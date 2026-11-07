@@ -30,7 +30,7 @@
  *
  * A direction is the `dir` an element writes where its collapsed form is `ltr` or `rtl`, and else
  * the one its parent holds, except that an `m:math` that writes neither holds `ltr` (MathML 3
- * §2.2.1 and §3.1.5.1, reading 150). A `dir` of any other form, HTML's `auto` among them, has no
+ * §2.2.1 and §3.1.5.1, reading 153). A `dir` of any other form, HTML's `auto` among them, has no
  * `AlignDirection`, so it is written as none: the row's `dirLexical` is empty and the element
  * changes no direction. A cell's root takes the direction of the nearest ancestor up to its
  * `m:math` that writes `ltr` or `rtl`, else `ltr`, the host's statement (audit items 1 and 2). An

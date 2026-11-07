@@ -26,9 +26,11 @@
  *   interpret the title is taken from the language attribute of the associated item, test or object
  *   bank"): when the record's general category has a `title`, one of its strings in the document's
  *   language is the document's `title`: a string whose `language` is the root's `xml:lang`, or one
- *   with no `language`, or any string where the root states no `xml:lang`. An empty `xml:lang`, or
- *   one of whitespace alone, states none ("the absence of language information", XML 1.0 §2.12),
- *   and an empty `language` is read alike.
+ *   with no `language`, or any string where the root states no language. A root states none where
+ *   it writes no `xml:lang`, or one whose collapsed form is no language tag (spec reading 151): an
+ *   empty one, "just as if xml:lang had not been specified" (XML 1.0 §2.12), one of whitespace
+ *   alone, or an ill-formed one, which AL1 refuses under its own rule. An empty `language` is read
+ *   as none alike.
  * - **`lom-learning-resource-type`** (law "LOM learning resource type", spec reading 122, §2.7.5.1:
  *   "QTI objects are designed to be reusable in a variety of assessment scenarios. Therefore, the
  *   LOM-defined values self assessment and exam are forbidden"): a `learningResourceType` of the
@@ -120,6 +122,7 @@ import {
   ResourceType,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
+import { baseTypes, languageTag } from "#pantry/grammar/attributes.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
@@ -190,6 +193,13 @@ export const trimmedPattern = `^(?:[${xmlNonSpace}](?:[${xmlChar}]*[${xmlNonSpac
  * is an NCName is AL1's lexical half over the attribute.
  */
 export const identifierPattern = `^[${xmlNonSpace}]+$`;
+
+/**
+ * A well-formed BCP 47 language tag as a whole text (`languageTag`, spec reading 129): the compared
+ * forms of an `xml:lang` that states a language to `lom-title`. A form that is no tag, the empty
+ * one included, names no language (RFC 5646 §2.1), so the root states none (spec reading 151).
+ */
+export const languageTagPattern = `^(?:${languageTag})$`;
 
 /**
  * XML whitespace `S`, possibly none: what a piece's text holds around its token.
@@ -421,11 +431,12 @@ export const LomTitleString = relation(
  * An assessment object, keyed by the `qti-assessment-item` or `qti-assessment-test` root, whatever
  * it writes: its {@link nodeRef} tuple; its count of `xml:lang` attributes (0 or 1, as
  * {@link ObjectLang} holds them), the one total fact of whether the optional attribute exists; and
- * `langTag`, its language as `lom-title` compares it: its {@link ObjectLang}'s where it writes one,
- * {@link noLanguage} where it writes none. Its required `identifier` and `title` are rows of their
- * own, {@link ObjectIdentifier} and {@link ObjectTitle}, so a root that writes neither still has its
- * row and AL3 alone refuses it, and no LOM entry or title string matches what it does not write
- * (spec reading 148).
+ * `langTag`, its `xml:lang`'s compared form, which `lom-title` reads as a language where it is a
+ * tag ({@link languageTagPattern}): its {@link ObjectLang}'s where it writes one, {@link noLanguage}
+ * where it writes none. Its required `identifier` and `title` are rows of their own,
+ * {@link ObjectIdentifier} and {@link ObjectTitle}, so a root that writes neither still has its row
+ * and AL3 alone refuses it, and no LOM entry or title string matches what it does not write (spec
+ * reading 148).
  */
 export const AssessmentObject = relation(
   "AssessmentObject",
@@ -503,10 +514,10 @@ export const LomObjectIdentifier = relation(
 
 /**
  * The title string by which a record names its document (`lom-title`), keyed by the record: the
- * document, its title's value ({@link ObjectTitle}'s `titleValue`) and its language
- * ({@link AssessmentObject}'s `langTag`, {@link noLanguage} where it states none), and a string of
- * one of the record's titles whose text has that value (`textValue`), with the string's language
- * (`languageTag`, {@link noLanguage} where it has none).
+ * document, its title's value ({@link ObjectTitle}'s `titleValue`) and its `xml:lang`'s compared
+ * form ({@link AssessmentObject}'s `langTag`, which states no language where it is no tag), and a
+ * string of one of the record's titles whose text has that value (`textValue`), with the string's
+ * language (`languageTag`, {@link noLanguage} where it has none).
  *
  * A row exists for every naming record that has a general title; its string is the existential's
  * witness, so a record none of whose title strings names its document, or whose document writes no
@@ -577,7 +588,8 @@ export const lomVocabulary = "LOMv1.0";
  * The compared form of a language that states none: the empty text. An empty `xml:lang` states no
  * language, "just as if xml:lang had not been specified" (XML 1.0 §2.12), so a root that writes no
  * `xml:lang` and one whose `xml:lang` collapses to the empty text compare alike (`lom-title`, and
- * R26's forms in `#pantry/qti/identity.ts`); a `lom:string`'s empty `language` is read alike.
+ * R26's forms in `#pantry/qti/identity.ts`); a `lom:string`'s empty `language` is read alike. The
+ * empty text is no language tag, so `lom-title`'s {@link languageTagPattern} reads it as none.
  *
  * @see {@link https://www.w3.org/TR/xml/#sec-lang-tag | XML 1.0, §2.12 Language Identification}
  */
@@ -895,7 +907,9 @@ const usageRecordValues = select(Node, (n) =>
  *   that document's, and whose entry is a general entry of the record with that token.
  * - **`lom-title`:** a title of a naming record makes its record's {@link LomObjectTitle} exist,
  *   whose document, title value and language tag are its record's object's, and whose string is a
- *   title string of the record with that value, in the document's language ("LomObjectTitle").
+ *   title string of the record with that value, in the document's language: the object's tag is no
+ *   language tag, which states none (spec reading 151), the string has no language, or the two are
+ *   one ("LomObjectTitle").
  * - **the learning resource types:** each `lom:value` and each `lom:source` of a
  *   `lom:learningResourceType` is copied, with its string value, into its type's
  *   {@link LomResourceType} or {@link LomResourceTypeSource}, and every such row names one, by a
@@ -1174,7 +1188,7 @@ export const metadataLawsByName = {
     ),
     check("LomObjectTitle", LomObjectTitle, (l) =>
       l.or(
-        l.eq(l.objectLang, noLanguage),
+        l.not(Compute.matches(l.objectLang, languageTagPattern)),
         l.eq(l.stringLanguage, noLanguage),
         l.eq(l.stringLanguage, l.objectLang),
       ),

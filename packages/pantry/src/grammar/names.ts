@@ -28,6 +28,8 @@ import type {
 } from "#pantry/grammar/closed.ts";
 import { isForeignKind } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";
+import type { NamespaceName, NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 
 /**
  * Spell a text as a literal of grizzle's pattern grammar, ECMAScript's under the `u` flag: each
@@ -192,7 +194,8 @@ export type TypesAvailable = Closed<
 /**
  * Generate `TypeAvailable`, total over the `TypeName` roster: for each type, the pattern of the
  * vocabulary namespaces under whose elements an `xsi:type` may name it; {@link everyText} for the
- * null type and for a type of XML Schema's own namespace, which every schema set holds.
+ * null type, which names no namespace, and for a type of XML Schema's own namespace, which every
+ * schema set holds.
  *
  * An element of a namespace no vocabulary has stands in documents of every set, so it may name a
  * type of every vocabulary: a law reads that half through {@link vocabularyNamespacesPattern},
@@ -201,37 +204,40 @@ export type TypesAvailable = Closed<
  * @param input - The types and the rule they are available by.
  * @param input.available - Whether an element of the first namespace may name a type of the
  *   second (`open.ts`, `typeAvailable`).
- * @param input.everywhere - Whether a type handle is available under every namespace: the null
- *   type, and a type of XML Schema's namespace.
- * @param input.namespaceOf - A type's namespace.
+ * @param input.everywhere - Whether a type of a namespace is available under every namespace: a
+ *   type of XML Schema's namespace.
+ * @param input.namespaceOf - A type's namespace, or none for the null type.
  * @param input.types - The `TypeName` roster.
- * @param input.vocabularies - The vocabularies' namespaces.
+ * @param input.vocabularies - The vocabularies' namespaces, as crust's tree spells them, the texts
+ *   a pattern holds.
  * @returns The relation, or the reason it has no constant.
  */
 export const typesAvailable = (input: {
-  readonly available: (parent: string, type: string) => boolean;
-  readonly everywhere: (type: string) => boolean;
-  readonly namespaceOf: (type: string) => string;
+  readonly available: (parent: NamespaceOfKind, type: NamespaceName) => boolean;
+  readonly everywhere: (namespace: NamespaceName) => boolean;
+  readonly namespaceOf: (type: string) => Option.Option<NamespaceName>;
   readonly types: Roster<string>;
   readonly vocabularies: readonly string[];
 }): Result.Result<TypesAvailable, ClosedRelationError> => {
-  // A type's pattern is its namespace's, so each namespace's is spelled once.
-  const byNamespace = new Map<string, string>();
-  const patternOf = (namespace: string): string => {
-    const known = byNamespace.get(namespace);
-    if (known !== undefined) {
-      return known;
-    }
-
-    const pattern = textsPattern(
-      input.vocabularies.filter((parent) => input.available(parent, namespace)),
+  const patternOf = (namespace: NamespaceName): string =>
+    textsPattern(
+      input.vocabularies.filter((parent) => input.available(namespaceNameOf(parent), namespace)),
     );
-    byNamespace.set(namespace, pattern);
-
-    return pattern;
-  };
+  // A type's pattern is its namespace's, so each named namespace's is spelled once.
+  const byNamespace = new Map<string, string>();
   const rows = input.types.handles.map((type) => ({
-    namespaces: input.everywhere(type) ? everyText : patternOf(input.namespaceOf(type)),
+    namespaces: Option.match(input.namespaceOf(type), {
+      onNone: () => everyText,
+      onSome: (namespace) => {
+        if (input.everywhere(namespace)) {
+          return everyText;
+        }
+
+        return namespace._tag === "in"
+          ? byNamespace.getOrInsertComputed(namespace.uri, () => patternOf(namespace))
+          : patternOf(namespace);
+      },
+    }),
     type,
   }));
 
@@ -276,23 +282,24 @@ export type HeldRootsUnder = NamesUnder;
  *   by namespace class (`foreignKinds`).
  * @param input.held - Each (version, parent, foreign kind) only strict wildcards admit.
  * @param input.kinds - The `NodeKind` roster.
- * @param input.namespaceOf - A kind's namespace, empty for a kind of no vocabulary.
+ * @param input.namespaceOf - A kind's namespace.
  * @param input.reads - Whether a wildcard of the first namespace's kind finds the second
  *   namespace's globals in its documents' schema set (`open.ts`, `wildcardReads`).
- * @param input.roots - Each root and the versions it is declared globally in.
+ * @param input.roots - Each root, its name as crust's tree spells it, and the versions it is
+ *   declared globally in.
  * @param input.versions - The `SchemaVersion` roster.
  * @returns The relation, or the reason it has no constant.
  */
 export const heldRootsUnder = (input: {
-  readonly classOf: (namespace: string, parent: string) => string;
+  readonly classOf: (namespace: NamespaceName, parent: NamespaceOfKind) => string;
   readonly held: readonly {
     readonly child: string;
     readonly parent: string;
     readonly version: SchemaVersion;
   }[];
   readonly kinds: Roster<string>;
-  readonly namespaceOf: (kind: string) => string;
-  readonly reads: (parent: string, child: string) => boolean;
+  readonly namespaceOf: (kind: string) => NamespaceOfKind;
+  readonly reads: (parent: NamespaceOfKind, child: NamespaceName) => boolean;
   readonly roots: readonly {
     readonly kind: string;
     readonly local: string;
@@ -314,8 +321,8 @@ export const heldRootsUnder = (input: {
           input.roots.filter(
             ({ namespace, versions }) =>
               versions.includes(first.version) &&
-              classes.has(input.classOf(namespace, own)) &&
-              input.reads(own, namespace),
+              classes.has(input.classOf(namespaceNameOf(namespace), own)) &&
+              input.reads(own, namespaceNameOf(namespace)),
           ),
         ),
         parent: first.parent,

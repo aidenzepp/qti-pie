@@ -26,7 +26,15 @@ import type { Client, DatabaseError } from "pg";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { Flag, KindByNameUnder, KindNamespace, TypeAvailable } from "#pantry/grammar/install.ts";
-import { Comment, Doctype, Document, OpenElementName, Pi } from "#pantry/qti/chardata.ts";
+import {
+  Comment,
+  Doctype,
+  Document,
+  EncodingDecl,
+  OpenElementName,
+  Pi,
+  SdDecl,
+} from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
@@ -170,11 +178,10 @@ const strayNode = "00000000-0000-4000-8000-0000000000f0";
 /**
  * Each arm and the document row, with a row of it whose node is no stored node, and the table its
  * containment into `Node` is installed on. The document row is the manifest's, lawful on its own
- * CHECKs: every optional field its null object (no declaration, so `none` version and standalone
- * and the empty encoding; the `none` resource type, which only `imsmanifest.xml` bears, by
- * `RootOfType`), no family member yet (each count 0), no site naming it (so its context is the
- * empty set and its nearest context the document node, by `E1_derived`), and its node's copied
- * tuple the document node's.
+ * CHECKs: the `none` resource type, which only `imsmanifest.xml` bears, by `RootOfType`, no
+ * family member yet (each count 0), no site naming it (so its context is the empty set and its
+ * nearest context the document node, by `E1_derived`), and its node's copied tuple the document
+ * node's. Its XML declaration is rows of their own, and it has none.
  */
 const arms: readonly Stated[] = [
   { fact: { node: strayNode, value: "a comment" }, relation: Comment },
@@ -187,7 +194,6 @@ const arms: readonly Stated[] = [
       context: bitsText(Flag, []),
       contextNearest: strayNode,
       contextNearestKind: "document",
-      encoding: "",
       exportCharset: "UTF-8",
       node: strayNode,
       nodeChildren: 1n,
@@ -200,9 +206,7 @@ const arms: readonly Stated[] = [
       path: manifestPath,
       resourceType: "none",
       rootKind: "cp:manifest",
-      standalone: "none",
       version: "3.0.1",
-      xmlVersion: "none",
     },
     relation: Document,
   },
@@ -340,13 +344,12 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "accepts a Document row whose optional fields are each their null object, by every law of the row itself",
+        "accepts the Document row of a document that writes no declaration, by every law of the row itself",
         () =>
-          // Oracle: PostgreSQL, the row's domains and CHECKs, the `Document` check among them, with
-          // every foreign key deferred and none set immediate.
-          // Bound: the one row that holds every null object: no declaration, so `none` version and
-          // standalone and the empty encoding, and the manifest's `none` resource type.
-          Effect.gen(function* nullObjects() {
+          // Oracle: PostgreSQL, the row's domains and CHECKs, with every foreign key deferred and
+          // none set immediate.
+          // Bound: the manifest's row, of the `none` resource type, with no declaration's rows.
+          Effect.gen(function* undeclared() {
             const client = yield* loginSession;
             const document = arms.find(({ relation }) => relation === Document);
             assert.isDefined(document);
@@ -358,51 +361,41 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a document that writes no declaration but an encoding or a standalone, by the Document check",
+        "refuses an encoding or a standalone with no declaration, by the Document law's containments into XmlDecl",
         () =>
-          // Oracle: PostgreSQL, the `Document` CHECK (q1.02's no-declaration rule), judged as the
-          // row is inserted.
-          // Bound: each field a declaration alone writes, set without one, on the manifest's row,
-          // whose `none` resource type `RootOfType` admits, so the one check under test refuses it.
-          Effect.gen(function* noDeclaration() {
+          // Oracle: PostgreSQL, the containments `EncodingDecl(node) ⊆ XmlDecl(node)` and
+          // `SdDecl(node) ⊆ XmlDecl(node)`: neither part is written outside a declaration (XML 1.0
+          // §2.8, `XMLDecl ::= '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'`).
+          // Bound: each part's row alone, on a node with no XmlDecl row.
+          Effect.gen(function* partWithoutDeclaration() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            const base = {
-              assembled: false,
-              charset: "UTF-8",
-              contextNearest: strayNode,
-              contextNearestKind: "document",
-              encoding: "",
-              exportCharset: "UTF-8",
-              node: strayNode,
-              nodeChildren: 1n,
-              nodeDocument: strayNode,
-              nodeGoverns: "none",
-              nodeKind: "document",
-              nodeParentKind: "document",
-              nodeStart: 0n,
-              package: strayNode,
-              path: manifestPath,
-              resourceType: "none",
-              rootKind: "cp:manifest",
-              standalone: "none",
-              version: "3.0.0",
-              xmlVersion: "none",
-            } as const;
-            for (const row of [
-              { ...base, encoding: "UTF-8" },
-              { ...base, standalone: "yes" },
-            ] as const) {
-              const outcome = yield* db.apply(ChangeSet.empty(Author).insert(Document, [row]), {});
+            const parts = [
+              {
+                changes: ChangeSet.empty(Author).insert(EncodingDecl, [
+                  { encoding: "UTF-8", node: strayNode },
+                ]),
+                relation: "EncodingDecl",
+              },
+              {
+                changes: ChangeSet.empty(Author).insert(SdDecl, [
+                  { node: strayNode, standalone: "yes" },
+                ]),
+                relation: "SdDecl",
+              },
+            ] as const;
+            for (const { changes, relation } of parts) {
+              const outcome = yield* db.apply(changes, {});
 
-              assert.strictEqual(outcome.kind, "invariant-rejected");
+              assert.strictEqual(outcome.kind, "invariant-rejected", relation);
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
                   outcome.refused.laws.some(
                     (law) =>
-                      law.kind === "check" &&
-                      law.relation === "Document" &&
-                      law.name === "Document",
+                      law.kind === "contained" &&
+                      law.from.relation === relation &&
+                      law.to.relation === "XmlDecl",
                   ),
+                relation,
               );
             }
           }),

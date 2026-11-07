@@ -858,13 +858,7 @@ describe.skipIf(!hasLease)(
               // arm alone refuses it: the manifest's first text, cp:schema's, is TextDomain's first.
               editNode(
                 (node) => node.kind === "text" && node.chars === "Look at the text in the picture.",
-                (node) => ({
-                  ...node,
-                  chars: " ",
-                  first: " ",
-                  last: " ",
-                  stringPiece: node.stringPiece === "" ? "" : " ",
-                }),
+                (node) => ({ ...node, chars: " ", first: " ", last: " " }),
               ),
             ),
           laws: [checkNamed("Node", "text_arm")],
@@ -876,13 +870,7 @@ describe.skipIf(!hasLease)(
               fixtures.simple,
               editNode(
                 (node) => node.kind === "ws",
-                (node) => ({
-                  ...node,
-                  chars: "x",
-                  first: "x",
-                  last: "x",
-                  stringPiece: node.stringPiece === "" ? "" : "x",
-                }),
+                (node) => ({ ...node, chars: "x", first: "x", last: "x" }),
               ),
             ),
           laws: [checkNamed("Node", "ws_arm")],
@@ -913,7 +901,7 @@ describe.skipIf(!hasLease)(
                   ...node,
                   children: node.children.map((child) =>
                     child.kind === "text"
-                      ? { ...child, chars: "3.0.x", first: "3", last: "x", stringPiece: "3.0.x" }
+                      ? { ...child, chars: "3.0.x", first: "3", last: "x" }
                       : child,
                   ),
                 }),

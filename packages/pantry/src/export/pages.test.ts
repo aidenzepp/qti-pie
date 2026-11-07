@@ -72,7 +72,8 @@ const bySlot = (left: { readonly at: bigint }, right: { readonly at: bigint }): 
 /**
  * The scan of one document as the database delivers it, built from the document's rows without
  * the code under test: each node row in `start` order with its characters (a text or whitespace
- * run's, an entity reference's `&name;`) and the rows keyed by it attached, its attributes and
+ * run's, an entity reference's `&name;`) and the rows keyed by it attached, the document row with
+ * its XML declaration and the declaration with its encoding and standalone, its attributes and
  * namespace declarations in `at` order, and an attribute's entity references in offset order with
  * its open name.
  *
@@ -87,6 +88,9 @@ const scanOf = (rows: FlatRows<Composed>): readonly ScanRow<Composed>[] => {
   const entityRefs = byNode(rows.entityRefs);
   const doctypes = byNode(rows.doctypes);
   const openElementNames = byNode(rows.openElementNames);
+  const xmlDecls = byNode(rows.xmlDecls);
+  const encodingDecls = byNode(rows.encodingDecls);
+  const sdDecls = byNode(rows.sdDecls);
   const attributes = Map.groupBy(rows.attributes, ({ node }) => node);
   const namespaces = Map.groupBy(rows.namespaces, ({ node }) => node);
   const openNames = Map.groupBy(rows.openNames, ({ attribute }) => attribute);
@@ -128,10 +132,20 @@ const scanOf = (rows: FlatRows<Composed>): readonly ScanRow<Composed>[] => {
         node.id === rows.document.node
           ? Option.some({
               charset: rows.document.charset,
-              encoding: rows.document.encoding,
+              declaration: Option.fromNullishOr(xmlDecls.get(node.id)).pipe(
+                Option.map(({ version }) => ({
+                  encoding: Option.fromNullishOr(encodingDecls.get(node.id)).pipe(
+                    Option.map(({ encoding }) => ({ encoding })),
+                  ),
+                  node: node.id,
+                  standalone: Option.fromNullishOr(sdDecls.get(node.id)).pipe(
+                    Option.map(({ standalone }) => ({ standalone })),
+                  ),
+                  version,
+                })),
+              ),
               exportCharset: rows.document.exportCharset,
-              standalone: rows.document.standalone,
-              xmlVersion: rows.document.xmlVersion,
+              node: node.id,
             })
           : Option.none(),
       namespaces: (namespaces.get(node.id) ?? [])
@@ -263,7 +277,7 @@ type PagingFeature =
 /**
  * The named ways a page stream departs from the scan: one page served twice in a row, as a page
  * whose lookahead repeats a boundary would; one page left out; a `Document` row on a node besides
- * the document node, which the mirror law of `Document` refuses in the database; and a `Document`
+ * the document node, which the mirror law of `Document` refuses in the database; and an `XmlDecl`
  * row whose XML version is no version, which its pattern refuses there.
  */
 type PageVariant = "repeatedPage" | "droppedPage" | "secondDocumentRow" | "badXmlVersion";
@@ -360,12 +374,13 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
   );
 
   it.effect(
-    "refuses the document when a page of its scan is served twice or left out, a second node carries a Document row, or that row holds no XML version",
+    "refuses the document when a page of its scan is served twice or left out, a second node carries a Document row, or its declaration holds no XML version",
     (ctx) =>
       // Oracle: the specification as a checker: a document's rows are a set keyed by start, so a
       // page served twice repeats every start it holds and a page left out leaves its starts
       // empty, and assemble refuses both; and a document holds one Document row, on its document
-      // node, whose XML version is none or a VersionNum. No defect of the page stream is absorbed.
+      // node, and its XmlDecl row, where it has one, a VersionNum. No defect of the page stream is
+      // absorbed.
       // Bound: the generator's drawn bounds, one drawn cut set, variant and page a case.
       searched(
         ctx,
@@ -448,7 +463,15 @@ describe("export/pages.ts", { timeout: searchTimeout }, () => {
                   }
 
                   const documentRow = root.documentRow.pipe(
-                    Option.map((fields) => ({ ...fields, xmlVersion: "2.0" })),
+                    Option.map((fields) => ({
+                      ...fields,
+                      declaration: Option.some({
+                        encoding: Option.none(),
+                        node: fields.node,
+                        standalone: Option.none(),
+                        version: "2.0",
+                      }),
+                    })),
                   );
                   const assembled = yield* assembledFrom(rows.document.node, [
                     [{ ...root, documentRow }, ...below],

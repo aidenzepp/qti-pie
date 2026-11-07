@@ -51,7 +51,7 @@ import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/te
 import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
-import { namespaceClassOf } from "#pantry/vocab/namespaces.ts";
+import { namespaceClassOf, namespaceNameOf } from "#pantry/vocab/namespaces.ts";
 import {
   resolverOf,
   toyFacets,
@@ -639,7 +639,10 @@ const judged = (composedGrammar: ComposedGrammar, version: SchemaVersion, root: 
     const kinds = elements.map((child) =>
       Option.getOrElse(
         resolve(child.namespace, child.local, kind),
-        () => foreignKinds[namespaceClassOf(child.namespace, node.namespace)],
+        () =>
+          foreignKinds[
+            namespaceClassOf(namespaceNameOf(child.namespace), namespaceNameOf(node.namespace))
+          ],
       ),
     );
     const foreignMathml = elements.some(

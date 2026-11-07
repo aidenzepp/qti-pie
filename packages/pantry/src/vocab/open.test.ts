@@ -49,6 +49,7 @@ import {
   asiNamespace,
   mathmlNamespace,
   namespaceClassOf,
+  namespaceNameOf,
   ssmlNamespace,
   xmlNamespace,
   xsiNamespace,
@@ -1214,7 +1215,10 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
           case131.filter(({ kind, version }) =>
             Option.isSome(
               grammar.admission.lookup({
-                child: foreignKinds[namespaceClassOf(asiNamespace, asiNamespace)],
+                child:
+                  foreignKinds[
+                    namespaceClassOf(namespaceNameOf(asiNamespace), namespaceNameOf(asiNamespace))
+                  ],
                 parent: kind,
                 version,
               }),
@@ -1246,7 +1250,10 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
                   index,
                 );
                 const wrong = namespacesAgainst(own).flatMap(([label, namespace]) => {
-                  const foreign = foreignKinds[namespaceClassOf(namespace, own)];
+                  const foreign =
+                    foreignKinds[
+                      namespaceClassOf(namespaceNameOf(namespace), namespaceNameOf(own))
+                    ];
                   // Every processing admits an undeclared element its constraint admits; a
                   // `strict` one only with an xsi:type its document's schema set resolves (spec
                   // reading 81), so `StrictlyHeld` marks a foreign kind only strict wildcards admit.

@@ -892,9 +892,9 @@ describe("import/overlays/interactions.ts, section references", () => {
     "places every section instance under its test and resolves each of its document's references once there",
     (ctx) =>
       // Oracle: a second implementation, the box's own list of placements and of each section
-      // document's references, resolved by hand: SCORED to the test's declaration, completionStatus
-      // to the built-in, which names no declaration, and UNDECLARED to none (port audit A45; lane
-      // NIL's NS2: no declaration row, never the nil uuid).
+      // document's references, resolved by hand: SCORED to the test's declaration, and
+      // completionStatus, an item's built-in and no test's (spec reading 29), and UNDECLARED to
+      // none (port audit A45; lane NIL's NS2: no declaration row, never the nil uuid).
       // Bound: every test of up to 2 placements of 3 section documents, each with up to 1
       // placement inside, 1 + 3·4 + (3·4)² = 157 trees.
       searched(
@@ -967,6 +967,7 @@ describe("import/overlays/interactions.ts, section references", () => {
 
               for (const row of resolved) {
                 assert.strictEqual(row.assembly, testDocument);
+                assert.strictEqual(row.assemblyKind, "qti-assessment-test");
               }
 
               assert.sameMembers(
@@ -1475,6 +1476,7 @@ describe("import/overlays/interactions.ts, content reference declarations", () =
               const key = JSON.stringify([named?.id, input.reference.attribute]);
               const relation = referenceRelationOf(rows, input.reference.kind);
               const reference = {
+                assemblyKind: "qti-assessment-item",
                 attribute: input.reference.attribute,
                 document: idOf(0),
                 identifier: input.name,

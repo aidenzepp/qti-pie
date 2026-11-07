@@ -39,17 +39,16 @@
  * The laws, each named by its oracle law with spaces written as underscores, and the rule each
  * keeps: `Arity` (P2); `Operand_fit` and `One_base` (P23); `Condition_type` (P21); `Set_type`
  * (P20); `Lookup_type` (P22); `Reference_type` (P24); `Outcome_only` (P25); `Template_reads` (P26);
- * `Mapped_response` (P27); `Weighted_base` (P29); `Variable_declared` (P8, over an item's names
- * and a test's and a section's unprefixed ones, a braced `pattern` that names none a string value,
- * reading R15-k); "Item duration" (item-duration, in an item and through an item ref, a
- * containment into the time-dependent items, `timedItems`); `Literal_lexical` (attribute-lexical);
- * `Prefixed_reference` (prefixed-ref);
- * `Section_identifier_target`; `Template_default_target` and `Template_default_type` (P20);
- * `Variable_mapping_source` and `Variable_mapping_target`; and `E1_derived`, every code the host
- * writes proved from what it is derived from, among them each expression's result type and a
- * response processing's published template (the retired rule `template-derivation`). The old
- * guards P31 (every operand edge has its operand row) and P32 (a copy agrees with its source) hold
- * by construction: the operand rows' existence and every copy are containments.
+ * `Mapped_response` (P27); `Weighted_base` (P29); `Variable_declared` (P8, over an item's names and
+ * a test's and a section's unprefixed ones, a braced `pattern` that names none a string value,
+ * reading R15-k); `Literal_lexical` (attribute-lexical);
+ * `Prefixed_reference` (prefixed-ref); `Section_identifier_target`; `Template_default_target` and
+ * `Template_default_type` (P20); `Variable_mapping_source` and `Variable_mapping_target`; and
+ * `E1_derived`, every code the host writes proved from what it is derived from, among them each
+ * expression's result type and a response processing's published template (the retired rule
+ * `template-derivation`). The old guards P31 (every operand edge has its operand row) and P32 (a
+ * copy agrees with its source) hold by construction: the operand rows' existence and every copy are
+ * containments.
  */
 import {
   accumulated,
@@ -121,6 +120,7 @@ import {
   ReadingSource,
   ReferenceBase,
   ReferenceDeclaration,
+  referenceDeclarations,
   ReferencedTable,
   TableReader,
   ReferenceResolution,
@@ -316,13 +316,14 @@ export const Processing = relation(
  * - **the host's:** `before`, `identifier` and `after`, the lexical form split around the name it
  *   spells, the whitespace around a bare name or the braces around a braced one; `parent`,
  *   `language`, `elementBase` and `elementCardinality`, its element's (`exprRef` for an expression,
- *   the language for a rule); `rootKind`, its document's root's; `resolution`, and for a declared
- *   variable `declaration`, `declarationKind`, `declBaseType` and `declCardinality`, its
- *   `declarationRef` tuple; `baseType` and `cardinality`, the variable's type; `table`, the table
- *   its element needs the declaration to hold; and `heldBase` and `heldCardinality`, the type of a
- *   setter's or a lookup's one expression.
+ *   the language for a rule); `rootKind`, its document's root's; `resolution`; `baseType` and
+ *   `cardinality`, the variable's type; `table`, the table its element needs the declaration to
+ *   hold; and `heldBase` and `heldCardinality`, the type of a setter's or a lookup's one
+ *   expression.
  *
- * Fields a row's case leaves unread hold null objects: the nil uuid, `none`, `unknown`.
+ * The declaration a declared reference names is a row of its own, {@link VariableRefDeclaration}
+ * (lane NIL's NS1: a reference that names no declaration has no declaration row, never the nil
+ * uuid). A type field its element leaves unread holds `unknown`.
  */
 export const VariableRef = relation(
   "VariableRef",
@@ -332,10 +333,6 @@ export const VariableRef = relation(
     baseType: closedId(ValueBase),
     before: Affix,
     cardinality: closedId(ValueCardinality),
-    declBaseType: closedId(BaseType),
-    declCardinality: closedId(Cardinality),
-    declaration: uuid,
-    declarationKind: closedId(DeclarationKind),
     document: uuid,
     elementBase: closedId(ValueBase),
     elementCardinality: closedId(ValueCardinality),
@@ -355,23 +352,46 @@ export const VariableRef = relation(
 );
 
 /**
+ * The declaration a declared {@link VariableRef} names, keyed as the reference: its
+ * `declarationRef` tuple (`declaration`, `declarationKind`, `declBaseType`, `declCardinality`, with
+ * its reference's `document` and `identifier`), and the reference's fields its laws read beside
+ * it, each copied from the reference. A reference exactly where its `resolution` is `declared` has
+ * one (lane NIL's NS1), so one that names a built-in variable or nothing has none.
+ */
+export const VariableRefDeclaration = relation(
+  "VariableRefDeclaration",
+  {
+    attribute: closedId(AttributeName),
+    baseType: closedId(ValueBase),
+    cardinality: closedId(ValueCardinality),
+    declBaseType: closedId(BaseType),
+    declCardinality: closedId(Cardinality),
+    declaration: uuid,
+    declarationKind: closedId(DeclarationKind),
+    document: uuid,
+    identifier: keyText,
+    kind: closedId(NodeKind),
+    language: closedId(Language),
+    node: uuid,
+    table: closedId(ReferencedTable),
+  },
+  ["node", "attribute"],
+);
+
+/**
  * One variable reference of an instance of an item's assembly (Q5.13's `Instance`, spec reading
  * 117), keyed by the instance and the reference's element node and attribute: a
  * {@link VariableRef} of the instance's document, its name resolved among the item's
  * declarations, else to one of the item's built-in variables, else to nothing, so a response or
  * outcome rule fragment's references name its item's variables ("Variable declared" over the
- * assembly). `rootKind` is the assembly's root's, an item's; the declaration fields are its
- * `declarationRef` tuple, the null objects where it names none.
+ * assembly). `rootKind` is the assembly's root's, an item's. The declaration a declared one names
+ * is a row of its own, {@link PlacedVariableRefDeclaration} (lane NIL's NS1).
  */
 export const PlacedVariableRef = relation(
   "PlacedVariableRef",
   {
     assembly: uuid,
     attribute: closedId(AttributeName),
-    declBaseType: closedId(BaseType),
-    declCardinality: closedId(Cardinality),
-    declaration: uuid,
-    declarationKind: closedId(DeclarationKind),
     document: uuid,
     identifier: keyText,
     instance: uuid,
@@ -379,6 +399,29 @@ export const PlacedVariableRef = relation(
     node: uuid,
     resolution: closedId(ReferenceResolution),
     rootKind: closedId(NodeKind),
+  },
+  ["instance", "node", "attribute"],
+);
+
+/**
+ * The declaration a declared {@link PlacedVariableRef} names among its assembly's item's
+ * declarations, keyed as the placed reference: its `declarationRef` tuple (with its `assembly` as
+ * its document and its `identifier`), and its reference's `kind` and `attribute`. A placed
+ * reference exactly where its `resolution` is `declared` has one (lane NIL's NS1).
+ */
+export const PlacedVariableRefDeclaration = relation(
+  "PlacedVariableRefDeclaration",
+  {
+    assembly: uuid,
+    attribute: closedId(AttributeName),
+    declBaseType: closedId(BaseType),
+    declCardinality: closedId(Cardinality),
+    declaration: uuid,
+    declarationKind: closedId(DeclarationKind),
+    identifier: keyText,
+    instance: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
   },
   ["instance", "node", "attribute"],
 );
@@ -397,19 +440,6 @@ export const documentVariableFamily = counted(
 export const placedVariableFamily = counted(
   on(PlacedVariableRef, "instance"),
   fin(Instance, "variables"),
-);
-
-/**
- * An item's timing, keyed by its `qti-assessment-item` node: its document, its `time-dependent`'s
- * lexical form, and whether the item is time-dependent (C17; the UP audit's A62). It exists exactly
- * where the item writes `time-dependent`, which every item must (AL3), so a reference to the
- * built-in `duration` reads its item among the time-dependent ones ({@link timedItems}), and an
- * item that writes none is AL3's, and "Item duration"'s where it reads its `duration`.
- */
-export const ItemTiming = relation(
-  "ItemTiming",
-  { document: uuid, lexical: keyText, node: uuid, timeDependent: pg.boolean },
-  ["node"],
 );
 
 /**
@@ -796,12 +826,13 @@ export const Separator = str.regex("^\\.?$");
 
 /**
  * One dot-separated piece of a reference's name, at its place `at` from 0 (A59's split as a
- * sequence): its `piece`, which holds no dot, its `separator` and `token = separator ‖ piece`,
- * `digit`, whether it follows a dot and is all digits (a reading 88 instance number), and the
- * concatenation fold's running `before` and `after`, so `before` at `at = j` is the name's first
- * `j` pieces joined, the scope of its split at `j`.
+ * sequence): its `piece`, which holds no dot, its `separator`, `digit`, whether it follows a dot
+ * and is all digits (a reading 88 instance number), the generated `token = separator ‖ piece`, the
+ * concatenation's step, a `keyText` whose domain refuses a token past the bound, and the fold's
+ * running `before` and `after`, so `before` at `at = j` is the name's first `j` pieces joined, the
+ * scope of its split at `j`.
  */
-export const ReferenceSegment = relation(
+export const ReferenceSegment = relation.generated(
   "ReferenceSegment",
   {
     after: accumulated(keyText, ""),
@@ -813,9 +844,9 @@ export const ReferenceSegment = relation(
     node: uuid,
     piece: keyText,
     separator: Separator,
-    token: keyText,
   },
   ["assembly", "node", "attribute", "at"],
+  (s) => ({ token: generated(keyText, Compute.concat(s.separator, s.piece)) }),
 );
 
 /**
@@ -884,6 +915,7 @@ export const referenceRelations = {
   PlacedDocument,
   PlacedReference,
   PlacedVariableRef,
+  PlacedVariableRefDeclaration,
   Reading,
   ReferenceDocument,
   ReferenceSegment,
@@ -892,6 +924,7 @@ export const referenceRelations = {
   TemplateDefaultTarget,
   TestReference,
   VariableLookup,
+  VariableRefDeclaration,
 };
 
 /**
@@ -903,6 +936,11 @@ type ExpressionRow = RowScalars<typeof Expression>;
  * A `VariableRef` row as a row check or a selection reads it.
  */
 type VariableRefRow = RowScalars<typeof VariableRef>;
+
+/**
+ * A `PlacedVariableRef` row as a row check reads it.
+ */
+type PlacedVariableRefRow = RowScalars<typeof PlacedVariableRef>;
 
 /**
  * The base types that say nothing: `any`, which passes every rule, and `unknown`.
@@ -971,35 +1009,6 @@ const typingAttributes = select(Attribute, (a) =>
     a.and(a.eq(a.kind, "qti-test-variables"), a.in(a.name, ["base-type", "weight-identifier"])),
     a.and(a.eq(a.kind, "qti-math-operator"), a.eq(a.name, "name")),
   ),
-);
-
-/**
- * The `time-dependent` of each item, `ItemTiming`'s source.
- */
-const itemTimes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, itemKind), a.eq(a.name, "time-dependent")),
-);
-
-/**
- * The lexical forms of a true `xs:boolean` as written, its whitespace collapse absorbed: `true` and
- * `1`; every other valid form is false.
- */
-const timeDependentForm = "^[\\t\\n\\r ]*(?:true|1)[\\t\\n\\r ]*$";
-
-/**
- * The time-dependent items, by document: the only items whose `duration` an expression may read
- * ("The value of duration for items that are not time dependent must not be used in any item or
- * test-level expression", info §2.2.2.2). An item that writes no `time-dependent` has no
- * {@link ItemTiming} row, so it is none of them.
- */
-const timedItems = select(ItemTiming, (t) => t.eq(t.timeDependent, true));
-
-/**
- * The references an item's own expressions make to its built-in `duration`, each of which its item
- * must be time-dependent to make.
- */
-const itemDurations = select(VariableRef, (v) =>
-  v.and(v.eq(v.rootKind, itemKind), v.eq(v.resolution, "builtIn"), v.eq(v.identifier, "duration")),
 );
 
 /**
@@ -1155,29 +1164,25 @@ const prefixedName = "^.*[.].*$";
 
 /**
  * State the type a reference's resolution gives it: a declared variable's through `ValueBaseOf`
- * and `ValueCardinalityOf`; a built-in's by its name, among its root's built-ins; nothing for an
- * unresolved one, whose name is none of them.
+ * and `ValueCardinalityOf`, which its {@link VariableRefDeclaration}'s `E1_derived` states; a
+ * built-in's by its name, among its root's built-ins; nothing for an unresolved one, whose name is
+ * none of them.
  *
  * @param v - The row.
  * @returns The predicate.
  */
 const resolvedType = (v: VariableRefRow) =>
   v.or(
-    v.and(
-      v.eq(v.resolution, "declared"),
-      v.eq(v.baseType, ValueBaseOf.at("value", v.declBaseType)),
-      v.eq(v.cardinality, ValueCardinalityOf.at("value", v.declCardinality)),
-    ),
+    v.eq(v.resolution, "declared"),
     v.and(
       v.eq(v.resolution, "builtIn"),
       v.or(
-        ...builtIns.map(({ baseType, cardinality, declaration, root, variable }) =>
+        ...builtIns.map(({ baseType, cardinality, root, variable }) =>
           v.and(
             v.eq(v.rootKind, root),
             v.eq(v.identifier, variable),
             v.eq(v.baseType, baseType),
             v.eq(v.cardinality, cardinality),
-            v.eq(v.declarationKind, declaration),
           ),
         ),
       ),
@@ -1222,9 +1227,7 @@ const claimedTables = select(VariableRef, (v) => v.ne(v.table, "none"));
  * @returns The selection.
  */
 const tableReaders = (kind: (typeof NodeKind.handles)[number]) =>
-  select(VariableRef, (v) =>
-    v.and(v.eq(v.kind, kind), v.eq(v.attribute, "identifier"), v.eq(v.resolution, "declared")),
-  );
+  select(VariableRefDeclaration, (d) => d.and(d.eq(d.kind, kind), d.eq(d.attribute, "identifier")));
 
 /**
  * The declarations whose table slot holds one table: each a containment into that table's overlay
@@ -1314,12 +1317,62 @@ const typedBaseValues = select(Expression, (e) =>
 );
 
 /**
- * The references by `identifier` that name a variable, declared or built in: each names one of the
- * declaration kinds its element reads or sets (`ReferenceDeclaration`).
+ * The declared references by `identifier`: each names one of the declaration kinds its element
+ * reads or sets (`ReferenceDeclaration`).
  */
-const namedVariables = select(VariableRef, (v) =>
-  v.and(v.eq(v.attribute, "identifier"), v.ne(v.resolution, "unresolved")),
+const namedVariables = select(VariableRefDeclaration, (d) => d.eq(d.attribute, "identifier"));
+
+/**
+ * The declared placed references by `identifier`, each naming a declaration kind its element reads
+ * or sets.
+ */
+const namedPlacedVariables = select(PlacedVariableRefDeclaration, (d) =>
+  d.eq(d.attribute, "identifier"),
 );
+
+/**
+ * Each built-in variable with the kinds whose element may name it by `identifier`: those whose
+ * `ReferenceDeclaration` admits the declaration kind it stands as (reading 29), so a reference to a
+ * built-in is judged under "Variable kind" as a declared one is.
+ */
+const builtInReferrers = builtIns.flatMap(({ declaration, root, variable }) => {
+  const kinds = referenceDeclarations.flatMap(({ declarations, kind }) =>
+    declarations.includes(declaration) ? [kind] : [],
+  );
+
+  return kinds.length === 0 ? [] : [{ kinds, root, variable }];
+});
+
+/**
+ * State that a reference by `identifier` to a built-in variable names one its element may: a
+ * kind whose `ReferenceDeclaration` admits the built-in's declaration kind.
+ *
+ * @param v - The row.
+ * @returns The predicate.
+ */
+const namesAllowedBuiltIn = (v: VariableRefRow) =>
+  v.or(
+    v.ne(v.attribute, "identifier"),
+    v.ne(v.resolution, "builtIn"),
+    ...builtInReferrers.map(({ kinds, root, variable }) =>
+      v.and(v.eq(v.rootKind, root), v.eq(v.identifier, variable), v.in(v.kind, kinds)),
+    ),
+  );
+
+/**
+ * {@link namesAllowedBuiltIn} over a placed reference, whose root is its assembly's.
+ *
+ * @param v - The row.
+ * @returns The predicate.
+ */
+const placesAllowedBuiltIn = (v: PlacedVariableRefRow) =>
+  v.or(
+    v.ne(v.attribute, "identifier"),
+    v.ne(v.resolution, "builtIn"),
+    ...builtInReferrers.map(({ kinds, root, variable }) =>
+      v.and(v.eq(v.rootKind, root), v.eq(v.identifier, variable), v.in(v.kind, kinds)),
+    ),
+  );
 
 /**
  * The names a document declares.
@@ -1503,15 +1556,6 @@ const resolves = (r: ReadingRow) =>
   );
 
 /**
- * State that a reading reads an item's `duration`, which only a time-dependent item's may be
- * (A62).
- *
- * @param r - The row.
- * @returns The predicate.
- */
-const readsItemDuration = (r: ReadingRow) =>
-  r.and(itemHeld(r), r.eq(r.source, "builtIn"), r.eq(r.variable, "duration"));
-
 /**
  * The variable mappings whose item ref names no LTI link: a mapping under an LTI item ref has no
  * item, so no source declaration, and is accepted unchecked (spec reading 110). A mapping under an
@@ -1558,11 +1602,6 @@ const declaredReadings = select(Reading, (r) => r.eq(r.source, "declared"));
  * ({@link linkHeld}, spec reading 110).
  */
 const mappedReadings = select(Reading, (r) => r.and(r.eq(r.source, "mapped"), r.not(linkHeld(r))));
-
-/**
- * The readings of an item's `duration`, each of which its item must be time-dependent to make.
- */
-const timedReadings = select(Reading, readsItemDuration);
 
 /**
  * The split and numbered readings, each at the segment its dot ends.
@@ -1703,9 +1742,8 @@ export const readingFamily = counted(
  *   places its document and read once per test, its name split at every dot (A59's concatenation),
  *   its readings exactly the readings of its name, exactly one of them resolving
  *   (`Prefixed_reference`, M3, the refusal naming both), none through a name two placements give
- *   (reading 86), an unsplit name declared (`Variable_declared`, P8), an item's `duration` only a
- *   time-dependent item's ("Item duration"), a literal's stand-in typed (`Reference_type`, P24),
- *   and a `section-identifier` a section's (`Section_identifier_target`).
+ *   (reading 86), an unsplit name declared (`Variable_declared`, P8), a literal's stand-in typed
+ *   (`Reference_type`, P24), and a `section-identifier` a section's (`Section_identifier_target`).
  */
 export const referenceLawsByName = {
   "DocumentId key": [
@@ -1959,7 +1997,6 @@ export const referenceLawsByName = {
     check("E1_derived", ReferenceSegment, (s) =>
       s.and(
         Compute.matches(s.piece, piecePattern),
-        s.eq(s.token, Compute.concat(s.separator, s.piece)),
         s.or(
           s.and(s.eq(s.at, 0n), s.eq(s.separator, ""), s.eq(s.digit, false)),
           s.and(
@@ -2154,7 +2191,6 @@ export const referenceLawsByName = {
       ),
     ),
   ],
-  "Item duration": [contained(on(timedReadings, "lookupDocument"), on(timedItems, "document"))],
   "Item ref target": [
     // A found item ref's target and item are its `ItemRefTarget`'s and `ItemRefDocument`'s, each a
     // row only where the package holds one, so an item ref naming no resource of the package, or an
@@ -2372,7 +2408,6 @@ export const expressionLawsByName = {
     ),
   ],
   "DocumentId key": [
-    key(on(itemTimes, "node")),
     // ProcessingTemplate: the published template a response processing's URI names.
     key(on(templateAttributes, "node")),
   ],
@@ -2602,6 +2637,47 @@ export const expressionLawsByName = {
         ),
       ),
     ),
+    // VariableRefDeclaration (lane NIL's NS1): a declared reference's declaration, a row of its own.
+    mirrors(
+      on(
+        select(VariableRef, (v) => v.eq(v.resolution, "declared")),
+        "node",
+        "attribute",
+      ),
+      on(VariableRefDeclaration, "node", "attribute"),
+    ),
+    contained(
+      on(
+        VariableRefDeclaration,
+        "node",
+        "attribute",
+        "baseType",
+        "cardinality",
+        "document",
+        "identifier",
+        "kind",
+        "language",
+        "table",
+      ),
+      on(
+        VariableRef,
+        "node",
+        "attribute",
+        "baseType",
+        "cardinality",
+        "document",
+        "identifier",
+        "kind",
+        "language",
+        "table",
+      ),
+    ),
+    check("E1_derived", VariableRefDeclaration, (d) =>
+      d.and(
+        d.eq(d.baseType, ValueBaseOf.at("value", d.declBaseType)),
+        d.eq(d.cardinality, ValueCardinalityOf.at("value", d.declCardinality)),
+      ),
+    ),
     // PlacedVariableRef (spec reading 117): each item instance's references, its document's,
     // resolved among the item's declarations, under "Variable declared" over the assembly.
     documentVariableFamily,
@@ -2629,12 +2705,8 @@ export const expressionLawsByName = {
         v.and(
           v.eq(v.resolution, "builtIn"),
           v.or(
-            ...builtIns.map(({ declaration, root, variable }) =>
-              v.and(
-                v.eq(v.rootKind, root),
-                v.eq(v.identifier, variable),
-                v.eq(v.declarationKind, declaration),
-              ),
+            ...builtIns.map(({ root, variable }) =>
+              v.and(v.eq(v.rootKind, root), v.eq(v.identifier, variable)),
             ),
           ),
         ),
@@ -2646,16 +2718,27 @@ export const expressionLawsByName = {
         ),
       ),
     ),
-    contained(
-      on(itemTimes, "node", "document", "lexical"),
-      on(ItemTiming, "node", "document", "lexical"),
-    ),
-    key(on(ItemTiming, "document")),
-    check("E1_derived", ItemTiming, (t) =>
-      t.or(
-        t.and(Compute.matches(t.lexical, timeDependentForm), t.eq(t.timeDependent, true)),
-        t.and(t.not(Compute.matches(t.lexical, timeDependentForm)), t.eq(t.timeDependent, false)),
+    // PlacedVariableRefDeclaration (lane NIL's NS1): a declared placed reference's declaration.
+    mirrors(
+      on(
+        select(PlacedVariableRef, (v) => v.eq(v.resolution, "declared")),
+        "instance",
+        "node",
+        "attribute",
       ),
+      on(PlacedVariableRefDeclaration, "instance", "node", "attribute"),
+    ),
+    contained(
+      on(
+        PlacedVariableRefDeclaration,
+        "instance",
+        "node",
+        "attribute",
+        "assembly",
+        "identifier",
+        "kind",
+      ),
+      on(PlacedVariableRef, "instance", "node", "attribute", "assembly", "identifier", "kind"),
     ),
     // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
     key(on(typingAttributes, "node", "name")),
@@ -2752,7 +2835,6 @@ export const expressionLawsByName = {
       ),
     ),
   ],
-  "Item duration": [contained(on(itemDurations, "document"), on(timedItems, "document"))],
   "Literal lexical": [
     check("Literal_lexical", LiteralTyped, (l) =>
       Compute.matches(l.text, BaseTypePattern.at("pattern", l.typeCode)),
@@ -2776,19 +2858,18 @@ export const expressionLawsByName = {
     ),
   ],
   "Mapped response": [
-    check("Mapped_response", VariableRef, (v) =>
-      v.or(
-        v.ne(v.attribute, "identifier"),
-        v.not(v.in(v.kind, ["qti-map-response", "qti-map-response-point"])),
-        v.ne(v.resolution, "declared"),
-        v.and(
-          v.eq(v.declarationKind, "qti-response-declaration"),
-          v.or(
-            v.and(v.eq(v.kind, "qti-map-response"), v.eq(v.table, "qti-mapping")),
-            v.and(
-              v.eq(v.kind, "qti-map-response-point"),
-              v.eq(v.table, "qti-area-mapping"),
-              v.in(v.baseType, ["point", ...silentBases]),
+    check("Mapped_response", VariableRefDeclaration, (d) =>
+      d.or(
+        d.ne(d.attribute, "identifier"),
+        d.not(d.in(d.kind, ["qti-map-response", "qti-map-response-point"])),
+        d.and(
+          d.eq(d.declarationKind, "qti-response-declaration"),
+          d.or(
+            d.and(d.eq(d.kind, "qti-map-response"), d.eq(d.table, "qti-mapping")),
+            d.and(
+              d.eq(d.kind, "qti-map-response-point"),
+              d.eq(d.table, "qti-area-mapping"),
+              d.in(d.baseType, ["point", ...silentBases]),
             ),
           ),
         ),
@@ -2830,17 +2911,18 @@ export const expressionLawsByName = {
   ],
   "Reference type": [
     check("Reference_type", VariableRef, (v) =>
-      v.or(
-        v.eq(v.attribute, "identifier"),
-        v.eq(v.resolution, "unresolved"),
-        v.and(
-          v.eq(v.resolution, "declared"),
-          v.in(v.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
-          v.or(
-            v.eq(v.baseType, ReferenceBase.at("base", v.kind, v.attribute)),
-            v.in(v.baseType, silentBases),
+      v.or(v.eq(v.attribute, "identifier"), v.ne(v.resolution, "builtIn")),
+    ),
+    check("Reference_type", VariableRefDeclaration, (d) =>
+      d.or(
+        d.eq(d.attribute, "identifier"),
+        d.and(
+          d.in(d.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
+          d.or(
+            d.eq(d.baseType, ReferenceBase.at("base", d.kind, d.attribute)),
+            d.in(d.baseType, silentBases),
           ),
-          v.in(v.cardinality, ["single", "unknown"]),
+          d.in(d.cardinality, ["single", "unknown"]),
         ),
       ),
     ),
@@ -2870,20 +2952,22 @@ export const expressionLawsByName = {
       v.or(
         v.ne(v.language, "template"),
         v.not(v.in(v.kind, expressionKinds)),
-        v.and(
-          v.or(
-            v.ne(v.resolution, "declared"),
-            v.not(v.in(v.declarationKind, ["qti-outcome-declaration", "qti-response-declaration"])),
-          ),
-          v.or(v.ne(v.resolution, "builtIn"), v.eq(v.identifier, "QTI_CONTEXT")),
-        ),
+        v.ne(v.resolution, "builtIn"),
+        v.eq(v.identifier, "QTI_CONTEXT"),
+      ),
+    ),
+    check("Template_reads", VariableRefDeclaration, (d) =>
+      d.or(
+        d.ne(d.language, "template"),
+        d.not(d.in(d.kind, expressionKinds)),
+        d.not(d.in(d.declarationKind, ["qti-outcome-declaration", "qti-response-declaration"])),
       ),
     ),
   ],
   "Variable declared": [
     contained(
       on(
-        select(VariableRef, (v) => v.eq(v.resolution, "declared")),
+        VariableRefDeclaration,
         "declaration",
         "document",
         "identifier",
@@ -2911,7 +2995,7 @@ export const expressionLawsByName = {
     ),
     contained(
       on(
-        select(PlacedVariableRef, (v) => v.eq(v.resolution, "declared")),
+        PlacedVariableRefDeclaration,
         "declaration",
         "assembly",
         "identifier",
@@ -2935,17 +3019,12 @@ export const expressionLawsByName = {
       on(namedVariables, "kind", "attribute", "declarationKind"),
       on(ReferenceDeclaration, "kind", "attribute", "declaration"),
     ),
+    check("Variable_kind", VariableRef, namesAllowedBuiltIn),
     contained(
-      on(
-        select(PlacedVariableRef, (v) =>
-          v.and(v.eq(v.attribute, "identifier"), v.ne(v.resolution, "unresolved")),
-        ),
-        "kind",
-        "attribute",
-        "declarationKind",
-      ),
+      on(namedPlacedVariables, "kind", "attribute", "declarationKind"),
       on(ReferenceDeclaration, "kind", "attribute", "declaration"),
     ),
+    check("Variable_kind", PlacedVariableRef, placesAllowedBuiltIn),
   ],
   "Weighted base": [
     check("Weighted_base", ExpressionAttribute, (x) =>

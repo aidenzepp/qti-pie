@@ -19,7 +19,7 @@ import { foreignKinds, isForeignKind } from "#pantry/grammar/kinds.ts";
 import { expandedNameOf } from "#pantry/grammar/xsi.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
-import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
+import { mathmlNamespace, namespaceNameOf } from "#pantry/vocab/namespaces.ts";
 import { typeAvailable } from "#pantry/vocab/open.ts";
 import {
   baseVersion,
@@ -152,7 +152,8 @@ const unavailableTypes = (grammar: ComposedGrammar, node: Node): readonly Node["
     : grammar.xsi.typeName.handles.filter((handle) =>
         Option.exists(
           expandedNameOf(handle),
-          ({ namespace }) => !typeAvailable(parent.namespace, namespace),
+          ({ namespace }) =>
+            !typeAvailable(namespaceNameOf(parent.namespace), namespaceNameOf(namespace)),
         ),
       );
 };

@@ -15,7 +15,7 @@
  *   written, each compared collapsed. It is written from the sentence, apart from the module's
  *   constants and the law oracle's.
  * - **The database's laws** ({@link databaseRefusals}): the rows `rowsOf` builds and the tree's rows
- *   `rootInsertOf` writes, with `Node.stringValue` folded from the host's `stringPiece` as the
+ *   `rootInsertOf` writes, with `Node.stringValue` folded from the children's `chars` as the
  *   database folds it, under every statement `metadataLaws` adds for the law: the copies both ways,
  *   the keys over each term, and the law's containment.
  */
@@ -510,14 +510,14 @@ export const repeats = (sketch: PackageSketch): boolean =>
     );
 
 /**
- * One node of a document as the tree's insert writes it: its id, kind, parent and `stringPiece`.
+ * One node of a document as the tree's insert writes it: its id, kind, parent and `chars`.
  */
 interface WrittenNode {
+  readonly chars: string;
   readonly id: string;
   readonly kind: string;
   readonly parent: string;
   readonly parentKind: string;
-  readonly stringPiece: string;
 }
 
 /**
@@ -534,11 +534,11 @@ const writtenNodes = (root: NodeRoot): readonly WrittenNode[] => {
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
     const { node, parent } = next;
     out.push({
+      chars: node.chars,
       id: node.id,
       kind: node.kind,
       parent: parent.id,
       parentKind: parent.kind,
-      stringPiece: node.stringPiece,
     });
     stack.push(...node.children.map((child) => ({ node: child, parent: node })).toReversed());
   }
@@ -548,7 +548,8 @@ const writtenNodes = (root: NodeRoot): readonly WrittenNode[] => {
 
 /**
  * One document's rows as the laws read them: its learning resource types' two overlays, and each
- * term's string value as the database folds it, the concatenation of its children's `stringPiece`.
+ * term's string value as the database folds it, the concatenation of its children's `chars`, every
+ * one of which the fold steps (`copiedVocabularyText` of `#pantry/qti/node.ts`).
  */
 export interface DocumentRows {
   readonly sources: ReadonlyMap<string, Addition<typeof LomResourceTypeSource>>;
@@ -586,7 +587,7 @@ export const documentRowsOf = (
   );
   const folded = new Map<string, string>();
   for (const node of nodes) {
-    folded.set(node.parent, `${folded.get(node.parent) ?? ""}${node.stringPiece}`);
+    folded.set(node.parent, `${folded.get(node.parent) ?? ""}${node.chars}`);
   }
 
   return {

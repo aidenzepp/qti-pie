@@ -772,6 +772,12 @@ RETURN '{"none","imsqti_test_xmlv3p0","imsqti_section_xmlv3p0","imsqti_item_xmlv
 
 REVOKE ALL ON FUNCTION "qti"."__resource_type_names_iatibe6omc"() FROM PUBLIC;
 
+CREATE FUNCTION "qti"."__rounding_holds_names_6j2zaayymp"() RETURNS "pg_catalog"."name"[]
+LANGUAGE sql IMMUTABLE PARALLEL SAFE
+RETURN '{"neither","mode","figures","both"}'::"pg_catalog"."name"[];
+
+REVOKE ALL ON FUNCTION "qti"."__rounding_holds_names_6j2zaayymp"() FROM PUBLIC;
+
 CREATE FUNCTION "qti"."__rp_template_names_tkkjkmwhuf"() RETURNS "pg_catalog"."name"[]
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
 RETURN '{"none","match_correct","map_response","map_response_point","CC2_match","CC2_match_basic","CC2_map_response"}'::"pg_catalog"."name"[];
@@ -820,11 +826,11 @@ RETURN '{"qti-text-entry-interaction@role","xs:IDREFS","xs:normalizedString","AR
 
 REVOKE ALL ON FUNCTION "qti"."__value_domain_names_tb7etzpdol"() FROM PUBLIC;
 
-CREATE FUNCTION "qti"."__xml_standalone_names_f2rbvjae6d"() RETURNS "pg_catalog"."name"[]
+CREATE FUNCTION "qti"."__xml_standalone_names_psf7bszcug"() RETURNS "pg_catalog"."name"[]
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
-RETURN '{"none","yes","no"}'::"pg_catalog"."name"[];
+RETURN '{"yes","no"}'::"pg_catalog"."name"[];
 
-REVOKE ALL ON FUNCTION "qti"."__xml_standalone_names_f2rbvjae6d"() FROM PUBLIC;
+REVOKE ALL ON FUNCTION "qti"."__xml_standalone_names_psf7bszcug"() FROM PUBLIC;
 
 CREATE FUNCTION "qti"."__attribute_name_live_7ot3c4gfh5"() RETURNS bit varying
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
@@ -922,6 +928,8 @@ CREATE DOMAIN "qti"."referenced_table" AS smallint CONSTRAINT "check" CHECK (VAL
 
 CREATE DOMAIN "qti"."resource_type" AS smallint CONSTRAINT "check" CHECK (VALUE IS NULL OR (("qti"."__resource_type_names_iatibe6omc"())[VALUE + 1] <> ''::"pg_catalog"."name") IS TRUE);
 
+CREATE DOMAIN "qti"."rounding_holds" AS smallint CONSTRAINT "check" CHECK (VALUE IS NULL OR (("qti"."__rounding_holds_names_6j2zaayymp"())[VALUE + 1] <> ''::"pg_catalog"."name") IS TRUE);
+
 CREATE DOMAIN "qti"."rp_template" AS smallint CONSTRAINT "check" CHECK (VALUE IS NULL OR (("qti"."__rp_template_names_tkkjkmwhuf"())[VALUE + 1] <> ''::"pg_catalog"."name") IS TRUE);
 
 CREATE DOMAIN "qti"."schema_version" AS smallint CONSTRAINT "check" CHECK (VALUE IS NULL OR (("qti"."__schema_version_names_p2hfvbhu24"())[VALUE + 1] <> ''::"pg_catalog"."name") IS TRUE);
@@ -938,7 +946,7 @@ CREATE DOMAIN "qti"."value_cardinality" AS smallint CONSTRAINT "check" CHECK (VA
 
 CREATE DOMAIN "qti"."value_domain" AS smallint CONSTRAINT "check" CHECK (VALUE IS NULL OR (("qti"."__value_domain_names_tb7etzpdol"())[VALUE + 1] <> ''::"pg_catalog"."name") IS TRUE);
 
-CREATE DOMAIN "qti"."xml_standalone" AS smallint CONSTRAINT "check" CHECK (VALUE IS NULL OR (("qti"."__xml_standalone_names_f2rbvjae6d"())[VALUE + 1] <> ''::"pg_catalog"."name") IS TRUE);
+CREATE DOMAIN "qti"."xml_standalone" AS smallint CONSTRAINT "check" CHECK (VALUE IS NULL OR (("qti"."__xml_standalone_names_psf7bszcug"())[VALUE + 1] <> ''::"pg_catalog"."name") IS TRUE);
 
 CREATE DOMAIN "qti"."__attribute_name_bits_416_thr6i6sipt" AS bit(416) CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE & "qti"."__attribute_name_live_7ot3c4gfh5"() = VALUE) IS TRUE);
 
@@ -982,8 +990,6 @@ CREATE DOMAIN "qti"."__text_7dfilirtp3" AS "pg_catalog"."text" COLLATE "pg_catal
 
 CREATE DOMAIN "qti"."__text_xisvziygi3" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:\+?0*(?:[1-8][0-9]{18}|[1-9][0-9]{0,17}|9[01][0-9]{17}|92[01][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[01][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807|0)|\-0*(?:[1-8][0-9]{18}|[1-9][0-9]{0,17}|9[01][0-9]{17}|92[01][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[01][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-7]|9223372036854775808|0))\Z'::"pg_catalog"."text") IS TRUE);
 
-CREATE DOMAIN "qti"."__text_blket2gym3" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:none|1\.[0-9]+)\Z'::"pg_catalog"."text") IS TRUE);
-
 CREATE DOMAIN "qti"."__text_7j6kgluyjp" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:\-[\u0009\u000A\u000D -\,\.-\uFFFD\U00010000-\U0010FFFF]|[\u0009\u000A\u000D -\,\.-\uFFFD\U00010000-\U0010FFFF])*\Z'::"pg_catalog"."text") IS TRUE);
 
 CREATE DOMAIN "qti"."__text_xey6ryorh5" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A[A-Za-z][\-\.0-9A-Z\_a-z]*\Z'::"pg_catalog"."text") IS TRUE);
@@ -1002,8 +1008,6 @@ CREATE DOMAIN "qti"."__text_mpc5fvfrbl" AS "pg_catalog"."text" COLLATE "pg_catal
 
 CREATE DOMAIN "qti"."__text_7lh2gkatwn" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:[\+\/-9A-Za-z]{4})*(?:[\+\/-9A-Za-z]{2}\=\=|[\+\/-9A-Za-z]{3}\=)?\Z'::"pg_catalog"."text") IS TRUE);
 
-CREATE DOMAIN "qti"."__text_jcb7qxjt3i" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:[A-Za-z][\-\.0-9A-Z\_a-z]*)?\Z'::"pg_catalog"."text") IS TRUE);
-
 CREATE DOMAIN "qti"."__text_qvake6vbfh" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A\-?\Z'::"pg_catalog"."text") IS TRUE);
 
 CREATE DOMAIN "qti"."__text_zij47sgley" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-9\;\=\@-Z\_a-z\~])+(?:\/(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])*)*|\/(?:(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])+(?:\/(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])*)*)?|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=A-Z\_a-z\~])*\@)?(?:(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-9\;\=A-Z\_a-z\~])*|\[(?:(?:[0-9A-Fa-f]{1,4})?\:\:(?:[0-9A-Fa-f]{1,4}\:){4}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:)?[0-9A-Fa-f]{1,4})?\:\:(?:[0-9A-Fa-f]{1,4}\:){3}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:){0,2}[0-9A-Fa-f]{1,4})?\:\:(?:[0-9A-Fa-f]{1,4}\:){2}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:){0,3}[0-9A-Fa-f]{1,4})?\:\:[0-9A-Fa-f]{1,4}\:(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:){0,4}[0-9A-Fa-f]{1,4})?\:\:(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:){0,5}[0-9A-Fa-f]{1,4})?\:\:[0-9A-Fa-f]{1,4}|(?:(?:[0-9A-Fa-f]{1,4}\:){0,6}[0-9A-Fa-f]{1,4})?\:\:|(?:[0-9A-Fa-f]{1,4}\:){6}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|\:\:(?:[0-9A-Fa-f]{1,4}\:){5}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|[Vv][0-9A-Fa-f]+\.[\!\$\&-\.0-\;\=A-Z\_a-z\~]+)\])(?:\:[0-9]*)?(?:\/(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])*)*|[A-Za-z][\+\-\.0-9A-Za-z]*\:(?:(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])+(?:\/(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])*)*|\/(?:(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])+(?:\/(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])*)*)?|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=A-Z\_a-z\~])*\@)?(?:(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-9\;\=A-Z\_a-z\~])*|\[(?:(?:[0-9A-Fa-f]{1,4})?\:\:(?:[0-9A-Fa-f]{1,4}\:){4}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:)?[0-9A-Fa-f]{1,4})?\:\:(?:[0-9A-Fa-f]{1,4}\:){3}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:){0,2}[0-9A-Fa-f]{1,4})?\:\:(?:[0-9A-Fa-f]{1,4}\:){2}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:){0,3}[0-9A-Fa-f]{1,4})?\:\:[0-9A-Fa-f]{1,4}\:(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:){0,4}[0-9A-Fa-f]{1,4})?\:\:(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|(?:(?:[0-9A-Fa-f]{1,4}\:){0,5}[0-9A-Fa-f]{1,4})?\:\:[0-9A-Fa-f]{1,4}|(?:(?:[0-9A-Fa-f]{1,4}\:){0,6}[0-9A-Fa-f]{1,4})?\:\:|(?:[0-9A-Fa-f]{1,4}\:){6}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|\:\:(?:[0-9A-Fa-f]{1,4}\:){5}(?:(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])\.(?:1[0-9]{2}|[1-9][0-9]|2[0-4][0-9]|25[0-5]|[0-9])|[0-9A-Fa-f]{1,4}\:[0-9A-Fa-f]{1,4})|[Vv][0-9A-Fa-f]+\.[\!\$\&-\.0-\;\=A-Z\_a-z\~]+)\])(?:\:[0-9]*)?(?:\/(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\.0-\;\=\@-Z\_a-z\~])*)*)?)?(?:\?(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\;\=\?-Z\_a-z\~])*)?(?:\#(?:\%[0-9A-Fa-f]{2}|[\!\$\&-\;\=\?-Z\_a-z\~])*)?\Z'::"pg_catalog"."text") IS TRUE);
@@ -1017,6 +1021,8 @@ CREATE DOMAIN "qti"."__text_5xaumrdzw7" AS "pg_catalog"."text" COLLATE "pg_catal
 CREATE DOMAIN "qti"."__text_7v4cf2tt2q" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:[\+\-]?(?:0{0,255}(?:[1-9][0-9]{0,14}|0)(?:\.(?:[0-9]{0,14}|[0-9]{15}0{0,255}))?|\.(?:[0-9]{1,14}|[0-9]{15}0{0,255}))(?:[Ee][\+\-]?0{0,255}(?:1[0-9]{2}|[1-9][0-9]?|2[0-8][0-9]|29[0-2]|293|0))?|\-?INF|NaN)\Z'::"pg_catalog"."text") IS TRUE);
 
 CREATE DOMAIN "qti"."__text_3dlgl63rv6" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:[\u0009\u000A\u000D ]*|[\{\}])\Z'::"pg_catalog"."text") IS TRUE);
+
+CREATE DOMAIN "qti"."__text_aezrarw5qb" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A1\.[0-9]+\Z'::"pg_catalog"."text") IS TRUE);
 
 CREATE DOMAIN "qti"."__text_3adwbksayk" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (VALUE IS NULL OR (VALUE ~ '\A(?:[A-WYZ\_a-wyz\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]{2}|[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]?|[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]{3}[\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*|[Xx](?:[\-\.0-9A-LN-Z\_a-ln-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]|[Mm][\-\.0-9A-KM-Z\_a-km-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]))\Z'::"pg_catalog"."text") IS TRUE);
 

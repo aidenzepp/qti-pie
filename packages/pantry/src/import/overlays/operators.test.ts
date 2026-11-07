@@ -1,7 +1,8 @@
 /**
  * The operator builder's free tests: `tolerancePiecesOf` splits every `tolerance` into exactly its
- * whitespace-separated values, `figuresOf` reads every `figures` as reading 119 does, and over
- * documents `rowsOf` gives each rounding operator its row and each written `tolerance` its values,
+ * whitespace-separated values, the database's `integerForm` reads every collapsed `figures` as
+ * reading 119 does, and over documents `rowsOf` gives each rounding operator its rows and each
+ * written `tolerance` its values,
  * so that the database's checks, restated over those rows with the patterns they read, refuse
  * exactly where the specification does.
  *
@@ -10,7 +11,6 @@
  * by the builder's own code. The database tests (`#pantry/qti/operators.db.test.ts`) judge the
  * rows through PostgreSQL.
  */
-import type { Addition } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
@@ -20,18 +20,22 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { swarm, swarmChoice } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Result } from "effect";
+import { Duration, Effect, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { ownContext } from "#pantry/import/fold.ts";
-import { figuresOf, rowsOf, tolerancePiecesOf } from "#pantry/import/overlays/operators.ts";
+import { rowsOf, tolerancePiecesOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows, ToleranceRow } from "#pantry/import/overlays/operators.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import { doublePattern, integerForm, positivePattern } from "#pantry/qti/operators.ts";
-import type { Rounding } from "#pantry/qti/operators.ts";
+import {
+  doublePattern,
+  equalRoundedMode,
+  integerForm,
+  positivePattern,
+} from "#pantry/qti/operators.ts";
 import {
   collapsedText,
   figuresIntegerOf,
@@ -138,11 +142,13 @@ describe("import/overlays/operators.ts, tolerancePiecesOf", () => {
                 JSON.stringify(lexical),
               );
               if (pieces.length > 0) {
-                assert.strictEqual(pieces.map(({ piece }) => piece).join(""), lexical);
+                assert.strictEqual(
+                  pieces.map(({ after, before, token }) => `${before}${token}${after}`).join(""),
+                  lexical,
+                );
               }
 
-              for (const [at, { after, before, piece, token }] of pieces.entries()) {
-                assert.strictEqual(piece, `${before}${token}${after}`);
+              for (const [at, { after, before }] of pieces.entries()) {
                 assert.isTrue(at === 0 || before !== "", JSON.stringify(lexical));
                 assert.isTrue(at === pieces.length - 1 || after === "", JSON.stringify(lexical));
               }
@@ -151,6 +157,16 @@ describe("import/overlays/operators.ts, tolerancePiecesOf", () => {
       ),
   );
 });
+
+/**
+ * The patterns the database's checks read, as PostgreSQL's `~` reads them: each anchored, of
+ * classes, groups and alternation alone, which ECMAScript's `u` mode reads the same.
+ */
+const database = {
+  integer: new RegExp(integerForm, "u"),
+  numeric: new RegExp(doublePattern, "u"),
+  positive: new RegExp(positivePattern, "u"),
+};
 
 /**
  * The first 18 digits of both ends of the signed 64-bit range, `9223372036854775807` and
@@ -170,64 +186,65 @@ type FiguresSituation = "integer" | "no integer" | "the greatest integer" | "the
  */
 const int64Range = { max: 2n ** 63n - 1n, min: -(2n ** 63n) } as const;
 
-describe("import/overlays/operators.ts, figuresOf", { timeout: searchTimeout }, () => {
-  it.effect(
-    "reads every figures of at most 4 pieces over the box as reading 119 does: collapsed, an integer exactly where the specification reads one, at its value",
-    (ctx) =>
-      // Oracle: the specification as a checker, the union's xs:integer member read collapsed
-      // within reading 46's signed 64-bit range, `#pantry/test/operator-spec.ts` figuresIntegerOf.
-      // Bound: every figures of at most 4 pieces over 0, 1, 7, 8, 9, +, -, space, tab, F and
-      // {@link int64Stem}, 16,105, which reach both ends of the range and one past each.
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every figures of at most 4 pieces over 0 1 7 8 9 + - space tab F and the 64-bit bounds' first 18 digits",
-            caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<FiguresSituation>([
-              "integer",
-              "no integer",
-              "the greatest integer",
-              "the least integer",
-            ]),
-            generator: string(
-              element(["0", "1", "7", "8", "9", "+", "-", " ", "\t", "F", int64Stem] as const),
-              { max: 4, min: 0 },
-            ),
-            limit: 16_105,
-            literal: (value) => JSON.stringify(value),
-            oracle: {
-              kind: "specification",
-              name: "xs:integer's lexical space, collapsed, within the signed 64-bit range",
+describe(
+  "qti/operators.ts, integerForm over a collapsed figures",
+  { timeout: searchTimeout },
+  () => {
+    it.effect(
+      "reads every figures of at most 4 pieces over the box as reading 119 does, collapsed: an integer exactly where the specification reads one, at its value",
+      (ctx) =>
+        // Oracle: the specification as a checker, the union's xs:integer member read collapsed
+        // within reading 46's signed 64-bit range, `#pantry/test/operator-spec.ts` figuresIntegerOf.
+        // Bound: every figures of at most 4 pieces over 0, 1, 7, 8, 9, +, -, space, tab, F and
+        // {@link int64Stem}, 16,105, which reach both ends of the range and one past each.
+        searched(
+          ctx,
+          exhaust(
+            {
+              box: "every figures of at most 4 pieces over 0 1 7 8 9 + - space tab F and the 64-bit bounds' first 18 digits",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<FiguresSituation>([
+                "integer",
+                "no integer",
+                "the greatest integer",
+                "the least integer",
+              ]),
+              generator: string(
+                element(["0", "1", "7", "8", "9", "+", "-", " ", "\t", "F", int64Stem] as const),
+                { max: 4, min: 0 },
+              ),
+              limit: 16_105,
+              literal: (value) => JSON.stringify(value),
+              oracle: {
+                kind: "specification",
+                name: "xs:integer's lexical space, collapsed, within the signed 64-bit range",
+              },
+              suite: "import/overlays/operators-figures",
             },
-            suite: "import/overlays/operators-figures",
-          },
-          (lexical: string, c) =>
-            Effect.sync(() => {
-              const spec = figuresIntegerOf(lexical);
-              c.note(spec === undefined ? "no integer" : "integer");
-              if (spec === int64Range.max) {
-                c.note("the greatest integer");
-              }
+            (lexical: string, c) =>
+              Effect.sync(() => {
+                const spec = figuresIntegerOf(lexical);
+                c.note(spec === undefined ? "no integer" : "integer");
+                if (spec === int64Range.max) {
+                  c.note("the greatest integer");
+                }
 
-              if (spec === int64Range.min) {
-                c.note("the least integer");
-              }
+                if (spec === int64Range.min) {
+                  c.note("the least integer");
+                }
 
-              assert.deepStrictEqual(
-                figuresOf(lexical),
-                {
-                  figures: collapsedText(lexical),
-                  figuresValue: spec ?? 0n,
-                  integer: spec !== undefined,
-                },
-                JSON.stringify(lexical),
-              );
-            }),
+                const figures = collapsedText(lexical);
+                assert.deepStrictEqual(
+                  database.integer.test(figures) ? BigInt(figures) : undefined,
+                  spec,
+                  JSON.stringify(lexical),
+                );
+              }),
+          ),
         ),
-      ),
-  );
-});
+    );
+  },
+);
 
 /**
  * Response processing of four rounding operators and three equalities: a `qti-equal-rounded` with
@@ -300,39 +317,66 @@ describe("import/overlays/operators.ts, rowsOf", () => {
 });
 
 /**
- * The patterns the database's checks read, as PostgreSQL's `~` reads them: each anchored, of
- * classes, groups and alternation alone, which ECMAScript's `u` mode reads the same.
+ * The least `figures` reading 119 admits under each mode.
  */
-const database = {
-  integer: new RegExp(integerForm, "u"),
-  numeric: new RegExp(doublePattern, "u"),
-  positive: new RegExp(positivePattern, "u"),
+const leastFigures: ReadonlyMap<string, bigint> = new Map([
+  ["decimalPlaces", 0n],
+  ["significantFigures", 1n],
+]);
+
+/**
+ * Restate `E1_derived` over a rounding operator's `Rounding` row and the detail rows it holds, and
+ * the mirrors between them, as PostgreSQL evaluates them: what it holds, by its mode in force and
+ * its `figures`; the collapsed `figures`; the written or default mode; and its `both` arm, copying
+ * both.
+ *
+ * @param rows - The operator's document's rows, which hold one rounding operator.
+ * @returns Whether every one holds.
+ */
+const roundingDerived = (rows: OperatorRows): boolean => {
+  const [rounding] = [...rows.Rounding.values()];
+  const [figures] = [...rows.RoundingFigures.values()];
+  const [mode] = [...rows.RoundingMode.values()];
+  const [both] = [...rows.RoundingModeFigures.values()];
+  if (rounding === undefined) {
+    return false;
+  }
+
+  const moded = rounding.modeWritten || rounding.kind === "qti-equal-rounded";
+  const holdsMode = rounding.holds === "mode" || rounding.holds === "both";
+  const holdsFigures = rounding.holds === "figures" || rounding.holds === "both";
+  const modeHeld =
+    mode === undefined ||
+    (mode.modeWritten === rounding.modeWritten &&
+      (mode.modeWritten || (mode.kind === "qti-equal-rounded" && mode.mode === equalRoundedMode)));
+
+  return (
+    holdsMode === moded &&
+    holdsFigures === (figures !== undefined) &&
+    holdsMode === (mode !== undefined) &&
+    (rounding.holds === "both") === (both !== undefined) &&
+    (figures === undefined || figures.figures === collapsedText(figures.figuresLexical)) &&
+    modeHeld &&
+    (both === undefined || (both.figures === figures?.figures && both.mode === mode?.mode))
+  );
 };
 
 /**
- * Restate `operatorLaws`' checks over a rounding row, as PostgreSQL evaluates them: `E1_derived`
- * (the collapsed `figures`, `integer`, `figuresValue` and the default mode) and
- * `Rounding_figures`.
+ * Restate `Rounding_figures` over a rounding operator's `both` arm, as PostgreSQL evaluates it:
+ * an integer `figures` at least its mode's least.
  *
- * @param row - The row.
- * @returns Whether `E1_derived` holds, and whether `Rounding_figures` does.
+ * @param rows - The operator's document's rows, which hold one rounding operator.
+ * @returns Whether it holds, as it does where the operator has no such arm.
  */
-const roundingChecks = (row: Addition<typeof Rounding>) => {
-  const integer = database.integer.test(row.figures);
-
-  return {
-    derived:
-      row.figures === collapsedText(row.figuresLexical) &&
-      row.integer === integer &&
-      row.figuresValue === (integer ? BigInt(row.figures) : 0n) &&
-      (row.modeWritten ||
-        (row.kind === "qti-equal-rounded" && row.mode === "significantFigures") ||
-        (row.kind === "qti-round-to" && row.mode === "")),
-    figures:
-      (!row.integer || row.mode !== "significantFigures" || row.figuresValue >= 1n) &&
-      (!row.integer || row.mode !== "decimalPlaces" || row.figuresValue >= 0n),
-  };
-};
+const roundingFiguresHolds = (rows: OperatorRows): boolean =>
+  [...rows.RoundingModeFigures.values()].every(
+    ({ figures, mode }) =>
+      !database.integer.test(figures) ||
+      Option.match(Option.fromNullishOr(leastFigures.get(mode)), {
+        onNone: () => true,
+        onSome: (least) => BigInt(figures) >= least,
+      }),
+  );
 
 /**
  * Restate reading 121's laws over a `qti-equal`'s rows, as PostgreSQL evaluates them: the
@@ -543,9 +587,10 @@ const assertEquality = (drawnCase: DrawnOperator, rows: OperatorRows): void => {
 };
 
 /**
- * Assert a drawn rounding operator's rows: one `Rounding` row, copying its `figures` and its
- * `rounding-mode`, meeting `E1_derived`, and breaking `Rounding_figures` exactly where the
- * specification refuses.
+ * Assert a drawn rounding operator's rows: one `Rounding` row; a `RoundingFigures` row exactly
+ * where it writes `figures`, copying it; a `RoundingMode` row exactly where a mode is in force,
+ * copying its `rounding-mode` or holding the default; all meeting `E1_derived`; and breaking
+ * `Rounding_figures` exactly where the specification refuses.
  *
  * @param kind - The operator's kind.
  * @param drawnCase - The operator.
@@ -555,23 +600,31 @@ const assertEquality = (drawnCase: DrawnOperator, rows: OperatorRows): void => {
 const assertRounding = (kind: RoundingKind, drawnCase: DrawnOperator, rows: OperatorRows): void => {
   const message = JSON.stringify(drawnCase);
   const [row, ...rest] = [...rows.Rounding.values()];
+  const figures = [...rows.RoundingFigures.values()].map(({ figuresLexical }) => figuresLexical);
+  const modes = [...rows.RoundingMode.values()].map(({ mode }) => mode);
 
   assert.strictEqual(rows.Tolerance.size, 0, message);
   assert.strictEqual(rest.length, 0, message);
   assert.isDefined(row, `no Rounding row: ${message}`);
-  if (row !== undefined) {
-    assert.strictEqual(row.figuresLexical, drawnCase.figures ?? "", message);
-    assert.strictEqual(row.modeWritten, drawnCase.mode !== undefined, message);
-    assert.strictEqual(row.mode, drawnCase.mode ?? row.mode, message);
+  assert.strictEqual(row?.modeWritten, drawnCase.mode !== undefined, message);
+  assert.deepStrictEqual(
+    figures,
+    drawnCase.figures === undefined ? [] : [drawnCase.figures],
+    message,
+  );
 
-    const verdict = roundingChecks(row);
-    assert.isTrue(verdict.derived, `E1_derived breaks: ${message}`);
-    assert.strictEqual(
-      !verdict.figures,
-      roundingRefused(kind, drawnCase.mode, drawnCase.figures),
-      message,
-    );
-  }
+  const defaulted = kind === "qti-equal-rounded" ? [equalRoundedMode] : [];
+  assert.deepStrictEqual(
+    modes,
+    drawnCase.mode === undefined ? defaulted : [drawnCase.mode],
+    message,
+  );
+  assert.isTrue(roundingDerived(rows), `E1_derived breaks: ${message}`);
+  assert.strictEqual(
+    !roundingFiguresHolds(rows),
+    roundingRefused(kind, drawnCase.mode, drawnCase.figures),
+    message,
+  );
 };
 
 describe(

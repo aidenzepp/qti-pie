@@ -81,7 +81,6 @@ export const precedence = [
   "P26",
   "P27",
   "P29",
-  "item-duration",
   // O5 to O7: mapping, metadata, tests.
   "mapping-base-type",
   "lookup-cardinality",
@@ -346,7 +345,8 @@ export const lawTable = {
   },
   Document: {
     rule: "reachability",
-    source: "the XDM document node as the Document row (plan §1.4, fin.md D7)",
+    source:
+      "the XDM document node as the Document row (plan §1.4), and its XML declaration as rows of their own, written where the document writes each part: XmlDecl where it writes a declaration, EncodingDecl and SdDecl where the declaration writes an encoding or a standalone, each a declaration's (https://www.w3.org/TR/xml/#NT-XMLDecl, XML 1.0 §2.8: \"XMLDecl ::= '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'\") (chardata.ts)",
   },
   "Document entry": {
     rule: "entry-kind",
@@ -467,11 +467,6 @@ export const lawTable = {
     source:
       "reading 85: https://www.w3.org/TR/xinclude-11/#loops (XInclude 1.1 §4.2.7: 'it is a fatal error to process another xi:include element with an include location and xpointer attribute value that have already been processed in the inclusion chain'), the XInclude https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1) names, and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: the section ref 'functions as a facade for the qti-assessment-section to which it refers', the document that holds it, 'with the refered-to section merged in', behaving as 'a document that has all the same sections aggregated in one document', which a chain that returns to its own document has none of): no chain of qti-assessment-section-ref and xi:include hrefs, over the documents the manifest lists, returns to a document already on it",
   },
-  "Item duration": {
-    rule: "item-duration",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'The value of duration for items that are not time dependent must not be used in any item or test-level expression', info.txt:8468) (expressions.ts: each reference to an item's duration, and each reading of it through an item ref, contained in the time-dependent ItemTiming rows; the UP audit's A62)",
-  },
   "Item ref target": {
     rule: "item-ref-target",
     source:
@@ -530,7 +525,7 @@ export const lawTable = {
   "Map key": {
     rule: "map-key-unique",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88.4 and §7.21: 'The map is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float'), so a mapping is a function of its source value: no two of its entries share a key, compared as values of its base type where the schema holds one (an integer's canonical form, a float of grizzle's double form as its double, mapping.ts MapKeyInteger and MapKeyFloat) and as written otherwise (readings 7, 34 and 45), but a string as its entry's case-sensitive says it is matched (§7.21.3: 'The default value is false'): case-folded where false and by code points where true, two entries repeating a string key only where they are written identically and matched the same way (readings 98 and 151: `York` and `york` are two keys, the first listed matching entry giving the value, as AreaMapping's areas are 'those listed first taking priority')",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88.4 and §7.21: 'The map is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float'), so a mapping is a function of its source value: no two of its entries share a key, compared as values of its base type where the schema holds one (an integer's canonical form, a float of grizzle's double form as its double, mapping.ts MapKeyInteger and MapKeyFloat) and as written otherwise (readings 7, 34 and 45), but a string as its entry's case-sensitive says it is matched (§7.21.3: 'The default value is false'): case-folded where false and by code points where true, two entries repeating a string key only where they are written identically and matched the same way (readings 98 and 154: `York` and `york` are two keys, the first listed matching entry giving the value, as AreaMapping's areas are 'those listed first taking priority')",
   },
   MappableBaseType: {
     rule: "mapping-base-type",
@@ -550,7 +545,7 @@ export const lawTable = {
   "Mastery range": {
     rule: "mastery-range",
     source:
-      "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both are written, as xs:double values (INF and -INF infinite), NaN ordered against nothing; a value outside grizzle's double lexical form (outer whitespace, over 15 significant digits, an exponent beyond 293) is not judged, a recorded limit",
+      "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both have a value, a normal-minimum a 3.0.1 outcome declaration does not write being its XSD default 0.0 and a 3.0.0 one's none (reading 149), as xs:double values (INF and -INF infinite), NaN ordered against nothing; a value outside grizzle's double lexical form (outer whitespace, over 15 significant digits, an exponent beyond 293) is not judged, a recorded limit",
   },
   "MathML align first": {
     rule: "ordering",
@@ -560,7 +555,7 @@ export const lawTable = {
   "MathML align placement": {
     rule: "admission",
     source:
-      "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.malign.group (MathML 3 §3.5.5.2: an maligngroup in a table cell stands in the cell directly or inside an mrow or mstyle that changes no direction, mphantom, mfenced, the selected sub-expression of an maction, or semantics) and #presm.malign.mtable (§3.5.5.9); a group with no cell above it is ignored, only an maction's selected sub-expression is checked, and a change of direction is a dir other than the one the element inherits, so mrow dir='ltr' in a formula that reads left to right changes none (operator decision 321); m:math inherits none, since 'the dir attribute defaults to \"ltr\" on the math element' (MathML 3 §2.2.1, reading 150)",
+      "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.malign.group (MathML 3 §3.5.5.2: an maligngroup in a table cell stands in the cell directly or inside an mrow or mstyle that changes no direction, mphantom, mfenced, the selected sub-expression of an maction, or semantics) and #presm.malign.mtable (§3.5.5.9); a group with no cell above it is ignored, only an maction's selected sub-expression is checked, and a change of direction is a dir other than the one the element inherits, so mrow dir='ltr' in a formula that reads left to right changes none (operator decision 321); m:math inherits none, since 'the dir attribute defaults to \"ltr\" on the math element' (MathML 3 §2.2.1, reading 153)",
   },
   "MathML arity": {
     rule: "math-arity",
@@ -776,7 +771,7 @@ export const lawTable = {
   "Rounding figures": {
     rule: "P10",
     source:
-      "reading 119: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_EqualRounded.Attr_figures (§5.47.2: 'If roundingMode= 'significantFigures', the value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must be an integer greater than or equal to zero') and #DataCharacteristic_RoundTo.Attr_figures (§5.119.2, the same of rounding-mode), under the EqualRounded default significantFigures (§5.47.1): a figures whose collapsed form is an integer is at least 1 under significantFigures and at least 0 under decimalPlaces, a variable's name read at run time (operators.ts Rounding, Rounding_figures)",
+      "reading 119: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_EqualRounded.Attr_figures (§5.47.2: 'If roundingMode= 'significantFigures', the value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must be an integer greater than or equal to zero') and #DataCharacteristic_RoundTo.Attr_figures (§5.119.2, the same of rounding-mode), under the EqualRounded default significantFigures (§5.47.1): a figures whose collapsed form is an integer is at least 1 under significantFigures and at least 0 under decimalPlaces, a variable's name read at run time (operators.ts RoundingModeFigures, Rounding_figures)",
   },
   "SSML lexicon reference": {
     rule: "ssml-fragment",

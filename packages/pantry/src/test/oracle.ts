@@ -137,7 +137,7 @@ import {
 } from "#pantry/test/oracle-laws.ts";
 import { dataSsmlBreachIn } from "#pantry/test/oracle-laws/data-ssml.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
-import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import { mathmlNamespace, namespaceNameOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 import {
   ancestorsOf,
@@ -210,7 +210,6 @@ export const oracleRules = [
   "include-root",
   "include-target",
   "inclusion-cycle",
-  "item-duration",
   "item-ref-target",
   "key-text-bound",
   "label-tool",
@@ -956,7 +955,7 @@ const cnPartsOf = (
  * `rtl`, `ltr` once the walk passes an `m:math` that writes neither. MathML 3 §2.2.1 says "the dir
  * attribute defaults to "ltr" on the math element (but inherits on all other elements which accept
  * the dir attribute)", and §3.1.5.1 sets a formula's direction by its `math` element, so an HTML
- * ancestor's `dir` above it is not read (reading 150).
+ * ancestor's `dir` above it is not read (reading 153).
  *
  * @param view - The document.
  * @param node - The element.
@@ -980,7 +979,7 @@ const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string =>
 /**
  * Tell whether an element writes a `dir` other than the one it inherits, so `mrow dir="ltr"` in a
  * left-to-right formula changes none (operator decision 321). A `dir` that spells neither `ltr` nor
- * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 150).
+ * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 153).
  *
  * @param view - The document.
  * @param node - The element.
@@ -2053,7 +2052,9 @@ const nodeLaws: readonly NodeLaw[] = [
         type === xsNamespace ||
           Option.exists(
             against,
-            (namespace) => !vocabulary(namespace) || typeAvailable(namespace, type),
+            (namespace) =>
+              !vocabulary(namespace) ||
+              typeAvailable(namespaceNameOf(namespace), namespaceNameOf(type)),
           ),
         () => ({
           governs: node.governs,
@@ -3396,7 +3397,7 @@ const mapKeyValueOf = (baseType: string, key: string): string => {
 };
 
 /**
- * Read a map key as the identity its mapping holds it under (Map key, readings 98 and 151): a
+ * Read a map key as the identity its mapping holds it under (Map key, readings 98 and 154): a
  * string key whose own entry's `case-sensitive` is not true is `folded`, a response meeting it
  * without regard to case, and is the key as written, so `York` and `york` are two keys and a
  * `york` written twice is one; a key matched by code points is never the same key as a folded one;
@@ -5770,7 +5771,10 @@ const packageBreaches = (
           : [
               breach("LomObjectIdentifier", {
                 entries: JSON.stringify(entries),
-                identifier: Option.getOrElse(identifier, () => ""),
+                ...Option.match(identifier, {
+                  onNone: () => ({}),
+                  onSome: (id) => ({ identifier: id }),
+                }),
                 node: pathOf(manifest, lom.id),
               }),
             ];
@@ -6939,10 +6943,6 @@ const ownLaws = {
     explain: (keys) =>
       `the section refs and includes ${inBraces(membersOf(keys["chain"]))} lead from ${field(keys, "path")} back to it, so its merged document never ends`,
   },
-  "Item duration": {
-    explain: (keys) =>
-      `${field(keys, "kind")} reads duration in an item that is not time-dependent`,
-  },
   "Item ref target": {
     explain: (keys) =>
       `the item ref ${field(keys, "node")} names ${field(keys, "path")}, which is no item document of the package`,
@@ -6965,11 +6965,15 @@ const ownLaws = {
   },
   LomObjectIdentifier: {
     explain: (keys) =>
-      `the document ${field(keys, "identifier")} is named ${field(keys, "entries")} by its record`,
+      keys["identifier"] === undefined
+        ? `the document writes no identifier, so none of its record's entries ${field(keys, "entries")} names it`
+        : `the document ${field(keys, "identifier")} is named ${field(keys, "entries")} by its record`,
   },
   LomObjectTitle: {
     explain: (keys) =>
-      `the document titled ${JSON.stringify(field(keys, "title"))} is titled ${field(keys, "strings")} by its record in its language`,
+      keys["title"] === undefined
+        ? `the document writes no title, so none of its record's title strings ${field(keys, "strings")} names it`
+        : `the document titled ${JSON.stringify(field(keys, "title"))} is titled ${field(keys, "strings")} by its record in its language`,
   },
   "Lookup table cardinality": {
     explain: (keys) =>

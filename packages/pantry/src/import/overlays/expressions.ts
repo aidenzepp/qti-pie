@@ -70,7 +70,6 @@ import type {
   DeclarationTable,
   Expression,
   ExpressionAttribute,
-  ItemTiming,
   Literal,
   LiteralTyped,
   MappingItemRef,
@@ -81,6 +80,7 @@ import type {
   PlacedDocument,
   PlacedReference,
   PlacedVariableRef,
+  PlacedVariableRefDeclaration,
   Processing,
   ProcessingTemplate,
   Reading,
@@ -92,6 +92,7 @@ import type {
   TestReference,
   VariableLookup,
   VariableRef,
+  VariableRefDeclaration,
 } from "#pantry/qti/expressions.ts";
 import {
   itemKind,
@@ -132,7 +133,6 @@ export interface ExpressionRows {
   readonly DeclarationTable: ReadonlyMap<string, Addition<typeof DeclarationTable>>;
   readonly Expression: ReadonlyMap<string, Addition<typeof Expression>>;
   readonly ExpressionAttribute: ReadonlyMap<string, Addition<typeof ExpressionAttribute>>;
-  readonly ItemTiming: ReadonlyMap<string, Addition<typeof ItemTiming>>;
   readonly Literal: ReadonlyMap<string, Addition<typeof Literal>>;
   readonly LiteralTyped: ReadonlyMap<string, Addition<typeof LiteralTyped>>;
   readonly Operand: ReadonlyMap<string, Addition<typeof Operand>>;
@@ -143,21 +143,13 @@ export interface ExpressionRows {
   readonly TestReference: ReadonlyMap<string, Addition<typeof TestReference>>;
   readonly VariableLookup: ReadonlyMap<string, Addition<typeof VariableLookup>>;
   readonly VariableRef: ReadonlyMap<string, Addition<typeof VariableRef>>;
+  readonly VariableRefDeclaration: ReadonlyMap<string, Addition<typeof VariableRefDeclaration>>;
 }
-
-/**
- * The nil uuid, a reference's `declaration` where it names no declaration: NIL's NS1 (a reference
- * that names no declaration is a row of its own relation, never the nil uuid) is open, and its
- * known entries `dangling-uuid: VariableRef.declaration` and `PlacedVariableRef.declaration` show
- * it.
- */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * The declaration codes a row holds where it names no declaration: the null objects
  * `#pantry/qti/expressions.ts` states for `VariableLookup`'s absent rows (M2: a name's absence is
- * proved by the key of a row of its own), for a `Reading` whose source is none, and for a reference
- * that names none.
+ * proved by the key of a row of its own) and for a `Reading` whose source is none.
  */
 const undeclared = {
   baseType: "none",
@@ -260,11 +252,6 @@ const spellingOf: ReadonlyMap<string, "bare" | "braced"> = new Map(
 const tests: ReadonlySet<string> = new Set(testRoots);
 
 /**
- * A true `xs:boolean`'s lexical forms, its whitespace collapse absorbed.
- */
-const trueForm = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
-
-/**
  * A name a reference spells: an NCName.
  */
 const nameForm = new RegExp(`^[${ncStart}][${ncChar}]*$`, "u");
@@ -357,7 +344,7 @@ const attributesOf = (
  * its declaration codes read as expression-typing codes.
  */
 interface BuiltIn {
-  readonly declarationKind: Addition<typeof VariableRef>["declarationKind"];
+  readonly declarationKind: Addition<typeof VariableRefDeclaration>["declarationKind"];
   readonly type: Typed;
 }
 
@@ -943,7 +930,6 @@ const resolve = (doc: Document, name: string) => {
   const declared = doc.declarations.get(name);
   if (declared !== undefined) {
     return {
-      declarationKind: Option.some(declared.kind),
       declared,
       resolution: "declared" as const,
       type: {
@@ -954,18 +940,8 @@ const resolve = (doc: Document, name: string) => {
   }
 
   return Option.match(builtInOf(doc.rootKind, name), {
-    onNone: () => ({
-      declarationKind: Option.none(),
-      declared,
-      resolution: "unresolved" as const,
-      type: unknownType,
-    }),
-    onSome: (builtIn) => ({
-      declarationKind: Option.some(builtIn.declarationKind),
-      declared,
-      resolution: "builtIn" as const,
-      type: builtIn.type,
-    }),
+    onNone: () => ({ declared, resolution: "unresolved" as const, type: unknownType }),
+    onSome: (builtIn) => ({ declared, resolution: "builtIn" as const, type: builtIn.type }),
   });
 };
 
@@ -988,7 +964,7 @@ const referenceOf = (
     return undefined;
   }
 
-  const { declarationKind, declared, resolution, type } = resolve(doc, spelled.name);
+  const { declared, resolution, type } = resolve(doc, spelled.name);
 
   return {
     after: spelled.after,
@@ -996,10 +972,6 @@ const referenceOf = (
     baseType: type.baseType,
     before: spelled.before,
     cardinality: type.cardinality,
-    declBaseType: declared === undefined ? undeclared.baseType : declared.baseType,
-    declCardinality: declared === undefined ? undeclared.cardinality : declared.cardinality,
-    declaration: declared === undefined ? nilUuid : declared.node,
-    declarationKind: Option.getOrElse(declarationKind, () => undeclared.declarationKind),
     document: doc.id,
     ...unfilledTypes,
     identifier: spelled.name,
@@ -1225,34 +1197,6 @@ const expressionRowsOf = (
 };
 
 /**
- * An item's `ItemTiming` row, keyed by its root's node: its `time-dependent` as written and the
- * code it spells; none for a document that is no item, or an item that omits the attribute, which
- * AL3 refuses.
- *
- * @param doc - The document.
- * @returns The row, by its node.
- */
-const itemTimingOf = (doc: Document): Map<string, Addition<typeof ItemTiming>> => {
-  const attribute = doc.rows.attributes.find(
-    ({ name, node }) => name === "time-dependent" && doc.nodeOf(node).kind === itemKind,
-  );
-
-  return attribute === undefined
-    ? new Map<string, Addition<typeof ItemTiming>>()
-    : new Map<string, Addition<typeof ItemTiming>>([
-        [
-          attribute.node,
-          {
-            document: doc.id,
-            lexical: attribute.lexical,
-            node: attribute.node,
-            timeDependent: trueForm.test(attribute.lexical),
-          },
-        ],
-      ]);
-};
-
-/**
  * Fill a reference's element type, an expression's own, and a setter's or a lookup's one
  * expression's type, once every expression is typed.
  *
@@ -1361,6 +1305,58 @@ const variableLookupsOf = (
 };
 
 /**
+ * Write each declared reference's declaration as a row of its own (lane NIL's NS1): the declaration
+ * of the document its name resolves to, with its codes, and the reference's fields its laws read
+ * beside them. A reference to a built-in variable or to nothing has none.
+ *
+ * @param doc - The document.
+ * @param references - Its references, their types filled.
+ * @returns The rows, by `[node, attribute]`.
+ * @throws {Error} When a declared reference's name has no declaration of the document, which its
+ *   resolution read: a defect of the builder.
+ */
+const referenceDeclarationsOf = (
+  doc: Document,
+  references: ReadonlyMap<string, Addition<typeof VariableRef>>,
+): ReadonlyMap<string, Addition<typeof VariableRefDeclaration>> =>
+  new Map(
+    [...references].flatMap(([at, reference]) => {
+      if (reference.resolution !== "declared") {
+        return [];
+      }
+
+      const declared = Option.getOrThrowWith(
+        Option.fromNullishOr(doc.declarations.get(reference.identifier)),
+        () =>
+          new Error(
+            `The reference ${reference.node} ${reference.attribute} resolved to a declaration of ${reference.identifier}, which its document's declarations do not hold. Resolve a reference against its own document's declarations.`,
+          ),
+      );
+
+      return [
+        [
+          at,
+          {
+            attribute: reference.attribute,
+            baseType: reference.baseType,
+            cardinality: reference.cardinality,
+            declBaseType: declared.baseType,
+            declCardinality: declared.cardinality,
+            declaration: declared.node,
+            declarationKind: declared.kind,
+            document: reference.document,
+            identifier: reference.identifier,
+            kind: reference.kind,
+            language: reference.language,
+            node: reference.node,
+            table: reference.table,
+          },
+        ] as const,
+      ];
+    }),
+  );
+
+/**
  * The lookup table a declaration holds: its match table, else its interpolation table, else none.
  *
  * @param held - The tables it holds.
@@ -1379,18 +1375,16 @@ const tableReaderKinds: ReadonlySet<string> = new Set(tablesRead.keys());
  * table the declaration holds there or `none`.
  *
  * @param doc - The document.
- * @param references - Its references.
+ * @param declared - Its declared references' declarations.
  * @returns The rows, by declaration.
  */
 const declarationTablesOf = (
   doc: Document,
-  references: ReadonlyMap<string, Addition<typeof VariableRef>>,
+  declared: ReadonlyMap<string, Addition<typeof VariableRefDeclaration>>,
 ): ReadonlyMap<string, Addition<typeof DeclarationTable>> => {
   const named = new Set(
-    [...references.values()].flatMap((reference) =>
-      reference.resolution === "declared" &&
-      reference.attribute === "identifier" &&
-      tableReaderKinds.has(reference.kind)
+    [...declared.values()].flatMap((reference) =>
+      reference.attribute === "identifier" && tableReaderKinds.has(reference.kind)
         ? [reference.declaration]
         : [],
     ),
@@ -1525,7 +1519,6 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
   const built = {
     Expression: new Map<string, Addition<typeof Expression>>(),
     ExpressionAttribute: new Map<string, Addition<typeof ExpressionAttribute>>(),
-    ItemTiming: itemTimingOf(doc),
     Literal: new Map<string, Addition<typeof Literal>>(),
     LiteralTyped: new Map<string, Addition<typeof LiteralTyped>>(),
     Operand: new Map<string, Addition<typeof Operand>>(),
@@ -1545,10 +1538,11 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
   }
 
   const sectionIdentifiers = sectionIdentifiersOf(doc);
+  const declarations = referenceDeclarationsOf(doc, references);
 
   return {
     ...built,
-    DeclarationTable: declarationTablesOf(doc, references),
+    DeclarationTable: declarationTablesOf(doc, declarations),
     ReferenceDocument:
       doc.rootKind === itemKind
         ? new Map<string, Addition<typeof ReferenceDocument>>()
@@ -1556,6 +1550,7 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
     SectionIdentifier: sectionIdentifiers,
     TestReference: testReferencesOf(doc, references, sectionIdentifiers),
     VariableLookup: variableLookupsOf(doc, references),
+    VariableRefDeclaration: declarations,
   };
 };
 
@@ -2025,7 +2020,6 @@ const assembledReferenceOf = (
     digit: at > 0 && digits.test(piece),
     piece,
     separator: at === 0 ? "" : ".",
-    token: at === 0 ? piece : `.${piece}`,
   }));
   const readings = readingTextsOf(reference.identifier, reference.role).map((text) =>
     readingOf(lookups, assembly, reference, text),
@@ -2528,50 +2522,29 @@ export const resolvingReadingsOf = (
  */
 export interface PlacedVariableRows {
   readonly PlacedVariableRef: ReadonlyMap<string, Addition<typeof PlacedVariableRef>>;
+  readonly PlacedVariableRefDeclaration: ReadonlyMap<
+    string,
+    Addition<typeof PlacedVariableRefDeclaration>
+  >;
   readonly VariableLookup: ReadonlyMap<string, Addition<typeof VariableLookup>>;
 }
 
 /**
- * Resolve a name among an item's declarations, else its built-in variables, else to nothing, with
- * the declaration fields a placed reference carries.
+ * Resolve a name among an item's declarations, else its built-in variables, else to nothing.
  *
  * @param declaration - The item's declaration of the name, if any.
  * @param name - The name.
- * @returns The resolution and its `declarationRef` tuple, the null objects where it names none.
+ * @returns The resolution.
  */
 const placedResolutionOf = (
   declaration: Addition<typeof Declaration> | undefined,
   name: string,
-): Pick<
-  Addition<typeof PlacedVariableRef>,
-  "declBaseType" | "declCardinality" | "declaration" | "declarationKind" | "resolution"
-> => {
+): Addition<typeof PlacedVariableRef>["resolution"] => {
   if (declaration !== undefined) {
-    return {
-      declBaseType: declaration.baseType,
-      declCardinality: declaration.cardinality,
-      declaration: declaration.node,
-      declarationKind: declaration.declarationKind,
-      resolution: "declared" as const,
-    };
+    return "declared";
   }
 
-  return Option.match(builtInOf(itemKind, name), {
-    onNone: () => ({
-      declBaseType: undeclared.baseType,
-      declCardinality: undeclared.cardinality,
-      declaration: nilUuid,
-      declarationKind: undeclared.declarationKind,
-      resolution: "unresolved" as const,
-    }),
-    onSome: ({ declarationKind }) => ({
-      declBaseType: undeclared.baseType,
-      declCardinality: undeclared.cardinality,
-      declaration: nilUuid,
-      declarationKind,
-      resolution: "builtIn" as const,
-    }),
-  });
+  return Option.isSome(builtInOf(itemKind, name)) ? "builtIn" : "unresolved";
 };
 
 /**
@@ -2603,6 +2576,7 @@ export const placedVariableRowsOf = (input: {
   const untyped = new Set([...input.untyped].map(({ document, name }) => keyOf([document, name])));
   const referencesOf = Map.groupBy(input.references, ({ document }) => document);
   const placed = new Map<string, Addition<typeof PlacedVariableRef>>();
+  const placedDeclarations = new Map<string, Addition<typeof PlacedVariableRefDeclaration>>();
   const lookups = new Map<string, Addition<typeof VariableLookup>>();
   for (const root of input.instances) {
     for (const instance of root.assemblyKind === itemKind ? instancesIn(root) : []) {
@@ -2611,8 +2585,8 @@ export const placedVariableRowsOf = (input: {
         Arr.empty,
       ).filter(({ identifier }) => !untyped.has(keyOf([root.assembly, identifier])))) {
         const declaration = declared.get(keyOf([root.assembly, reference.identifier]));
-        placed.set(keyOf([instance.id, reference.node, reference.attribute]), {
-          ...placedResolutionOf(declaration, reference.identifier),
+        const at = keyOf([instance.id, reference.node, reference.attribute]);
+        placed.set(at, {
           assembly: root.assembly,
           attribute: reference.attribute,
           document: instance.document,
@@ -2620,6 +2594,7 @@ export const placedVariableRowsOf = (input: {
           instance: instance.id,
           kind: reference.kind,
           node: reference.node,
+          resolution: placedResolutionOf(declaration, reference.identifier),
           rootKind: itemKind,
         });
         if (declaration === undefined) {
@@ -2627,10 +2602,27 @@ export const placedVariableRowsOf = (input: {
             lookupKey(root.assembly, reference.identifier),
             absentLookup(root.assembly, reference.identifier),
           );
+        } else {
+          placedDeclarations.set(at, {
+            assembly: root.assembly,
+            attribute: reference.attribute,
+            declBaseType: declaration.baseType,
+            declCardinality: declaration.cardinality,
+            declaration: declaration.node,
+            declarationKind: declaration.declarationKind,
+            identifier: reference.identifier,
+            instance: instance.id,
+            kind: reference.kind,
+            node: reference.node,
+          });
         }
       }
     }
   }
 
-  return { PlacedVariableRef: placed, VariableLookup: lookups };
+  return {
+    PlacedVariableRef: placed,
+    PlacedVariableRefDeclaration: placedDeclarations,
+    VariableLookup: lookups,
+  };
 };

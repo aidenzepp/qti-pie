@@ -20,7 +20,7 @@
  *   text the oracle finds past its bound in a field of a relation the import writes, no fold's end,
  *   is in that field's rows.
  */
-import { Cause, Effect, Exit, FileSystem, Option, Result } from "effect";
+import { Cause, Effect, Exit, FileSystem, Formatter, Option, Result } from "effect";
 import type { Path, PlatformError } from "effect";
 import type { Law } from "@bjornpagen/grizzle";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
@@ -28,7 +28,7 @@ import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { noType } from "#pantry/grammar/xsi.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused, lawIdentity, refusalOfLaws } from "#pantry/import/refusal.ts";
+import { ImportRefused, refusalOfLaws } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
@@ -640,7 +640,7 @@ const loneRefusal = (
               importRule: refused.rule,
               kind: "lone-refusal",
               law: lone,
-              laws: laws.map(lawIdentity).join("; "),
+              laws: laws.map((law) => Formatter.format(law)).join("; "),
               rule,
               witness: witnessOf(refused),
             },

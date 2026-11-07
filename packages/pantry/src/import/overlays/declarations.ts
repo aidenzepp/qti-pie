@@ -34,6 +34,7 @@ import type {
   ValueBaseType,
   ValueSet,
 } from "#pantry/qti/declarations.ts";
+import { normalMinimumDefaults } from "#pantry/qti/declarations.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -455,9 +456,31 @@ const tupleOf = (reading: Reading, node: NodeRow<Composed>) => ({
 });
 
 /**
- * Add an outcome declaration's scale rows: each of its `mastery-value`, `normal-minimum` and
- * `normal-maximum` it writes, and each pair of them `Mastery_range` orders where it writes both
- * (spec reading 9: "each pair judged where both are written"). An attribute it does not write has
+ * Read an outcome declaration's normal minimum (spec reading 149): its `normal-minimum` as written,
+ * and else its version's XSD default, which QTI 3.0.1 states and QTI 3.0 does not
+ * (`normalMinimumDefaults`).
+ *
+ * @param reading - The document.
+ * @param node - The declaration's node.
+ * @returns The minimum's lexical form and whether it is written, none where it has none.
+ */
+const minimumOf = (
+  reading: Reading,
+  node: NodeRow<Composed>,
+): Option.Option<{ readonly lexical: string; readonly written: boolean }> =>
+  Option.match(Option.fromUndefinedOr(valueOf(reading, node, "normal-minimum")), {
+    onNone: () =>
+      Option.map(Option.fromUndefinedOr(normalMinimumDefaults.get(node.version)), (lexical) => ({
+        lexical,
+        written: false,
+      })),
+    onSome: (lexical) => Option.some({ lexical, written: true }),
+  });
+
+/**
+ * Add an outcome declaration's scale rows: each of its `mastery-value` and `normal-maximum` it
+ * writes, its normal minimum where it has one ({@link minimumOf}), and each pair of them
+ * `Mastery_range` orders where it has both (spec readings 9 and 149). A value it does not have has
  * no row, and no pair holds it.
  *
  * @param reading - The document.
@@ -466,21 +489,28 @@ const tupleOf = (reading: Reading, node: NodeRow<Composed>) => ({
 const addScale = (reading: Reading, node: NodeRow<Composed>): void => {
   const written = (name: string) => Option.fromUndefinedOr(valueOf(reading, node, name));
   const mastery = written("mastery-value");
-  const minimum = written("normal-minimum");
+  const minimum = minimumOf(reading, node);
   const maximum = written("normal-maximum");
   for (const lexical of Option.toArray(mastery)) {
     reading.rows.MasteryValue.set(node.id, { lexical, node: node.id });
   }
 
-  for (const lexical of Option.toArray(minimum)) {
-    reading.rows.NormalMinimum.set(node.id, { lexical, node: node.id });
+  for (const { lexical, written: stated } of Option.toArray(minimum)) {
+    reading.rows.NormalMinimum.set(node.id, {
+      lexical,
+      node: node.id,
+      version: node.version,
+      written: stated,
+    });
   }
 
   for (const lexical of Option.toArray(maximum)) {
     reading.rows.NormalMaximum.set(node.id, { lexical, node: node.id });
   }
 
-  for (const [normalMinimum, masteryValue] of Option.toArray(Option.all([minimum, mastery]))) {
+  for (const [{ lexical: normalMinimum }, masteryValue] of Option.toArray(
+    Option.all([minimum, mastery]),
+  )) {
     reading.rows.MasteryFloor.set(node.id, { masteryValue, node: node.id, normalMinimum });
   }
 

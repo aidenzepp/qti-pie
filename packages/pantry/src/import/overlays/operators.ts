@@ -3,11 +3,12 @@
  * tree and the ids its nodes are written under, the rows of every relation
  * `#pantry/qti/operators.ts` declares, each a keyed set.
  *
- * The rows restate what the tree says and nothing else: each rounding operator's node tuple, its
- * `figures` as written and collapsed, and the mode in force; each `qti-equal`'s `tolerance` as
- * written, split into its values. The database proves every one of them (`operatorLaws`), so a
- * row this builder gets wrong is refused, never accepted. Reading 121's presence reads `Attribute`
- * and `Tolerance` alone, so it has no rows of its own.
+ * The rows restate what the tree says and nothing else: each rounding operator's node tuple and
+ * what it holds, its `figures` as written and collapsed where it writes one, its mode in force
+ * where it has one, and both together where it has both; each `qti-equal`'s `tolerance` as written,
+ * split into its values. The database proves every one of them (`operatorLaws`), so a row this
+ * builder gets wrong is refused, never accepted. Reading 121's presence reads `Attribute` and
+ * `Tolerance` alone, so it has no rows of its own.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
@@ -17,8 +18,15 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { equalRoundedMode, roundingKinds, roundingUnwritten } from "#pantry/qti/operators.ts";
-import type { Rounding, Tolerance, ToleranceToken } from "#pantry/qti/operators.ts";
+import { equalRoundedMode, roundingKinds } from "#pantry/qti/operators.ts";
+import type {
+  Rounding,
+  RoundingFigures,
+  RoundingMode,
+  RoundingModeFigures,
+  Tolerance,
+  ToleranceToken,
+} from "#pantry/qti/operators.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -53,20 +61,11 @@ export type ToleranceRow = Addition<typeof Tolerance> & {
  */
 export interface OperatorRows {
   readonly Rounding: ReadonlyMap<string, Addition<typeof Rounding>>;
+  readonly RoundingFigures: ReadonlyMap<string, Addition<typeof RoundingFigures>>;
+  readonly RoundingMode: ReadonlyMap<string, Addition<typeof RoundingMode>>;
+  readonly RoundingModeFigures: ReadonlyMap<string, Addition<typeof RoundingModeFigures>>;
   readonly Tolerance: ReadonlyMap<string, ToleranceRow>;
 }
-
-/**
- * The lexical form of a `figures` that is an integer the representation reads: `xs:integer`'s,
- * within the signed 64-bit range (spec reading 46), as `integerForm` of
- * `#pantry/qti/operators.ts` states it for the database.
- */
-const integerLexical = /^[+-]?[0-9]+$/u;
-
-/**
- * The least and the greatest signed 64-bit integers, the range of `pg.bigint`.
- */
-const bigintRange = { max: 2n ** 63n - 1n, min: -(2n ** 63n) } as const;
 
 /**
  * The rounding operator kinds, each of which has its `Rounding` row.
@@ -121,56 +120,55 @@ export const tolerancePiecesOf = (lexical: string): readonly ToleranceTokenInser
     const before = spacingOf(lexical.slice(end, run.index));
     end = run.index + token.length;
     const after = spacingOf(at === runs.length - 1 ? lexical.slice(end) : "");
-    pieces.push({ after, before, piece: `${before}${token}${after}`, token });
+    pieces.push({ after, before, token });
   }
 
   return pieces;
 };
 
 /**
- * The fields of a `Rounding` row the host reads off its `figures`, each proved by `E1_derived`.
- */
-export type FiguresFields = Pick<Addition<typeof Rounding>, "figures" | "figuresValue" | "integer">;
-
-/**
- * Read a `figures` as `Rounding` holds it: its lexical form collapsed, whether that is an integer
- * within the signed 64-bit range, and the integer, `roundingUnwritten`'s where it is none.
- *
- * @param lexical - The attribute's lexical form, or `roundingUnwritten`'s for an element that
- *   writes none.
- * @returns The collapsed form, `integer` and `figuresValue`.
- */
-export const figuresOf = (lexical: string): FiguresFields => {
-  const figures = collapse(lexical);
-  const value = integerLexical.test(figures) ? BigInt(figures) : undefined;
-  const integer = value !== undefined && value >= bigintRange.min && value <= bigintRange.max;
-
-  return { figures, figuresValue: integer ? value : roundingUnwritten.figuresValue, integer };
-};
-
-/**
- * Read the mode in force on a rounding operator: its `rounding-mode` where written, else
- * `qti-equal-rounded`'s default, else `roundingUnwritten`'s for a `qti-round-to`, which AL3
- * refuses.
+ * A rounding operator's mode in force: its `rounding-mode` where written, else
+ * {@link equalRoundedMode} on a `qti-equal-rounded`, else none, a `qti-round-to`'s that writes none,
+ * which AL3 refuses.
  *
  * @param kind - The operator's kind.
  * @param written - Its `rounding-mode`, where written.
- * @returns The mode.
+ * @returns The mode, where one is in force.
  */
-const modeOf = (kind: string, written: Option.Option<string>): string =>
-  Option.getOrElse(written, () =>
-    kind === "qti-equal-rounded" ? equalRoundedMode : roundingUnwritten.mode,
+const modeOf = (kind: string, written: Option.Option<string>): Option.Option<string> =>
+  Option.orElse(written, () =>
+    kind === "qti-equal-rounded" ? Option.some(equalRoundedMode) : Option.none(),
   );
+
+/**
+ * What a rounding operator holds (`RoundingHolds` of `#pantry/qti/operators.ts`): which of a
+ * `figures` and a mode in force it has.
+ *
+ * @param figures - Its `figures`, where written.
+ * @param mode - Its mode in force, where it has one.
+ * @returns The `RoundingHolds` handle.
+ */
+const holdingsOf = (
+  figures: Option.Option<string>,
+  mode: Option.Option<string>,
+): Addition<typeof Rounding>["holds"] => {
+  if (Option.isSome(figures)) {
+    return Option.isSome(mode) ? "both" : "figures";
+  }
+
+  return Option.isSome(mode) ? "mode" : "neither";
+};
 
 /**
  * Build a document's operator rows.
  *
- * Each rounding operator has its `Rounding` row: its `figures` as written, else empty, which the
- * copy's foreign key then refuses; its `rounding-mode` where it writes one, else
- * `significantFigures` on a `qti-equal-rounded` and empty on a `qti-round-to`. Each `qti-equal`
- * that writes `tolerance` has its {@link ToleranceRow}. A text past `keyText`'s bound keeps its
- * row, which `keyText` refuses under "Key text bound". A document with no such element gives no
- * row.
+ * Each rounding operator has its `Rounding` row, with what it holds; its `RoundingFigures` row
+ * where it writes `figures`; its `RoundingMode` row where a mode is in force, its `rounding-mode`
+ * or a `qti-equal-rounded`'s default; and its `RoundingModeFigures` row where it has both. An
+ * operator that leaves out a required attribute has no row of it, and AL3 refuses it alone. Each
+ * `qti-equal` that writes `tolerance` has its {@link ToleranceRow}. A text past `keyText`'s bound
+ * keeps its row, which `keyText` refuses under "Key text bound". A document with no such element
+ * gives no row.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under, and its context.
@@ -180,10 +178,15 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: OperatorIds): OperatorRo
   const rows = flatten(doc, ids.idOf);
   const document = rows.document.node;
   const operators = rows.nodes.filter(({ kind }) => rounders.has(kind) || kind === "qti-equal");
-  const rounding = new Map<string, Addition<typeof Rounding>>();
-  const tolerances = new Map<string, ToleranceRow>();
+  const built = {
+    Rounding: new Map<string, Addition<typeof Rounding>>(),
+    RoundingFigures: new Map<string, Addition<typeof RoundingFigures>>(),
+    RoundingMode: new Map<string, Addition<typeof RoundingMode>>(),
+    RoundingModeFigures: new Map<string, Addition<typeof RoundingModeFigures>>(),
+    Tolerance: new Map<string, ToleranceRow>(),
+  };
   if (operators.length === 0) {
-    return { Rounding: rounding, Tolerance: tolerances };
+    return built;
   }
 
   const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
@@ -195,31 +198,56 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: OperatorIds): OperatorRo
     if (node.kind === "qti-equal") {
       const lexical = valueOf(node, "tolerance");
       if (lexical !== undefined) {
-        tolerances.set(node.id, { lexical, node: node.id, tokens: tolerancePiecesOf(lexical) });
+        built.Tolerance.set(node.id, {
+          lexical,
+          node: node.id,
+          tokens: tolerancePiecesOf(lexical),
+        });
       }
 
       continue;
     }
 
-    const figuresLexical = Option.getOrElse(
-      Option.fromNullishOr(valueOf(node, "figures")),
-      () => roundingUnwritten.figures,
-    );
-    const mode = Option.fromNullishOr(valueOf(node, "rounding-mode"));
-    rounding.set(node.id, {
-      ...figuresOf(figuresLexical),
+    const figuresLexical = Option.fromNullishOr(valueOf(node, "figures"));
+    const written = Option.fromNullishOr(valueOf(node, "rounding-mode"));
+    const mode = modeOf(node.kind, written);
+    const modeWritten = Option.isSome(written);
+    built.Rounding.set(node.id, {
       document,
-      figuresLexical,
+      holds: holdingsOf(figuresLexical, mode),
       kind: node.kind,
-      mode: modeOf(node.kind, mode),
-      modeWritten: Option.isSome(mode),
+      modeWritten,
       nearest: foldAt(folds, node.id).nearest,
       node: node.id,
       parent: node.parent,
       start: node.start,
       version: node.version,
     });
+
+    const figures = figuresLexical.pipe(
+      Option.map((lexical) => ({ figures: collapse(lexical), figuresLexical: lexical })),
+    );
+    if (Option.isSome(figures)) {
+      built.RoundingFigures.set(node.id, { ...figures.value, node: node.id });
+    }
+
+    if (Option.isSome(mode)) {
+      built.RoundingMode.set(node.id, {
+        kind: node.kind,
+        mode: mode.value,
+        modeWritten,
+        node: node.id,
+      });
+    }
+
+    if (Option.isSome(figures) && Option.isSome(mode)) {
+      built.RoundingModeFigures.set(node.id, {
+        figures: figures.value.figures,
+        mode: mode.value,
+        node: node.id,
+      });
+    }
   }
 
-  return { Rounding: rounding, Tolerance: tolerances };
+  return built;
 };

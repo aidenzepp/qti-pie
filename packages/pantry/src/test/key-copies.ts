@@ -23,8 +23,8 @@
  * evaluated on the host in SQL's three-valued logic, over the fields the oracle knows of a row
  * ({@link attributeFields}, {@link nodeFields}).
  */
-import type { Law, LawSide } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, pipe, Predicate, Result, Schema } from "effect";
+import type { Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
+import { Array as Arr, Formatter, Option, pipe, Predicate, Result, Schema } from "effect";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -172,8 +172,8 @@ interface Copy {
    */
   readonly holds: (row: Row) => boolean;
   /**
-   * The statement as grizzle's outcome names it (`src/import/refusal.ts` `lawIdentity`): the
-   * containment or the fold, and for a check its name, its relation and the two fields it equates.
+   * The statement's law as {@link identityOf} writes it: the containment or the fold, and for a
+   * check its name, its relation and the two fields it equates.
    */
   readonly law: string;
   /**
@@ -1027,21 +1027,40 @@ const lawSideOf = (side: StoredSide): LawSide => ({
 });
 
 /**
- * Write a law side as `src/import/refusal.ts` `lawIdentity` spells it.
+ * Write one term of a law side: a field as its name, `pred` of a field as `pred(field)`, and a
+ * containment source's constant as `constant(value)`.
+ *
+ * @param term - The term.
+ * @returns Its text.
+ */
+const termText = (term: LawSourceSide["terms"][number]): string => {
+  if (term.kind === "constant") {
+    return `constant(${Formatter.format(term.value)})`;
+  }
+
+  return term.kind === "pred" ? `pred(${term.field})` : term.field;
+};
+
+/**
+ * Write a law side as {@link identityOf} spells it: its relation and its terms, `pred` of a field as
+ * `pred(field)`, its selection left out.
  *
  * @param side - The side.
  * @returns Its text.
  */
-const sideText = (side: LawSide): string =>
-  `${side.relation}(${side.terms.map((term) => (term.kind === "field" ? term.field : `pred(${term.field})`)).join(", ")})`;
+const sideText = (side: LawSourceSide): string =>
+  `${side.relation}(${side.terms.map(termText).join(", ")})`;
 
 /**
- * Write a containment's or a fold's identity as `src/import/refusal.ts` `lawIdentity` does.
+ * Write a containment's or a fold's identity as this list keys its copies, and as
+ * `keys.oracle.test.ts` reads the law table's: its kind, its sides and a fold's slots and monoid,
+ * its selections left out, so two statements that differ by their selections alone share it and
+ * {@link Copy}'s `statement` tells them apart.
  *
  * @param law - The law.
  * @returns Its identity.
  */
-const identityOf = (law: Law): string => {
+export const identityOf = (law: Law): string => {
   if (law.kind === "contained") {
     return `contained ${sideText(law.from)} in ${sideText(law.to)}`;
   }
@@ -1062,7 +1081,8 @@ const StoredRelationSchema = Schema.Struct({
 
 /**
  * Every field of the composed schema whose type is `keyText`, an accumulator or a generated field
- * of it included, as `Relation.field`.
+ * of it included, as `Relation.field`: grizzle keeps an accumulator's type at its `field` and a
+ * generated field's at its `type`.
  */
 export const keyTextFields: ReadonlySet<string> = new Set(
   Object.values(Qti.relations).flatMap((member) =>
@@ -1070,7 +1090,9 @@ export const keyTextFields: ReadonlySet<string> = new Set(
       onNone: () => [],
       onSome: ({ fields, name }) =>
         Object.entries(fields).flatMap(([field, type]) =>
-          type === keyText || (Predicate.hasProperty(type, "field") && type.field === keyText)
+          type === keyText ||
+          (Predicate.hasProperty(type, "field") && type.field === keyText) ||
+          (Predicate.hasProperty(type, "type") && type.type === keyText)
             ? [`${name}.${field}`]
             : [],
         ),

@@ -237,10 +237,11 @@ const withFields = (stated: Stated, fields: Stated["fact"]): Stated => ({
 });
 
 /**
- * A piece of an IDREFS attribute's two tokens, which no case writes the attribute of.
+ * A piece of an IDREFS attribute's two tokens, which no case writes the attribute of: its token
+ * with its whitespace, the piece itself PostgreSQL's to generate.
  *
  * @param at - Its slot.
- * @param fields - Its piece, running texts and token, and whatever else the case sets.
+ * @param fields - Its running texts and token, and whatever else the case sets.
  * @returns The fact.
  */
 const idrefPiece = (at: number, fields: Readonly<Record<string, string>>): Stated => ({
@@ -588,9 +589,10 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
     "carries an IDREFS attribute's tokens as Idref pieces that concatenate to its lexical form, and none on any other attribute",
     () =>
       // Oracle: PostgreSQL, E1_derived on Attribute (the concatenation's end is the lexical form of
-      // an IDREF or IDREFS attribute, and no other attribute has tokens) and on Idref (each piece
-      // is its whitespace and its token, a token holds no whitespace, and every token after the
-      // first follows whitespace), and the concat fold's slot-0 pin by its comment.
+      // an IDREF or IDREFS attribute, and no other attribute has tokens) and on Idref (a token
+      // holds no whitespace, and every token after the first follows whitespace), and the concat
+      // fold's slot-0 pin by its comment. Each piece is generated, its whitespace and its token, so
+      // no case can write one that is not its parts.
       // Bound: one control and one corruption of each law.
       Effect.gen(function* idrefTokens() {
         const client = yield* loginSession;
@@ -629,8 +631,8 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           yield* judged(
             client,
             statedInserts([
-              idrefPiece(0, { piece: "a", piecesAfter: "a", piecesWas: "", token: "a" }),
-              idrefPiece(1, { piece: " b", piecesAfter: "a b", piecesWas: "a", token: "b" }),
+              idrefPiece(0, { piecesAfter: "a", piecesWas: "", token: "a" }),
+              idrefPiece(1, { piecesAfter: "a b", piecesWas: "a", token: "b" }),
             ]),
           ),
           "pieces control",
@@ -638,22 +640,12 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
 
         for (const [label, stated] of [
           [
-            "a piece that is not its parts",
-            idrefPiece(0, { piece: "x", piecesAfter: "x", piecesWas: "", token: "a" }),
-          ],
-          [
             "a token holding a space",
-            idrefPiece(0, { piece: "a c", piecesAfter: "a c", piecesWas: "", token: "a c" }),
+            idrefPiece(0, { piecesAfter: "a c", piecesWas: "", token: "a c" }),
           ],
           [
             "a second token with no whitespace before it",
-            idrefPiece(1, {
-              before: "",
-              piece: "b",
-              piecesAfter: "ab",
-              piecesWas: "a",
-              token: "b",
-            }),
+            idrefPiece(1, { before: "", piecesAfter: "ab", piecesWas: "a", token: "b" }),
           ],
         ] as const) {
           assertVerdict(yield* judged(client, statedInserts([stated])), "e_1_derived", true, label);
@@ -662,9 +654,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
         assertVerdict(
           yield* judged(
             client,
-            statedInserts([
-              idrefPiece(0, { piece: "a", piecesAfter: "za", piecesWas: "z", token: "a" }),
-            ]),
+            statedInserts([idrefPiece(0, { piecesAfter: "za", piecesWas: "z", token: "a" })]),
           ),
           yield* constraintDescribed(client, "idref", "check of Idref for law concat fold%"),
           true,

@@ -1,7 +1,8 @@
 /**
  * The import's rows judged on the host: the laws `Qti` states that a package's rows can be held to
  * before any of them is written, evaluated over the rows `readProgram` builds, each named by its
- * law as a refusal names it (`#pantry/import/refusal.ts` `statedLaws`).
+ * law as a refusal names it (`#pantry/import/refusal.ts` `lawNameOf`), each statement's laws as
+ * grizzle's `lawsOf` gives them.
  *
  * Four kinds of statement are evaluated, from the statements grizzle keeps for them, never from a
  * list written here:
@@ -26,14 +27,15 @@
  * The rows also must name no uuid the program did not mint: a row's uuid field that names no id of
  * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
  */
-import { Array as Arr, Option, pipe, Predicate, Schema } from "effect";
-import type { Law, LawSide } from "@bjornpagen/grizzle";
-import { lawIdentity, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
+import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
+import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import type { Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
+import { lawNameOf, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-import { keyTextFields } from "#pantry/test/key-copies.ts";
+import { identityOf, keyTextFields } from "#pantry/test/key-copies.ts";
 
 /**
  * One field's value as a row holds it: a text, a number, a natural, a flag or a set of handles.
@@ -361,47 +363,78 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
 };
 
 /**
- * A statement this module evaluates, by the identity its law has: a check's is `check <name> on
- * <relation>`, since one check may be stated on several relations.
+ * A statement this module evaluates, with its law as grizzle's `lawsOf` names it: a key's, a
+ * check's, or one containment's, a mirrors' each its own.
  */
 type Evaluated =
-  | { readonly identity: string; readonly kind: "key"; readonly side: Side }
+  | { readonly kind: "key"; readonly law: Law; readonly side: Side }
   | {
-      readonly identity: string;
       readonly kind: "check";
+      readonly law: Law;
       readonly predicate: Term;
       readonly relation: string;
     }
   | {
       readonly from: Side;
-      readonly identity: string;
       readonly kind: "contained";
+      readonly law: Law;
       readonly to: Side;
     };
 
 /**
- * Read the statements of one stored statement this module evaluates: a key's, a containment's,
- * and both containments of a mirrors.
+ * Whether a law side reads a side as this module read it from its statement: the same relation and
+ * the same terms, each a field or `pred` of one, in order.
+ *
+ * @param law - The side as the law names it.
+ * @param read - The side as this module read it.
+ * @returns Whether they are one side.
+ */
+const sameSide = (law: LawSourceSide, read: LawSide): boolean =>
+  law.relation === read.relation &&
+  law.terms.length === read.terms.length &&
+  law.terms.every((term, at) => {
+    const held = read.terms[at];
+
+    return (
+      held !== undefined &&
+      term.kind !== "constant" &&
+      term.kind === held.kind &&
+      term.field === held.field
+    );
+  });
+
+/**
+ * Read the statements of one stored statement this module evaluates, each with its law: a key's, a
+ * check's, a containment's, and both containments of a mirrors, each the law of `laws` whose sides
+ * are its own.
  *
  * @param read - The stored statement.
+ * @param laws - Its laws, as grizzle's `lawsOf` names them.
  * @returns The statements.
  */
-const evaluatedOf = (read: typeof StoredStatement.Type): readonly Evaluated[] => {
+const evaluatedOf = (
+  read: typeof StoredStatement.Type,
+  laws: readonly Law[],
+): readonly Evaluated[] => {
   if (read.kind === "check") {
-    return [
-      {
-        identity: `check ${read.desc.name} on ${read.relation.name}`,
-        kind: "check",
-        predicate: termOf(read.desc.predicate),
-        relation: read.relation.name,
-      },
-    ];
+    return laws.flatMap((law) =>
+      law.kind === "check"
+        ? [
+            {
+              kind: "check" as const,
+              law,
+              predicate: termOf(read.desc.predicate),
+              relation: read.relation.name,
+            },
+          ]
+        : [],
+    );
   }
 
   if (read.kind === "key") {
-    const { law, side } = sideOf(read.side);
+    const { side } = sideOf(read.side);
 
-    return [{ identity: lawIdentity({ kind: "key", side: law }), kind: "key", side }];
+    return laws.flatMap((law) => (law.kind === "key" ? [{ kind: "key" as const, law, side }] : []));
   }
 
   const left = sideOf(read.left);
@@ -414,37 +447,44 @@ const evaluatedOf = (read: typeof StoredStatement.Type): readonly Evaluated[] =>
           [right, left],
         ];
 
-  return pairs.map(([from, to]) => ({
-    from: from.side,
-    identity: lawIdentity({ from: from.law, kind: "contained", to: to.law }),
-    kind: "contained",
-    to: to.side,
-  }));
+  return pairs.flatMap(([from, to]) =>
+    laws.flatMap((law) =>
+      law.kind === "contained" && sameSide(law.from, from.law) && sameSide(law.to, to.law)
+        ? [{ from: from.side, kind: "contained" as const, law, to: to.side }]
+        : [],
+    ),
+  );
 };
 
 /**
- * The stored statements of `Qti`, each as this module reads it, none for one it does not.
+ * Each statement of `Qti` with its laws, as grizzle's `lawsOf` names them: the one compile of
+ * Qti's law model this module runs.
  */
-const stored = Qti.statements.flatMap((statement) =>
-  Option.toArray(Schema.decodeUnknownOption(StoredStatement)(statement)),
+const statementLaws = lawsOf(Qti);
+
+/**
+ * The stored statements of `Qti`, each as this module reads it with its laws, none for one it does
+ * not read.
+ */
+const stored = statementLaws.flatMap(({ laws, statement }) =>
+  Option.toArray(
+    Option.map(Schema.decodeUnknownOption(StoredStatement)(statement), (read) => ({ laws, read })),
+  ),
 );
 
 /**
  * Every statement of `Qti` this module evaluates.
  */
-const evaluated: readonly Evaluated[] = stored.flatMap(evaluatedOf);
+const evaluated: readonly Evaluated[] = stored.flatMap(({ laws, read }) => evaluatedOf(read, laws));
 
 /**
- * Each check's law, by the check's identity.
+ * Each check's law name, by the check's law.
  */
-const checkLaws: ReadonlyMap<string, LawName> = new Map(
+const checkLaws: ReadonlyMap<Law, LawName> = new Map(
   evaluated.flatMap((statement) =>
-    statement.kind === "check"
+    statement.law.kind === "check"
       ? Option.toArray(
-          Option.map(
-            lawOfCheck(statement.identity.split(" ")[1] ?? ""),
-            (law) => [statement.identity, law] as const,
-          ),
+          Option.map(lawOfCheck(statement.law.name), (name) => [statement.law, name] as const),
         )
       : [],
   ),
@@ -459,7 +499,7 @@ const unreadChecks: ReadonlySet<LawName> = new Set(
     Option.match(Schema.decodeUnknownOption(StoredCheck)(statement), {
       onNone: () => [],
       onSome: ({ desc }) =>
-        stored.some((read) => read.kind === "check" && read.desc.name === desc.name)
+        stored.some(({ read }) => read.kind === "check" && read.desc.name === desc.name)
           ? []
           : Option.toArray(lawOfCheck(desc.name)),
     }),
@@ -467,37 +507,56 @@ const unreadChecks: ReadonlySet<LawName> = new Set(
 );
 
 /**
- * Each law's name by the identity of a statement of it.
+ * The laws no statement states, as `refusal.ts` writes them out: the primary keys, the patterns and
+ * the generated fields, each with its name.
  */
-const namesByIdentity: ReadonlyMap<string, LawName> = new Map(
-  statedLaws.map(([law, name]) => [lawIdentity(law), name] as const),
+const writtenLaws = statedLaws().filter(
+  ([law]) => law.kind === "generated" || law.kind === "pattern" || law.kind === "primaryKey",
 );
 
 /**
- * Each statement's law, by its identity: every law of `statedLaws`, and each check as its outcome
- * names it, by its name alone.
+ * Each law the schema states that is no check, with its name: every law of a statement of `Qti`,
+ * as {@link statementLaws} names it, and every law of {@link writtenLaws}.
  */
-const lawsByIdentity: ReadonlyMap<string, Law> = new Map<string, Law>([
-  ...statedLaws.map(([law]): readonly [string, Law] => [lawIdentity(law), law]),
-  ...stored.flatMap((read): readonly (readonly [string, Law])[] =>
-    read.kind === "check"
-      ? [
-          [
-            `check ${read.desc.name} on ${read.relation.name}`,
-            { kind: "check", name: read.desc.name, relation: read.relation.name },
-          ],
-        ]
-      : [],
+const namedLaws: readonly (readonly [Law, LawName])[] = [
+  ...statementLaws.flatMap(({ laws }) =>
+    laws.flatMap((law) =>
+      law.kind === "check"
+        ? []
+        : Option.toArray(Option.map(lawNameOf(law), (name) => [law, name] as const)),
+    ),
   ),
-]);
+  ...writtenLaws,
+];
 
 /**
- * Each law the schema states that is no check, by name, with the identities of its statements.
+ * Write a law as a broken law's witness names it, the text the genetic search's known
+ * disagreements are keyed by (`known.ts`): a check by its name and its relation, a containment or a
+ * fold as `key-copies.ts`'s `identityOf` writes it, any other law as grizzle reports it.
+ *
+ * @param law - The law.
+ * @returns Its text.
  */
-const identitiesOf: ReadonlyMap<LawName, readonly string[]> = new Map(
-  [...new Set(statedLaws.map(([, name]) => name))].map((name) => [
+const shownOf = (law: Law): string => {
+  if (law.kind === "check") {
+    return `check ${law.name} on ${law.relation}`;
+  }
+
+  return law.kind === "contained" || law.kind === "fold" ? identityOf(law) : Formatter.format(law);
+};
+
+/**
+ * Each law's name, by the law: every law of {@link namedLaws}.
+ */
+const namesOf: ReadonlyMap<Law, LawName> = new Map(namedLaws);
+
+/**
+ * Each law the schema states that is no check, by name, with the laws of its statements.
+ */
+const lawsNamed: ReadonlyMap<LawName, readonly Law[]> = new Map(
+  [...new Set(namedLaws.map(([, name]) => name))].map((name) => [
     name,
-    statedLaws.flatMap(([law, held]) => (held === name ? [lawIdentity(law)] : [])),
+    namedLaws.flatMap(([law, held]) => (held === name ? [law] : [])),
   ]),
 );
 
@@ -509,7 +568,9 @@ const StoredRelation = Schema.Struct({
   fields: Schema.Record(
     Schema.String,
     Schema.Struct({
-      pattern: Schema.optionalKey(Schema.Struct({ flags: Schema.String, source: Schema.String })),
+      pattern: Schema.optionalKey(
+        Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
+      ),
       sql: Schema.optionalKey(Schema.String),
     }),
   ),
@@ -549,39 +610,55 @@ const unflattened: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Each pattern law's fields, by the law's identity: every field whose type's pattern it is, as
- * `[relation, field]`.
+ * A pattern law, its source and its flags.
  */
-const patternFields: ReadonlyMap<string, readonly (readonly [string, string])[]> = (() => {
-  const byIdentity = new Map<string, (readonly [string, string])[]>();
+type PatternLaw = Extract<Law, { readonly kind: "pattern" }>;
+
+/**
+ * The pattern laws of {@link writtenLaws}.
+ */
+const patternLaws: readonly PatternLaw[] = writtenLaws.flatMap(([law]) =>
+  law.kind === "pattern" ? [law] : [],
+);
+
+/**
+ * Each pattern law's fields: every field whose type's pattern grizzle's `sameLaw` holds to be the
+ * law, as `[relation, field]`. A pattern no row of the table names is left out, since no refusal
+ * could name it.
+ */
+const patternFields: ReadonlyMap<PatternLaw, readonly (readonly [string, string])[]> = (() => {
+  const byLaw = new Map<PatternLaw, (readonly [string, string])[]>();
   for (const [name, { fields, kind }] of relations) {
     for (const [field, { pattern }] of Object.entries(fields)) {
-      if (kind === "relation" && pattern !== undefined) {
-        const identity = `pattern /${pattern.source}/${pattern.flags}`;
-        byIdentity.set(identity, [...(byIdentity.get(identity) ?? []), [name, field] as const]);
+      const law =
+        kind === "relation" && pattern !== undefined
+          ? patternLaws.find((stated) =>
+              sameLaw(stated, { flags: pattern.flags, kind: "pattern", source: pattern.source }),
+            )
+          : undefined;
+      if (law !== undefined) {
+        byLaw.set(law, [...(byLaw.get(law) ?? []), [name, field] as const]);
       }
     }
   }
 
-  return byIdentity;
+  return byLaw;
 })();
 
 /**
  * Each field's type's pattern law, by `Relation.field`.
  */
-const fieldPatterns: ReadonlyMap<string, string> = new Map(
-  [...patternFields].flatMap(([identity, fields]) =>
-    fields.map(([relation, field]) => [`${relation}.${field}`, identity] as const),
+const fieldPatterns: ReadonlyMap<string, PatternLaw> = new Map(
+  [...patternFields].flatMap(([law, fields]) =>
+    fields.map(([relation, field]) => [`${relation}.${field}`, law] as const),
   ),
 );
 
 /**
- * Each generated field's law identity, with its relation.
+ * Each generated field's law, with its relation.
  */
-const generatedRelations: ReadonlyMap<string, string> = new Map(
-  statedLaws.flatMap(([law]) =>
-    law.kind === "generated" ? [[lawIdentity(law), law.relation] as const] : [],
-  ),
+const generatedRelations: ReadonlyMap<Law, string> = new Map(
+  writtenLaws.flatMap(([law]) => (law.kind === "generated" ? [[law, law.relation] as const] : [])),
 );
 
 /**
@@ -589,14 +666,18 @@ const generatedRelations: ReadonlyMap<string, string> = new Map(
  * holds a value its pattern matches. A relation the program writes no row of holds it.
  *
  * @param view - The rows.
- * @param identity - The pattern law's identity, `pattern /source/flags`.
+ * @param law - The pattern law.
+ * @param fields - Its fields, as `[relation, field]`.
  * @returns Its verdict.
  */
-const patternVerdictOf = (view: View, identity: string): Verdict => {
-  const at = identity.lastIndexOf("/");
-  const pattern = new RegExp(identity.slice("pattern /".length, at), identity.slice(at + 1));
+const patternVerdictOf = (
+  view: View,
+  law: PatternLaw,
+  fields: readonly (readonly [string, string])[],
+): Verdict => {
+  const pattern = new RegExp(law.source, law.flags);
   let unknown = false;
-  for (const [relation, field] of patternFields.get(identity) ?? []) {
+  for (const [relation, field] of fields) {
     const rows = view.get(relation);
     if (rows === undefined) {
       unknown ||= unflattened.has(relation);
@@ -628,26 +709,26 @@ const patternVerdictOf = (view: View, identity: string): Verdict => {
  * `lexical(date)`); unknown otherwise.
  *
  * @param view - The rows.
- * @param identity - The generated field's law identity.
+ * @param law - The generated field's law.
  * @param relation - The field's relation.
- * @param patterns - Each pattern law's verdict over the rows, by identity.
+ * @param patterns - Each pattern law's verdict over the rows.
  * @returns Its verdict.
  */
 const generatedVerdictOf = (
   view: View,
-  identity: string,
+  law: Law,
   relation: string,
-  patterns: ReadonlyMap<string, Verdict>,
+  patterns: ReadonlyMap<Law, Verdict>,
 ): Verdict => {
   const rows = view.get(relation);
   if (rows === undefined ? !unflattened.has(relation) : rows.length === 0) {
     return { kind: "held" };
   }
 
-  const law = namesByIdentity.get(identity);
+  const name = namesOf.get(law);
   const own = [...patternFields].filter(
     ([pattern, fields]) =>
-      namesByIdentity.get(pattern) === law && fields.some(([held]) => held === relation),
+      namesOf.get(pattern) === name && fields.some(([held]) => held === relation),
   );
 
   return own.length > 0 && own.every(([pattern]) => patterns.get(pattern)?.kind === "held")
@@ -1458,44 +1539,41 @@ export interface HostVerdict {
  */
 export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>): HostVerdict => {
   const view = viewOf(inputs);
-  const patterns = new Map(
-    [...patternFields.keys()].map(
-      (identity) => [identity, patternVerdictOf(view, identity)] as const,
-    ),
+  const patterns = new Map<Law, Verdict>(
+    [...patternFields].map(([law, fields]) => [law, patternVerdictOf(view, law, fields)] as const),
   );
-  const verdicts = new Map<string, Verdict>([
-    ...evaluated.map((statement) => [statement.identity, verdictOf(view, statement)] as const),
+  const verdicts = new Map<Law, Verdict>([
+    ...evaluated.map((statement) => [statement.law, verdictOf(view, statement)] as const),
     ...patterns,
     ...[...generatedRelations].map(
-      ([identity, relation]) =>
-        [identity, generatedVerdictOf(view, identity, relation, patterns)] as const,
+      ([law, relation]) => [law, generatedVerdictOf(view, law, relation, patterns)] as const,
     ),
   ]);
   const broken = new Map<LawName, string>();
-  for (const [identity, verdict] of verdicts) {
-    const name = namesByIdentity.get(identity) ?? checkLaws.get(identity);
+  for (const [law, verdict] of verdicts) {
+    const name = namesOf.get(law) ?? checkLaws.get(law);
     if (verdict.kind === "broken" && name !== undefined && !broken.has(name)) {
-      broken.set(name, `${identity}: ${verdict.witness}`);
+      broken.set(name, `${shownOf(law)}: ${verdict.witness}`);
     }
   }
 
-  const checksOf = new Map<LawName, string[]>();
-  for (const [identity, law] of checkLaws) {
-    checksOf.set(law, [...(checksOf.get(law) ?? []), identity]);
+  const checksOf = new Map<LawName, Law[]>();
+  for (const [law, name] of checkLaws) {
+    checksOf.set(name, [...(checksOf.get(name) ?? []), law]);
   }
 
   const held = new Set(
-    [...new Set([...identitiesOf.keys(), ...checksOf.keys()])].filter(
+    [...new Set([...lawsNamed.keys(), ...checksOf.keys()])].filter(
       (name) =>
         !unreadChecks.has(name) &&
         !broken.has(name) &&
-        [...(identitiesOf.get(name) ?? []), ...(checksOf.get(name) ?? [])].every(
-          (identity) => verdicts.get(identity)?.kind === "held",
+        [...(lawsNamed.get(name) ?? []), ...(checksOf.get(name) ?? [])].every(
+          (law) => verdicts.get(law)?.kind === "held",
         ),
     ),
   );
   const overLong = new Set<string>();
-  const boundLaws = new Set<string>();
+  const boundLaws = new Set<Law>();
   const dangling = new Set<string>();
   for (const [relation, rows] of view) {
     const uuids = uuidFields.get(relation) ?? [];
@@ -1525,11 +1603,11 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
   }
 
   const brokenLaws = [
-    ...[...verdicts].flatMap(([identity, verdict]) =>
-      verdict.kind === "broken" ? [identity] : [],
-    ),
-    ...boundLaws,
-  ].flatMap((identity) => Option.toArray(Option.fromUndefinedOr(lawsByIdentity.get(identity))));
+    ...new Set([
+      ...[...verdicts].flatMap(([law, verdict]) => (verdict.kind === "broken" ? [law] : [])),
+      ...boundLaws,
+    ]),
+  ];
 
   return {
     broken,

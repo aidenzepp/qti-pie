@@ -83,7 +83,11 @@ const exempt: ReadonlyMap<string, string> = new Map([
   ],
   [
     "pantry/src/import/overlays/expressions.absence.oracle.test.ts",
-    "measurement owed: its 18-package box ran under FB-EXPR's run of 2026-11-07, whose load average was below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+    "measurement owed: its 18-package box ran under FB-EXPR's run of 2026-11-07, whose load average was below 60, and its 9-package box, once FIX-A1 struck the timing cases, 3.9 s at a load average of 34 to 40 beside four other suites; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/test/normal-minimum-default.oracle.test.ts",
+    "measurement owed: its 32-case exhaust ran 2.9 s at a load average of 34 to 45 in FIX-NORMALMIN's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/test/census.migration.test.ts",

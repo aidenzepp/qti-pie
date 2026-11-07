@@ -2,35 +2,28 @@
 /**
  * The mapping overlays' rows against a second reading of the same tree: a direct walk of the XDM
  * document that numbers its nodes in document order as the tree's rows are numbered, collects one
- * map key per `qti-map-entry` from its attributes, and reads each integer key's value with
- * JavaScript's `BigInt`. The walk shares no code with the builder, which reads the tree's flat rows
- * (`flatten`).
+ * map key per `qti-map-entry` from its attributes, and splits each typed key as its base type
+ * reads it, an integer's magnitude by JavaScript's `BigInt`. The walk shares no code with the
+ * builder, which reads the tree's flat rows (`flatten`). Each typed key's value is PostgreSQL's,
+ * generated from the split, so `#pantry/qti/mapping.db.test.ts` judges it.
  */
 import { lexicalForm, pg } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { drawn, exhaust, explore } from "@grizzle/testing/explore";
-import { required, requiredInSpace } from "@grizzle/testing/features";
-import { array, element, int } from "@grizzle/testing/gen";
+import { exhaust } from "@grizzle/testing/explore";
+import { requiredInSpace } from "@grizzle/testing/features";
+import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
-import { notesOnly } from "@grizzle/testing/sense";
-import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { ownContext } from "#pantry/import/fold.ts";
 import {
-  floatValueOf,
-  integerValueOf,
-  pairValueOf,
-  pointValueOf,
+  integerPartsOf,
+  pairPartsOf,
+  pointPartsOf,
   rowsOf,
 } from "#pantry/import/overlays/mapping.ts";
 import type { MappingIds } from "#pantry/import/overlays/mapping.ts";
-import {
-  floatKeyPattern,
-  integerKeyPattern,
-  pairKeyPattern,
-  pointKeyPattern,
-} from "#pantry/qti/mapping.ts";
+import { integerKeyPattern, pairKeyPattern, pointKeyPattern } from "#pantry/qti/mapping.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
 import type {
@@ -252,9 +245,9 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
     "writes one MapKey row per qti-map-entry, distinct by node, even where two entries are identical, and each typed key's row by its base type",
     (ctx) =>
       // Oracle: a second implementation, a direct walk of the XDM tree that numbers its entries in
-      // document order, against the builder's read of the flat rows; each integer key's value by
-      // JavaScript's `BigInt`, which reads xs:integer's lexical space to the same integer, and each
-      // float key's selection by the deleted `xsDouble` and grizzle's double form.
+      // document order, against the builder's read of the flat rows; each integer key's selection
+      // by the deleted `xsInteger`, and each float key's by the deleted `xsDouble` and grizzle's
+      // double form.
       // Bound: every mapping of 3 base types with at most 4 entries over 3 keys and 2 values,
       // 4,665.
       searched(
@@ -293,18 +286,18 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
               }
 
               assert.deepStrictEqual(
-                [...rows.MapKeyInteger].map(([node, row]) => [node, row.key, row.value]),
+                [...rows.MapKeyInteger].map(([node, row]) => [node, row.key]),
                 input.baseType === "integer"
                   ? [...walked].flatMap(([node, { key }]) =>
-                      xsInteger.test(key) ? [[node, key, typedOf("integer", key)]] : [],
+                      xsInteger.test(key) ? [[node, key]] : [],
                     )
                   : [],
               );
               assert.deepStrictEqual(
-                [...rows.MapKeyFloat.keys()],
+                [...rows.MapKeyFloat].map(([node, row]) => [node, row.key]),
                 input.baseType === "float"
                   ? [...walked].flatMap(([node, { key }]) =>
-                      xsDouble.test(key) && grizzleDouble.test(key) ? [node] : [],
+                      xsDouble.test(key) && grizzleDouble.test(key) ? [[node, key]] : [],
                     )
                   : [],
               );
@@ -382,8 +375,8 @@ const identityOf = (entries: readonly { caseSensitive?: string; key: string }[])
   ].map((row) => JSON.stringify([row.mapping, row.folded, row.key]));
 
 describe("import/overlays/mapping.ts, which map keys are one key", () => {
-  it("writes the key as written beside how it is matched as a key's identity, so York and york are two keys and york written twice is one (reading 151)", () => {
-    // Oracle: reading 151 (decision 425): two string entries are one key only when they are
+  it("writes the key as written beside how it is matched as a key's identity, so York and york are two keys and york written twice is one (reading 154)", () => {
+    // Oracle: reading 154 (decision 425): two string entries are one key only when they are
     // written identically and matched the same way; the schema's uniqueness is
     // `key(MapKey(mapping, folded, key))`, so the identity read here is that tuple.
     // Bound: the one string mapping, its entries named.
@@ -425,63 +418,57 @@ const situationOfInteger = (signed: boolean, magnitude: string): IntegerSituatio
   return signed ? "signed" : "plain";
 };
 
-describe(
-  "import/overlays/mapping.ts, an integer key's canonical form",
-  { timeout: searchTimeout },
-  () => {
-    it.effect(
-      "splits every xs:integer key into the parts E1_derived proves, its value the canonical form of the integer it names",
-      (ctx) =>
-        // Oracle: a second implementation, JavaScript's `BigInt` of the key and its decimal string,
-        // XML Schema's canonical form of xs:integer (no `+`, no leading zero, `0` unsigned); the
-        // parts against E1_derived's equalities, restated.
-        // Bound: every sign or none before every run of 1 to 3 digits over 0, 1 and 9, 117.
-        searched(
-          ctx,
-          exhaust(
-            {
-              box: "every optional sign before 1 to 3 digits over 0, 1 and 9",
-              caseHang: Duration.seconds(10),
-              coverage: requiredInSpace<IntegerSituation>([
-                "signed",
-                "padded",
-                "signed zero",
-                "plain",
-              ]),
-              generator: (source) =>
-                `${source.draw(element(["", "+", "-"] as const))}${source
-                  .draw(array(element(["0", "1", "9"] as const), { max: 3, min: 1 }))
-                  .join("")}`,
-              limit: 200,
-              literal: (key) => JSON.stringify(key),
-              oracle: { kind: "second-implementation", name: "JavaScript's BigInt of the key" },
-              suite: "pantry/import/overlays-mapping-integer",
-            },
-            (key: string, c) =>
-              Effect.sync(() => {
-                const signed = key.startsWith("+") || key.startsWith("-");
-                const magnitude = signed ? key.slice(1) : key;
-                c.note(situationOfInteger(signed, magnitude));
+describe("import/overlays/mapping.ts, an integer key's split", { timeout: searchTimeout }, () => {
+  it.effect(
+    "splits every xs:integer key into the parts E1_derived proves, its digits the magnitude of the integer it names",
+    (ctx) =>
+      // Oracle: a second implementation, JavaScript's `BigInt` of the key, whose magnitude's
+      // decimal string is the digits of XML Schema's canonical form of xs:integer (no leading
+      // zero); the parts against E1_derived's equality, restated.
+      // Bound: every sign or none before every run of 1 to 3 digits over 0, 1 and 9, 117.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every optional sign before 1 to 3 digits over 0, 1 and 9",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<IntegerSituation>([
+              "signed",
+              "padded",
+              "signed zero",
+              "plain",
+            ]),
+            generator: (source) =>
+              `${source.draw(element(["", "+", "-"] as const))}${source
+                .draw(array(element(["0", "1", "9"] as const), { max: 3, min: 1 }))
+                .join("")}`,
+            limit: 200,
+            literal: (key) => JSON.stringify(key),
+            oracle: { kind: "second-implementation", name: "JavaScript's BigInt of the key" },
+            suite: "pantry/import/overlays-mapping-integer",
+          },
+          (key: string, c) =>
+            Effect.sync(() => {
+              const signed = key.startsWith("+") || key.startsWith("-");
+              const magnitude = signed ? key.slice(1) : key;
+              c.note(situationOfInteger(signed, magnitude));
 
-                const parts = integerValueOf(key);
-                assert.isDefined(parts, key);
-                if (parts !== undefined) {
-                  assert.strictEqual(parts.value, String(BigInt(key)), key);
-                  assert.strictEqual(`${parts.sign}${parts.zeros}${parts.digits}`, key);
-                  assert.strictEqual(`${parts.negative}${parts.digits}`, parts.value);
-                }
-              }),
-          ),
+              const parts = integerPartsOf(key);
+              const integer = BigInt(key);
+              assert.isDefined(parts, key);
+              if (parts !== undefined) {
+                assert.strictEqual(parts.digits, String(integer < 0n ? -integer : integer), key);
+                assert.strictEqual(`${parts.sign}${parts.zeros}${parts.digits}`, key);
+              }
+            }),
         ),
-    );
-  },
-);
+      ),
+  );
+});
 
 /**
  * The keys a two-item mapping draws from: a pair and its reverse, the pair with a tab between, a
- * point and its spelling with a zero and a sign, and two items one of which is past U+FFFF, the
- * case where code-point order and JavaScript's UTF-16 order part (U+10000 sorts after U+E000 by
- * code point, before it by code unit).
+ * point and its spelling with a zero and a sign, and two items one of which is past U+FFFF.
  */
 const twoItemKeys = ["A B", "B A", "A\tB", "1 2", "01 +2", "\u{10000} \u{E000}"] as const;
 
@@ -497,67 +484,39 @@ const twoItemCases: Gen<MappingCase> = (source) => ({
 });
 
 /**
- * Compare two texts by code point, as PostgreSQL's `pg_c_utf8` collation does.
- *
- * @param left - The first text.
- * @param right - The second.
- * @returns A negative number, zero or a positive number as the first sorts before, with or after
- *   the second.
- */
-const byCodePoint = (left: string, right: string): number => {
-  const a = Array.from(left, (char) => char.codePointAt(0) ?? 0);
-  const b = Array.from(right, (char) => char.codePointAt(0) ?? 0);
-  const at = a.findIndex((code, index) => code !== b[index]);
-
-  return at === -1 ? a.length - b.length : (a[at] ?? 0) - (b[at] ?? Number.NEGATIVE_INFINITY);
-};
-
-/**
- * Read a two-item key as the value its base type gives it, by a second reading: a point's two
- * integers by `BigInt`, a pair's two items sorted by code point, a directed pair's in order.
+ * Split a two-item key as its base type reads it, by a second reading: its two items and the one
+ * whitespace character between them, a point's items each an `xs:integer`.
  *
  * @param baseType - The mapping's base type.
  * @param key - The key.
- * @returns The canonical value, or none for a key that is not two items of the base type.
+ * @returns The first item, the whitespace and the second item, or none for a key that is not two
+ *   items of the base type.
  */
-const twoItemValueOf = (baseType: string, key: string): string | undefined => {
-  const items = key.split(/[\t\n\r ]/u);
-  if (items.length !== 2 || items.some((item) => item === "")) {
+const twoItemsOf = (baseType: string, key: string): readonly string[] | undefined => {
+  const gaps = [...key.matchAll(/[\t\n\r ]/gu)];
+  const [gap] = gaps;
+  if (gaps.length !== 1 || gap === undefined) {
     return undefined;
   }
 
-  const [first = "", second = ""] = items;
-  if (baseType === "point") {
-    return xsInteger.test(first) && xsInteger.test(second)
-      ? `${String(BigInt(first))} ${String(BigInt(second))}`
-      : undefined;
-  }
+  const first = key.slice(0, gap.index);
+  const second = key.slice(gap.index + 1);
+  const integers = baseType !== "point" || (xsInteger.test(first) && xsInteger.test(second));
 
-  return baseType === "pair" ? items.toSorted(byCodePoint).join(" ") : `${first} ${second}`;
+  return first !== "" && second !== "" && integers ? [first, gap[0], second] : undefined;
 };
 
 /**
- * A situation the two-item box must reach: two keys of one value spelled apart, a pair whose items
- * code-point order and UTF-16 order sort apart, and a mapping with none of these.
+ * A two-item key's typed row as the test compares it: its entry's node, and its first item, the
+ * whitespace and its second item.
  */
-type TwoItemSituation = "typed repeat" | "astral order" | "distinct";
+type SplitRow = readonly [string, readonly string[]];
 
 /**
- * Name the situations a two-item mapping reaches.
- *
- * @param repeat - Whether two of its keys spelled apart name one value.
- * @param astral - Whether it is a pair mapping holding an item past U+FFFF.
- * @returns Its situations.
+ * A situation the two-item box must reach: a key its base type splits, a key it does not (a pair
+ * of letters in a point mapping), and a mapping with no entry.
  */
-const twoItemSituationsOf = (repeat: boolean, astral: boolean): readonly TwoItemSituation[] => {
-  const situations: readonly (readonly [TwoItemSituation, boolean])[] = [
-    ["typed repeat", repeat],
-    ["astral order", astral],
-  ];
-  const reached = situations.flatMap(([situation, holds]) => (holds ? [situation] : []));
-
-  return reached.length === 0 ? ["distinct"] : reached;
-};
+type TwoItemSituation = "split" | "unsplit" | "no entry";
 
 /**
  * The characters a typed key's parse and its pattern are drawn over: the signs, two digits, a
@@ -608,7 +567,7 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
               const integer = new RegExp(integerKeyPattern, "u").test(key);
               const point = new RegExp(pointKeyPattern, "u").test(key);
               const pair = new RegExp(pairKeyPattern, "u").test(key);
-              const split = pairValueOf(key) !== undefined;
+              const split = pairPartsOf(key) !== undefined;
               const situations: readonly [ParseSituation, boolean][] = [
                 ["integer", integer],
                 ["point", point],
@@ -617,8 +576,8 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
               ];
               c.note(situations.find(([, holds]) => holds)?.[0] ?? "untyped");
 
-              assert.strictEqual(integerValueOf(key) !== undefined, integer, key);
-              assert.strictEqual(pointValueOf(key) !== undefined, point, key);
+              assert.strictEqual(integerPartsOf(key) !== undefined, integer, key);
+              assert.strictEqual(pointPartsOf(key) !== undefined, point, key);
               assert.isTrue(!pair || split, key);
               assert.strictEqual(split && !pair, split && key.includes("\u{1}"), key);
             }),
@@ -629,11 +588,11 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
 
 describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }, () => {
   it.effect(
-    "writes each point, pair and directed pair key's typed row, its value the second reading's canonical form",
+    "writes each point, pair and directed pair key's typed row, its split the second reading's items",
     (ctx) =>
-      // Oracle: a second implementation, a split at each XML whitespace character, `BigInt` of a
-      // point's integers and a code-point sort of a pair's items (§8.13: a pair is undirected, a
-      // directed pair and a point ordered), against the builder's split and `atOrBefore`.
+      // Oracle: a second implementation, a split at the one XML whitespace character, a point's
+      // items each an xs:integer, against the builder's split, which E1_derived holds to the key
+      // and PostgreSQL generates each value from (§8.13).
       // Bound: every mapping of point, pair or directedPair with at most 3 entries over 6 keys,
       // 777.
       searched(
@@ -642,53 +601,53 @@ describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }
           {
             box: "every mapping of point, pair or directedPair with at most 3 entries over 6 keys",
             caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<TwoItemSituation>([
-              "typed repeat",
-              "astral order",
-              "distinct",
-            ]),
+            coverage: requiredInSpace<TwoItemSituation>(["split", "unsplit", "no entry"]),
             generator: twoItemCases,
             limit: 1000,
             literal: (input) =>
               `${input.baseType}: ${input.entries.map(({ key }) => JSON.stringify(key)).join(" ")}`,
-            oracle: {
-              kind: "second-implementation",
-              name: "a whitespace split, BigInt and a code-point sort",
-            },
+            oracle: { kind: "second-implementation", name: "a whitespace split" },
             suite: "pantry/import/overlays-mapping-two-items",
           },
           (input: MappingCase, c) =>
             Effect.sync(() => {
-              const keys = input.entries.map(({ key }) => key);
-              const values = keys.flatMap((key) =>
-                Option.toArray(Option.fromNullishOr(twoItemValueOf(input.baseType, key))),
-              );
-              const astral =
-                input.baseType === "pair" && keys.some((key) => key.includes("\u{10000}"));
-              const repeat = new Set(values).size < new Set(keys).size;
-              c.noteAll(twoItemSituationsOf(repeat, astral));
+              const split = input.entries.map(({ key }) => twoItemsOf(input.baseType, key));
+              c.noteAll([
+                ...(split.length === 0 ? (["no entry"] as const) : []),
+                ...(split.some((items) => items !== undefined) ? (["split"] as const) : []),
+                ...(split.some((items) => items === undefined) ? (["unsplit"] as const) : []),
+              ]);
 
               const rows = rowsOf(treeOf(input), ids);
               const typed = {
-                directedPair: rows.MapKeyDirectedPair,
-                pair: rows.MapKeyPair,
-                point: rows.MapKeyPoint,
-              } as const;
+                directedPair: [...rows.MapKeyDirectedPair].map(([node, row]): SplitRow => [
+                  node,
+                  [row.source, row.gap, row.target],
+                ]),
+                pair: [...rows.MapKeyPair].map(([node, row]): SplitRow => [
+                  node,
+                  [row.first, row.gap, row.second],
+                ]),
+                point: [...rows.MapKeyPoint].map(([node, row]): SplitRow => [
+                  node,
+                  [
+                    `${row.xSign}${row.xZeros}${row.xDigits}`,
+                    row.gap,
+                    `${row.ySign}${row.yZeros}${row.yDigits}`,
+                  ],
+                ]),
+              };
               const expected = [...walkedKeys(input)].flatMap(([node, { key }]) =>
                 Option.toArray(
-                  Option.map(Option.fromNullishOr(twoItemValueOf(input.baseType, key)), (value) => [
-                    node,
-                    value,
-                  ]),
+                  Option.map(
+                    Option.fromNullishOr(twoItemsOf(input.baseType, key)),
+                    (items): SplitRow => [node, items],
+                  ),
                 ),
               );
 
-              for (const [baseType, relation] of Object.entries(typed)) {
-                assert.deepStrictEqual(
-                  [...relation].map(([node, row]) => [node, row.value]),
-                  baseType === input.baseType ? expected : [],
-                  baseType,
-                );
+              for (const [baseType, held] of Object.entries(typed)) {
+                assert.deepStrictEqual(held, baseType === input.baseType ? expected : [], baseType);
               }
             }),
         ),
@@ -808,169 +767,6 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
               assert.deepStrictEqual(
                 [...rows.LookupTable].map(([node, { kind }]) => [node, kind]),
                 [[ids.idOf(3), input.kind]],
-              );
-            }),
-        ),
-      ),
-  );
-});
-
-/**
- * The number of bits of a positive integer.
- *
- * @param n - The integer.
- * @returns Its bit length.
- */
-const bitLength = (n: bigint): number => n.toString(2).length;
-
-/**
- * Read a decimal of grizzle's double form as the nearest double, ties to even, in exact integer
- * arithmetic: IEEE 754's roundTiesToEven of the decimal's value, which PostgreSQL's `strtod`
- * computes, written as a second implementation that shares nothing with JavaScript's `Number`.
- *
- * @param key - A key of {@link floatKeyPattern} that names no infinity and no NaN.
- * @returns Its double.
- */
-const exactDouble = (key: string): number => {
-  const groups =
-    /^(?<sign>[+-]?)(?<whole>[0-9]*)(?:\.(?<fraction>[0-9]*))?(?:[eE](?<exponent>[+-]?[0-9]+))?$/u.exec(
-      key,
-    )?.groups;
-  const negative = groups?.["sign"] === "-";
-  const fraction = groups?.["fraction"] ?? "";
-  const digits = `${groups?.["whole"] ?? ""}${fraction}`.replace(/^0+/u, "");
-  const scale = Number(groups?.["exponent"] ?? "0") - fraction.length;
-  if (digits === "") {
-    return negative ? -0 : 0;
-  }
-
-  const numerator = BigInt(digits) * (scale >= 0 ? 10n ** BigInt(scale) : 1n);
-  const denominator = scale >= 0 ? 1n : 10n ** BigInt(-scale);
-  let exponent = Math.max(bitLength(numerator) - bitLength(denominator) - 53, -1074);
-  const quotientAt = (at: number) =>
-    at >= 0
-      ? { d: denominator * 2n ** BigInt(at), n: numerator }
-      : { d: denominator, n: numerator * 2n ** BigInt(-at) };
-  while (exponent > -1074 && quotientAt(exponent).n < quotientAt(exponent).d * 2n ** 52n) {
-    exponent -= 1;
-  }
-
-  while (quotientAt(exponent).n >= quotientAt(exponent).d * 2n ** 53n) {
-    exponent += 1;
-  }
-
-  const { d, n } = quotientAt(exponent);
-  let mantissa = n / d;
-  const twice = (n - mantissa * d) * 2n;
-  if (twice > d || (twice === d && mantissa % 2n === 1n)) {
-    mantissa += 1n;
-  }
-
-  const magnitude = Number(mantissa) * 2 ** exponent;
-
-  return negative ? -magnitude : magnitude;
-};
-
-/**
- * Decimals of grizzle's double form where a rounding other than to the nearest, ties to even,
- * shows: 2^53 + 1, 2^53 + 3 and 2^54 + 2, each exactly halfway between two doubles; the form's
- * largest decimal; and two subnormals, the form's least positive decimal among them.
- */
-const halfwayKeys = [
-  "900719925474099.3e1",
-  "900719925474099.5e1",
-  "180143985094819.86e2",
-  "999999999999999.999999999999999e293",
-  ".000000000000022e-293",
-  ".000000000000001e-293",
-] as const;
-
-/**
- * A float key in grizzle's double form: an optional sign, up to 15 significant digits before the
- * point and up to 15 after it, each with a few padding zeros, and an optional exponent of at most
- * 293; one of the kept halfway decimals; or one of the three names.
- */
-const floatKeys: Gen<string> = (source) => {
-  const digitsOf = (count: number) =>
-    Array.from({ length: count }, () => String(source.draw(int(0, 9)))).join("");
-  const form = source.draw(element(["decimal", "halfway", "INF", "-INF", "NaN"] as const));
-  if (form === "halfway") {
-    return source.draw(element(halfwayKeys));
-  }
-
-  if (form !== "decimal") {
-    return form;
-  }
-
-  const sign = source.draw(element(["", "+", "-"] as const));
-  const padding = "0".repeat(source.draw(int(0, 2)));
-  const wholeCount = source.draw(int(0, 15));
-  const whole =
-    wholeCount === 0 ? "0" : `${String(source.draw(int(1, 9)))}${digitsOf(wholeCount - 1)}`;
-  const fractionCount = source.draw(int(0, 15));
-  const fraction =
-    fractionCount === 0
-      ? source.draw(element(["", "."] as const))
-      : `.${digitsOf(fractionCount)}${fractionCount === 15 ? "0".repeat(source.draw(int(0, 2))) : ""}`;
-  const exponent = source.draw(element([false, true] as const))
-    ? `${source.draw(element(["e", "E"] as const))}${source.draw(element(["", "+", "-"] as const))}${String(source.draw(int(0, 293)))}`
-    : "";
-
-  return `${sign}${padding}${whole}${fraction}${exponent}`;
-};
-
-describe("import/overlays/mapping.ts, a float key's double", { timeout: searchTimeout }, () => {
-  it.effect(
-    "reads every float key of grizzle's form as the double nearest its decimal, ties to even, as PostgreSQL's cast does",
-    (ctx) =>
-      // Oracle: a second implementation, IEEE 754 roundTiesToEven of the key's exact rational
-      // value in BigInt arithmetic, with subnormals; the three names by IEEE 754's infinities and
-      // NaN. Bound: 2,000 keys of up to 15 digits on each side of the point and exponents up to
-      // 293, among them the halfway decimals.
-      searched(
-        ctx,
-        explore(
-          {
-            caseHang: Duration.seconds(10),
-            concurrency: 1,
-            coverage: required<"decimal" | "named" | "subnormal">(["decimal", "named"], {
-              cases: 200,
-              sense: notesOnly,
-            }),
-            draw: drawn(floatKeys),
-            kept: [],
-            literal: JSON.stringify,
-            oracle: { kind: "second-implementation", name: "roundTiesToEven in BigInt arithmetic" },
-            runs: 2000,
-            shrink: completeShrink,
-            steerEvery: 16,
-            suite: "pantry/import/overlays-mapping-float",
-          },
-          (key, c) =>
-            Effect.sync(() => {
-              assert.match(key, new RegExp(floatKeyPattern, "u"));
-              if (key === "INF" || key === "-INF" || key === "NaN") {
-                c.note("named");
-                assert.isTrue(
-                  Object.is(
-                    floatValueOf(key),
-                    {
-                      "-INF": Number.NEGATIVE_INFINITY,
-                      INF: Number.POSITIVE_INFINITY,
-                      NaN: Number.NaN,
-                    }[key],
-                  ),
-                  key,
-                );
-
-                return;
-              }
-
-              const exact = exactDouble(key);
-              c.note(exact !== 0 && Math.abs(exact) < 2 ** -1022 ? "subnormal" : "decimal");
-              assert.isTrue(
-                Object.is(floatValueOf(key), exact),
-                `${key}: ${String(floatValueOf(key))} against ${String(exact)}`,
               );
             }),
         ),

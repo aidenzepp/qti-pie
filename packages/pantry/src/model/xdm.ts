@@ -141,9 +141,10 @@ export interface XdmDeclaration {
  * A document node: the XML declaration and the charsets as its fields, and its children by their
  * place in XML's `document` production.
  *
- * It is one row of `Document` beside its row of `Node`, the row's null objects standing for what
- * the declaration does not write (fin.md, D7). Its children are the doctype, first when it has one,
- * then the prolog, the root element and the epilog, each in document order.
+ * It is one row of `Document` beside its row of `Node`, and its declaration's rows where it writes
+ * one: an `XmlDecl` row, and an `EncodingDecl` and an `SdDecl` row where the declaration writes
+ * each. Its children are the doctype, first when it has one, then the prolog, the root element and
+ * the epilog, each in document order.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-document | XML 1.0, document}
  */
@@ -479,16 +480,10 @@ export const documentFamily = <V extends XdmVocabulary>(
 ];
 
 /**
- * The null object of the document row's optional closed fields (fin.md, D7): what `xmlVersion` and
- * `standalone` hold when the document does not write them. Neither field's written values contain
- * it, so it can never be read as one.
+ * The `TypeName` handle `none`: the governing type of a node that is no element, and of an element
+ * no named type governs.
  */
 export const none = "none";
-
-/**
- * The type of {@link none}.
- */
-export type None = typeof none;
 
 /**
  * A node id: the language of a uuid's hyphenated spelling, which is the type of
@@ -534,23 +529,47 @@ export interface NodeRow<V extends XdmVocabulary> {
 }
 
 /**
- * The document node's `Document` row, keyed by the node: the charsets, and the XML declaration's
- * fields through their null objects (fin.md, D7), since a row's fields are total.
- *
- * `xmlVersion` is {@link none} when the document writes no declaration, and then `encoding` is
- * empty and `standalone` is `none` too. `encoding` is empty when the declaration writes none:
- * `none` is itself a legal encoding name, so its null object is the empty label, which an encoding
- * name's leading letter excludes.
- *
- * @see {@link https://www.w3.org/TR/xml/#NT-EncName | XML 1.0, EncName}
+ * The document node's `Document` row, keyed by the node: the charsets. Its XML declaration is rows
+ * of their own ({@link XmlDeclRow}, {@link EncodingDeclRow}, {@link SdDeclRow}), since each part
+ * of it is optional (XML 1.0 §2.8) and a row's fields are total.
  */
 export interface DocumentRow {
   readonly charset: string;
-  readonly encoding: string;
   readonly exportCharset: string;
   readonly node: NodeId;
-  readonly standalone: Standalone | None;
-  readonly xmlVersion: XmlVersion | None;
+}
+
+/**
+ * The document node's `XmlDecl` row, keyed by the node, where the document writes a declaration:
+ * the version it declares.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-XMLDecl | XML 1.0, XMLDecl}
+ */
+export interface XmlDeclRow {
+  readonly node: NodeId;
+  readonly version: XmlVersion;
+}
+
+/**
+ * The document node's `EncodingDecl` row, keyed by the node, where its declaration writes an
+ * `encoding`: the encoding name as written.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-EncodingDecl | XML 1.0, EncodingDecl}
+ */
+export interface EncodingDeclRow {
+  readonly encoding: string;
+  readonly node: NodeId;
+}
+
+/**
+ * The document node's `SdDecl` row, keyed by the node, where its declaration writes a
+ * `standalone`: the value as written.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-SDDecl | XML 1.0, SDDecl}
+ */
+export interface SdDeclRow {
+  readonly node: NodeId;
+  readonly standalone: Standalone;
 }
 
 /**
@@ -653,14 +672,17 @@ export interface FlatRows<V extends XdmVocabulary> {
   readonly comments: readonly CharacterRow[];
   readonly doctypes: readonly CharacterRow[];
   readonly document: DocumentRow;
+  readonly encodingDecls: readonly EncodingDeclRow[];
   readonly entityRefs: readonly EntityRefRow[];
   readonly namespaces: readonly NamespaceRow[];
   readonly nodes: readonly NodeRow<V>[];
   readonly openElementNames: readonly OpenElementNameRow[];
   readonly openNames: readonly OpenNameRow[];
   readonly pis: readonly PiRow[];
+  readonly sdDecls: readonly SdDeclRow[];
   readonly texts: readonly CharacterRow[];
   readonly whitespace: readonly CharacterRow[];
+  readonly xmlDecls: readonly XmlDeclRow[];
 }
 
 /**
@@ -704,22 +726,32 @@ interface MetAttribute<V extends XdmVocabulary> {
 }
 
 /**
- * Write a document's XML declaration as its row's fields, each through its null object.
+ * Write a document's XML declaration as its rows: an `XmlDecl` row where the document writes one,
+ * and an `EncodingDecl` and an `SdDecl` row where the declaration writes each part.
  *
  * @param declaration - The declaration, none when the document writes none.
- * @returns `xmlVersion`, `encoding` and `standalone` as the `Document` row holds them.
+ * @param node - The document node's id.
+ * @returns The rows, each list empty where the document writes no such part.
  */
-const declarationRow = (
+const declarationRowsOf = (
   declaration: Option.Option<XdmDeclaration>,
-): Pick<DocumentRow, "encoding" | "standalone" | "xmlVersion"> =>
-  Option.match(declaration, {
-    onNone: () => ({ encoding: "", standalone: none, xmlVersion: none }),
-    onSome: ({ encoding, standalone, version }) => ({
-      encoding: Option.getOrElse(encoding, () => ""),
-      standalone: Option.getOrElse(standalone, (): None => none),
-      xmlVersion: version,
-    }),
-  });
+  node: NodeId,
+): Pick<FlatRows<XdmVocabulary>, "encodingDecls" | "sdDecls" | "xmlDecls"> => ({
+  encodingDecls: declaration.pipe(
+    Option.flatMap(({ encoding }) => encoding),
+    Option.map((encoding) => ({ encoding, node })),
+    Option.toArray,
+  ),
+  sdDecls: declaration.pipe(
+    Option.flatMap(({ standalone }) => standalone),
+    Option.map((standalone) => ({ node, standalone })),
+    Option.toArray,
+  ),
+  xmlDecls: declaration.pipe(
+    Option.map(({ version }) => ({ node, version })),
+    Option.toArray,
+  ),
+});
 
 /**
  * Write an open name as its `OpenAttributeName` row: what its class leaves of the name beside its
@@ -891,12 +923,8 @@ export const flatten = <V extends XdmVocabulary>(
     attributes,
     comments,
     doctypes,
-    document: {
-      charset: document.charset,
-      exportCharset: document.exportCharset,
-      node: self,
-      ...declarationRow(document.declaration),
-    },
+    document: { charset: document.charset, exportCharset: document.exportCharset, node: self },
+    ...declarationRowsOf(document.declaration, self),
     entityRefs,
     namespaces,
     nodes,

@@ -17,7 +17,12 @@ import {
 } from "#pantry/grammar/names.ts";
 import { expandedNameOf, noType } from "#pantry/grammar/xsi.ts";
 import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
-import { namespaceClassOf, vocabularyNamespaces, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import {
+  namespaceClassOf,
+  namespaceNameOf,
+  vocabularyNamespaces,
+  xsNamespace,
+} from "#pantry/vocab/namespaces.ts";
 import { foreignRoots, schemaSets } from "#pantry/vocab/open.ts";
 
 /**
@@ -321,7 +326,9 @@ describe("HeldRootsUnder", () => {
         if (foreignRoots.has(kind) && versions.includes(version)) {
           const namespace = namespaceOf(kind);
           const expected =
-            classes.has(foreignKinds[namespaceClassOf(namespace, own)]) &&
+            classes.has(
+              foreignKinds[namespaceClassOf(namespaceNameOf(namespace), namespaceNameOf(own))],
+            ) &&
             Object.values(schemaSets).some(
               (set: readonly string[]) =>
                 set.includes(vocabularyOf.get(namespace) ?? "") &&
@@ -375,7 +382,7 @@ describe("HeldRootsUnder", () => {
               version,
             })),
             kinds,
-            namespaceOf: () => "urn:host",
+            namespaceOf: () => namespaceNameOf("urn:host"),
             reads: () => true,
             roots,
             versions,

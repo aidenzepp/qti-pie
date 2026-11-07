@@ -14,6 +14,7 @@ import type {
   Sources,
 } from "#pantry/vocab/inventory/types.ts";
 import { admitsNamespace, namespaceClassesUnder } from "#pantry/vocab/namespaces.ts";
+import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 
 /**
  * Whether bounds allow more than one occurrence.
@@ -135,14 +136,15 @@ const never = (occurs: Occurs): boolean => Option.contains(occurs.max, 0);
  * constraints share a namespace. Each pair once, the lower position first.
  *
  * @param held - The state's positions.
- * @param namespaceOf - Each kind's namespace.
+ * @param namespaceOf - Each kind's namespace: a kind that names no element is none a wildcard
+ *   admits by its namespace (`admitsNamespace`).
  * @param own - The model's kind's namespace, the wildcards' own.
  * @returns The clashing pairs.
  */
 const clashesIn = (
   held: readonly Position[],
-  namespaceOf: (kind: string) => string,
-  own: string,
+  namespaceOf: (kind: string) => NamespaceOfKind,
+  own: NamespaceOfKind,
 ): readonly (readonly [number, number])[] => {
   const clashes = new Map<string, readonly [number, number]>();
   const note = (left: number, right: number): void => {
@@ -290,8 +292,8 @@ const bodyOf = (
  */
 export const automatonOf = (
   particle: Particle,
-  namespaceOf: (kind: string) => string,
-  own: string,
+  namespaceOf: (kind: string) => NamespaceOfKind,
+  own: NamespaceOfKind,
 ): Automaton => {
   // The start, before any child; then one state per position, the state after a child there.
   const start: State = { follows: new Set() };

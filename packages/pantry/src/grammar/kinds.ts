@@ -10,7 +10,8 @@
  */
 import { Option, Result } from "effect";
 import { closed, idField, roster, valueField } from "#pantry/grammar/closed.ts";
-import type { NamespaceClass } from "#pantry/vocab/namespaces.ts";
+import { spelledNamespace } from "#pantry/vocab/namespaces.ts";
+import type { Nameless, NamespaceClass, NamespaceName } from "#pantry/vocab/namespaces.ts";
 import type {
   Closed,
   ClosedRelationError,
@@ -41,17 +42,32 @@ export interface VocabularyKind {
 }
 
 /**
+ * A kind that names no element, as every kind of a {@link Nameless} vocabulary does.
+ */
+export interface NamelessKind extends VocabularyKind {
+  readonly local: "";
+}
+
+/**
  * A vocabulary as the kinds generator reads it: the namespace its elements are in, its node kinds
  * in append-only order, and the attribute names it introduces.
  *
  * A kind with a local name is an element kind, written with that name in the vocabulary's
- * namespace. A kind with an empty local name names no element, as character data does.
+ * namespace, or in none where the vocabulary is `absent`. A kind with an empty local name names no
+ * element, as character data does. A layer of kinds that name no element, such as character data
+ * or the document layer, is `nameless`: it has no namespace, since it writes no element.
  */
-export interface Vocabulary {
-  readonly attributes: readonly string[];
-  readonly kinds: readonly VocabularyKind[];
-  readonly namespace: string;
-}
+export type Vocabulary =
+  | {
+      readonly attributes: readonly string[];
+      readonly kinds: readonly NamelessKind[];
+      readonly namespace: Nameless;
+    }
+  | {
+      readonly attributes: readonly string[];
+      readonly kinds: readonly VocabularyKind[];
+      readonly namespace: NamespaceName;
+    };
 
 /**
  * The element kind of a foreign element, by its namespace class relative to its parent's namespace
@@ -152,7 +168,8 @@ export interface Kinds<Kind extends string, Name extends string> {
    */
   readonly attributeName: Roster<Name>;
   /**
-   * `ElementName`: the namespace name and local name each element kind is written with.
+   * `ElementName`: the namespace name and local name each element kind is written with, as crust's
+   * tree spells them (`spelledNamespace`), since the codec reads and writes names against them.
    */
   readonly elementName: Closed<
     readonly [IdField<"kind", Kind>],
@@ -247,10 +264,16 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
       ...openClasses,
       ...new Set([...source.layer, ...vocabularies.flatMap(namesIn<V>)]),
     ]);
-    const elements = vocabularies.flatMap((vocabulary) =>
-      vocabulary.kinds
-        .filter(({ local }) => local !== "")
-        .map(({ handle, local }) => ({ handle, row: { local, namespace: vocabulary.namespace } })),
+    // A nameless vocabulary's kinds name no element, so only a namespaced one's are elements.
+    const elements = vocabularies.flatMap(({ kinds, namespace }) =>
+      namespace._tag === "nameless"
+        ? []
+        : kinds
+            .filter(({ local }) => local !== "")
+            .map(({ handle, local }) => ({
+              handle,
+              row: { local, namespace: spelledNamespace(namespace) },
+            })),
     );
     const kind = idField("kind", nodeKind);
     const elementName = yield* closed({

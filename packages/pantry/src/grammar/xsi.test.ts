@@ -21,7 +21,8 @@ import type { ContentModel, ExpandedName, TypeDerivation } from "#pantry/vocab/i
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { typeDerivations } from "#pantry/vocab/inventory/models.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
-import { xsNamespace } from "#pantry/vocab/namespaces.ts";
+import { namespaceNameOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 import {
   loadXsd,
   nameKey,
@@ -75,7 +76,7 @@ const derivations: readonly TypeDerivation[] = [
 /**
  * The toy kinds' namespace, the toy types' own.
  */
-const toyNamespace = "urn:toy";
+const toyNamespace = namespaceNameOf("urn:toy");
 
 /**
  * The namespaces of four vocabularies, as `#pantry/vocab/namespaces.ts` writes them: the curriculum
@@ -115,7 +116,7 @@ describe("XsiType", () => {
               // its declared type or a type derived from it, and nothing for an anonymous type.
               const kinds = yield* Effect.fromResult(roster("NodeKind", ["k0", "k1", "k2"]));
               const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
-              const models: readonly (ContentModel & { readonly namespace: string })[] =
+              const models: readonly (ContentModel & { readonly namespace: NamespaceOfKind })[] =
                 declared.map((at, index) => ({
                   content: { _tag: "empty" },
                   kind: `k${String(index)}`,
@@ -179,7 +180,7 @@ describe("XsiType", () => {
             {
               content: { _tag: "empty" },
               kind: "csmd:GUID",
-              namespace: setNamespaces.csmd,
+              namespace: namespaceNameOf(setNamespaces.csmd),
               sources: toySources(schemaVersions),
               type: Option.some(declared),
               versions: schemaVersions,

@@ -19,10 +19,11 @@
  * - {@link RecordField}, one per `qti-value` of a value set that writes both a `field-identifier` and
  *   a `base-type`, a counted member of its set.
  * - {@link RecordFieldName}, a record field's name, where its `field-identifier` names something.
- * - {@link MasteryValue}, {@link NormalMinimum} and {@link NormalMaximum}, an outcome declaration's
- *   `mastery-value`, `normal-minimum` and `normal-maximum`, each where it writes it, and
- *   {@link MasteryFloor} and {@link MasteryCeiling}, each pair of them `Mastery_range` compares as
- *   `xs:double` values, where it writes both.
+ * - {@link MasteryValue} and {@link NormalMaximum}, an outcome declaration's `mastery-value` and
+ *   `normal-maximum`, each where it writes it; {@link NormalMinimum}, its `normal-minimum` where it
+ *   writes one, and else its version's XSD default where the version states one (spec reading 149);
+ *   and {@link MasteryFloor} and {@link MasteryCeiling}, each pair of them `Mastery_range` compares
+ *   as `xs:double` values, where it has both.
  *
  * No field stands for an attribute its element does not write: a value that may be missing is a row
  * of its own relation, written only where it is (AGENTS.md, Schema intent). One sentinel is left,
@@ -61,6 +62,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
+import { Option } from "effect";
 import {
   BaseType,
   BaseTypeLexical,
@@ -77,6 +79,8 @@ import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import { testKind } from "#pantry/qti/tests.ts";
+import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
+import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
 /**
  * XML whitespace `S`, possibly none: what an identifier's lexical form holds around its name.
@@ -200,8 +204,9 @@ export const contextVariable = {
  *   copies it into every row that names the declaration (lane NIL's audit, B12, open);
  * - `cardinality`, the `Cardinality` its `cardinality` spells, and `cardinalityLexical`;
  * - `masteries`, `minimums` and `maximums`, drawn: its counts of {@link MasteryValue},
- *   {@link NormalMinimum} and {@link NormalMaximum} rows, 1 where it writes the attribute and 0
- *   where it does not.
+ *   {@link NormalMinimum} and {@link NormalMaximum} rows, 1 where it has the value and 0 where it
+ *   does not: a mastery value or a normal maximum where it writes one, and a normal minimum where
+ *   it writes one or its version's XSD defaults it (spec reading 149).
  *
  * Copied text is `keyText` (`#pantry/qti/limits.ts`): an identifier and each copy sit in a key or a
  * containment's index.
@@ -412,10 +417,34 @@ export const RecordFieldName = relation(
 export const MasteryValue = relation("MasteryValue", { lexical: keyText, node: uuid }, ["node"]);
 
 /**
- * An outcome declaration's `normal-minimum`, keyed by its node, where it writes one, as
- * {@link MasteryValue} is its mastery value.
+ * The `normal-minimum` an outcome declaration has, by its version, where the version's XSD states a
+ * default (spec reading 149): QTI 3.0.1's `default="0.0"` (`imsqti_asiv3p0p1_v1p0.xsd` line 30137;
+ * information model §4.5.8, "Default = "0.0"" and "It is set to 0 by default"). QTI 3.0 states none
+ * (`imsqti_asiv3p0_v1p0.xsd` line 29989, and its §4.5.8), so a 3.0.0 declaration that writes no
+ * `normal-minimum` has no normal minimum. Read from the inventory's leaf, the one statement of the
+ * XSD's defaults.
  */
-export const NormalMinimum = relation("NormalMinimum", { lexical: keyText, node: uuid }, ["node"]);
+export const normalMinimumDefaults: ReadonlyMap<Version, string> = new Map(
+  attributeDeclarations.flatMap(({ default: stated, kind, name, versions }) =>
+    kind === "qti-outcome-declaration" && name === "normal-minimum"
+      ? Option.toArray(stated).flatMap((value) =>
+          versions.map((version) => [version, value] as const),
+        )
+      : [],
+  ),
+);
+
+/**
+ * An outcome declaration's normal minimum, keyed by its node, where it has one (spec reading 149):
+ * `lexical`, its `normal-minimum` as written where `written`, and else its version's default
+ * ({@link normalMinimumDefaults}), which `E1_derived` proves; `version`, its declaration's. A
+ * counted member of its {@link Declaration}.
+ */
+export const NormalMinimum = relation(
+  "NormalMinimum",
+  { lexical: keyText, node: uuid, version: closedId(SchemaVersion), written: pg.boolean },
+  ["node"],
+);
 
 /**
  * An outcome declaration's `normal-maximum`, keyed by its node, where it writes one, as
@@ -424,9 +453,10 @@ export const NormalMinimum = relation("NormalMinimum", { lexical: keyText, node:
 export const NormalMaximum = relation("NormalMaximum", { lexical: keyText, node: uuid }, ["node"]);
 
 /**
- * An outcome declaration that writes both a `normal-minimum` and a `mastery-value`, keyed by its
- * node: the two lexical forms, copied from its {@link NormalMinimum} and {@link MasteryValue},
- * which `Mastery_range` orders (spec reading 9: "each pair judged where both are written").
+ * An outcome declaration that has both a normal minimum, written or its version's default, and a
+ * `mastery-value`, keyed by its node: the two lexical forms, copied from its {@link NormalMinimum}
+ * and {@link MasteryValue}, which `Mastery_range` orders (spec readings 9 and 149: each pair judged
+ * where both have a value).
  */
 export const MasteryFloor = relation(
   "MasteryFloor",
@@ -456,7 +486,8 @@ export const recordFieldFamily = counted(on(RecordField, "parent"), fin(ValueSet
 export const masteryValueFamily = counted(on(MasteryValue, "node"), fin(Declaration, "masteries"));
 
 /**
- * Each outcome declaration's normal minimum, counted by `Declaration.minimums`: one row or none.
+ * Each outcome declaration's normal minimum, written or its version's default, counted by
+ * `Declaration.minimums`: one row or none.
  */
 export const normalMinimumFamily = counted(on(NormalMinimum, "node"), fin(Declaration, "minimums"));
 
@@ -551,6 +582,12 @@ const masteryValues = scaleAttributes("mastery-value");
  * The `normal-minimum` of each outcome declaration that writes one.
  */
 const normalMinimums = scaleAttributes("normal-minimum");
+
+/**
+ * The normal minimums each outcome declaration writes: the {@link NormalMinimum} rows that copy
+ * a `normal-minimum` attribute, which a default does not.
+ */
+const writtenMinimums = select(NormalMinimum, (n) => n.eq(n.written, true));
 
 /**
  * The `normal-maximum` of each outcome declaration that writes one.
@@ -702,10 +739,10 @@ const fieldValueCheck = (b: ValueBaseTypeRow) =>
 const doubleForm = lexicalForm(pg["double precision"]);
 
 /**
- * State `Mastery_range` over a normal minimum and a mastery value both written (reading 9): the
- * minimum is no greater than the mastery value, `NaN` ordered against nothing, and a form outside
- * {@link doubleForm} read as the bound that holds the order, so it is not judged (a recorded
- * limit).
+ * State `Mastery_range` over a mastery value written and a normal minimum, written or its version's
+ * default (readings 9 and 149): the minimum is no greater than the mastery value, `NaN` ordered
+ * against nothing, and a form outside {@link doubleForm} read as the bound that holds the order, so
+ * it is not judged (a recorded limit).
  *
  * @param r - The row.
  * @returns The predicate.
@@ -762,7 +799,9 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   `base-type` that spells a code, a record field its `field-identifier` and `base-type`,
  *   {@link RecordFieldName} its field's `field-identifier` where that names something, and each
  *   scale row its attribute. Each optional attribute's copy has a reverse containment, so a row
- *   holds a lexical form exactly where its element writes one.
+ *   holds a lexical form exactly where its element writes one; a normal minimum's, over its
+ *   `written` rows, since an outcome declaration of a version whose XSD defaults it has its row
+ *   whether it writes it or not (reading 149).
  * - **existence:** a declaration has its row exactly where it writes its required `identifier` and
  *   `cardinality`, through each one's copy and its reverse, and `E1_derived` holds each code to the
  *   one its lexical form spells; one that writes either none, or one that spells nothing, has no
@@ -771,13 +810,14 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   them). Every value set and value of a declaration with a row has its row through a containment
  *   from `Node`, every record value its field (`Value_cardinality`), every field whose
  *   `field-identifier` names something its name, through {@link namedFields}, and every outcome
- *   declaration that writes both ends of a pair of its scale its {@link MasteryFloor} or
+ *   declaration of a version that defaults its normal minimum its {@link NormalMinimum}, and every
+ *   outcome declaration that has both ends of a pair of its scale its {@link MasteryFloor} or
  *   {@link MasteryCeiling}, through its counts. A field whose `field-identifier` is whitespace
  *   alone has no name, and its value domain refuses it alone.
  * - **E1 (C17), `E1_derived`:** a declaration's kind is its `Declares` kind; each code is the one its
  *   lexical form spells (`<Roster>Lexical`), a declaration's base type its
  *   {@link DeclarationBaseType}'s, and `none` exactly where it has none; each identifier is its
- *   lexical form collapsed.
+ *   lexical form collapsed; a normal minimum not written is its version's default.
  * - **`Declaration key`** (spec reading 74): `key(document, identifier)`.
  * - **`Declaration not reserved`** (reading 72): no declaration names a built-in session variable, in
  *   any document, an item's, a test's or a section's alike, since every declaration element has its
@@ -794,7 +834,7 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  * - **`Typed value`** (C1, G-match): each value's text is a lexical form of its base type, its set's
  *   or, a record's field's, its own.
  * - **`Mastery range`** (C2, G-parse): the mastery value lies in the normal range, each pair judged
- *   where both are written.
+ *   where both have a value: written, or a normal minimum's version default (reading 149).
  */
 export const declarationLawsByName = {
   "Declaration base type": [
@@ -889,8 +929,21 @@ export const declarationLawsByName = {
     contained(on(masteryValues, "node", "lexical"), on(MasteryValue, "node", "lexical")),
     contained(on(MasteryValue, "node"), on(masteryValues, "node")),
     normalMinimumFamily,
-    contained(on(normalMinimums, "node", "lexical"), on(NormalMinimum, "node", "lexical")),
-    contained(on(NormalMinimum, "node"), on(normalMinimums, "node")),
+    contained(on(NormalMinimum, "node", "version"), on(Declaration, "node", "version")),
+    contained(on(normalMinimums, "node", "lexical"), on(writtenMinimums, "node", "lexical")),
+    contained(on(writtenMinimums, "node"), on(normalMinimums, "node")),
+    contained(
+      on(
+        select(Declaration, (d) =>
+          d.and(
+            d.eq(d.kind, "qti-outcome-declaration"),
+            d.in(d.version, [...normalMinimumDefaults.keys()]),
+          ),
+        ),
+        "node",
+      ),
+      on(NormalMinimum, "node"),
+    ),
     normalMaximumFamily,
     contained(on(normalMaximums, "node", "lexical"), on(NormalMaximum, "node", "lexical")),
     contained(on(NormalMaximum, "node"), on(normalMaximums, "node")),
@@ -946,6 +999,14 @@ export const declarationLawsByName = {
       b.eq(BaseTypeLexical.at("lexical", b.baseType), b.baseTypeLexical),
     ),
     check("E1_derived", RecordFieldName, collapsedField),
+    check("E1_derived", NormalMinimum, (n) =>
+      n.or(
+        n.eq(n.written, true),
+        ...[...normalMinimumDefaults].map(([version, lexical]) =>
+          n.and(n.eq(n.version, version), n.eq(n.lexical, lexical)),
+        ),
+      ),
+    ),
   ],
   "Mastery range": [
     check("Mastery_range", MasteryFloor, floorCheck),

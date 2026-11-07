@@ -15,10 +15,10 @@
  * entry is removed, and a law skipped for a value the list does not name fails it until the value
  * is named.
  */
+import type { Law, LawSourceSide } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Predicate } from "effect";
-import { lawIdentity } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -52,6 +52,13 @@ const rootCopy =
   "a tree root's copy along its own axis is the field's start value, which grizzle keeps in the field's builder and exports no reader of";
 
 /**
+ * Why a typed map key's value is absent: PostgreSQL generates it from the map key's text
+ * (`#pantry/qti/mapping.ts`), and the write's own statement compares the key over it.
+ */
+const typedKeyValue =
+  "a field PostgreSQL generates from the map key's text, which the write's own statement compares";
+
+/**
  * Every value the host does not restore that a law over the every-relation package's rows reads,
  * as `Relation.field` or `Relation: a <kind> term`, with why.
  */
@@ -72,7 +79,14 @@ const unjudged = {
   "Idref: a base term": unreadTerm("base"),
   "LeastCount: a base term": unreadTerm("base"),
   "LeastCount: a when term": unreadTerm("when"),
+  "MapKeyDirectedPair.value": typedKeyValue,
+  "MapKeyFloat.value": typedKeyValue,
   "MapKeyFloat: a cast term": unreadTerm("cast"),
+  "MapKeyInteger.value": typedKeyValue,
+  "MapKeyPair.value": typedKeyValue,
+  "MapKeyPoint.value": typedKeyValue,
+  "MasteryCeiling: a when term": unreadTerm("when"),
+  "MasteryFloor: a when term": unreadTerm("when"),
   "MathAction: a base term": unreadTerm("base"),
   "MathAction: a when term": unreadTerm("when"),
   "MathApply: a base term": unreadTerm("base"),
@@ -93,10 +107,9 @@ const unjudged = {
   "OpenAttributeName: a literal term":
     "its predicate holds a literal of no datum's type, a Bits set over AttributeName",
   "OpenElementName: a literal term": "its predicate holds a literal of no datum's type",
-  "OutcomeRange: a when term": unreadTerm("when"),
   "Quotation: a base term": unreadTerm("base"),
   "Reference: a base term": unreadTerm("base"),
-  "Rounding: a when term": unreadTerm("when"),
+  "RoundingModeFigures: a when term": unreadTerm("when"),
   "SectionSelection.select": "a field PostgreSQL generates, a cast of `selectForm`",
   "SectionSelection: a base term": unreadTerm("base"),
   "ShareFragment: a charLength function term":
@@ -106,16 +119,56 @@ const unjudged = {
 } satisfies Readonly<Record<string, string>>;
 
 /**
- * The laws the test must judge: both halves of the heads' mirror with the roots, the count that
- * places every assembled document, and both halves of `ReferenceDocument`'s mirror.
+ * Whether a law side is `relation`'s one field `field`.
+ *
+ * @param side - The side.
+ * @param relation - The relation.
+ * @param field - The field.
+ * @returns Whether it is.
  */
-const required = [
-  "contained Document(node) in Instance(document)",
-  "contained Instance(document) in Document(node)",
-  "check Inclusion_cycle",
-  "contained ReferenceDocument(document) in Document(node)",
-  "contained Document(node) in ReferenceDocument(document)",
-] as const;
+const readsOne = (side: LawSourceSide, relation: string, field: string): boolean =>
+  side.relation === relation &&
+  side.terms.length === 1 &&
+  side.terms.every((term) => term.kind === "field" && term.field === field);
+
+/**
+ * The test that a law is the containment of one field of a relation in one field of another.
+ *
+ * @param from - The source relation and its field.
+ * @param to - The target relation and its field.
+ * @returns The test.
+ */
+const containedAs =
+  (from: readonly [string, string], to: readonly [string, string]) =>
+  (law: Law): boolean =>
+    law.kind === "contained" && readsOne(law.from, ...from) && readsOne(law.to, ...to);
+
+/**
+ * The roots' half of the heads' mirror: every instance's document is a document.
+ */
+const instanceInDocument = containedAs(["Instance", "document"], ["Document", "node"]);
+
+/**
+ * The laws the test must judge, each with its label: both halves of the heads' mirror with the
+ * roots, the count that places every assembled document, and both halves of `ReferenceDocument`'s
+ * mirror.
+ */
+const required: readonly (readonly [string, (law: Law) => boolean])[] = [
+  [
+    "Document(node) in Instance(document)",
+    containedAs(["Document", "node"], ["Instance", "document"]),
+  ],
+  ["Instance(document) in Document(node)", instanceInDocument],
+  ["check Inclusion_cycle", (law) => law.kind === "check" && law.name === "Inclusion_cycle"],
+  [
+    "ReferenceDocument(document) in Document(node)",
+    containedAs(["ReferenceDocument", "document"], ["Document", "node"]),
+  ],
+  [
+    "Document(node) in ReferenceDocument(document)",
+    containedAs(["Document", "node"], ["ReferenceDocument", "document"]),
+  ],
+];
 
 /**
  * The paths of the documents a package's rows name, by document node.
@@ -187,15 +240,14 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             assert.deepStrictEqual(
               judgment.broken.map(
                 ({ law, rows: breaking }) =>
-                  `${lawIdentity(law)}: ${Formatter.format(breaking.map((row) => namedIn(paths, row)))}`,
+                  `${Formatter.format(law)}: ${Formatter.format(breaking.map((row) => namedIn(paths, row)))}`,
               ),
               [],
               "a law the import's rows break",
             );
 
-            const judged = new Set(judgment.judged.map(lawIdentity));
             assert.deepStrictEqual(
-              required.filter((identity) => !judged.has(identity)),
+              required.flatMap(([label, is]) => (judgment.judged.some(is) ? [] : [label])),
               [],
               "a law the test must judge went unjudged",
             );
@@ -203,7 +255,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             const absent = new Map<string, string[]>();
             for (const { absent: values, law } of judgment.skipped) {
               for (const value of values) {
-                absent.set(value, [...(absent.get(value) ?? []), lawIdentity(law)]);
+                absent.set(value, [...(absent.get(value) ?? []), Formatter.format(law)]);
               }
             }
 
@@ -236,9 +288,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               planted = withRoot(planted, node);
             }
 
-            const refused = judge(planted, laws).broken.find(
-              ({ law }) => lawIdentity(law) === "contained Instance(document) in Document(node)",
-            );
+            const refused = judge(planted, laws).broken.find(({ law }) => instanceInDocument(law));
             assert.deepStrictEqual(
               (refused?.rows ?? [])
                 .map(

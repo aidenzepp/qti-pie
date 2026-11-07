@@ -9,8 +9,6 @@
  * - `nearest` and `nearestKind`, its parent where the parent is an interaction, else its parent's
  *   (N8), the document node's its context's (spec reading 117);
  * - `state`, its content-automaton state (C5, N5), the document node's 0;
- * - `copiesText`, whether its characters are its `stringPiece`: its parent's text is checked or
- *   copied (`inStringValue` of `#pantry/qti/node.ts`);
  * - `elements`, the elements among its parent's children up to it, itself included where it is one,
  *   the document node's 0, and `elementChildren`, the elements among its own children, which an
  *   overlay copies where `nodeCounts` holds it to `Node`'s fold of them.
@@ -35,7 +33,6 @@ import type { Flag } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { NodeId, NodeRow } from "#pantry/model/xdm.ts";
-import { copiedTextKinds, copiedUnder, universalDomains } from "#pantry/qti/node.ts";
 
 /**
  * An ancestry flag's handle.
@@ -47,11 +44,6 @@ type FlagHandle = (typeof Flag.handles)[number];
  */
 export interface Folded {
   readonly ancestry: ReadonlySet<FlagHandle>;
-  /**
-   * Whether the node's characters are its `stringPiece`: its parent's text is checked
-   * (`checkedText`), or copied (`copiedTextKinds`, `copiedUnder`).
-   */
-  readonly copiesText: boolean;
   readonly elementChildren: bigint;
   readonly elements: bigint;
   readonly nearest: NodeId;
@@ -60,14 +52,11 @@ export interface Folded {
 }
 
 /**
- * What the fold keeps of a node for its children: its fold, and its governing type, its kind and
- * its parent's kind, `document` for the document node, which its children read as their
- * grandparent's (`copiedUnder`).
+ * What the fold keeps of a node for its children: its fold, and its kind, which steps their
+ * automaton and names their nearest interaction.
  */
 interface Held extends Omit<Folded, "elementChildren"> {
-  readonly governs: string;
   readonly kind: Kind;
-  readonly parentKind: Kind;
 }
 
 /**
@@ -174,16 +163,6 @@ const interactions: ReadonlySet<string> = new Set(interactionKinds);
 const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 
 /**
- * The domains whose text TextDomain never judges (`universalDomains` of `#pantry/qti/node.ts`).
- */
-const universal: ReadonlySet<string> = new Set(universalDomains);
-
-/**
- * The kinds whose text an overlay copies though no domain judges it (`copiedTextKinds`).
- */
-const copied: ReadonlySet<string> = new Set(copiedTextKinds);
-
-/**
  * Read the domain an element reads its text in: `TextDomain` under the governor `GoverningOf`
  * gives it.
  *
@@ -200,19 +179,6 @@ export const textDomainOf = (
   Option.flatMap(governorOf(version, kind, governs), (governor) =>
     Option.fromNullishOr(textDomainAt.get(keyOf(version, governor))),
   );
-
-/**
- * Decide whether an element's text is one TextDomain judges: its domain under its governor is
- * none of the universal domains (`checkedText` of `#pantry/qti/node.ts`, on the host).
- *
- * @param version - The element's version.
- * @param kind - Its kind.
- * @param governs - Its governing type.
- * @returns Whether its text is checked; false where `GoverningOf` or `TextDomain` holds no row,
- *   which PostgreSQL reads as NULL and so passes.
- */
-const checksText = (version: string, kind: string, governs: string): boolean =>
-  Option.exists(textDomainOf(version, kind, governs), (domain) => !universal.has(domain));
 
 /**
  * The state a family's automaton starts in, before its first member: position 0, the family's
@@ -333,18 +299,15 @@ export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentCon
   const folded = new Map<NodeId, { readonly held: Held; readonly under: Under }>();
 
   for (const node of nodes) {
-    const { governs, id, kind, version } = node;
+    const { id, kind, version } = node;
     if (node.parent === id) {
       folded.set(id, {
         held: {
           ancestry: context.ancestry,
-          copiesText: false,
           elements: 0n,
-          governs,
           kind,
           nearest: context.nearest,
           nearestKind: context.nearestKind,
-          parentKind: kind,
           state: startState,
         },
         under: { elements: 0n, state: startState },
@@ -366,16 +329,10 @@ export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentCon
     folded.set(id, {
       held: {
         ancestry: new Set([...parent.ancestry, ...flagsEnteredBy(kind)]),
-        copiesText:
-          checksText(version, parent.kind, parent.governs) ||
-          copied.has(parent.kind) ||
-          copiedUnder(parent.kind, parent.parentKind),
         elements: under.elements,
-        governs,
         kind,
         nearest: fromInteraction ? node.parent : parent.nearest,
         nearestKind: fromInteraction ? parent.kind : parent.nearestKind,
-        parentKind: parent.kind,
         state: under.state,
       },
       under: { elements: 0n, state: startState },

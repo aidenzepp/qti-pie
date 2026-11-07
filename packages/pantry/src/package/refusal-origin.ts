@@ -33,8 +33,9 @@ const witnessKinds = {
 export const WitnessKind = Schema.Literals(Object.values(witnessKinds));
 
 /**
- * One law a database refusal names: its identity as grizzle reports the law, and the name and rule
- * the law table gives it, absent for a law the table does not hold.
+ * One law a database refusal names: its identity, the law as grizzle reports it, written by
+ * Effect's `Formatter.format`, and the name and rule the law table gives it, absent for a law the
+ * table does not hold.
  */
 export const RefusedLaw = Schema.Struct({
   identity: Schema.String,

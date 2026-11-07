@@ -106,7 +106,15 @@ import { contentModels, typeDerivations } from "#pantry/vocab/inventory/models.t
 import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import { globalKinds, vocabularies as rosters } from "#pantry/vocab/inventory/vocabularies.ts";
 import type { ContentModel, Domain, Source, TypeText } from "#pantry/vocab/inventory/types.ts";
-import { namespaceClassOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import {
+  inNamespaceOf,
+  nameless,
+  namespaceClassOf,
+  namespaceNameOf,
+  spelledNamespace,
+  xsNamespace,
+} from "#pantry/vocab/namespaces.ts";
+import type { NamespaceName, NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 import * as open from "#pantry/vocab/open.ts";
 
 /**
@@ -116,7 +124,12 @@ import * as open from "#pantry/vocab/open.ts";
  * declarations it reads its attributes' types from; and its grammar facets. A vocabulary with none
  * of a part states it empty.
  */
-export interface Vocabulary extends KindsVocabulary {
+export type Vocabulary = KindsVocabulary & VocabularyParts;
+
+/**
+ * The parts of a {@link Vocabulary} beside the ones the kinds generator reads.
+ */
+interface VocabularyParts {
   readonly admission: readonly (AdmittedChild & { readonly source: Source })[];
   readonly declarations: readonly Declared[];
   readonly facets: Facets;
@@ -169,13 +182,13 @@ const vocabulary = <const R extends (typeof rosters)[number]>(
     facets: facets.vocabularyFacets[declared.name],
     kinds: declared.kinds,
     models: contentModels.filter(({ kind }) => held.has(kind)),
-    namespace: declared.namespace,
+    namespace: namespaceNameOf(declared.namespace),
   };
 };
 
 /**
- * A layer of the composition that no XSD declares: kinds that name no element, or none, the
- * attribute names it holds, and the facets that state what no XSD does.
+ * A layer of the composition that no XSD declares: kinds that name no element, or none, so it is
+ * nameless, the attribute names it holds, and the facets that state what no XSD does.
  *
  * @param kinds - The layer's kinds, none of them an element.
  * @param stated - Its facets.
@@ -196,7 +209,7 @@ const layer = <const K extends readonly string[], const A extends readonly strin
   facets: stated,
   kinds: kinds.map((handle) => ({ handle, local: "" as const })),
   models: [],
-  namespace: "",
+  namespace: nameless,
 });
 
 /**
@@ -294,16 +307,20 @@ export const coveredBy = (
 };
 
 /**
- * Read the namespace an element of a kind is written in, empty for a kind no vocabulary declares.
+ * Read the namespace an element of a kind is written in, from its `ElementName` row.
  *
  * @param kinds - The composition's kinds.
  * @param kind - The kind.
- * @returns Its namespace name.
+ * @returns Its namespace, or nameless for a kind with no row, which names no element: the document
+ *   node, the doctype, character data and the foreign kinds.
  */
-const namespaceOfKind = (kinds: Pick<Kinds<string, string>, "elementName">, kind: string): string =>
+const namespaceOfKind = (
+  kinds: Pick<Kinds<string, string>, "elementName">,
+  kind: string,
+): NamespaceOfKind =>
   Option.match(kinds.elementName.lookup({ kind }), {
-    onNone: () => "",
-    onSome: ({ namespace }) => namespace,
+    onNone: () => nameless,
+    onSome: ({ namespace }) => namespaceNameOf(namespace),
   });
 
 /**
@@ -419,9 +436,18 @@ const layerOf = (
 };
 
 /**
+ * Whether a name is in XML Schema's namespace, whose types every schema set holds.
+ *
+ * @param name - The namespace name.
+ * @returns Whether it is {@link xsNamespace}.
+ */
+const isXsNamespace = (name: NamespaceName): boolean =>
+  name._tag === "in" && name.uri === xsNamespace;
+
+/**
  * Read the texts of the named types a composition's elements may be governed by: each leaf row of
  * a type in XML Schema's namespace or one of the composition's vocabularies'. A toy composition
- * reads the built-ins alone.
+ * reads the built-ins alone, and a nameless layer holds no type.
  *
  * `xs:NOTATION`'s text is among them: its value space is the QNames of the notations the schema
  * declares (XML Schema Part 2, 3.2.19), and no pinned XSD declares one, so its domain is empty, a
@@ -433,12 +459,13 @@ const layerOf = (
  * @param namespaces - The namespaces of the composition's vocabularies.
  * @returns The rows.
  */
-const governingTextsOf = (namespaces: ReadonlySet<string>): readonly TypeText[] =>
+const governingTextsOf = (namespaces: readonly NamespaceOfKind[]): readonly TypeText[] =>
   typeTexts.filter(({ owner }) =>
-    Option.exists(
-      expandedNameOf(owner),
-      ({ namespace }) => namespace === xsNamespace || namespaces.has(namespace),
-    ),
+    Option.exists(expandedNameOf(owner), ({ namespace }) => {
+      const name = namespaceNameOf(namespace);
+
+      return isXsNamespace(name) || namespaces.some((held) => inNamespaceOf(name, held));
+    }),
   );
 
 /**
@@ -643,10 +670,11 @@ export type ComposeError =
  * Read a `TypeName` handle's namespace.
  *
  * @param type - The handle.
- * @returns Its namespace name, empty for the null type.
+ * @returns Its namespace, or none for the null type, which names no type: the one handle of a
+ *   `TypeName` roster that spells no expanded name (`expandedNameOf`).
  */
-const typeNamespaceOf = (type: string): string =>
-  Option.match(expandedNameOf(type), { onNone: () => "", onSome: ({ namespace }) => namespace });
+const typeNamespaceOf = (type: string): Option.Option<NamespaceName> =>
+  Option.map(expandedNameOf(type), ({ namespace }) => namespaceNameOf(namespace));
 
 /**
  * Run every generator over a vocabulary list.
@@ -734,9 +762,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
       ),
       versions: kinds.versions,
     });
-    const governingTexts = governingTextsOf(
-      new Set(list.flatMap(({ namespace }) => (namespace === "" ? [] : [namespace]))),
-    );
+    const governingTexts = governingTextsOf(list.map(({ namespace }) => namespace));
     const attributes = yield* generateAttributes(
       {
         declarations: [...declarations, ...layerOf(kinds, declared, declaresId)],
@@ -750,8 +776,13 @@ export const compose = <const V extends readonly Vocabulary[]>(
       },
       readDomain,
     );
+    // The namespaces of the vocabularies that write elements, as the patterns spell them.
     const namespaces = [
-      ...new Set(list.flatMap(({ namespace }) => (namespace === "" ? [] : [namespace]))),
+      ...new Set(
+        list.flatMap(({ namespace }) =>
+          namespace._tag === "nameless" ? [] : [spelledNamespace(namespace)],
+        ),
+      ),
     ];
     const baseTypeRoster = yield* roster("BaseType", baseTypes);
     const cardinalities = yield* roster("TypedCardinality", typedCardinalities);
@@ -823,7 +854,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
       }),
       typeAvailable: yield* typesAvailable({
         available: open.typeAvailable,
-        everywhere: (type) => type === noType || typeNamespaceOf(type) === xsNamespace,
+        everywhere: isXsNamespace,
         namespaceOf: typeNamespaceOf,
         types: xsi.typeName,
         vocabularies: namespaces,

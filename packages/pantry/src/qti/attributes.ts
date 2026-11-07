@@ -86,6 +86,7 @@ import {
   drawn,
   fin,
   fold,
+  generated,
   key,
   Monoid,
   natural,
@@ -340,16 +341,16 @@ export const TextDoubleValue = relation(
  * refused by the accumulator's type when grizzle fills the fold, a stated limit of the
  * representation.
  *
- * - **the host's:** `before`, `token` and `after`, from its split of the lexical form, and `piece`,
- *   `before ‖ token ‖ after`, which `E1_derived` proves. It is written, not generated, because a
- *   concat fold's accumulators are of its step's type exactly (grizzle's `check/fold.ts`
- *   `foldRule`), and a generated `‖` is text of no pattern, which no bound could then carry;
+ * - **the host's:** `before`, `token` and `after`, from its split of the lexical form;
+ * - **generated:** `piece`, `before ‖ token ‖ after`, the concatenation's step: a `keyText` whose
+ *   domain refuses a piece past the bound, as grizzle's README states of a generated term of
+ *   another pattern or byte bound than its field's ("How a field is written");
  * - **the family's group:** `node` and `attribute`;
  * - **drawn:** `at`;
  * - **accumulated:** `document`, its attribute's, along the owner axis, which `Idref target` reads
  *   (Q5.07); `piecesWas` and `piecesAfter`, the concatenation before and after it.
  */
-export const Idref = relation(
+export const Idref = relation.generated(
   "Idref",
   {
     after: Space,
@@ -358,12 +359,14 @@ export const Idref = relation(
     before: Space,
     document: accumulated(uuid, nilUuid),
     node: uuid,
-    piece: keyText,
     piecesAfter: accumulated(keyText, ""),
     piecesWas: accumulated(keyText, ""),
     token: keyText,
   },
   ["node", "attribute", "at"],
+  (i) => ({
+    piece: generated(keyText, Compute.concat(Compute.concat(i.before, i.token), i.after)),
+  }),
 );
 
 /**
@@ -769,17 +772,7 @@ export const attributeLawsByName = {
       on(Attribute, "node", "id", "idrefText"),
     ),
     check("E1_derived", Idref, (i) =>
-      i.and(
-        i.eq(
-          i.piece,
-          Compute.concat(
-            Compute.concat(Compute.base(i.before), Compute.base(i.token)),
-            Compute.base(i.after),
-          ),
-        ),
-        Compute.matches(i.token, nonSpacePattern),
-        i.or(i.eq(i.at, 0n), i.ne(i.before, "")),
-      ),
+      i.and(Compute.matches(i.token, nonSpacePattern), i.or(i.eq(i.at, 0n), i.ne(i.before, ""))),
     ),
   ],
   "Foreign attribute class": [

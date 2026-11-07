@@ -19,9 +19,9 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, FileSystem, Option, Predicate, Result } from "effect";
+import { Duration, Effect, FileSystem, Formatter, Option, Predicate, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { lawIdentity, lawNameOf } from "#pantry/import/refusal.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
@@ -117,7 +117,7 @@ const rowsOfCase = (files: readonly PackageFile[]) =>
         keys: keyBreachesOf(program.inputs).map(
           ({ fields, law, relation }) => `${law}: ${relation}(${fields.join(", ")})`,
         ),
-        laws: broken.map(({ law }) => lawIdentity(law)),
+        laws: broken.map(({ law }) => Formatter.format(law)),
         rules: [...new Set(broken.flatMap(({ law }) => Option.toArray(lawNameOf(law))))],
         unplaced: (rows.get("TestDocument") ?? []).flatMap(({ node }) => {
           const entry = paths.get(node);

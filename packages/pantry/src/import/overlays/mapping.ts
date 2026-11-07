@@ -5,9 +5,10 @@
  *
  * The rows restate what the tree says and nothing else: each overlay's node tuple, its parent, its
  * declaration's `declarationRef` tuple as `#pantry/qti/declarations.ts` derives it, each map
- * entry's `map-key` as written, each key's typed value where its base type has one, and each
- * lookup table's typed attribute values beside its base type. The database proves every one of
- * them (`mappingLaws`), so a row this builder gets wrong is refused, never accepted.
+ * entry's `map-key` as written, each key's split where its base type has a typed value, whose
+ * value PostgreSQL generates from the split, and each lookup table's typed attribute values beside
+ * its base type. The database proves every one of them (`mappingLaws`), so a row this builder gets
+ * wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
@@ -121,12 +122,9 @@ const lookupAttributeOf: ReadonlyMap<string, string> = new Map([
 const integerParts = /^(?<sign>[+-]?)(?<zeros>0*)(?<digits>0|[1-9][0-9]*)$/u;
 
 /**
- * The parts of an integer map key's typed value, as {@link MapKeyInteger} holds them.
+ * The parts of an integer map key's split, as {@link MapKeyInteger} holds them.
  */
-type IntegerParts = Pick<
-  Addition<typeof MapKeyInteger>,
-  "digits" | "negative" | "sign" | "value" | "zeros"
->;
+type IntegerParts = Pick<Addition<typeof MapKeyInteger>, "digits" | "sign" | "zeros">;
 
 /**
  * Whether a text is a sign or none, the language of `MapKeyInteger.sign`.
@@ -157,54 +155,20 @@ const isDigits = (text: string | undefined): text is IntegerParts["digits"] =>
   text !== undefined && /^(?:0|[1-9][0-9]*)$/u.test(text);
 
 /**
- * The float map keys of grizzle's form that name their double: PostgreSQL's cast reads them, and
- * JavaScript's `Number` reads none of them as that double.
- */
-const namedFloats: ReadonlyMap<string, number> = new Map([
-  ["-INF", Number.NEGATIVE_INFINITY],
-  ["INF", Number.POSITIVE_INFINITY],
-  ["NaN", Number.NaN],
-]);
-
-/**
- * Read a float map key of grizzle's `double precision` form as the double PostgreSQL's cast reads
- * it, the value `E1_derived` holds `MapKeyFloat.value` to: `INF`, `-INF` and `NaN` by name, which
- * the cast reads and JavaScript's `Number` does not, and every other key by `Number`, which reads
- * the form's sign, point, exponent and padding zeros as the cast does and rounds the decimal to the
- * nearest double.
- *
- * ECMAScript requires that rounding only for up to 20 significant digits (§7.1.4.1.1,
- * RoundMVResult), and the form admits 30; V8, which Node runs, rounds every decimal correctly, as
- * PostgreSQL's `strtod` does. Were an engine to round otherwise, `E1_derived` would refuse the row
- * rather than store a wrong value.
- *
- * @param key - A member of {@link floatKeyPattern}.
- * @returns Its double.
- * @see {@link https://tc39.es/ecma262/#sec-roundmvresult | ECMAScript, RoundMVResult}
- */
-export const floatValueOf = (key: string): number => namedFloats.get(key) ?? Number(key);
-
-/**
- * Split an integer map key into its typed value's parts: the sign, the leading zeros, the
- * magnitude, and its canonical form's sign, so `negative ‖ digits` is the canonical form XML
- * Schema gives the integer.
+ * Split an integer map key into the parts PostgreSQL generates its canonical form from: the sign,
+ * the leading zeros and the magnitude.
  *
  * @param key - The key.
  * @returns The parts, or none for a key that is no member of `integerKeyPattern`
  *   (`#pantry/qti/mapping.ts`).
  */
-export const integerValueOf = (key: string): IntegerParts | undefined => {
+export const integerPartsOf = (key: string): IntegerParts | undefined => {
   const groups = integerParts.exec(key)?.groups;
   const sign = groups?.["sign"];
   const zeros = groups?.["zeros"];
   const digits = groups?.["digits"];
-  if (!isSign(sign) || !isZeros(zeros) || !isDigits(digits)) {
-    return undefined;
-  }
 
-  const negative = sign === "-" && digits !== "0" ? "-" : "";
-
-  return { digits, negative, sign, value: `${negative}${digits}`, zeros };
+  return isSign(sign) && isZeros(zeros) && isDigits(digits) ? { digits, sign, zeros } : undefined;
 };
 
 /**
@@ -242,99 +206,60 @@ const itemsOf = (
 };
 
 /**
- * Split a point map key into its typed value's parts: each integer's, as {@link integerValueOf}
- * splits one, the whitespace between them, and its canonical form, the two canonical integers with
- * one space between.
+ * Split a point map key into the parts PostgreSQL generates its canonical form from: each
+ * integer's, as {@link integerPartsOf} splits one, and the whitespace between them.
  *
  * @param key - The key.
  * @returns The parts, or none for a key that is no member of `pointKeyPattern`
  *   (`#pantry/qti/mapping.ts`).
  */
-export const pointValueOf = (
+export const pointPartsOf = (
   key: string,
 ): Omit<Addition<typeof MapKeyPoint>, "key" | "mapping" | "node"> | undefined => {
   const items = itemsOf(key);
-  const x = items === undefined ? undefined : integerValueOf(items.first);
-  const y = items === undefined ? undefined : integerValueOf(items.second);
+  const x = items === undefined ? undefined : integerPartsOf(items.first);
+  const y = items === undefined ? undefined : integerPartsOf(items.second);
   if (items === undefined || x === undefined || y === undefined) {
     return undefined;
   }
 
   return {
     gap: items.gap,
-    value: `${x.value} ${y.value}`,
     xDigits: x.digits,
-    xNegative: x.negative,
     xSign: x.sign,
     xZeros: x.zeros,
     yDigits: y.digits,
-    yNegative: y.negative,
     ySign: y.sign,
     yZeros: y.zeros,
   };
 };
 
 /**
- * Compare two texts by their code points, as PostgreSQL's `pg_c_utf8` collation orders a key's
- * text: JavaScript's `<` compares UTF-16 code units, which order a supplementary character below
- * U+E000 to U+FFFF. UTF-8 orders its encodings as their code points, so the texts' UTF-8 bytes
- * compare as `pg_c_utf8` does; a key holds no lone surrogate, which no XML `Char` is and no
- * PostgreSQL text can hold, so its encoding is its code points'.
- *
- * @param left - The first text.
- * @param right - The second.
- * @returns Whether the first sorts at or before the second.
- * @see {@link https://www.rfc-editor.org/rfc/rfc3629#section-1 | RFC 3629, §1: byte order is code point order}
- */
-const atOrBefore = (left: string, right: string): boolean =>
-  Buffer.compare(Buffer.from(left, "utf-8"), Buffer.from(right, "utf-8")) <= 0;
-
-/**
- * Split a pair map key into its typed value's parts: its two items, the whitespace between them,
- * and its canonical form, the two in code-point order with one space between, since a pair is
- * undirected.
+ * Split a pair map key into the parts PostgreSQL generates its canonical form from: its two items
+ * and the whitespace between them.
  *
  * @param key - The key.
  * @returns The parts, or none for a key that is no member of {@link pairKeyPattern}.
  */
-export const pairValueOf = (
+export const pairPartsOf = (
   key: string,
-): Omit<Addition<typeof MapKeyPair>, "key" | "mapping" | "node"> | undefined => {
-  const items = itemsOf(key);
-  if (items === undefined) {
-    return undefined;
-  }
-
-  const { first, gap, second } = items;
-
-  return {
-    first,
-    gap,
-    second,
-    value: atOrBefore(first, second) ? `${first} ${second}` : `${second} ${first}`,
-  };
-};
+): Omit<Addition<typeof MapKeyPair>, "key" | "mapping" | "node"> | undefined => itemsOf(key);
 
 /**
- * Split a directed pair map key into its typed value's parts: its source and target, the
- * whitespace between them, and its canonical form, the two in order with one space between.
+ * Split a directed pair map key into the parts PostgreSQL generates its canonical form from: its
+ * source and target and the whitespace between them.
  *
  * @param key - The key.
  * @returns The parts, or none for a key that is no member of {@link pairKeyPattern}.
  */
-export const directedPairValueOf = (
+export const directedPairPartsOf = (
   key: string,
 ): Omit<Addition<typeof MapKeyDirectedPair>, "key" | "mapping" | "node"> | undefined => {
   const items = itemsOf(key);
 
   return items === undefined
     ? undefined
-    : {
-        gap: items.gap,
-        source: items.first,
-        target: items.second,
-        value: `${items.first} ${items.second}`,
-      };
+    : { gap: items.gap, source: items.first, target: items.second };
 };
 
 /**
@@ -360,36 +285,36 @@ interface TypedEntry {
 /**
  * Each base type's typed key, where it has one: the parse of its key, which is the one test that
  * the key holds a typed value, and the relation its row joins. A float key's test is its pattern,
- * since `Number` reads every text; a pair's is its pattern beside the parse ({@link pairKey}).
+ * since its row holds no split; a pair's is its pattern beside the parse ({@link pairKey}).
  */
 const typedKeyAdders: Partial<
   Readonly<Record<BaseTypeHandle, (typed: TypedKeys, entry: TypedEntry) => void>>
 > = {
   directedPair: (typed, entry) => {
-    const directed = pairKey.test(entry.key) ? directedPairValueOf(entry.key) : undefined;
+    const directed = pairKey.test(entry.key) ? directedPairPartsOf(entry.key) : undefined;
     if (directed !== undefined) {
       typed.MapKeyDirectedPair.set(entry.node, { ...directed, ...entry });
     }
   },
   float: (typed, entry) => {
     if (floatKey.test(entry.key)) {
-      typed.MapKeyFloat.set(entry.node, { ...entry, value: floatValueOf(entry.key) });
+      typed.MapKeyFloat.set(entry.node, entry);
     }
   },
   integer: (typed, entry) => {
-    const integer = integerValueOf(entry.key);
+    const integer = integerPartsOf(entry.key);
     if (integer !== undefined) {
       typed.MapKeyInteger.set(entry.node, { ...integer, ...entry });
     }
   },
   pair: (typed, entry) => {
-    const pair = pairKey.test(entry.key) ? pairValueOf(entry.key) : undefined;
+    const pair = pairKey.test(entry.key) ? pairPartsOf(entry.key) : undefined;
     if (pair !== undefined) {
       typed.MapKeyPair.set(entry.node, { ...pair, ...entry });
     }
   },
   point: (typed, entry) => {
-    const point = pointValueOf(entry.key);
+    const point = pointPartsOf(entry.key);
     if (point !== undefined) {
       typed.MapKeyPoint.set(entry.node, { ...point, ...entry });
     }

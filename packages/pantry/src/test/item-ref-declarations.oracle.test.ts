@@ -17,7 +17,7 @@
  *   session check, and what each item ref names: its `ItemRefTarget` and `ItemRefDocument`, each a
  *   row only where the package holds it, and the assembly's names' copies of them. Each law carries
  *   the name `src/import/refusal.ts` gives the schema's statement of it ({@link hostLaws}, held to
- *   `lawRules` by the first test).
+ *   `statedLaws` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -27,7 +27,7 @@
  * refuses for one cause is refused under that cause's rule alone. No row holds the nil uuid, no
  * target a `none` type, and no family member lacks its owner (`#pantry/test/family-owners.ts`).
  */
-import type { Addition } from "@bjornpagen/grizzle";
+import type { Addition, Law, LawSourceSide } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as plainIt, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -36,10 +36,10 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import type { Case } from "@grizzle/testing/explore";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawRules } from "#pantry/import/refusal.ts";
+import { lawOfCheck, ruleOfLaws, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { itemRefKind, itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
@@ -65,6 +65,7 @@ import {
 import type { ItemRefPackage, Named } from "#pantry/test/gen/item-ref-declarations.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
+import { lawTable } from "#pantry/vocab/laws.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -124,70 +125,266 @@ interface HostBreach {
 }
 
 /**
- * The schema's statements this file restates, each by its identity as `refusal.ts` keys
- * `lawRules`, with the law name the host gives its breaches.
+ * A side of a statement this file restates: its relation, then the fields its terms read, in the
+ * order the law pairs them.
  */
-const hostLaws: readonly (readonly [string, LawName | "E1 derived"])[] = [
-  ["check Item_ref_target", "Item ref target"],
-  ["contained Node(id) in ItemRefTarget(node)", "Item ref target"],
+type RestatedSide = readonly [relation: string, ...fields: string[]];
+
+/**
+ * A statement of the schema this file restates, by the law it states: a check by its name, a key
+ * by its side, a containment by its two sides. A side's selection is no part of it: the host reads
+ * each statement over the rows its selection admits.
+ */
+type Restated =
+  | { readonly from: RestatedSide; readonly kind: "contained"; readonly to: RestatedSide }
+  | { readonly kind: "check"; readonly name: string }
+  | { readonly kind: "key"; readonly side: RestatedSide };
+
+/**
+ * Whether a law side reads a restated side: the same relation, and a field term for each field, in
+ * order.
+ *
+ * @param side - A side of a law the schema states.
+ * @param restated - The restated side.
+ * @returns Whether it reads it.
+ */
+const readsAs = (side: LawSourceSide, [relation, ...fields]: RestatedSide): boolean =>
+  side.relation === relation &&
+  side.terms.length === fields.length &&
+  side.terms.every((term, at) => term.kind === "field" && term.field === fields[at]);
+
+/**
+ * Whether a law the schema states is a restated statement's.
+ *
+ * @param law - The law, as grizzle's `lawsOf` names it.
+ * @param restated - The restated statement.
+ * @returns Whether it is.
+ */
+const restates = (law: Law, restated: Restated): boolean => {
+  if (restated.kind === "check") {
+    return law.kind === "check" && law.name === restated.name;
+  }
+
+  if (restated.kind === "key") {
+    return law.kind === "key" && readsAs(law.side, restated.side);
+  }
+
+  return (
+    law.kind === "contained" && readsAs(law.from, restated.from) && readsAs(law.to, restated.to)
+  );
+};
+
+/**
+ * The schema's statements this file restates, each with the law name the host gives its breaches.
+ */
+const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
+  [{ kind: "check", name: "Item_ref_target" }, "Item ref target"],
+  [{ from: ["Node", "id"], kind: "contained", to: ["ItemRefTarget", "node"] }, "Item ref target"],
   [
-    "contained ItemRefTarget(node, package, path) in ItemRefDocument(node, package, path)",
+    {
+      from: ["ItemRefTarget", "node", "package", "path"],
+      kind: "contained",
+      to: ["ItemRefDocument", "node", "package", "path"],
+    },
     "Item ref target",
   ],
   [
-    "contained ItemRefDocument(document, package, path) in Document(node, package, path)",
+    {
+      from: ["ItemRefDocument", "document", "package", "path"],
+      kind: "contained",
+      to: ["Document", "node", "package", "path"],
+    },
     "Item ref target",
   ],
-  ["contained NameLookup(node, resourceType) in ItemRefTarget(node, type)", "Item ref target"],
   [
-    "contained NameLookup(node, itemDocument) in ItemRefDocument(node, document)",
+    {
+      from: ["NameLookup", "node", "resourceType"],
+      kind: "contained",
+      to: ["ItemRefTarget", "node", "type"],
+    },
     "Item ref target",
   ],
-  ["contained TemplateDefault(node) in TemplateDefaultTarget(node)", "Template default target"],
   [
-    "contained TemplateDefaultTarget(itemRef, itemDocument) in ItemRefDocument(node, document)",
+    {
+      from: ["NameLookup", "node", "itemDocument"],
+      kind: "contained",
+      to: ["ItemRefDocument", "node", "document"],
+    },
+    "Item ref target",
+  ],
+  [
+    { from: ["TemplateDefault", "node"], kind: "contained", to: ["TemplateDefaultTarget", "node"] },
     "Template default target",
   ],
   [
-    "contained TemplateDefaultTarget(declaration, itemDocument, template, declarationKind, declBaseType, declCardinality) in Declaration(node, document, identifier, declarationKind, baseType, cardinality)",
+    {
+      from: ["TemplateDefaultTarget", "itemRef", "itemDocument"],
+      kind: "contained",
+      to: ["ItemRefDocument", "node", "document"],
+    },
     "Template default target",
   ],
-  ["check Template_default_target", "Template default target"],
-  ["check Template_default_type", "Template default type"],
   [
-    "contained TemplateDefaultTarget(node, heldBase, heldCardinality) in Expression(parent, baseType, cardinality)",
+    {
+      from: [
+        "TemplateDefaultTarget",
+        "declaration",
+        "itemDocument",
+        "template",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ],
+      kind: "contained",
+      to: [
+        "Declaration",
+        "node",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ],
+    },
+    "Template default target",
+  ],
+  [{ kind: "check", name: "Template_default_target" }, "Template default target"],
+  [{ kind: "check", name: "Template_default_type" }, "Template default type"],
+  [
+    {
+      from: ["TemplateDefaultTarget", "node", "heldBase", "heldCardinality"],
+      kind: "contained",
+      to: ["Expression", "parent", "baseType", "cardinality"],
+    },
     "E1 derived",
   ],
   [
-    "contained TemplateDefaultTarget(node, itemRef, template) in TemplateDefault(node, itemRef, template)",
+    {
+      from: ["TemplateDefaultTarget", "node", "itemRef", "template"],
+      kind: "contained",
+      to: ["TemplateDefault", "node", "itemRef", "template"],
+    },
     "E1 derived",
   ],
-  ["contained MappingItemRef(node) in MappingSourceDeclaration(node)", "Variable mapping source"],
-  ["contained VariableMapping(node, parent) in MappingItemRef(node, itemRef)", "Item ref target"],
-  ["contained MappingItemRef(node, itemRef) in VariableMapping(node, parent)", "Item ref target"],
-  ["contained MappingItemRef(itemRef, type) in ItemRefTarget(node, type)", "Item ref target"],
   [
-    "contained MappingSourceDeclaration(itemRef, itemDocument) in ItemRefDocument(node, document)",
+    {
+      from: ["VariableMapping", "node", "parent"],
+      kind: "contained",
+      to: ["MappingItemRef", "node", "itemRef"],
+    },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["MappingItemRef", "node", "itemRef"],
+      kind: "contained",
+      to: ["VariableMapping", "node", "parent"],
+    },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["MappingItemRef", "itemRef", "type"],
+      kind: "contained",
+      to: ["ItemRefTarget", "node", "type"],
+    },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["MappingItemRef", "node"],
+      kind: "contained",
+      to: ["MappingSourceDeclaration", "node"],
+    },
     "Variable mapping source",
   ],
   [
-    "contained MappingSourceDeclaration(declaration, itemDocument, source, declarationKind, declBaseType, declCardinality) in Declaration(node, document, identifier, declarationKind, baseType, cardinality)",
-    "Variable mapping source",
-  ],
-  ["check Variable_mapping_source", "Variable mapping source"],
-  ["check Variable_mapping_target", "Variable mapping target"],
-  ["key MappingSourceDeclaration(itemRef, target)", "Variable mapping target"],
-  ["key VariableMapping(parent, target)", "Variable mapping target"],
-  [
-    "contained Reading(named, variable, declaration, declarationKind, declBaseType, declCardinality) in MappingSourceDeclaration(itemRef, target, declaration, declarationKind, declBaseType, declCardinality)",
+    {
+      from: ["MappingSourceDeclaration", "itemRef", "itemDocument"],
+      kind: "contained",
+      to: ["ItemRefDocument", "node", "document"],
+    },
     "Variable mapping source",
   ],
   [
-    "contained MappingSourceDeclaration(itemDocument, target, targetDeclared) in VariableLookup(document, name, declared)",
+    {
+      from: [
+        "MappingSourceDeclaration",
+        "declaration",
+        "itemDocument",
+        "source",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ],
+      kind: "contained",
+      to: [
+        "Declaration",
+        "node",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ],
+    },
+    "Variable mapping source",
+  ],
+  [{ kind: "check", name: "Variable_mapping_source" }, "Variable mapping source"],
+  [{ kind: "check", name: "Variable_mapping_target" }, "Variable mapping target"],
+  [
+    { kind: "key", side: ["MappingSourceDeclaration", "itemRef", "target"] },
+    "Variable mapping target",
+  ],
+  [{ kind: "key", side: ["VariableMapping", "parent", "target"] }, "Variable mapping target"],
+  [
+    {
+      from: [
+        "Reading",
+        "named",
+        "variable",
+        "declaration",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ],
+      kind: "contained",
+      to: [
+        "MappingSourceDeclaration",
+        "itemRef",
+        "target",
+        "declaration",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ],
+    },
+    "Variable mapping source",
+  ],
+  [
+    {
+      from: ["MappingSourceDeclaration", "itemDocument", "target", "targetDeclared"],
+      kind: "contained",
+      to: ["VariableLookup", "document", "name", "declared"],
+    },
     "E1 derived",
   ],
-  ["contained VariableMapping(parent, target) in MappingLookup(itemRef, name)", "E1 derived"],
-  ["contained MappingLookup(itemRef, name) in VariableMapping(parent, target)", "E1 derived"],
+  [
+    {
+      from: ["VariableMapping", "parent", "target"],
+      kind: "contained",
+      to: ["MappingLookup", "itemRef", "name"],
+    },
+    "E1 derived",
+  ],
+  [
+    {
+      from: ["MappingLookup", "itemRef", "name"],
+      kind: "contained",
+      to: ["VariableMapping", "parent", "target"],
+    },
+    "E1 derived",
+  ],
 ];
 
 /**
@@ -790,14 +987,20 @@ const judged = (input: ItemRefPackage, c: Case<Situation>) =>
 
 describe("an item ref's declarations: the schema's restatement", () => {
   plainIt("names each restated law as refusal.ts names the schema's statement of it", () => {
-    // Oracle: `lawRules`, the one table from a law grizzle reports to its rule, against the rule
-    // each host law's name keeps (`ruleOf`). Bound: every law the host restates.
-    for (const [identity, name] of hostLaws) {
-      assert.strictEqual(
-        lawRules.get(identity),
-        name === "E1 derived" ? "derived" : ruleOf(name),
-        identity,
-      );
+    // Oracle: `refusal.ts`'s naming of the laws the schema states (`ruleOfLaws`), against the rule
+    // each host law's name keeps (`ruleOf`). A check is named by its name; any other restated
+    // statement is each law of `statedLaws` it reads as. Bound: every law the host restates.
+    for (const [restated, name] of hostLaws) {
+      const expected = name === "E1 derived" ? "derived" : ruleOf(name);
+      const rules =
+        restated.kind === "check"
+          ? [Option.map(lawOfCheck(restated.name), (law) => lawTable[law].rule)]
+          : statedLaws().flatMap(([law]) => (restates(law, restated) ? [ruleOfLaws([law])] : []));
+
+      assert.isNotEmpty(rules, `${Formatter.format(restated)}: no law the schema states`);
+      for (const rule of rules) {
+        assert.deepStrictEqual(rule, Option.some(expected), Formatter.format(restated));
+      }
     }
   });
 });

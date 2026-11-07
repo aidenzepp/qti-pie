@@ -106,7 +106,7 @@ export const headerPiecesOf = (lexical: string): readonly HeaderTokenInsert[] =>
       );
     }
 
-    return { after, before, piece: `${before}${token}${after}`, token };
+    return { after, before, token };
   });
 };
 

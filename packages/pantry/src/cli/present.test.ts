@@ -2,7 +2,7 @@ import path from "node:path";
 import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Result, Schema } from "effect";
+import { Effect, Exit, FileSystem, Formatter, Result, Schema } from "effect";
 import { Command } from "effect/cli";
 import { inject } from "vitest";
 import { RoundtripDiffers } from "#pantry/cli/errors.ts";
@@ -211,12 +211,17 @@ layer(NodeServices.layer, { excludeTestServices: true })("the JSON error shape",
 const matchesCommittedError = matchesCommitted("error");
 
 /**
+ * A law the table does not hold: a check of no law.
+ */
+const unownedLaw: Law = { kind: "check", name: "not_a_law", relation: "Node" };
+
+/**
  * The one law of the table this file's refusals name, with a law the table does not hold beside it:
- * AL1's admission check, and a check of no law.
+ * AL1's admission check, and {@link unownedLaw}.
  */
 const refusedLaws = (checkName: string): readonly [Law, Law] => [
   { kind: "check", name: checkName, relation: "Attribute" },
-  { kind: "check", name: "not_a_law", relation: "Node" },
+  unownedLaw,
 ];
 
 /**
@@ -277,7 +282,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
         stderr,
       );
       assert.include(stderr, "the database names no row");
-      assert.include(stderr, "check not_a_law, which no rule of the law table owns");
+      assert.include(
+        stderr,
+        `${Formatter.format(unownedLaw)}, which no rule of the law table owns`,
+      );
       assert.strictEqual(
         stderr.split("\n").filter((line) => line === `  source: ${source}`).length,
         1,
@@ -290,12 +298,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
   );
 
   it.effect("under --json prints one error object with the rule, each law and its sources", () =>
-    // Oracle: the law table, read directly by the name each law was built from: its identity as
-    // grizzle names a check, and the name and rule the table gives it; a check of no law has its
-    // identity alone. The witness kind the refusal was built under, and the committed schema of
+    // Oracle: the law table, read directly by the name each law was built from: its identity, the
+    // law as grizzle names a check, written by Effect's Formatter, and the name and rule the table
+    // gives it; a check of no law has its identity alone. The witness kind the refusal was built under, and the committed schema of
     // the error object.
     Effect.gen(function* json() {
       const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
+      const [first] = refusedLaws(checkNameOf("AL1 admission"));
       const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
       const error = errorLine(stderr);
 
@@ -306,12 +315,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
       assert.strictEqual(error.command, "import");
       assert.strictEqual(error.rule, "attribute-admission");
       assert.deepStrictEqual(error.laws, [
-        {
-          identity: `check ${checkNameOf("AL1 admission")}`,
-          name: "AL1 admission",
-          rule: "attribute-admission",
-        },
-        { identity: "check not_a_law" },
+        { identity: Formatter.format(first), name: "AL1 admission", rule: "attribute-admission" },
+        { identity: Formatter.format(unownedLaw) },
       ]);
       assert.deepStrictEqual(error.sources, [lawTable["AL1 admission"].source]);
       assert.strictEqual(error.witness, "unreported");
@@ -353,7 +358,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
             { kind: error.kind, laws: error.laws, rule: error.rule, sources: error.sources },
             {
               kind: "import-refused",
-              laws: [{ identity: `check ${checkNameOf(name)}`, name, rule }],
+              laws: [{ identity: Formatter.format(law), name, rule }],
               rule,
               sources: [source],
             },
@@ -420,13 +425,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
 
             return {
               expected: {
-                laws: [
-                  {
-                    identity: `check ${checkNameOf("AL1 admission")}`,
-                    name: "AL1 admission",
-                    rule,
-                  },
-                ],
+                laws: [{ identity: Formatter.format(law), name: "AL1 admission", rule }],
                 sources: [source],
                 witness,
               },

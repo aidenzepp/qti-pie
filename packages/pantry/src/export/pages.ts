@@ -5,9 +5,10 @@
  *
  * `#pantry/export/scan.ts` states the scan: `Node` where `document = $document`, ordered by
  * `start`, each row with its own characters, its comment, instruction, doctype, `Document` row and
- * foreign element's name at most once each, and its attributes, each with its entity references
- * and its open name, and its namespace declarations. A page is a run of those rows;
- * {@link scannedRows} follows a page's cursor to the next until none follows, so the stream it
+ * foreign element's name at most once each, the `Document` row with its XML declaration and the
+ * declaration with its encoding and standalone at most once each, and its attributes, each with its
+ * entity references and its open name, and its namespace declarations. A page is a run of those
+ * rows; {@link scannedRows} follows a page's cursor to the next until none follows, so the stream it
  * gives is the scan's rows, whatever the cuts.
  *
  * Every row is folded by its own key, never by where it arrives: a node by its `start`, an
@@ -18,7 +19,6 @@
 import { Effect, Option, Result, Schema, Stream } from "effect";
 import type { Page, PageCursor, PageRequest } from "@bjornpagen/grizzle";
 import { assemble } from "#pantry/model/assemble.ts";
-import { none } from "#pantry/model/xdm.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
 import type {
   AttributeEntityRow,
@@ -26,17 +26,18 @@ import type {
   AttributeRow,
   CharacterRow,
   DocumentRow,
+  EncodingDeclRow,
   EntityRefRow,
-  FlatRows,
   NamespaceRow,
   NodeId,
   NodeRow,
-  None,
   OpenElementNameRow,
   OpenNameRow,
   PiRow,
+  SdDeclRow,
   XdmDocument,
   XdmVocabulary,
+  XmlDeclRow,
   XmlVersion,
 } from "#pantry/model/xdm.ts";
 
@@ -59,11 +60,22 @@ export interface ScannedAttribute<V extends XdmVocabulary> {
 }
 
 /**
- * A document node's `Document` row as the scan delivers it: its fields as `assemble` reads them,
- * but for the XML version, which is text of `none` or a `VersionNum` (`Document.xmlVersion`).
+ * A document's `XmlDecl` row as the scan delivers it under the `Document` row: its fields as
+ * `assemble` reads them, but for the version, which is the text `XmlDecl.version` holds, and with
+ * its `EncodingDecl` and `SdDecl` rows attached, each at most once, keyed by the node.
  */
-export interface ScannedDocument extends Omit<DocumentRow, "node" | "xmlVersion"> {
-  readonly xmlVersion: string;
+export interface ScannedDeclaration extends Omit<XmlDeclRow, "version"> {
+  readonly encoding: Option.Option<Pick<EncodingDeclRow, "encoding">>;
+  readonly standalone: Option.Option<Pick<SdDeclRow, "standalone">>;
+  readonly version: string;
+}
+
+/**
+ * A document node's `Document` row as the scan delivers it: its fields as `assemble` reads them,
+ * with its `XmlDecl` row attached, none where the document writes no declaration.
+ */
+export interface ScannedDocument extends DocumentRow {
+  readonly declaration: Option.Option<ScannedDeclaration>;
 }
 
 /**
@@ -82,8 +94,8 @@ export interface ScanRow<V extends XdmVocabulary> extends NodeRow<V> {
   readonly comment: Option.Option<Pick<CharacterRow, "value">>;
   readonly doctype: Option.Option<Pick<CharacterRow, "value">>;
   /**
-   * The document node's `Document` row; none on every other node. Its XML version is the text the
-   * row holds, `none` or a `VersionNum`, which {@link assembleScan} reads.
+   * The document node's `Document` row; none on every other node. Its declaration's version is the
+   * text the `XmlDecl` row holds, which {@link assembleScan} reads.
    */
   readonly documentRow: Option.Option<ScannedDocument>;
   readonly namespaces: readonly Omit<NamespaceRow, "node">[];
@@ -92,8 +104,9 @@ export interface ScanRow<V extends XdmVocabulary> extends NodeRow<V> {
 }
 
 /**
- * The rows of one document folded from its scan so far, by relation, as `assemble` reads them, and
- * the `Document` rows met, which a whole scan holds exactly one of.
+ * The rows of one document folded from its scan so far, by relation, as `assemble` reads them, the
+ * `Document` rows met, which a whole scan holds exactly one of, and the `XmlDecl` rows met, each
+ * version as the row holds it.
  *
  * It is a fold's accumulator: {@link addRow} appends to its lists in place and returns it, so a
  * fold over a stream starts each run from a new {@link emptyScan}.
@@ -103,15 +116,18 @@ export interface Scan<V extends XdmVocabulary> {
   readonly attributes: AttributeRow<V>[];
   readonly comments: CharacterRow[];
   readonly doctypes: CharacterRow[];
-  readonly documents: (ScannedDocument & { readonly node: NodeId })[];
+  readonly documents: DocumentRow[];
+  readonly encodingDecls: EncodingDeclRow[];
   readonly entityRefs: EntityRefRow[];
   readonly namespaces: NamespaceRow[];
   readonly nodes: NodeRow<V>[];
   readonly openElementNames: OpenElementNameRow[];
   readonly openNames: OpenNameRow[];
   readonly pis: PiRow[];
+  readonly sdDecls: SdDeclRow[];
   readonly texts: CharacterRow[];
   readonly whitespace: CharacterRow[];
+  readonly xmlDecls: Omit<ScannedDeclaration, "encoding" | "standalone">[];
 }
 
 /**
@@ -125,14 +141,17 @@ export const emptyScan = <V extends XdmVocabulary>(): Scan<V> => ({
   comments: [],
   doctypes: [],
   documents: [],
+  encodingDecls: [],
   entityRefs: [],
   namespaces: [],
   nodes: [],
   openElementNames: [],
   openNames: [],
   pis: [],
+  sdDecls: [],
   texts: [],
   whitespace: [],
+  xmlDecls: [],
 });
 
 /**
@@ -189,7 +208,15 @@ export const addRow = <V extends XdmVocabulary>(scan: Scan<V>, row: ScanRow<V>):
   keyedBy(node, row.pi, scan.pis);
   keyedBy(node, row.doctype, scan.doctypes);
   keyedBy(node, row.openElementName, scan.openElementNames);
-  keyedBy(node, row.documentRow, scan.documents);
+  for (const { charset, declaration, exportCharset } of Option.toArray(row.documentRow)) {
+    scan.documents.push({ charset, exportCharset, node });
+    for (const { encoding, standalone, version: declared } of Option.toArray(declaration)) {
+      scan.xmlDecls.push({ node, version: declared });
+      keyedBy(node, encoding, scan.encodingDecls);
+      keyedBy(node, standalone, scan.sdDecls);
+    }
+  }
+
   for (const attribute of row.attributes) {
     const { id } = attribute;
     scan.attributes.push({
@@ -237,8 +264,8 @@ export class DocumentRowCount extends Schema.TaggedError<DocumentRowCount>()("Do
 }
 
 /**
- * A document's `Document` row holds an XML version that is neither `none` nor a `VersionNum`, so no
- * declaration can be written from it.
+ * A document's `XmlDecl` row holds an XML version that is no `VersionNum`, so no declaration can be
+ * written from it.
  */
 export class XmlVersionUnread extends Schema.TaggedError<XmlVersionUnread>()("XmlVersionUnread", {
   document: Schema.String,
@@ -248,19 +275,33 @@ export class XmlVersionUnread extends Schema.TaggedError<XmlVersionUnread>()("Xm
    * The document, the version it holds, the forms a version takes, and the repair.
    */
   override get message(): string {
-    return `The Document row of document ${this.document} holds the XML version ${JSON.stringify(this.xmlVersion)}, but a version is none, for a document without a declaration, or 1. and digits, so the document cannot be written. Read the row from a database whose Document.xmlVersion holds its pattern.`;
+    return `The XmlDecl row of document ${this.document} holds the XML version ${JSON.stringify(this.xmlVersion)}, but a version is 1. and digits, so the document's declaration cannot be written. Read the row from a database whose XmlDecl.version holds its pattern.`;
   }
 }
 
 /**
- * Test whether a `Document` row's XML version is one a declaration can be written from.
+ * Test whether an `XmlDecl` row's XML version is one a declaration can be written from.
  *
  * @param text - The version as the row holds it.
- * @returns Whether it is `none` or `1.` and digits, XML 1.0's `VersionNum`.
+ * @returns Whether it is `1.` and digits, XML 1.0's `VersionNum`.
  * @see {@link https://www.w3.org/TR/xml/#NT-VersionNum | XML 1.0, VersionNum}
  */
-const isXmlVersion = (text: string): text is XmlVersion | None =>
-  text === none || /^1\.[0-9]+$/u.test(text);
+const isXmlVersion = (text: string): text is XmlVersion => /^1\.[0-9]+$/u.test(text);
+
+/**
+ * Read an `XmlDecl` row as `assemble` reads it, its version a `VersionNum`.
+ *
+ * @param document - The id of the document's node, which a refusal names.
+ * @param row - The row as the scan delivered it.
+ * @returns The row; or `XmlVersionUnread` when its version is no version.
+ */
+const xmlDeclOf = (
+  document: NodeId,
+  { node, version }: Scan<XdmVocabulary>["xmlDecls"][number],
+): Result.Result<XmlDeclRow, XmlVersionUnread> =>
+  isXmlVersion(version)
+    ? Result.succeed({ node, version })
+    : Result.fail(new XmlVersionUnread({ document, xmlVersion: version }));
 
 /**
  * Assemble a document from the rows its scan folded.
@@ -268,8 +309,8 @@ const isXmlVersion = (text: string): text is XmlVersion | None =>
  * @param document - The id of the document's node, which its scan was filtered by.
  * @param scan - The rows the whole scan folded.
  * @returns The document the rows stand for; or `DocumentRowCount` when the scan did not hold
- *   exactly one `Document` row, `XmlVersionUnread` when that row's XML version is no version, or
- *   `assemble`'s refusal of rows that are not one document's.
+ *   exactly one `Document` row, `XmlVersionUnread` when an `XmlDecl` row's XML version is no
+ *   version, or `assemble`'s refusal of rows that are not one document's.
  */
 export const assembleScan = <V extends XdmVocabulary>(
   document: NodeId,
@@ -280,28 +321,28 @@ export const assembleScan = <V extends XdmVocabulary>(
     return Result.fail(new DocumentRowCount({ document, found: scan.documents.length }));
   }
 
-  const { xmlVersion } = only;
-  if (!isXmlVersion(xmlVersion)) {
-    return Result.fail(new XmlVersionUnread({ document, xmlVersion }));
-  }
-
-  const rows: FlatRows<V> = {
-    attributeEntities: scan.attributeEntities,
-    attributes: scan.attributes,
-    comments: scan.comments,
-    doctypes: scan.doctypes,
-    document: { ...only, xmlVersion },
-    entityRefs: scan.entityRefs,
-    namespaces: scan.namespaces,
-    nodes: scan.nodes,
-    openElementNames: scan.openElementNames,
-    openNames: scan.openNames,
-    pis: scan.pis,
-    texts: scan.texts,
-    whitespace: scan.whitespace,
-  };
-
-  return assemble(rows);
+  return Result.flatMap(
+    Result.all(scan.xmlDecls.map((row) => xmlDeclOf(document, row))),
+    (xmlDecls) =>
+      assemble<V>({
+        attributeEntities: scan.attributeEntities,
+        attributes: scan.attributes,
+        comments: scan.comments,
+        doctypes: scan.doctypes,
+        document: only,
+        encodingDecls: scan.encodingDecls,
+        entityRefs: scan.entityRefs,
+        namespaces: scan.namespaces,
+        nodes: scan.nodes,
+        openElementNames: scan.openElementNames,
+        openNames: scan.openNames,
+        pis: scan.pis,
+        sdDecls: scan.sdDecls,
+        texts: scan.texts,
+        whitespace: scan.whitespace,
+        xmlDecls,
+      }),
+  );
 };
 
 /**

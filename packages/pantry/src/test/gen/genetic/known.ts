@@ -55,82 +55,6 @@ export const knownEntries = (known: Known): PackageEntries =>
  * The known disagreements, keyed by signature.
  */
 export const known = {
-  "dangling-uuid: PlacedVariableRef.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    <resource type="imsqti_item_xmlv3p0" href="items/item3.xml">
-      
-      
-    </resource>
-    <resource type="imsqti_fragment_xmlv3p0" href="items/rules.xml">
-      
-    </resource>
-    
-    
-    
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "items/item3.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" adaptive="false" time-dependent="false">
-  
-  
-  <qti-response-processing><xi:include href="rules.xml"/></qti-response-processing>
-</qti-assessment-item>`,
-      ],
-      [
-        "items/rules.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
-  <qti-response-if>
-    
-    <qti-set-outcome-value identifier="SCORE">
-      
-    </qti-set-outcome-value>
-  </qti-response-if>
-</qti-response-condition>`,
-      ],
-    ],
-    fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
-  "dangling-uuid: VariableRef.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
-      ],
-      [
-        "rtest01/rtest01-rules.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-set-outcome-value identifier="NOPE"/></qti-response-if></qti-response-condition>`,
-      ],
-    ],
-    fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
   "import-only-law: E1 derived, contained Declaration(document, identifier, node, declarationKind, baseType, cardinality) in VariableLookup(document, name, declaration, declarationKind, baseType, cardinality)":
     {
       files: [
@@ -609,6 +533,64 @@ export const fixed = {
     fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
     owner: "NIL",
   },
+  "dangling-uuid: PlacedVariableRef.declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+  <metadata>
+    
+    <schemaversion>3.0.0</schemaversion>
+    
+  </metadata>
+  
+  <resources>
+    
+    
+    
+    <resource type="imsqti_item_xmlv3p0" href="items/item3.xml">
+      
+      
+    </resource>
+    <resource type="imsqti_fragment_xmlv3p0" href="items/rules.xml">
+      
+    </resource>
+    
+    
+    
+    
+  </resources>
+</manifest>`,
+      ],
+      [
+        "items/item3.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" adaptive="false" time-dependent="false">
+  
+  
+  <qti-response-processing><xi:include href="rules.xml"/></qti-response-processing>
+</qti-assessment-item>`,
+      ],
+      [
+        "items/rules.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
+  <qti-response-if>
+    
+    <qti-set-outcome-value identifier="SCORE">
+      
+    </qti-set-outcome-value>
+  </qti-response-if>
+</qti-response-condition>`,
+      ],
+    ],
+    fix: "NS1 (FB-EXPR): a declared reference's declaration is a row of its own, VariableRefDeclaration or PlacedVariableRefDeclaration, so one that names a built-in or nothing holds no nil uuid",
+    owner: "NIL",
+  },
   "dangling-uuid: SectionTemplateRef.declaration": {
     files: [
       [
@@ -677,6 +659,24 @@ export const fixed = {
       ],
     ],
     fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
+    owner: "NIL",
+  },
+  "dangling-uuid: VariableRef.declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
+      ],
+      [
+        "rtest01/rtest01-rules.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-set-outcome-value identifier="NOPE"/></qti-response-if></qti-response-condition>`,
+      ],
+    ],
+    fix: "NS1 (FB-EXPR): a declared reference's declaration is a row of its own, VariableRefDeclaration or PlacedVariableRefDeclaration, so one that names a built-in or nothing holds no nil uuid",
     owner: "NIL",
   },
   "import-only-law: Binding cardinality, contained BindingDeclaration(node) in CountBound(node)": {

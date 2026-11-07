@@ -110,6 +110,7 @@ import {
   drawn,
   fin,
   fold,
+  generated,
   key,
   mirrors,
   Monoid,
@@ -256,14 +257,15 @@ export const IdentityText = relation(
  * the whitespace written before and after it, so its `piece` is a stretch of the text and the
  * pieces concatenate to it, as Q5.05's `Idref` splits an attribute's.
  *
- * - **the host's:** `before`, `token` and `after`, and `piece`, `before ‖ token ‖ after`, which
- *   `E1_derived` proves; it is written, since a concat fold's accumulators are of its step's type;
+ * - **the host's:** `before`, `token` and `after`;
+ * - **generated:** `piece`, `before ‖ token ‖ after`, the concatenation's step, a `keyText` whose
+ *   domain refuses a piece past the bound;
  * - **the family's group:** `node`;
  * - **drawn:** `at`;
  * - **accumulated:** `document`, its element's, along the owner axis, which `Idref target` reads;
  *   `piecesWas` and `piecesAfter`, the concatenation before and after it.
  */
-export const TextIdref = relation(
+export const TextIdref = relation.generated(
   "TextIdref",
   {
     after: Space,
@@ -271,12 +273,14 @@ export const TextIdref = relation(
     before: Space,
     document: accumulated(uuid, nilUuid),
     node: uuid,
-    piece: keyText,
     piecesAfter: accumulated(keyText, ""),
     piecesWas: accumulated(keyText, ""),
     token: keyText,
   },
   ["node", "at"],
+  (i) => ({
+    piece: generated(keyText, Compute.concat(Compute.concat(i.before, i.token), i.after)),
+  }),
 );
 
 /**
@@ -1135,11 +1139,7 @@ export const identityLawsByName = {
       ),
     ),
     check("E1_derived", TextIdref, (i) =>
-      i.and(
-        i.eq(i.piece, Compute.concat(Compute.concat(i.before, i.token), i.after)),
-        Compute.matches(i.token, idValuePattern),
-        i.or(i.eq(i.at, 0n), i.ne(i.before, "")),
-      ),
+      i.and(Compute.matches(i.token, idValuePattern), i.or(i.eq(i.at, 0n), i.ne(i.before, ""))),
     ),
     contained(on(IdrefTarget, "document", "assembled"), on(Document, "node", "assembled")),
     contained(on(ShareFragment, "document", "assembled"), on(Document, "node", "assembled")),

@@ -45,7 +45,6 @@ import {
   AssembledReference,
   Expression,
   ExpressionAttribute,
-  ItemTiming,
   LiteralTyped,
   MappingSourceDeclaration,
   Operand,
@@ -55,6 +54,7 @@ import {
   TemplateDefaultTarget,
   TestReference,
   VariableRef,
+  VariableRefDeclaration,
 } from "#pantry/qti/expressions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -146,10 +146,6 @@ const referenceRow = (
   baseType: "unknown",
   before: "",
   cardinality: "unknown",
-  declBaseType: "none",
-  declCardinality: "single",
-  declaration: strayNode,
-  declarationKind: "qti-outcome-declaration",
   document: strayNode,
   elementBase: "unknown",
   elementCardinality: "unknown",
@@ -181,7 +177,6 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
   charset: "UTF-8",
   contextNearest: reference.document,
   contextNearestKind: "document",
-  encoding: "",
   exportCharset: "UTF-8",
   node: reference.document,
   nodeChildren: 1n,
@@ -194,9 +189,7 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
   path: manifestPath,
   resourceType: "none",
   rootKind: reference.rootKind,
-  standalone: "none",
   version: "3.0.0",
-  xmlVersion: "none",
 });
 
 /**
@@ -205,10 +198,36 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
  * @param reference - The reference.
  * @returns The change.
  */
-const referenceChange = (reference: Addition<typeof VariableRef>) =>
+const referenceChange = (
+  reference: Addition<typeof VariableRef>,
+  declaration: Partial<Addition<typeof VariableRefDeclaration>> | undefined,
+) =>
   ChangeSet.empty(Author)
     .insert(Document, [documentOf(reference)])
-    .insert(VariableRef, [reference]);
+    .insert(VariableRef, [reference])
+    .insert(
+      VariableRefDeclaration,
+      declaration === undefined
+        ? []
+        : [
+            {
+              attribute: reference.attribute,
+              baseType: reference.baseType,
+              cardinality: reference.cardinality,
+              declBaseType: "integer",
+              declCardinality: "single",
+              declaration: strayNode,
+              declarationKind: "qti-outcome-declaration",
+              document: reference.document,
+              identifier: reference.identifier,
+              kind: reference.kind,
+              language: reference.language,
+              node: reference.node,
+              table: reference.table,
+              ...declaration,
+            },
+          ],
+    );
 
 /**
  * The type a kind's expression has over `count` operands of no known type, which every rule of
@@ -399,13 +418,14 @@ const readingFacts = (
  * @param relation - The relation the containment reads.
  * @returns Whether it does.
  */
-const namesVariableKind = (outcome: ApplyOutcome<unknown>, relation: string): boolean =>
+const namesVariableKind = (outcome: ApplyOutcome<unknown>): boolean =>
   outcome.kind === "invariant-rejected" &&
   outcome.refused.laws.some(
     (law: Law) =>
-      law.kind === "contained" &&
-      law.from.relation === relation &&
-      law.to.relation === "ReferenceDeclaration",
+      (law.kind === "contained" &&
+        law.from.relation === "VariableRefDeclaration" &&
+        law.to.relation === "ReferenceDeclaration") ||
+      (law.kind === "check" && law.relation === "VariableRef" && law.name === "Variable_kind"),
   );
 
 describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
@@ -559,20 +579,23 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
 
       it.effect("refuses each reference row law's breach by its law, and keeps its control", () =>
         // Oracle: PostgreSQL, each CHECK of `VariableRef`, against the old checker's rules (P8,
-        // P20, P22, P24, P26, P27). The UP audit's A62, "Item duration", is a containment into the
-        // time-dependent items, no CHECK of the row.
+        // P20, P22, P24, P26, P27).
         // Bound: one breach of each law, beside the same row with the breach repaired.
         Effect.gen(function* referenceLaws() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
-          const declared = {
-            declBaseType: "integer",
-            declCardinality: "single",
-            resolution: "declared",
-          } as const;
-          const cases = [
+          const declared = { resolution: "declared" } as const;
+          const cases: readonly {
+            readonly broken: Addition<typeof VariableRef>;
+            readonly declaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+            readonly law: string;
+            readonly on: "VariableRef" | "VariableRefDeclaration";
+            readonly repaired: Partial<Addition<typeof VariableRef>>;
+            readonly repairedDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+          }[] = [
             {
               broken: referenceRow({ rootKind: "qti-assessment-item" }),
               law: "Variable_declared",
+              on: "VariableRef",
               repaired: { rootKind: "qti-response-processing" },
             },
             {
@@ -584,7 +607,9 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 heldCardinality: "single",
                 kind: "qti-set-outcome-value",
               }),
+              declaration: {},
               law: "Set_type",
+              on: "VariableRef",
               repaired: { heldBase: "integer" },
             },
             {
@@ -597,7 +622,9 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 kind: "qti-lookup-outcome-value",
                 table: "qti-interpolation-table",
               }),
+              declaration: {},
               law: "Lookup_type",
+              on: "VariableRef",
               repaired: { heldBase: "float" },
             },
             {
@@ -606,52 +633,64 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 attribute: "figures",
                 baseType: "float",
                 cardinality: "single",
-                declBaseType: "float",
                 kind: "qti-equal-rounded",
               }),
+              declaration: { declBaseType: "float" },
               law: "Reference_type",
-              repaired: { baseType: "integer", declBaseType: "integer" },
+              on: "VariableRefDeclaration",
+              repaired: { baseType: "integer" },
+              repairedDeclaration: { declBaseType: "integer" },
             },
             {
               broken: referenceRow({
                 ...declared,
                 baseType: "integer",
                 cardinality: "single",
-                declarationKind: "qti-response-declaration",
                 elementBase: "integer",
                 elementCardinality: "single",
                 language: "template",
               }),
+              declaration: { declarationKind: "qti-response-declaration" },
               law: "Template_reads",
-              repaired: { declarationKind: "qti-template-declaration" },
+              on: "VariableRefDeclaration",
+              repaired: {},
+              repairedDeclaration: { declarationKind: "qti-template-declaration" },
             },
             {
               broken: referenceRow({
                 ...declared,
                 baseType: "integer",
                 cardinality: "single",
-                declarationKind: "qti-response-declaration",
                 kind: "qti-map-response",
               }),
+              declaration: { declarationKind: "qti-response-declaration" },
               law: "Mapped_response",
+              on: "VariableRefDeclaration",
               repaired: { table: "qti-mapping" },
+              repairedDeclaration: { table: "qti-mapping" },
             },
-          ] as const;
-          for (const { broken, law, repaired } of cases) {
-            const refused = yield* db.apply(referenceChange(broken), {});
-            const kept = yield* db.apply(referenceChange({ ...broken, ...repaired }), {});
+          ];
+          for (const { broken, declaration, law, on, repaired, repairedDeclaration } of cases) {
+            const refused = yield* db.apply(referenceChange(broken, declaration), {});
+            const kept = yield* db.apply(
+              referenceChange(
+                { ...broken, ...repaired },
+                declaration === undefined ? undefined : { ...declaration, ...repairedDeclaration },
+              ),
+              {},
+            );
 
-            assert.isTrue(names(refused, "VariableRef", law), law);
-            assert.isFalse(names(kept, "VariableRef", law), law);
+            assert.isTrue(names(refused, on, law), law);
+            assert.isFalse(names(kept, on, law), law);
           }
         }),
       );
 
       it.effect(
-        "refuses a weighted integer, a base value no lexical form of its base type, and a template or timing whose code its form does not spell",
+        "refuses a weighted integer, a base value no lexical form of its base type, and a template whose code its form does not spell",
         () =>
           // Oracle: PostgreSQL, `Weighted_base` (P29), `Literal_lexical` (`BaseTypePattern`) and
-          // `E1_derived` over `ProcessingTemplate` (template-derivation) and `ItemTiming` (C17).
+          // `E1_derived` over `ProcessingTemplate` (template-derivation).
           // Bound: one breach of each, beside its repair.
           Effect.gen(function* attributeLaws() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -678,12 +717,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               template: "match_correct",
               uri: "urn:example:template",
             };
-            const timing: Addition<typeof ItemTiming> = {
-              document: strayNode,
-              lexical: "true",
-              node,
-              timeDependent: false,
-            };
             const outcomes = {
               keptLiteral: yield* db.apply(
                 ChangeSet.empty(Author).insert(LiteralTyped, [{ ...literal, text: " 42 " }]),
@@ -698,10 +731,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 ]),
                 {},
               ),
-              keptTiming: yield* db.apply(
-                ChangeSet.empty(Author).insert(ItemTiming, [{ ...timing, timeDependent: true }]),
-                {},
-              ),
               keptWeighted: yield* db.apply(
                 ChangeSet.empty(Author).insert(ExpressionAttribute, [
                   { ...weighted, baseType: "float" },
@@ -713,7 +742,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 ChangeSet.empty(Author).insert(ProcessingTemplate, [template]),
                 {},
               ),
-              timing: yield* db.apply(ChangeSet.empty(Author).insert(ItemTiming, [timing]), {}),
               weighted: yield* db.apply(
                 ChangeSet.empty(Author).insert(ExpressionAttribute, [weighted]),
                 {},
@@ -726,8 +754,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             assert.isFalse(names(outcomes.keptLiteral, "LiteralTyped", "Literal_lexical"));
             assert.isTrue(names(outcomes.template, "ProcessingTemplate", "E1_derived"));
             assert.isFalse(names(outcomes.keptTemplate, "ProcessingTemplate", "E1_derived"));
-            assert.isTrue(names(outcomes.timing, "ItemTiming", "E1_derived"));
-            assert.isFalse(names(outcomes.keptTiming, "ItemTiming", "E1_derived"));
           }),
       );
 
@@ -736,8 +762,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, P24
           // (A66) and §7.27.1's `section-identifier` (A61), here a `qti-number-correct`'s, which
-          // reads a section. The time-dependence sentence of §2.2.2.2 (A62), "Item duration", is a
-          // containment into the time-dependent items, no CHECK of the row.
+          // reads a section.
           // Bound: one breach of each law, beside the same row with the breach repaired, each
           // with its reference's owners.
           Effect.gen(function* readingLaws() {
@@ -818,28 +843,28 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           Effect.gen(function* variableKind() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const declared = { resolution: "declared", rootKind: "qti-assessment-item" } as const;
-            const cases = [
+            const cases: readonly {
+              readonly broken: Addition<typeof VariableRef>;
+              readonly declaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+              readonly kept: Partial<Addition<typeof VariableRef>>;
+              readonly keptDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+            }[] = [
               {
-                broken: referenceRow({
-                  ...declared,
-                  declarationKind: "qti-response-declaration",
-                  kind: "qti-set-outcome-value",
-                }),
-                kept: { declarationKind: "qti-outcome-declaration" },
+                broken: referenceRow({ ...declared, kind: "qti-set-outcome-value" }),
+                declaration: { declarationKind: "qti-response-declaration" },
+                kept: {},
+                keptDeclaration: { declarationKind: "qti-outcome-declaration" },
               },
               {
-                broken: referenceRow({
-                  ...declared,
-                  declarationKind: "qti-outcome-declaration",
-                  kind: "qti-correct",
-                }),
-                kept: { declarationKind: "qti-response-declaration" },
+                broken: referenceRow({ ...declared, kind: "qti-correct" }),
+                declaration: { declarationKind: "qti-outcome-declaration" },
+                kept: {},
+                keptDeclaration: { declarationKind: "qti-response-declaration" },
               },
               {
                 broken: referenceRow({
                   baseType: "integer",
                   cardinality: "single",
-                  declarationKind: "qti-response-declaration",
                   identifier: "numAttempts",
                   kind: "qti-set-outcome-value",
                   lexical: "numAttempts",
@@ -848,13 +873,19 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 }),
                 kept: { kind: "qti-variable" },
               },
-            ] as const;
-            for (const { broken, kept } of cases) {
-              const refused = yield* db.apply(referenceChange(broken), {});
-              const held = yield* db.apply(referenceChange({ ...broken, ...kept }), {});
+            ];
+            for (const { broken, declaration, kept, keptDeclaration } of cases) {
+              const refused = yield* db.apply(referenceChange(broken, declaration), {});
+              const held = yield* db.apply(
+                referenceChange(
+                  { ...broken, ...kept },
+                  declaration === undefined ? undefined : { ...declaration, ...keptDeclaration },
+                ),
+                {},
+              );
 
-              assert.isTrue(namesVariableKind(refused, "VariableRef"), broken.kind);
-              assert.isFalse(namesVariableKind(held, "VariableRef"), broken.kind);
+              assert.isTrue(namesVariableKind(refused), broken.kind);
+              assert.isFalse(namesVariableKind(held), broken.kind);
             }
           }),
       );

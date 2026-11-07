@@ -9,8 +9,10 @@
  * recursion, and `db.page` pages it by that key. Each row carries its own characters (`Node.chars`:
  * a text or whitespace run's, an entity reference's `&name;`) and what its node owns, each as its
  * own attachment: its comment, instruction, doctype, `Document` row and foreign element's name at
- * most once (each keyed by its node), and its attribute and namespace families as lists in `at`
- * order. The arms stay apart, never a union, because an attachment over a union is never paged.
+ * most once (each keyed by its node), the `Document` row with its XML declaration at most once
+ * and the declaration with its encoding and standalone at most once each, and its attribute and
+ * namespace families as lists in `at` order. The arms stay apart, never a union, because an
+ * attachment over a union is never paged.
  */
 import { query, uuid, v } from "@bjornpagen/grizzle";
 import { Attribute, AttributeEntity, OpenAttributeName } from "#pantry/qti/attributes.ts";
@@ -18,9 +20,12 @@ import {
   Comment,
   Doctype,
   Document,
+  EncodingDecl,
   Namespace,
   OpenElementName,
   Pi,
+  SdDecl,
+  XmlDecl,
 } from "#pantry/qti/chardata.ts";
 import { Node } from "#pantry/qti/node.ts";
 import { Entry } from "#pantry/qti/package.ts";
@@ -100,23 +105,51 @@ export const documentScan = query(Author)
   .attach(
     "documentRow",
     (node) =>
-      query(Author).rule((r) => {
-        const { charset, encoding, exportCharset, standalone, xmlVersion } = v(
-          Document,
-          "documentRow",
-        );
+      query(Author)
+        .rule((r) => {
+          const { charset, exportCharset } = v(Document, "documentRow");
 
-        return r
-          .match(Document, {
-            charset,
-            encoding,
-            exportCharset,
-            node: node.id,
-            standalone,
-            xmlVersion,
-          })
-          .find({ charset, encoding, exportCharset, standalone, xmlVersion });
-      }),
+          return r
+            .match(Document, { charset, exportCharset, node: node.id })
+            .find({ charset, exportCharset, node: node.id });
+        })
+        .attach(
+          "declaration",
+          (document) =>
+            query(Author)
+              .rule((r) => {
+                const { version } = v(XmlDecl, "xmlDecl");
+
+                return r
+                  .match(XmlDecl, { node: document.node, version })
+                  .find({ node: document.node, version });
+              })
+              .attach(
+                "encoding",
+                (declaration) =>
+                  query(Author).rule((r) => {
+                    const { encoding } = v(EncodingDecl, "encodingDecl");
+
+                    return r
+                      .match(EncodingDecl, { encoding, node: declaration.node })
+                      .find({ encoding });
+                  }),
+                "option",
+              )
+              .attach(
+                "standalone",
+                (declaration) =>
+                  query(Author).rule((r) => {
+                    const { standalone } = v(SdDecl, "sdDecl");
+
+                    return r
+                      .match(SdDecl, { node: declaration.node, standalone })
+                      .find({ standalone });
+                  }),
+                "option",
+              ),
+          "option",
+        ),
     "option",
   )
   .attach(

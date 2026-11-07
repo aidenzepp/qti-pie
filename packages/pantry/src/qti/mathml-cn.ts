@@ -260,6 +260,21 @@ export const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
 export const slotFamily = counted(on(CnSlot, "node"), fin(CnCount, "parts"));
 
 /**
+ * The containments that judge a `cn`'s part count: its `(type, parts)` in {@link CnParts}, and
+ * each part's `(type, part, form)` in {@link CnForm}, over the judged `cn`s ({@link MathCn},
+ * {@link CnPartText}) and again over every `cn` whose `type` lists a form ({@link CnCount},
+ * {@link CnSlot}), whatever its base and whatever its parts hold. A `cn` of the wrong part count is
+ * a `cn` of the wrong form, "MathML cn form" as the oracle names it, so `mathmlLawsByName`
+ * (`#pantry/qti/mathml.ts`) names them so and the rest of the module "E1 derived".
+ */
+export const cnCountLaws = {
+  judgedForm: contained(on(CnPartText, "type", "part", "form"), on(CnForm, "type", "part", "form")),
+  judgedParts: contained(on(MathCn, "type", "parts"), on(CnParts, "type", "parts")),
+  typedForm: contained(on(CnSlot, "type", "part", "form"), on(CnForm, "type", "part", "form")),
+  typedParts: contained(on(CnCount, "type", "parts"), on(CnParts, "type", "parts")),
+};
+
+/**
  * The statements over {@link CnAttribute}, {@link MathCn} and {@link CnPartText}, each `check`
  * named by its law:
  *
@@ -303,7 +318,7 @@ export const cnLaws = [
       "lexical",
     ),
   ),
-  contained(on(MathCn, "type", "parts"), on(CnParts, "type", "parts")),
+  cnCountLaws.judgedParts,
   check("E1_derived", MathCn, (c) =>
     c.and(
       c.or(
@@ -323,7 +338,7 @@ export const cnLaws = [
 
   partFamily,
   contained(on(CnPartText, "node", "type", "base"), on(MathCn, "node", "type", "base")),
-  contained(on(CnPartText, "type", "part", "form"), on(CnForm, "type", "part", "form")),
+  cnCountLaws.judgedForm,
 
   contained(on(CnCount, "node"), on(cnNodes, "id")),
   contained(
@@ -343,9 +358,9 @@ export const cnLaws = [
     ),
   ),
   slotFamily,
-  contained(on(CnCount, "type", "parts"), on(CnParts, "type", "parts")),
+  cnCountLaws.typedParts,
   contained(on(CnSlot, "node", "type"), on(CnCount, "node", "type")),
-  contained(on(CnSlot, "type", "part", "form"), on(CnForm, "type", "part", "form")),
+  cnCountLaws.typedForm,
   contained(on(MathCn, "node", "type"), on(CnCount, "node", "type")),
   check("MathML_cn_form", CnPartText, (p) =>
     Compute.matches(p.text, CnPattern.at("pattern", p.form, p.base)),

@@ -305,6 +305,7 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  */
 const feedbackOf = (fields: Partial<Fact<typeof FeedbackRef>> = {}) =>
   ({
+    assemblyKind: "qti-assessment-item",
     attribute: "outcome-identifier",
     document: stray,
     identifier: "FEEDBACK",
@@ -413,7 +414,6 @@ const strayDocument = {
   charset: "UTF-8",
   contextNearest: stray,
   contextNearestKind: "document",
-  encoding: "",
   exportCharset: "UTF-8",
   node: stray,
   nodeChildren: 1n,
@@ -426,9 +426,7 @@ const strayDocument = {
   path: manifestPath,
   resourceType: "none",
   rootKind: "qti-assessment-item",
-  standalone: "none",
   version: "3.0.1",
-  xmlVersion: "none",
 } as const satisfies Addition<typeof Document>;
 
 /**
@@ -973,7 +971,14 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               ChangeSet.empty(Author)
                 .insert(ReferringDocument, [{ document }])
                 .insert(SectionFeedbackName, [{ attribute, document, identifier, kind, node }])
-                .insert(SectionScope, [{ assembly: stray, document, instance: strayNode(1) }])
+                .insert(SectionScope, [
+                  {
+                    assembly: stray,
+                    assemblyKind: "qti-assessment-item",
+                    document,
+                    instance: strayNode(1),
+                  },
+                ])
                 .insert(SectionFeedbackRef, [{ ...feedbackOf(), ...placement }])
                 .insert(SectionFeedbackRefDeclaration, [
                   { ...feedbackDeclarationOf({ baseType: "float" }), ...placement },

@@ -11,7 +11,7 @@
  *   `qti-round-to` with figures 0 under significantFigures (main's `processing.db.test.ts:866-880`
  *   P10 case at `2b276d76`, ported) and one with figures -1 under decimalPlaces, each by the check
  *   `Rounding_figures`; and the overlay's rows held to the tree: a missing row, a mode default
- *   written where the attribute is, and a `figuresValue` that is not the cast.
+ *   written where the attribute is, and a `figures` that is not its collapse.
  * - **Reading 121:** a `qti-equal` in absolute mode with no tolerance (main's `:892-903` P36 case,
  *   ported) by the containment of the mode's `Attribute` selection in `Tolerance(node)`; three
  *   values, an empty tolerance, a 0, NaN and a negative of 16 significant digits, each by a check
@@ -110,7 +110,10 @@ const containedIn =
   (from: readonly [string, ...string[]], to: readonly [string, ...string[]]) =>
   (law: Law): boolean =>
     law.kind === "contained" &&
-    [law.from.relation, ...law.from.terms.map(({ field }) => field)].join(" ") === from.join(" ") &&
+    [
+      law.from.relation,
+      ...law.from.terms.map((term) => (term.kind === "constant" ? "constant" : term.field)),
+    ].join(" ") === from.join(" ") &&
     [law.to.relation, ...law.to.terms.map(({ field }) => field)].join(" ") === to.join(" ");
 
 /**
@@ -210,7 +213,7 @@ const validRules = [
 /**
  * The law that refuses a rounding operator's figures (reading 119).
  */
-const figuresLaw = [checkNamed("Rounding", "Rounding_figures")];
+const figuresLaw = [checkNamed("RoundingModeFigures", "Rounding_figures")];
 
 /**
  * The laws that refuse a tolerance's count or values (reading 121).
@@ -326,7 +329,11 @@ const refusedCases = [
         })),
       ),
     laws: [
-      containedIn(["Attribute", "node", "lexical"], ["Rounding", "node", "mode"]),
+      containedIn(["Attribute", "node"], ["Rounding", "node"]),
+      containedIn(
+        ["RoundingMode", "node", "kind", "modeWritten"],
+        ["Rounding", "node", "kind", "modeWritten"],
+      ),
       checkNamed("Rounding", "E1_derived"),
     ],
     name: "a written rounding-mode held as unwritten (E1 derived)",
@@ -336,16 +343,22 @@ const refusedCases = [
       Effect.flatMap(withRules("valid", validRules), (dir) =>
         applyEdited(dir, (inputs) => ({
           ...inputs,
-          Rounding: new Map(
-            [...inputs.Rounding].map(([node, row]) => [
+          RoundingFigures: new Map(
+            [...inputs.RoundingFigures].map(([node, row]) => [
               node,
-              row.integer ? { ...row, figuresValue: row.figuresValue + 1n } : row,
+              { ...row, figures: `${row.figures} ` },
             ]),
           ),
         })),
       ),
-    laws: [checkNamed("Rounding", "E1_derived")],
-    name: "a figures whose figuresValue is not its cast (E1 derived)",
+    laws: [
+      checkNamed("RoundingFigures", "E1_derived"),
+      containedIn(
+        ["RoundingModeFigures", "node", "figures"],
+        ["RoundingFigures", "node", "figures"],
+      ),
+    ],
+    name: "a figures that is not its collapse (E1 derived)",
   },
   {
     apply: () =>
@@ -358,9 +371,7 @@ const refusedCases = [
               {
                 ...row,
                 tokens: row.tokens.map((token) =>
-                  token.token === "0.1"
-                    ? { ...token, piece: token.piece.replace("0.1", "9"), token: "9" }
-                    : token,
+                  token.token === "0.1" ? { ...token, token: "9" } : token,
                 ),
               },
             ]),

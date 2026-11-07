@@ -583,12 +583,13 @@ const grandfatheredTags = [
  * variant and singleton subtags and its subtags are in the IANA Language Subtag Registry (§2.2.9).
  * Only well-formedness is a pattern: the registry is a dated dataset no pinned source holds, and a
  * repeated subtag is a comparison between subtags no pattern without backreferences states, so
- * validity is spec reading 129's stated limit.
+ * validity is spec reading 129's stated limit. `lom-title` reads a root's `xml:lang` by it too: a
+ * form that is no tag states no language (spec reading 151, `#pantry/qti/metadata.ts`).
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc5646#section-2.1 | RFC 5646, 2.1 Syntax}
  * @see {@link https://www.rfc-editor.org/rfc/rfc5646#section-2.2.9 | RFC 5646, 2.2.9 Classes of Conformance}
  */
-const languageTag = (() => {
+export const languageTag = (() => {
   const language = "[A-Za-z]{2,3}(-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8}";
   const langtag = [
     `(${language})`,

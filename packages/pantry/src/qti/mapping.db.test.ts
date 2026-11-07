@@ -19,12 +19,11 @@
  * entry targeting `x`.
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { Fact, Law } from "@bjornpagen/grizzle";
+import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { floatValueOf } from "#pantry/import/overlays/mapping.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
   AreaMapping,
@@ -157,16 +156,17 @@ const mapKeyRow = (
 });
 
 /**
- * A stray integer key of one mapping, entry `at`, with its parts.
+ * A stray integer key of one mapping, entry `at`, with its split, from which PostgreSQL generates
+ * its value.
  *
  * @param at - The entry's number.
- * @param parts - Its key and the parts E1_derived reads.
+ * @param parts - Its key and the split E1_derived reads.
  * @returns The row.
  */
 const integer = (
   at: number,
-  parts: Omit<Fact<typeof MapKeyInteger>, "mapping" | "node">,
-): Fact<typeof MapKeyInteger> => ({ ...parts, mapping: stray, node: strayNode(at) });
+  parts: Omit<Addition<typeof MapKeyInteger>, "mapping" | "node">,
+): Addition<typeof MapKeyInteger> => ({ ...parts, mapping: stray, node: strayNode(at) });
 
 /**
  * The mapping and node of a stray typed key, entry `n`.
@@ -228,65 +228,24 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       it.effect(
         "refuses two integer keys of one mapping that name one integer, by the key on (mapping, value)",
         () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyInteger, "mapping", "value")), each
-          // row's parts true to E1_derived; the canonical forms are XML Schema's.
+          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyInteger, "mapping", "value")) over the
+          // value it generates from each row's split, true to E1_derived; the canonical forms are
+          // XML Schema's.
           // Bound: 1 and 01, -0 and +0, and +7 and 007.
           Effect.gen(function* integerRepeat() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const rows of [
               [
-                integer(0, {
-                  digits: "1",
-                  key: "1",
-                  negative: "",
-                  sign: "",
-                  value: "1",
-                  zeros: "",
-                }),
-                integer(1, {
-                  digits: "1",
-                  key: "01",
-                  negative: "",
-                  sign: "",
-                  value: "1",
-                  zeros: "0",
-                }),
+                integer(0, { digits: "1", key: "1", sign: "", zeros: "" }),
+                integer(1, { digits: "1", key: "01", sign: "", zeros: "0" }),
               ],
               [
-                integer(0, {
-                  digits: "0",
-                  key: "-0",
-                  negative: "",
-                  sign: "-",
-                  value: "0",
-                  zeros: "",
-                }),
-                integer(1, {
-                  digits: "0",
-                  key: "+0",
-                  negative: "",
-                  sign: "+",
-                  value: "0",
-                  zeros: "",
-                }),
+                integer(0, { digits: "0", key: "-0", sign: "-", zeros: "" }),
+                integer(1, { digits: "0", key: "+0", sign: "+", zeros: "" }),
               ],
               [
-                integer(0, {
-                  digits: "7",
-                  key: "+7",
-                  negative: "",
-                  sign: "+",
-                  value: "7",
-                  zeros: "",
-                }),
-                integer(1, {
-                  digits: "7",
-                  key: "007",
-                  negative: "",
-                  sign: "",
-                  value: "7",
-                  zeros: "00",
-                }),
+                integer(0, { digits: "7", key: "+7", sign: "+", zeros: "" }),
+                integer(1, { digits: "7", key: "007", sign: "", zeros: "00" }),
               ],
             ]) {
               const outcome = yield* db.apply(
@@ -299,17 +258,54 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           }),
       );
 
-      it.effect("refuses an integer key whose canonical form is not its value, by E1_derived", () =>
+      it.effect(
+        "keeps two integer keys of one mapping that name two integers, the key on (mapping, value) unbroken",
+        () =>
+          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyInteger, "mapping", "value")) over the
+          // value it generates, against XML Schema's canonical forms, which differ: the control of
+          // the repeat above. A stray row's deferred containments may still refuse the write at
+          // commit, so the key alone is read.
+          // Bound: -1 and 1, 10 and 1, and -0 and -10.
+          Effect.gen(function* integerDistinct() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            for (const rows of [
+              [
+                integer(0, { digits: "1", key: "-1", sign: "-", zeros: "" }),
+                integer(1, { digits: "1", key: "1", sign: "", zeros: "" }),
+              ],
+              [
+                integer(0, { digits: "10", key: "10", sign: "", zeros: "" }),
+                integer(1, { digits: "1", key: "1", sign: "", zeros: "" }),
+              ],
+              [
+                integer(0, { digits: "0", key: "-0", sign: "-", zeros: "" }),
+                integer(1, { digits: "10", key: "-10", sign: "-", zeros: "" }),
+              ],
+            ]) {
+              const outcome = yield* db.apply(
+                ChangeSet.empty(Author).insert(MapKeyInteger, rows),
+                {},
+              );
+
+              assert.isFalse(
+                rejectedBy(outcome, keyOver("MapKeyInteger", ["mapping", "value"])),
+                rows.map(({ key }) => key).join(" "),
+              );
+            }
+          }),
+      );
+
+      it.effect("refuses an integer key whose split does not spell it, by E1_derived", () =>
         // Oracle: PostgreSQL, the E1_derived CHECK on MapKeyInteger, judged as the row is
         // inserted.
-        // Bound: a negative zero kept signed, a padded key's zeros dropped from its split, and a
-        // negative value written unsigned.
+        // Bound: a padded key's zeros dropped from its split, a negative key's sign dropped, and a
+        // magnitude that is not the key's.
         Effect.gen(function* integerDerived() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
           for (const row of [
-            { digits: "0", key: "-0", negative: "-", sign: "-", value: "-0", zeros: "" },
-            { digits: "1", key: "01", negative: "", sign: "", value: "1", zeros: "" },
-            { digits: "5", key: "-5", negative: "", sign: "-", value: "5", zeros: "" },
+            { digits: "1", key: "01", sign: "", zeros: "" },
+            { digits: "5", key: "-5", sign: "", zeros: "" },
+            { digits: "6", key: "5", sign: "", zeros: "" },
           ] as const) {
             const outcome = yield* db.apply(
               ChangeSet.empty(Author).insert(MapKeyInteger, [
@@ -327,8 +323,8 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         "refuses two float keys of one mapping that name one double, by the key on (mapping, value)",
         () =>
           // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyFloat, "mapping", "value")) over the
-          // host's value, which E1_derived holds to the cast that rounds each decimal once to its
-          // nearest double (reading 56).
+          // value it generates, the cast that rounds each decimal once to its nearest double
+          // (reading 56).
           // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, and 0.1 and .10.
           Effect.gen(function* floatRepeat() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -340,8 +336,8 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
             ] as const) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author).insert(MapKeyFloat, [
-                  { key: first, value: floatValueOf(first), ...at(0) },
-                  { key: second, value: floatValueOf(second), ...at(1) },
+                  { key: first, ...at(0) },
+                  { key: second, ...at(1) },
                 ]),
                 {},
               );
@@ -355,25 +351,33 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a float key whose value is not the double its key names, by MapKeyFloat's E1_derived",
+        "keeps two float keys of one mapping that name two doubles, the key on (mapping, value) unbroken",
         () =>
-          // Oracle: PostgreSQL, the E1_derived CHECK on MapKeyFloat, `value = key::double
-          // precision`, judged as the row is inserted.
-          // Bound: a value off by one, the double next above 0.1 (one unit in its last place,
-          // 2^-56), and a zero for -INF.
-          Effect.gen(function* floatDerived() {
+          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyFloat, "mapping", "value")) over the
+          // cast it generates, against the doubles each decimal rounds to, which differ: the
+          // control of the repeat above. A stray row's deferred containments may still refuse the
+          // write at commit, so the key alone is read.
+          // Bound: 1 and 2, 0.1 and 0.100000000000001 (apart in the fifteenth digit, the last the
+          // form holds), and INF and -INF.
+          Effect.gen(function* floatDistinct() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const row of [
-              { key: "1", value: 2 },
-              { key: "0.1", value: 0.1 + 2 ** -56 },
-              { key: "-INF", value: 0 },
+            for (const [first, second] of [
+              ["1", "2"],
+              ["0.1", "0.100000000000001"],
+              ["INF", "-INF"],
             ] as const) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKeyFloat, [{ ...row, ...at(0) }]),
+                ChangeSet.empty(Author).insert(MapKeyFloat, [
+                  { key: first, ...at(0) },
+                  { key: second, ...at(1) },
+                ]),
                 {},
               );
 
-              assert.isTrue(rejectedBy(outcome, checkNamed("MapKeyFloat", "E1_derived")), row.key);
+              assert.isFalse(
+                rejectedBy(outcome, keyOver("MapKeyFloat", ["mapping", "value"])),
+                `${first} ${second}`,
+              );
             }
           }),
       );
@@ -508,9 +512,10 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         "refuses two point, pair or directed pair keys of one mapping that name one value, by each key on (mapping, value)",
         () =>
           // Oracle: PostgreSQL, the UNIQUE of key(on(R, "mapping", "value")) for each two-item
-          // relation, each row's parts true to its E1_derived (information model §8.13: a pair
-          // undirected, a point and a directed pair ordered).
-          // Bound: points 1 2 and 01 +2; pairs A B and B A; directed pairs A B and A, a tab, B.
+          // relation over the value it generates, each row's parts true to its E1_derived
+          // (information model §8.13: a pair undirected, a point and a directed pair ordered).
+          // Bound: points 1 2 and 01 +2; pairs A B and B A, and U+E000 U+10000 and its reverse;
+          // directed pairs A B and A, a tab, B.
           Effect.gen(function* twoItemRepeat() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const point = yield* db.apply(
@@ -519,13 +524,10 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
                   ...at(0),
                   gap: " ",
                   key: "1 2",
-                  value: "1 2",
                   xDigits: "1",
-                  xNegative: "",
                   xSign: "",
                   xZeros: "",
                   yDigits: "2",
-                  yNegative: "",
                   ySign: "",
                   yZeros: "",
                 },
@@ -533,36 +535,43 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
                   ...at(1),
                   gap: " ",
                   key: "01 +2",
-                  value: "1 2",
                   xDigits: "1",
-                  xNegative: "",
                   xSign: "",
                   xZeros: "0",
                   yDigits: "2",
-                  yNegative: "",
                   ySign: "+",
                   yZeros: "",
                 },
               ]),
               {},
             );
-            const pair = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyPair, [
-                { ...at(0), first: "A", gap: " ", key: "A B", second: "B", value: "A B" },
-                { ...at(1), first: "B", gap: " ", key: "B A", second: "A", value: "A B" },
-              ]),
-              {},
-            );
+            const pairs = [];
+            for (const [first, second] of [
+              ["A", "B"],
+              ["\u{E000}", "\u{10000}"],
+            ] as const) {
+              pairs.push(
+                yield* db.apply(
+                  ChangeSet.empty(Author).insert(MapKeyPair, [
+                    { ...at(0), first, gap: " ", key: `${first} ${second}`, second },
+                    { ...at(1), first: second, gap: " ", key: `${second} ${first}`, second: first },
+                  ]),
+                  {},
+                ),
+              );
+            }
             const directed = yield* db.apply(
               ChangeSet.empty(Author).insert(MapKeyDirectedPair, [
-                { ...at(0), gap: " ", key: "A B", source: "A", target: "B", value: "A B" },
-                { ...at(1), gap: "\t", key: "A\tB", source: "A", target: "B", value: "A B" },
+                { ...at(0), gap: " ", key: "A B", source: "A", target: "B" },
+                { ...at(1), gap: "\t", key: "A\tB", source: "A", target: "B" },
               ]),
               {},
             );
 
             assert.isTrue(rejectedBy(point, keyOver("MapKeyPoint", ["mapping", "value"])));
-            assert.isTrue(rejectedBy(pair, keyOver("MapKeyPair", ["mapping", "value"])));
+            for (const pair of pairs) {
+              assert.isTrue(rejectedBy(pair, keyOver("MapKeyPair", ["mapping", "value"])));
+            }
             assert.isTrue(
               rejectedBy(directed, keyOver("MapKeyDirectedPair", ["mapping", "value"])),
             );
@@ -570,35 +579,62 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a pair key whose value keeps its items out of code-point order, by E1_derived",
+        "keeps two point, pair or directed pair keys of one mapping that name two values, each key on (mapping, value) unbroken",
         () =>
-          // Oracle: PostgreSQL, the E1_derived CHECK on MapKeyPair under the pg_c_utf8 collation,
-          // which orders text by code point.
-          // Bound: B A kept as B A; and U+E000 and U+10000 written in JavaScript's UTF-16 order,
-          // where U+10000 sorts first, not in code-point order.
-          Effect.gen(function* pairOrder() {
+          // Oracle: PostgreSQL, the UNIQUE of key(on(R, "mapping", "value")) for each two-item
+          // relation over the value it generates, against §8.13's tuples, which differ: the
+          // control of the repeats above. A stray row's deferred containments may still refuse the
+          // write at commit, so the key alone is read.
+          // Bound: points -1 2 and 1 2; pairs A B and A C; directed pairs A B and B A.
+          Effect.gen(function* twoItemDistinct() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const [first, second, value] of [
-              ["B", "A", "B A"],
-              ["\u{E000}", "\u{10000}", "\u{10000} \u{E000}"],
-            ] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKeyPair, [
-                  {
-                    first,
-                    gap: " ",
-                    key: `${first} ${second}`,
-                    mapping: stray,
-                    node: strayNode(0),
-                    second,
-                    value,
-                  },
-                ]),
-                {},
-              );
+            const point = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyPoint, [
+                {
+                  ...at(0),
+                  gap: " ",
+                  key: "-1 2",
+                  xDigits: "1",
+                  xSign: "-",
+                  xZeros: "",
+                  yDigits: "2",
+                  ySign: "",
+                  yZeros: "",
+                },
+                {
+                  ...at(1),
+                  gap: " ",
+                  key: "1 2",
+                  xDigits: "1",
+                  xSign: "",
+                  xZeros: "",
+                  yDigits: "2",
+                  ySign: "",
+                  yZeros: "",
+                },
+              ]),
+              {},
+            );
+            const pair = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyPair, [
+                { ...at(0), first: "A", gap: " ", key: "A B", second: "B" },
+                { ...at(1), first: "A", gap: " ", key: "A C", second: "C" },
+              ]),
+              {},
+            );
+            const directed = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyDirectedPair, [
+                { ...at(0), gap: " ", key: "A B", source: "A", target: "B" },
+                { ...at(1), gap: " ", key: "B A", source: "B", target: "A" },
+              ]),
+              {},
+            );
 
-              assert.isTrue(rejectedBy(outcome, checkNamed("MapKeyPair", "E1_derived")), value);
-            }
+            assert.isFalse(rejectedBy(point, keyOver("MapKeyPoint", ["mapping", "value"])));
+            assert.isFalse(rejectedBy(pair, keyOver("MapKeyPair", ["mapping", "value"])));
+            assert.isFalse(
+              rejectedBy(directed, keyOver("MapKeyDirectedPair", ["mapping", "value"])),
+            );
           }),
       );
     },

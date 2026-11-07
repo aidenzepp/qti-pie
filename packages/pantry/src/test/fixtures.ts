@@ -341,7 +341,7 @@ const testNames = [
 ] as const;
 
 /**
- * The names of phase 5's 62 negative fixtures: each a data-only edit set over one of
+ * The names of phase 5's 60 negative fixtures: each a data-only edit set over one of
  * {@link testNames}, a refusal of one rule of the spec's 4.15, bin 1 by the database and bin 2 by
  * the importer. `item-prefixed`, `instance-spelling-canonical`, `section-variable-in-test` and
  * `duration-of-item-ref` are "(direct)" only: their spec is the positive's own, and the leased
@@ -361,8 +361,6 @@ export const negativeNames = [
   "include-text",
   "include-xpointer",
   "instance-spelling-canonical",
-  "item-duration-in-item",
-  "item-duration-not-timed",
   "item-in-section",
   "item-prefixed",
   "item-ref-missing",
@@ -790,7 +788,7 @@ export const pciVerdicts: readonly (readonly [FixtureName, readonly string[]])[]
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, the
  * packaging phase's metadata and content cuts with their negatives, the 11 positive fixtures of
- * phase 5's tests, sections and stimuli ({@link testNames}) and its 62 negatives
+ * phase 5's tests, sections and stimuli ({@link testNames}) and its 60 negatives
  * ({@link
  * negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six
  * assembly fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the
@@ -4023,20 +4021,18 @@ const durationProcessing = [
 ].join("\n");
 
 /**
- * A hand-written stub whose response processing names `duration`.
+ * A hand-written time-dependent stub whose response processing names `duration`.
  *
  * @param identifier - The item's identifier and title.
  * @param outcomes - Each further outcome's identifier and base type, declared single.
- * @param timed - Whether the item declares `time-dependent="true"`.
  * @returns The item's text.
  */
 const durationStub = (
   identifier: string,
   outcomes: readonly (readonly [string, string])[],
-  timed: boolean,
 ): string =>
   stubItem(identifier, outcomes)
-    .replace('time-dependent="false"', `time-dependent="${timed}"`)
+    .replace('time-dependent="false"', 'time-dependent="true"')
     .replace(/<qti-response-processing [^>]*\/>/u, durationProcessing);
 
 /**
@@ -4070,7 +4066,7 @@ const mappingStubs = (
       ["item034.xml", stubItem("item034", [["NOTA", "float"]], false)],
       ["item160.xml", stubItem("item160")],
       ["item063.xml", stubItem("item063")],
-      ["itemI.xml", durationStub("I", [["A.B", "float"]], true)],
+      ["itemI.xml", durationStub("I", [["A.B", "float"]])],
       ["itemJ.xml", stubItem("J")],
       ["item434.xml", stubItem("item434")],
       ["item065.xml", stubItem("item065")],
@@ -4220,18 +4216,6 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
     ),
   ]),
   "instance-spelling-canonical": negativeOver("instance-spelling-canonical", "test-mapping"),
-  "item-duration-in-item": negativeByHand(
-    "item-duration-in-item",
-    "test-mapping",
-    mappingStubs({ "itemJ.xml": durationStub("J", [], false) }),
-    [],
-  ),
-  "item-duration-not-timed": negativeByHand(
-    "item-duration-not-timed",
-    "test-mapping",
-    mappingStubs({ "itemI.xml": stubItem("I", [["A.B", "float"]]) }),
-    [],
-  ),
   "item-in-section": negativeOver("item-in-section", "test-linear", [
     replaceIn(
       "rtest13.xml",

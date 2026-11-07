@@ -57,7 +57,7 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { LabelUse } from "#pantry/qti/identity.ts";
-import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
+import { copiedTextKinds, Node, universalDomains, vocabularyTermKinds } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
@@ -452,11 +452,25 @@ const universal: ReadonlySet<string> = new Set(universalDomains);
 const copiedKinds: ReadonlySet<string> = new Set(copiedTextKinds);
 
 /**
+ * Decide on the host what `copiedTitleText` and `copiedVocabularyText` of `node.ts` state of a
+ * member, from its parent's kind and its grandparent's: whether an overlay copies its parent's
+ * text by the two kinds together.
+ *
+ * @param parentKind - The member's parent's kind.
+ * @param parentParentKind - The member's grandparent's kind, `document` for a child of the root
+ *   element.
+ * @returns Whether the member's characters are copied into its parent's string value.
+ */
+const copiedUnder = (parentKind: string, parentParentKind: string): boolean =>
+  (parentKind === "lom:string" && parentParentKind === "lom:title") ||
+  (vocabularyTermKinds.some((kind) => kind === parentKind) &&
+    parentParentKind === "lom:learningResourceType");
+
+/**
  * Decide whether a member's characters make its parent's string value, as `node.ts`'s fold steps
  * it: its parent's text is checked (its domain is no universal one), its parent is one of
  * `copiedTextKinds`, or an overlay copies its parent's text by its parent's and grandparent's kinds
- * together, a title string's or a vocabulary term's (`copiedUnder`, the host mirror of
- * `copiedTitleText` and `copiedVocabularyText` that the import's walk reads too).
+ * together, a title string's or a vocabulary term's ({@link copiedUnder}).
  *
  * @param member - The member's folded row.
  * @param parent - Its parent's folded row.
@@ -530,7 +544,7 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
     familyOf.set(node.parent, [...(familyOf.get(node.parent) ?? []), node]);
   }
 
-  const running = new Map<string, { charsAfter: string; charsWas: string; piece: string }>();
+  const running = new Map<string, { charsAfter: string; charsWas: string }>();
   for (const [parentId, members] of familyOf) {
     const parent = byId.get(parentId);
     members.sort((left, right) => Number(left.at - right.at));
@@ -542,17 +556,13 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
         joined += chars.get(member.id) ?? "";
       }
 
-      running.set(member.id, {
-        charsAfter: joined,
-        charsWas,
-        piece: checked ? (chars.get(member.id) ?? "") : "",
-      });
+      running.set(member.id, { charsAfter: joined, charsWas });
     }
   }
 
   const facts = rows.nodes.map((node): Stated => {
     const parent = node.start === 0n ? node : (byId.get(node.parent) ?? node);
-    const own = running.get(node.id) ?? { charsAfter: "", charsWas: "", piece: "" };
+    const own = running.get(node.id) ?? { charsAfter: "", charsWas: "" };
     const last = Arr.last(familyOf.get(node.id) ?? []).pipe(
       Option.flatMap(({ id }) => Option.fromNullishOr(running.get(id))),
     );
@@ -591,7 +601,6 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
         prefix: node.prefix,
         start: node.start,
         state: String(node.derived.state),
-        stringPiece: own.piece,
         stringValue: Option.match(last, {
           onNone: () => "",
           onSome: ({ charsAfter }) => charsAfter,
@@ -1314,7 +1323,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 context: root["ancestry"] ?? "",
                 contextNearest: root["nearest"] ?? "",
                 contextNearestKind: root["nearestKind"] ?? "",
-                encoding: "",
                 exportCharset: utf8Label,
                 node: root["id"] ?? "",
                 nodeChildren: root["children"] ?? 0n,
@@ -1327,9 +1335,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 path: "item.xml",
                 resourceType: "imsqti_item_xmlv3p0",
                 rootKind: "qti-assessment-item",
-                standalone: "none",
                 version: root["version"] ?? "",
-                xmlVersion: "none",
               },
               relation: Document,
             };

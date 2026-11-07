@@ -17,9 +17,9 @@
  * No row carries a field grizzle draws or fills, or PostgreSQL generates: each is `Addition<R>`,
  * which omits them, nested at a sequence's count field only. The host writes the fields the
  * amendment's §C gives it, each proved by a law: a node's `state` from `placedStep` (C5, N5), its
- * `ancestry` (`E1_derived`), its nearest interaction (N8), its `chars`, `first`, `last` and
- * `stringPiece` (E1); an attribute's `slot` (AL2's step) and its IDREF pieces, which concatenate
- * to its lexical form.
+ * `ancestry` (`E1_derived`), its nearest interaction (N8), its `chars`, `first` and `last` (E1);
+ * an attribute's `slot` (AL2's step) and its IDREF tokens with the whitespace around each, whose
+ * generated pieces concatenate to its lexical form.
  *
  * Ids are drawn by the number `flatten` (`#pantry/model/xdm.ts`) gives each node and attribute, so
  * the tree and every overlay builder name each node by one id ({@link NodeIds}).
@@ -484,10 +484,9 @@ const specialDoubles: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
- * Read an `xs:double` literal's value, the reader of an attribute's or a text's double
- * (`#pantry/import/overlays/mapping.ts`'s `floatValueOf` reads a map key, which is never
- * collapsed): its whitespace collapsed, then a special literal's value, else the IEEE double
- * nearest the decimal it writes,
+ * Read an `xs:double` literal's value, the reader of an attribute's or a text's double (a map
+ * key's is PostgreSQL's cast, `#pantry/qti/mapping.ts` `MapKeyFloat`): its whitespace collapsed,
+ * then a special literal's value, else the IEEE double nearest the decimal it writes,
  * which JavaScript's `Number` rounds to as XML Schema 1.1 Part 2 §3.3.5.2 does, a magnitude below
  * 2^-1075 rounding to a zero of its sign.
  *
@@ -565,16 +564,11 @@ export const idrefPiecesOf = (lexical: string): readonly IdrefInsert[] => {
     before = "";
   }
 
-  return tokens.map(({ before: lead, token }, at) => {
-    const after = at === tokens.length - 1 ? before : "";
-
-    return {
-      after: spaceOf(after),
-      before: spaceOf(lead),
-      piece: `${lead}${token}${after}`,
-      token,
-    };
-  });
+  return tokens.map(({ before: lead, token }, at) => ({
+    after: spaceOf(at === tokens.length - 1 ? before : ""),
+    before: spaceOf(lead),
+    token,
+  }));
 };
 
 /**
@@ -774,8 +768,7 @@ interface WrittenMember {
  * Write one node below the document node from its gathered rows and its fold.
  *
  * @param gathered - The node, gathered with its own rows.
- * @param folded - Its fold (`foldOf`): its ancestry, its nearest interaction, its state, and
- *   whether its characters are its `stringPiece`.
+ * @param folded - Its fold (`foldOf`): its ancestry, its nearest interaction and its state.
  * @param documentType - The type of the resource that lists its document.
  * @returns The member, with the list its children are nested in.
  */
@@ -813,7 +806,6 @@ const memberOf = (
       nearestKind: folded.nearestKind,
       prefix: node.prefix,
       state: positionHandle(folded.state),
-      stringPiece: folded.copiesText ? gathered.chars : "",
       version,
     },
   };
@@ -827,9 +819,9 @@ const memberOf = (
  * No row names `parent`, only the root names `document`, and no row carries a drawn, accumulated
  * or generated field. The host's fields are the ones the laws prove:
  *
- * - `state`, `ancestry`, `nearest` and `nearestKind`, and whether `stringPiece` holds `chars`, from
- *   the document's fold (`foldOf` of `#pantry/import/fold.ts`, under the document's context: C5,
- *   E1, N8 and spec reading 117); the document node's are its context's, its state 0;
+ * - `state`, `ancestry`, `nearest` and `nearestKind`, from the document's fold (`foldOf` of
+ *   `#pantry/import/fold.ts`, under the document's context: C5, E1, N8 and spec reading 117); the
+ *   document node's are its context's, its state 0;
  * - `chars`, a text or whitespace node's characters and an entity reference's `&name;`, empty
  *   elsewhere, `first` and `last`, the first and last code points of `chars` (`endsOf`);
  * - `governs` and `prefix`, an element's own, `none` and empty for any other node;
@@ -872,7 +864,6 @@ export const rootInsertOf = (
     nearestKind: context.nearestKind,
     prefix: "",
     state: "0",
-    stringPiece: "",
     version,
   };
   const children = new Map<NodeId, NodeMember[]>([[self, rootChildren]]);
@@ -895,9 +886,10 @@ export const rootInsertOf = (
 };
 
 /**
- * Write a document's flat rows of the document layer: its `Document` row, each comment's,
- * instruction's and doctype's row, and each foreign element's `OpenElementName` row with its
- * node's tuple (C18) and its parent's kind and namespace name, the document node's none.
+ * Write a document's flat rows of the document layer: its `Document` row, its XML declaration's
+ * `XmlDecl`, `EncodingDecl` and `SdDecl` rows where it writes each, each comment's, instruction's
+ * and doctype's row, and each foreign element's `OpenElementName` row with its node's tuple (C18)
+ * and its parent's kind and namespace name, the document node's none.
  *
  * @param document - The document as the importer lists it.
  * @param ids - The ids its rows are written under, whether it is in an assembly, and the context
@@ -950,6 +942,7 @@ export const documentRowsOf = (
         },
       ],
     ]),
+    EncodingDecl: new Map(rows.encodingDecls.map((row) => [row.node, row] as const)),
     OpenElementName: new Map(
       rows.openElementNames.map(({ local, namespace, node }) => {
         const row = ownerIn(byId, node, "an open element name");
@@ -975,6 +968,8 @@ export const documentRowsOf = (
       }),
     ),
     Pi: new Map(rows.pis.map(({ data, node, target }) => [node, { data, node, target }] as const)),
+    SdDecl: new Map(rows.sdDecls.map((row) => [row.node, row] as const)),
+    XmlDecl: new Map(rows.xmlDecls.map((row) => [row.node, row] as const)),
   };
 };
 

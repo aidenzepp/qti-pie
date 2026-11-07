@@ -198,12 +198,21 @@ const walkedPieces = (lexical: string) => {
 };
 
 /**
+ * The normal minimum an outcome declaration that writes none has, by its version (spec reading
+ * 149): QTI 3.0.1's, "Default = "0.0"" (information model §4.5.8), and none in QTI 3.0, whose
+ * §4.5.8 states no default.
+ */
+const minimumByDefault: ReadonlyMap<string, string> = new Map([["3.0.1", "0.0"]]);
+
+/**
  * Collect a declaration's expected rows, where it has them: its identifier written and naming
  * something once collapsed, its cardinality written and spelling a handle, and its base type
  * unwritten or spelling one. Its base type's row is written where it writes one, and an outcome
- * declaration's row of each scale attribute it writes, and of each pair of them it writes both
- * of. Any other declaration has no row, and no value set, value or field below it either (lane
- * NIL's audit, B10 and B11: a missing value is a row of its own relation, never a sentinel).
+ * declaration's row of each scale value it has, and of each pair of them it has both of: a mastery
+ * value and a normal maximum where written, and a normal minimum where written or else its
+ * version's default ({@link minimumByDefault}). Any other declaration has no row, and no value set,
+ * value or field below it either (lane NIL's audit, B10 and B11: a missing value is a row of its
+ * own relation, never a sentinel).
  *
  * @param expected - The rows so far.
  * @param met - The declaration's element.
@@ -250,19 +259,28 @@ const walkDeclaration = (
   }
 
   const mastery = valueOf("mastery-value");
-  const minimum = valueOf("normal-minimum");
+  const writtenMinimum = valueOf("normal-minimum");
+  const minimum = writtenMinimum ?? minimumByDefault.get(tuple.version);
   const maximum = valueOf("normal-maximum");
   if (tuple.kind === "qti-outcome-declaration") {
-    const { node } = tuple;
+    const { node, version } = tuple;
     const scale = [
       [expected.MasteryValue, mastery],
-      [expected.NormalMinimum, minimum],
       [expected.NormalMaximum, maximum],
     ] as const;
     for (const [rows, lexical] of scale) {
       if (lexical !== undefined) {
         rows.set(node, { lexical, node });
       }
+    }
+
+    if (minimum !== undefined) {
+      expected.NormalMinimum.set(node, {
+        lexical: minimum,
+        node,
+        version,
+        written: writtenMinimum !== undefined,
+      });
     }
 
     if (minimum !== undefined && mastery !== undefined) {

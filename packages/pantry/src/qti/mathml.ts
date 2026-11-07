@@ -4,11 +4,11 @@
  * number's content), align (action selection and alignment groups) and share (the `share` cycle).
  *
  * {@link mathmlRelations} and {@link mathmlLaws} are `#pantry/qti/schema.ts`'s MathML members: the
- * four families' relations and laws, spread in that order.
+ * four families' relations and laws, spread in that order; {@link mathmlLawsByName} names each law.
  */
 import { alignLaws, alignRelations } from "#pantry/qti/mathml-align.ts";
-import { applyLaws, applyRelations } from "#pantry/qti/mathml-apply.ts";
-import { cnLaws, cnRelations } from "#pantry/qti/mathml-cn.ts";
+import { applyLaws, applyRelations, headQualifierLaw } from "#pantry/qti/mathml-apply.ts";
+import { cnCountLaws, cnLaws, cnRelations } from "#pantry/qti/mathml-cn.ts";
 import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
 
 /**
@@ -25,3 +25,24 @@ export const mathmlRelations = {
  * The laws of the four MathML families, in the order apply, cn, align, share.
  */
 export const mathmlLaws = [...applyLaws, ...cnLaws, ...alignLaws, ...shareLaws];
+
+/**
+ * {@link mathmlLaws} by the law each states, the law's name its key, as every other module names its
+ * laws where it states them (`namedLaws`, `#pantry/import/refusal.ts`):
+ *
+ * - **MathML head qualifier:** the apply family's head qualifier containment, a pair MathML 3's
+ *   §4.4 syntax tables list (`mathml-apply.ts`, reading R6-head-qualifiers; its check is "MathML
+ *   arity", named by the check itself);
+ * - **MathML cn form:** a `cn`'s four part count containments, over the judged `cn`s and over every
+ *   typed `cn` ({@link cnCountLaws}): a wrong part count is a `cn` of the wrong form;
+ * - **E1 derived:** every other statement of the four families, a restatement of the tree.
+ */
+export const mathmlLawsByName = {
+  "E1 derived": mathmlLaws.filter(
+    (statement) =>
+      statement !== headQualifierLaw &&
+      !Object.values(cnCountLaws).some((count) => count === statement),
+  ),
+  "MathML cn form": Object.values(cnCountLaws),
+  "MathML head qualifier": [headQualifierLaw],
+};

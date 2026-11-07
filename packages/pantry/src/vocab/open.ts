@@ -52,14 +52,16 @@ import type {
   Processing,
 } from "#pantry/vocab/inventory/types.ts";
 import {
+  nameless,
   namespaceClassesUnder,
   namespaceClassOf,
+  namespaceNameOf,
   vocabularyNamespaces,
   xmlNamespace,
   xsiNamespace,
   xsNamespace,
 } from "#pantry/vocab/namespaces.ts";
-import type { NamespaceClass } from "#pantry/vocab/namespaces.ts";
+import type { NamespaceClass, NamespaceName, NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 
 /**
  * An `AttributeName` handle that stands for a class of open names: `data-*`, `foreign`,
@@ -143,23 +145,34 @@ export const schemaSets = {
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
 /**
- * Each vocabulary's name, by its namespace.
+ * Each vocabulary's name, by its namespace's URI.
  */
 const vocabularyOf: ReadonlyMap<string, string> = new Map(
   Object.entries(vocabularyNamespaces).map(([name, { namespace }]) => [namespace, name] as const),
 );
 
 /**
+ * Find the vocabulary a kind's elements are in.
+ *
+ * @param namespace - The kind's namespace.
+ * @returns Its vocabulary's name, or none for a namespace no vocabulary is in, for no namespace,
+ *   which none is in, and for a kind that names no element.
+ */
+const vocabularyIn = (namespace: NamespaceOfKind): Option.Option<string> =>
+  namespace._tag === "in" ? Option.fromNullishOr(vocabularyOf.get(namespace.uri)) : Option.none();
+
+/**
  * Whether an element of a namespace stands in documents assessed against a schema set: an element
  * of a vocabulary in those of each set that lists its vocabulary, and a foreign element, of no
- * vocabulary's namespace, in those of every set (spec reading 81).
+ * vocabulary's namespace or of a foreign kind, which names no element, in those of every set (spec
+ * reading 81).
  *
- * @param namespace - The element's namespace.
+ * @param namespace - The element's namespace, or its kind's.
  * @param members - The vocabularies the set lists.
  * @returns Whether its documents may be assessed against the set.
  */
-const standsIn = (namespace: string, members: readonly string[]): boolean =>
-  Option.match(Option.fromNullishOr(vocabularyOf.get(namespace)), {
+const standsIn = (namespace: NamespaceOfKind, members: readonly string[]): boolean =>
+  Option.match(vocabularyIn(namespace), {
     onNone: () => true,
     onSome: (vocabulary) => members.includes(vocabulary),
   });
@@ -169,14 +182,15 @@ const standsIn = (namespace: string, members: readonly string[]): boolean =>
  * a component of `child`'s namespace: some set lists both vocabularies. An element of no
  * vocabulary's namespace, a foreign element, stands in documents of every set (spec reading 81).
  *
- * @param parent - The element's namespace.
- * @param child - The component's namespace.
+ * @param parent - The element's namespace, or its kind's.
+ * @param child - The component's namespace, or its kind's.
  * @returns Whether a set the element's documents are assessed against lists the component's
  *   vocabulary.
  */
-const sharesSet = (parent: string, child: string): boolean =>
-  Option.match(Option.fromNullishOr(vocabularyOf.get(child)), {
-    // A component of no vocabulary's namespace is in no schema set.
+const sharesSet = (parent: NamespaceOfKind, child: NamespaceOfKind): boolean =>
+  Option.match(vocabularyIn(child), {
+    // A component of no vocabulary's namespace, or of a kind that names no element, is in no
+    // schema set.
     onNone: () => false,
     onSome: (other) =>
       Object.values(schemaSets).some(
@@ -199,12 +213,13 @@ const sharesSet = (parent: string, child: string): boolean =>
  * every set. One grammar serves all of a kind's documents, so its wildcards read a declaration any
  * of those sets holds: reading 81 states that limit.
  *
- * @param parent - The namespace of the wildcard's kind, empty for a kind of no vocabulary.
- * @param child - The namespace of the globally declared element.
+ * @param parent - The namespace of the wildcard's kind.
+ * @param child - The namespace of the globally declared element's kind.
  * @returns Whether the wildcard reads the element as its declaration.
  * @see {@link https://www.w3.org/TR/2004/REC-xmlschema-1-20041028/#cvc-wildcard | XML Schema Part 1, 3.10.4 Item Valid (Wildcard)}
  */
-export const wildcardReads = (parent: string, child: string): boolean => sharesSet(parent, child);
+export const wildcardReads = (parent: NamespaceOfKind, child: NamespaceOfKind): boolean =>
+  sharesSet(parent, child);
 
 /**
  * Whether an element a `lax` or `strict` wildcard holds with no global declaration of its
@@ -215,13 +230,13 @@ export const wildcardReads = (parent: string, child: string): boolean => sharesS
  * 3.10.1, `strict`: "or the item must have an xsi:type"). Where the `xsi:type` resolves to no type
  * there, a `strict` wildcard refuses the element and a `lax` one assesses it against nothing.
  *
- * @param parent - The namespace of the wildcard's kind.
+ * @param parent - The namespace of the wildcard's kind, or of the element that holds the wildcard.
  * @param type - The namespace of the type the `xsi:type` names.
  * @returns Whether the type is one the element's document is assessed against.
  * @see {@link https://www.w3.org/TR/2004/REC-xmlschema-1-20041028/#cvc-assess-elt | XML Schema Part 1, 3.3.4 Schema-Validity Assessment (Element)}
  */
-export const typeAvailable = (parent: string, type: string): boolean =>
-  type === xsNamespace || sharesSet(parent, type);
+export const typeAvailable = (parent: NamespaceOfKind, type: NamespaceName): boolean =>
+  (type._tag === "in" && type.uri === xsNamespace) || sharesSet(parent, type);
 
 /**
  * One attribute a schema declares globally, which a kind admits under its closed handle: its
@@ -275,11 +290,14 @@ export const attributeSchemaSets = {
  * one grammar serves all of them and admits the declarations any of those sets holds: reading 81's
  * limit, for attributes as for elements.
  *
- * @param host - The element's namespace, empty for a kind of no vocabulary.
+ * @param host - The namespace of the element's kind.
  * @param schema - The attribute-only schema.
  * @returns Whether a set the element's documents are assessed against imports it.
  */
-export const holdsGlobals = (host: string, schema: keyof typeof attributeSchemaSets): boolean => {
+export const holdsGlobals = (
+  host: NamespaceOfKind,
+  schema: keyof typeof attributeSchemaSets,
+): boolean => {
   const imports: readonly string[] = attributeSchemaSets[schema];
 
   return Object.entries(schemaSets).some(
@@ -409,9 +427,10 @@ export class OpenClassRefused extends Schema.TaggedError<OpenClassRefused>()("Op
 }
 
 /**
- * The element an attribute is on, as {@link openClassOf} reads it: its namespace name, which a
- * name in its own namespace is classed against; its local name, which a refusal names; and
- * whether it is a foreign element, whose names in no namespace are never `data-*`.
+ * The element an attribute is on, as {@link openClassOf} reads it: its namespace name, as crust's
+ * tree spells it, which a name in its own namespace is classed against; its local name, which a
+ * refusal names; and whether it is a foreign element, whose names in no namespace are never
+ * `data-*`.
  */
 export interface AttributeHost {
   readonly foreign: boolean;
@@ -458,7 +477,9 @@ export const openClassOf = (
     return refuse("declared");
   }
 
-  return Match.value(namespaceClassOf(namespace, element.namespace)).pipe(
+  return Match.value(
+    namespaceClassOf(namespaceNameOf(namespace), namespaceNameOf(element.namespace)),
+  ).pipe(
     Match.when("own", () =>
       Result.succeed<OpenName>({ _tag: "own-namespace", local, prefix, uri: namespace }),
     ),
@@ -515,12 +536,12 @@ const openAs = (name: OpenClass): GlobalAttribute => ({ ...openAttribute, name }
  *   and no schema declares one of an open class.
  *
  * @param wildcard - The wildcard's namespace constraint and processing, as the leaf states them.
- * @param host - The namespace of the element that holds it, empty for a kind of no vocabulary.
+ * @param host - The namespace of the kind of the element that holds it.
  * @returns The attributes, the `xml:` names first, then XLink's, then the classes in roster order.
  */
 export const attributesUnder = (
   { namespace, processing }: Pick<AttributeWildcard, "namespace" | "processing">,
-  host: string,
+  host: NamespaceOfKind,
 ): readonly GlobalAttribute[] => {
   const classes = namespaceClassesUnder[namespace];
   const other = classes.includes("other");
@@ -547,11 +568,11 @@ const anyTypeWildcard = { namespace: "##any", processing: "lax" } as const satis
 /**
  * The attributes every foreign kind admits: those {@link anyTypeWildcard} adds, but `data-*`, the
  * class of HTML's custom data names, which a foreign element's markup is not ({@link openClassOf}
- * reads its names in no namespace as `no-namespace`). A foreign element stands in documents of
- * every schema set, so it admits `xml.xsd`'s and XLink's names with their types
- * ({@link holdsGlobals}).
+ * reads its names in no namespace as `no-namespace`). A foreign kind names no element, so a
+ * foreign element stands in documents of every schema set, and admits `xml.xsd`'s and XLink's
+ * names with their types ({@link holdsGlobals}).
  */
 export const foreignAttributes: readonly GlobalAttribute[] = attributesUnder(
   anyTypeWildcard,
-  "",
+  nameless,
 ).filter(({ name }) => name !== "data-*");

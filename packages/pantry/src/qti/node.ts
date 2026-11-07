@@ -144,9 +144,8 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  *   manifest: its document's `Document.resourceType` at the root, its parent's below), `governs`,
  *   `prefix`, `nearest`, `nearestKind`, `state` (its content-automaton state, from `placedStep`),
  *   `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or whitespace node's characters,
- *   an entity reference's `&name;`, empty elsewhere), `first` and `last` (the first and last code
- *   points of its `chars`, empty where `chars` is) and `stringPiece` (its `chars` where its
- *   parent's text is checked or copied, empty elsewhere: the string value fold's step);
+ *   an entity reference's `&name;`, empty elsewhere: the string value fold's step), and `first` and
+ *   `last` (the first and last code points of its `chars`, empty where `chars` is);
  * - **the tree's group:** `parent`, which the nesting supplies and the root holds as its own id;
  * - **drawn:** `at`, `children`, `start`, `end`, and the attribute, namespace and typed text
  *   (`doubleValue`, `TextDoubleValue` of `#pantry/qti/attributes.ts`) family counts;
@@ -198,7 +197,6 @@ export const Node = relation(
     prefix: str.bytes(prefixBytes, str.regex(prefixPattern)),
     start: drawn(natural),
     state: closedId(Position),
-    stringPiece: keyText,
     stringValue: accumulated(keyText, ""),
     version: closedId(SchemaVersion),
     was: accumulated(closedId(Position), "0"),
@@ -389,26 +387,10 @@ export const copiedVocabularyText = (n: NodeRow) =>
   );
 
 /**
- * Decide on the host what {@link copiedTitleText} and {@link copiedVocabularyText} state of a
- * member, from its parent's kind and its grandparent's: whether an overlay copies its parent's
- * text by the two kinds together. The walk that writes `stringPiece` reads it
- * (`#pantry/import/write.ts`), so the host steps the rows the fold steps.
- *
- * @param parentKind - The member's parent's kind.
- * @param parentParentKind - The member's grandparent's kind, `document` for a child of the root
- *   element.
- * @returns Whether the member's characters are copied into its parent's string value.
- */
-export const copiedUnder = (parentKind: string, parentParentKind: string): boolean =>
-  (parentKind === "lom:string" && parentParentKind === "lom:title") ||
-  (vocabularyTermKinds.some((kind) => kind === parentKind) &&
-    parentParentKind === "lom:learningResourceType");
-
-/**
  * State that a member's characters make its parent's string value: it is a member, and its parent's
  * text is checked ({@link inCheckedText}) or copied ({@link copiedTextKinds},
- * {@link copiedTitleText}, {@link copiedVocabularyText}). The string value's fold steps these rows,
- * and `E1_derived` gives exactly these a `stringPiece`.
+ * {@link copiedTitleText}, {@link copiedVocabularyText}). The string value's fold steps these rows'
+ * `chars`.
  *
  * @param n - The row.
  * @returns The predicate.
@@ -570,14 +552,16 @@ const barredFold = fold(
  * grizzle refuses a key whose B-tree entry can pass PostgreSQL's `BTMaxItemSize`
  * (`UnrepresentableKey`). So `charsWas`, `charsAfter` and `stringValue` are `keyText`
  * (`#pantry/qti/limits.ts`), and a folded string value past its bound is refused by that type's
- * pattern, by name: a stated limit of the representation (spec reading 60). A fold's step is of its
- * accumulators' type, so the step is `stringPiece`, a `keyText` copy of the child's `chars` that
- * `E1_derived` proves, never `chars` itself, whose text no key holds.
+ * pattern, by name: a stated limit of the representation (spec reading 60). The step is the
+ * member's own `chars`, unbounded text no key holds: a fold's accumulators are of its step's type
+ * but for their own pattern and byte bound, and each one's domain refuses a running value outside
+ * its own (grizzle's README, "Families", `fold`), so a member whose characters alone pass the bound
+ * is refused by `charsAfter`'s.
  */
 const stringValueFold = fold(
   nodeTree,
   Monoid.concat,
-  on(select(Node, inStringValue), "parent", "stringPiece", "charsWas", "charsAfter"),
+  on(select(Node, inStringValue), "parent", "chars", "charsWas", "charsAfter"),
   on(Node, "id", "stringValue"),
 );
 
@@ -604,9 +588,8 @@ const stringValueFold = fold(
  *   unadmitted kind reads no position and is refused.
  * - **E1:** `ancestry` is `parentAncestry ∪ Enters(kind)`, only character data has characters,
  *   `first` and `last` are the first and last code points of `chars` (each one code point by its
- *   type, so `startsWith` and `endsWith` pin it), both empty exactly where `chars` is, and
- *   `stringPiece` is a member's `chars` where its parent's text is checked or copied, empty
- *   elsewhere.
+ *   type, so `startsWith` and `endsWith` pin it), and both empty exactly where `chars` is; and the
+ *   string value's fold over the `chars` of the members whose parent's text is checked or copied.
  * - **N6:** no banned flag above a node, and every flag it needs.
  * - **N7:** the last-slot copy, riding the last axis; `N7_Last`, its own model's `Last` holds every
  *   modeled node's last state; and the counted and barred positions' bounds, each on the owner,
@@ -636,10 +619,6 @@ export const nodeLawsByName = {
             n.eq(Compute.startsWith(n.chars, n.first), true),
             n.eq(Compute.endsWith(n.chars, n.last), true),
           ),
-        ),
-        n.or(
-          n.and(inStringValue(n), n.eq(n.stringPiece, n.chars)),
-          n.and(n.not(inStringValue(n)), n.eq(n.stringPiece, "")),
         ),
       ),
     ),

@@ -12,8 +12,8 @@
  * - **Laws by name.** Every law the schema states has a name, the law oracle's (`src/test/oracle.ts`
  *   `LawName`) where the oracle states the law, with its rule and its spec source
  *   ({@link lawTable}). A check is named by its law ({@link checkNameOf}); every other law is a row
- *   of {@link statedLaws}, keyed by its identity as the outcome reports it ({@link lawIdentity}).
- *   {@link lawRules} is the one table from identity to rule.
+ *   of {@link statedLaws}, as grizzle's `lawsOf` names it, matched to an outcome's law by grizzle's
+ *   `sameLaw` ({@link lawNameOf}).
  * - **One rule per refusal.** A family's axis foreign key discharges the family and every containment
  *   and fold merged into it, and its violation names them all, so a refusal picks the rule of its
  *   most specific law by one fixed order ({@link precedence}).
@@ -21,10 +21,11 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { date, lexical, str } from "@bjornpagen/grizzle";
-import type { Law, LawSide, Statement, Witness } from "@bjornpagen/grizzle";
+import { date, lawsOf, lexical, sameLaw, str } from "@bjornpagen/grizzle";
+import type { Law, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
+  Function as Fn,
   Formatter,
   Match,
   Option,
@@ -40,7 +41,13 @@ import { noSharedModel } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
-import { attributeLawsByName, EntityName, OpenLocal, Space } from "#pantry/qti/attributes.ts";
+import {
+  attributeLawsByName,
+  EntityName,
+  Idref,
+  OpenLocal,
+  Space,
+} from "#pantry/qti/attributes.ts";
 import {
   Affix,
   AssembledReference,
@@ -49,7 +56,6 @@ import {
   ExpressionAttribute,
   expressionLawsByName,
   referenceLawsByName,
-  ItemTiming,
   Literal,
   LiteralTyped,
   MappingItemRef,
@@ -60,6 +66,7 @@ import {
   PlacedDocument,
   PlacedReference,
   PlacedVariableRef,
+  PlacedVariableRefDeclaration,
   Processing,
   ProcessingTemplate,
   Reading,
@@ -72,11 +79,11 @@ import {
   TestReference,
   VariableLookup,
   VariableRef,
+  VariableRefDeclaration,
 } from "#pantry/qti/expressions.ts";
 import {
   chardataLawsByName,
   CommentText,
-  DeclaredEncoding,
   DoctypeText,
   EncName,
   EntryPath,
@@ -147,6 +154,8 @@ import {
   Item,
   LookupValue,
   MapKeyDirectedPair,
+  MapKeyFloat,
+  MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
   mappingLawsByName,
@@ -183,9 +192,9 @@ import {
 import { EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
 import { catalogLawsByName } from "#pantry/qti/catalog.ts";
-import { htmlLawsByName } from "#pantry/qti/html.ts";
-import { identityLawsByName } from "#pantry/qti/identity.ts";
-import { operatorLawsByName } from "#pantry/qti/operators.ts";
+import { HeaderToken, htmlLawsByName } from "#pantry/qti/html.ts";
+import { identityLawsByName, TextIdref } from "#pantry/qti/identity.ts";
+import { operatorLawsByName, ToleranceToken } from "#pantry/qti/operators.ts";
 import {
   EntryContent,
   HrefParams,
@@ -195,10 +204,10 @@ import {
   TextReference,
   TextReferencePath,
 } from "#pantry/qti/package.ts";
-import { mathmlLaws } from "#pantry/qti/mathml.ts";
-import { headQualifierLaw } from "#pantry/qti/mathml-apply.ts";
+import { mathmlLawsByName } from "#pantry/qti/mathml.ts";
 import { quotationLawsByName } from "#pantry/qti/quotation.ts";
 import { SectionSelection, SelectForm, testLawsByName, testRelations } from "#pantry/qti/tests.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipRefusal } from "#pantry/package/zip.ts";
 import type { Source } from "#pantry/vocab/inventory/types.ts";
@@ -299,119 +308,54 @@ export const lawOfCheck = (name: string): Option.Option<LawName> => {
 };
 
 /**
- * One term of a law side: a field, or `pred` of a natural field.
- */
-type Term = LawSide["terms"][number];
-
-/**
- * Write a term as a law's identity spells it: a field by its name, `pred` of one as `pred(field)`.
+ * The relation each side of a law reads, in the order the law names its sides: the part of a law
+ * {@link bucketOf} files it under beside its kind. A pattern and a contract read no relation.
  *
- * @param term - The term.
- * @returns Its text.
+ * @param law - A law as grizzle names it.
+ * @returns Its sides' relations.
  */
-const termText = (term: Term): string =>
-  term.kind === "field" ? term.field : `pred(${term.field})`;
-
-/**
- * Write a side as a law's identity spells it: its relation and its terms in the order the law
- * pairs them, as `Node(parent, pred(at), was)`.
- *
- * @param side - The side.
- * @returns Its text.
- */
-const sideText = (side: LawSide): string =>
-  `${side.relation}(${side.terms.map(termText).join(", ")})`;
-
-/**
- * Write a law's identity: the text {@link lawRules} is keyed by, one per law the schema states.
- *
- * A check is its name alone, since every check is named by its law ({@link checkNameOf}) and one
- * law may be checked on several relations, as E1 is on `Node`, `Attribute` and `Idref`. A side is
- * its relation and its terms; its selection is no part of the identity, since no two laws the
- * schema states differ by a selection alone, which the census in `refusal.oracle.test.ts` holds. A
- * family and a tree are their slots, since one count counts one family, and a fold is its family's
- * slots, its monoid and its end, since an accumulated end is filled by one statement. A generated
- * field is its relation and field, since grizzle names one by them where a closed read in its term
- * has no row and its column's NOT NULL refuses the row.
- *
- * @param law - A law as an `invariant-rejected` outcome names it.
- * @returns Its identity.
- */
-export const lawIdentity = (law: Law): string =>
+const relationsOf = (law: Law): readonly string[] =>
   Match.value(law).pipe(
     Match.discriminatorsExhaustive("kind")({
-      check: ({ name }) => `check ${name}`,
-      contained: ({ from, to }) => `contained ${sideText(from)} in ${sideText(to)}`,
-      contract: ({ contract }) => `contract ${contract}`,
-      coverage: ({ from, to }) => `coverage ${sideText(from)} in ${sideText(to)}`,
-      family: ({ order, slots }) => `${order} family ${slots.owner}.${slots.count}`,
-      fold: ({ end, family, monoid }) =>
-        `${monoid} fold over ${family.owner}.${family.count} into ${sideText(end)}`,
-      generated: ({ field, relation }) => `generated ${relation}.${field}`,
-      key: ({ side }) => `key ${sideText(side)}`,
-      pattern: ({ flags, source }) => `pattern /${source}/${flags}`,
-      primaryKey: ({ fields, relation }) => `primary key ${relation}(${fields.join(", ")})`,
-      tree: ({ root, slots }) => `tree ${slots.owner}.${slots.count} by ${root}`,
+      check: ({ relation }) => [relation],
+      contained: ({ from, to }) => [from.relation, to.relation],
+      contract: () => [],
+      coverage: ({ from, to }) => [from.relation, to.relation],
+      family: ({ member, slots }) => [member.relation, slots.owner],
+      fold: ({ end, family, step }) => [family.owner, step.relation, end.relation],
+      generated: ({ relation }) => [relation],
+      key: ({ side }) => [side.relation],
+      pattern: () => [],
+      primaryKey: ({ relation }) => [relation],
+      tree: ({ member, slots }) => [member.relation, slots.owner],
     }),
   );
 
 /**
- * The prefix that marks a `pred` term among a side's terms, as a statement's reading writes it.
+ * File a law by its kind and its sides' relations, so {@link lawNameOf} holds an outcome's law to
+ * the few stated laws of that kind over those relations, never every law of Qti.
+ *
+ * This is no identity of the law: grizzle's `sameLaw` decides whether two laws are one, comparing
+ * them whole, and two laws one bucket holds may still differ in their terms or selections. The
+ * bucket only needs one law's two descriptions to fall in it together, which they do, since
+ * `sameLaw` holds only of laws of one kind whose sides read the same relations.
+ *
+ * @param law - A law as grizzle names it.
+ * @returns Its bucket.
  */
-const predPrefix = "pred:";
+const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
 
 /**
- * Read one term of a side: `pred:field` is `pred(field)`, any other text a field.
- *
- * @param term - The term's text.
- * @returns The term.
+ * The law of a given kind.
  */
-const termOf = (term: string): Term =>
-  term.startsWith(predPrefix)
-    ? { field: term.slice(predPrefix.length), kind: "pred" }
-    : { field: term, kind: "field" };
+type LawOf<Kind extends Law["kind"]> = Extract<Law, { readonly kind: Kind }>;
 
 /**
- * Build a side over every fact of a relation, as a law states it.
- *
- * @param relation - The relation.
- * @param terms - Its terms in the order the law pairs them: a field's name, or `pred:field`.
- * @returns The side.
+ * A law no statement states, which {@link writtenLaws} writes out: a relation's primary key, a text
+ * pattern, or a generated field. Every other law is a statement's, as grizzle's `lawsOf` names it,
+ * so no row of the table can name a containment, key, family, tree or fold no statement states.
  */
-const sideOf = (relation: string, ...terms: readonly [string, ...string[]]): LawSide => ({
-  relation,
-  selection: { conjuncts: [] },
-  terms: pipe(terms, Arr.map(termOf)),
-});
-
-/**
- * Build a containment law.
- *
- * @param from - The side whose tuples are contained.
- * @param to - The side they are among.
- * @returns The law.
- */
-const containedIn = (from: LawSide, to: LawSide): Law => ({ from, kind: "contained", to });
-
-/**
- * Build both containments of a mirrors statement.
- *
- * @param left - One side.
- * @param right - The other.
- * @returns The two laws.
- */
-const mirrored = (left: LawSide, right: LawSide): readonly Law[] => [
-  containedIn(left, right),
-  containedIn(right, left),
-];
-
-/**
- * Build a key law over a side.
- *
- * @param side - The side.
- * @returns The law.
- */
-const keyOver = (side: LawSide): Law => ({ kind: "key", side });
+type WrittenLaw = LawOf<"generated" | "pattern" | "primaryKey">;
 
 /**
  * Build a relation's primary key law.
@@ -420,7 +364,7 @@ const keyOver = (side: LawSide): Law => ({ kind: "key", side });
  * @param fields - Its key's fields.
  * @returns The law.
  */
-const primaryKeyOf = (relation: string, ...fields: readonly string[]): Law => ({
+const primaryKeyOf = (relation: string, ...fields: readonly string[]): LawOf<"primaryKey"> => ({
   fields,
   kind: "primaryKey",
   relation,
@@ -438,42 +382,7 @@ const primaryKeyOf = (relation: string, ...fields: readonly string[]): Law => ({
 const generatedOf = <R extends { readonly fields: object; readonly name: string }>(
   relation: R,
   field: keyof R["fields"] & string,
-): Law => ({ field, kind: "generated", relation: relation.name });
-
-/**
- * Build a family law: an ordered family's members indexed by their own field, a counted family's
- * by a hidden one.
- *
- * @param order - `ordered` or `counted`.
- * @param member - The member side, its group then an ordered family's index.
- * @param owner - The owner relation.
- * @param count - The owner's drawn count.
- * @returns The law.
- */
-const familyOf = (
-  order: "counted" | "ordered",
-  member: LawSide,
-  owner: string,
-  count: string,
-): Law => ({ kind: "family", member, order, slots: { count, owner } });
-
-/**
- * Build a fold law over a family's slots.
- *
- * @param slots - The family's slots.
- * @param slots.owner - The owner relation.
- * @param slots.count - The owner's count.
- * @param monoid - The monoid it combines by.
- * @param step - The member side it steps by.
- * @param end - The owner side it ends at.
- * @returns The law.
- */
-const foldOf = (
-  slots: { readonly count: string; readonly owner: string },
-  monoid: Extract<Law, { kind: "fold" }>["monoid"],
-  step: LawSide,
-  end: LawSide,
-): Law => ({ end, family: slots, kind: "fold", monoid, step });
+): LawOf<"generated"> => ({ field, kind: "generated", relation: relation.name });
 
 /**
  * A text field type, as `str.regex` builds it: its pattern's source and flags.
@@ -487,7 +396,7 @@ interface TextType {
  */
 export interface PatternConflict {
   readonly first: LawName;
-  readonly identity: string;
+  readonly law: LawOf<"pattern">;
   readonly second: LawName;
 }
 
@@ -504,20 +413,19 @@ export interface PatternConflict {
  */
 export const patternLawsOf = (
   types: readonly (readonly [TextType, LawName])[],
-): Result.Result<readonly (readonly [Law, LawName])[], PatternConflict> => {
-  const named = new Map<string, readonly [Law, LawName]>();
+): Result.Result<readonly (readonly [LawOf<"pattern">, LawName])[], PatternConflict> => {
+  const named: (readonly [LawOf<"pattern">, LawName])[] = [];
   for (const [{ pattern }, name] of types) {
-    const law: Law = { flags: pattern.flags, kind: "pattern", source: pattern.source };
-    const identity = lawIdentity(law);
-    const held = named.get(identity);
+    const law: LawOf<"pattern"> = { flags: pattern.flags, kind: "pattern", source: pattern.source };
+    const held = named.find(([stated]) => sameLaw(stated, law));
     if (held === undefined) {
-      named.set(identity, [law, name]);
+      named.push([law, name]);
     } else if (held[1] !== name) {
-      return Result.fail({ first: held[1], identity, second: name });
+      return Result.fail({ first: held[1], law, second: name });
     }
   }
 
-  return Result.succeed([...named.values()]);
+  return Result.succeed(named);
 };
 
 /**
@@ -529,55 +437,53 @@ export const patternLawsOf = (
  */
 const patternLaws = (
   types: readonly (readonly [TextType, LawName])[],
-): readonly (readonly [Law, LawName])[] =>
+): readonly (readonly [LawOf<"pattern">, LawName])[] =>
   Result.getOrThrowWith(
     patternLawsOf(types),
-    ({ first, identity, second }) =>
+    ({ first, law, second }) =>
       new Error(
-        `Two rows of writtenLaws in src/import/refusal.ts name the law ${identity} "${first}" and "${second}", and grizzle reports one law per pattern. Name both rows by the one law a package can break, or give one type a pattern of its own.`,
+        `Two rows of writtenLaws in src/import/refusal.ts name the law ${Formatter.format(law)} "${first}" and "${second}", and grizzle reports one law per pattern. Name both rows by the one law a package can break, or give one type a pattern of its own.`,
       ),
   );
 
 /**
- * The names of the primary keys of `tests.ts`'s relations that are no overlay's: the assembled
- * test's instances, its names and its branch resolutions (Q5.13).
+ * The law each primary key of `tests.ts`'s relations is named by: an overlay's "Test overlay", and
+ * the assembled test's instances', its names' and its branch resolutions' (Q5.13) the law their
+ * key states. The record is total over `testRelations`, so a relation `tests.ts` gains is named
+ * here or fails to compile.
  */
-const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
-  ["AssembledName", "Test name key"],
-  ["BranchResolution", "Branch target"],
-  ["BranchShuffle", "Branch forward"],
-  ["BranchTarget", "Branch target"],
-  ["Instance", "Inclusion cycle"],
-  ["InstanceName", "Test name key"],
-  ["ItemRefTarget", "Item ref target"],
-]);
-
-/**
- * The containments that judge a `cn`'s part count: its `(type, parts)` in {@link CnParts}, and
- * each part's `(type, part, form)` in {@link CnForm}, over the judged `cn`s ({@link MathCn},
- * {@link CnPartText}) and again over every `cn` whose `type` lists a form ({@link CnCount},
- * {@link CnSlot}), whatever its base and whatever its parts hold. A `cn` of the wrong part count is
- * a `cn` of the wrong form, "MathML cn form" as the oracle names it, so {@link writtenLaws} names
- * them and the MathML group leaves them out.
- */
-const cnCountLaws: readonly Law[] = [
-  containedIn(sideOf("MathCn", "type", "parts"), sideOf("CnParts", "type", "parts")),
-  containedIn(
-    sideOf("CnPartText", "type", "part", "form"),
-    sideOf("CnForm", "type", "part", "form"),
-  ),
-  containedIn(sideOf("CnCount", "type", "parts"), sideOf("CnParts", "type", "parts")),
-  containedIn(sideOf("CnSlot", "type", "part", "form"), sideOf("CnForm", "type", "part", "form")),
-];
-
-const cnCountIdentities: ReadonlySet<string> = new Set(cnCountLaws.map(lawIdentity));
+const testKeyNames = {
+  AssembledName: "Test name key",
+  BranchResolution: "Branch target",
+  BranchRule: "Test overlay",
+  BranchShuffle: "Branch forward",
+  BranchTarget: "Branch target",
+  Inclusion: "Test overlay",
+  Instance: "Inclusion cycle",
+  InstanceName: "Test name key",
+  ItemRefDocument: "Test overlay",
+  ItemRefTarget: "Item ref target",
+  Named: "Test overlay",
+  Section: "Test overlay",
+  SectionMember: "Test overlay",
+  SectionOrdering: "Test overlay",
+  SectionSelection: "Test overlay",
+  Site: "Test overlay",
+  SitePath: "Test overlay",
+  SiteTarget: "Test overlay",
+  StimulusRef: "Test overlay",
+  TestDocument: "Test overlay",
+  TestFlag: "Test overlay",
+  TestToken: "Test overlay",
+  VariableMapping: "Test overlay",
+} as const satisfies { readonly [Name in keyof typeof testRelations]: LawName };
 
 /**
  * The laws written out row by row, each as its outcome names it, with its name in {@link lawTable}:
  * the text types' patterns, each read from the type its module exports, so a bound that moves moves
- * its row; each relation's primary key; the generated fields' laws; and the laws of the modules
- * that do not yet name them where they state them ({@link namedLaws} holds those that do), in the
- * module order of the plan's §C.
+ * its row; each relation's primary key; and the generated fields' laws ({@link WrittenLaw}), in the
+ * module order of the plan's §C. A statement's laws are named where it is stated
+ * ({@link namedLaws}).
  *
  * - **The text patterns**, in three classes (the orchestrator's ruling of 2026-11-06):
  *
@@ -598,13 +504,12 @@ const cnCountIdentities: ReadonlySet<string> = new Set(cnCountLaws.map(lawIdenti
  *   - The whitespace around an IDREF token and an entry's base64 bytes are the host's own split and
  *     encoding, "E1 derived".
  * - **Each relation's primary key**, under the law its module's rows belong to.
- * - **The other overlays**: the keys, families and containments the W5 briefs state exactly.
  * - **The generated fields**: each one's law, its term's NULL, beside its relation's rows, under the
  *   law that states its value exists. No term of Qti's reads `C.at`, the one read that can miss, so
  *   no row breaks one. Each row says which law refuses first, or why none needs to, and is stated
  *   so an outcome naming it still has a rule.
  */
-const writtenLaws: readonly (readonly [Law, LawName])[] = [
+const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   ...patternLaws([
     [keyText, "Key text bound"],
     [namespaceText, "Key text bound"],
@@ -619,7 +524,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     [PiData, "XML production"],
     [DoctypeText, "XML production"],
     [EncName, "XML production"],
-    [DeclaredEncoding, "XML production"],
     [XmlVersion, "XML production"],
     [NcName, "XML production"],
     [EntityName, "XML production"],
@@ -646,6 +550,9 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       ["Pi", "pi arm"],
       ["Doctype", "doctype arm"],
       ["Document", "Document"],
+      ["XmlDecl", "Document"],
+      ["EncodingDecl", "Document"],
+      ["SdDecl", "Document"],
     ] as const
   ).map(([relation, name]) => [primaryKeyOf(relation, "node"), name] as const),
   [primaryKeyOf("Namespace", "node", "at"), "Namespace family"],
@@ -708,8 +615,19 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
   [primaryKeyOf("TableHeader", "node"), "E1 derived"],
   [primaryKeyOf("Rounding", "node"), "E1 derived"],
+  [primaryKeyOf("RoundingFigures", "node"), "E1 derived"],
+  [primaryKeyOf("RoundingMode", "node"), "E1 derived"],
+  [primaryKeyOf("RoundingModeFigures", "node"), "E1 derived"],
   [primaryKeyOf("Tolerance", "node"), "E1 derived"],
   [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
+  // An IDREF token's piece, a header's and a tolerance value's, is its own whitespace and token
+  // concatenated, its concat fold's step: written texts, none NULL, so the term is never NULL and
+  // no row breaks these. A piece past its keyText bound is refused by that type's pattern law, "Key
+  // text bound".
+  [generatedOf(Idref, "piece"), "E1 derived"],
+  [generatedOf(TextIdref, "piece"), "E1 derived"],
+  [generatedOf(HeaderToken, "piece"), "E1 derived"],
+  [generatedOf(ToleranceToken, "piece"), "E1 derived"],
   ...(
     [
       "Declaration",
@@ -740,7 +658,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ({ name, primaryKey }) =>
       [
         { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
-        testKeyNames.get(name) ?? "Test overlay",
+        testKeyNames[name],
       ] as const,
   ),
   ...patternLaws([[SelectForm, "E1 derived"]]),
@@ -849,12 +767,22 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "Mapping overlay",
       ] as const,
   ),
+  // A typed map key's generated fields read its own split, by concatenation and conditionals, or a
+  // float key's cast, which `floatKeyPattern`'s law above holds to the language the cast reads
+  // total. No term reads a closed relation, so none is NULL and no row breaks these.
+  [generatedOf(MapKeyInteger, "negative"), "E1 derived"],
+  [generatedOf(MapKeyInteger, "value"), "E1 derived"],
+  [generatedOf(MapKeyFloat, "value"), "E1 derived"],
+  [generatedOf(MapKeyPoint, "value"), "E1 derived"],
+  [generatedOf(MapKeyPoint, "xNegative"), "E1 derived"],
+  [generatedOf(MapKeyPoint, "yNegative"), "E1 derived"],
+  [generatedOf(MapKeyPair, "value"), "E1 derived"],
+  [generatedOf(MapKeyDirectedPair, "value"), "E1 derived"],
   ...[
     AssembledReference,
     DeclarationTable,
     Expression,
     ExpressionAttribute,
-    ItemTiming,
     Literal,
     LiteralTyped,
     MappingItemRef,
@@ -865,6 +793,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     PlacedDocument,
     PlacedReference,
     PlacedVariableRef,
+    PlacedVariableRefDeclaration,
     Processing,
     ProcessingTemplate,
     Reading,
@@ -876,6 +805,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     TestReference,
     VariableLookup,
     VariableRef,
+    VariableRefDeclaration,
   ].map(
     ({ name, primaryKey }) =>
       [
@@ -883,6 +813,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
+  // A segment's token is its separator and its piece concatenated, its concat fold's step: written
+  // texts, none NULL, so no row breaks this. A token past its keyText bound is refused by that
+  // type's pattern law, "Key text bound".
+  [generatedOf(ReferenceSegment, "token"), "E1 derived"],
   ...[Reference, ReferencePath, TextReference, TextReferencePath].map(
     ({ name, primaryKey }) =>
       [
@@ -890,20 +824,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "Reference overlay",
       ] as const,
   ),
-  // The one MathML statement that reads as its own law: an application's head qualifier is a pair
-  // MathML 3's §4.4 syntax tables list (`mathml-apply.ts`, reading R6-head-qualifiers). The rest of the
-  // module is a restatement of the tree, "E1 derived", through lawGroups.
-  [
-    containedIn(
-      sideOf("MathQualifier", "head", "kind"),
-      sideOf("HeadQualifier", "head", "qualifier"),
-    ),
-    "MathML head qualifier",
-  ],
-  // A cn's part count and a part's place, over the judged cns and over every typed cn, are the
-  // oracle's "MathML cn form" (a wrong part count is a cn of the wrong form), so the group leaves
-  // them out as it leaves the head qualifier.
-  ...cnCountLaws.map((law) => [law, "MathML cn form"] as const),
   [primaryKeyOf("MathApply", "node"), "E1 derived"],
   [primaryKeyOf("MathArgument", "node"), "E1 derived"],
   [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
@@ -922,165 +842,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("PlacedMathRank", "instance", "node"), "E1 derived"],
   [primaryKeyOf("PlacedShareTarget", "instance", "node"), "E1 derived"],
   [primaryKeyOf("ShareTarget", "node"), "E1 derived"],
-];
-
-/**
- * A term of a side as a statement value holds it: a field's name, or `pred` of one.
- */
-const TermValue = Schema.Union([
-  Schema.String,
-  Schema.Struct({ field: Schema.String, kind: Schema.Literal("pred") }),
-]);
-
-/**
- * A relation as a statement value names it.
- */
-const NamedValue = Schema.Struct({ name: Schema.String });
-
-/**
- * A side as a statement value holds it: its source, a relation or a selection of one, and its
- * terms. A selection's predicate is no part of the value, nor of a law's identity.
- */
-const SideValue = Schema.Struct({
-  source: Schema.Union([NamedValue, Schema.Struct({ relation: NamedValue })]),
-  terms: Schema.NonEmptyArray(TermValue),
-});
-
-/**
- * A family's slots as a statement value holds them: its owner relation and the owner's count field.
- */
-const SlotsValue = Schema.Struct({ count: Schema.String, owner: NamedValue });
-
-/**
- * A family statement's value: an `ordered` or `counted` family's member side and slots, or a
- * `tree`'s and the root field each tree's rows share, which grizzle's `tree` always holds
- * (`schema/statements.ts` `treeBuilder`).
- */
-const FamilyValue = Schema.Union([
-  Schema.Struct({
-    family: SideValue,
-    kind: Schema.Literals(["counted", "ordered"]),
-    slots: SlotsValue,
-  }),
-  Schema.Struct({
-    family: SideValue,
-    kind: Schema.Literal("tree"),
-    root: Schema.String,
-    slots: SlotsValue,
-  }),
-]);
-
-/**
- * Every statement value a module's group of {@link namedLaws} may hold, as grizzle's constructors
- * build it.
- */
-const StatementValue = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("check") }),
-  Schema.Struct({ kind: Schema.Literal("key"), side: SideValue }),
-  Schema.Struct({
-    kind: Schema.Literals(["contained", "mirrors"]),
-    left: SideValue,
-    right: SideValue,
-  }),
-  FamilyValue,
-  Schema.Struct({
-    end: SideValue,
-    family: FamilyValue,
-    kind: Schema.Literal("fold"),
-    monoid: Schema.Struct({
-      name: Schema.Literals(["count", "sum", "or", "twos", "max", "concat"]),
-    }),
-    step: SideValue,
-  }),
-]);
-
-/**
- * Read a statement value's side as a law names it.
- *
- * @param side - The side's value.
- * @returns The side.
- */
-const sideRead = (side: typeof SideValue.Type): LawSide => ({
-  relation: "relation" in side.source ? side.source.relation.name : side.source.name,
-  selection: { conjuncts: [] },
-  terms: pipe(
-    side.terms,
-    Arr.map((term): Term => (Predicate.isString(term) ? termOf(term) : term)),
-  ),
-});
-
-/**
- * Read the laws a statement states that are no check, as an `invariant-rejected` outcome names
- * them: a mirrors is its two containments, and a check is named by its law already.
- *
- * @param statement - A statement of a schema.
- * @returns Its laws, none for a check or a statement value no law reads.
- */
-export const lawsOfStatement = (statement: Statement): readonly Law[] =>
-  Option.match(Schema.decodeUnknownOption(StatementValue)(statement), {
-    onNone: () => [],
-    onSome: (read): readonly Law[] => {
-      if (read.kind === "check") {
-        return [];
-      }
-
-      if (read.kind === "key") {
-        return [keyOver(sideRead(read.side))];
-      }
-
-      if (read.kind === "contained" || read.kind === "mirrors") {
-        const left = sideRead(read.left);
-        const right = sideRead(read.right);
-
-        return read.kind === "contained" ? [containedIn(left, right)] : mirrored(left, right);
-      }
-
-      if (read.kind === "fold") {
-        return [
-          foldOf(
-            { count: read.family.slots.count, owner: read.family.slots.owner.name },
-            read.monoid.name,
-            sideRead(read.step),
-            sideRead(read.end),
-          ),
-        ];
-      }
-
-      if (!("slots" in read)) {
-        return [];
-      }
-
-      const member = sideRead(read.family);
-      const slots = { count: read.slots.count, owner: read.slots.owner.name };
-
-      return [
-        read.kind === "tree"
-          ? { kind: "tree", member, root: read.root, slots }
-          : familyOf(read.kind, member, slots.owner, slots.count),
-      ];
-    },
-  });
-
-/**
- * The law groups a module exports, each with the one name all of its laws but its checks are
- * stated under, so a law the group gains is named with it: MathML's, the one module whose laws are
- * not yet named where they are stated ({@link namedLaws} holds the others).
- *
- * - **MathML** (`mathml.ts`, reading 2): each statement of its four families is a restatement, "E1
- *   derived", and a row of {@link writtenLaws} names a law of a group otherwise: the apply family's
- *   head qualifier containment ("MathML head qualifier"; its check is "MathML arity") and a cn's
- *   four part count containments, over the judged cns and over every typed cn ("MathML cn form"),
- *   which the group leaves out, so that every law a group holds keeps the group's name.
- */
-export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
-  [
-    mathmlLaws.filter(
-      (statement) =>
-        statement !== headQualifierLaw &&
-        !lawsOfStatement(statement).some((law) => cnCountIdentities.has(lawIdentity(law))),
-    ),
-    "E1 derived",
-  ],
 ];
 
 /**
@@ -1109,68 +870,104 @@ export const namedLaws: readonly LawsByName[] = [
   quotationLawsByName,
   operatorLawsByName,
   catalogLawsByName,
+  mathmlLawsByName,
   testLawsByName,
 ];
 
 /**
- * Read the laws a module names: every law of each statement under its law's name, a check by its
- * own name already.
+ * Read a module's groups: each law name it groups statements under, with them. A name the module
+ * states no law of has no entry.
  *
  * @param byName - The module's statements by law.
- * @returns Its laws, each with its name.
+ * @returns Its groups.
  */
-const lawsNamedIn = (byName: LawsByName): readonly (readonly [Law, LawName])[] =>
-  lawNames.flatMap((name) =>
-    (byName[name] ?? []).flatMap(lawsOfStatement).map((law) => [law, name] as const),
+const groupsOf = (byName: LawsByName): readonly (readonly [LawName, readonly Statement[]])[] =>
+  Object.entries(byName).flatMap(([held, statements]) =>
+    lawNames.flatMap((name) => (name === held ? [[name, statements] as const] : [])),
   );
 
 /**
- * Every law the schema states that is no check, each as its outcome names it, with its name in
- * {@link lawTable}: every law of {@link namedLaws}, under the name its module groups it by, then
- * {@link writtenLaws}' rows for the laws no module names, then every law of {@link lawGroups} they
- * do not name, each once.
+ * The name of the law each statement of {@link namedLaws} states, by the statement: the very value
+ * a module declares and `Qti` lists, which grizzle's `lawsOf` returns beside its laws.
  */
-export const statedLaws: readonly (readonly [Law, LawName])[] = Arr.dedupeWith(
-  [
-    ...namedLaws.flatMap(lawsNamedIn),
-    ...writtenLaws,
-    ...lawGroups.flatMap(([statements, name]) =>
-      statements.flatMap(lawsOfStatement).map((law) => [law, name] as const),
+const nameOfStatement: ReadonlyMap<Statement, LawName> = new Map(
+  namedLaws.flatMap((byName) =>
+    groupsOf(byName).flatMap(([name, statements]) =>
+      statements.map((statement) => [statement, name] as const),
     ),
-  ],
-  ([a], [b]) => lawIdentity(a) === lawIdentity(b),
+  ),
 );
 
 /**
- * Each law's name by its identity: every law's check, by {@link checkNameOf}, and every law of
- * {@link statedLaws}.
+ * The laws a schema states that are no check, each with its name, and the same laws filed by
+ * {@link bucketOf}.
  */
-const namesByIdentity: ReadonlyMap<string, LawName> = new Map([
-  ...lawNames.map((name) => [`check ${checkNameOf(name)}`, name] as const),
-  ...statedLaws.map(([law, name]) => [lawIdentity(law), name] as const),
-]);
+interface Stated {
+  readonly buckets: ReadonlyMap<string, Arr.NonEmptyReadonlyArray<readonly [Law, LawName]>>;
+  readonly laws: readonly (readonly [Law, LawName])[];
+}
 
 /**
- * The rule each law the schema states keeps, by the law's identity ({@link lawIdentity}): the one
- * table from a law as grizzle reports it to the rule its refusal names.
+ * Read the laws a schema states that are no check, each as an `invariant-rejected` outcome names
+ * it, with its name in {@link lawTable}: each statement's laws as grizzle's `lawsOf` gives them, a
+ * mirrors' two containments and an alternatives law's each its statement's, under the name its
+ * module groups the statement by ({@link nameOfStatement}); then {@link writtenLaws}' rows, the
+ * primary keys, patterns and generated fields no statement states. A check is named by its own
+ * name ({@link lawOfCheck}), so its law is left out. A statement no module groups names none of its
+ * laws, which the census in `refusal.oracle.test.ts` refuses.
+ *
+ * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
+ * schema's identity: the first refusal compiles it once per process, loading this module never
+ * does, and every later call returns the same laws.
+ *
+ * @param schema - The schema, `Qti`.
+ * @returns Its laws, with their names.
  */
-export const lawRules: ReadonlyMap<string, Rule> = new Map(
-  [...namesByIdentity].map(([identity, name]) => [identity, lawTable[name].rule] as const),
-);
+const statedIn = Fn.memoize((schema: typeof Qti): Stated => {
+  const laws = [
+    ...lawsOf(schema).flatMap(({ laws: own, statement }) =>
+      Option.match(Option.fromUndefinedOr(nameOfStatement.get(statement)), {
+        onNone: () => [],
+        onSome: (name) =>
+          own.flatMap((law) => (law.kind === "check" ? [] : [[law, name] as const])),
+      }),
+    ),
+    ...writtenLaws,
+  ];
+
+  return { buckets: new Map(Object.entries(Arr.groupBy(laws, ([law]) => bucketOf(law)))), laws };
+});
 
 /**
- * Name the law an outcome's law is.
+ * Every law `Qti` states that is no check, each as its outcome names it, with its name in
+ * {@link lawTable} ({@link statedIn}). The first call compiles Qti's law model.
+ *
+ * @returns The laws, with their names.
+ */
+export const statedLaws = (): readonly (readonly [Law, LawName])[] => statedIn(Qti).laws;
+
+/**
+ * Name the law an outcome's law is: a check by its name ({@link lawOfCheck}), any other law by the
+ * law of {@link statedLaws} that grizzle's `sameLaw` holds it to be, among those of its bucket
+ * ({@link bucketOf}).
+ *
+ * `sameLaw` encodes both laws on every call, so the name is memoized by the law value (Effect's
+ * `Function.memoize`): a law read again, as a refusal's laws are when the same outcome is explained
+ * and ruled, is named once.
  *
  * @param law - A law as an `invariant-rejected` outcome names it.
  * @returns Its name, or none for a law no row of the table states.
  */
-export const lawNameOf = (law: Law): Option.Option<LawName> =>
-  Option.fromUndefinedOr(namesByIdentity.get(lawIdentity(law)));
-
-/**
- * Each rule's place in {@link precedence}.
- */
-const ranks: ReadonlyMap<Rule, number> = new Map(precedence.map((rule, rank) => [rule, rank]));
+export const lawNameOf: (law: Law) => Option.Option<LawName> = Fn.memoize(
+  (law: Law): Option.Option<LawName> =>
+    law.kind === "check"
+      ? lawOfCheck(law.name)
+      : pipe(
+          Option.fromUndefinedOr(statedIn(Qti).buckets.get(bucketOf(law))),
+          Option.flatMap(Arr.findFirst(([stated]) => sameLaw(stated, law))),
+          Option.map(([, name]) => name),
+        ),
+);
 
 /**
  * Name the one rule a refusal that names `laws` is refused under: the most specific rule among
@@ -1187,9 +984,9 @@ export const ruleOfLaws = (laws: Arr.NonEmptyReadonlyArray<Law>): Option.Option<
   Arr.head(
     Arr.sort(
       laws.flatMap((law) =>
-        Option.toArray(Option.map(lawNameOf(law), (name): Rule => lawTable[name].rule)),
+        Option.toArray(Option.map(lawNameOf(law), (name) => lawTable[name].rule)),
       ),
-      Order.mapInput(Order.Number, (rule: Rule) => ranks.get(rule) ?? precedence.length),
+      Order.mapInput(Order.Number, (rule: (typeof precedence)[number]) => precedence.indexOf(rule)),
     ),
   );
 
@@ -1234,8 +1031,8 @@ export interface Allowed {
  */
 export interface Explanation {
   /**
-   * Each law, its rule and its identity; the witness's row; and for a content-order law the state
-   * it broke at and what its model allows there.
+   * Each law, its rule and the law as grizzle reports it; the witness's row; and for a
+   * content-order law the state it broke at and what its model allows there.
    */
   readonly detail: string;
   /**
@@ -1324,7 +1121,6 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
   }
 
   const { admission, content } = constants;
-  const symbols = Map.groupBy(content.symbol.rows, ({ model }) => model);
   const index: ContentIndex = {
     ends: grouped(content.last.rows.map(({ model, position }) => [model, position] as const)),
     kinds: grouped([
@@ -1332,11 +1128,15 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
         ({ child, parent, position, version }) =>
           [positionKey(version, parent, position), child] as const,
       ),
+      // Each family's shared model's symbols, joined on the model in each side's own order: a
+      // scan, run once per grammar, so the index holds no lookup that can miss.
       ...content.sharedModelOf.rows.flatMap(({ model, parent, version }) =>
         model === noSharedModel
           ? []
-          : (symbols.get(model) ?? []).map(
-              ({ kind, position }) => [positionKey(version, parent, position), kind] as const,
+          : content.symbol.rows.flatMap((symbol) =>
+              symbol.model === model
+                ? [[positionKey(version, parent, symbol.position), symbol.kind] as const]
+                : [],
             ),
       ),
     ]),
@@ -1370,10 +1170,10 @@ const byPosition = Order.mapInput(Order.Number, Number);
 
 /**
  * The state a content-order law broke at, read from a row: the version, the model's kind and the
- * state, and the node's own kind.
+ * state, and the node's own kind where the row holds it.
  */
 interface BrokenState {
-  readonly kind: string;
+  readonly kind: Option.Option<string>;
   readonly law: LawName;
   readonly parent: string;
   readonly state: string;
@@ -1401,25 +1201,48 @@ const brokenStateOf = (law: LawName, witness: RefusalWitness): Option.Option<Bro
 
   return version === undefined || parent === undefined || state === undefined
     ? Option.none()
-    : Option.some({ kind: values["kind"] ?? parent, law, parent, state, version });
+    : Option.some({
+        kind: Option.fromUndefinedOr(values["kind"]),
+        law,
+        parent,
+        state,
+        version,
+      });
 };
+
+/**
+ * Read the values a grouping of the index holds under a key: none where the grouping holds no
+ * group of it, as a relation's image of a key no row has is empty.
+ *
+ * @param groups - The grouping.
+ * @param key - The key.
+ * @returns Its values, in the grouping's order.
+ */
+const groupAt = (groups: ReadonlyMap<string, readonly string[]>, key: string): readonly string[] =>
+  Option.toArray(Option.fromUndefinedOr(groups.get(key))).flat();
 
 /**
  * Name the positions a model allows after a state, with their kinds and sources.
  *
  * @param broken - The state.
  * @param constants - The installed grammar's rows.
- * @returns The positions, ascending by code.
+ * @returns The positions, ascending by code, and the parent's content model; none where the
+ *   grammar holds no content model of the parent in its version.
  */
-const allowedAfter = (broken: BrokenState, constants: RefusalConstants): readonly Allowed[] => {
+const allowedAfter = (
+  broken: BrokenState,
+  constants: RefusalConstants,
+): Option.Option<{ readonly allowed: readonly Allowed[]; readonly model: string }> => {
   const index = contentIndexOf(constants);
   const { parent, state, version } = broken;
-  const model = index.models.get(`${version} ${parent}`) ?? "";
 
-  return Arr.sort(index.next.get(`${model} ${state}`) ?? [], byPosition).map((position) => ({
-    kinds: index.kinds.get(positionKey(version, parent, position)) ?? [],
-    position,
-    source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
+  return Option.map(Option.fromUndefinedOr(index.models.get(`${version} ${parent}`)), (model) => ({
+    allowed: Arr.sort(groupAt(index.next, `${model} ${state}`), byPosition).map((position) => ({
+      kinds: groupAt(index.kinds, positionKey(version, parent, position)),
+      position,
+      source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
+    })),
+    model,
   }));
 };
 
@@ -1435,10 +1258,13 @@ const allowedText = (allowed: readonly Allowed[]): string =>
     : allowed
         .map(
           ({ kinds, position, source }) =>
-            `${position} (${kinds.join(" ") || "no kind"}${Option.match(source, {
-              onNone: () => "",
-              onSome: (text) => `, ${text}`,
-            })})`,
+            `${position} (${kinds.length === 0 ? "no kind" : kinds.join(" ")}${Option.match(
+              source,
+              {
+                onNone: () => "",
+                onSome: (text) => `, ${text}`,
+              },
+            )})`,
         )
         .join("; ");
 
@@ -1447,24 +1273,26 @@ const allowedText = (allowed: readonly Allowed[]): string =>
  * or where its family ends in its own, and what the model allows next.
  *
  * @param broken - The state.
- * @param allowed - What the model allows after it.
+ * @param after - What the model allows after it, and the model.
+ * @param after.allowed - The positions it allows.
+ * @param after.model - The parent's content model.
  * @param constants - The installed grammar's rows.
  * @returns The sentence.
  */
 const brokenStateText = (
   broken: BrokenState,
-  allowed: readonly Allowed[],
+  after: { readonly allowed: readonly Allowed[]; readonly model: string },
   constants: RefusalConstants,
 ): string => {
   const { kind, parent, state, version } = broken;
+  const { allowed, model } = after;
   if (broken.law === "N7 Last") {
-    const index = contentIndexOf(constants);
-    const ends = index.ends.get(index.models.get(`${version} ${parent}`) ?? "") ?? [];
+    const ends = Arr.sort(groupAt(contentIndexOf(constants).ends, model), byPosition);
 
-    return `${parent}'s children end in state ${state} of its content model in ${version}, which ends only in ${Arr.sort(ends, byPosition).join(", ") || "no state"}; after state ${state} it needs one of ${allowedText(allowed)}`;
+    return `${parent}'s children end in state ${state} of its content model in ${version}, which ends only in ${ends.length === 0 ? "no state" : ends.join(", ")}; after state ${state} it needs one of ${allowedText(allowed)}`;
   }
 
-  return `${kind} follows state ${state} of ${parent}'s content model in ${version}, which allows next ${allowedText(allowed)}`;
+  return `${Option.match(kind, { onNone: () => "A child", onSome: (own) => own })} follows state ${state} of ${parent}'s content model in ${version}, which allows next ${allowedText(allowed)}`;
 };
 
 /**
@@ -1490,7 +1318,8 @@ const witnessText = (witness: RefusalWitness): string => {
 /**
  * Explain a refusal from its laws, its witness and the installed grammar, as a pure function.
  *
- * Each law is named with its rule and identity, and its spec source joins `sources`. For a
+ * Each law is named with its rule and shown as grizzle reports it (Effect's `Formatter.format`),
+ * and its spec source joins `sources`. For a
  * content-order law (N5's `Follow` step, N7's `Last` end) whose row the witness gives, the
  * explanation names the positions `Follow` allows after the state it broke at, each with its kinds
  * and the XSD particle or reading that states it, and `sources` adds the model's and each
@@ -1506,24 +1335,26 @@ export const explain = (
   witness: RefusalWitness,
   constants: RefusalConstants,
 ): Explanation => {
-  const named = laws.map((law) => ({ identity: lawIdentity(law), name: lawNameOf(law) }));
+  const named = laws.map((law) => ({ law, name: lawNameOf(law) }));
   const broken = Arr.head(
     named.flatMap(({ name }) =>
       Option.toArray(name.pipe(Option.flatMap((law) => brokenStateOf(law, witness)))),
     ),
   );
-  const next = broken.pipe(Option.map((state) => allowedAfter(state, constants)));
+  const after = broken.pipe(Option.flatMap((state) => allowedAfter(state, constants)));
+  const next = after.pipe(Option.map(({ allowed }) => allowed));
   const lawText = named
-    .map(({ identity, name }) =>
+    .map(({ law, name }) =>
       Option.match(name, {
-        onNone: () => `${identity}, which no rule of the law table owns`,
-        onSome: (law) => `${law} (rule ${lawTable[law].rule}): ${identity}`,
+        onNone: () => `${Formatter.format(law)}, which no rule of the law table owns`,
+        onSome: (held) => `${held} (rule ${lawTable[held].rule}): ${Formatter.format(law)}`,
       }),
     )
     .join("; ");
-  const stateText = Option.match(Option.all({ allowed: next, broken }), {
+  const stateText = Option.match(Option.all({ after, broken }), {
     onNone: () => "",
-    onSome: ({ allowed, broken: state }) => `. ${brokenStateText(state, allowed, constants)}`,
+    onSome: ({ after: allowed, broken: state }) =>
+      `. ${brokenStateText(state, allowed, constants)}`,
   });
   const modelSources = Option.match(broken, {
     onNone: () => [],
@@ -1531,7 +1362,9 @@ export const explain = (
       ...Option.toArray(
         Option.map(constants.content.sourceOf({ parent, position: "0", version }), sourceText),
       ),
-      ...Option.getOrElse(next, () => []).flatMap(({ source }) => Option.toArray(source)),
+      ...Option.toArray(next)
+        .flat()
+        .flatMap(({ source }) => Option.toArray(source)),
     ],
   });
   const [first, ...rest] = Arr.dedupe([
@@ -1556,9 +1389,9 @@ export const explain = (
  *
  * `detail` says what broke it, and `origin` where the refusal came from
  * (`#pantry/package/refusal-origin.ts`): the reader, the container or the codec, or the database,
- * whose case carries the laws it named, each parsed into its identity, name and rule, where each
- * is stated, and how the refusal names the row that broke them. A reader that tells the user where
- * to look reads the witness's kind rather than the detail's wording.
+ * whose case carries the laws it named, each shown as grizzle reports it with its name and rule,
+ * where each is stated, and how the refusal names the row that broke them. A reader that tells the
+ * user where to look reads the witness's kind rather than the detail's wording.
  */
 export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRefused", {
   detail: Schema.String,
@@ -1585,7 +1418,7 @@ export class UnownedLaws extends Schema.TaggedError<UnownedLaws>()("UnownedLaws"
    * The laws, and the repair.
    */
   override get message(): string {
-    return `No rule owns the laws ${this.laws.join("; ")}. Add each to statedLaws in src/import/refusal.ts under the law it states, and run the census in refusal.oracle.test.ts.`;
+    return `No rule owns the laws ${this.laws.join("; ")}. Group the statement of each under the law it states in its module's laws by name (namedLaws in src/import/refusal.ts), or give a primary key, pattern or generated field a row of writtenLaws there, and run the census in refusal.oracle.test.ts.`;
   }
 }
 
@@ -1607,13 +1440,13 @@ export const refusalOfLaws = (
   constants: RefusalConstants,
 ): Result.Result<ImportRefused, UnownedLaws> =>
   Option.match(ruleOfLaws(laws), {
-    onNone: () => Result.fail(new UnownedLaws({ laws: laws.map(lawIdentity) })),
+    onNone: () => Result.fail(new UnownedLaws({ laws: laws.map((law) => Formatter.format(law)) })),
     onSome: (rule) => {
       const { detail, sources } = explain(laws, witness, constants);
       const named = pipe(
         laws,
         Arr.map((law) => {
-          const identity = lawIdentity(law);
+          const identity = Formatter.format(law);
 
           return Option.match(lawNameOf(law), {
             onNone: () => ({ identity }),

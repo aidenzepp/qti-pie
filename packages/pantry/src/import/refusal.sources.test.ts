@@ -159,18 +159,6 @@ const known: ReadonlyMap<string, Known> = new Map([
       owner: "OL A1, schema slot 10",
     },
   ],
-  [
-    "Item duration",
-    {
-      fix: "A1 strikes the law, whose one carrier is §2.2.2.2",
-      offences: [
-        "Item duration: #IV_Response stands in §2.2.2.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "Item duration: §2.2.2.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "Item duration: info.txt:8468 stands in §2.2.2.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-      ],
-      owner: "OL A1, schema slot 10",
-    },
-  ],
 ]);
 
 /**

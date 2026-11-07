@@ -1,5 +1,5 @@
 /**
- * A MathML formula's direction starts at its `m:math` (spec reading 150): `ltr` unless the `math`
+ * A MathML formula's direction starts at its `m:math` (spec reading 153): `ltr` unless the `math`
  * element writes `rtl`, whatever an HTML ancestor's `dir` says. The law oracle
  * (`#pantry/test/oracle.ts` `inheritedDirectionOf`) and the schema's own laws over the import's
  * rows (the builder's `reading.owns`, `#pantry/import/overlays/mathml-align.ts`) must give the

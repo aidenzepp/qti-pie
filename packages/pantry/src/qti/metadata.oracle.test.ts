@@ -750,8 +750,8 @@ describe("qti/metadata.ts, the learning resource type", { timeout: testTimeoutMs
       // written (the binding's default, line 1288). A second implementation, the law oracle's
       // `LOM learning resource type` over the folded manifest. And the database's statements
       // restated over the builder's rows and the tree's insert (`databaseRefusals`): each term's
-      // row holds the string value the database folds from the host's `stringPiece`, and the
-      // law's containment refuses exactly the types the specification refuses.
+      // row holds the string value the database folds from its children's `chars`, and the law's
+      // containment refuses exactly the types the specification refuses.
       // Bound: 8 sources by 10 values by 2 orders, 160 cases.
       searched(
         ctx,
