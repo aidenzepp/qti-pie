@@ -937,16 +937,30 @@ const tableOf = (view: View, node: FoldedNode<Composed>): NodeId | undefined =>
   [node, ...ancestorsOf(view, node)].find(({ kind }) => kind === "table")?.id;
 
 /**
+ * An NCName, `xs:NCName` as the value domains compile it: the form of a bare variable reference,
+ * and of an ID's value, `xs:ID` being a restriction of it.
+ */
+const nameForm = new RegExp(
+  Result.getOrThrowWith(
+    Result.flatMap(builtinDomainOf("NCName"), (domain) => compile(domain, "exact")),
+    (unread) => unread,
+  ).pattern,
+  patternFlags,
+);
+
+/**
  * The header ids of each document's tables, computed once per document.
  */
 const tableHeaderCache = new WeakMap<View, ReadonlyMap<NodeId, ReadonlySet<string>>>();
 
 /**
  * Collect the ids of the `th`s that take part in each table of a document, by the table's id,
- * each id collapsed (an `xs:ID`'s whiteSpace).
+ * each id collapsed (an `xs:ID`'s whiteSpace) and an NCName ({@link nameForm}): an `id` outside
+ * `xs:ID`'s lexical space is no ID value, so a cell's `headers` token names no header by it (spec
+ * reading 156).
  *
  * @param view - The document.
- * @returns Each table's header ids; a table no `th` with an `id` takes part in holds none.
+ * @returns Each table's header ids; a table no `th` with an ID takes part in holds none.
  */
 const tableHeadersOf = (view: View): ReadonlyMap<NodeId, ReadonlySet<string>> => {
   const held = tableHeaderCache.get(view);
@@ -958,8 +972,10 @@ const tableHeadersOf = (view: View): ReadonlyMap<NodeId, ReadonlySet<string>> =>
   for (const node of view.members) {
     const table = node.kind === "th" ? tableOf(view, node) : undefined;
     if (table !== undefined) {
-      for (const id of Option.toArray(valueOf(view, node.id, "id"))) {
-        headers.set(table, (headers.get(table) ?? new Set()).add(collapsed(id)));
+      for (const id of Option.toArray(valueOf(view, node.id, "id")).map(collapsed)) {
+        if (nameForm.test(id)) {
+          headers.set(table, (headers.get(table) ?? new Set()).add(id));
+        }
       }
     }
   }
@@ -2673,17 +2689,6 @@ const wholeBreaches = (
       ),
   ];
 };
-
-/**
- * An NCName, `xs:NCName` as the value domains compile it: the form of a bare variable reference.
- */
-const nameForm = new RegExp(
-  Result.getOrThrowWith(
-    Result.flatMap(builtinDomainOf("NCName"), (domain) => compile(domain, "exact")),
-    (unread) => unread,
-  ).pattern,
-  patternFlags,
-);
 
 /**
  * A braced variable reference: `{identifier}`.

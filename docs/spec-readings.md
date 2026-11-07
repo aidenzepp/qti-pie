@@ -2791,3 +2791,22 @@ against it. A reading that is not an information-model-over-XSD case says which 
      The corpus moves no verdict: each of the 209 item refs of its 29 zips writes an href and an identifier, by a scan
      of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ITEMREF.)
+156. **An ID-typed attribute or text is one of its document's IDs only where its value is an NCName. Any other value is
+     no ID: it binds nothing, no IDREF and no cell's `headers` token names it, and its value domain alone refuses it.**
+     `xs:ID` restricts `xs:NCName`, whose lexical space it keeps (XML Schema Part 2, §3.3.8), as does the
+     `IdentifierDType` a context declaration's `identifier` holds (reading 74), and a form outside a type's lexical
+     space denotes no value of it (§2.3). So `""`, a form of whitespace alone, `1a`, `a b` or `٠a`, written as an
+     `id`, a response or context declaration's `identifier`, a manifest's or a resource's `identifier`, or an
+     ID-typed element's text, is no ID value, as reading 152 reads the names. An IDREF written to the same form names
+     no ID, and cvc-id clause 1 ("There must be no ID/IDREF binding in the item's [ID/IDREF table] whose [binding] is
+     the empty set", XML Schema 1.0 Part 1, Validation Root) refuses it under "Idref target"; a cell's `headers` token
+     written to it names no `th`, since each token "must have the value of an ID of a 'th' tag taking part in the
+     same table" (info §5.140.1, reading 126), and "Table headers" refuses it. The schema copies an ID-typed
+     attribute or text into `DocumentId`, and a `th`'s `id` into `TableHeader`, only where its form names something
+     once collapsed (`namingPattern`, over the grammar's one `ncNamePattern`, `src/qti/identity.ts`), and the importer
+     writes their rows by `isNcName`. This sets aside the importer's reading of every ID-typed form as an ID, under
+     which an empty identifier, or one with whitespace inside, had a `DocumentId` row that "E1 derived" refused beside
+     its value domain, and `1a` was an ID an IDREF of `1a` resolved to; and the law oracle's reading of a `th`'s
+     `id` as a header whatever its form, under which `headers="1a"` named `<th id="1a">`. This binds pantry and plate
+     alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the
+     operator's standing ruling of 2026-11-05, from seat FIX-IDNCNAME.)

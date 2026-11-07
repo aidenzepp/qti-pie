@@ -74,24 +74,6 @@ export const known = {
       fix: "a declaration whose identifier names nothing (empty, whitespace alone, or no NCName: spec reading 152, lane NIL's B10) has no Declaration row, but Declaration overlay's forward copies of its cardinality and base type demand one of every declaration that writes them; the declaration's name wants a row of its own (as RecordFieldName), so the copies hold without a name and the value domain refuses it alone",
       owner: "unassigned, found by FIX-NCNAME",
     },
-  "import-only-law: E1 derived, check E1_derived on DocumentId": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"/></qti-assessment-item>`,
-      ],
-    ],
-    fix: "an ID-typed attribute whose value is no NCName, a response or context declaration's empty identifier or one with whitespace inside, still gets a DocumentId row, which E1_derived refuses beside its value domain: an ID that names nothing wants no DocumentId row (spec reading 152's reading, applied to the identity overlay)",
-    owner: "unassigned, found by FIX-NCNAME",
-  },
   "import-only-law: Mapping overlay, contained Attribute(node, lexical) in MapKey(node, key)": {
     files: [
       [
@@ -714,6 +696,24 @@ export const fixed = {
     ],
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
+  },
+  "import-only-law: E1 derived, check E1_derived on DocumentId": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"/></qti-assessment-item>`,
+      ],
+    ],
+    fix: "spec reading 156, reading 152's for the IDs: an ID-typed attribute or text is an ID value only where its value is an NCName (the grammar's ncNamePattern), so the import and the schema's copy sources (namingIdAttributes, idTexts, headerIds) write no DocumentId and no TableHeader for an empty identifier or one with whitespace inside, its value domain refuses it alone, and an IDREF or a cell's headers token that names it is refused under its own law, as the oracle reads idsOf and tableHeadersOf",
+    owner: "FIX-IDNCNAME",
   },
   "import-only-law: E1 derived, check E1_derived on InteractionAttribute": {
     files: [

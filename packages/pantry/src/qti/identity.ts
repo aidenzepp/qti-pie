@@ -15,7 +15,9 @@
  *   element the ID/IDREF table binds the ID to: the element that carries the attribute, or the
  *   parent of the element whose text it is (XML Schema 1.0 Part 1 §3.15.5, `[binding]`: "an
  *   attribute information item in its [attributes] or an element information item in its
- *   [children]").
+ *   [children]"). A form whose value is no NCName ({@link namingPattern}), empty, whitespace alone
+ *   or holding whitespace inside, is no ID value: it has no row, binds nothing and names nothing,
+ *   and its value domain or TextDomain refuses it alone (spec reading 156).
  * - **{@link IdBinding}** is the projection of the IDs onto (document, id, owner), keyed by its
  *   heading, and its key on (document, id) is cvc-id clause 2, "no ID/IDREF binding … whose
  *   [binding] has more than one member" (law "DocumentId key", rule `document-key`). An element
@@ -117,6 +119,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
+import { ncNamePattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeGrammar,
   AttributeModelOf,
@@ -158,10 +161,19 @@ const Space = str.regex(spacePattern);
 
 /**
  * A nonempty run holding no XML whitespace: an ID's value once its lexical form's outer whitespace
- * is set apart, and an IDREF token. That the run is an NCName is AL1's lexical half over the
- * attribute, and TextDomain's over the element's text.
+ * is set apart, and an IDREF token. That an ID's run is an NCName is its copy source's
+ * ({@link namingPattern}); that an IDREF token is, AL1's lexical half over the attribute and
+ * TextDomain's over the element's text.
  */
 export const idValuePattern = "^[^\\t\\n\\r ]+$";
+
+/**
+ * A lexical form that names something once collapsed: an NCName (`ncNamePattern`) with XML
+ * whitespace around it, which collapsing strips. Only such a form of an ID-typed attribute or text
+ * is an ID value, `xs:ID` being a restriction of `xs:NCName`; any other form names nothing and has
+ * no {@link DocumentId}, so its value domain refuses it alone (spec reading 156).
+ */
+export const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
 
 /**
  * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner
@@ -661,14 +673,32 @@ const textIdentityOf = (n: GovernedRow) =>
   );
 
 /**
- * The attributes whose value is one of their document's IDs: those of an `xs:ID` domain, and each
- * context declaration's `identifier` (spec reading 74).
+ * State that an attribute is ID-typed: its domain is an `xs:ID` one, or it is a context
+ * declaration's `identifier` (spec reading 74).
+ *
+ * @param a - The attribute row.
+ * @returns The statement.
  */
-export const idAttributes = select(Attribute, (a) =>
+const idTyped = (a: AttributeRow) =>
   a.or(
     a.eq(identityOf(a), "ID"),
     a.and(a.eq(a.kind, "qti-context-declaration"), a.eq(a.name, "identifier")),
-  ),
+  );
+
+/**
+ * The ID-typed attributes, whatever their value, which the key over `node` holds to one per
+ * element: XML Schema gives a valid element at most one attribute of an ID type (cvc-complex-type
+ * clause 5), a statement of types, not of values.
+ */
+export const idAttributes = select(Attribute, idTyped);
+
+/**
+ * The ID-typed attributes whose value is one of their document's IDs: those whose lexical form
+ * names something once collapsed ({@link namingPattern}), each the source of a {@link DocumentId},
+ * with a key of its own over `node` that the copy's reverse probe reads (C18).
+ */
+const namingIdAttributes = select(Attribute, (a) =>
+  a.and(idTyped(a), Compute.matches(a.lexical, namingPattern)),
 );
 
 /**
@@ -677,9 +707,12 @@ export const idAttributes = select(Attribute, (a) =>
 const identityNodes = select(Node, (n) => n.ne(textIdentityOf(n), "none"));
 
 /**
- * The elements whose text is an ID, each the source of a {@link DocumentId}.
+ * The elements whose text is an ID, each the source of a {@link DocumentId}: those whose text is
+ * of an `xs:ID` domain and names something once collapsed ({@link namingPattern}).
  */
-const idTexts = select(IdentityText, (t) => t.eq(textIdentityOf(t), "ID"));
+const idTexts = select(IdentityText, (t) =>
+  t.and(t.eq(textIdentityOf(t), "ID"), Compute.matches(t.lexical, namingPattern)),
+);
 
 /**
  * The IDs an attribute carries: those whose owner is their own node.
@@ -909,8 +942,9 @@ export const ssmlLexiconReference = contained(
  * Every statement over the identity overlays, each `check` named by its oracle law:
  *
  * - **DocumentId:** at most one ID-typed attribute per element (the key over its selection), each
- *   copied into its row and each attribute row an attribute's (C18); each ID-typed text copied into
- *   its row, bound to the element's parent, and each text row a text's; the value set apart from
+ *   whose value is an NCName copied into its row and each attribute row such an attribute's (C18,
+ *   with the key over that selection); each ID-typed text whose value is an NCName copied into its
+ *   row, bound to the element's parent, and each text row such a text's; the value set apart from
  *   its outer whitespace (`E1_derived`);
  * - **IdBinding:** the projection's counted family, each binding carried, and "DocumentId key";
  * - **IdentityText:** each element whose text is of an identity type copied into its row with its
@@ -958,11 +992,12 @@ export const identityLawsByName = {
   ],
   "DocumentId key": [
     key(on(idAttributes, "node")),
+    key(on(namingIdAttributes, "node")),
     contained(
-      on(idAttributes, "node", "document", "lexical"),
+      on(namingIdAttributes, "node", "document", "lexical"),
       on(DocumentId, "node", "document", "lexical"),
     ),
-    contained(on(attributeIds, "node"), on(idAttributes, "node")),
+    contained(on(attributeIds, "node"), on(namingIdAttributes, "node")),
     contained(
       on(idTexts, "node", "document", "owner", "lexical"),
       on(DocumentId, "node", "document", "owner", "lexical"),

@@ -4,13 +4,14 @@
  * a keyed set.
  *
  * The rows restate what the tree says and nothing else: each table cell's `headers` as written,
- * split into its tokens; each `th`'s `id`, its value as `DocumentId` holds it; and each element on
- * the way from those cells up to the table they take part in. The database proves every one of
- * them (`htmlLaws`), so a row this builder gets wrong is refused, never accepted. Readings 124 and
- * 125 read `Node` and `Attribute` alone, so they have no rows here.
+ * split into its tokens; each `th`'s `id` that is an NCName, its value as `DocumentId` holds it;
+ * and each element on the way from those cells up to the table they take part in. The database
+ * proves every one of them (`htmlLaws`), so a row this builder gets wrong is refused, never
+ * accepted. Readings 124 and 125 read `Node` and `Attribute` alone, so they have no rows here.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext } from "#pantry/import/context.ts";
+import { isNcName } from "#pantry/grammar/domains.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -162,8 +163,9 @@ const tableWalkOf = (
  * Build a document's HTML rows.
  *
  * Each cell that writes `headers` has its {@link CellHeadersRow}, and each `th` that writes an `id`
- * its `TableHeader`, the ID's value its lexical form with its outer whitespace set apart, as
- * `DocumentId` holds it; each element on the walk up from either to its nearest `table` has its
+ * whose value is an NCName ({@link isNcName}) its `TableHeader`, the ID's value its lexical form
+ * with its outer whitespace set apart, as `DocumentId` holds it; any other `id` names no header
+ * (spec reading 156). Each element on the walk up from either to its nearest `table` has its
  * `TableScope`. A text past `keyText`'s bound keeps its row, which `keyText` refuses under "Key
  * text bound". A document with no such cell gives no row.
  *
@@ -217,10 +219,11 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
     }
 
     const id = cell.kind === "th" ? valueOf(cell, "id") : undefined;
-    if (id !== undefined) {
+    const value = id?.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, "");
+    if (value !== undefined && isNcName(value)) {
       headerIds.set(cell.id, {
         document,
-        id: id.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, ""),
+        id: value,
         node: cell.id,
         owner: cell.id,
         table: tableOf(cell),
