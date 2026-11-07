@@ -26,6 +26,7 @@ import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type {
@@ -143,15 +144,32 @@ const checkedInstance = (
 
 /**
  * Copy an accepted document's item into the form the page may know: its body, title and language,
- * without its correct responses, mappings, defaults or processing.
+ * with each printed variable as the text it prints from the record, without its correct responses,
+ * mappings, defaults, processing or template rules.
+ *
+ * A printed variable prints the value `record` holds for it, a template value else an outcome
+ * value, formatted as its attributes say; NULL prints nothing, and one whose value `record` does
+ * not hold shows the notice `qti-printed-variable`. With no record, an item whose template
+ * processing does not run prints the values its first attempt starts with (its declared template
+ * defaults and its outcomes' starting values), and an item whose template processing runs shows
+ * every printed variable as the notice. It never copies a template value or an outcome value it
+ * does not print, the record's seed or an override template processing set. `redactItem` in
+ * `#plate/payload.ts` lists what it copies.
  *
  * It takes only `check`'s `Accepted` (rule `723e580c`), so a hand-built item, which may hold a
- * `javascript:` href or an `onclick` that `check` would strip, never reaches {@link render}.
+ * `javascript:` href or an `onclick` that `check` would strip, never reaches {@link render}. It
+ * always gives a redacted item: what it cannot print shows as a notice.
+ *
+ * @example
+ *   const shown = redact(accepted, record); // record: the attempt's ItemRecord
  *
  * @param document The document `check` accepted.
+ * @param record The attempt's template values and outcome values, such as its `ItemRecord`;
+ *   none to show the item as it reads with no record.
  * @returns The redacted item, the one input {@link render} takes.
  */
-export const redact = (document: Accepted): Redacted => redactItem(document.item);
+export const redact = (document: Accepted, record?: RedactRecord): Redacted =>
+  redactItem(document.item, record);
 
 /**
  * Give a record keyed by response identifier as the map a view holds.

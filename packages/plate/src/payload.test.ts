@@ -12,9 +12,12 @@ import type {
   InlineChoiceInteraction,
   Item,
   PrintedVariable,
+  TemplateDeclaration,
   TextEntryInteraction,
   Unsupported,
 } from "#plate/model/item.ts";
+import { fresh } from "#plate/model/record.ts";
+import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { choiceOrder, identifyMessages, payload, postings, redactItem } from "#plate/payload.ts";
@@ -910,11 +913,13 @@ const printingBody = (
 
 /**
  * An item that prints variables at four places among two notices and a mark, as the model holds
- * it: each printed variable a body node, and none among the unsupported features.
+ * it: each printed variable a body node, and none among the unsupported features. Its template
+ * processing runs, so with no record `redactItem` withholds every printed variable (H3).
  */
 const printing: Item = {
   ...item,
   body: printingBody(printed),
+  templateProcessing: Option.some([]),
   unsupported: [
     {
       feature: "qti-hotspot-interaction",
@@ -927,7 +932,7 @@ const printing: Item = {
 };
 
 describe("redactItem on printed variables", () => {
-  it("[I-5] withholds each printed variable behind its notice, named among the notices in document order: the redaction of the item holding each as that notice", () => {
+  it("[I-5] withholds each printed variable of a templated item with no record behind its notice, named among the notices in document order: the redaction of the item holding each as that notice (H3)", () => {
     const asNotices: Item = {
       ...printing,
       body: printingBody((_, path) => noticeOf("qti-printed-variable", path)),
@@ -953,7 +958,7 @@ describe("redactItem on printed variables", () => {
     ]);
   });
 
-  it("[I-5] puts a printed variable's notice after the notice of a URL dropped from the link that holds it, in the order check lists them", () => {
+  it("[I-5] puts the notice of a printed variable the record holds no value of after the notice of a URL dropped from the link that holds it, in the order check lists them", () => {
     const verdict = check(
       doc(
         "item.xml",
@@ -994,7 +999,7 @@ describe("redactItem on printed variables", () => {
       tables,
     );
     const accepted = Option.getOrThrow(acceptedItem(verdict));
-    const withheld = redact(accepted);
+    const withheld = redact(accepted, { outcomes: {}, templates: {} });
     const link = `${bodyPath}/p/a`;
 
     assert.deepStrictEqual(accepted.unsupported, [
@@ -1029,6 +1034,287 @@ describe("redactItem on printed variables", () => {
     );
 
     assert.deepStrictEqual(handBuilt.body, [{ feature: "qti-printed-variable", kind: "notice" }]);
+  });
+});
+
+/**
+ * Construct a single integer value.
+ *
+ * @param value The integer.
+ * @returns The value.
+ */
+const integerValue = (value: bigint): Value => one({ baseType: "integer", value });
+
+/**
+ * Construct a single float value.
+ *
+ * @param value The float.
+ * @returns The value.
+ */
+const floatValue = (value: number): Value => one({ baseType: "float", value });
+
+/**
+ * Construct an ordered integer value.
+ *
+ * @param values The integers, in order.
+ * @returns The value.
+ */
+const orderedIntegers = (values: readonly bigint[]): Value => ({
+  baseType: "integer",
+  cardinality: "ordered",
+  values: values.map((value) => ({ baseType: "integer", value })),
+});
+
+/**
+ * Construct a template declaration, neither a parameter nor a math variable.
+ *
+ * @param identifier The variable's identifier.
+ * @param declared Its declared default, which gives its base type and cardinality; NULL declares
+ *   none.
+ * @returns The declaration.
+ */
+const templateOf = (identifier: string, declared: Value): TemplateDeclaration => ({
+  baseType: declared.baseType,
+  cardinality: declared.cardinality,
+  defaultValue: declared.values.length === 0 ? Option.none() : Option.some(declared),
+  identifier,
+  mathVariable: false,
+  paramVariable: false,
+});
+
+/**
+ * The paragraph every printed variable of {@link templated} sits in.
+ */
+const printingParagraph = `${bodyPath}/p`;
+
+/**
+ * Give the path of a printed variable of {@link templated}'s paragraph.
+ *
+ * @param n Its position among them, from 1.
+ * @returns The path.
+ */
+const printedAt = (n: number): string => `${printingParagraph}/qti-printed-variable[${String(n)}]`;
+
+/**
+ * An item whose template processing runs, with one paragraph that prints, each after a label: `N`
+ * in its default form, `SCORE` through `%.2f`, the `POS`-th member of `LIST`, `N` through `%i` in
+ * the base `RADIX` holds, and `SCORE` in its default form; then a feedback block's notice. `N`
+ * defaults to 3, `RADIX` to 16 and `LIST` to 10, 20, 30, and `POS` declares no default.
+ */
+const templated: Item = {
+  ...item,
+  body: [
+    {
+      attributes: [],
+      children: [
+        text("N "),
+        printed("N", printedAt(1)),
+        text(", score "),
+        { ...printed("SCORE", printedAt(2)), format: Option.some("%.2f") },
+        text(", member "),
+        {
+          ...printed("LIST", printedAt(3)),
+          index: Option.some({ _tag: "ref", identifier: "POS" }),
+        },
+        text(", hex "),
+        {
+          ...printed("N", printedAt(4)),
+          base: { _tag: "ref", identifier: "RADIX" },
+          format: Option.some("%i"),
+        },
+        text(", raw "),
+        printed("SCORE", printedAt(5)),
+      ],
+      kind: "element",
+      path: printingParagraph,
+      tag: "p",
+    },
+    noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
+  ],
+  templateProcessing: Option.some([]),
+  templates: new Map(
+    [
+      templateOf("N", integerValue(3n)),
+      templateOf("POS", nullOf("integer", "single")),
+      templateOf("RADIX", integerValue(16n)),
+      templateOf("LIST", orderedIntegers([10n, 20n, 30n])),
+    ].map((declaration) => [declaration.identifier, declaration] as const),
+  ),
+  unsupported: [
+    { feature: "qti-feedback-block", path: `${bodyPath}/qti-feedback-block`, shown: "notice" },
+  ],
+};
+
+/**
+ * {@link templated} without template processing, so with no record it reads as the record its
+ * first attempt starts with: its declared values.
+ */
+const untemplated: Item = { ...templated, templateProcessing: Option.none() };
+
+/**
+ * The record of an attempt of {@link templated}: `N` 255, `POS` 2, `RADIX` 16, `LIST` 10, 20, 30,
+ * and `SCORE` 2.675.
+ */
+const drawn: ItemRecord = {
+  ...fresh(templated, instance),
+  outcomes: { ...fresh(templated, instance).outcomes, SCORE: floatValue(2.675) },
+  templates: {
+    LIST: orderedIntegers([10n, 20n, 30n]),
+    N: integerValue(255n),
+    POS: integerValue(2n),
+    RADIX: integerValue(16n),
+  },
+};
+
+/**
+ * Construct a text node of the body for each string.
+ *
+ * @param texts The texts.
+ * @returns The nodes.
+ */
+const texts = (...values: readonly string[]): readonly BodyNode[] => values.map(text);
+
+/**
+ * Give the nodes of a redacted item's first body element, the printing paragraph.
+ *
+ * @param redaction The redacted item.
+ * @returns The paragraph's children.
+ */
+const paragraphOf = (redaction: Redacted): readonly BodyNode[] => {
+  const [first] = redaction.body;
+
+  return first?.kind === "element"
+    ? first.children
+    : assert.fail("The body starts with no element.");
+};
+
+/**
+ * The notice of the printed variable at a position of {@link templated}'s paragraph.
+ *
+ * @param n Its position, from 1.
+ * @returns The notice node.
+ */
+const printedNoticeAt = (n: number): Unsupported => noticeOf("qti-printed-variable", printedAt(n));
+
+describe("redactItem with a record", () => {
+  it("[I-5] prints each printed variable from the record as text: a template value and an outcome value, through a format and in the default form, with an index and a base written as names read from the record", () => {
+    const printedOut = redactItem(templated, drawn);
+
+    assert.deepStrictEqual(
+      paragraphOf(printedOut),
+      texts("N ", "255", ", score ", "2.68", ", member ", "20", ", hex ", "ff", ", raw ", "2.675"),
+    );
+    assert.deepStrictEqual(printedOut.notices, ["qti-feedback-block"]);
+  });
+
+  it("[I-5] prints nothing for a NULL value", () => {
+    const empty = redactItem(templated, {
+      ...drawn,
+      templates: { ...drawn.templates, N: nullOf("integer", "single") },
+    });
+
+    assert.deepStrictEqual(
+      paragraphOf(empty),
+      texts("N ", ", score ", "2.68", ", member ", "20", ", hex ", ", raw ", "2.675"),
+    );
+    assert.deepStrictEqual(empty.notices, ["qti-feedback-block"]);
+  });
+
+  it("[I-5] leaves the notice where the record holds no value of the variable, or of the name its base or index names", () => {
+    const gaps = redactItem(templated, {
+      ...drawn,
+      templates: { N: integerValue(255n), POS: integerValue(2n) },
+    });
+
+    assert.deepStrictEqual(paragraphOf(gaps), [
+      ...texts("N ", "255", ", score ", "2.68", ", member "),
+      printedNoticeAt(3),
+      text(", hex "),
+      printedNoticeAt(4),
+      ...texts(", raw ", "2.675"),
+    ]);
+    assert.deepStrictEqual(gaps.notices, [
+      "qti-printed-variable",
+      "qti-printed-variable",
+      "qti-feedback-block",
+    ]);
+  });
+
+  it("[I-5] reads only the record's own entries, never a name an object inherits", () => {
+    const inherited = redactItem(
+      { ...templated, body: [{ ...printed("constructor", printedAt(1)) }], unsupported: [] },
+      drawn,
+    );
+
+    assert.deepStrictEqual(inherited.body, [printedNoticeAt(1)]);
+  });
+
+  it("[I-5] with no record, withholds every printed variable of an item whose template processing runs (H3)", () => {
+    const withheld = redactItem(templated);
+
+    assert.deepStrictEqual(paragraphOf(withheld), [
+      text("N "),
+      printedNoticeAt(1),
+      text(", score "),
+      printedNoticeAt(2),
+      text(", member "),
+      printedNoticeAt(3),
+      text(", hex "),
+      printedNoticeAt(4),
+      text(", raw "),
+      printedNoticeAt(5),
+    ]);
+  });
+
+  it("[I-5] with no record, prints what an item without template processing starts with: each template variable at its declared default, each outcome at its starting value (H3)", () => {
+    assert.deepStrictEqual(
+      paragraphOf(redactItem(untemplated)),
+      texts("N ", "3", ", score ", "0.00", ", member ", "10;20;30", ", hex ", "3", ", raw ", "0"),
+    );
+  });
+
+  it("[I-5] with no record, prints no template value of an item whose template processing does not run, which leaves its notice (0.13 decision 15)", () => {
+    const unrun: Item = {
+      ...untemplated,
+      unsupported: [
+        {
+          feature: "qti-template-processing",
+          path: "qti-assessment-item/qti-template-processing",
+          shown: "mark",
+        },
+        ...untemplated.unsupported,
+      ],
+    };
+
+    assert.deepStrictEqual(paragraphOf(redactItem(unrun)), [
+      text("N "),
+      printedNoticeAt(1),
+      ...texts(", score ", "0.00", ", member "),
+      printedNoticeAt(3),
+      text(", hex "),
+      printedNoticeAt(4),
+      ...texts(", raw ", "0"),
+    ]);
+  });
+
+  it("[I-5] names the notices the record names, with the record and, for an item without template processing, without one; a templated item with no record names each printed variable it withholds besides (Mind amendment, H3)", () => {
+    const started: ItemRecord = {
+      ...fresh(untemplated, instance),
+      templates: {
+        LIST: orderedIntegers([10n, 20n, 30n]),
+        N: integerValue(3n),
+        POS: nullOf("integer", "single"),
+        RADIX: integerValue(16n),
+      },
+    };
+
+    assert.deepStrictEqual(redactItem(templated, drawn).notices, drawn.notices);
+    assert.deepStrictEqual(redactItem(untemplated, started).notices, started.notices);
+    assert.deepStrictEqual(redactItem(untemplated).notices, started.notices);
+    assert.deepStrictEqual(redactItem(templated).notices, [
+      ...Array.from({ length: 5 }, () => "qti-printed-variable"),
+      ...drawn.notices,
+    ]);
   });
 });
 
