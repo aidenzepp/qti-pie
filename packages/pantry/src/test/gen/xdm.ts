@@ -2020,11 +2020,15 @@ const boundsGen: Gen<Bounds> = (source) => ({
  * @param grammar - The composed grammar.
  * @param without - The features every case's swarm leaves off, for a suite whose oracle cannot
  *   judge them, so the suite never draws what it would set aside: none by default.
+ * @param rooted - The root kinds a case may draw, for a suite whose oracle judges only some, so
+ *   the suite constructs those rather than setting the rest aside: every root by default. It must
+ *   leave each version a root.
  * @returns The generator.
  */
 export const xdmDocument = (
   grammar: ComposedGrammar,
   without: ReadonlySet<XdmFeature> = new Set(),
+  rooted: (kind: ElementKind<Composed>) => boolean = () => true,
 ): Gen<GeneratedXdm> => {
   const index = indexOf(grammar);
   const weighed = xdmFeatures.filter((feature) => !without.has(feature));
@@ -2069,8 +2073,9 @@ export const xdmDocument = (
     }
 
     const prolog = source.draw(array(miscOf(context, slot), { max: 2, min: 0 }));
+    const admitted = (index.roots.get(version) ?? []).filter(rooted);
     const roots = Option.getOrThrowWith(
-      Option.fromNullishOr(index.roots.get(version)),
+      Arr.isReadonlyArrayNonEmpty(admitted) ? Option.some(admitted) : Option.none(),
       () => new Error(`The grammar admits no root element kind in ${version}.`),
     );
     const rootKind = source.draw(

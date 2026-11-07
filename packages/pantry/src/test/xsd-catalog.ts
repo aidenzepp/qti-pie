@@ -548,6 +548,7 @@ const ruleClasses: ReadonlyMap<string, LawClass> = new Map([
   ["text-copy", "text-value"],
   ["union-count", "content"],
   ["well-formedness", "well-formed"],
+  ["xsi-type", "attribute-value"],
 ]);
 
 /**
