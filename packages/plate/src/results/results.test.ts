@@ -16,7 +16,7 @@ import { firstAttempt } from "#plate/engine/attempt.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { InlineChoiceInteraction } from "#plate/model/item.ts";
-import { fresh } from "#plate/model/record.ts";
+import { fresh, startingValue } from "#plate/model/record.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
@@ -496,6 +496,7 @@ const sessionItem = (
   ref: refId,
   saved: Option.none(),
   sequenceIndex,
+  templateDefaults: Option.none(),
   ...changes,
 });
 
@@ -518,7 +519,8 @@ const processedRecord = (item: SessionItem, processed: number): ItemRecord => ({
 });
 
 /**
- * Write a test session in the form the host stores.
+ * Write a test session in the form the host stores, its test's outcomes at their starting values,
+ * with no outcome processing run and no shuffle seed.
  *
  * @param test The test it is a session of.
  * @param items Its items.
@@ -539,9 +541,17 @@ const storedSession = (
       instance,
       items,
       kind: "test",
+      outcomeRuns: 0,
+      outcomes: Object.fromEntries(
+        Array.from(test.test.outcomes, ([identifier, outcome]) => [
+          identifier,
+          startingValue(outcome),
+        ]),
+      ),
       parts,
       position: 0,
       seed,
+      shuffleSeed: Option.none(),
       started,
       status: "closed",
       test: test.test.identifier,

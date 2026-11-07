@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
+import { decodeRecord, encodeRecord, versionIssue } from "#plate/codec/record.ts";
 import type { InvalidRecord, ItemRecordSchema } from "#plate/codec/record.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
@@ -218,11 +218,11 @@ describe("decodeRecord", () => {
 });
 
 describe("the stored record's version", () => {
-  it.effect("[T-14] [I-5] is written as version 2 and read back", () =>
+  it.effect("[T-14] [I-5] is written as version 3 and read back", () =>
     Effect.gen(function* writesVersion() {
       const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
 
-      assert.strictEqual(stored.version, 2);
+      assert.strictEqual(stored.version, 3);
       assert.deepStrictEqual(
         yield* Effect.fromResult(throughHost(fresh(bg007Item, "i1"))),
         fresh(bg007Item, "i1"),
@@ -245,7 +245,7 @@ describe("the stored record's version", () => {
   );
 
   it.effect(
-    "[T-14] [I-5] must be 2: a stored record of version 1, with or without the fields version 2 adds, is InvalidRecord at stage decode",
+    "[T-1] [T-14] [I-5] reads only a record stored at version 3: one stored at version 2, its fields version 3's, or at version 1 without them, is InvalidRecord at stage decode, naming the version found",
     () =>
       Effect.gen(function* refusesOtherVersion() {
         const stored = yield* Effect.fromResult(encodeRecord(templated));
@@ -257,14 +257,17 @@ describe("the stored record's version", () => {
           ...earlier
         } = stored;
 
-        for (const versionOne of [
+        for (const other of [
+          { ...stored, version: 2 },
           { ...earlier, version: 1 },
-          { ...stored, version: 1 },
         ]) {
-          const error = yield* Effect.flip(Effect.fromResult(decodeRecord(versionOne)));
+          const error = yield* Effect.flip(Effect.fromResult(decodeRecord(other)));
 
-          assert.strictEqual(error._tag, "InvalidRecord");
-          assert.strictEqual(error.stage, "decode");
+          assert.deepStrictEqual(
+            [error._tag, error.stage, Option.some(error.issue)],
+            ["InvalidRecord", "decode", versionIssue(other)],
+          );
+          assert.isTrue(Option.isSome(versionIssue(other)));
         }
       }),
   );

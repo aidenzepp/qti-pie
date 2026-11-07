@@ -19,7 +19,7 @@ import { firstAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
-import { fresh } from "#plate/model/record.ts";
+import { fresh, startingValue } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
@@ -700,7 +700,10 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * first attempt draws its template values under it, and each item's shuffle is keyed by it, so a
  * restored session presents the choice order and the values it showed whatever seed the host
  * passes later. The seed keys every value processing draws, so the stored session, which holds it,
- * is server data. A test with no item at all starts closed.
+ * is server data. The session also keeps the configuration's `seed`, absent when it has none, as
+ * its `shuffleSeed`, and starts each of the test's outcomes at its declared default, else its
+ * starting value, with no run of the test's outcome processing counted. No item holds template
+ * defaults. A test with no item at all starts closed.
  *
  * @example
  *   startTest(test, items, configuration, { instance: crypto.randomUUID(), now: new Date() });
@@ -744,6 +747,7 @@ export const startTest = (
               ref: ref.identifier,
               saved: Option.none(),
               sequenceIndex: index + 1,
+              templateDefaults: Option.none(),
             };
 
             return index === 0 ? presented(item, accepted, datestamp, seed) : item;
@@ -757,9 +761,17 @@ export const startTest = (
       instance,
       items: delivered,
       kind: "test",
+      outcomeRuns: 0,
+      outcomes: Object.fromEntries(
+        Array.from(test.test.outcomes, ([identifier, outcome]) => [
+          identifier,
+          startingValue(outcome),
+        ]),
+      ),
       parts: startingParts(test.test.parts, first),
       position: 0,
       seed,
+      shuffleSeed: Option.fromUndefinedOr(configuration.seed),
       started: datestamp,
       status: Option.isSome(first) ? "interacting" : "closed",
       test: test.test.identifier,

@@ -16,13 +16,14 @@ import { ValueSchema } from "#plate/codec/values.ts";
 import type { TestSession } from "#plate/session/session.ts";
 
 /**
- * Values by identifier: an item's saved responses, or its first outcomes.
+ * Values by identifier: an item's saved responses, first outcomes or template defaults, or the
+ * test's outcomes.
  */
 const ValuesSchema = Schema.Record(Schema.String, ValueSchema);
 
 /**
- * The Schema of one item of a test session. `saved` and `firstOutcomes` are left out of the stored
- * form when there are none.
+ * The Schema of one item of a test session. `saved`, `firstOutcomes` and `templateDefaults` are
+ * left out of the stored form when there are none.
  */
 const SessionItemSchema = Schema.Struct({
   datestamp: Schema.String,
@@ -33,17 +34,21 @@ const SessionItemSchema = Schema.Struct({
   ref: Schema.String,
   saved: Schema.OptionFromOptionalKey(ValuesSchema),
   sequenceIndex: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  templateDefaults: Schema.OptionFromOptionalKey(ValuesSchema),
 });
 
 /**
  * The fields of a test session, as {@link TestSession} has them. `seed` is a string, required: the
- * host's seed or the one `startTest` drew, which every stored session holds.
+ * host's seed or the one `startTest` drew, which every stored session holds. `outcomeRuns` is a
+ * whole number, and `shuffleSeed` is left out of the stored form when the session has none.
  */
 const sessionFields = {
   document: Schema.String,
   instance: Schema.String,
   items: Schema.Array(SessionItemSchema),
   kind: Schema.Literal("test"),
+  outcomeRuns: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  outcomes: ValuesSchema,
   parts: Schema.Array(
     Schema.Struct({
       identifier: Schema.String,
@@ -52,6 +57,7 @@ const sessionFields = {
   ),
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   seed: Schema.String,
+  shuffleSeed: Schema.OptionFromOptionalKey(Schema.String),
   started: Schema.String,
   status: Schema.Literals(["closed", "interacting"]),
   test: Schema.String,
@@ -77,12 +83,13 @@ export const TestSessionSchema = Schema.Struct({
 );
 
 /**
- * A test session in the form the host stores: JSON-safe data that names its version, `2`. Every
+ * A test session in the form the host stores: JSON-safe data that names its version, `3`. Every
  * value is written as the stored item record writes it, integers as their decimal digits, so no
- * integer is rounded on the way through the host; each item's `record` is a stored item record,
- * its seed, template values, correct responses and defaults with it, so it is server data as the
- * record is, and so is the session's own `seed`, which keys every value an item draws; an item's
- * `saved` and an item's `firstOutcomes` are absent when there are none.
+ * integer is rounded on the way through the host, the test's `outcomes` among them; each item's
+ * `record` is a stored item record, its seed, template values, correct responses and defaults with
+ * it, so it is server data as the record is, and so is the session's own `seed`, which keys every
+ * value an item draws; an item's `saved`, `firstOutcomes` and `templateDefaults`, and the
+ * session's `shuffleSeed`, are absent when there are none.
  */
 export type StoredTestSession = typeof TestSessionSchema.Encoded;
 
@@ -133,7 +140,7 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
    */
   readonly stage: SessionStage;
   /**
-   * The value the stored session holds under `version`, which is `2` when something else is
+   * The value the stored session holds under `version`, which is `3` when something else is
    * wrong; none when it is not an object or names no version, and at stage `encode`, where no
    * stored session was read.
    */

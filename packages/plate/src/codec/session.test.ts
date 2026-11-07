@@ -29,9 +29,9 @@ type Equals<A, B> =
 const sessionPinned: Equals<typeof TestSessionSchema.Type, TestSession> = true;
 
 /**
- * The stored form carries version 2; `tsc` refuses this line when it carries another.
+ * The stored form carries version 3; `tsc` refuses this line when it carries another.
  */
-const versionPinned: Equals<StoredTestSession["version"], 2> = true;
+const versionPinned: Equals<StoredTestSession["version"], 3> = true;
 
 /**
  * The test the sessions below belong to, as `decodeSession` checks them against it.
@@ -50,12 +50,14 @@ const unpresented: SessionItem = {
   ref: "item-2",
   saved: Option.none(),
   sequenceIndex: 2,
+  templateDefaults: Option.none(),
 };
 
 /**
- * A two-item session of the test {@link owner}, seed `"7"`: item 1 presented and processed once,
- * with its first outcomes kept and responses saved since, an integer beyond 2^53 and a NULL among
- * them; item 2 never presented.
+ * A two-item session of the test {@link owner}, seed `"7"`, with no shuffle seed, no test outcome
+ * and no outcome processing run: item 1 presented and processed once, with its first outcomes kept
+ * and responses saved since, an integer beyond 2^53 and a NULL among them; item 2 never presented.
+ * Neither item holds template defaults.
  */
 const seeded: TestSession = {
   document: "tests/m2.xml",
@@ -78,16 +80,20 @@ const seeded: TestSession = {
         RESPONSE: nullOf("identifier", "single"),
       }),
       sequenceIndex: 1,
+      templateDefaults: Option.none(),
     },
     unpresented,
   ],
   kind: "test",
+  outcomeRuns: 0,
+  outcomes: {},
   parts: [
     { identifier: "part-1", status: "current" },
     { identifier: "part-2", status: "pending" },
   ],
   position: 0,
   seed: "7",
+  shuffleSeed: Option.none(),
   started: "2026-11-05T10:00:00.000Z",
   status: "interacting",
   test: "m2",
@@ -120,6 +126,25 @@ const templated: TestSession = {
         }
       : item,
   ),
+};
+
+/**
+ * {@link seeded} after two runs of the test's outcome processing, under the shuffle seed `"9"`:
+ * the test's outcomes an integer beyond 2^53, a float and a NULL, and item 2's template defaults
+ * computed when its nonlinear part started, the template variable `T` at {@link drawn}.
+ */
+const processed: TestSession = {
+  ...seeded,
+  items: seeded.items.map((item) =>
+    item.sequenceIndex === 2 ? { ...item, templateDefaults: Option.some({ T: drawn }) } : item,
+  ),
+  outcomeRuns: 2,
+  outcomes: {
+    PASSED: nullOf("boolean", "single"),
+    SCORE: float(1.5),
+    TOTAL: integer(2n ** 53n + 1n),
+  },
+  shuffleSeed: Option.some("9"),
 };
 
 /**
@@ -162,7 +187,7 @@ const fieldsOf = (failure: InvalidSession | SessionMismatch): readonly unknown[]
     : [failure._tag, failure.field, failure.found, failure.expected];
 
 describe("the plain type", () => {
-  it("is the Schema's type, and the stored form carries version 2", () => {
+  it("is the Schema's type, and the stored form carries version 3", () => {
     assert.isTrue(sessionPinned && versionPinned);
   });
 });
@@ -175,12 +200,37 @@ describe("encodeSession and decodeSession", () => {
         const stored = yield* Effect.fromResult(encodeSession(seeded));
         const [first, second] = stored.items;
 
-        assert.strictEqual(stored.version, 2);
+        assert.strictEqual(stored.version, 3);
         assert.strictEqual(stored.seed, "7");
         assert.strictEqual(first?.saved?.["COUNT"]?.values[0]?.value, "9007199254740993");
         assert.isTrue(first !== undefined && "firstOutcomes" in first);
         assert.isFalse(second !== undefined && "firstOutcomes" in second);
         assert.isFalse(second !== undefined && "saved" in second);
+        assert.deepStrictEqual(yield* Effect.fromResult(throughHost(seeded)), seeded);
+      }),
+  );
+
+  it.effect(
+    "[T-1] [T-14] round-trip a session stored at version 3: the test's outcomes, the run count, the shuffle seed and an item's template defaults, each absent one left out of the stored form",
+    () =>
+      Effect.gen(function* roundTripsProcessed() {
+        const stored = yield* Effect.fromResult(encodeSession(processed));
+        const bare = yield* Effect.fromResult(encodeSession(seeded));
+        const [first, second] = stored.items;
+
+        assert.strictEqual(stored.version, 3);
+        assert.strictEqual(stored.outcomeRuns, 2);
+        assert.strictEqual(stored.shuffleSeed, "9");
+        assert.strictEqual(stored.outcomes["TOTAL"]?.values[0]?.value, "9007199254740993");
+        assert.strictEqual(
+          second?.templateDefaults?.["T"]?.values[0]?.value,
+          "1152921504606846979",
+        );
+        assert.isFalse(first !== undefined && "templateDefaults" in first);
+        assert.deepStrictEqual([bare.outcomeRuns, bare.outcomes], [0, {}]);
+        assert.isFalse("shuffleSeed" in bare);
+        assert.isFalse(bare.items.some((item) => "templateDefaults" in item));
+        assert.deepStrictEqual(yield* Effect.fromResult(throughHost(processed)), processed);
         assert.deepStrictEqual(yield* Effect.fromResult(throughHost(seeded)), seeded);
       }),
   );
@@ -232,15 +282,19 @@ describe("encodeSession and decodeSession", () => {
 });
 
 describe("decodeSession", () => {
-  it.effect("[T-14] [I-5] refuses a stored session of version 1: InvalidSession naming 1", () =>
-    Effect.gen(function* refusesVersionOne() {
-      const stored = yield* Effect.fromResult(encodeSession(seeded));
+  it.effect(
+    "[T-1] [T-14] [I-5] reads only a session stored at version 3: one stored at version 2 or 1 is InvalidSession at stage decode, naming the version found",
+    () =>
+      Effect.gen(function* refusesEarlierVersions() {
+        const stored = yield* Effect.fromResult(encodeSession(processed));
 
-      assert.deepStrictEqual(
-        Option.map(failureOf({ ...stored, version: 1 }), fieldsOf),
-        Option.some(["InvalidSession", "decode", Option.some(1)]),
-      );
-    }),
+        for (const version of [2, 1]) {
+          assert.deepStrictEqual(
+            Option.map(failureOf({ ...stored, version }), fieldsOf),
+            Option.some(["InvalidSession", "decode", Option.some(version)]),
+          );
+        }
+      }),
   );
 
   it.effect("refuses a stored session with no version: InvalidSession naming none", () =>
@@ -262,7 +316,7 @@ describe("decodeSession", () => {
 
       assert.deepStrictEqual(
         Option.map(failureOf({ ...stored, items: [first, ...unversioned] }), fieldsOf),
-        Option.some(["InvalidSession", "decode", Option.some(2)]),
+        Option.some(["InvalidSession", "decode", Option.some(3)]),
       );
     }),
   );
@@ -277,10 +331,14 @@ describe("decodeSession", () => {
           { ...stored, status: "paused" },
           { ...stored, position: -1 },
           { ...stored, seed: 7 },
+          { ...stored, outcomeRuns: -1 },
+          { ...stored, outcomeRuns: 1.5 },
+          { ...stored, outcomes: { SCORE: "1.5" } },
+          { ...stored, shuffleSeed: 9 },
         ]) {
           assert.deepStrictEqual(
             Option.map(failureOf(malformed), fieldsOf),
-            Option.some(["InvalidSession", "decode", Option.some(2)]),
+            Option.some(["InvalidSession", "decode", Option.some(3)]),
             JSON.stringify(malformed),
           );
         }
