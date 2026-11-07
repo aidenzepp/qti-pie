@@ -18,6 +18,9 @@
  *   media objects and interactions"), so the item-only laws read {@link BoundVariable}.
  * - {@link Binding}: every interaction with a `response-identifier`, its optional part: an
  *   interaction that writes none has no row, and AL3 refuses it.
+ * - {@link PciModuleForm}: each form in which a portable custom interaction names its module, its
+ *   `module` attribute and its `qti-interaction-modules` child, counted by
+ *   `Interaction.moduleForms` so that "PCI module source" asks for at least one (§5.106.2, R10-a).
  * - {@link BoundVariable}: each attribute by which an item's interaction binds a response variable,
  *   its `response-identifier` and its `string-identifier` (§5.48.2, §5.162.3: "binding the
  *   interaction to a second response variable (of base-type string)"), and beside it, where a
@@ -517,8 +520,10 @@ export const InteractionAttribute = relation(
 /**
  * An interaction element, in any document, keyed by its node: its {@link nodeRef} tuple and its
  * count of {@link ChoiceInteraction} rows, the choices whose nearest interaction it is, which the
- * family draws. Every interaction has one, whether or not it writes a `response-identifier`, so its
- * choices' family always has its owner and a missing response identifier is AL3's alone.
+ * family draws, and its count of {@link PciModuleForm} rows, the forms of a portable custom
+ * interaction's module, which the second family draws. Every interaction has one, whether or not it
+ * writes a `response-identifier`, so its choices' family always has its owner and a missing
+ * response identifier is AL3's alone.
  */
 export const Interaction = relation(
   "Interaction",
@@ -526,6 +531,7 @@ export const Interaction = relation(
     choices: drawn(natural),
     document: uuid,
     kind: closedId(NodeKind),
+    moduleForms: drawn(natural),
     nearest: uuid,
     node: uuid,
     parent: uuid,
@@ -764,6 +770,58 @@ export const choiceFamily = counted(
   on(ChoiceInteraction, "interaction"),
   fin(Interaction, "choices"),
 );
+
+/**
+ * One form in which a portable custom interaction names its module, keyed by the interaction's node
+ * and the form: `element` is false for the `module` attribute and true for the
+ * `qti-interaction-modules` child (information model §5.106.2: "If this characteristic is provided
+ * the qti-interaction-modules child attribute is not required, if omitted then the modules child
+ * element is mandatory", R10-a). A form a PCI does not write has no row; "PCI module source" counts
+ * the rows.
+ *
+ * Its rows are copies of the tree, both ways: an attribute form of each `module` attribute of a
+ * portable custom interaction, an element form of each `qti-interaction-modules` child of one.
+ */
+export const PciModuleForm = relation("PciModuleForm", { element: pg.boolean, node: uuid }, [
+  "node",
+  "element",
+]);
+
+/**
+ * Each interaction's module forms, counted by `Interaction.moduleForms`: a flat row whose group,
+ * `node`, names its owner.
+ */
+export const pciModuleFamily = counted(on(PciModuleForm, "node"), fin(Interaction, "moduleForms"));
+
+/**
+ * The portable custom interaction's kind, the one element whose module a form names.
+ */
+export const pciKind = "qti-portable-custom-interaction";
+
+/**
+ * The `module` attribute of a portable custom interaction: the attribute form of its module.
+ */
+const moduleAttributes = select(Attribute, (a) =>
+  a.and(a.eq(a.kind, pciKind), a.eq(a.name, "module")),
+);
+
+/**
+ * The `qti-interaction-modules` children of a portable custom interaction, by their parent: the
+ * element form of its module.
+ */
+const moduleElements = select(Node, (n) =>
+  n.and(n.eq(n.kind, "qti-interaction-modules"), n.eq(n.parentKind, pciKind)),
+);
+
+/**
+ * The attribute forms among the {@link PciModuleForm} rows.
+ */
+const attributeForms = select(PciModuleForm, (f) => f.eq(f.element, false));
+
+/**
+ * The element forms among the {@link PciModuleForm} rows.
+ */
+const elementForms = select(PciModuleForm, (f) => f.eq(f.element, true));
 
 /**
  * A hottext, keyed by its node: its {@link nodeRef} tuple, its nearest interaction's kind
@@ -1285,6 +1343,7 @@ export const interactionRelations = {
   Interaction,
   InteractionAttribute,
   ItemMode,
+  PciModuleForm,
   PlacedBinding,
   PlacedBindingDeclaration,
   PlacedChoice,
@@ -2020,6 +2079,7 @@ export const interactionLawsByName = {
       ),
     ),
   ],
+  "DocumentId key": [key(on(moduleAttributes, "node"))],
   "E1 derived": [
     key(on(read, "node", "name")),
     contained(
@@ -2038,6 +2098,14 @@ export const interactionLawsByName = {
       on(Binding, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
+    key(on(attributeForms, "node")),
+    key(on(elementForms, "node")),
+    key(on(moduleElements, "parent")),
+    contained(on(moduleAttributes, "node"), on(attributeForms, "node")),
+    contained(on(attributeForms, "node"), on(moduleAttributes, "node")),
+    contained(on(moduleElements, "parent"), on(elementForms, "node")),
+    contained(on(elementForms, "node"), on(moduleElements, "parent")),
+    pciModuleFamily,
     contained(on(Binding, "node"), on(Interaction, "node")),
     contained(
       on(readOf(["response-identifier"], interactionKinds), "node", "rootKind", "value"),
@@ -2507,6 +2575,11 @@ export const interactionLawsByName = {
         "nearestKind",
       ),
       on(Interaction, "node", "kind"),
+    ),
+  ],
+  "PCI module source": [
+    check("PCI_module_source", Interaction, (i) =>
+      i.or(i.ne(i.kind, pciKind), i.gt(i.moduleForms, 0n)),
     ),
   ],
   "Printed variable reference": [

@@ -234,6 +234,7 @@ export const oracleRules = [
   "P29",
   "P36",
   "P8",
+  "pci-module-source",
   "prefixed-ref",
   "printed-variable-ref",
   "q-punctuation",
@@ -3791,6 +3792,16 @@ const overlayLaws: readonly ((
         : [{ keys: { baseType, cardinality: cardinality.value, identifier }, law: "BindingFit" }];
     });
   },
+  (node, overlay) =>
+    // R10-a: a portable custom interaction names its module by `module`, by a
+    // `qti-interaction-modules` child, or by both; one with neither names none.
+    node.kind === "qti-portable-custom-interaction" &&
+    Option.isNone(valueOf(overlay.view, node.id, "module")) &&
+    !(overlay.view.childrenOf.get(node.id) ?? []).some(
+      ({ kind }) => kind === "qti-interaction-modules",
+    )
+      ? [{ keys: {}, law: "PCI module source" }]
+      : [],
   (node, overlay) => {
     const { choiceBound, choiceCount } = overlay.laws.grammar.references;
 
@@ -7079,6 +7090,13 @@ const ownLaws = {
     rule: "P25",
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-number-correct (§6.9.58 to §6.9.64 and §6.9.41, normative: qti-number-correct, qti-number-incorrect, qti-number-presented, qti-number-responded, qti-number-selected, qti-outcome-minimum, qti-outcome-maximum and qti-test-variables, each 'which can only be used in outcomes processing') (expressions.ts Outcome_only, its language Processing's; the old checker's P25)",
+  },
+  "PCI module source": {
+    explain: (keys) =>
+      `the portable custom interaction ${field(keys, "node")} writes neither a module attribute nor a qti-interaction-modules child, so it names no module`,
+    rule: "pci-module-source",
+    source:
+      "R10-a: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_PortableCustomInteraction.Attr_module (§5.106.2: 'If this characteristic is provided the qti-interaction-modules child attribute is not required, if omitted then the modules child element is mandatory'): a portable custom interaction names its module by a module attribute, by a qti-interaction-modules child, or by both (interactions.ts PCI_module_source)",
   },
   "Picture source srcset": {
     explain: () =>

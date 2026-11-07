@@ -21,12 +21,13 @@
  *   a `logbase` and an argument, a table whose cell's `headers` names its header, a printed
  *   variable whose base names a variable, a `q` with no quotation mark beside or inside it,
  *   template and feedback content, choice, hottext, hotspot, slider, custom (holding a foreign
- *   element) and portable custom interactions, a catalog whose keyword-translation card holds two
- *   entries (the first its default, in `es`, the second in `de`, languages the item's LOM does not
- *   list, since a catalog sits outside the body) and whose sign-language card names the image as
- *   its file, a span in the body whose `data-catalog-idref` names the catalog, and response
- *   processing that holds a `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a
- *   `tolerance`;
+ *   element) and portable custom interactions (the item's names its module by the `module`
+ *   attribute, the included fragment's by both forms, so the package writes each form of "PCI
+ *   module source"), a catalog whose keyword-translation card holds two entries (the first its
+ *   default, in `es`, the second in `de`, languages the item's LOM does not list, since a catalog
+ *   sits outside the body) and whose sign-language card names the image as its file, a span in the
+ *   body whose `data-catalog-idref` names the catalog, and response processing that holds a
+ *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
  *   times;
  * - **the stimulus** has a doctype, a processing instruction, a comment, an `xml:base` and an
@@ -376,6 +377,7 @@ const fragment = [
   '    <p>Pick <qti-hottext identifier="W1">this</qti-hottext>.</p>',
   "  </qti-hottext-interaction>",
   '  <qti-portable-custom-interaction response-identifier="WIDGET2" custom-interaction-type-identifier="urn:example:portable" module="portable">',
+  '    <qti-interaction-modules><qti-interaction-module id="portable" primary-path="portable.js"/></qti-interaction-modules>',
   "    <qti-interaction-markup><div>A placed portable interaction.</div></qti-interaction-markup>",
   '    <qti-context-variable identifier="CTX2"/>',
   "  </qti-portable-custom-interaction>",

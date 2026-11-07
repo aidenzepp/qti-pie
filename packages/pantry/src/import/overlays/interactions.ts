@@ -41,6 +41,7 @@ import {
   hottextKind,
   integerStartPattern,
   nilUuid,
+  pciKind,
   readAttributes,
   references,
   referringRoots,
@@ -66,6 +67,7 @@ import type {
   Interaction,
   InteractionAttribute,
   ItemMode,
+  PciModuleForm,
   PlacedBinding,
   PlacedBindingDeclaration,
   PlacedChoice,
@@ -126,6 +128,7 @@ export interface InteractionRows {
   readonly Interaction: ReadonlyMap<string, Addition<typeof Interaction>>;
   readonly InteractionAttribute: ReadonlyMap<string, Addition<typeof InteractionAttribute>>;
   readonly ItemMode: ReadonlyMap<string, Addition<typeof ItemMode>>;
+  readonly PciModuleForm: ReadonlyMap<string, Addition<typeof PciModuleForm>>;
   readonly PrintedVariableRef: ReadonlyMap<string, Addition<typeof PrintedVariableRef>>;
   readonly ReferringDocument: ReadonlyMap<string, Addition<typeof ReferringDocument>>;
   readonly SectionContextName: ReadonlyMap<string, Addition<typeof SectionContextName>>;
@@ -626,6 +629,28 @@ const interactionsOf = (context: Context) =>
   );
 
 /**
+ * Build each portable custom interaction's module forms: an attribute form for its `module`
+ * attribute and an element form for its `qti-interaction-modules` child (R10-a).
+ *
+ * @param context - The document.
+ * @returns The rows, keyed by node and form.
+ */
+const pciModuleFormsOf = (context: Context) => {
+  const forms = new Map<string, Addition<typeof PciModuleForm>>();
+  for (const node of context.rows.nodes) {
+    if (node.kind === pciKind && context.attributes.get(node.id)?.has("module") === true) {
+      forms.set(keyOf([node.id, String(false)]), { element: false, node: node.id });
+    }
+
+    if (node.kind === "qti-interaction-modules" && context.facts.kindOf(node.parent) === pciKind) {
+      forms.set(keyOf([node.parent, String(true)]), { element: true, node: node.parent });
+    }
+  }
+
+  return forms;
+};
+
+/**
  * Build each choice's row.
  *
  * @param context - The document.
@@ -1080,6 +1105,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
         ? [[context.document, { adaptive: context.adaptive, document: context.document }]]
         : [],
     ),
+    PciModuleForm: pciModuleFormsOf(context),
     PrintedVariableRef: referencesOf(context, read, references.printed, always),
     ReferringDocument: new Map(
       referringRoots.every((root) => root !== context.rootKind)

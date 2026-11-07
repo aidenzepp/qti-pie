@@ -36,6 +36,7 @@ import {
 import { Qti } from "#pantry/qti/schema.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { base, breachesOf, edit, item, judged, shown } from "#pantry/test/probe.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
 /**
@@ -115,6 +116,7 @@ describe("qti/interactions.ts, declared", () => {
       "Feedback outcome type",
       "Feedback reference",
       "Graphic gap match default hotspot",
+      "PCI module source",
       "Printed variable reference",
       "Slider bounds",
       "Template reference",
@@ -348,4 +350,77 @@ describe("qti/interactions.ts, reading 104 by the law oracle", () => {
         }
       }).pipe(Effect.provide(NodeServices.layer)),
   );
+});
+
+/**
+ * The base item's choice interaction, as written, which the PCI cases replace.
+ */
+const choiceInteraction = `<qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-simple-choice identifier="A">A</qti-simple-choice>
+      <qti-simple-choice identifier="B">B</qti-simple-choice>
+    </qti-choice-interaction>`;
+
+/**
+ * The element form of a PCI's module: the `qti-interaction-modules` child.
+ */
+const moduleElement = `<qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules>`;
+
+/**
+ * A portable custom interaction of the base item, with or without each form of its module.
+ *
+ * @param forms - Which forms it writes.
+ * @param forms.attribute - Whether it writes `module`.
+ * @param forms.element - Whether it writes `qti-interaction-modules`.
+ * @returns The interaction's text.
+ */
+const pciOf = ({
+  attribute,
+  element,
+}: {
+  readonly attribute: boolean;
+  readonly element: boolean;
+}) =>
+  `<qti-portable-custom-interaction response-identifier="RESPONSE"${attribute ? ` module="m"` : ""} custom-interaction-type-identifier="t">${element ? moduleElement : ""}<qti-interaction-markup/></qti-portable-custom-interaction>`;
+
+/**
+ * The breaches of "PCI module source" in the base item with its choice interaction replaced by a
+ * PCI.
+ *
+ * @param forms - Which forms of its module the PCI writes.
+ * @param forms.attribute - Whether it writes `module`.
+ * @param forms.element - Whether it writes `qti-interaction-modules`.
+ * @returns The breaches.
+ */
+const pciBreachesOf = (forms: { readonly attribute: boolean; readonly element: boolean }) =>
+  Effect.map(
+    judged({ ...base, "item.xml": edit(item, choiceInteraction, pciOf(forms)) }),
+    (judgment) => breachesOf(judgment).filter(({ law }) => law === "PCI module source"),
+  );
+
+describe("qti/interactions.ts, PCI module source", () => {
+  it.effect(
+    "is broken once by a PCI with neither module form, and by none that writes `module`, `qti-interaction-modules` or both",
+    () =>
+      // Oracle: the information model's §5.106.2, "If this characteristic is provided the
+      // qti-interaction-modules child attribute is not required, if omitted then the modules child
+      // element is mandatory" (R10-a), read as a count of the forms each PCI writes, over the four
+      // ways a PCI writes them.
+      Effect.gen(function* moduleSource() {
+        const neither = yield* pciBreachesOf({ attribute: false, element: false });
+        assert.lengthOf(neither, 1, shown(neither));
+        for (const forms of [
+          { attribute: true, element: false },
+          { attribute: false, element: true },
+          { attribute: true, element: true },
+        ]) {
+          const held = yield* pciBreachesOf(forms);
+          assert.lengthOf(held, 0, shown(held));
+        }
+      }),
+  );
+
+  it("is a check of Interaction under the rule of its own: pci-module-source", () => {
+    // Oracle: the oracle's own rule table (`ruleOf`).
+    assert.strictEqual(ruleOf("PCI module source"), "pci-module-source");
+  });
 });
