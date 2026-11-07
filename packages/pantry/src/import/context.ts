@@ -12,9 +12,11 @@
  *
  * A site is a section ref, or an `xi:include` under a parent whose model holds an explicit include
  * particle (spec reading 114), whose href resolves, as its `ReferencePath` does, to a listed
- * document. The contexts are a fixpoint over the sites: a fragment a fragment includes inherits
- * through the includer's own context, and a chain that returns to a document on it, which the
- * database refuses as an inclusion cycle, is cut where the walk meets the bound.
+ * document a resource names: never the manifest, which no resource names (reading 115: "Fragments
+ * are packaged as separate resources"), so a site whose href names it names no document. The
+ * contexts are a fixpoint over the sites: a fragment a fragment includes inherits through the
+ * includer's own context, and a chain that returns to a document on it, which the database refuses
+ * as an inclusion cycle, is cut where the walk meets the bound.
  */
 import { Option } from "effect";
 import type { Kind } from "#pantry/grammar/compose.ts";
@@ -153,6 +155,11 @@ export const isSiteKind = (kind: string, parentKind: string): boolean =>
  */
 interface Listed {
   readonly idOf: (index: number) => NodeId;
+  /**
+   * Whether a resource names the document, so a site may name it: every listed document but the
+   * manifest.
+   */
+  readonly named: boolean;
   readonly path: string;
   readonly tree: XdmDocument<Composed>;
 }
@@ -307,15 +314,16 @@ const settledOn = (
 /**
  * Compute every listed document's context.
  *
- * @param documents - The package's documents, each with the ids its rows are written under.
+ * @param documents - The package's documents, each with the ids its rows are written under, and
+ *   whether a site may name it.
  * @returns Each document's context, by its document node's id, and the documents sites name.
  */
 export const contextsOf = (documents: readonly Listed[]): Contexts => {
   const read = documents.map(readOf);
   const byPath = new Map<string, NodeId>();
-  for (const [at, { path }] of documents.entries()) {
+  for (const [at, { named, path }] of documents.entries()) {
     const self = read[at]?.self;
-    if (self !== undefined && !byPath.has(path)) {
+    if (named && self !== undefined && !byPath.has(path)) {
       byPath.set(path, self);
     }
   }

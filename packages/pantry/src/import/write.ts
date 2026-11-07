@@ -117,7 +117,8 @@ export interface NodeIds {
    * copies them.
    *
    * @param path - A document's path in the package.
-   * @returns The document there, none when the package lists none at the path.
+   * @returns The document a resource names there, none when no resource names one at the path,
+   *   the manifest's included (spec reading 115).
    */
   readonly targetAt: (path: string) => Option.Option<ListedTarget>;
   /**
@@ -153,7 +154,9 @@ export interface PackageIds {
  *
  * A document's `documentAt` reads every listed document's document node; where two documents share
  * a path (one path named under two resource types, which the database refuses), it gives the
- * first.
+ * first. Its `targetAt` reads only the documents a resource names, the first at each path: a site
+ * never names the manifest, which no resource names (spec reading 115), so an href that resolves
+ * to it names no target, and "Include target" refuses an include of it.
  *
  * @param documents - The package's documents, in the listing's order.
  * @param mint - Draws a fresh uuid. Defaults to `crypto.randomUUID`.
@@ -180,33 +183,33 @@ export const nodeIdsOf = (
     };
   });
   const placed = new Map<string, NodeId>();
-  for (const [at, { path }] of documents.entries()) {
+  const targets = new Map<string, Omit<ListedTarget, "context">>();
+  for (const [at, { path, resourceType, tree }] of documents.entries()) {
     const idOf = idOfs[at];
     if (idOf !== undefined && !placed.has(path)) {
       placed.set(path, idOf(0));
+    }
+
+    if (idOf !== undefined && resourceType !== "none" && !targets.has(path)) {
+      targets.set(path, { node: idOf(0), rootKind: tree.root.kind });
     }
   }
 
   const documentAt = (path: string): Option.Option<NodeId> =>
     Option.fromNullishOr(placed.get(path));
   const { assembled, contexts, targeted } = contextsOf(
-    documents.flatMap(({ path, tree }, at) => {
+    documents.flatMap(({ path, resourceType, tree }, at) => {
       const idOf = idOfs[at];
 
-      return idOf === undefined ? [] : [{ idOf, path, tree }];
+      return idOf === undefined ? [] : [{ idOf, named: resourceType !== "none", path, tree }];
     }),
   );
-  const rootKinds = new Map<string, ListedDocument["tree"]["root"]["kind"]>(
-    documents.map(({ path, tree }) => [path, tree.root.kind] as const).toReversed(),
-  );
   const targetAt = (path: string): Option.Option<ListedTarget> =>
-    Option.flatMap(documentAt(path), (node) =>
-      Option.map(Option.fromNullishOr(rootKinds.get(path)), (rootKind) => ({
-        context: contextAt(contexts, node),
-        node,
-        rootKind,
-      })),
-    );
+    Option.map(Option.fromNullishOr(targets.get(path)), ({ node, rootKind }) => ({
+      context: contextAt(contexts, node),
+      node,
+      rootKind,
+    }));
 
   return {
     documents: documents.flatMap(({ path }, at) => {

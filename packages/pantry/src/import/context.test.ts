@@ -163,9 +163,9 @@ describe("contextsOf", () => {
               );
               const nested = yield* treeOf(`<span xmlns="${asi}">b</span>`);
               const { assembled, contexts, targeted } = contextsOf([
-                { idOf: idsOf(1), path: "i.xml", tree: item },
-                { idOf: idsOf(2), path: "f.xml", tree: fragment },
-                { idOf: idsOf(3), path: "g.xml", tree: nested },
+                { idOf: idsOf(1), named: true, path: "i.xml", tree: item },
+                { idOf: idsOf(2), named: true, path: "f.xml", tree: fragment },
+                { idOf: idsOf(3), named: true, path: "g.xml", tree: nested },
               ]);
               const itemNodes = flatten(item, idsOf(1)).nodes;
               const interactionOf = (kind: string | undefined) =>
