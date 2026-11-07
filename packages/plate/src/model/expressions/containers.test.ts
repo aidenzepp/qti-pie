@@ -325,11 +325,10 @@ describe("the containers family's reader specs and kind rules", () => {
         assertKindType(outcome("SIZE"), "container-size", [response]);
         assert.deepStrictEqual(outcome("PICKED"), identifiers("single", "D"));
         assertKindType(outcome("PICKED"), "index", [ordered]);
-        assert.deepInclude(
-          [identifiers("single", "B"), identifiers("single", "C")],
-          outcome("CHOSEN"),
-          "qti-random picks a member of RESPONSE",
-        );
+        // `processed` runs under the default stream, `drawStream("", "")`, and CHOSEN takes the
+        // run's first draw, 0xaa7855e1. `drawBelow` among RESPONSE's 3 members keeps its low 2
+        // bits, 1, so qti-random picks the member at position 1 (from 0) of B, C, B: C.
+        assert.deepStrictEqual(outcome("CHOSEN"), identifiers("single", "C"));
         assertKindType(outcome("CHOSEN"), "random", [response]);
         assert.deepStrictEqual(outcome("HELD"), truth(true));
         assertKindType(outcome("HELD"), "member", [single, response]);

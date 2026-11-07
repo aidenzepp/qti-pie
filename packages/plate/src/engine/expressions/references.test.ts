@@ -610,6 +610,25 @@ describe("the references family's evaluators of qti-random-integer and qti-rando
   );
 
   it.effect(
+    '[I-9a] qti-random-integer with min="2" max="11" step="3" gives min + step × j for the stream\'s j: 8',
+    () =>
+      Effect.gen(function* pinsSteppedInteger() {
+        const item = yield* declared();
+        // `drawStream("pin", "random-integer")`'s first draw is 0x967db1fe. `drawBelow` among the 4
+        // values the range holds keeps its low 2 bits, j = 2, so the value is 2 + 3 × 2 = 8. The
+        // reversed mapping, max − step × j, gives 5.
+        const value = drawn(
+          randomInteger(2n, 11n, 3n),
+          item,
+          changed,
+          drawStream("pin", "random-integer"),
+        );
+
+        assert.deepStrictEqual(value, integer(8n));
+      }),
+  );
+
+  it.effect(
     "[I-9a] qti-random-integer gives NULL and draws nothing when max is below min, step is 0 or below, a bound passes 1,000,000 bits, or an attribute names a variable holding NULL (G-R1 draft 148; G-R2, pending)",
     () =>
       Effect.gen(function* givesNullWithoutDrawing() {
@@ -723,6 +742,50 @@ describe("the references family's evaluators of qti-random-integer and qti-rando
             assertKindType(value, "random-float", []);
           }
         }
+      }),
+  );
+
+  it.effect(
+    "[I-9a] qti-random-float from -1.5 to 2.5 gives min + u × (max − min) for the stream's u: 0.7269821957053031",
+    () =>
+      Effect.gen(function* pinsNonzeroMinFloat() {
+        const item = yield* declared();
+        // `drawStream("pin", "random-float")`'s first two draws are 0x8e86e047 and 0xa6a837b0, so
+        // `drawFloat`'s numerator is (0x8e86e047 >>> 5) × 2^26 + (0xa6a837b0 >>> 6) =
+        // 74725122 × 2^26 + 43688158 = 5014718093369566, and u = 5014718093369566 / 2^53
+        // (0.5567455489263258). The value is -1.5 + u × 4 = -1.5 + 5014718093369566 / 2^51 =
+        // 0.7269821957053031, exactly. With a nonzero min the swapped form, max − u × (max − min),
+        // gives 0.2730178042946969, and the fallback form 0.7269821957053032.
+        const value = drawn(
+          randomFloat(-1.5, 2.5),
+          item,
+          changed,
+          drawStream("pin", "random-float"),
+        );
+
+        assert.deepStrictEqual(value, float(0.7269821957053031));
+      }),
+  );
+
+  it.effect(
+    "[I-9a] qti-random-float across the whole double range gives min × (1 − u) + max × u for the stream's u: 1.7435743705619021e308",
+    () =>
+      Effect.gen(function* pinsFallbackFloat() {
+        const item = yield* declared();
+        // `drawStream("pin", "random-float across the double range")`'s first two draws are
+        // 0xfc2588ad and 0x0c49ebbd, so `drawFloat`'s numerator is 132197445 × 2^26 + 3221422 =
+        // 8871620360873902, and u = 8871620360873902 / 2^53 (0.9849477190375546). max − min
+        // overflows to Infinity, so the value is min × (1 − u) + max × u in doubles:
+        // -2.705938215020678e306 + 1.770633752712109e308 = 1.7435743705619021e308. The main form,
+        // min + u × (max − min), gives Infinity, which the clamp makes max.
+        const value = drawn(
+          randomFloat(-1.7976931348623157e308, 1.7976931348623157e308),
+          item,
+          changed,
+          drawStream("pin", "random-float across the double range"),
+        );
+
+        assert.deepStrictEqual(value, float(1.7435743705619021e308));
       }),
   );
 
