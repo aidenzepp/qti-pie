@@ -1811,6 +1811,41 @@ const unownedValid: readonly {
     name: "reading 2: moment of five arguments, as MathML 3 §4.4.8.6's example writes it",
   },
   {
+    files: withMath(
+      `<m:apply><m:log/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply>`,
+    ),
+    name: "R6-head-qualifiers: log with its logbase",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:apply><m:ci>f</m:ci></m:apply><m:degree><m:cn>2</m:cn></m:degree><m:ci>x</m:ci></m:apply>`,
+    ),
+    name: "R6-head-qualifiers: a degree beside an apply, which is no built-in operator",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:int/><m:bvar><m:ci>x</m:ci></m:bvar><m:interval><m:ci>a</m:ci><m:ci>b</m:ci></m:interval><m:condition><m:ci>c</m:ci></m:condition><m:ci>x</m:ci></m:apply>`,
+    ),
+    name: "R6-head-qualifiers: int with the qualifiers every binding application shares",
+  },
+  {
+    files: withMath(`<m:cn type="rational">1<m:sep/>2</m:cn>`),
+    name: "reading 2: a rational cn of two parts",
+  },
+  { files: withMath(`<m:cn base="16">FF</m:cn>`), name: "reading 2: a cn read in base 16" },
+  {
+    files: withMath(`<m:cn type="hexdouble">7ff8000000000000</m:cn>`),
+    name: "R6-hexdouble: a hexdouble of sixteen digits",
+  },
+  {
+    files: withMath(`<m:cn type="constant">&#960;</m:cn>`),
+    name: "reading 2: a cn of type constant, which is text",
+  },
+  {
+    files: withMath(`<m:cn base="40">ZZ</m:cn>`),
+    name: "reading 2: a cn whose base lies beyond the alphabet, where the digits are application specific",
+  },
+  {
     files: {
       ...base,
       "item.xml": edit(
@@ -1997,6 +2032,32 @@ const unownedBroken: readonly LawCase[] = [
     law: "MathML arity",
     name: "reading 2: minus of three",
     rule: "math-arity",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:sin/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply>`,
+    ),
+    law: "MathML head qualifier",
+    name: "R6-head-qualifiers: sin with a logbase",
+    rule: "admission",
+  },
+  {
+    files: withMath(`<m:cn type="rational">12</m:cn>`),
+    law: "MathML cn form",
+    name: "reading 2: a rational cn of one part",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withMath(`<m:cn type="hexdouble">7ff8</m:cn>`),
+    law: "MathML cn form",
+    name: "R6-hexdouble: a hexdouble of four digits",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withMath(`<m:cn type="integer">abc</m:cn>`),
+    law: "MathML cn form",
+    name: "reading 2: an integer cn of letters",
+    rule: "attribute-lexical",
   },
   {
     files: withScore(

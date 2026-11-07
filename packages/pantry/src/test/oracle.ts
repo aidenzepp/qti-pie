@@ -75,7 +75,15 @@ import {
   contentStep,
   noSharedModel,
 } from "#pantry/grammar/content.ts";
-import { mathArities, mathQualifiers } from "#pantry/grammar/expression.ts";
+import {
+  cnDefaultType,
+  cnForms,
+  cnPatternOf,
+  mathArities,
+  mathHeadOperators,
+  mathHeadQualifiers,
+  mathQualifiers,
+} from "#pantry/grammar/expression.ts";
 import { compile, patternFlags } from "#pantry/grammar/domains.ts";
 import type { ValueFacet } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
@@ -397,7 +405,9 @@ const lawRules = {
   "Mapped response": "P27",
   "Mastery range": "mastery-range",
   "MathML arity": "math-arity",
+  "MathML cn form": "attribute-lexical",
   "MathML foreign element": "unmodeled-vocabulary",
+  "MathML head qualifier": "admission",
   "Media source src": "source-src",
   "N1 one document node": "reachability",
   "N1 sentinel": "reachability",
@@ -614,8 +624,12 @@ export const lawSources = {
     "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both are written, as xs:double values (INF and -INF infinite), NaN ordered against nothing; a value outside grizzle's double lexical form (outer whitespace, over 15 significant digits, an exponent beyond 293) is not judged, a recorded limit",
   "MathML arity":
     "reading 2 (expression.ts mathArities): https://www.w3.org/TR/MathML3/chapter4.html#contm.unary (MathML 3 §4.3.4.6: 'Unary operators take a single argument') and #contm.binary (§4.3.4.5: 'Binary operators take two arguments'), each operator's class from its syntax table in §4.4 (§4.1.5: the Class row 'indicate[s] how many arguments the operator represented by this element takes'); an apply with a qualifier or an interval beside its operator is not judged, and moment is left out, since §4.4.8.6's own example applies it to five arguments",
+  "MathML cn form":
+    "spec readings 2 and R6-hexdouble: https://www.w3.org/TR/MathML3/chapter4.html#contm.cn (MathML 3 §4.2.1: the content of a cn has the form its type implies, integer, real, double, hexdouble, e-notation, rational, complex-cartesian and complex-polar, split at m:sep; every other type is text), digits read in its base from 2 to 36; a part holding an element or an entity reference is not judged, and a base beyond the alphabet leaves the digits application specific (expression.ts cnForms and cnPatternOf)",
   "MathML foreign element":
     "MathML 3 RelaxNG mathml3-common.rnc: start = math (line 15) and anyElement = element (* - m:*) (line 61); MathML 3 §2.2, 'All other MathML content must be contained in a math element'; reading 2",
+  "MathML head qualifier":
+    "spec reading R6-head-qualifiers (expression.ts mathHeadQualifiers) and MathML 3's §4.4 syntax tables: https://www.w3.org/TR/MathML3/chapter4.html#contm.root (§4.4.2.11), #contm.log (§4.4.7.7) and #contm.moment (§4.4.8.6) list degree, logbase and momentabout beside their operators; an apply whose first child is no built-in operator is not judged",
   "Media source src":
     "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_src (§5.135.1: 'The value must be a valid non-empty URL potentially surrounded by spaces. This characteristic must be present'), read in a media element as the HTML Standard it restates splits it (https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element: where 'The source element's parent is a media element', 'This attribute must be present'; where it is a picture element, 'The src attribute must not be present'): a source whose parent is an audio or a video carries src (html.ts Media_source_src)",
   "N1 one document node": "XML 1.0 §2.1, one document entity; fin.md §12, entry 8",
@@ -1368,6 +1382,8 @@ export const nodeLawNames = [
   "Media source src",
   "Track srclang",
   "MathML arity",
+  "MathML head qualifier",
+  "MathML cn form",
   "SSML lexicon reference",
   "SSML trim mark",
   "XsiType derived",
@@ -1697,6 +1713,71 @@ const elementChildrenOf = (
   elements: ReadonlySet<string>,
 ): readonly FoldedNode<Composed>[] =>
   (view.childrenOf.get(node.id) ?? []).filter(({ kind }) => elements.has(kind));
+
+/**
+ * Read an element's closed attribute as written and collapsed ({@link collapsed}).
+ *
+ * @param view - The document.
+ * @param node - The element's id.
+ * @param name - The attribute's closed name.
+ * @returns Its collapsed lexical form, or none when the element carries no such attribute.
+ */
+const collapsedValueOf = (view: View, node: NodeId, name: string): Option.Option<string> =>
+  Option.map(valueOf(view, node, name), collapsed);
+
+/**
+ * The qualifiers whose place R6-head-qualifiers ties to an operator: `degree`, `momentabout` and
+ * `logbase`, the qualifier kinds of {@link mathHeadQualifiers}.
+ */
+const headQualifierKinds: ReadonlySet<string> = new Set(
+  mathHeadQualifiers.map(({ qualifier }) => qualifier),
+);
+
+/**
+ * One part of a `cn`'s content: its text collapsed, and whether it is plain text.
+ */
+interface CnPart {
+  /**
+   * False when the part holds an element or an entity reference, which the form law does not judge.
+   */
+  readonly judged: boolean;
+  readonly text: string;
+}
+
+/**
+ * Split a `cn`'s content into parts at its `m:sep` children (MathML 3 §4.2.1): the text and
+ * whitespace children's characters of each stretch between separators, collapsed (§2.1.7); comments
+ * and instructions add nothing.
+ *
+ * @param view - The document.
+ * @param node - The `cn`.
+ * @param elements - The kinds that are elements.
+ * @returns Its parts in order, one more than it has separators.
+ */
+const cnPartsOf = (
+  view: View,
+  node: FoldedNode<Composed>,
+  elements: ReadonlySet<string>,
+): readonly CnPart[] => {
+  const raw: { judged: boolean; text: string }[] = [{ judged: true, text: "" }];
+
+  for (const child of view.childrenOf.get(node.id) ?? []) {
+    const last = raw.at(-1);
+    if (last === undefined) {
+      continue;
+    }
+
+    if (child.kind === "m:sep") {
+      raw.push({ judged: true, text: "" });
+    } else if (child.kind === "text" || child.kind === "ws") {
+      last.text += view.textOf.get(child.id) ?? "";
+    } else if (child.kind === "entityRef" || elements.has(child.kind)) {
+      last.judged = false;
+    }
+  }
+
+  return raw.map(({ judged, text }) => ({ judged, text: collapsed(text) }));
+};
 
 /**
  * Find the SSML fragment a node sits in, spec reading 3's "document": its nearest `ssml:speak`,
@@ -2404,6 +2485,78 @@ const nodeLaws: readonly NodeLaw[] = [
       );
     },
     law: "MathML arity",
+    over: "members",
+  },
+  {
+    breaks: (node, view, { elements }) => {
+      if (node.kind !== "m:apply") {
+        return Option.none();
+      }
+
+      const [head, ...rest] = elementChildrenOf(view, node, elements);
+      if (head === undefined || !mathHeadOperators.has(head.kind)) {
+        return Option.none();
+      }
+
+      const stray = rest.find(
+        ({ kind }) =>
+          headQualifierKinds.has(kind) &&
+          !mathHeadQualifiers.some(
+            (listed) => listed.head === head.kind && listed.qualifier === kind,
+          ),
+      );
+
+      return Option.map(Option.fromNullishOr(stray), ({ kind }) => ({
+        head: head.kind,
+        qualifier: kind,
+      }));
+    },
+    law: "MathML head qualifier",
+    over: "members",
+  },
+  {
+    breaks: (node, view, { elements }) => {
+      if (node.kind !== "m:cn") {
+        return Option.none();
+      }
+
+      const type = Option.getOrElse(collapsedValueOf(view, node.id, "type"), () => cnDefaultType);
+      const forms = cnForms.get(type);
+      if (forms === undefined) {
+        return Option.none();
+      }
+
+      const parts = cnPartsOf(view, node, elements);
+      const base = Option.getOrElse(collapsedValueOf(view, node.id, "base"), () => "10");
+      const keys = { base, type };
+      if (parts.length !== forms.length) {
+        return Option.some({
+          ...keys,
+          part: "",
+          text: parts.map(({ text }) => text).join("|"),
+        });
+      }
+
+      const wrong = parts.findIndex(
+        ({ judged, text }, index) =>
+          judged &&
+          Option.exists(
+            Option.map(
+              cnPatternOf(
+                forms[index] ?? "real",
+                /^[+-]?[0-9]+$/u.test(base) ? Number(base) : Number.NaN,
+              ),
+              (pattern) => new RegExp(`^(?:${pattern})$`, patternFlags),
+            ),
+            (form) => !form.test(text),
+          ),
+      );
+
+      return wrong === -1
+        ? Option.none()
+        : Option.some({ ...keys, part: String(wrong + 1), text: parts[wrong]?.text ?? "" });
+    },
+    law: "MathML cn form",
     over: "members",
   },
   {
@@ -6012,6 +6165,21 @@ const field = (keys: Keys, name: string): string => keys[name] ?? "";
 const inBraces = (members: readonly string[]): string => `{${members.join(", ")}}`;
 
 /**
+ * Write the counts an operator takes for an explanation.
+ *
+ * @param min - The fewest.
+ * @param max - The most, `Infinity` for no most.
+ * @returns The one count, "`min` or `max`", or "`min` or more" when `max` is not finite.
+ */
+const countsShown = (min: number, max: number): string => {
+  if (!Number.isFinite(max)) {
+    return `${String(min)} or more`;
+  }
+
+  return min === max ? String(min) : `${String(min)} or ${String(max)}`;
+};
+
+/**
  * The kinds that take a position of a parent's content model: those whose `Admission` row holds
  * it, and those `Symbol` places there.
  *
@@ -6338,10 +6506,23 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     Option.match(Option.fromNullishOr(mathArities.get(field(keys, "operator"))), {
       onNone: () => `${field(keys, "operator")} has no MathML arity`,
       onSome: ({ max, min, section }) =>
-        `m:apply applies ${field(keys, "operator")} to ${field(keys, "arguments")} arguments, where its class (MathML 3 §${section}) takes ${min === max ? String(min) : `${String(min)} or ${String(max)}`}`,
+        `m:apply applies ${field(keys, "operator")} to ${field(keys, "arguments")} arguments, where its class (MathML 3 §${section}) takes ${countsShown(min, max)}`,
     }),
+  "MathML cn form": (keys) => {
+    const forms = cnForms.get(field(keys, "type")) ?? [];
+
+    return field(keys, "part") === ""
+      ? `a cn of type ${JSON.stringify(field(keys, "type"))} holds the parts ${JSON.stringify(field(keys, "text"))}, where its type takes ${String(forms.length)} (MathML 3 §4.2.1), split at m:sep`
+      : `part ${field(keys, "part")} of a cn of type ${JSON.stringify(field(keys, "type"))}, ${JSON.stringify(field(keys, "text"))}, is no ${forms[Number(field(keys, "part")) - 1] ?? "valid"} in base ${field(keys, "base")} (MathML 3 §4.2.1)`;
+  },
   "MathML foreign element": (keys) =>
     `${field(keys, "node")} is a foreign element named {${field(keys, "namespace")}}${field(keys, "local")}, and no foreign element is in the MathML namespace: MathML content stands only inside m:math`,
+  "MathML head qualifier": (keys) =>
+    `m:apply applies ${field(keys, "head")} with a ${field(keys, "qualifier")}, which ${field(keys, "head")}'s syntax table (MathML 3 §4.4) does not list: ${inBraces(
+      mathHeadQualifiers
+        .filter(({ qualifier }) => qualifier === field(keys, "qualifier"))
+        .map(({ head }) => head),
+    )} take it`,
   "Media source src": (keys) =>
     `a source in ${field(keys, "parentKind") || "a media element"} carries no src, where a source of an audio or a video names its media resource`,
   "N1 one document node": (keys) =>

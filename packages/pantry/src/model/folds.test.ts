@@ -689,6 +689,10 @@ const unconstructed = {
   MappableBaseType: "a declaration's base type, a value drawn without reading",
   "Mastery range": "a declaration's mastery and normal bounds, values drawn without reading",
   "MathML arity": "an operator's arity, a count of children the content automaton relaxes",
+  "MathML cn form":
+    "a cn's type, base and text, values a generated tree draws without reading them",
+  "MathML head qualifier":
+    "an operator's qualifier children, which a generated tree draws without reading the operator's syntax table",
   "N6 ancestry":
     "the ancestry bans, which the generator does not read; a search of its own judges N6",
   "N7 Counted": "the counts of 2…n the content automaton relaxes",
