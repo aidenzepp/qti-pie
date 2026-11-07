@@ -62,7 +62,7 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
   "feedback-outcome-float": { main: ["feedback-ref"], oracle: ["feedback-ref"] },
   "feedback-template": {
     main: ["ancestry-ban", "binding-declared"],
-    oracle: ["P8", "ancestry-ban", "prefixed-ref"],
+    oracle: ["ancestry-ban", "template-ref"],
   },
   "include-text": { main: ["include-parse"], oracle: ["attribute-lexical"] },
   "include-xpointer": { main: ["include-xpointer"], oracle: ["attribute-admission"] },
@@ -95,22 +95,25 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
   },
   "rubric-interaction": { main: ["ancestry-ban"], oracle: ["ancestry-ban", "idref-target"] },
   "rubric-no-body": { main: ["structure-count"], oracle: ["child-set"] },
-  "rubric-printed-undeclared": { main: ["binding-declared"], oracle: ["P8", "prefixed-ref"] },
+  "rubric-printed-undeclared": { main: ["binding-declared"], oracle: ["printed-variable-ref"] },
   "section-adaptive-and-selection": { main: ["ordering"], oracle: ["ordering"] },
-  "section-feedback-undeclared": { main: ["binding-declared"], oracle: ["P8", "prefixed-ref"] },
+  "section-feedback-undeclared": { main: ["binding-declared"], oracle: ["feedback-ref"] },
   "section-identifier-unknown": {
     main: ["section-identifier-target", "reach-copy"],
     oracle: ["section-identifier-target"],
   },
   "section-prefixed-unresolved": { main: ["prefixed-ref"], oracle: ["prefixed-ref"] },
-  "section-printed-undeclared": { main: ["binding-declared"], oracle: ["P8", "prefixed-ref"] },
+  "section-printed-undeclared": {
+    main: ["binding-declared"],
+    oracle: ["P8", "prefixed-ref", "printed-variable-ref"],
+  },
   "section-ref-cycle": { main: ["section-ref-cycle"], oracle: ["inclusion-cycle"] },
   "section-ref-identifier-clash": { main: ["structure-identifier"], oracle: ["test-name-key"] },
   "section-ref-to-item": { main: ["section-ref-target"], oracle: ["entry-kind"] },
   "section-two-isc": { main: ["structure-count"], oracle: ["ordering"] },
   "section-unprefixed-undeclared": {
     main: ["P8", "binding-declared"],
-    oracle: ["P8", "prefixed-ref"],
+    oracle: ["P8", "prefixed-ref", "printed-variable-ref"],
   },
   "section-variable-in-test": { main: ["section-variable-ref"], oracle: "accepted" },
   "select-not-integer": {
