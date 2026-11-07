@@ -935,6 +935,24 @@ export const known = {
       fix: "(3), its law half: the Manifest overlay selections read the manifest's cp:* attributes alone, as the import writes ManifestId and Resource from imsmanifest.xml alone",
       owner: "GEN-A",
     },
+  "import-only-law: N8 nearest, contained Choice(node) in ChoiceInteraction(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p>a <qti-gap identifier="G1"/> b</p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "N8: the oracle states the choice law the schema does, every choice in a choice interaction, so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
+    owner: "OL",
+  },
   "import-only-law: Reserved type, check Reserved_type on Declaration": {
     files: [
       [
@@ -1543,6 +1561,24 @@ export const fixed = {
     ],
     fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
     owner: "VD",
+  },
+  "lone-refusal: N5 Follow named owner-copy, witness unreported": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p>a <qti-gap identifier="G1"/> b</p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "TD-B's or-n6-missing, kept as a planted bug: the oracle's N6 reads the flags a kind needs (Needs), so a qti-gap outside every qti-gap-match-interaction breaks N6 beside N5 Follow, and N5 Follow is never the oracle's lone law here",
+    owner: "GEN-A",
   },
   "lone-refusal: N5 admitted named attribute-lexical, witness unreported": {
     files: [
