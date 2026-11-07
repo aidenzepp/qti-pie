@@ -357,18 +357,32 @@ describe("the functions family's evaluators", () => {
     }
   });
 
-  it("[I-9a] qti-math-operator toDegrees and toRadians multiply then divide by Math.PI's double, keep ±INF and give NULL at NaN (R§6.8)", () => {
+  it("[I-9a] qti-math-operator toDegrees and toRadians multiply by one constant, 180 / π or π / 180 from Math.PI's double, keep ±INF and give NULL at NaN (R§6.8)", () => {
     const inf = Number.POSITIVE_INFINITY;
 
     assert.deepStrictEqual(ofFloat("toDegrees", Math.PI), float(180));
     assert.deepStrictEqual(ofFloat("toRadians", 180), float(Math.PI));
     assert.deepStrictEqual(ofFloat("toDegrees", 1), float(180 / Math.PI));
     assert.deepStrictEqual(ofFloat("toRadians", 1), float(Math.PI / 180));
+    assert.deepStrictEqual(ofFloat("toDegrees", 1), float(57.29577951308232));
+    assert.deepStrictEqual(ofFloat("toRadians", 1), float(0.017453292519943295));
     for (const name of ["toDegrees", "toRadians"] as const) {
       assert.deepStrictEqual(ofFloat(name, inf), float(inf), `${name}(INF)`);
       assert.deepStrictEqual(ofFloat(name, -inf), float(-inf), `${name}(-INF)`);
       assert.deepStrictEqual(ofFloat(name, Number.NaN), floatNull, `${name}(NaN)`);
     }
+  });
+
+  it("[I-9a] qti-math-operator toDegrees and toRadians overflow only when the true result does (R§6.8)", () => {
+    const inf = Number.POSITIVE_INFINITY;
+
+    assert.deepStrictEqual(ofFloat("toRadians", 1e308), float(1.7453292519943295e306));
+    assert.deepStrictEqual(ofFloat("toRadians", -1e308), float(-1.7453292519943295e306));
+    assert.deepStrictEqual(ofFloat("toRadians", Number.MAX_VALUE), float(3.1375664143845866e306));
+    assert.deepStrictEqual(ofFloat("toDegrees", 2e306), float(1.1459155902616465e308));
+    assert.deepStrictEqual(ofFloat("toDegrees", -2e306), float(-1.1459155902616465e308));
+    assert.deepStrictEqual(ofFloat("toDegrees", 4e306), float(inf));
+    assert.deepStrictEqual(ofFloat("toDegrees", -4e306), float(-inf));
   });
 
   it("[I-9a] qti-math-operator gives its type's NULL for a NULL operand", () => {
@@ -430,6 +444,48 @@ describe("the functions family's evaluators", () => {
     assert.deepStrictEqual(statsOperator("mean", floats("multiple", [inf, -inf])), floatNull);
     assert.deepStrictEqual(statsOperator("popVariance", floats("multiple", [inf, 1])), floatNull);
     assert.deepStrictEqual(statsOperator("mean", floats("multiple", [inf, 1])), float(inf));
+  });
+
+  it("[I-9a] qti-stats-operator's sums never overflow when its statistic does not: [1e308, 1e308]'s mean is 1e308 and its spreads 0 (9.20)", () => {
+    const twice = floats("multiple", [1e308, 1e308]);
+
+    assert.deepStrictEqual(statsOperator("mean", twice), float(1e308));
+    for (const name of ["sampleVariance", "sampleSD", "popVariance", "popSD"] as const) {
+      assert.deepStrictEqual(statsOperator(name, twice), float(0), name);
+    }
+
+    const largest = floats("ordered", [Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE]);
+
+    assert.deepStrictEqual(statsOperator("mean", largest), float(Number.MAX_VALUE));
+    assert.deepStrictEqual(statsOperator("popSD", largest), float(0));
+    assert.deepStrictEqual(
+      statsOperator("mean", floats("multiple", [Number.MAX_VALUE, -Number.MAX_VALUE])),
+      float(0),
+    );
+  });
+
+  it("[I-9a] qti-stats-operator gives a finite standard deviation whose variance overflows, and keeps the variance's INF (9.20)", () => {
+    const inf = Number.POSITIVE_INFINITY;
+    const opposite = floats("multiple", [1e200, -1e200]);
+
+    assert.deepStrictEqual(statsOperator("popSD", opposite), float(1e200));
+    assert.deepStrictEqual(statsOperator("sampleSD", opposite), float(1.414213562373095e200));
+    assert.deepStrictEqual(statsOperator("popVariance", opposite), float(inf));
+    assert.deepStrictEqual(statsOperator("sampleVariance", opposite), float(inf));
+
+    const spread = floats("ordered", [1e300, 2e300, 3e300]);
+
+    assert.deepStrictEqual(statsOperator("mean", spread), float(2e300));
+    assert.deepStrictEqual(statsOperator("sampleSD", spread), float(1e300));
+    assert.deepStrictEqual(statsOperator("popSD", spread), float(8.164965809277261e299));
+    assert.deepStrictEqual(
+      statsOperator("popSD", floats("multiple", [Number.MAX_VALUE, -Number.MAX_VALUE])),
+      float(Number.MAX_VALUE),
+    );
+    assert.deepStrictEqual(
+      statsOperator("sampleSD", floats("multiple", [Number.MAX_VALUE, -Number.MAX_VALUE])),
+      float(inf),
+    );
   });
 
   it("[I-9a] qti-power gives math.ts's pow as a float, integers included", () => {

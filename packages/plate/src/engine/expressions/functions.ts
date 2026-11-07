@@ -7,7 +7,8 @@
  * `cosh`, `tanh`, `exp`, `log`, `log10` and `pow`, each with IEEE results (NaN, ±INF, ±0). This
  * module names no approximated `Math` member and never `**` on a number, so a result is the same
  * in every engine. Everything else it computes by operations ECMA-262 defines exactly: `+`, `-`,
- * `*`, `/`, and of `Math` only `abs`, `floor`, `ceil`, `sign`, `sqrt`, `PI` and `E`.
+ * `*`, `/`, `Number` of a power of two, and of `Math` only `abs`, `floor`, `ceil`, `sign`, `sqrt`,
+ * `PI` and `E`.
  *
  * Over those IEEE results it applies QTI's rules: a NaN, the result of an argument outside a
  * function's natural domain, is NULL; an infinity is a value of `qti-math-operator` and
@@ -96,6 +97,18 @@ const integralOf = (value: number): Option.Option<bigint> =>
   Number.isFinite(value) ? Option.some(BigInt(value)) : Option.none();
 
 /**
+ * The degrees in a radian, `180 / π` with `Math.PI`'s double, computed once so that `toDegrees` is
+ * one product, as Java's `Math.toDegrees` is.
+ */
+const degreesPerRadian = 180 / Math.PI;
+
+/**
+ * The radians in a degree, `π / 180` with `Math.PI`'s double, computed once so that `toRadians` is
+ * one product, as Java's `Math.toRadians` is.
+ */
+const radiansPerDegree = Math.PI / 180;
+
+/**
  * How a `qti-math-operator` name computes its value: a float function of one argument, a float
  * function of two (`atan2`), or an integer function of one number (`signum`, `floor`, `ceil`),
  * which takes an integer operand as it is. A float function gives NaN for NULL.
@@ -154,8 +167,9 @@ const signOf = (value: bigint): bigint => {
  * - `sec`, `csc`, `cot`, `sech`, `csch` and `coth` are the {@link reciprocal} of `cos`, `sin`, `tan`,
  *   `cosh`, `sinh` and `tanh`; `asec`, `acsc` and `acot` are `acos`, `asin` and `atan` of `1 / x`,
  *   so an argument below 1 in magnitude gives NaN, NULL, for the first two.
- * - `toDegrees` is `x × 180 / π` and `toRadians` is `x × π / 180`, multiplied first, with `Math.PI`'s
- *   double for π.
+ * - `toDegrees` is `x × (180 / π)` and `toRadians` is `x × (π / 180)`, one product by
+ *   {@link degreesPerRadian} or {@link radiansPerDegree}, so a result overflows only when the true
+ *   result does.
  * - `abs` is `Math.abs`; `signum`, `floor` and `ceil` give an exact integer, the integer an integer
  *   operand holds for `floor` and `ceil`; ±INF and NaN give none for `floor` and `ceil`, NaN none
  *   for `signum`, whose ±INF is ±1 (9.10).
@@ -195,8 +209,8 @@ const operations = {
   sinh: unary(sinh),
   tan: unary(tan),
   tanh: unary(tanh),
-  toDegrees: unary((x) => (x * 180) / Math.PI),
-  toRadians: unary((x) => (x * Math.PI) / 180),
+  toDegrees: unary((x) => x * degreesPerRadian),
+  toRadians: unary((x) => x * radiansPerDegree),
 } satisfies { readonly [N in MathOperatorName]: Operation };
 
 /**
@@ -313,6 +327,41 @@ const membersOf = (value: Value): Option.Option<readonly number[]> => {
 };
 
 /**
+ * The greatest magnitude a member may have for the statistics to be computed on the members as they
+ * are: 2^494. A deviation from the mean of such members is under 2^495, its square under 2^990, and
+ * a sum of fewer than 2^32 of either (an array's greatest length) under 2^1022, so no intermediate
+ * sum or square overflows.
+ */
+const unscaledMagnitude = Number(2n ** 494n);
+
+/**
+ * The scale the statistics compute larger members at: 2^-530, which brings every finite magnitude,
+ * under 2^1024, under {@link unscaledMagnitude}. A power of two, so a scaled member is the member's
+ * exact image unless it falls below the normal range, which only a member more than 2^1000 times
+ * smaller than the largest does, too small to move a sum.
+ */
+const largeScale = 1 / Number(2n ** 530n);
+
+/**
+ * Give the scale the statistics compute members at: 1, or {@link largeScale} when a member's
+ * magnitude exceeds {@link unscaledMagnitude}, so that no intermediate overflows unless the
+ * statistic does. A power of two moves no rounding in the normal range, so the scale changes a
+ * statistic only where an intermediate overflowed without it.
+ *
+ * @param members The floats.
+ * @returns The scale.
+ */
+const scaleOf = (members: readonly number[]): number => {
+  for (const member of members) {
+    if (Math.abs(member) > unscaledMagnitude) {
+      return largeScale;
+    }
+  }
+
+  return 1;
+};
+
+/**
  * Give the arithmetic mean of floats: their sum, left to right, over their count.
  *
  * @param members The floats, at least one.
@@ -348,33 +397,40 @@ const squaredDeviationsOf = (members: readonly number[]): number => {
  * Give a statistic of floats by name: the mean, and the variance and standard deviation of a
  * sample (over n − 1) and of a population (over n), each root by `Math.sqrt` (9.20).
  *
+ * It computes on the members times their {@link scaleOf} and divides the scale back out, once for
+ * the mean and a standard deviation, twice for a variance, so a statistic is ±INF only when its
+ * true value exceeds the largest float: the mean of [1e308, 1e308] is 1e308, and the population
+ * standard deviation of [1e200, -1e200] is 1e200 while its variance is INF.
+ *
  * @param name The statistic.
  * @param members The floats, at least one.
  * @returns The statistic; NaN for the four spreads of a single float, which need a container size
  *   greater than 1.
  */
 const statisticOf = (name: StatsOperatorName, members: readonly number[]): number => {
+  const scale = scaleOf(members);
+  const scaled = members.map((member) => member * scale);
   if (name === "mean") {
-    return meanOf(members);
+    return meanOf(scaled) / scale;
   }
 
   if (members.length < 2) {
     return Number.NaN;
   }
 
-  const squares = squaredDeviationsOf(members);
+  const squares = squaredDeviationsOf(scaled);
   switch (name) {
     case "popSD": {
-      return Math.sqrt(squares / members.length);
+      return Math.sqrt(squares / members.length) / scale;
     }
     case "popVariance": {
-      return squares / members.length;
+      return squares / members.length / scale / scale;
     }
     case "sampleSD": {
-      return Math.sqrt(squares / (members.length - 1));
+      return Math.sqrt(squares / (members.length - 1)) / scale;
     }
     case "sampleVariance": {
-      return squares / (members.length - 1);
+      return squares / (members.length - 1) / scale / scale;
     }
     default: {
       return name satisfies never;
@@ -385,7 +441,8 @@ const statisticOf = (name: StatsOperatorName, members: readonly number[]): numbe
 /**
  * Give the value of a `qti-stats-operator`: a single float, its name's statistic of its operand's
  * members (9.20). It is NULL when the operand is NULL, for a spread of a container of one, and for
- * a statistic that is NaN, as one over an infinite member may be; an infinite mean is kept.
+ * a statistic that is NaN, as one over an infinite member may be. An infinite statistic is kept: a
+ * mean over an infinite member, or a statistic whose true value exceeds the largest float.
  *
  * @param expression The `qti-stats-operator`.
  * @param scope The item and the variables of the attempt.
