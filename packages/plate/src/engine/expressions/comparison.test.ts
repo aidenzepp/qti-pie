@@ -315,7 +315,7 @@ describe("the comparison family's evaluators", () => {
     );
   });
 
-  it("[I-9a] qti-equal in a tolerance mode compares an integer and a float operand as two floats, the integer through toFloat, whichever operand it is", () => {
+  it("[I-9a] qti-equal in a tolerance mode compares an integer and a float operand exactly, the float as the exact fraction it is, whichever operand it is (Mind amendment 1)", () => {
     const one = [literal(1)];
 
     assert.deepStrictEqual(
@@ -326,14 +326,18 @@ describe("the comparison family's evaluators", () => {
       ],
       [true, true, false].map((held) => truth(held)),
     );
-    for (const width of [2, 1, 0]) {
+    for (const [width, expected] of [
+      [2, true],
+      [1, true],
+      [0, false],
+    ] as const) {
       assert.deepStrictEqual(
         [
           tolerated("absolute", [float(2 ** 53), integer(twoTo53 + 1n)], [literal(width)]),
           tolerated("absolute", [integer(twoTo53 + 1n), float(2 ** 53)], [literal(width)]),
         ],
-        [truth(true), truth(true)],
-        `2^53+1 and 2^53, whose floats are equal, ± ${width}`,
+        [truth(expected), truth(expected)],
+        `2^53+1 against 2^53 ± ${width}`,
       );
     }
     assert.deepStrictEqual(
@@ -341,7 +345,21 @@ describe("the comparison family's evaluators", () => {
         tolerated("absolute", [float(Number.MAX_VALUE), integer(10n ** 400n)], [literal(0)]),
         tolerated("absolute", [integer(10n ** 400n), float(Number.MAX_VALUE)], [literal(0)]),
       ],
-      [truth(true), truth(true)],
+      [truth(false), truth(false)],
+    );
+  });
+
+  it("[I-9a] qti-equal in a tolerance mode compares two finite floats exactly, so no bound is rounded (Mind amendment 1)", () => {
+    const x = float(1e16);
+
+    assert.deepStrictEqual(
+      [
+        tolerated("absolute", [x, float(1e16 + 2)], [literal(1.5)]),
+        tolerated("absolute", [x, float(1e16 - 2)], [literal(1.5)]),
+        tolerated("absolute", [x, float(1e16 + 2)], [literal(2)]),
+        tolerated("absolute", [float(0.1), float(0.3)], [literal(0.2)]),
+      ],
+      [false, false, true, true].map((held) => truth(held)),
     );
   });
 
@@ -382,22 +400,40 @@ describe("the comparison family's evaluators", () => {
     );
   });
 
-  it("[I-9a] qti-equal of two integer operands in a tolerance mode takes an infinite tolerance as an unbounded band, holds 0 alone around x = 0 whatever its tolerance, and holds nothing for a NaN tolerance", () => {
-    const infinite = [literal(Number.POSITIVE_INFINITY)];
+  it("[I-9a] qti-equal in a tolerance mode takes the written float formula for a bound an infinite or NaN tolerance enters, and the other bound exactly (Mind amendment 1)", () => {
+    const infinite = literal(Number.POSITIVE_INFINITY);
+    const v = integer(twoTo53 + 1n);
 
     assert.deepStrictEqual(
       [
-        tolerated("absolute", [integer(10n), integer(10n ** 400n)], infinite),
-        tolerated("relative", [integer(10n), integer(-(10n ** 400n))], infinite),
-        tolerated("relative", [integer(0n), integer(0n)], infinite),
-        tolerated("relative", [integer(0n), integer(1n)], infinite),
+        tolerated("absolute", [integer(10n), integer(10n ** 400n)], [infinite]),
+        tolerated("relative", [integer(10n), integer(-(10n ** 400n))], [infinite]),
+        tolerated("relative", [integer(0n), integer(0n)], [infinite]),
         tolerated("absolute", [integer(10n), integer(10n)], [literal(Number.NaN)]),
+        tolerated("absolute", [v, v], [infinite, literal(0)]),
+        tolerated("absolute", [v, v], [literal(0), infinite]),
+        tolerated("absolute", [float(1e16), float(1e16 + 2)], [infinite, literal(1.5)]),
       ],
-      [true, true, true, false, false].map((held) => truth(held)),
+      [true, true, false, false, true, true, false].map((held) => truth(held)),
     );
   });
 
-  it("[I-9a] qti-equal reads a tolerance token that names a float variable, and one that names an integer variable through toFloat (9.11)", () => {
+  it("[I-9a] qti-equal reads an integer tolerance variable exactly, past the largest float (Mind amendment 1)", () => {
+    const variables: Variables = { outcomes: { BIG: integer(10n ** 400n) }, responses: {} };
+    const big = [ref("BIG")];
+
+    assert.deepStrictEqual(
+      [
+        tolerated("absolute", [integer(0n), integer(10n ** 400n)], big, {}, variables),
+        tolerated("absolute", [integer(0n), integer(10n ** 400n + 1n)], big, {}, variables),
+        tolerated("absolute", [float(0), integer(10n ** 400n)], big, {}, variables),
+        tolerated("absolute", [float(0), integer(10n ** 400n + 1n)], big, {}, variables),
+      ],
+      [true, false, true, false].map((held) => truth(held)),
+    );
+  });
+
+  it("[I-9a] qti-equal reads a tolerance token that names a float variable, and one that names an integer variable, exactly (9.11)", () => {
     const variables: Variables = {
       outcomes: { HALF: float(0.5), ONE: integer(1n) },
       responses: {},
