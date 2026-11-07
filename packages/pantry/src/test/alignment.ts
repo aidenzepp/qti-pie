@@ -267,7 +267,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [53, { owner: "plate delivers; pantry stores `max-strings` as written", status: "G" }],
   [54, { owner: "plate checks responses; pantry stores `pattern-mask` as written", status: "G" }],
   [55, { owner: "plate checks responses; pantry stores `pattern-mask` as written", status: "G" }],
-  [56, { owner: "G5's typed `xs:double` values (Q5.08)", status: "P" }],
+  [
+    56,
+    {
+      owner:
+        "G5's typed `xs:double` values (Q5.08): `Compute.cast` over `doubleForm` for `Mastery_range` (`src/qti/declarations.ts`) and for an interaction's bounds (`src/qti/interactions.ts`), and `MapKeyFloat`'s `value` (`src/qti/mapping.ts`), each rounding the decimal once as XML Schema's mapping does; the stated limit: a float map key outside grizzle's `double precision` form (`floatKeyPattern`) has no typed value and is distinct by its spelling (the float map key row of `docs/grizzle-findings.md`)",
+      status: "G",
+    },
+  ],
   [57, { owner: "the W5 overlays over every node the walk checks (Q5.09)", status: "P" }],
   [58, { owner: "plate checks the pattern; pantry stores `pattern-mask` as written", status: "G" }],
   [59, { owner: "plate scores; pantry stores `coords` as written", status: "G" }],
@@ -413,8 +420,9 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [
     87,
     {
-      owner: "Q5.13's branch targets over `Instance`; p15-48 (a rule inside a section document)",
-      status: "P",
+      owner:
+        "Q5.13's branch targets over `Instance`: `Branch_target` and `Branch_forward` over each instance's `BranchResolution`, a rule placed in its own instance by `instanceStart` (`branchLaws`, `src/qti/tests.ts`), held by `src/test/gen/assembly.test.ts`; the oracle's Branch target and Branch forward (`src/test/oracle-laws/tests.ts`, `branchLaws`), held by `oracle-laws.differential.oracle.test.ts`",
+      status: "G",
     },
   ],
   [
@@ -487,7 +495,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     98,
     {
       owner:
-        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over the lexical key, and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 56's limit), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; the oracle's `Map key`",
+        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, folded, matched))`, where `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"` and `matched` to its ASCII lowercase (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise to the key as written, so a case-sensitive entry never meets a case-insensitive one, and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 56's limit), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; the oracle's `Map key` (`matchedKeyOf`, `src/test/oracle.ts`), folding the same way",
       status: "G",
     },
   ],
@@ -543,7 +551,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     105,
     {
       owner:
-        "PM's `UsageValue` (`src/qti/metadata.ts`): `Usage_typed_value` over `BaseTypePattern`, the `ud:value` text folded by `copiedTextKinds` (`src/qti/node.ts`); the oracle's Usage typed value",
+        "PM's `UsageValue` (`src/qti/metadata.ts`): a row only for a `ud:value` that writes a `fieldIdentifier` (inside a record) and a `baseType` (`usageRecordValues`), `Usage_typed_value` over `BaseTypePattern` on its text, folded by `copiedTextKinds` (`src/qti/node.ts`), and a `baseType` outside a record left untyped; the oracle's Usage typed value (`src/test/oracle.ts`), the same test",
       status: "G",
     },
   ],
@@ -583,7 +591,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     110,
     {
       owner:
-        "PE's `MappingSource` and `TemplateDefault` (`src/qti/expressions.ts`), through `ItemRefDocument` (`src/qti/tests.ts`): under an LTI link no item declares a source or a template; the oracle's Variable mapping source and Template default target",
+        "PE's `MappingSource` and `TemplateDefault` (`src/qti/expressions.ts`), through `ItemRefDocument` (`src/qti/tests.ts`): a variable mapping under an LTI item ref is accepted unchecked, a recorded limit (`heldMappings` leaves out the nil document; a name read through the link is `linkHeld`), and a template default under it is refused by `Template_default_target`; the oracle's Template default target and, over an item an item ref names, its Variable mapping source (`itemRefLaws`, `src/test/oracle-laws/tests.ts`)",
       status: "G",
     },
   ],
@@ -623,7 +631,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     115,
     {
       owner:
-        "IN's `SiteTarget`, each site's target, a row only where its href names a document the manifest lists: `Site` into `SiteTarget` and `SiteTarget` into `Document`, and every include its site (`src/qti/tests.ts`, Include target), and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target and Include fragment identifier",
+        "IN's `SiteTarget`, each site's target, a row only where its href names a document the manifest lists: `SiteTarget` into `Site` and into `Document`, every include an include parent reads its `Site`, and each such include that is not `external` its `SiteTarget` (`includeSites`, `src/qti/tests.ts`, Include target); a `Site` marked `external` is proven by its href's `Reference` row (`externalSites` into `externalHrefs`), stored as written and never fetched; and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target, admitting an external href (`inclusionBreaches`, `src/test/oracle.ts`), and Include fragment identifier",
       status: "G",
     },
   ],
