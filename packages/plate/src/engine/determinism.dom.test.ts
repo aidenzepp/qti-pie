@@ -1,16 +1,18 @@
 /**
  * Criterion 7 in Chromium's and WebKit's pages: the hand-built fixture of
  * `src/test/determinism.ts`, under its fixed seed and instance, gives the template values, HTML and
- * outcomes Node pinned, on every run, and its test's outcome processing gives the outcomes Node
- * pinned for runs 1 and 2 (`GOAL.md` criterion 7; Node's half is `determinism.test.ts`).
+ * outcomes Node pinned, on every run, its test's outcome processing gives the outcomes Node
+ * pinned for runs 1 and 2, and its item ref's template defaults give the defaults and template
+ * values Node pinned (`GOAL.md` criterion 7; Node's half is `determinism.test.ts`).
  *
  * The fixture runs through the browser entries only: `firstAttempt` starts the record, `redactItem`
- * and `render` write its HTML, `runAttempt` scores the attempt, and `runOutcomes` runs the test's
- * outcome processing over its scope. Never `begin`, `score` or `restore`, the Schema side a page
- * does not load. Every pinned value is drawn from the
- * HMAC-SHA-256 stream keyed by the seed (`src/engine/sha256.ts`) and `S` is plate's FDLIBM `sin`,
- * so an equal value here is also the engine's check of SHA-256, HMAC-SHA-256 and the Math port. A
- * value that differs from Node's is a finding, never configured around (rule `c8a113fd`).
+ * and `render` write its HTML, `runAttempt` scores the attempt, `runOutcomes` runs the test's
+ * outcome processing over its scope, and `evaluateTemplateDefaults` evaluates the item ref's
+ * defaults, which `firstAttempt` starts its item from. Never `begin`, `score` or `restore`, the
+ * Schema side a page does not load. Every pinned value is drawn from the HMAC-SHA-256 stream keyed
+ * by the seed (`src/engine/sha256.ts`) and `S` is plate's FDLIBM `sin`, so an equal value here is
+ * also the engine's check of SHA-256, HMAC-SHA-256 and the Math port. A value that differs from
+ * Node's is a finding, never configured around (rule `c8a113fd`).
  *
  * It runs only inside the engine's page, under Vitest's browser mode in the in-page project of
  * `vite.browser.config.ts` (`test:browser`). Every case sits under a `describe` named by the engine
@@ -21,9 +23,11 @@ import { Result } from "effect";
 import { server } from "vite-plus/test/browser/context";
 import {
   observe,
+  observeDefaults,
   observeOutcomes,
   otherSeed,
   pinned,
+  pinnedDefaultDraws,
   pinnedOutcomeDraws,
   startRecord,
 } from "#plate/test/determinism.ts";
@@ -102,6 +106,31 @@ describe(server.browser, () => {
           `run ${index + 1}, ${drawn}`,
         );
       }
+    }
+  });
+
+  it("evaluateTemplateDefaults and firstAttempt give the pinned template default draws, and the template values from them, on two fresh starts", () => {
+    const starts = [
+      Result.getOrThrow(observeDefaults()),
+      Result.getOrThrow(observeDefaults()),
+    ] as const;
+
+    assert.notStrictEqual(starts[0], starts[1]);
+
+    for (const [index, start] of starts.entries()) {
+      assert.deepStrictEqual(start, pinnedDefaultDraws, `start ${index + 1}`);
+    }
+  });
+
+  it("evaluateTemplateDefaults and firstAttempt give other template default draws, and other template values, under another seed", () => {
+    const other = Result.getOrThrow(observeDefaults(otherSeed));
+
+    for (const drawn of ["LOW", "HIGH"]) {
+      assert.notDeepEqual(other.defaults[drawn], pinnedDefaultDraws.defaults[drawn], drawn);
+    }
+
+    for (const drawn of ["LOW", "HIGH", "PICK", "SPAN"]) {
+      assert.notDeepEqual(other.templates[drawn], pinnedDefaultDraws.templates[drawn], drawn);
     }
   });
 });
