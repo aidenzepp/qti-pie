@@ -835,6 +835,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    142,
+    {
+      owner:
+        "the law `Reserved type` (`reservedBaseTypes`' `root` and the containment of a non-float SCORE or MAXSCORE into a test's root, `src/qti/declarations.ts`; the oracle producer in `src/test/oracle-laws/documents.ts`), held by `Reserved type` in `src/test/laws.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
