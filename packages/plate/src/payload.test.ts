@@ -2689,3 +2689,275 @@ describe("postings", () => {
     growthTimeoutMs,
   );
 });
+
+/**
+ * The parameters of {@link parameterDocument}'s `object`, each a `name` and the `value` written:
+ * one for each `param-variable` template variable, `N` an integer, `F` a float, `P` a point, `Q` a
+ * pair, `D` a directed pair and `B` a boolean; `PLAIN`, a template variable not declared
+ * `param-variable`; and a literal no variable is named by.
+ */
+const writtenParameters = [
+  ["count", "N"],
+  ["ratio", "F"],
+  ["spot", "P"],
+  ["link", "Q"],
+  ["arrow", "D"],
+  ["flag", "B"],
+  ["plain", "PLAIN"],
+  ["literal", "hello"],
+] as const;
+
+/**
+ * Construct a `qti-template-declaration` with a declared default.
+ *
+ * @param identifier The variable's identifier.
+ * @param baseType Its base type.
+ * @param lexical Its default, as written.
+ * @param parameter Whether it is declared `param-variable="true"`.
+ * @returns The element.
+ */
+const parameterDeclaration = (
+  identifier: string,
+  baseType: string,
+  lexical: string,
+  parameter: boolean,
+) =>
+  el(
+    "qti-template-declaration",
+    [
+      attr("base-type", baseType),
+      attr("cardinality", "single"),
+      attr("identifier", identifier),
+      ...(parameter ? [attr("param-variable", "true")] : []),
+    ],
+    [el("qti-default-value", [], [el("qti-value", [], [sourceText(lexical)])])],
+  );
+
+/**
+ * An item whose template processing runs, with a paragraph holding an `object` whose parameters
+ * are {@link writtenParameters}. Each template variable declares a default, and the processing
+ * sets `N` to 255.
+ */
+const parameterDocument = doc(
+  "item.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "parameters"), attr("time-dependent", "false"), attr("title", "Params")],
+    [
+      parameterDeclaration("N", "integer", "3", true),
+      parameterDeclaration("F", "float", "0.5", true),
+      parameterDeclaration("P", "point", "1 2", true),
+      parameterDeclaration("Q", "pair", "C D", true),
+      parameterDeclaration("D", "directedPair", "C D", true),
+      parameterDeclaration("B", "boolean", "false", true),
+      parameterDeclaration("PLAIN", "integer", "7", false),
+      el(
+        "qti-template-processing",
+        [],
+        [
+          el(
+            "qti-set-template-value",
+            [attr("identifier", "N")],
+            [el("qti-base-value", [attr("base-type", "integer")], [sourceText("255")])],
+          ),
+        ],
+      ),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            "p",
+            [],
+            [
+              el(
+                "object",
+                [attr("data", "applet.html"), attr("type", "text/html")],
+                [
+                  ...writtenParameters.map(([name, value]) =>
+                    el("param", [
+                      attr("name", name),
+                      attr("value", value),
+                      attr("valuetype", "DATA"),
+                    ]),
+                  ),
+                  sourceText("Applet"),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
+ * The template values of an attempt of {@link parameterDocument}: `N` 255, `F` 1234567.5, `P` the
+ * point 3 4, `Q` the pair A B, `D` the directed pair B A, `B` true and `PLAIN` 7.
+ */
+const parameterValues = holding({
+  B: one({ baseType: "boolean", value: true }),
+  D: one({ baseType: "directedPair", value: ["B", "A"] }),
+  F: floatValue(1_234_567.5),
+  N: integerValue(255n),
+  P: one({ baseType: "point", value: [3n, 4n] }),
+  PLAIN: integerValue(7n),
+  Q: one({ baseType: "pair", value: ["A", "B"] }),
+});
+
+/**
+ * Give the children of the `object` in a body of {@link parameterDocument}: the paragraph's one
+ * element.
+ *
+ * @param body The body, as the model reads it or as a redaction leaves it.
+ * @returns The object's children.
+ */
+const objectChildren = (body: readonly BodyNode[]): readonly BodyNode[] => {
+  const [paragraph] = body;
+  const [object] = paragraph?.kind === "element" ? paragraph.children : [];
+
+  return object?.kind === "element" && object.tag === "object"
+    ? object.children
+    : assert.fail("The paragraph holds no object.");
+};
+
+/**
+ * Give each `param` among some body nodes as its `name` and its `value`.
+ *
+ * @param nodes The nodes.
+ * @returns Each parameter's name and value, in document order.
+ */
+const parametersOf = (nodes: readonly BodyNode[]): readonly (readonly [string, string])[] =>
+  nodes.flatMap((node): readonly (readonly [string, string])[] => {
+    if (node.kind !== "element" || node.tag !== "param") {
+      return [];
+    }
+
+    const valueOf = (name: string): string =>
+      node.attributes.find((entry) => entry.name === name)?.value ??
+      assert.fail(`A param has no ${name}.`);
+
+    return [[valueOf("name"), valueOf("value")]];
+  });
+
+/**
+ * The parameters {@link parameterValues} gives {@link parameterDocument}'s `object`: each
+ * `param-variable` value written as the information model's `param` `value` converts it, and the
+ * others as written.
+ */
+const expandedParameters = [
+  ["count", "255"],
+  ["ratio", "1.23457E+06"],
+  ["spot", "3 4"],
+  ["link", "A B"],
+  ["arrow", "B A"],
+  ["flag", "true"],
+  ["plain", "PLAIN"],
+  ["literal", "hello"],
+] as const;
+
+/**
+ * The notice a withheld `param` of {@link parameterDocument} is shown as.
+ *
+ * @param node The `param` as the model reads it.
+ * @returns The notice at its path.
+ */
+const parameterNoticeAt = (node: BodyNode | undefined): Unsupported =>
+  node?.kind === "element"
+    ? noticeOf("param", node.path)
+    : assert.fail("The object holds fewer params.");
+
+describe("redactItem on param-variable parameters", () => {
+  it.effect(
+    "[I-5] gives a param whose value names a param-variable template variable that variable's value from the record, which render writes: an integer by %i, a float by %G, a point x then y, a pair and a directed pair as their identifiers, a boolean as true or false (R§4.4)",
+    () =>
+      Effect.gen(function* rendersParameterValues() {
+        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const expanded = redact(accepted, parameterValues);
+        const configuration = yield* configure({});
+        const rendered = yield* Effect.fromResult(render(expanded, configuration, { instance }));
+        const written: readonly (readonly [unknown, unknown])[] = elementsOf(
+          parseHtml(rendered.html),
+        )
+          .filter((element) => element.tag === "param")
+          .map((element) => [element.attrs["name"], element.attrs["value"]]);
+
+        assert.deepStrictEqual(parametersOf(objectChildren(expanded.body)), expandedParameters);
+        assert.deepStrictEqual(written, expandedParameters);
+        assert.deepStrictEqual(expanded.notices, []);
+      }),
+  );
+
+  it.effect(
+    "[I-5] keeps the written value of a param that names a template variable not declared param-variable, or names none",
+    () =>
+      Effect.gen(function* keepsWrittenValues() {
+        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const kept = parametersOf(objectChildren(redact(accepted, parameterValues).body));
+
+        assert.deepStrictEqual(kept.slice(-2), [
+          ["plain", "PLAIN"],
+          ["literal", "hello"],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] with no record, withholds each param-variable param of an item whose template processing runs behind its notice, param at its path, named among the notices in document order (H3)",
+    () =>
+      Effect.gen(function* withholdsParameters() {
+        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const withheld = redact(accepted);
+        const [count, ratio, spot, link, arrow, flag, ...rest] = objectChildren(accepted.item.body);
+
+        assert.deepStrictEqual(objectChildren(withheld.body), [
+          ...[count, ratio, spot, link, arrow, flag].map(parameterNoticeAt),
+          ...rest,
+        ]);
+        assert.deepStrictEqual(
+          withheld.notices,
+          Array.from({ length: 6 }, () => "param"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] withholds a param-variable param whose template variable the record holds no value of, as with no record (0.13 decision 15)",
+    () =>
+      Effect.gen(function* withholdsUnheldParameter() {
+        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const { N: _held, ...unheld } = parameterValues.templates;
+        const gap = redact(accepted, holding(unheld));
+        const [count] = objectChildren(accepted.item.body);
+        const [, ...expandedOthers] = objectChildren(redact(accepted, parameterValues).body);
+
+        assert.deepStrictEqual(objectChildren(gap.body), [
+          parameterNoticeAt(count),
+          ...expandedOthers,
+        ]);
+        assert.deepStrictEqual(gap.notices, ["param"]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] with no record, gives an item without template processing's param-variable params their declared defaults, the values its first record holds (H3)",
+    () =>
+      Effect.gen(function* givesDeclaredDefaults() {
+        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const started = redactItem({ ...accepted.item, templateProcessing: Option.none() });
+
+        assert.deepStrictEqual(parametersOf(objectChildren(started.body)), [
+          ["count", "3"],
+          ["ratio", "0.5"],
+          ["spot", "1 2"],
+          ["link", "C D"],
+          ["arrow", "C D"],
+          ["flag", "false"],
+          ["plain", "PLAIN"],
+          ["literal", "hello"],
+        ]);
+        assert.deepStrictEqual(started.notices, []);
+      }),
+  );
+});
