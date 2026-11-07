@@ -90,7 +90,7 @@ import {
   mathHeadQualifiers,
   mathQualifiers,
 } from "#pantry/grammar/expression.ts";
-import { compile, patternFlags } from "#pantry/grammar/domains.ts";
+import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
 import type { ValueFacet } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -3819,9 +3819,9 @@ const overlayLaws: readonly ((
     const parts = (overlay.view.childrenOf.get(node.parent) ?? []).filter(({ kind }) =>
       Option.isSome(overlay.laws.grammar.references.sectionPart.lookup({ kind })),
     ).length;
-    const replaced = Option.exists(
-      collapsedOf(overlay, node, "with-replacement"),
-      (form) => form === "true" || form === "1",
+    const replaced = Option.contains(
+      Option.flatMap(collapsedOf(overlay, node, "with-replacement"), booleanOf),
+      true,
     );
 
     return Option.toArray(Option.flatMap(valueOf(overlay.view, node.id, "select"), countOf))

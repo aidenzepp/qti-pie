@@ -14,11 +14,13 @@
  * - **The shared syntax.** PostgreSQL's and JavaScript's regular expression grammars, turned into a
  *   checker of the subset both read.
  */
+import { globSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
-import { element, int, weighted } from "@grizzle/testing/gen";
+import { array, element, int, map, weighted } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { floorSeed } from "@grizzle/testing/random";
 import { notesOnly } from "@grizzle/testing/sense";
@@ -30,6 +32,9 @@ import { Digest } from "effect/crypto";
 import {
   anyUriPattern,
   baseChar,
+  booleanOf,
+  booleanTrue,
+  booleanTruePattern,
   combiningChar,
   compile,
   extender,
@@ -1499,4 +1504,211 @@ describe("Length facets", () => {
       ),
     120_000,
   );
+});
+
+/**
+ * `xs:boolean` as XSD 1.1 Part 2 reads a form as written, the oracle of its one reading: §4.3.6's
+ * collapse (tabs, line feeds and carriage returns to spaces, runs of spaces to one, a space at
+ * either end dropped), then §3.3.2.2's booleanLexicalMap on the four literals.
+ *
+ * @param form - The form as written.
+ * @returns Its value, or none outside the lexical space.
+ */
+const xsdBoolean = (form: string): Option.Option<boolean> => {
+  const collapsed = form
+    .replaceAll(/[\t\n\r]/gu, " ")
+    .replaceAll(/ {2,}/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
+
+  return Option.fromUndefinedOr(
+    new Map([
+      ["0", false],
+      ["1", true],
+      ["false", false],
+      ["true", true],
+    ]).get(collapsed),
+  );
+};
+
+/**
+ * What may stand around a boolean's literal: XML whitespace, and the two characters nearest it
+ * that are no XML whitespace, U+00A0 and U+0085, which `String.prototype.trim` and `\s` would take
+ * for it.
+ */
+const booleanEdges = [" ", "\t", "\n", "\r", "\u00A0", "\u0085"] as const;
+
+/**
+ * Every literal of `xs:boolean`, and the near misses a reader might take for one: another case,
+ * a prefix, a suffix, a doubled digit, an inner space, a word of no boolean, and nothing.
+ */
+const booleanCores = [
+  "true",
+  "false",
+  "1",
+  "0",
+  "TRUE",
+  "True",
+  "tru",
+  "truee",
+  "t rue",
+  "10",
+  "yes",
+  "",
+] as const;
+
+/**
+ * A boolean's form as written: at most two edge characters, a core, at most two more.
+ */
+const booleanForms = ((): Gen<string> => {
+  const edge = map(array(element(booleanEdges), { max: 2, min: 0 }), (characters) =>
+    characters.join(""),
+  );
+  const core = element(booleanCores);
+
+  return (source) => {
+    const lead = edge(source);
+    const middle = core(source);
+
+    return lead + middle + edge(source);
+  };
+})();
+
+/**
+ * `xs:boolean`'s compiled domain, the pattern AL1 installs for it.
+ */
+const booleanDomain = new RegExp(
+  Result.getOrThrow(compile(Result.getOrThrow(builtinDomainOf("boolean")), "xsd")).pattern,
+  patternFlags,
+);
+
+/**
+ * {@link booleanTruePattern}, as JavaScript reads it.
+ */
+const booleanTrueForm = new RegExp(booleanTruePattern, "u");
+
+/**
+ * What a boolean form is, for the search to reach: a true or a false literal as written bare, one
+ * padded with XML whitespace, or a form outside the lexical space.
+ */
+type BooleanSituation = "bare" | "false" | "outside" | "padded" | "true";
+
+/**
+ * The text a module that reads `xs:boolean`'s truth itself would spell: an alternation of the true
+ * literals, an array of them, or a comparison with `"true"`. `grammar/domains.ts` states the one
+ * reading, and a test may state the specification's as its oracle; no other module spells one.
+ */
+const booleanSpellings = [
+  /\(\?:true\|1\)/u,
+  /\["true", "1"\]/u,
+  /[=]== "true"|"true" ===/u,
+] as const;
+
+/**
+ * The modules that still read the item's `time-dependent` themselves, each for the Item duration
+ * law, which slot 9 deletes whole (A1). The list only shrinks: A1 empties it.
+ */
+const pendingBooleanSpellings: readonly string[] = [
+  "import/overlays/expressions.ts",
+  "qti/expressions.ts",
+  "test/oracle-laws/expressions.ts",
+];
+
+describe("xs:boolean", () => {
+  it.effect(
+    "reads a form as XSD does: valid exactly in the lexical space after collapse, and true exactly for true and 1, in booleanOf, the installed pattern and the collapsed literals alike",
+    (ctx) =>
+      // Oracle: the specification as a checker, XSD 1.1 Part 2 §4.3.6 (collapse) and §3.3.2.2
+      // (booleanLexicalMap), written above as xsdBoolean, and xs:boolean's compiled domain, the
+      // pattern AL1 installs.
+      // Bound: every core of booleanCores with at most two of booleanEdges on each side, 43² × 12.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every literal and near miss with at most two of space, tab, line feed, carriage return, U+00A0 and U+0085 on each side",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<BooleanSituation>([
+              "true",
+              "false",
+              "bare",
+              "padded",
+              "outside",
+            ]),
+            generator: booleanForms,
+            limit: 43 * 43 * 12,
+            literal: (form) => JSON.stringify(form),
+            oracle: {
+              kind: "specification",
+              name: "XSD 1.1 Part 2 §4.3.6 collapse, then §3.3.2.2 booleanLexicalMap",
+            },
+            suite: "grammar/domains-boolean",
+          },
+          (form: string, c) =>
+            Effect.sync(() => {
+              const expected = xsdBoolean(form);
+              const isTrue = Option.contains(expected, true);
+              if (Option.isNone(expected)) {
+                c.note("outside");
+              } else {
+                c.note(isTrue ? "true" : "false");
+                c.note(/^[\t\n\r ]|[\t\n\r ]$/u.test(form) ? "padded" : "bare");
+              }
+
+              assert.deepStrictEqual(
+                booleanOf(form),
+                expected,
+                `booleanOf ${JSON.stringify(form)}`,
+              );
+              assert.strictEqual(
+                booleanDomain.test(form),
+                Option.isSome(expected),
+                `the compiled domain ${JSON.stringify(form)}`,
+              );
+              assert.strictEqual(
+                booleanTrueForm.test(form),
+                isTrue,
+                `booleanTruePattern ${JSON.stringify(form)}`,
+              );
+              assert.strictEqual(
+                Option.isSome(expected) &&
+                  booleanTrue.some(
+                    (literal) => literal === form.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, ""),
+                  ),
+                isTrue,
+                `booleanTrue ${JSON.stringify(form)}`,
+              );
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it("is read in grammar/domains.ts alone: no other module spells a truth of its own", () => {
+    // Oracle: the source text, against the spellings a reading of xs:boolean's truth takes, each
+    // one shown matching the reading it stands for. Bound: every module under src but the tests.
+    const witnesses = [
+      String.raw`const trueForm = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;`,
+      `export const booleanTrue = ["true", "1"] as const;`,
+      `(form) => form === "true" || form === "1",`,
+      `return mixed.value === "true";`,
+    ];
+    assert.deepStrictEqual(
+      witnesses.filter((witness) => !booleanSpellings.some((spelling) => spelling.test(witness))),
+      [],
+      "each spelling a copy took is one the census finds",
+    );
+
+    const sourceRoot = path.resolve(import.meta.dirname, "..");
+    const readers = globSync("**/*.ts", { cwd: sourceRoot })
+      .filter((file) => !file.endsWith(".test.ts") && file !== "grammar/domains.ts")
+      .filter((file) => {
+        const text = readFileSync(path.join(sourceRoot, file), "utf-8");
+
+        return booleanSpellings.some((spelling) => spelling.test(text));
+      })
+      .toSorted();
+
+    assert.deepStrictEqual(readers, pendingBooleanSpellings);
+  });
 });

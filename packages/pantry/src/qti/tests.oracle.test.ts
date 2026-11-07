@@ -27,7 +27,6 @@ import {
   testNameLaws,
   testOverlayLaws,
   testRelations,
-  truePattern,
 } from "#pantry/qti/tests.ts";
 import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
 
@@ -112,7 +111,7 @@ const padded = array(element(paddedAlphabet), { max: 4, min: 0 });
  */
 type CollapseSituation = "collapsed" | "padded" | "empty";
 
-describe("qti/tests.ts, collapsedPattern and truePattern", () => {
+describe("qti/tests.ts, collapsedPattern", () => {
   it.effect(
     "collapsedPattern admits exactly a nonempty value with no XML whitespace at either end",
     (ctx) =>
@@ -151,25 +150,6 @@ describe("qti/tests.ts, collapsedPattern and truePattern", () => {
         ),
       ),
   );
-
-  it("truePattern admits exactly the xs:boolean forms whose collapsed value is true or 1", () => {
-    // Oracle: the specification as a checker, XML Schema Part 2 §3.2.2.1: boolean's lexical space
-    // is {true, false, 1, 0}, true and 1 naming true, its whitespace collapsed.
-    // Bound: each of the four forms under every padding of at most one of space, tab and line feed
-    // on each side, 64.
-    const form = new RegExp(truePattern, "u");
-    for (const lead of ["", " ", "\t", "\n"]) {
-      for (const trail of ["", " ", "\t", "\n"]) {
-        for (const value of ["true", "false", "1", "0"]) {
-          assert.strictEqual(
-            form.test(`${lead}${value}${trail}`),
-            value === "true" || value === "1",
-            JSON.stringify(`${lead}${value}${trail}`),
-          );
-        }
-      }
-    }
-  });
 });
 
 /**

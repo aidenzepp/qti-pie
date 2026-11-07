@@ -11,8 +11,11 @@
  */
 import { element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
+import { Option } from "effect";
+import { admissionOf } from "#pantry/grammar/attributes.ts";
+import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import type { FoldedRows } from "#pantry/model/folds.ts";
+import type { FoldedAttribute, FoldedRows } from "#pantry/model/folds.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import { corrupt } from "#pantry/test/gen/xdm.ts";
 import type { Corruption } from "#pantry/test/gen/xdm.ts";
@@ -67,16 +70,114 @@ const numbersOf = (
 ): readonly number[] => rows.nodes.flatMap((node, number) => (keep(node, number) ? [number] : []));
 
 /**
+ * An attribute row's typing: its domain, and that domain's identity type.
+ */
+interface Typing {
+  /**
+   * The domain its owner's copy admits its name in, none where none admits it.
+   */
+  readonly domain: Option.Option<string>;
+  /**
+   * The domain's identity, `ID`, `IDREF` or `IDREFS`, none for a domain that has none.
+   */
+  readonly identity: Option.Option<string>;
+}
+
+/**
+ * How an attribute row is typed by the copy of its owner it holds: the domain its (version, kind,
+ * governing type) admits its name in, none where none admits it, and that domain's identity, `ID`
+ * for a context declaration's `identifier` as the oracle's ID table reads it (spec reading 74).
+ *
+ * @param grammar - The composed grammar.
+ * @param attribute - The attribute row.
+ * @returns Its domain and its identity.
+ */
+const typingOf = (grammar: ComposedGrammar, attribute: FoldedAttribute<Composed>): Typing => {
+  const domain = admissionOf(grammar.attributes, {
+    governs: attribute.governs,
+    kind: attribute.kind,
+    name: attribute.name,
+    version: attribute.version,
+  }).pipe(Option.map((admitted) => admitted.domain));
+
+  return {
+    domain,
+    identity:
+      attribute.kind === "qti-context-declaration" && attribute.name === "identifier"
+        ? Option.some("ID")
+        : domain.pipe(
+            Option.flatMap((held) => grammar.attributes.identity.lookup({ domain: held })),
+            Option.map(({ identity }) => identity),
+          ),
+  };
+};
+
+/**
+ * Decide whether an owner-copy corruption of one attribute breaks AL1 owner alone: the attribute is
+ * no ID or IDREF before or after it, so the document's ids and references stand as they were, and
+ * under the copy it holds after it its name is admitted in the same domain or in none, so no value
+ * domain (attribute-lexical, ranked ahead of attribute-admission) judges its value otherwise. An
+ * admission the copy loses breaks AL1 admission and AL2 fold, AL1 owner's own rule.
+ *
+ * @param grammar - The composed grammar.
+ * @param before - The attribute row.
+ * @param after - The row the corruption leaves.
+ * @returns Whether the corruption isolates AL1 owner.
+ */
+const ownerCopyIsolates = (
+  grammar: ComposedGrammar,
+  before: FoldedAttribute<Composed>,
+  after: FoldedAttribute<Composed> | undefined,
+): boolean => {
+  const was = typingOf(grammar, before);
+  const is = after === undefined ? was : typingOf(grammar, after);
+
+  return (
+    Option.isNone(was.identity) &&
+    Option.isNone(is.identity) &&
+    Option.match(is.domain, {
+      onNone: () => true,
+      onSome: (domain) => Option.contains(was.domain, domain),
+    })
+  );
+};
+
+/**
+ * The owner-copy fields AL1 owner's mutation corrupts.
+ */
+const ownerCopyFields = ["kind", "version", "document"] as const;
+
+/**
  * Each law's mutation, by law.
  */
 export const rowMutations = {
   // AL1 owner (AL1): an attribute's copy of its owner's kind, version or document that is not
-  // its owner's.
-  "AL1 owner": corrupting(item, (rows) => (source) => ({
-    _tag: "ownerCopy",
-    attribute: source.draw(int(0, rows.attributes.length - 1)),
-    field: source.draw(element(["kind", "version", "document"] as const)),
-  })),
+  // its owner's, drawn among the attributes whose every such corruption breaks AL1 owner alone
+  // ({@link ownerCopyIsolates}): the context declaration's identifier, an ID a context variable
+  // names, copied as its item's would leave CTX no ID and raise Idref target ahead of it.
+  "AL1 owner": {
+    document: item,
+    mutate: (rows, grammar) => (source) => {
+      const isolated = rows.attributes.flatMap((attribute, index) =>
+        ownerCopyFields.every((field) =>
+          ownerCopyIsolates(
+            grammar,
+            attribute,
+            corrupt(rows, { _tag: "ownerCopy", attribute: index, field }).attributes[index],
+          ),
+        )
+          ? [index]
+          : [],
+      );
+
+      return corrupt(rows, {
+        _tag: "ownerCopy",
+        attribute: source.draw(oneOf(isolated)),
+        field: source.draw(element(ownerCopyFields)),
+      });
+    },
+    over: "rows",
+  },
   // AL2 distinct (AL2): an attribute of the lead division given the closed name and the value of
   // one before it, so no value domain judges it otherwise than the first.
   "AL2 distinct": {

@@ -18,6 +18,7 @@
 import { Option } from "effect";
 import { rowOf, step } from "#pantry/grammar/ancestry.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { booleanOf } from "#pantry/grammar/domains.ts";
 import {
   ancestorsOf,
   breachAt,
@@ -296,11 +297,6 @@ const declarationLawsOf = (
 };
 
 /**
- * An `xs:boolean` lexical form that is true, its whitespace collapsed: `true` or `1`.
- */
-const truePattern = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
-
-/**
  * Judge the interaction laws the oracle declares here over an item: `Adaptive feedback`, an
  * interaction of a non-adaptive item that binds a response variable stands under no feedback
  * element (§5.49, §5.52), and `Max strings required`, an extended text interaction bound to a
@@ -318,8 +314,9 @@ const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breac
 
   const interactions = new Set(grammar.kinds.interaction.rows.map(({ kind }) => kind));
   const feedback = rowOf(grammar.ancestry.enters, "qti-feedback-block");
-  const adaptive = Option.exists(valueOf(rows, root.id, "adaptive"), (lexical) =>
-    truePattern.test(lexical),
+  const adaptive = Option.contains(
+    Option.flatMap(valueOf(rows, root.id, "adaptive"), booleanOf),
+    true,
   );
   const declared = new Map(
     rows.members.flatMap((node) =>

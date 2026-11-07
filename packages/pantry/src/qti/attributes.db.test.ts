@@ -2,18 +2,19 @@
  * The attribute layer's laws on the lease, PostgreSQL itself the judge (testing doctrine, rule 3):
  * each refused row is one the law's model refuses, named by the constraint that states the law.
  *
- * Every case is a direct SQL writer's, as the rules file's rule 8 states it: the author login, `SET
- * ROLE` to the author role, at SERIALIZABLE, every deferrable foreign key deferred, one `INSERT` of
- * the case's rows into `Qti`'s table with every column a writer fills (the hidden ones by the
- * comments grizzle installs on them, `grizzle names`'s mapping), and a rollback. A row's CHECKs and
- * keys are judged as the row is inserted, before any foreign key's trigger runs at the statement's
- * end, so a refused row's verdict is its SQLSTATE and the constraint that states the law, and a
- * control's is that no CHECK and no key refuses it: it meets, at most, the owner axis's foreign key
- * into a `Node` row the case does not write (23503).
+ * Every case is a direct SQL writer's, as the rules file's rule 8 states it, through the one direct
+ * writer (`#pantry/test/direct-sql.ts`): the author login, `SET ROLE` to the author role, at
+ * SERIALIZABLE, every deferrable foreign key deferred, one `INSERT` of the case's facts into
+ * `Qti`'s table with every column a writer fills, and a rollback. A row's CHECKs and keys are
+ * judged as the row is inserted, before any foreign key's trigger runs at the statement's end, so a
+ * refused row's verdict is its SQLSTATE and the constraint that states the law, and a control's is
+ * that no CHECK and no key refuses it: it meets, at most, the owner axis's foreign key into a
+ * `Node` row the case does not write (23503). Since no case writes its owner, a member's copy of
+ * its owner's count is the members it states, unless it states that count as a hidden value: the
+ * second of two attributes, or one token of two.
  *
- * PostgreSQL evaluates a table's CHECKs in the order of their names, and each control sets every
- * family column as grizzle's filler would, so a corrupted row breaks exactly the law its case
- * names.
+ * PostgreSQL evaluates a table's CHECKs in the order of their names, and each control states every
+ * field as grizzle's filler would, so a corrupted row breaks exactly the law its case names.
  *
  * Cases over a stored tree arrive with the importer (Q5.15), and probe P1 restates them over a
  * whole package: AL3 required and TextDomain, which are CHECKs on `Node` beside the tree's own, and
@@ -23,14 +24,10 @@
  * `value_domain` reads `ValueDomainOf`'s patterns, which compile once grammar/domains.ts emits them
  * without lookaround (seat QX); its cases run once it does.
  */
-import type { DbConnection } from "@bjornpagen/grizzle";
-import { NodeFileSystem } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
-import { Effect, Option, Redacted } from "effect";
-import { Client } from "pg";
-import type { DatabaseError, QueryResultRow } from "pg";
+import { Effect, Option } from "effect";
+import type { DatabaseError } from "pg";
 import { describe } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import {
   AttributeName,
   attributeRows,
@@ -38,298 +35,32 @@ import {
   GoverningOf,
   KindNamespace,
   NodeKind,
-  SchemaVersion,
-  TypeName,
 } from "#pantry/grammar/install.ts";
-import { bitsText, bitsWidth } from "#pantry/test/bits.ts";
+import { Attribute, Idref, OpenAttributeName } from "#pantry/qti/attributes.ts";
+import { bitsText } from "#pantry/test/bits.ts";
+import {
+  assertVerdict,
+  constraintDescribed,
+  judged,
+  loginSession,
+  statedInserts,
+} from "#pantry/test/direct-sql.ts";
+import type { Stated } from "#pantry/test/direct-sql.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role.
- */
-const authorRole = "qti__author";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
-
-/**
- * The password a connection authenticates with, read once.
+ * Assert that no CHECK and no key refused a case: it was accepted, or met a foreign key, the owner
+ * axis into the `Node` row no case writes.
  *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA,
- * closed with its scope: a direct SQL writer.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-}).pipe(Effect.provide(NodeFileSystem.layer));
-
-/**
- * Run one statement on a session and return its rows.
- *
- * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters.
- * @returns The rows, each as node-postgres decodes it.
- */
-const rowsOf = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly unknown[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
- * Whether a failure is a server error of node-postgres's, which carries a SQLSTATE and the
- * constraint it names.
- *
- * @param error - The failure's cause.
- * @returns Whether it is one.
- */
-const isServerError = (error: unknown): error is DatabaseError =>
-  error instanceof Error && "code" in error && "constraint" in error;
-
-/**
- * One column of a table as a direct writer fills it: its name, whether PostgreSQL generates it,
- * grizzle's comment on it (empty for a declared field), its base type and, for a bit string, its
- * width.
- */
-interface Column {
-  readonly base: string;
-  readonly comment: string;
-  readonly generated: boolean;
-  readonly name: string;
-  readonly width: number;
-}
-
-/**
- * Read a table's columns from the catalogue.
- *
- * @param client - The session.
- * @param table - The table.
- * @returns Its live columns, in order.
- */
-const columnsOf = (client: Client, table: string) =>
-  rowsOf<{
-    readonly base: string;
-    readonly comment: string | null;
-    readonly generated: string;
-    readonly name: string;
-    readonly width: number;
-  }>(
-    client,
-    `SELECT a.attname AS name, a.attgenerated AS generated,
-            pg_catalog.col_description(a.attrelid, a.attnum) AS comment,
-            bt.typname AS base,
-            CASE WHEN t.typtype = 'd' THEN t.typtypmod ELSE a.atttypmod END AS width
-       FROM pg_catalog.pg_attribute a
-       JOIN pg_catalog.pg_type t ON t.oid = a.atttypid
-       JOIN pg_catalog.pg_type bt ON bt.oid = CASE WHEN t.typtype = 'd' THEN t.typbasetype ELSE t.oid END
-      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
-      ORDER BY a.attnum`,
-    [`${qtiSchema}.${table}`],
-  ).pipe(
-    Effect.map((rows) =>
-      rows.map((row): Column => ({
-        base: row.base,
-        comment: row.comment ?? "",
-        generated: row.generated !== "",
-        name: row.name,
-        width: row.width,
-      })),
-    ),
-  );
-
-/**
- * A row a direct writer inserts: its declared columns by their names, and its hidden columns by
- * the comment grizzle installs on each (`the owner's count of the family Node.attributes`).
- */
-interface SqlRow {
-  readonly fields: Readonly<Record<string, string | number | boolean>>;
-  readonly hidden?: Readonly<Record<string, string | number>>;
-}
-
-/**
- * A column's value where the case states none: the identity of its type, which no CHECK of the
- * attribute layer reads unless the case sets it.
- *
- * @param column - The column.
- * @returns Zero, the empty text, the nil uuid, or the empty set.
- */
-const identityOf = (column: Column): string | number | boolean => {
-  switch (column.base) {
-    case "bit": {
-      assert.strictEqual(
-        column.width,
-        bitsWidth(AttributeSlot),
-        `${column.name}: the attribute layer's one set is over AttributeSlot`,
-      );
-
-      return bitsText(AttributeSlot, []);
-    }
-    case "bool": {
-      return false;
-    }
-    case "uuid": {
-      return "00000000-0000-0000-0000-000000000000";
-    }
-    case "text": {
-      return "";
-    }
-    default: {
-      return 0;
-    }
-  }
-};
-
-/**
- * The value a row gives a column: its own field, its hidden column by the column's comment, or the
- * column's type's identity.
- *
- * @param row - The row.
- * @param column - The column.
- * @returns The value.
- */
-const valueOf = (row: SqlRow, column: Column): string | number | boolean => {
-  const hidden = Object.entries(row.hidden ?? {}).find(([comment]) => comment === column.comment);
-
-  return row.fields[column.name] ?? hidden?.[1] ?? identityOf(column);
-};
-
-/**
- * Insert rows into one of `Qti`'s tables as the author role, every deferrable foreign key deferred,
- * and roll back: the server's verdict on the rows by their CHECKs, keys and immediate foreign keys.
- *
- * @param client - The session.
- * @param table - The table.
- * @param rows - The rows.
- * @returns The server's error, or none when the statement succeeded; fails with any other failure.
- */
-const insertRows = (client: Client, table: string, rows: readonly SqlRow[]) =>
-  Effect.gen(function* insertStatement() {
-    const columns = (yield* columnsOf(client, table)).filter(({ generated }) => !generated);
-    const values = rows.flatMap((row) => columns.map((column) => valueOf(row, column)));
-    const tuples = rows.map(
-      (_row, r) =>
-        `(${columns.map((_column, c) => `$${String(r * columns.length + c + 1)}`).join(", ")})`,
-    );
-
-    yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
-
-    const outcome = yield* Effect.gen(function* statements() {
-      yield* rowsOf(client, `SET ROLE ${authorRole}`);
-      yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
-      yield* rowsOf(
-        client,
-        `INSERT INTO ${qtiSchema}.${table} (${columns.map(({ name }) => `"${name}"`).join(", ")}) VALUES ${tuples.join(", ")}`,
-        values,
-      );
-    }).pipe(
-      Effect.as(Option.none<DatabaseError>()),
-      Effect.catch((error) =>
-        isServerError(error.cause) ? Effect.succeed(Option.some(error.cause)) : Effect.fail(error),
-      ),
-    );
-    yield* rowsOf(client, "ROLLBACK");
-
-    return Option.getOrUndefined(outcome);
-  });
-
-/**
- * Find the constraint of a table whose comment starts as given: a family's law, which grizzle names
- * by a digest and describes by its comment.
- *
- * @param client - The session.
- * @param table - The table.
- * @param prefix - The comment's start.
- * @returns The constraint's name.
- */
-const constraintDescribed = (client: Client, table: string, prefix: string) =>
-  rowsOf<{ readonly conname: string }>(
-    client,
-    `SELECT c.conname FROM pg_catalog.pg_constraint c
-      WHERE c.conrelid = pg_catalog.to_regclass($1)
-        AND pg_catalog.starts_with(pg_catalog.obj_description(c.oid, 'pg_constraint'), $2)`,
-    [`${qtiSchema}.${table}`, prefix],
-  ).pipe(
-    Effect.map((rows) => {
-      assert.strictEqual(rows.length, 1, `${table}: one constraint described "${prefix}"`);
-
-      return rows[0]?.conname ?? "";
-    }),
-  );
-
-/**
- * Assert that a statement's verdict is a CHECK's or a key's refusal by the named constraint.
- *
- * @param refused - The server's error, if any.
- * @param constraint - The constraint stating the law.
- * @param sqlstate - The SQLSTATE: 23514 for a CHECK, 23505 for a key.
+ * @param verdict - The server's error, if any.
  * @param label - The case.
  */
-const assertRefusedBy = (
-  refused: DatabaseError | undefined,
-  constraint: string,
-  sqlstate: "23505" | "23514",
-  label: string,
-) => {
-  assert.strictEqual(refused?.code, sqlstate, `${label}: ${refused?.message ?? "accepted"}`);
-  assert.strictEqual(refused?.constraint, constraint, label);
-};
-
-/**
- * Assert that no CHECK and no key refused a statement: it succeeded, or met a foreign key.
- *
- * @param refused - The server's error, if any.
- * @param label - The case.
- */
-const assertNoRowLawRefuses = (refused: DatabaseError | undefined, label: string) => {
+const assertNoRowLawRefuses = (verdict: Option.Option<DatabaseError>, label: string) => {
+  const refused = Option.getOrUndefined(verdict);
   assert.isTrue(
     refused === undefined || refused.code === "23503",
     `${label}: ${refused?.code ?? ""} ${refused?.constraint ?? ""} ${refused?.message ?? ""}`,
   );
-};
-
-/**
- * The code of a handle in its roster, the value a direct writer stores in its closed-id column.
- *
- * @param handles - The roster's handles.
- * @param handle - The handle.
- * @returns Its code.
- */
-const codeOf = (handles: readonly string[], handle: string): number => {
-  const code = handles.indexOf(handle);
-  assert.isAtLeast(code, 0, `${handle} is a handle of its roster`);
-
-  return code;
 };
 
 /**
@@ -386,65 +117,90 @@ const slotOf = (name: string, at: string = version, governor: string = kind): nu
 const strayNode = "00000000-0000-4000-8000-0000000000a0";
 
 /**
- * The comment on an Attribute row's copy of its element's attribute count.
+ * A member's copy of its owner's count, stated by the case where it writes fewer members than its
+ * owner counts.
+ *
+ * @param family - The family, `Owner.count`.
+ * @param count - The owner's count.
+ * @returns The hidden value.
  */
-const attributeCount = "the owner's count of the family Node.attributes";
+const ownerCount = (family: string, count: number) => ({
+  [`the owner's count of the family ${family}`]: count,
+});
 
 /**
- * An attribute row of the hotspot choice, its every family column as grizzle's filler sets it for
- * the attribute at slot `at` of `count`, after the slots `was`: the control each case corrupts.
+ * An attribute fact of the hotspot choice, every field as grizzle's filler writes it for the
+ * attribute at slot `at`, after the slots `was`: the control each case corrupts. It has no prefix,
+ * no entity, no token and the empty concatenation, and one open name exactly where its name is an
+ * open class.
  *
  * @param fields - The attribute's name and lexical form, and whatever the case sets.
  * @param fields.name - The name.
  * @param fields.lexical - The lexical form.
- * @param place - Its slot, its element's count, and the slots before it.
+ * @param place - Its slot, its element, and the slots before it.
  * @param place.at - Its slot.
- * @param place.count - Its element's attribute count.
  * @param place.host - Its element's kind and governing type, which governs it: the hotspot choice
  *   under its declared type by default.
  * @param place.was - The slots of the closed names before it.
- * @param place.rest - Any other column the case sets.
- * @returns The row.
+ * @param place.rest - Any other field the case sets.
+ * @returns The fact.
  */
-const attributeRow = (
+const attributeOf = (
   { lexical, name }: { readonly lexical: string; readonly name: string },
   {
     at = 0,
-    count = 1,
     host = { governs, kind },
     rest = {},
     was = [],
   }: {
     readonly at?: number;
-    readonly count?: number;
     readonly host?: { readonly governs: string; readonly kind: string };
-    readonly rest?: Readonly<Record<string, string | number>>;
+    readonly rest?: Stated["fact"];
     readonly was?: readonly number[];
   } = {},
-): SqlRow => {
+): Stated => {
   const open = ["data-*", "foreign", "no-namespace", "own-namespace"].includes(name);
   const slot = slotOf(name, version, host.kind);
 
   return {
-    fields: {
-      at,
-      attrs_after: slotBits(...was, ...(open ? [] : [slot])),
-      attrs_was: slotBits(...was),
+    fact: {
+      at: BigInt(at),
+      attrsAfter: slotBits(...was, ...(open ? [] : [slot])),
+      attrsWas: slotBits(...was),
       document: strayNode,
-      governs: codeOf(TypeName.handles, host.governs),
+      governs: host.governs,
       id: `00000000-0000-4000-8000-0000000001${String(at).padStart(2, "0")}`,
-      kind: codeOf(NodeKind.handles, host.kind),
+      idrefText: "",
+      kind: host.kind,
       lexical,
-      name: codeOf(AttributeName.handles, name),
+      name,
       node: strayNode,
-      open_name: open ? 1 : 0,
+      openName: open ? 1n : 0n,
+      prefix: "",
       slot: slotBits(slot),
-      version: codeOf(SchemaVersion.handles, version),
+      version,
       ...rest,
     },
-    hidden: { [attributeCount]: count },
+    relation: Attribute,
   };
 };
+
+/**
+ * The second of two attributes of the hotspot choice, its element counting both.
+ *
+ * @param fields - The attribute's name and lexical form.
+ * @param fields.name - The name.
+ * @param fields.lexical - The lexical form.
+ * @param was - The slots of the closed names before it.
+ * @returns The fact.
+ */
+const secondOfTwo = (
+  fields: { readonly lexical: string; readonly name: string },
+  was: readonly number[],
+): Stated => ({
+  ...attributeOf(fields, { at: 1, was }),
+  hidden: ownerCount("Node.attributes", 2),
+});
 
 /**
  * Read the governing type a kind's elements hold under the kind's own governor in the cases'
@@ -459,6 +215,65 @@ const hostOf = (of: string) => ({
       (row) => row.kind === of && row.governor === of && row.version === version,
     )?.governs ?? assert.fail(`GoverningOf holds ${of} under its own governor`),
   kind: of,
+});
+
+/**
+ * A fact with some of its fields replaced: a case's corruption of a control.
+ *
+ * @param stated - The control.
+ * @param fields - The fields to replace.
+ * @returns The fact.
+ */
+const withFields = (stated: Stated, fields: Stated["fact"]): Stated => ({
+  ...stated,
+  fact: { ...stated.fact, ...fields },
+});
+
+/**
+ * A piece of an IDREFS attribute's two tokens, which no case writes the attribute of.
+ *
+ * @param at - Its slot.
+ * @param fields - Its piece, running texts and token, and whatever else the case sets.
+ * @returns The fact.
+ */
+const idrefPiece = (at: number, fields: Readonly<Record<string, string>>): Stated => ({
+  fact: {
+    after: "",
+    at: BigInt(at),
+    attribute: "00000000-0000-4000-8000-000000000100",
+    before: at === 0 ? "" : " ",
+    document: strayNode,
+    node: strayNode,
+    ...fields,
+  },
+  hidden: ownerCount("Attribute.idrefs", 2),
+  relation: Idref,
+});
+
+/**
+ * An open name of an attribute that counts one, which no case writes: a name in no namespace on a
+ * foreign element, unless the case sets otherwise.
+ *
+ * @param fields - Its class and whatever else the case sets.
+ * @param attribute - Its attribute.
+ * @returns The fact.
+ */
+const openNameOf = (
+  fields: Stated["fact"],
+  attribute = "00000000-0000-4000-8000-000000000100",
+): Stated => ({
+  fact: {
+    at: 0n,
+    attribute,
+    elementNamespace: "urn:element",
+    kind: "foreign-element",
+    local: "a",
+    node: strayNode,
+    uri: "",
+    ...fields,
+  },
+  hidden: ownerCount("Attribute.openName", 1),
+  relation: OpenAttributeName,
 });
 
 describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
@@ -477,12 +292,12 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
         const fold = yield* constraintDescribed(
           client,
           "attribute",
-          "check of Attribute for law or fold over fin(Node, attributes)",
+          "check of Attribute for law or fold over fin(Node, attributes)%",
         );
         const identifier = slotOf("identifier");
-        const admitted = attributeRow({ lexical: "H1", name: "identifier" });
+        const admitted = attributeOf({ lexical: "H1", name: "identifier" });
 
-        assertNoRowLawRefuses(yield* insertRows(client, "attribute", [admitted]), "control");
+        assertNoRowLawRefuses(yield* judged(client, statedInserts([admitted])), "control");
 
         const unadmitted =
           AttributeName.handles.find(
@@ -491,103 +306,89 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
                 (row) => row.version === version && row.governor === kind && row.name === name,
               ),
           ) ?? assert.fail(`${kind} admits every name`);
-        const unadmittedRow: SqlRow = {
-          ...admitted,
-          fields: {
-            ...admitted.fields,
-            attrs_after: slotBits(),
-            name: codeOf(AttributeName.handles, unadmitted),
-            slot: slotBits(),
-          },
-        };
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [unadmittedRow]),
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([
+              withFields(admitted, { attrsAfter: slotBits(), name: unadmitted, slot: slotBits() }),
+            ]),
+          ),
           "al_1_admission",
-          "23514",
+          true,
           `${unadmitted} on ${kind}`,
         );
 
         const wrongSlot = slotOf("shape");
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            {
-              ...admitted,
-              fields: {
-                ...admitted.fields,
-                attrs_after: slotBits(wrongSlot),
-                slot: slotBits(wrongSlot),
-              },
-            },
-          ]),
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([
+              withFields(admitted, { attrsAfter: slotBits(wrongSlot), slot: slotBits(wrongSlot) }),
+            ]),
+          ),
           "e_1_derived",
-          "23514",
+          true,
           "identifier holding shape's slot",
         );
 
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            attributeRow(
-              { lexical: "H2", name: "identifier" },
-              { at: 1, count: 2, was: [identifier] },
-            ),
-          ]),
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([secondOfTwo({ lexical: "H2", name: "identifier" }, [identifier])]),
+          ),
           "al_2_distinct",
-          "23514",
+          true,
           "identifier repeated",
         );
 
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            attributeRow({ lexical: "H1", name: "identifier" }, { was: [slotOf("shape")] }),
-          ]),
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([
+              attributeOf({ lexical: "H1", name: "identifier" }, { was: [slotOf("shape")] }),
+            ]),
+          ),
           fold,
-          "23514",
+          true,
           "a junk attrsWas at slot 0",
         );
 
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            { ...admitted, fields: { ...admitted.fields, attrs_after: slotBits() } },
-          ]),
+        assertVerdict(
+          yield* judged(client, statedInserts([withFields(admitted, { attrsAfter: slotBits() })])),
           fold,
-          "23514",
+          true,
           "an after that left the slot out",
         );
 
-        const data = attributeRow({ lexical: "x", name: "data-*" });
-        assertNoRowLawRefuses(yield* insertRows(client, "attribute", [data]), "data-* control");
+        const data = attributeOf({ lexical: "x", name: "data-*" });
+        assertNoRowLawRefuses(yield* judged(client, statedInserts([data])), "data-* control");
         assertNoRowLawRefuses(
-          yield* insertRows(client, "attribute", [
-            attributeRow({ lexical: "y", name: "data-*" }, { at: 1, count: 2 }),
-          ]),
+          yield* judged(client, statedInserts([secondOfTwo({ lexical: "y", name: "data-*" }, [])])),
           "a second data-*: the fold steps over open classes, so attrsWas holds no open slot",
         );
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            { ...data, fields: { ...data.fields, attrs_after: slotBits(slotOf("data-*")) } },
-          ]),
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([withFields(data, { attrsAfter: slotBits(slotOf("data-*")) })]),
+          ),
           fold,
-          "23514",
+          true,
           "data-* stepping the fold, which the step selection leaves it out of",
         );
 
-        for (const openName of [0, 2]) {
-          assertRefusedBy(
-            yield* insertRows(client, "attribute", [
-              { ...data, fields: { ...data.fields, open_name: openName } },
-            ]),
+        for (const openName of [0n, 2n]) {
+          assertVerdict(
+            yield* judged(client, statedInserts([withFields(data, { openName })])),
             "al_4_open_names",
-            "23514",
+            true,
             `data-* with ${String(openName)} open names`,
           );
         }
 
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            { ...admitted, fields: { ...admitted.fields, open_name: 1 } },
-          ]),
+        assertVerdict(
+          yield* judged(client, statedInserts([withFields(admitted, { openName: 1n })])),
           "al_4_open_names",
-          "23514",
+          true,
           "a closed name with an open name",
         );
       }).pipe(Effect.scoped),
@@ -609,9 +410,11 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               .filter((row) => row.version === at && kinds.has(row.governor))
               .map(({ governor, name }) => `${governor}\u0000${name}`),
           );
+        // Each version's admitted names, read once: 38986 rows, so a set per key is minutes.
+        const [older, newer] = [admittedIn("3.0.0"), admittedIn("3.0.1")];
         const differences = [
-          ...[...admittedIn("3.0.1")].filter((key) => !admittedIn("3.0.0").has(key)),
-          ...[...admittedIn("3.0.0")].filter((key) => !admittedIn("3.0.1").has(key)),
+          ...[...newer].filter((key) => !older.has(key)),
+          ...[...older].filter((key) => !newer.has(key)),
         ].slice(0, 8);
 
         for (const key of differences) {
@@ -628,31 +431,40 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
             }
 
             const slot = row === undefined ? [] : [Number(row.position)];
-            const refused = yield* insertRows(client, "attribute", [
-              {
-                fields: {
-                  at: 0,
-                  attrs_after: slotBits(...slot),
-                  attrs_was: slotBits(),
-                  document: strayNode,
-                  governs: codeOf(TypeName.handles, governing.governs),
-                  id: "00000000-0000-4000-8000-000000000200",
-                  kind: codeOf(NodeKind.handles, governor),
-                  lexical: "",
-                  name: codeOf(AttributeName.handles, name),
-                  node: strayNode,
-                  slot: slotBits(...slot),
-                  version: codeOf(SchemaVersion.handles, at),
+            const refused = yield* judged(
+              client,
+              statedInserts([
+                {
+                  fact: {
+                    at: 0n,
+                    attrsAfter: slotBits(...slot),
+                    attrsWas: slotBits(),
+                    document: strayNode,
+                    governs: governing.governs,
+                    id: "00000000-0000-4000-8000-000000000200",
+                    idrefText: "",
+                    kind: governor,
+                    lexical: "",
+                    name,
+                    node: strayNode,
+                    prefix: "",
+                    slot: slotBits(...slot),
+                    version: at,
+                  },
+                  relation: Attribute,
                 },
-                hidden: { [attributeCount]: 1 },
-              },
-            ]);
+              ]),
+            );
             const label = `${name} on ${governor} in ${at}`;
 
             if (row === undefined) {
-              assertRefusedBy(refused, "al_1_admission", "23514", label);
+              assertVerdict(refused, "al_1_admission", true, label);
             } else {
-              assert.notStrictEqual(refused?.constraint, "al_1_admission", label);
+              assert.notStrictEqual(
+                Option.getOrUndefined(refused)?.constraint,
+                "al_1_admission",
+                label,
+              );
             }
           }
         }
@@ -670,38 +482,26 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
       // its roster.
       Effect.gen(function* lexical() {
         const client = yield* loginSession;
-        for (const [value, valid] of [
-          ["1,2,3", true],
-          ["1,2,3,4", true],
-          ["1,2,3,4,5,6", true],
-          ["1,2", false],
-          ["1,2,3,4,5", false],
+        for (const [value, name, valid] of [
+          ["1,2,3", "coords", true],
+          ["1,2,3,4", "coords", true],
+          ["1,2,3,4,5,6", "coords", true],
+          ["1,2", "coords", false],
+          ["1,2,3,4,5", "coords", false],
+          ["polite", "aria-live", true],
+          ["loud", "aria-live", false],
         ] as const) {
-          const refused = yield* insertRows(client, "attribute", [
-            attributeRow({ lexical: value, name: "coords" }),
-          ]);
+          const refused = yield* judged(
+            client,
+            statedInserts([attributeOf({ lexical: value, name })]),
+          );
 
           if (valid) {
-            assertNoRowLawRefuses(refused, `coords ${value}`);
+            assertNoRowLawRefuses(refused, `${name} ${value}`);
           } else {
-            assertRefusedBy(refused, "value_domain", "23514", `coords ${value}`);
+            assertVerdict(refused, "value_domain", true, `${name} ${value}`);
           }
         }
-
-        assertNoRowLawRefuses(
-          yield* insertRows(client, "attribute", [
-            attributeRow({ lexical: "polite", name: "aria-live" }),
-          ]),
-          "aria-live polite",
-        );
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            attributeRow({ lexical: "loud", name: "aria-live" }),
-          ]),
-          "value_domain",
-          "23514",
-          "aria-live loud",
-        );
       }).pipe(Effect.scoped),
     leaseTestTimeoutMs,
   );
@@ -761,14 +561,15 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
         ];
         for (const [name, lexical, prefix, constraint, host, valid] of cases) {
           const label = `${name}=${JSON.stringify(lexical)} written with ${JSON.stringify(prefix)} on ${host.kind}`;
-          const refused = yield* insertRows(client, "attribute", [
-            attributeRow({ lexical, name }, { host, rest: { prefix } }),
-          ]);
+          const refused = yield* judged(
+            client,
+            statedInserts([attributeOf({ lexical, name }, { host, rest: { prefix } })]),
+          );
 
           if (valid) {
             assertNoRowLawRefuses(refused, label);
           } else {
-            assertRefusedBy(refused, constraint, "23514", label);
+            assertVerdict(refused, constraint, true, label);
           }
         }
       }).pipe(Effect.scoped),
@@ -785,74 +586,80 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
       // Bound: one control and one corruption of each law.
       Effect.gen(function* idrefTokens() {
         const client = yield* loginSession;
-        const controls = attributeRow(
+        const controls = attributeOf(
           { lexical: "a b", name: "aria-controls" },
-          { rest: { idref_text: "a b", idrefs: 2 } },
+          { rest: { idrefText: "a b", idrefs: 2n } },
         );
-        assertNoRowLawRefuses(yield* insertRows(client, "attribute", [controls]), "IDREFS control");
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            { ...controls, fields: { ...controls.fields, idref_text: "a", idrefs: 1 } },
-          ]),
+        assertNoRowLawRefuses(yield* judged(client, statedInserts([controls])), "IDREFS control");
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([
+              { ...controls, fact: { ...controls.fact, idrefText: "a", idrefs: 1n } },
+            ]),
+          ),
           "e_1_derived",
-          "23514",
+          true,
           "tokens short of the lexical form",
         );
-        assertRefusedBy(
-          yield* insertRows(client, "attribute", [
-            attributeRow(
-              { lexical: "H1", name: "identifier" },
-              { rest: { idref_text: "H1", idrefs: 1 } },
-            ),
-          ]),
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([
+              attributeOf(
+                { lexical: "H1", name: "identifier" },
+                { rest: { idrefText: "H1", idrefs: 1n } },
+              ),
+            ]),
+          ),
           "e_1_derived",
-          "23514",
+          true,
           "an identifier, of no IDREF domain, with tokens",
         );
 
-        const idrefCount = "the owner's count of the family Attribute.idrefs";
-        const piece = (at: number, fields: Readonly<Record<string, string>>): SqlRow => ({
-          fields: {
-            after: "",
-            at,
-            attribute: "00000000-0000-4000-8000-000000000100",
-            before: at === 0 ? "" : " ",
-            document: strayNode,
-            node: strayNode,
-            ...fields,
-          },
-          hidden: { [idrefCount]: 2 },
-        });
-        const first = piece(0, { piece: "a", pieces_after: "a", pieces_was: "", token: "a" });
-        const second = piece(1, { piece: " b", pieces_after: "a b", pieces_was: "a", token: "b" });
         assertNoRowLawRefuses(
-          yield* insertRows(client, "idref", [first, second]),
+          yield* judged(
+            client,
+            statedInserts([
+              idrefPiece(0, { piece: "a", piecesAfter: "a", piecesWas: "", token: "a" }),
+              idrefPiece(1, { piece: " b", piecesAfter: "a b", piecesWas: "a", token: "b" }),
+            ]),
+          ),
           "pieces control",
         );
 
-        for (const [label, row] of [
+        for (const [label, stated] of [
           [
             "a piece that is not its parts",
-            piece(0, { piece: "x", pieces_after: "x", pieces_was: "", token: "a" }),
+            idrefPiece(0, { piece: "x", piecesAfter: "x", piecesWas: "", token: "a" }),
           ],
           [
             "a token holding a space",
-            piece(0, { piece: "a c", pieces_after: "a c", pieces_was: "", token: "a c" }),
+            idrefPiece(0, { piece: "a c", piecesAfter: "a c", piecesWas: "", token: "a c" }),
           ],
           [
             "a second token with no whitespace before it",
-            piece(1, { before: "", piece: "b", pieces_after: "ab", pieces_was: "a", token: "b" }),
+            idrefPiece(1, {
+              before: "",
+              piece: "b",
+              piecesAfter: "ab",
+              piecesWas: "a",
+              token: "b",
+            }),
           ],
         ] as const) {
-          assertRefusedBy(yield* insertRows(client, "idref", [row]), "e_1_derived", "23514", label);
+          assertVerdict(yield* judged(client, statedInserts([stated])), "e_1_derived", true, label);
         }
 
-        assertRefusedBy(
-          yield* insertRows(client, "idref", [
-            piece(0, { piece: "a", pieces_after: "za", pieces_was: "z", token: "a" }),
-          ]),
-          yield* constraintDescribed(client, "idref", "check of Idref for law concat fold"),
-          "23514",
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([
+              idrefPiece(0, { piece: "a", piecesAfter: "za", piecesWas: "z", token: "a" }),
+            ]),
+          ),
+          yield* constraintDescribed(client, "idref", "check of Idref for law concat fold%"),
+          true,
           "a junk running text at slot 0",
         );
       }).pipe(Effect.scoped),
@@ -870,117 +677,83 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
       // right and wrong; two names of one expanded name; two open names under one attribute.
       Effect.gen(function* openNames() {
         const client = yield* loginSession;
-        const openCount = "the owner's count of the family Attribute.openName";
         const kindNamespace =
           KindNamespace.rows.find((row) => row.kind === kind)?.namespace ??
           assert.fail(`KindNamespace holds ${kind}`);
-        const name = (
-          fields: Readonly<Record<string, string | number>>,
-          attribute = "00000000-0000-4000-8000-000000000100",
-        ): SqlRow => ({
-          fields: {
-            at: 0,
-            attribute,
-            element_namespace: "urn:element",
-            kind: codeOf(NodeKind.handles, "foreign-element"),
-            local: "a",
-            node: strayNode,
-            uri: "",
-            ...fields,
-          },
-          hidden: { [openCount]: 1 },
-        });
-        const classOf = (open: string) => codeOf(AttributeName.handles, open);
-        const cases: readonly (readonly [string, SqlRow, boolean])[] = [
-          ["no-namespace in none", name({ class: classOf("no-namespace") }), true],
+        const cases: readonly (readonly [string, Stated, boolean])[] = [
+          ["no-namespace in none", openNameOf({ class: "no-namespace" }), true],
           [
             "no-namespace in a namespace",
-            name({ class: classOf("no-namespace"), uri: "urn:x" }),
+            openNameOf({ class: "no-namespace", uri: "urn:x" }),
             false,
           ],
-          ["data-* in none", name({ class: classOf("data-*"), local: "data-a" }), true],
+          ["data-* in none", openNameOf({ class: "data-*", local: "data-a" }), true],
           [
             "data-* in a namespace",
-            name({ class: classOf("data-*"), local: "data-a", uri: "urn:x" }),
+            openNameOf({ class: "data-*", local: "data-a", uri: "urn:x" }),
             false,
           ],
           [
             "own-namespace in its element's",
-            name({ class: classOf("own-namespace"), uri: "urn:element" }),
+            openNameOf({ class: "own-namespace", uri: "urn:element" }),
             true,
           ],
-          [
-            "own-namespace in another",
-            name({ class: classOf("own-namespace"), uri: "urn:x" }),
-            false,
-          ],
-          ["own-namespace in none", name({ class: classOf("own-namespace") }), false],
-          ["foreign in another", name({ class: classOf("foreign"), uri: "urn:x" }), true],
-          [
-            "foreign in its element's",
-            name({ class: classOf("foreign"), uri: "urn:element" }),
-            false,
-          ],
-          ["foreign in none", name({ class: classOf("foreign") }), false],
+          ["own-namespace in another", openNameOf({ class: "own-namespace", uri: "urn:x" }), false],
+          ["own-namespace in none", openNameOf({ class: "own-namespace" }), false],
+          ["foreign in another", openNameOf({ class: "foreign", uri: "urn:x" }), true],
+          ["foreign in its element's", openNameOf({ class: "foreign", uri: "urn:element" }), false],
+          ["foreign in none", openNameOf({ class: "foreign" }), false],
           [
             "foreign on a kind, its element's namespace the kind's",
-            name({
-              class: classOf("foreign"),
-              element_namespace: kindNamespace,
-              kind: codeOf(NodeKind.handles, kind),
-              uri: "urn:x",
-            }),
+            openNameOf({ class: "foreign", elementNamespace: kindNamespace, kind, uri: "urn:x" }),
             true,
           ],
           [
             "foreign on a kind, its element's namespace another",
-            name({
-              class: classOf("foreign"),
-              element_namespace: "urn:other",
-              kind: codeOf(NodeKind.handles, kind),
-              uri: "urn:x",
-            }),
+            openNameOf({ class: "foreign", elementNamespace: "urn:other", kind, uri: "urn:x" }),
             false,
           ],
         ];
-        for (const [label, row, valid] of cases) {
-          const refused = yield* insertRows(client, "open_attribute_name", [row]);
+        for (const [label, stated, valid] of cases) {
+          const refused = yield* judged(client, statedInserts([stated]));
 
           if (valid) {
             assertNoRowLawRefuses(refused, label);
           } else {
-            assertRefusedBy(refused, "foreign_attribute_class", "23514", label);
+            assertVerdict(refused, "foreign_attribute_class", true, label);
           }
         }
 
-        const foreign = { class: classOf("foreign"), uri: "urn:x" };
-        assertRefusedBy(
-          yield* insertRows(client, "open_attribute_name", [
-            name(foreign),
-            name(foreign, "00000000-0000-4000-8000-000000000101"),
-          ]),
+        const foreign = { class: "foreign", uri: "urn:x" };
+        const second = openNameOf({ ...foreign, local: "b" });
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([
+              openNameOf(foreign),
+              openNameOf(foreign, "00000000-0000-4000-8000-000000000101"),
+            ]),
+          ),
           yield* constraintDescribed(
             client,
             "open_attribute_name",
-            "key OpenAttributeName(node, uri, local)",
+            "key OpenAttributeName(node, uri, local)%",
           ),
-          "23505",
+          true,
           "two attributes of one expanded name on one element",
+          "23505",
         );
-        assertRefusedBy(
-          yield* insertRows(client, "open_attribute_name", [
-            name(foreign),
-            {
-              ...name({ ...foreign, local: "b" }),
-              fields: { ...name({ ...foreign, local: "b" }).fields, at: 1 },
-            },
-          ]),
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([openNameOf(foreign), { ...second, fact: { ...second.fact, at: 1n } }]),
+          ),
           yield* constraintDescribed(
             client,
             "open_attribute_name",
-            "check of OpenAttributeName for law ordered",
+            "check of OpenAttributeName for law ordered%",
           ),
-          "23514",
+          true,
           "two open names under one attribute",
         );
       }).pipe(Effect.scoped),

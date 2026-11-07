@@ -74,20 +74,32 @@ export interface Prolog {
 }
 
 /**
- * Decide how a document treats a reference to an entity it does not declare.
+ * Decide how a document treats a reference to an entity it does not declare, by WFC Entity
+ * Declared's scope (XML 1.0 section 4.1): a document with no DTD, one whose only subset is an
+ * internal one that references no parameter entity, or one that says `standalone="yes"`. Inside it
+ * such a reference is not well-formed; outside it the rule is VC Entity Declared, which a reader
+ * that does not validate keeps the reference for.
  *
  * @param standalone - Whether the XML declaration says `standalone="yes"`.
  * @param externalSubset - Whether the DOCTYPE names a `SYSTEM` or `PUBLIC` identifier.
- * @returns `refused` when no declaration of such an entity can exist, `kept` otherwise.
+ * @param referencesParameters - Whether the internal subset references a parameter entity.
+ * @returns `refused` inside the scope, with why; `kept` outside it.
  */
-const undeclaredOf = (standalone: boolean, externalSubset: boolean): Undeclared => {
+const undeclaredOf = (
+  standalone: boolean,
+  externalSubset: boolean,
+  referencesParameters: boolean,
+): Undeclared => {
   if (standalone) {
     return { _tag: "refused", why: 'the document says standalone="yes"' };
   }
 
-  return externalSubset
+  return externalSubset || referencesParameters
     ? { _tag: "kept" }
-    : { _tag: "refused", why: "the document has no external subset" };
+    : {
+        _tag: "refused",
+        why: "the document has no external subset and its internal subset references no parameter entity",
+      };
 };
 
 /**
@@ -116,23 +128,33 @@ export const undeclaredEntity = (
 
 /**
  * Build the refusal for an attribute default that references an entity the internal subset
- * declares only after it. A declaration must precede every reference in a default value (XML 1.0
- * section 4.1, "Entity Declared"): a well-formedness constraint where no external subset or a
- * `standalone` declaration binds it, and otherwise a validity constraint, which a QTI package
- * meets too.
+ * declares only after it. XML 1.0 section 4.1 states "The declaration of a general entity MUST
+ * precede any reference to it which appears in a default value in an attribute-list declaration"
+ * twice. In WFC Entity Declared's scope (no DTD, an internal subset with no parameter-entity
+ * reference, or `standalone="yes"`) it is a well-formedness constraint, so the document is not
+ * well-formed. Outside it the same rule is VC Entity Declared, so the document is not valid; and
+ * there the default's value is one the specification leaves undetermined: a reader taking the
+ * subset in order has not seen the entity at the attribute-list declaration, and neither section
+ * 4.4 nor 5.1 fixes what a non-validating reader supplies (libxml2 2.9.13 supplies the empty
+ * string). The reader checks no DTD validity in general, but refuses where the infoset the
+ * specification defines is undetermined, rather than invent one.
  *
  * @param name - The entity's name.
  * @param owner - The attribute whose default holds the reference.
  * @param owner.attribute - The attribute's name.
  * @param owner.element - The name of the element the attribute is declared for.
+ * @param wellFormednessScope - Whether the document is in WFC Entity Declared's scope.
  * @returns The refusal, under rule `undeclared-entity`.
  */
 const declaredAfterDefault = (
   name: string,
   owner: { readonly attribute: string; readonly element: string },
+  wellFormednessScope: boolean,
 ): ReaderRefusal =>
   new ReaderRefusal({
-    detail: `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" before the internal subset declares it, and a declaration must precede every reference in an attribute default (XML 1.0 section 4.1, Entity Declared). Move the entity's declaration before the attribute-list declaration.`,
+    detail: wellFormednessScope
+      ? `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" before the internal subset declares it, so the document is not well-formed: a declaration must precede every reference in an attribute default (XML 1.0 section 4.1, well-formedness constraint Entity Declared). Move the entity's declaration before the attribute-list declaration.`
+      : `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" before the internal subset declares it, which breaks XML 1.0 section 4.1's validity constraint Entity Declared and leaves the default's value undetermined, since nothing defines what a reader supplies for an entity it has not yet seen. Move the entity's declaration before the attribute-list declaration.`,
     rule: "undeclared-entity",
   });
 
@@ -359,22 +381,31 @@ export const charge = (
  *
  * `bound` holds `&name` and `%name` for every entity declared, internal or external, because the
  * first declaration of a name is binding (XML 1.0 section 4.2). `stopped` is set at the first
- * parameter-entity reference that cannot be read (section 5.1). `undeclared` is set when the
- * DOCTYPE's external identifier is read, which precedes the internal subset, so every attribute
- * default is judged under the treatment the body is. `kept` lists each reference an attribute
- * default keeps, with the attribute, so the end of the subset can refuse one the subset declares
- * after it.
+ * parameter-entity reference that cannot be read (section 5.1). `externalSubset` is read with the
+ * DOCTYPE's external identifier and `referencesParameters` as the subset is read, and at the
+ * subset's end the two and `standalone` decide WFC Entity Declared's scope, under which every
+ * attribute default is judged as the body is. `kept` lists each reference to an entity not yet
+ * declared that an attribute default holds, with the attribute, so the end of the subset can refuse
+ * one the subset declares after it, or one it never declares in the WFC's scope.
  */
 interface Tables {
   readonly attlists: Map<string, Map<string, AttlistEntry>>;
   readonly bound: Set<string>;
   readonly budget: ExpansionBudget;
   readonly entities: Map<string, string>;
+  /**
+   * Whether the DOCTYPE names a `SYSTEM` or `PUBLIC` identifier, read before the internal subset.
+   */
+  externalSubset: boolean;
   readonly kept: { readonly name: string; readonly owner: DefaultOwner }[];
   readonly parameters: Map<string, string>;
+  /**
+   * Whether the subset has referenced a parameter entity, read or not, which takes the document
+   * out of WFC Entity Declared's scope (XML 1.0 section 4.1).
+   */
+  referencesParameters: boolean;
   readonly standalone: boolean;
   stopped: boolean;
-  undeclared: Undeclared;
 }
 
 /**
@@ -872,10 +903,8 @@ const expandDefault = (
 
       const replacement = tables.entities.get(entity);
       if (replacement === undefined) {
-        if (tables.undeclared._tag === "refused") {
-          return yield* undeclaredEntity(entity, tables.undeclared.why, owner);
-        }
-
+        // Kept until the subset ends, when WFC Entity Declared's scope is known (section 4.1): a
+        // parameter-entity reference after the list still takes the document out of it.
         tables.kept.push({ name: entity, owner });
 
         return [{ kind: "reference", name: entity }];
@@ -1184,6 +1213,7 @@ const readParameterReference = Effect.fnUntraced(function* readParameterEntityRe
   cursor.offset += "%".length;
   const name = yield* readName(cursor, "parameter-entity reference");
   yield* expect(cursor, ";", "parameter-entity reference");
+  tables.referencesParameters = true;
 
   const replacement = tables.parameters.get(name);
   if (tables.stopped) {
@@ -1242,11 +1272,12 @@ const unprocessed = (tables: Tables): Tables => ({
   bound: new Set(),
   budget: tables.budget,
   entities: new Map(),
+  externalSubset: tables.externalSubset,
   kept: [],
   parameters: new Map(),
+  referencesParameters: true,
   standalone: tables.standalone,
   stopped: false,
-  undeclared: { _tag: "kept" },
 });
 
 /**
@@ -1344,8 +1375,8 @@ const lexSubset: (
 /**
  * Read a `<!DOCTYPE>` declaration, its internal subset into `tables`.
  *
- * The external identifier precedes the internal subset, so `tables.undeclared` is decided from it
- * before any declaration of the subset is read.
+ * The external identifier precedes the internal subset; how an undeclared reference is treated is
+ * decided once the subset ends, when whether it references a parameter entity is known too.
  *
  * @param tables - The subset's declarations, filled as the subset is read.
  * @param cursor - The read position, at `<!DOCTYPE`.
@@ -1362,8 +1393,7 @@ const lexDoctype = Effect.fnUntraced(function* lexDoctypeDeclaration(
   yield* readName(cursor, context);
   skipSpace(cursor);
 
-  const externalSubset = yield* skipExternalId(cursor, context);
-  tables.undeclared = undeclaredOf(tables.standalone, externalSubset);
+  tables.externalSubset = yield* skipExternalId(cursor, context);
   skipSpace(cursor);
   if (take(cursor, "[")) {
     yield* lexSubset(tables, cursor, new Set());
@@ -1498,20 +1528,27 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
     bound: new Set(),
     budget: expansionBudget(text.length),
     entities: new Map(),
+    externalSubset: false,
     kept: [],
     parameters: new Map(),
+    referencesParameters: false,
     standalone,
     stopped: false,
-    undeclared: undeclaredOf(standalone, false),
   };
   yield* skipMisc(cursor);
 
   const doctype = text.startsWith("<!DOCTYPE", cursor.offset)
     ? Option.some(yield* lexDoctype(tables, cursor))
     : Option.none();
+  const undeclared = undeclaredOf(standalone, tables.externalSubset, tables.referencesParameters);
   const early = tables.kept.find(({ name }) => tables.bound.has(`&${name}`));
   if (early !== undefined) {
-    return yield* declaredAfterDefault(early.name, early.owner);
+    return yield* declaredAfterDefault(early.name, early.owner, undeclared._tag === "refused");
+  }
+
+  const never = tables.kept.find(({ name }) => !tables.bound.has(`&${name}`));
+  if (never !== undefined && undeclared._tag === "refused") {
+    return yield* undeclaredEntity(never.name, undeclared.why, never.owner);
   }
 
   const cycle = findCycle(tables.entities);
@@ -1529,7 +1566,7 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
     doctype,
     entities: tables.entities,
     expanded: tables.budget.expanded,
-    undeclared: tables.undeclared,
+    undeclared,
   };
 });
 

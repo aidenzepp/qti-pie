@@ -69,6 +69,7 @@ import {
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import type { Kind, Name } from "#pantry/grammar/compose.ts";
+import { booleanTruePattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeName,
   Flag,
@@ -240,13 +241,6 @@ export const SelectForm = lexical(pg.bigint);
  */
 export const collapsedPattern =
   "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]|[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}][\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])$";
-
-/**
- * An `xs:boolean` lexical form that is true, its whitespace collapsed: `true` or `1` (XML Schema
- * 1.0 Part 2, §3.2.2.1). AL1 has proved the form a boolean's, so a form that does not match this
- * is false.
- */
-export const truePattern = "^[\\t\\n\\r ]*(?:true|1)[\\t\\n\\r ]*$";
 
 /**
  * A document of a test or a section, keyed by its document node: its entry, its root kind, and
@@ -1170,8 +1164,8 @@ export const testOverlayLaws = [
   ...flagCarriers.flatMap(flagCopy),
   check("E1_derived", TestFlag, (f) =>
     f.or(
-      f.and(f.eq(f.value, true), Compute.matches(f.lexical, truePattern)),
-      f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, truePattern))),
+      f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTruePattern)),
+      f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTruePattern))),
     ),
   ),
 

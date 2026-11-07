@@ -24,7 +24,7 @@
  */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
-import type { Case } from "@grizzle/testing/explore";
+import type { Case, Kept } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
@@ -119,6 +119,22 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
  * list only shrinks.
  */
 const owedStatements = {} as const satisfies Readonly<Record<string, string>>;
+
+/**
+ * The counterexamples each law's search keeps, by law: each replays before the search, by its
+ * member counts and the draws its mutation made, and must still raise its law, by no law ahead of
+ * its rule.
+ */
+const keptCases: Readonly<Partial<Record<LawName, readonly Kept<MemberCounts, string>[]>>> = {
+  "AL1 owner": [
+    {
+      draws: "7.0",
+      note: "TEST_SEED=4172436958's counterexample, whose owner-copy kind of the context declaration's identifier left CTX no ID and raised Idref target ahead of AL1 owner; drawn now among the attributes whose corruption isolates it",
+      reaches: ["AL1 owner"],
+      sketch: { choices: 2, hotspots: 1, hottexts: 1 },
+    },
+  ],
+};
 
 /**
  * Each rule's place in the refusal's precedence.
@@ -263,6 +279,7 @@ const property = (law: LawName, mutation: Mutation) => (members: MemberCounts, c
       );
 
       holdsTo(law, judgment._tag === "Judged" ? judgment.breaches : [], literal);
+      c.note(law);
 
       return;
     }
@@ -281,6 +298,7 @@ const property = (law: LawName, mutation: Mutation) => (members: MemberCounts, c
     const mutated = c.draw(mutation.mutate(rows, grammar));
 
     holdsTo(law, documentBreaches(mutation.document, mutated, laws), literal);
+    c.note(law);
   });
 
 describe("every law the oracle declares", () => {
@@ -323,7 +341,7 @@ describe("every law the oracle declares", () => {
                 concurrency: 1,
                 coverage: noCoverage,
                 draw: drawn(memberCounts),
-                kept: [],
+                kept: keptCases[law] ?? [],
                 literal: JSON.stringify,
                 oracle: {
                   kind: "specification",

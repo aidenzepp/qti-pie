@@ -20,6 +20,7 @@ import {
   interactionKinds,
   nonElementKinds,
 } from "#pantry/grammar/install.ts";
+import { booleanOf } from "#pantry/grammar/domains.ts";
 import { ownContext } from "#pantry/import/context.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -33,7 +34,6 @@ import {
   adaptiveName,
   ariaNames,
   bindingAttributes,
-  booleanTrue,
   builtIns,
   choiceKinds,
   countDefault,
@@ -430,9 +430,7 @@ const contextOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Context => 
     ...base,
     adaptive:
       item !== undefined &&
-      Option.exists(valueOf(reading, item.id, adaptiveName), (value) =>
-        booleanTrue.some((form) => form === value),
-      ),
+      Option.contains(Option.flatMap(valueOf(reading, item.id, adaptiveName), booleanOf), true),
     declared: declaredOf(base),
   };
 };
