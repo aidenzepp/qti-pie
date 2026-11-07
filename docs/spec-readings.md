@@ -60,11 +60,11 @@ that needs one asks the operator first.
      and `base="0"` refused. "The base attribute should only be used on elements with type "integer" or "real"" is
      advice and is not read;
    - `mscarries` is not the last element of an `mstack` or `mlongdiv`: "It is an error for mscarries to be the last
-     element of an mstack or mlongdiv element" (§3.6.1);
+     element of an mstack or mlongdiv element" (§3.6.5.1);
    - a `bind` holds at least one `bvar`: "a non-empty list of bvar elements denoting the bound variables" (§4.2.6.1);
    - qualifiers appear in the order "bvar, lowlimit, uplimit, interval, condition, domainofapplication, degree,
      momentabout, logbase" (§4.3.3), and a `condition` only after a `bvar`: "condition qualifiers always contain
-     instances of the bound variable, and thus require a preceding bvar" (§4.3.3.2);
+     instances of the bound variable, and thus require a preceding bvar" (§4.3.3.1);
    - `selector` takes at least one argument ("It accepts one or more arguments", §4.4) and `partialdiff` without a
      `bvar` two;
    - an `maction`'s `selection` names one of its children: "If the value specified is out of range, it is an error"
@@ -2870,19 +2870,20 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-TESTS.)
 
 148. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
-     model's section 2.2.2.3, Outcomes Variable (https://www.imsglobal.org/spec/qti/v3p0/info#IV_Outcome), says of SCORE
-     "Items that declare a numeric outcome variable representing the candidate's overall performance on the item should
-     use the outcome name 'SCORE' for the variable. SCORE MUST be a float." (`info.txt:8478`), and of MAXSCORE "Items that
-     declare a maximum score (in multiple response choice interactions, for example) should do so by declaring the
-     'MAXSCORE' variable. MAXSCORE MUST be a float." (`info.txt:8480`). Both sentences are about items. It says of
-     PASSED "Items or tests that want to make the fact that the candidate scored above a predefined threshold available
-     as a variable should use the 'PASSED' variable. PASSED MUST be a boolean." (`info.txt:8482`), which covers a test
-     as well. So an outcome declaration named SCORE or MAXSCORE of an item is refused unless its base type is float, a
+     model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
+     of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
+     should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
+     MAXSCORE "Items that declare a maximum score (in multiple response choice interactions, for example) should do so
+     by declaring the 'MAXSCORE' variable. MAXSCORE needs to be a float." (`info.txt:11979`). Both sentences are about
+     items. It says of PASSED "Items or tests that want to make the fact that the candidate scored above a predefined
+     threshold available as a variable should use the 'PASSED' variable. PASSED needs to be a boolean."
+     (`info.txt:11979`), which covers a test as well. Section 2.2.2.3, which is not normative, says the same with
+     "MUST". So an outcome declaration named SCORE or MAXSCORE of an item is refused unless its base type is float, a
      test's of any base type is accepted (an integer included), and one named PASSED is refused unless it is a boolean,
      in an item and in a test alike. This refuses nothing the specification states and accepts what it leaves open;
      reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
-     type`.)
+     type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
 
 149. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes

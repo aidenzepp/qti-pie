@@ -1059,7 +1059,7 @@ const piecewiseModel = (() => {
  *   they stand in the order `bvar*`, `(lowlimit, uplimit?)*`, `interval*`, `condition*`,
  *   `domainofapplication*`, then `extra` (`degree`, `momentabout`, `logbase`), each kind's run in
  *   its place;
- * - §4.3.3.2, "condition qualifiers always contain instances of the bound variable, and thus require
+ * - §4.3.3.1, "condition qualifiers always contain instances of the bound variable, and thus require
  *   a preceding bvar": a `condition` stands only after a `bvar`;
  * - §4.2.6.1, "This is followed by a non-empty list of bvar elements": a `bind` needs one.
  *
@@ -1184,11 +1184,12 @@ const lambdaEnding = relaxNgCite("mathml3-content.rnc", 103, "§4.4.1.3 Lambda")
 
 /**
  * Where the rule that `mscarries` is not last comes from: the RelaxNG's `mstack` and `mlongdiv`
- * (`mathml3-presentation.rnc` lines 494 and 504) and MathML 3 §3.6.1, "It is an error for mscarries
- * to be the last element of an mstack or mlongdiv element", which the RelaxNG does not say.
+ * (`mathml3-presentation.rnc` lines 494 and 504) and MathML 3 §3.6.5.1, "It is an error for
+ * mscarries to be the last element of an mstack or mlongdiv element", which the RelaxNG does not
+ * say.
  */
 const mscarriesEnding =
-  "spec reading 2: MathML 3 RelaxNG, mathml3-presentation.rnc lines 494 and 504; MathML 3 §3.6.1 Stacks of Characters (mscarries is not the last element)";
+  "spec reading 2: MathML 3 RelaxNG, mathml3-presentation.rnc lines 494 and 504; MathML 3 §3.6.5.1 Carries, Borrows, and Crossouts (mscarries is not the last element)";
 
 /**
  * The kinds that may end an `mstack` or an `mlongdiv`: each kind the parent's model names but

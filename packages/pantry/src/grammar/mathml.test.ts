@@ -1108,11 +1108,11 @@ const endedToy = (model: ContentModel, ending: readonly [string, ...string[]]) =
     },
   ]);
 
-describe("MathML 3 §3.6.1: mscarries is never the last element of an mstack or mlongdiv", () => {
+describe("MathML 3 §3.6.5.1: mscarries is never the last element of an mstack or mlongdiv", () => {
   it.effect(
     "refuses a package whose mstack ends in an mscarries, under N7 Last and child-set",
     () =>
-      // Oracle: §3.6.1, "It is an error for mscarries to be the last element of an mstack or
+      // Oracle: §3.6.5.1, "It is an error for mscarries to be the last element of an mstack or
       // mlongdiv element", as the law oracle judges a whole package. Bound: one package, the base
       // item with that `mstack` after its paragraph.
       Effect.gen(function* endsInCarries() {
@@ -1191,7 +1191,7 @@ describe("MathML 3 §4.3.3 and §4.2.6.1: qualifiers in order, a condition after
 
   it.effect.each(refused)("refuses %s", ([, formula, laws]) =>
     // Oracle: §4.3.3 ("they appear in the order bvar, lowlimit, uplimit, interval, condition,
-    // domainofapplication, degree, momentabout, logbase"), §4.3.3.2 ("condition qualifiers ...
+    // domainofapplication, degree, momentabout, logbase"), §4.3.3.1 ("condition qualifiers ...
     // require a preceding bvar") and §4.2.6.1 ("followed by a non-empty list of bvar elements"),
     // as the law oracle judges a whole package. Bound: the three inputs that failed.
     Effect.gen(function* refusedFormula() {

@@ -64,7 +64,7 @@ const qualifierPlace: ReadonlyMap<string, number> = new Map([
 /**
  * Whether a run is qualifiers in the Recommendation's order: each kind one of the `allowed`, the
  * places never falling, each `uplimit` right after a `lowlimit`, and, when no `bvar` precedes the
- * run, no `condition` (§4.3.3.2, "condition qualifiers always contain instances of the bound
+ * run, no `condition` (§4.3.3.1, "condition qualifiers always contain instances of the bound
  * variable, and thus require a preceding bvar").
  *
  * @param run - The run, after the family's `bvar` run.
@@ -220,11 +220,11 @@ const stackOnly: ReadonlySet<string> = new Set(["m:mscarries", "m:msline", "m:ms
 
 /**
  * The RelaxNG's `mstack` and `mlongdiv` with the Recommendation's prose rule applied, the one layer
- * of this file that is not the RelaxNG alone: MathML 3 §3.6.1, "It is an error for mscarries to be
- * the last element of an mstack or mlongdiv element", which the RelaxNG does not say. The pattern
- * is `MstackExpression*` for `mstack` (`mathml3-presentation.rnc` line 494) and `MstackExpression,
- * MstackExpression, MstackExpression+` for `mlongdiv` (line 504), so `mlongdiv` holds at least
- * three.
+ * of this file that is not the RelaxNG alone: MathML 3 §3.6.5.1, "It is an error for mscarries to
+ * be the last element of an mstack or mlongdiv element", which the RelaxNG does not say. The
+ * pattern is `MstackExpression*` for `mstack` (`mathml3-presentation.rnc` line 494) and
+ * `MstackExpression, MstackExpression, MstackExpression+` for `mlongdiv` (line 504), so `mlongdiv`
+ * holds at least three.
  *
  * @param least - The fewest children the RelaxNG's pattern takes.
  * @returns The recognizer.
@@ -261,7 +261,7 @@ const contentExpressions =
  *   (`mathml3-strict-content.rnc` line 14): `semantics-contexp` (23), `cerror` (50), the qualifiers
  *   (`mathml3-content.rnc` lines 42 to 50), `piece` (62), `otherwise` (64), `reln` (70), `fn` (71),
  *   `declare` (72) and `interval` (84);
- * - `mstack` and `mlongdiv` (`mathml3-presentation.rnc` lines 494 and 504) with §3.6.1's prose rule
+ * - `mstack` and `mlongdiv` (`mathml3-presentation.rnc` lines 494 and 504) with §3.6.5.1's prose rule
  *   that `mscarries` is not their last child, which is the RelaxNG with the Recommendation's prose
  *   and not the RelaxNG alone.
  */
