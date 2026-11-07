@@ -75,3 +75,61 @@ describe("checkResponses on an item whose printed variable's whole text passes 1
     );
   }
 });
+
+/**
+ * A value whose members count each read of them, and a faithful value otherwise.
+ */
+interface CountedValue {
+  /**
+   * How many times the members have been read.
+   */
+  readonly reads: () => number;
+  readonly value: Value;
+}
+
+/**
+ * Wrap a value so each read of its members counts. Printing a variable reads its members, and
+ * deciding which parts the page shows never reads a printed variable's, so the count shows whether
+ * a path printed it.
+ *
+ * @param value The value.
+ * @returns The wrapped value and its count.
+ */
+const counted = (value: Value): CountedValue => {
+  let reads = 0;
+
+  return {
+    reads: () => reads,
+    value: {
+      baseType: value.baseType,
+      cardinality: value.cardinality,
+      get values() {
+        reads += 1;
+
+        return value.values;
+      },
+    },
+  };
+};
+
+describe("checkResponses and the printed variables of the item it judges", () => {
+  it.effect(
+    "[I-5] formats no printed variable: it learns which interactions and choices the page shows from the walk that prints no text",
+    () =>
+      Effect.gen(function* judgesWithoutPrinting() {
+        const document = repeatedItem("string", "y", 3, "");
+        const verdict = yield* open("items/repeated.xml", new TextEncoder().encode(document));
+        const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+        );
+        const configuration = yield* configure({});
+        const printed = counted(repeated({ baseType: "string", value: "y" }, 3));
+
+        assert.deepStrictEqual(
+          checkResponses(accepted, {}, configuration, { templates: { S: printed.value } }),
+          [],
+        );
+        assert.strictEqual(printed.reads(), 0);
+      }),
+  );
+});

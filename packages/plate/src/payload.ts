@@ -1089,6 +1089,15 @@ const choiceNotice = "template-identifier";
 const parameterNotice = "param";
 
 /**
+ * What a walk of {@link printBody} writes in place of a printed variable and of a `param-variable`
+ * parameter the values cover: `"text"` writes the text each prints or passes, through
+ * `formatPrinted`, as {@link redactItem} gives the page; `"structure"` writes none, for the callers
+ * that read only which parts the page shows ({@link redactStructure}). Either decides every
+ * visibility, binding and notice the same way.
+ */
+type Writing = "structure" | "text";
+
+/**
  * Copy one body node into its payload node.
  *
  * A printed variable becomes its notice. {@link redactItem} leaves none in a redacted body, so the
@@ -1246,16 +1255,24 @@ const printOptionsOf = (node: PrintedVariable, record: RedactRecord): Option.Opt
 
 /**
  * Give the text a printed variable prints from a record: `formatPrinted`'s text for the value of
- * the variable it names.
+ * the variable it names, or, when the walk writes no text, the empty text, so the formatter never
+ * runs.
  *
  * @param node The printed variable.
  * @param record The record.
- * @returns The text, empty for NULL; or none when the record holds no value of the variable, or of
- *   a name its `base` or `index` names.
+ * @param writing Whether the walk writes text (`"text"`) or none (`"structure"`).
+ * @returns The text, empty for NULL and always empty under `"structure"`; or none when the record
+ *   holds no value of the variable, or of a name its `base` or `index` names, under either.
  */
-const printedText = (node: PrintedVariable, record: RedactRecord): Option.Option<string> =>
+const printedText = (
+  node: PrintedVariable,
+  record: RedactRecord,
+  writing: Writing,
+): Option.Option<string> =>
   Option.flatMap(heldValue(record, node.identifier), (value) =>
-    Option.map(printOptionsOf(node, record), (options) => formatPrinted(value, options)),
+    Option.map(printOptionsOf(node, record), (options) =>
+      writing === "text" ? formatPrinted(value, options) : "",
+    ),
   );
 
 /**
@@ -1385,23 +1402,28 @@ const parameterText = (value: Value): string =>
  * Decide what the page sees of a body element's `value` as a parameter: the text of the value the
  * values hold for the `param-variable` template variable it names ({@link parameterOf},
  * {@link parameterText}), or none when they cannot give it, because there are no values or they
- * hold no value of that variable, so the `param` is withheld.
+ * hold no value of that variable, so the `param` is withheld. When the walk writes no text, a
+ * parameter the values expand keeps its `value` as written, the variable's name, and the formatter
+ * never runs.
  *
  * @param item The item.
  * @param printing The values the redaction reads, none when it has none.
  * @param node The body element.
+ * @param writing Whether the walk writes text (`"text"`) or none (`"structure"`).
  * @returns None for an element that stands in for no template variable, which is copied as written;
- *   some text for a parameter the values expand; some none for one they withhold.
+ *   some text for a parameter the values expand (its `value` as written under `"structure"`); some
+ *   none for one they withhold.
  */
 const expandedParameter = (
   item: Item,
   printing: Option.Option<RedactRecord>,
   node: BodyElement,
+  writing: Writing,
 ): Option.Option<Option.Option<string>> =>
   Option.map(parameterOf(item, node), (declaration) =>
     printing.pipe(
       Option.flatMap((record) => own(record.templates, declaration.identifier)),
-      Option.map(parameterText),
+      Option.map((value) => (writing === "text" ? parameterText(value) : declaration.identifier)),
     ),
   );
 
@@ -1458,16 +1480,27 @@ const expandedParameter = (
  * page sees binds nothing here, so a response only such notices bind, like one no interaction
  * binds, is never hidden-only.
  *
+ * Under `"structure"` the walk writes no text: a printed variable the values cover leaves nothing
+ * in its place, and a `param-variable` parameter they expand keeps its `value` as written. Every
+ * other decision, the notices, the hidden-only responses and every interaction and choice shown, is
+ * the same as under `"text"`, since none of them reads a printed text.
+ *
  * @param item The item.
  * @param printing The values the body is shown by, none to withhold every printed variable, every
  *   template block and inline, every choice with a template visibility and every `param-variable`
  *   parameter.
- * @returns The body, every printed variable its text or its notice, every template block and
- *   inline its content, nothing or its notice, and every `param-variable` parameter its value or
- *   its notice; the features shown as notices; and the responses only content the page does not
- *   see binds.
+ * @param writing Whether the walk writes each printed variable's and parameter's text (`"text"`)
+ *   or none (`"structure"`).
+ * @returns The body, every printed variable its text (nothing under `"structure"`) or its notice,
+ *   every template block and inline its content, nothing or its notice, and every `param-variable`
+ *   parameter its value (as written under `"structure"`) or its notice; the features shown as
+ *   notices; and the responses only content the page does not see binds.
  */
-const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedBody => {
+const printBody = (
+  item: Item,
+  printing: Option.Option<RedactRecord>,
+  writing: Writing,
+): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
   const listedAt = new Map<string, number[]>();
   for (const [index, entry] of listed.entries()) {
@@ -1549,7 +1582,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
     nodes.flatMap((node): readonly BodyNode[] => {
       switch (node.kind) {
         case "element": {
-          const parameter = expandedParameter(item, printing, node);
+          const parameter = expandedParameter(item, printing, node, writing);
           const withheld = Option.exists(parameter, Option.isNone);
           const held = new Set(
             node.children.flatMap((child) =>
@@ -1586,7 +1619,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
         }
         case "printed-variable": {
           return Option.match(
-            printing.pipe(Option.flatMap((record) => printedText(node, record))),
+            printing.pipe(Option.flatMap((record) => printedText(node, record, writing))),
             {
               onNone: (): readonly BodyNode[] => {
                 note(printedNotice, seen);
@@ -1740,6 +1773,20 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
 };
 
 /**
+ * Give the response bindings a redaction lists: each response the item declares, in document
+ * order, but the hidden-only ones.
+ *
+ * @param item The item.
+ * @param hiddenOnly The responses only content the page does not see binds.
+ * @returns The bindings.
+ */
+const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly ResponseBinding[] =>
+  [...item.responses.values()].flatMap(
+    ({ baseType, cardinality, identifier }): readonly ResponseBinding[] =>
+      hiddenOnly.has(identifier) ? [] : [{ baseType, cardinality, identifier }],
+  );
+
+/**
  * Copy the parts of an item the page may know: the allowlist, and the only way to make a
  * {@link Redacted} from an item.
  *
@@ -1795,7 +1842,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
  * @returns The redacted item.
  */
 export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
-  const { body, hiddenOnly, notices } = printBody(item, printingOf(item, record));
+  const { body, hiddenOnly, notices } = printBody(item, printingOf(item, record), "text");
 
   return brandRedacted({
     body,
@@ -1803,12 +1850,60 @@ export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
     identifier: item.identifier,
     lang: item.lang,
     notices,
-    responses: [...item.responses.values()].flatMap(
-      ({ baseType, cardinality, identifier }): readonly ResponseBinding[] =>
-        hiddenOnly.has(identifier) ? [] : [{ baseType, cardinality, identifier }],
-    ),
+    responses: bindingsShown(item, hiddenOnly),
     title: item.title,
   });
+};
+
+/**
+ * What the page is shown of an item's structure under a record: what {@link redactItem} decides,
+ * with no printed text. Plate's own, for the callers that read only which interactions, choices
+ * and responses the page shows; `src/index.ts` does not export it, and it is no {@link Redacted},
+ * so `payload` and `render` never take one.
+ */
+export interface RedactedStructure {
+  /**
+   * The body as `redactItem` gives it, but that a printed variable the record covers leaves
+   * nothing in its place and a `param-variable` parameter it expands keeps its `value` as written.
+   */
+  readonly body: readonly BodyNode[];
+  /**
+   * The responses only content the page does not see binds: {@link hiddenOnlyResponses}' set.
+   */
+  readonly hiddenOnly: ReadonlySet<string>;
+  /**
+   * The features the body shows as notices, as `redactItem` lists them.
+   */
+  readonly notices: readonly string[];
+  /**
+   * The response bindings, as `redactItem` lists them.
+   */
+  readonly responses: readonly ResponseBinding[];
+}
+
+/**
+ * Decide what the page is shown of an item under a record without printing it: the walk
+ * {@link redactItem} makes, with every visibility, binding and notice decided as it decides them,
+ * that formats no printed variable and no `param-variable` parameter's value. So the interactions
+ * and choices of its body, its responses, its notices and its hidden-only responses are
+ * `redactItem`'s, and its cost does not follow the length of what the item prints.
+ *
+ * It is for plate's own callers that read only what the page shows, such as `checkResponses`,
+ * `results` and a session's skip rule; `src/index.ts` does not export it.
+ *
+ * @example
+ *   interactionsIn(redactStructure(item, record).body);
+ *   // the interactions redactItem(item, record).body holds, each with the same choices
+ *
+ * @param item The item.
+ * @param record The template values and outcome values of the attempt shown, as `redactItem` takes
+ *   them; none to read the item as it reads with no record.
+ * @returns The item's structure as the page is shown it, with no printed text.
+ */
+export const redactStructure = (item: Item, record?: RedactRecord): RedactedStructure => {
+  const { body, hiddenOnly, notices } = printBody(item, printingOf(item, record), "structure");
+
+  return { body, hiddenOnly, notices, responses: bindingsShown(item, hiddenOnly) };
 };
 
 /**
@@ -1820,7 +1915,8 @@ export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
  *
  * A response bound only to a notice on content the page sees, or bound by no interaction, is not
  * among them, so a caller that passes such a response through keeps doing so (D8-3). The set comes
- * from the same walk `redactItem` makes, so the two never disagree.
+ * from the same walk `redactItem` makes, so the two never disagree, made as
+ * {@link redactStructure} makes it: it formats no printed variable and no parameter's value.
  *
  * @example
  *   // A block shown when T holds A binds SHOWN; a block shown when T holds B binds HIDDEN.
@@ -1833,7 +1929,7 @@ export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
  * @returns The responses, in the order the walk first meets them.
  */
 export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): ReadonlySet<string> =>
-  printBody(item, printingOf(item, record)).hiddenOnly;
+  printBody(item, printingOf(item, record), "structure").hiddenOnly;
 
 /**
  * How one response travels through a host's form: its identifier, its binding, and the options
@@ -1879,6 +1975,47 @@ const baseOf = (interaction: Interaction): Option.Option<number> => {
 };
 
 /**
+ * Give the postings of a body and its response bindings in one instance, as {@link postings} gives
+ * a redacted item's: plate's own, so a caller that holds a {@link RedactedStructure} learns which
+ * responses a page posts without printing the item. `src/index.ts` does not export it.
+ *
+ * @param redaction The body and the response bindings, of a `Redacted` or a `RedactedStructure`.
+ * @param instance The instance token the render used.
+ * @returns The postings, as `postings` gives them.
+ */
+export const postingsIn = (
+  redaction: Pick<RedactedFields, "body" | "responses">,
+  instance: string,
+): readonly Posting[] => {
+  const byResponse = new Map<string, Interaction[]>();
+  for (const interaction of interactionsIn(redaction.body)) {
+    const others = byResponse.get(interaction.response);
+    if (others === undefined) {
+      byResponse.set(interaction.response, [interaction]);
+    } else {
+      others.push(interaction);
+    }
+  }
+
+  return redaction.responses.flatMap(
+    ({ baseType, cardinality, identifier }): readonly Posting[] => {
+      const bound = byResponse.get(identifier) ?? [];
+      if (!isPosted(baseType) || bound.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          binding: { baseType, cardinality, name: entryName(instance, identifier) },
+          identifier,
+          options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
+        },
+      ];
+    },
+  );
+};
+
+/**
  * Give the postings of a redacted item in one instance: one for each response of a posted base
  * type that an interaction in the body binds, in the order of the item's `responses`, so a host
  * decodes each from its form with the base its interaction declares instead of assuming base 10.
@@ -1902,32 +2039,8 @@ const baseOf = (interaction: Interaction): Option.Option<number> => {
  * @returns The postings: a response no interaction binds, or of a base type no phase-1
  *   interaction posts, has none.
  */
-export const postings = (redacted: Redacted, instance: string): readonly Posting[] => {
-  const byResponse = new Map<string, Interaction[]>();
-  for (const interaction of interactionsIn(redacted.body)) {
-    const others = byResponse.get(interaction.response);
-    if (others === undefined) {
-      byResponse.set(interaction.response, [interaction]);
-    } else {
-      others.push(interaction);
-    }
-  }
-
-  return redacted.responses.flatMap(({ baseType, cardinality, identifier }): readonly Posting[] => {
-    const bound = byResponse.get(identifier) ?? [];
-    if (!isPosted(baseType) || bound.length === 0) {
-      return [];
-    }
-
-    return [
-      {
-        binding: { baseType, cardinality, name: entryName(instance, identifier) },
-        identifier,
-        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
-      },
-    ];
-  });
-};
+export const postings = (redacted: Redacted, instance: string): readonly Posting[] =>
+  postingsIn(redacted, instance);
 
 /**
  * Compute the payload of one render: the allowlist of what the emitter may know about a redacted

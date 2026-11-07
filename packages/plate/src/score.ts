@@ -580,10 +580,11 @@ const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | Recor
 /**
  * Leave out the posted value of each response only content the page does not see binds
  * (`hiddenOnlyResponses` in `#plate/payload.ts`, from the walk `redactItem` makes, which
- * `checkResponses` judges by): one some interaction binds, a rendered one anywhere in the body or
- * any one inside a template block or inline the record's template values hide or withhold, and no
- * interaction the page sees binds. An interaction inside hidden template content is dropped
- * whether the renderer shows it or a notice in its place: hidden wins.
+ * `checkResponses` judges by, made without printing any text): one some interaction binds, a
+ * rendered one anywhere in the body or any one inside a template block or inline the record's
+ * template values hide or withhold, and no interaction the page sees binds. An interaction inside
+ * hidden template content is dropped whether the renderer shows it or a notice in its place: hidden
+ * wins.
  *
  * `checkResponses` gives such a response no message, so a session's stored value for it passes
  * that check, and this is the one guard that keeps a posted value from reaching response

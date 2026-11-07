@@ -41,7 +41,7 @@ import {
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
-import { choiceOrder, hiddenOnlyResponses, redactItem } from "#plate/payload.ts";
+import { choiceOrder, hiddenOnlyResponses, redactStructure } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
 import type { ResultSingle } from "#plate/results/values.ts";
@@ -797,10 +797,11 @@ const choiceSequence = (
  * in, as `render` presents it.
  *
  * The interactions are the item's as `redactItem` shows it under the record's template values, the
- * redaction the page is built from, as `checkResponses` finds them. So a choice its template hides,
- * or withholds because the record holds no value of its template variable, is not listed, and the
- * choices shown are listed in the order `choiceOrder` gives them, which shuffles only those. An
- * interaction a hidden or withheld template block, inline or choice holds reports no order.
+ * redaction the page is built from, as `checkResponses` finds them, read through `redactStructure`,
+ * which decides the same and prints no text. So a choice its template hides, or withholds because
+ * the record holds no value of its template variable, is not listed, and the choices shown are
+ * listed in the order `choiceOrder` gives them, which shuffles only those. An interaction a hidden
+ * or withheld template block, inline or choice holds reports no order.
  *
  * @param item The item.
  * @param templates The template values of the record the page was shown under.
@@ -815,7 +816,7 @@ const choiceSequences = (
   instance: string,
 ): ReadonlyMap<string, string> =>
   new Map(
-    interactionsIn(redactItem(item, { outcomes: {}, templates }).body).flatMap((interaction) =>
+    interactionsIn(redactStructure(item, { outcomes: {}, templates }).body).flatMap((interaction) =>
       Option.match(choiceSequence(interaction, seed, instance), {
         onNone: () => [],
         onSome: (sequence) => [[interaction.response, sequence] as const],

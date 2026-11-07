@@ -25,7 +25,7 @@ import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
 import { isNull, match } from "#plate/model/values.ts";
-import { postings, redactItem } from "#plate/payload.ts";
+import { postingsIn, redactStructure } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { score } from "#plate/score.ts";
@@ -303,7 +303,8 @@ const valuesOf = (item: SessionItem): Responses =>
  * another.
  *
  * Only the responses a rendered page can post count: those `postings` lists for the item redacted
- * under its record (ruling R2 of phase 4's repair, 2026-11-06), so the template values the page was
+ * under its record (ruling R2 of phase 4's repair, 2026-11-06), read through `redactStructure`,
+ * which decides what `redactItem` decides and prints no text, so the template values the page was
  * shown with decide which interactions count, as they decide what `checkResponses` judges. A
  * response no interaction binds, one bound only to an interaction shown as a notice or held by a
  * template block the record hides, or one of a base type no interaction posts never takes another
@@ -326,7 +327,7 @@ const skipped = (
   values: Responses,
 ): boolean => {
   const posted = new Set(
-    postings(redactItem(item, record), instance).map(({ identifier }) => identifier),
+    postingsIn(redactStructure(item, record), instance).map(({ identifier }) => identifier),
   );
   const declarations = [...item.responses.values()].filter(({ identifier }) =>
     posted.has(identifier),
