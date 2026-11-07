@@ -139,6 +139,31 @@ const engine = [
 ] as const;
 
 /**
+ * The template rules: the six rule elements a `qti-template-processing`, a `qti-template-if`, a
+ * `qti-template-else-if` and a `qti-template-else` hold (`qti-set-template-value`,
+ * `qti-set-correct-response`, `qti-set-default-value`, `qti-template-condition`,
+ * `qti-template-constraint` and `qti-exit-template`), and the three parts of a
+ * `qti-template-condition`. The expression kinds they hold are the registry's landed kinds, as for
+ * {@link engine}.
+ *
+ * The item model reads template processing through these (`templateRules` in
+ * `#plate/model/template.ts`): template processing that holds any other element, or an expression
+ * kind the registry has not landed, is none, and that element is a mark keyed by its name. This is
+ * the one list of these names.
+ */
+const templateRules = [
+  "qti-set-template-value",
+  "qti-set-correct-response",
+  "qti-set-default-value",
+  "qti-template-condition",
+  "qti-template-if",
+  "qti-template-else-if",
+  "qti-template-else",
+  "qti-template-constraint",
+  "qti-exit-template",
+] as const;
+
+/**
  * The rule on the declarations an interaction renders with: the response declaration it binds must
  * have one of `baseTypes` and one of `cardinalities`. The form encoding's public `Binding` is
  * another thing: how one response travels through the form.
@@ -252,6 +277,11 @@ export interface Renders {
    * interactions (Q-31, Q-32): accepted, not launched.
    */
   readonly notices: readonly FeatureRule[];
+  /**
+   * The template rules the item model reads template processing through. The expression kinds
+   * they hold are the registry's landed kinds, as for `engine`.
+   */
+  readonly templateRules: readonly string[];
 }
 
 /**
@@ -374,6 +404,7 @@ export const renders = {
       when: { elements: textSafeElements, kind: "not-text-safe" },
     },
   ],
+  templateRules,
 } as const satisfies Renders;
 
 /**

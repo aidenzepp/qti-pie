@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
 import { Config, ConfigProvider, Data, Duration, Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import {
   attr,
@@ -21,6 +22,8 @@ import type {
 import { runAttempt } from "#plate/engine/attempt.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
+import type { TemplateRule } from "#plate/model/expression.ts";
+import { landedKinds } from "#plate/model/expressions/read.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type {
   AreaMapping,
@@ -31,6 +34,7 @@ import type {
   InlineChoiceInteraction,
   Item,
   Rule,
+  TemplateDeclaration,
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
@@ -2454,6 +2458,131 @@ describe("buildItem", () => {
   );
 
   it.effect(
+    "[I-3] holds each template declaration of a modelled type with its default, param-variable and math-variable, and still marks each",
+    () =>
+      Effect.gen(function* holdsTemplates() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              el(
+                "qti-template-declaration",
+                [
+                  attr("base-type", "integer"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "T"),
+                  attr("param-variable", "true"),
+                ],
+                [values("qti-default-value", "7")],
+              ),
+              el(
+                "qti-template-declaration",
+                [
+                  attr("base-type", "string"),
+                  attr("cardinality", "multiple"),
+                  attr("identifier", "NAMES"),
+                  attr("math-variable", " 1 "),
+                  attr("param-variable", "0"),
+                ],
+                [values("qti-default-value", "a", "b")],
+              ),
+              el("qti-template-declaration", [
+                attr("base-type", "duration"),
+                attr("cardinality", "single"),
+                attr("identifier", "D"),
+              ]),
+              el("qti-template-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "R"),
+              ]),
+              el("qti-template-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "P"),
+              ]),
+            ],
+          }),
+        );
+        const expected: readonly TemplateDeclaration[] = [
+          {
+            baseType: "integer",
+            cardinality: "single",
+            defaultValue: Option.some(integer(7n)),
+            identifier: "T",
+            mathVariable: false,
+            paramVariable: true,
+          },
+          {
+            baseType: "string",
+            cardinality: "multiple",
+            defaultValue: Option.some({
+              baseType: "string",
+              cardinality: "multiple",
+              values: [
+                { baseType: "string", value: "a" },
+                { baseType: "string", value: "b" },
+              ],
+            }),
+            identifier: "NAMES",
+            mathVariable: true,
+            paramVariable: false,
+          },
+          {
+            baseType: "float",
+            cardinality: "single",
+            defaultValue: Option.none(),
+            identifier: "P",
+            mathVariable: false,
+            paramVariable: false,
+          },
+        ];
+
+        assert.deepStrictEqual([...built.templates.keys()], ["T", "NAMES", "P"]);
+        assert.deepStrictEqual([...built.templates.values()], expected);
+        assert.deepStrictEqual(built.templateProcessing, Option.none());
+        assert.deepStrictEqual(
+          built.unsupported,
+          [1, 2, 3, 4, 5].map((position): UnsupportedFeature => ({
+            feature: "qti-template-declaration",
+            path: `${root}/qti-template-declaration[${position}]`,
+            shown: "mark",
+          })),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-3] refuses a template default outside its base type as value-type at its path",
+    () =>
+      Effect.gen(function* refusesTemplateDefault() {
+        const refusal = yield* Effect.flip(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el(
+                  "qti-template-declaration",
+                  [
+                    attr("base-type", "integer"),
+                    attr("cardinality", "single"),
+                    attr("identifier", "T"),
+                  ],
+                  [values("qti-default-value", "abc")],
+                ),
+              ],
+            }),
+          ),
+        );
+
+        assert.strictEqual(refusal.rule, "value-type");
+        assert.deepStrictEqual(refusal.location, {
+          kind: "path",
+          path: `${root}/qti-template-declaration/qti-default-value/qti-value`,
+        });
+      }),
+  );
+
+  it.effect(
     "[I-2] reads an outcome declaration's six reporting attributes as the XSD types them, none when absent",
     () =>
       Effect.gen(function* readsReporting() {
@@ -3862,5 +3991,82 @@ describe("buildItem", () => {
         );
       }),
     growthTimeoutMs,
+  );
+});
+
+/**
+ * A template rule tree's outline: each setting rule as its kind and target, each condition as its
+ * branches' outlines and its otherwise's, so a case can pin a tree's structure without pinning how
+ * an expression in it is modelled.
+ */
+type Outline =
+  | string
+  | {
+      readonly branches: readonly (readonly Outline[])[];
+      readonly otherwise: Option.Option<readonly Outline[]>;
+    };
+
+/**
+ * Outline template rules.
+ *
+ * @param rules The rules.
+ * @returns Their outline, in order.
+ */
+const outline = (rules: readonly TemplateRule[]): readonly Outline[] =>
+  rules.map((rule): Outline => {
+    if (rule.kind === "template-condition") {
+      return {
+        branches: rule.branches.map((part) => outline(part.then)),
+        otherwise: rule.otherwise.pipe(Option.map(outline)),
+      };
+    }
+
+    return "identifier" in rule ? `${rule.kind} ${rule.identifier}` : rule.kind;
+  });
+
+describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
+  it.effect(
+    "[I-5] template_digging reads its template processing, held once every kind it reads has landed, and keeps response processing none and both marks (D3)",
+    () =>
+      Effect.gen(function* templateDigging() {
+        const location = "QTI3_BPIG_Examples/items/template_digging.xml";
+        const source = yield* readSource(location, yield* readCorpusFile(location));
+        const built = yield* buildItem(source);
+        const features = built.unsupported.map((entry) => entry.feature);
+        const unlanded = (["random", "random-integer"] as const).filter(
+          (kind) => !landedKinds.includes(kind),
+        );
+
+        assert.deepStrictEqual([...built.templates.keys()], ["PEOPLE", "A", "B", "MIN"]);
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(
+          features.filter((feature) => feature === "qti-template-declaration").length,
+          4,
+        );
+        assert.include(features, "qti-template-processing");
+        if (unlanded.length > 0) {
+          // Until `qti-random` and `qti-random-integer` land (p8-01b, p8-01c), the reader marks each
+          // and the processing is none, as response processing holding them would be.
+          assert.deepStrictEqual(built.templateProcessing, Option.none());
+          assert.includeMembers(
+            features,
+            unlanded.map((kind) => `qti-${kind}`),
+          );
+        } else {
+          assert.deepStrictEqual(
+            built.templateProcessing.pipe(Option.map(outline)),
+            Option.some<readonly Outline[]>([
+              "set-template-value PEOPLE",
+              "set-template-value A",
+              {
+                branches: [["set-template-value B"], ["set-template-value B"]],
+                otherwise: Option.some(["set-template-value B"]),
+              },
+              "set-template-value MIN",
+              "set-correct-response RESPONSE",
+            ]),
+          );
+        }
+      }),
   );
 });
