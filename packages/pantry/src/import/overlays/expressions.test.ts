@@ -35,6 +35,8 @@ import type {
   ExpressionRows,
   NamedResource,
 } from "#pantry/import/overlays/expressions.ts";
+import { contextsOf } from "#pantry/import/context.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { assembledRowsOf, keyOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestIds } from "#pantry/import/overlays/tests.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -942,15 +944,30 @@ const packageRowsOf = (
   documents: readonly (readonly [string, XdmDocument<Composed>])[],
   links: readonly NamedResource[] = [],
 ): PackageRows => {
-  const nodes = new Map(documents.map(([at], n) => [at, idsIn(n)(0)] as const));
+  const nodes = new Map(
+    documents.map(([at, tree], n) => [at, { node: idsIn(n)(0), tree }] as const),
+  );
+  const nodeAt = (to: string) => Option.fromNullishOr(nodes.get(to));
+  const { assembled: inAssembly } = contextsOf(
+    documents.map(([at, tree], n) => ({ idOf: idsIn(n), named: true, path: at, tree })),
+  );
   const inputs = documents.map(([at, tree], n): AssembledExpressionInput => {
     const ids: TestIds = {
-      documentAt: (to: string) => Option.fromNullishOr(nodes.get(to)),
+      assembled: inAssembly.has(idsIn(n)(0)),
+      context: ownContext(idsIn(n)(0)),
+      documentAt: (to: string) => Option.map(nodeAt(to), ({ node }) => node),
       documentType:
         grammar.package.rootOfType.rows.find(({ root }) => root === tree.root.kind)?.type ?? "none",
+      entryAt: (to: string) => nodes.has(to),
       idOf: idsIn(n),
       package: packageId,
       path: at,
+      targetAt: (to: string) =>
+        Option.map(nodeAt(to), ({ node, tree: target }) => ({
+          context: ownContext(node),
+          node,
+          rootKind: target.root.kind,
+        })),
     };
 
     return { expressions: rowsOf(tree, ids), ids, tests: testRowsOf(tree, ids), tree };

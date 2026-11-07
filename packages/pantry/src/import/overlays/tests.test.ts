@@ -25,6 +25,8 @@ import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
+import { contextsOf } from "#pantry/import/context.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { assembledRowsOf, keyOf, piecesOf, rowsOf } from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledRows,
@@ -118,8 +120,9 @@ const listedTypeOf = (doc: XdmDocument<Composed>): TestIds["documentType"] =>
   grammar.package.rootOfType.rows.find(({ root }) => root === doc.root.kind)?.type ?? "none";
 
 /**
- * Read the rows of a package's documents, each under its own ids, every site's target found
- * among them by path.
+ * Read the rows of a package's documents, each under its own ids and its own context, every
+ * site's target found among them by path, and each in an assembly as the importer's contexts read
+ * it.
  *
  * @param documents - The documents by path, in order.
  * @returns Each document's rows, in the same order.
@@ -127,15 +130,29 @@ const listedTypeOf = (doc: XdmDocument<Composed>): TestIds["documentType"] =>
 const rowsOfPackage = (
   documents: readonly (readonly [string, XdmDocument<Composed>])[],
 ): readonly TestRows[] => {
-  const nodes = new Map(documents.map(([path], n) => [path, idsOf(n)(0)] as const));
+  const listed = documents.map(([path, tree], n) => ({ idOf: idsOf(n), named: true, path, tree }));
+  const { assembled } = contextsOf(listed);
+  const roots = new Map(
+    listed.map(({ idOf: ids, path, tree }) => [path, { node: ids(0), tree }] as const),
+  );
+  const rootAt = (at: string) => Option.fromNullishOr(roots.get(at));
 
-  return documents.map(([path, doc], n) =>
-    rowsOf(doc, {
-      documentAt: (at) => Option.fromNullishOr(nodes.get(at)),
-      documentType: listedTypeOf(doc),
-      idOf: idsOf(n),
+  return listed.map(({ idOf: ids, path, tree }) =>
+    rowsOf(tree, {
+      assembled: assembled.has(ids(0)),
+      context: ownContext(ids(0)),
+      documentAt: (at) => Option.map(rootAt(at), ({ node }) => node),
+      documentType: listedTypeOf(tree),
+      entryAt: (at) => roots.has(at),
+      idOf: ids,
       package: packageId,
       path,
+      targetAt: (at) =>
+        Option.map(rootAt(at), ({ node, tree: target }) => ({
+          context: ownContext(node),
+          node,
+          rootKind: target.root.kind,
+        })),
     }),
   );
 };
