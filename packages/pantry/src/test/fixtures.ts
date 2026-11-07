@@ -218,6 +218,7 @@ const cutNames = [
 const corpusMembers = {
   BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
   BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
+  sharedStimulus: "qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip",
   testWithLti: "qtiv3-examples/packaging/testWithLti/testWithLti.zip",
 } as const;
 
@@ -605,6 +606,28 @@ const wildcardNames = [
 ] as const;
 
 /**
+ * The names of the nine SSML and `data-ssml` positives of phase 7's stage N (spec 5.3), the first
+ * seven SSML in the item body and the last two `data-ssml` attributes: `ssml-corpus-sub`, the
+ * corpus's one SSML shape cut from `sharedStimulus`; `ssml-hooks`, the twelve elements the item's
+ * inline hosts admit, in both namespace forms and as a bare hook; `ssml-speak`, the `speak`
+ * element's attributes and its head of `meta`, `metadata` and `lexicon`; `ssml-voice`,
+ * `ssml-prosody` and `ssml-nested`, the attribute domains and content models below it;
+ * `ssml-two-speaks`, mark scope per fragment; `data-ssml`, valid Data-SSML on four hosts; and
+ * `data-ssml-custom`, a value on an element that does not declare the attribute.
+ */
+const ssmlNames = [
+  "ssml-corpus-sub",
+  "ssml-hooks",
+  "ssml-speak",
+  "ssml-voice",
+  "ssml-prosody",
+  "ssml-nested",
+  "ssml-two-speaks",
+  "data-ssml",
+  "data-ssml-custom",
+] as const;
+
+/**
  * The names of phase 10's ten PCI positives, from the corpus packages `pci_simple_example` and
  * `pci_item_examples` and hand-edited items of the first: `pci-simple` (the `module` attribute,
  * markup of HTML and ARIA, the module files as bytes), `pci-modules` (two PCIs of four modules
@@ -748,7 +771,8 @@ export const pciVerdicts: readonly (readonly [FixtureName, readonly string[]])[]
  * fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the four
  * companion-materials positives of {@link companionNames}, the 29 XML-path negatives of
  * {@link catalogNegativeNames}, the ten PCI positives of {@link pciNames}, the 28 PCI negatives of
- * {@link pciNegativeNames}, the ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
+ * {@link pciNegativeNames}, the ten wildcard fixtures of {@link wildcardNames}, the nine SSML and
+ * `data-ssml` positives of {@link ssmlNames}, and `rtest01`, the
  * examples' included fragment in place (spec reading 117), with one negative per include law.
  */
 export const fixtureNames = [
@@ -854,6 +878,7 @@ export const fixtureNames = [
   "usage3-bad-context",
   "usage3-bad-name",
   ...wildcardNames,
+  ...ssmlNames,
 ] as const;
 
 /**
@@ -2757,7 +2782,7 @@ const testsDirectory = "qtiv3-examples/tests";
 /**
  * The tarball member of the `sharedStimulus` package.
  */
-const sharedStimulusMember = "qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip";
+const sharedStimulusMember = corpusMembers.sharedStimulus;
 
 /**
  * The tarball member of the `basicFeedbackTest` package.
@@ -5466,6 +5491,285 @@ const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The SSML namespace, which `speak` declares in an item body and the hooks of `ssml-hooks` bind
+ * on the item root.
+ */
+const ssmlNamespace = "http://www.w3.org/2001/10/synthesis";
+
+/**
+ * The paragraph `simple`'s item body opens with, after which the SSML fixtures place their markup.
+ */
+const simpleOpeningParagraph = "<p>Look at the text in the picture.</p>";
+
+/**
+ * Build the edit that places markup in `simple`'s item body, after its opening paragraph.
+ *
+ * @param markup - The markup, ASCII like every edit.
+ * @returns The edit as plain data.
+ */
+const afterOpeningParagraph = (markup: string): TextEdit =>
+  replaceIn("choice.xml", simpleOpeningParagraph, `${simpleOpeningParagraph}${markup}`);
+
+/**
+ * Write one `speak` fragment in a paragraph, declaring the SSML namespace as `ssml` on itself.
+ *
+ * @param attributes - The attributes beyond the namespace declaration, `version` and `xml:lang`,
+ *   each led by a space.
+ * @param content - The fragment's content.
+ * @returns A paragraph holding the fragment.
+ */
+const speakParagraph = (attributes: string, content: string): string =>
+  `<p><ssml:speak xmlns:ssml="${ssmlNamespace}" version="1.1" xml:lang="en"${attributes}>${content}</ssml:speak></p>`;
+
+/**
+ * Build the edits that list languages in `simple`'s resource LOM, each as a `general.language`
+ * after the title. The `document-lang` law (R26) asks every `xml:lang` form in an item, an SSML
+ * `speak`'s and `lang`'s included, to be listed there, and `simple` lists none.
+ *
+ * @param tags - The language tags, in the order the LOM lists them.
+ * @returns One edit for each, each of which must follow the one before it.
+ */
+const simpleLanguages = (tags: readonly string[]): readonly TextEdit[] =>
+  tags.map((tag, index) => ({
+    _tag: "InsertAfterLine",
+    file: "imsmanifest.xml",
+    line: simpleResourceTitleEnd + index,
+    text: `                        <imsmd:language>${tag}</imsmd:language>`,
+  }));
+
+/**
+ * Build an SSML fixture over `simple` that places one markup in the item body.
+ *
+ * @param name - The fixture's name.
+ * @param markup - The markup placed after the item body's opening paragraph.
+ * @param languages - The languages the markup's `xml:lang`s state, which the resource's LOM lists
+ *   so that `document-lang` has nothing to refuse.
+ * @returns The spec.
+ */
+const ssmlOverSimple = (
+  name: string,
+  markup: string,
+  languages: readonly string[] = ["en"],
+): FixtureSpec => overSimple(name, [...simpleLanguages(languages), afterOpeningParagraph(markup)]);
+
+/**
+ * `simple`'s first choice, which `ssml-hooks` extends with a `speak` in the default namespace.
+ */
+const simpleFirstChoice =
+  '<qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.</qti-simple-choice>';
+
+/**
+ * `simple`'s `xmlns:xsi` declaration, before which `ssml-hooks` binds the `ssml` prefix on the item
+ * root so that its hooks need no declaration of their own.
+ */
+const simpleXsiDeclaration = 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"';
+
+/**
+ * The item of `sharedStimulus` that holds the corpus's one SSML element.
+ */
+const ssmlCorpusItem = "exemplar06.xml";
+
+/**
+ * The reference to a stimulus that `ssml-corpus-sub` drops from {@link ssmlCorpusItem}.
+ */
+const ssmlCorpusStimulusRef =
+  '<qti-assessment-stimulus-ref identifier="Stimulus1" href="passages/unbelievableNight.xml"/>';
+
+/**
+ * The `data-ssml` values of the `data-ssml` fixture: each member alone, all five, whitespace and
+ * member order varied, an escaped member name, a repeated name and the two `rate` spellings. Each
+ * is a value Data-SSML 1.0's schema admits (reading R7-a), so the importer accepts it.
+ */
+const dataSsmlValues = {
+  all: '{"break":{"strength":"x-strong","time":"2s"},"phoneme":{"ph":"t@mA:toU","alphabet":"x-sampa","type":"default"},"prosody":{"rate":"slow"},"say-as":{"interpret-as":"ordinal"},"sub":{"alias":"World Wide Web"}}',
+  break: '{"break":{"strength":"weak","time":"1s"}}',
+  empty: "{}",
+  escaped: '{"b\\u0072eak":{"time":"1s"}}',
+  fast: '{"prosody":{"rate":"x-fast"}}',
+  percent: '{"prosody":{"rate":"80%"}}',
+  phoneme: '{"phoneme":{"ph":"t@mA:toU"}}',
+  repeated: '{"break":{"strength":"weak"},"break":{"time":"1s"}}',
+  sayAs: '{"say-as":{"interpret-as":"date"}}',
+  spaced: ' \t{ "sub" : {"alias":"a"} , "break" : {"time":"1s"} }\n',
+  sub: '{"sub":{"alias":"World Wide Web"}}',
+} as const;
+
+/**
+ * The nine SSML and `data-ssml` positives of phase 7's stage N (spec 5.3), keyed by name. Every one
+ * is accepted, so each is the package its source is with the markup in place.
+ *
+ * - `ssml-corpus-sub` is `sharedStimulus`'s `exemplar06.xml`, the one corpus item with SSML: an
+ *   `ssml:sub` in the spoken card of its catalog, kept where the corpus has it.
+ * - `ssml-hooks` binds `ssml` on the item root and places the twelve elements of the hook list in
+ *   four hosts: `ssml:p`, `ssml:s`, `ssml:say-as`, `ssml:phoneme` and `ssml:sub` in a paragraph;
+ *   `ssml:voice`, `ssml:emphasis`, `ssml:break` and `ssml:prosody` in a `span`; `ssml:audio` and a
+ *   `ssml:mark` outside every `speak` in `qti-prompt`; and a `speak` that declares SSML as its
+ *   default namespace in a `qti-simple-choice`.
+ * - `ssml-speak` is a `speak` with its optional attributes, a comment and a processing instruction
+ *   before its head, the head's `meta` in both forms, `metadata` and `lexicon` with every attribute
+ *   and a `maxage` of `+5`, then a `w` with a bound `role`, a `lang`, a `lookup` of the lexicon, a
+ *   `token` and the two marks `startmark` and `endmark` name.
+ * - `ssml-voice` is a `voice` with every attribute, `voice`s with an empty `gender`, `age` and
+ *   `variant` and with integers, an `audio` whose `maxage` is larger than any machine integer, an
+ *   `emphasis`, a `break` and a padded `say-as`.
+ * - `ssml-prosody` is a `prosody` for each value class of its attributes, `pitch="10 Hz"`, which the
+ *   XSD's `.` admits, an `audio` with a `desc` and a `phoneme`.
+ * - `ssml-nested` is `p > s > sub`, `s > token > say-as`, a `voice` in an `s`, an HTML `span` and a
+ *   foreign element in an `s`, and `xml:space` on an `s`.
+ * - `ssml-two-speaks` is two fragments that each define `mark name="a"` and name it in `startmark`,
+ *   and a third whose `startmark` is `a b` beside `<mark name="a b"/>`: a mark is judged within its
+ *   fragment, by its collapsed name.
+ * - `data-ssml` is a `data-ssml` on a `p`, a `span`, a `div` and a `qti-rubric-block`, which declare
+ *   it, holding {@link dataSsmlValues}.
+ * - `data-ssml-custom` is `data-ssml="anything"` on a `li`, which does not declare it, so it is a
+ *   custom `data-*` attribute with any text.
+ */
+const ssmlSpecs: Record<(typeof ssmlNames)[number], FixtureSpec> = {
+  "data-ssml": ssmlOverSimple(
+    "data-ssml",
+    [
+      `<p data-ssml='${dataSsmlValues.empty}'>one</p>`,
+      `<p data-ssml='${dataSsmlValues.break}'>two</p>`,
+      `<p data-ssml='${dataSsmlValues.phoneme}'>three</p>`,
+      `<p data-ssml='${dataSsmlValues.sayAs}'>four</p>`,
+      `<p data-ssml='${dataSsmlValues.sub}'>five</p>`,
+      `<p data-ssml='${dataSsmlValues.all}'>six</p>`,
+      `<p data-ssml='${dataSsmlValues.spaced}'>seven</p>`,
+      `<p><span data-ssml='${dataSsmlValues.escaped}'>eight</span></p>`,
+      `<p><span data-ssml='${dataSsmlValues.repeated}'>nine</span></p>`,
+      `<div data-ssml='${dataSsmlValues.fast}'><p>ten</p></div>`,
+      `<div data-ssml='${dataSsmlValues.percent}'><p>eleven</p></div>`,
+      `<qti-rubric-block use="instructions" view="candidate" data-ssml='${dataSsmlValues.break}'><qti-content-body><p>twelve</p></qti-content-body></qti-rubric-block>`,
+    ].join(""),
+  ),
+  "data-ssml-custom": ssmlOverSimple(
+    "data-ssml-custom",
+    '<ul><li data-ssml="anything">one</li><li data-ssml=\'{"not":"data-ssml"}\'>two</li></ul>',
+  ),
+  "ssml-corpus-sub": {
+    ...cutItem("ssml-corpus-sub", "sharedStimulus", ssmlCorpusItem, "3.0.0"),
+    edits: [
+      // The item names a stimulus the cut does not keep, which `file-exists` and
+      // `stimulus-ref-target` refuse, so the reference goes and the item keeps its body and its
+      // catalog, where the corpus's `ssml:sub` stands.
+      replaceIn(ssmlCorpusItem, ssmlCorpusStimulusRef, ""),
+      { _tag: "cut", item: ssmlCorpusItem, schemaversion: "3.0.0" },
+    ],
+  },
+  "ssml-hooks": overSimple("ssml-hooks", [
+    ...simpleLanguages(["en"]),
+    replaceIn(
+      "choice.xml",
+      simpleXsiDeclaration,
+      `xmlns:ssml="${ssmlNamespace}" ${simpleXsiDeclaration}`,
+    ),
+    afterOpeningParagraph(
+      [
+        "<p>",
+        "<ssml:p>a paragraph</ssml:p>",
+        "<ssml:s>a sentence</ssml:s>",
+        '<ssml:say-as interpret-as="characters">UK</ssml:say-as>',
+        '<ssml:phoneme ph="t@mA:toU" alphabet="x-sampa">tomato</ssml:phoneme>',
+        '<ssml:sub alias="World Wide Web">WWW</ssml:sub>',
+        "</p>",
+        "<p><span>",
+        '<ssml:voice gender="female">a voice</ssml:voice>',
+        '<ssml:emphasis level="strong">stress</ssml:emphasis>',
+        '<ssml:break strength="weak"/>',
+        '<ssml:prosody rate="slow">slowly</ssml:prosody>',
+        "</span></p>",
+      ].join(""),
+    ),
+    replaceIn(
+      "choice.xml",
+      prompt,
+      '<qti-prompt>What does it say? <ssml:audio src="https://example.org/a.mp3">a sound</ssml:audio><ssml:mark name="free"/></qti-prompt>',
+    ),
+    replaceIn(
+      "choice.xml",
+      simpleFirstChoice,
+      `<qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.<speak xmlns="${ssmlNamespace}" version="1.1" xml:lang="en"><p><s>Stay.</s></p></speak></qti-simple-choice>`,
+    ),
+  ]),
+  "ssml-nested": ssmlOverSimple(
+    "ssml-nested",
+    speakParagraph(
+      "",
+      [
+        '<ssml:p><ssml:s>The <ssml:sub alias="World Wide Web">WWW</ssml:sub> is big.</ssml:s></ssml:p>',
+        '<ssml:s><ssml:token><ssml:say-as interpret-as="cardinal">12</ssml:say-as></ssml:token> <span>html</span>',
+        `<ma:extension xmlns:ma="${mathassessNamespace}"/></ssml:s>`,
+        '<ssml:s><ssml:voice gender="male">a voice</ssml:voice></ssml:s>',
+        '<ssml:s xml:space="preserve">  kept  </ssml:s>',
+      ].join(""),
+    ),
+  ),
+  "ssml-prosody": ssmlOverSimple(
+    "ssml-prosody",
+    speakParagraph(
+      "",
+      [
+        '<ssml:prosody pitch="x-high">a</ssml:prosody>',
+        '<ssml:prosody pitch="200Hz" range="+10Hz">b</ssml:prosody>',
+        '<ssml:prosody pitch="10 Hz">c</ssml:prosody>',
+        '<ssml:prosody pitch="-5%" range="+2st">d</ssml:prosody>',
+        '<ssml:prosody contour="(0%,+20Hz) (50%,-10st) (100%,medium)">e</ssml:prosody>',
+        '<ssml:prosody rate="1.5" duration="2s">f</ssml:prosody>',
+        '<ssml:prosody rate="80%" volume="+6dB">g</ssml:prosody>',
+        '<ssml:prosody rate="fast" volume="soft">h</ssml:prosody>',
+        '<ssml:audio src="https://example.org/a.mp3"><ssml:desc xml:lang="en">a sound</ssml:desc>fallback</ssml:audio>',
+        '<ssml:phoneme alphabet="ipa" ph="tomato" type="ruby">tomato</ssml:phoneme>',
+      ].join(""),
+    ),
+  ),
+  "ssml-speak": ssmlOverSimple(
+    "ssml-speak",
+    speakParagraph(
+      ' xml:base="https://example.org/speech/" onlangfailure="ignorelang" startmark="s" endmark="e"',
+      [
+        "<!-- a comment --><?pi data?>",
+        '<ssml:meta name="seeAlso" content="x"/>',
+        '<ssml:meta http-equiv="Cache-Control" content="no-cache"/>',
+        "<ssml:metadata/>",
+        '<ssml:lexicon uri="https://example.org/lexicon.pls" xml:id="L" type="application/pls+xml" fetchtimeout="5s" maxage="+5" maxstale="3"/>',
+        '<ssml:mark name="s"/>',
+        '<ssml:w role="ssml:noun">word</ssml:w>',
+        '<ssml:lang xml:lang="fr">oui</ssml:lang>',
+        '<ssml:lookup ref="L">looked up</ssml:lookup>',
+        "<ssml:token>token</ssml:token>",
+        '<ssml:mark name="e"/>',
+      ].join(""),
+    ),
+    ["en", "fr"],
+  ),
+  "ssml-two-speaks": ssmlOverSimple(
+    "ssml-two-speaks",
+    [
+      speakParagraph(' startmark="a"', '<ssml:mark name="a"/>one'),
+      speakParagraph(' startmark="a"', '<ssml:mark name="a"/>two'),
+      speakParagraph(' startmark="a  b"', '<ssml:mark name="a b"/>three'),
+    ].join(""),
+  ),
+  "ssml-voice": ssmlOverSimple(
+    "ssml-voice",
+    speakParagraph(
+      "",
+      [
+        '<ssml:voice xml:lang="en" gender="female" age="30" variant="2" name="alice" languages="en-US" required="gender" ordering="gender age" onvoicefailure="keepexisting">a</ssml:voice>',
+        '<ssml:voice gender="">b</ssml:voice>',
+        '<ssml:voice age="">c</ssml:voice>',
+        '<ssml:voice variant="">d</ssml:voice>',
+        '<ssml:voice age="7" variant="12">e</ssml:voice>',
+        '<ssml:audio src="https://example.org/a.mp3" maxage="99999999999999999999">f</ssml:audio>',
+        '<ssml:emphasis level="reduced">g</ssml:emphasis>',
+        '<ssml:break time="500ms" strength="medium"/>',
+        '<ssml:say-as interpret-as=" date " format=" mdy " detail=" 1 ">h</ssml:say-as>',
+      ].join(""),
+    ),
+  ),
+};
+
+/**
  * The tarball member of `pci_simple_example`, the corpus package of one item whose PCI names its
  * module by the `module` attribute. It is written out here because {@link zipMembers} is defined
  * after the specs that read it.
@@ -6131,6 +6435,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...pciSpecs,
   ...pciNegativeSpecs,
   ...wildcardSpecs,
+  ...ssmlSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
