@@ -205,6 +205,8 @@ export const contextVariable = {
  *
  * - The node's {@link nodeRef} tuple: `node`, `document`, `kind`, `start`, `nearest`, `version` and
  *   `parent`;
+ * - `parentKind`, its parent's kind, copied from `Node`: `Reserved type` reads it, since a test's
+ *   SCORE and MAXSCORE, a `qti-assessment-test`'s children, may be of any base type (reading 155);
  * - `declarationKind`, its kind as a `DeclarationKind`, `Declares` of `kind`;
  * - `identifier`, the declared name, its `identifier` attribute's lexical form without its outer
  *   whitespace; `identifierLexical`, that lexical form as written (C18's copy); and
@@ -239,6 +241,7 @@ export const Declaration = relation(
     nearest: uuid,
     node: uuid,
     parent: uuid,
+    parentKind: closedId(NodeKind),
     start: natural,
     version: closedId(SchemaVersion),
   },
@@ -726,26 +729,11 @@ const reservedNotRecord = (d: DeclarationRow, reserved: ReservedBaseType) =>
   );
 
 /**
- * The typed names that bind an item only: a declaration of one of another base type is lawful in a
- * test, so `Reserved type` holds it to a test's root instead of refusing it.
- */
-const itemOnlyBaseTypes = reservedBaseTypes.filter(({ root }) => root === "item");
-
-/**
- * The typed names that bind a document of any root.
- */
-const everyRootBaseTypes = reservedBaseTypes.filter(({ root }) => root === "any");
-
-/**
- * Each test's root element, the parent of the outcome declarations a test makes.
- */
-const testRoots = select(Node, (n) => n.eq(n.kind, testKind));
-
-/**
- * State that a declaration of each typed outcome name that has a base type has the one the
- * specification gives it: its {@link DeclarationBaseType} is that type's. A declaration of the name
- * with no base type is a record, which {@link reservedNotRecord} refuses, or one `Declaration base
- * type` refuses alone.
+ * State that a declaration of each typed outcome name that has a base type, where its type binds
+ * the declaration's document, has the one the specification gives it: its
+ * {@link DeclarationBaseType} is that type's. A declaration of the name with no base type is a
+ * record, which {@link reservedNotRecord} refuses where the type binds it, or one `Declaration
+ * base type` refuses alone.
  */
 const reservedBaseTypeLaws = reservedBaseTypes.map((reserved) =>
   contained(
@@ -755,6 +743,7 @@ const reservedBaseTypeLaws = reservedBaseTypes.map((reserved) =>
           d.eq(d.declarationKind, reserved.kind),
           d.eq(d.identifier, reserved.identifier),
           d.eq(d.baseTypes, 1n),
+          ...(reserved.root === "any" ? [] : [d.ne(d.parentKind, testKind)]),
         ),
       ),
       "node",
@@ -910,12 +899,9 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   any document, an item's, a test's or a section's alike, since every declaration element has its
  *   row whatever its root (information model tables 4.5.1, 5.115.1 and 5.151.1).
  * - **`Reserved type`**: SCORE and MAXSCORE of an item, PASSED and QTI_CONTEXT keep their specified
- *   types. A SCORE or MAXSCORE of another base type is refused unless its declaration is a child of
- *   a `qti-assessment-test`, since "SCORE MUST be a float" is said of items (§2.2.2.3:
- *   info.txt:8478, :8480).
- * - **`Declaration base type`**: a record has no base type, and every other variable has one.
- * - **`Reserved type`**: SCORE, MAXSCORE, PASSED and QTI_CONTEXT keep their specified types: a typed
- *   name is no record, and has its type where it has a base type.
+ *   types: a typed name is no record, and has its type where it has a base type (reading 153). A
+ *   SCORE or MAXSCORE whose declaration is a child of a `qti-assessment-test` (`parentKind`) is
+ *   held to neither, since "SCORE needs to be a float" is said of items (§4.5, reading 155).
  * - **`Declaration base type`**: a record has no base type, and every other variable has one, counted
  *   by `baseTypes`.
  * - **`Value cardinality`**: a single variable's value set holds one value, and a record's set holds
@@ -947,6 +933,7 @@ export const declarationLawsByName = {
       on(Declaration, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
+    contained(on(Declaration, "parent", "parentKind"), on(Node, "id", "kind")),
     contained(on(identifiers, "node", "lexical"), on(Declaration, "node", "identifierLexical")),
     contained(on(Declaration, "node"), on(identifiers, "node")),
     contained(on(cardinalities, "node", "lexical"), on(Declaration, "node", "cardinalityLexical")),
@@ -1109,19 +1096,14 @@ export const declarationLawsByName = {
   ],
   "Record field key": [key(on(RecordFieldName, "parent", "identifier"))],
   "Reserved type": [
-    contained(
-      on(
-        select(Declaration, (d) =>
-          d.not(d.and(...itemOnlyBaseTypes.map((reserved) => keepsReservedBaseType(d, reserved)))),
-        ),
-        "parent",
-      ),
-      on(testRoots, "id"),
-    ),
     ...reservedBaseTypeLaws,
     check("Reserved_type", Declaration, (d) =>
       d.and(
-        ...reservedBaseTypes.map((reserved) => reservedNotRecord(d, reserved)),
+        ...reservedBaseTypes.map((reserved) =>
+          reserved.root === "any"
+            ? reservedNotRecord(d, reserved)
+            : d.or(d.eq(d.parentKind, testKind), reservedNotRecord(d, reserved)),
+        ),
         d.or(
           d.ne(d.identifier, contextVariable.identifier),
           d.and(

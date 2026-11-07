@@ -883,6 +883,7 @@ const scored: Addition<typeof Declaration> = {
   nearest: testDocument,
   node: idOf(1001),
   parent: idOf(1000),
+  parentKind: "qti-assessment-test",
   start: 2n,
   version: "3.0.1",
 };

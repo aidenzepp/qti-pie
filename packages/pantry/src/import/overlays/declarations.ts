@@ -419,6 +419,7 @@ interface Reading {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
   readonly derived: Derived;
   readonly document: NodeId;
+  readonly kinds: ReadonlyMap<NodeId, NodeRow<Composed>["kind"]>;
   readonly rows: { readonly [Relation in keyof DeclarationRows]: Map<string, RowOf<Relation>> };
 }
 
@@ -432,6 +433,26 @@ interface Reading {
  */
 const valueOf = (reading: Reading, node: NodeRow<Composed>, name: string): string | undefined =>
   reading.attributes.get(node.id)?.get(name);
+
+/**
+ * Read a node's parent's kind, as `Declaration.parentKind` copies it from `Node`.
+ *
+ * @param reading - The document.
+ * @param node - The node, not the document node.
+ * @returns The parent's kind.
+ * @throws {Error} When the document holds no node of the parent's id: a defect of the caller, which
+ *   read a node of other rows than the reading's.
+ */
+const parentKindOf = (reading: Reading, node: NodeRow<Composed>): NodeRow<Composed>["kind"] => {
+  const kind = reading.kinds.get(node.parent);
+  if (kind === undefined) {
+    throw new Error(
+      `${node.parent}, the parent of ${node.id}, is none of the document's nodes, which hold every parent a declaration names. Read each node in the rows the reading was built from.`,
+    );
+  }
+
+  return kind;
+};
 
 /**
  * Write a node's `nodeRef` tuple as an overlay row copies it.
@@ -548,6 +569,7 @@ const addDeclaration = (
     identifierLead: declared.identifier.lead,
     identifierLexical: declared.identifierLexical,
     identifierTrail: declared.identifier.trail,
+    parentKind: parentKindOf(reading, node),
   });
   for (const baseType of Option.toArray(declared.baseType)) {
     reading.rows.DeclarationBaseType.set(node.id, {
@@ -691,6 +713,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
     attributes: attributesOf(flat),
     derived: derivedOf(flat, ids.context),
     document: flat.document.node,
+    kinds: new Map(flat.nodes.map(({ id, kind }) => [id, kind] as const)),
     rows: {
       Declaration: new Map(),
       DeclarationBaseType: new Map(),

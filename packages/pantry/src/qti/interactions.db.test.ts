@@ -1205,6 +1205,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               nearest: stray,
               node: strayNode(50),
               parent: stray,
+              parentKind: "qti-assessment-item",
               start: 2n,
               version: "3.0.1",
             } satisfies Addition<typeof Declaration>;

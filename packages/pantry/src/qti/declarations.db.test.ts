@@ -168,6 +168,7 @@ const declarationFact = (
   nearest: strayDocument,
   node: strayNode(node),
   parent: strayDocument,
+  parentKind: "qti-assessment-item",
   start: BigInt(node),
   version: "3.0.1",
 });
