@@ -478,13 +478,13 @@ const partEnded = (
  * reached its effective attempt limit above 0 is `attempts-exhausted`, and an item closed otherwise
  * `item-closed`; under `allow-skipping` false an item whose every response a page can post is NULL
  * or its default, the one its record's template processing set or else its declared one, is
- * `skipping-not-allowed`; under `validate-responses` true, responses
- * `checkResponses` gives messages for are `responses-invalid`. `checkResponses` judges them under
- * the item's record, the template values its page was shown with, so a choice its template hides
- * is refused and one it shows is judged as the page showed it, and an interaction a hidden template
- * block holds is not judged. Otherwise `score` runs over the item's record with its saved
- * responses, and its failures, `ResponsesRefused` among them, pass through. The item stays
- * current: moving on is a move's.
+ * `skipping-not-allowed`; under `validate-responses` true, responses `checkResponses` gives
+ * messages for are `responses-invalid`. `checkResponses` judges them under the item's record, the
+ * template values its page was shown with, so a choice its template hides is refused and one it
+ * shows is judged as the page showed it, and an interaction a hidden template block holds is not
+ * judged. Otherwise `score` runs over the item's record with its saved responses, and its
+ * failures, `ResponsesRefused` among them, pass through. The item stays current: moving on is a
+ * move's.
  *
  * @example
  *   submitItem(test, items, session, { intent: { kind: "submit-item" }, responses }, configuration, {

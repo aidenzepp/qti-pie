@@ -314,8 +314,8 @@ const responseMisfit = (item: Item, record: ItemRecord): Option.Option<string> =
  * A template variable the record lacks is not refused here: the record of an item whose
  * `qti-template-processing` the engine does not run holds none, and `results` and `advance` run
  * {@link fitting}, which shares this check, over the `fresh` record of an item never presented,
- * which holds no template value either. {@link templatesHeld} refuses the gap where it matters:
- * `score` and `restore` run it on the record of an item whose template processing runs.
+ * which holds no template value either. {@link templateGap} refuses the gap where it matters, on
+ * the record `score` and `restore` take for an item whose template processing runs.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -392,11 +392,11 @@ const templateGap = (item: Item, record: ItemRecord): Option.Option<string> =>
  * Check that a decoded record holds a value for every template variable its item declares, where
  * the item's template processing runs ({@link templateGap}).
  *
- * {@link score} runs it on the record it is handed, inside {@link carriedFitting}, and `restore`
- * after {@link fitting}, so neither scores nor gives back a record that would be scored against the
- * declared values its template processing replaces. {@link fitting} does not run it: `results` and
- * `advance` run that over the `fresh` record of an item never presented, which holds no template
- * value and must still fit.
+ * `restore` runs it after {@link fitting}, and {@link score} runs its check, {@link templateGap},
+ * inside {@link carriedFitting}, so neither gives back nor scores a record that would be scored
+ * against the declared values its template processing replaces. {@link fitting} does not run it:
+ * `results` and `advance` run that over the `fresh` record of an item never presented, which holds
+ * no template value and must still fit.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -472,8 +472,8 @@ const outcomeType = (item: Item, identifier: string): Option.Option<Expected> =>
  * the record lacks is not refused, nor is a record that lacks `completionStatus`, as one written
  * before the item held the built-in does: the attempt starts it at `unknown`. A declared template
  * variable the record of an item whose template processing runs lacks is {@link templatesHeld}'s
- * to refuse, which `restore` runs after this and `score` runs too; `results` and `advance` do not,
- * since they fit the `fresh` record of an item never presented.
+ * to refuse, which `restore` runs after this and whose check `score` runs too; `results` and
+ * `advance` do not, since they fit the `fresh` record of an item never presented.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -614,21 +614,27 @@ const shownOnly = (
  * Score one attempt of an item: run its response processing over the responses and return the
  * record the host stores.
  *
- * In order: it decodes the record the host handed back, checks that it belongs to the item, that
- * each response it holds is one the item scores, of its declaration's base type and cardinality,
- * that the built-in `completionStatus`, which the attempt carries over, is a single identifier,
- * and that its template values, correct responses and defaults are each of its variable's
- * declared type, and, where the item's template processing runs, that it holds a value for each
- * declared template variable ({@link templatesHeld}); it checks each response as a value of its
- * declaration; it refuses responses that break a tier (a) limit, under the default configuration,
- * judging the item as the record it scores from shows it (`checkResponses` with that record), so a
- * choice the record's template values hide is refused `unknownChoice` and one they show is judged
- * as any choice; it leaves out the posted value of a response only content the record hides or
- * withholds binds, whether the renderer shows the interaction there or a notice in its place
- * ({@link shownOnly}); then it runs the attempt and writes the record. The record's seed, template
- * values, correct responses and defaults come back unchanged, and the rules read the template
- * values, and the correct responses and defaults template processing set, from it. It sets no
- * attempt limit: `maxAttempts` is the author's flow.
+ * In order, it:
+ *
+ * 1. Decodes the record the host handed back and checks that it belongs to the item and, as
+ *    {@link carriedFitting} checks it, that each response it holds is one the item scores, of its
+ *    declaration's base type and cardinality, that the built-in `completionStatus`, which the
+ *    attempt carries over, is a single identifier, that its template values, correct responses and
+ *    defaults are each of its variable's declared type, and, where the item's template processing
+ *    runs, that it holds a value for each declared template variable ({@link templatesHeld}).
+ * 2. Checks each response as a value of its declaration.
+ * 3. Refuses responses that break a tier (a) limit, under the default configuration, judging the item
+ *    as the record it scores from shows it (`checkResponses` with that record), so a choice the
+ *    record's template values hide is refused `unknownChoice` and one they show is judged as any
+ *    choice.
+ * 4. Leaves out the posted value of a response only content the record hides or withholds binds,
+ *    whether the renderer shows the interaction there or a notice in its place
+ *    ({@link shownOnly}).
+ * 5. Runs the attempt and writes the record.
+ *
+ * The record's seed, template values, correct responses and defaults come back unchanged, and the
+ * rules read the template values, and the correct responses and defaults template processing set,
+ * from it. It sets no attempt limit: `maxAttempts` is the author's flow.
  *
  * With no record, an item whose template processing runs fails {@link RecordRequired}: its values
  * are drawn once, by `begin`, and `score` invents none. Any other item starts from the record its

@@ -53,8 +53,9 @@ export interface Store<Entry> {
    */
   readonly get: (id: string) => Option.Option<Entry>;
   /**
-   * The ids the store holds, in the order their entries were first stored, so the playground's
-   * index can resume each session.
+   * The ids the store holds, in the order their entries were first stored, so the playground can
+   * walk every entry: its index resumes each session, and its asset route finds the package of
+   * each open item.
    *
    * @returns The ids, none evicted.
    */
