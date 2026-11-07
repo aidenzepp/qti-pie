@@ -14,8 +14,11 @@
  *   documents of the three types M3 checks: outcome declarations, response processing and its
  *   templates;
  * - Each test's item refs resolve against the test's own path to an item resource the manifest lists
- *   (`item-ref-unresolved`), and each dotted reference in it is judged by reading 48 against the
- *   items they resolve to and its parts and sections (`ambiguous-reference`);
+ *   (`item-ref-unresolved`), and each dotted reference in it that the test does not declare whole
+ *   is judged by reading 48 against the items they resolve to, their variable mappings and its
+ *   parts and sections: one no reading resolves, or one that reads the `duration` of an item that
+ *   is not time dependent, is `undeclared-variable`, and one two readings resolve is
+ *   `ambiguous-reference`;
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
@@ -35,9 +38,23 @@ import type { Array as Arr } from "effect";
 import { resolveInside, schemePrefix } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
 import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
-import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceDocument,
+  SourceElement,
+  Visit,
+} from "#plate/document/source.ts";
+import { xsBooleanOf } from "#plate/model/attributes.ts";
+import {
+  expressionKinds,
+  floatOrRefOf,
+  integerOrRefOf,
+  stringOrRefOf,
+} from "#plate/model/expression.ts";
+import type { ExpressionKind, LiteralOrRef, ReferenceEntry } from "#plate/model/expression.ts";
+import { kindRules } from "#plate/model/expressions/read.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
-import { trimXmlSpace } from "#plate/model/values.ts";
+import { isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
@@ -278,9 +295,60 @@ const itemRefElements: ReadonlySet<string> = new Set(["qti-assessment-item-ref"]
 const durationScopes: ReadonlySet<string> = new Set(["qti-assessment-section", "qti-test-part"]);
 
 /**
- * The occurrence form of what follows a prefix, `N.VAR`: the variable of the item's Nth instance.
+ * The occurrence form of what follows a prefix, `N.VAR`: the variable of the item's Nth instance,
+ * `N` counted from 1 as pantry's `prefixedReadings` reads it
+ * (`packages/pantry/src/processing/prefixed.ts`). So `0.VAR` is no occurrence: it names the
+ * variable `0.VAR`, which no item has, since an identifier never starts with a digit.
  */
-const occurrenceForm = /^\d+\.(?<variable>.+)$/su;
+const occurrenceForm = /^0*[1-9]\d*\.(?<variable>.+)$/su;
+
+/**
+ * The variables a test's processing holds besides those it declares, as pantry gives a test its
+ * built-ins (`builtInsOf("test")` in `packages/pantry/src/processing/env.ts`).
+ */
+const testBuiltIns: ReadonlySet<string> = new Set([
+  "QTI_CONTEXT",
+  "completionStatus",
+  "duration",
+  "numAttempts",
+]);
+
+/**
+ * The declarations of a test's variables, by local name in QTI's namespace: an outcome variable
+ * and a context variable.
+ */
+const testDeclarations: ReadonlySet<string> = new Set([
+  "qti-context-declaration",
+  "qti-outcome-declaration",
+]);
+
+/**
+ * The child of an item ref that names one of its item's variables by another name the test reads
+ * it by, by local name in QTI's namespace.
+ */
+const mappingElements: ReadonlySet<string> = new Set(["qti-variable-mapping"]);
+
+/**
+ * Each expression kind, by its element's local name in QTI's namespace.
+ */
+const kindsByElement: ReadonlyMap<string, ExpressionKind> = new Map(
+  expressionKinds.map((kind) => [`qti-${kind}`, kind] as const),
+);
+
+/**
+ * Classify one value of a reference attribute as the literal or the reference it holds, through
+ * the classifier of the base type its facet entry names, the one the item model's reader and the
+ * validator use (`#plate/model/expression.ts`). Only the string classifier reads the names it is
+ * given: a `pattern` is a reference only as a braced name of a variable held (ruling R1).
+ */
+const classifiers = {
+  float: floatOrRefOf,
+  integer: integerOrRefOf,
+  string: stringOrRefOf,
+} as const satisfies Record<
+  ReferenceEntry["baseType"],
+  (written: string, held: ReadonlySet<string>) => LiteralOrRef<unknown>
+>;
 
 /**
  * A run of XML whitespace inside an attribute value.
@@ -605,13 +673,30 @@ const checkLom = (
   });
 
 /**
- * The variables an item's document declares and the built-ins every item has, which a reading of
- * a dotted reference may name.
+ * What a reading of a dotted reference may name through an item ref, read from its item's
+ * document.
+ */
+interface ItemVariables {
+  /**
+   * The identifiers of the variables the item declares.
+   */
+  readonly declared: ReadonlySet<string>;
+  /**
+   * Whether the item's `time-dependent` reads false as `xs:boolean`, so that no expression may
+   * read its `duration`. One that is absent or outside `xs:boolean` is the item's own verdict's
+   * refusal and does not make the item untimed here.
+   */
+  readonly untimed: boolean;
+}
+
+/**
+ * Read what a reading of a dotted reference may name through an item ref from its item's document:
+ * the variables it declares, and whether it is time dependent.
  *
  * @param document The item's document.
  * @returns Its variables, none when the document is unread or its root is not an item.
  */
-const variablesOf = (document: Document | undefined): Option.Option<ReadonlySet<string>> => {
+const variablesOf = (document: Document | undefined): Option.Option<ItemVariables> => {
   if (document === undefined || Result.isFailure(document.source)) {
     return Option.none();
   }
@@ -627,8 +712,23 @@ const variablesOf = (document: Document | undefined): Option.Option<ReadonlySet<
       : [],
   );
 
-  return Option.some(new Set([...itemBuiltIns, ...declared]));
+  return Option.some({
+    declared: new Set(declared),
+    untimed: Option.exists(
+      Option.flatMap(attributeOf(root, "time-dependent"), xsBooleanOf),
+      (timeDependent) => !timeDependent,
+    ),
+  });
 };
+
+/**
+ * What a reading of a dotted reference may name through one resolved item ref: its item's
+ * variables, and the targets of the item ref's variable mappings whose source the item declares,
+ * as pantry's reach holds them (`testProcessingRows` in `packages/pantry/src/import/reference.ts`).
+ */
+interface ItemRefVariables extends ItemVariables {
+  readonly mapped: ReadonlySet<string>;
+}
 
 /**
  * What a test's dotted references resolve against: each resolved item ref's variables, and the
@@ -636,28 +736,52 @@ const variablesOf = (document: Document | undefined): Option.Option<ReadonlySet<
  */
 interface ReferenceScope {
   readonly durations: ReadonlySet<string>;
-  readonly items: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly items: ReadonlyMap<string, ItemRefVariables>;
 }
 
 /**
- * Report whether one reading of a dotted reference names a real item ref, part or section and a
- * variable it has (reading 48).
+ * One reading of a dotted reference that resolves (reading 48): the item ref, part or section its
+ * prefix names, and the rest, as written.
+ */
+interface Reading {
+  readonly prefix: string;
+  readonly rest: string;
+  /**
+   * Whether it reads the built-in `duration` of an item that is not time dependent, which "must
+   * not be used in any item or test-level expression" (`info-compact.txt:8472`).
+   */
+  readonly untimed: boolean;
+}
+
+/**
+ * Resolve one reading of a dotted reference (reading 48), in pantry's order (`resolveReading` in
+ * `packages/pantry/src/processing/env.ts`).
  *
- * After an item ref, the rest names one of its item's variables directly, or in the occurrence
- * form `N.VAR` (reading 4). After a part or a section, the rest is its `duration`.
+ * After an item ref, the rest names, directly or in the occurrence form `N.VAR` (reading 4), a
+ * target of the item ref's variable mappings, else a variable its item declares, else one of the
+ * built-ins every item has. After a part or a section, the rest is its `duration`.
  *
  * @param scope What the test's references resolve against.
  * @param prefix The part before the dot the reading splits at.
  * @param rest The part after it.
- * @returns Whether the reading resolves.
+ * @returns The reading, none when it does not resolve.
  */
-const resolves = (scope: ReferenceScope, prefix: string, rest: string): boolean => {
-  const variables = scope.items.get(prefix);
-  if (variables !== undefined) {
-    return variables.has(occurrenceForm.exec(rest)?.groups?.["variable"] ?? rest);
+const readingOf = (scope: ReferenceScope, prefix: string, rest: string): Option.Option<Reading> => {
+  const item = scope.items.get(prefix);
+  if (item === undefined) {
+    return scope.durations.has(prefix) && rest === "duration"
+      ? Option.some({ prefix, rest, untimed: false })
+      : Option.none();
   }
 
-  return scope.durations.has(prefix) && rest === "duration";
+  const variable = occurrenceForm.exec(rest)?.groups?.["variable"] ?? rest;
+  if (item.mapped.has(variable) || item.declared.has(variable)) {
+    return Option.some({ prefix, rest, untimed: false });
+  }
+
+  return itemBuiltIns.has(variable)
+    ? Option.some({ prefix, rest, untimed: item.untimed && variable === "duration" })
+    : Option.none();
 };
 
 /**
@@ -666,22 +790,164 @@ const resolves = (scope: ReferenceScope, prefix: string, rest: string): boolean 
  *
  * @param scope What the test's references resolve against.
  * @param reference The reference.
- * @returns Each resolving reading's prefix and rest.
+ * @returns Each resolving reading.
  */
-const readingsOf = (
-  scope: ReferenceScope,
-  reference: string,
-): readonly (readonly [prefix: string, rest: string])[] => {
-  const readings: (readonly [prefix: string, rest: string])[] = [];
+const readingsOf = (scope: ReferenceScope, reference: string): readonly Reading[] => {
+  const readings: Reading[] = [];
   for (let dot = reference.indexOf("."); dot !== -1; dot = reference.indexOf(".", dot + 1)) {
-    const prefix = reference.slice(0, dot);
-    const rest = reference.slice(dot + 1);
-    if (resolves(scope, prefix, rest)) {
-      readings.push([prefix, rest]);
-    }
+    readings.push(
+      ...Option.toArray(readingOf(scope, reference.slice(0, dot), reference.slice(dot + 1))),
+    );
   }
 
   return readings;
+};
+
+/**
+ * Give the variable mappings an item ref holds, each its `source-identifier` and its
+ * `target-identifier`, in document order. One that lacks either names nothing here, and is its
+ * test's own verdict's refusal.
+ *
+ * @param itemRef The item ref.
+ * @returns Each mapping's source and target.
+ */
+const mappingsOf = (
+  itemRef: SourceElement,
+): readonly (readonly [source: string, target: string])[] =>
+  itemRef.children.flatMap((child) =>
+    child.kind === "element" && isQti(child, mappingElements)
+      ? Option.toArray(
+          Option.all([
+            attributeOf(child, "source-identifier"),
+            attributeOf(child, "target-identifier"),
+          ]).pipe(Option.map(([from, to]) => [trimXmlSpace(from), trimXmlSpace(to)] as const)),
+        )
+      : [],
+  );
+
+/**
+ * One attribute of an element of a test that names a variable, with the name.
+ */
+interface NamedReference {
+  readonly attribute: SourceAttribute;
+  readonly identifier: string;
+}
+
+/**
+ * Give each variable an element of a test names, in the element's attribute order: the
+ * `identifier` of a `qti-variable`, `qti-correct` or `qti-default`, and each value of a reference
+ * attribute its expression kind's reference facet checks, as pantry's `referenceAttributes` lists
+ * them (`figures`, `max`, `min`, `n`, `number-repeats`, `pattern` and `step`;
+ * `packages/pantry/src/processing/check.ts`).
+ *
+ * A literal names no variable, and a `pattern` names one only as a braced name of a variable the
+ * test holds (ruling R1). A name that is no NCName is the structure check's refusal, so it is
+ * passed over.
+ *
+ * @param element The element.
+ * @param held Whether the test holds a variable by a name: declares it whole, holds it as a
+ *   built-in, or resolves it by a reading.
+ * @returns The variables it names.
+ */
+const referencesOf = (
+  element: SourceElement,
+  held: (name: string) => boolean,
+): readonly NamedReference[] => {
+  if (element.namespace !== qtiNamespace) {
+    return [];
+  }
+
+  const kind = kindsByElement.get(element.local);
+  const entries = kind === undefined ? [] : kindRules[kind].references;
+
+  return element.attributes.flatMap((attribute) => {
+    if (attribute.namespace !== "") {
+      return [];
+    }
+
+    if (attribute.local === "identifier" && referenceElements.has(element.local)) {
+      const identifier = trimXmlSpace(attribute.value);
+
+      return isNcName(identifier) ? [{ attribute, identifier }] : [];
+    }
+
+    const entry = entries.find((one) => one.checked && one.attribute === attribute.local);
+    if (entry === undefined) {
+      return [];
+    }
+
+    const values = entry.list
+      ? attribute.value.split(xmlWhitespaceRun).filter((token) => token !== "")
+      : [attribute.value];
+
+    return values.flatMap((value) => {
+      const classified = classifiers[entry.baseType](
+        value,
+        new Set([value.slice(1, -1)].filter(held)),
+      );
+
+      return classified._tag === "ref" && isNcName(classified.identifier)
+        ? [{ attribute, identifier: classified.identifier }]
+        : [];
+    });
+  });
+};
+
+/**
+ * Judge one dotted reference of a test, which the test does not hold whole, by reading 48, as
+ * pantry's `reference` judges a prefixed name (`packages/pantry/src/processing/check.ts`).
+ *
+ * A reference no reading resolves is `undeclared-variable` with `check: "reading"` and the
+ * `reading`, pantry's `prefixed-ref` with no reading. One two readings resolve is
+ * `ambiguous-reference`, its detail the `reference` and its first two resolving readings, prefix
+ * and variable each, pantry's `prefixed-ref` with its readings. One whose one reading reads the
+ * built-in `duration` of an item that is not time dependent is `undeclared-variable` with `check:
+ * "untimed-duration"`, pantry's `item-duration`. Each is at the attribute; an
+ * `undeclared-variable` names the `element`, the `identifier` as written and, for an attribute
+ * other than `identifier`, the `attribute`.
+ *
+ * @param document The test's location.
+ * @param visit The element's visit.
+ * @param reference The attribute and the name it holds.
+ * @param scope What the test's references resolve against.
+ * @returns The refusal, none when exactly one reading resolves it and that one may be read.
+ */
+const judgeReference = (
+  document: string,
+  visit: Visit,
+  reference: NamedReference,
+  scope: ReferenceScope,
+): readonly Refusal[] => {
+  const { attribute, identifier } = reference;
+  const path = attributePath(visit.path, attribute);
+  const element = visit.element.local;
+  const named =
+    attribute.local === "identifier"
+      ? { element, identifier }
+      : { attribute: attribute.local, element, identifier };
+  const [first, second] = readingsOf(scope, identifier);
+  if (first === undefined) {
+    return [
+      refuse(document, "undeclared-variable", path, { ...named, check: "reading", reading: "48" }),
+    ];
+  }
+
+  if (second !== undefined) {
+    return [
+      refuse(document, "ambiguous-reference", path, {
+        firstPrefix: first.prefix,
+        firstVariable: first.rest,
+        reading: "48",
+        reference: identifier,
+        secondPrefix: second.prefix,
+        secondVariable: second.rest,
+      }),
+    ];
+  }
+
+  return first.untimed
+    ? [refuse(document, "undeclared-variable", path, { ...named, check: "untimed-duration" })]
+    : [];
 };
 
 /**
@@ -700,10 +966,11 @@ interface TestJudgement {
  *
  * An item ref that resolves to no listed item resource is `item-ref-unresolved` at the item ref,
  * its detail the `identifier`, the `href` and, when the `href` names a path inside the package,
- * that `path`. A reference two of whose readings resolve is `ambiguous-reference` at its
- * `identifier`, its detail the `reference` and its first two resolving readings, prefix and
- * variable each. An item ref resolves a reading only through an item whose document the package
- * holds and the reader read.
+ * that `path`. A reference the test declares whole, as an outcome or context variable (reading 37
+ * lets an identifier hold `.`), or holds as a built-in is never split, and a name with no `.` is
+ * the test's own check's; every other is judged by {@link judgeReference}. An item ref resolves a
+ * reading only through an item whose document the package holds and the reader read, so a
+ * reference through any other names nothing, as pantry's reach holds no such item ref.
  *
  * @param source The test's source.
  * @param testPath The test's path.
@@ -719,6 +986,7 @@ const judgeTest = (
 ): TestJudgement => {
   const visits = [...walk(source)];
   const refs = new Map<string, string>();
+  const mappings = new Map<string, readonly (readonly [source: string, target: string])[]>();
   const unresolved: Refusal[] = [];
   const durations = new Set<string>();
   for (const { element, path } of visits) {
@@ -731,6 +999,7 @@ const judgeTest = (
       const resolved = resolveReference(testPath, written);
       if (Option.isSome(resolved) && itemPaths.has(resolved.value)) {
         refs.set(identifier, resolved.value);
+        mappings.set(identifier, mappingsOf(element));
       } else {
         const facts = { href: written, identifier };
         unresolved.push(
@@ -748,39 +1017,39 @@ const judgeTest = (
     }
   }
 
-  const items = new Map<string, ReadonlySet<string>>();
+  const items = new Map<string, ItemRefVariables>();
   for (const [identifier, itemPath] of refs) {
     for (const variables of Option.toArray(variablesOf(documents.get(itemPath)))) {
-      items.set(identifier, variables);
+      items.set(identifier, {
+        ...variables,
+        mapped: new Set(
+          (mappings.get(identifier) ?? []).flatMap(([from, to]) =>
+            variables.declared.has(from) ? [to] : [],
+          ),
+        ),
+      });
     }
   }
 
   const scope: ReferenceScope = { durations, items };
-  const ambiguous = visits.flatMap(({ element, path }) =>
-    isQti(element, referenceElements)
-      ? element.attributes
-          .filter((attribute) => attribute.namespace === "" && attribute.local === "identifier")
-          .flatMap((attribute) => {
-            const reference = trimXmlSpace(attribute.value);
-            const [first, second] = readingsOf(scope, reference);
-
-            return first === undefined || second === undefined
-              ? []
-              : [
-                  refuse(source.location, "ambiguous-reference", attributePath(path, attribute), {
-                    firstPrefix: first[0],
-                    firstVariable: first[1],
-                    reading: "48",
-                    reference,
-                    secondPrefix: second[0],
-                    secondVariable: second[1],
-                  }),
-                ];
-          })
-      : [],
+  const whole: ReadonlySet<string> = new Set([
+    ...testBuiltIns,
+    ...source.root.children.flatMap((child) =>
+      child.kind === "element" && isQti(child, testDeclarations)
+        ? Option.toArray(identifierOf(child))
+        : [],
+    ),
+  ]);
+  const held = (name: string): boolean => whole.has(name) || readingsOf(scope, name).length > 0;
+  const references = visits.flatMap((visit) =>
+    referencesOf(visit.element, held).flatMap((reference) =>
+      whole.has(reference.identifier) || !reference.identifier.includes(".")
+        ? []
+        : judgeReference(source.location, visit, reference, scope),
+    ),
   );
 
-  return { refs, refusals: [...unresolved, ...ambiguous] };
+  return { refs, refusals: [...unresolved, ...references] };
 };
 
 /**
