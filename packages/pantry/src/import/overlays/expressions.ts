@@ -47,7 +47,7 @@ import type {
   TestRows,
 } from "#pantry/import/overlays/tests.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
-import type { Folded } from "#pantry/import/fold.ts";
+import type { Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -687,7 +687,7 @@ interface Document extends Tree {
    */
   readonly charsOf: (node: NodeRow<Composed>) => string;
   readonly declarations: ReadonlyMap<string, DeclarationEntry>;
-  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly folds: Folds;
   readonly untyped: ReadonlySet<string>;
   readonly id: NodeId;
   /**

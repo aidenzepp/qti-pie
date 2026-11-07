@@ -282,6 +282,11 @@ export const ownContext = (self: NodeId): DocumentContext => ({
 });
 
 /**
+ * A document's folds, as {@link foldOf} gives them, each node's read by {@link foldAt}.
+ */
+export type Folds = ReadonlyMap<NodeId, Folded>;
+
+/**
  * Read one node's fold: total, since {@link foldOf} folds every node it is given or throws.
  *
  * @param folds - A document's folds, as {@link foldOf} gives them.
@@ -290,7 +295,7 @@ export const ownContext = (self: NodeId): DocumentContext => ({
  * @throws {Error} When the node is no node of the folded document: a defect of the caller, which
  *   read a node of one document in another's folds.
  */
-export const foldAt = (folds: ReadonlyMap<NodeId, Folded>, node: NodeId): Folded => {
+export const foldAt = (folds: Folds, node: NodeId): Folded => {
   const folded = folds.get(node);
   if (folded === undefined) {
     throw new Error(
@@ -315,10 +320,7 @@ export const foldAt = (folds: ReadonlyMap<NodeId, Folded>, node: NodeId): Folded
  * @throws {Error} When a node comes before its parent, which `flatten`'s document order rules out:
  *   a defect of the caller, never of the document.
  */
-export const foldOf = (
-  nodes: readonly NodeRow<Composed>[],
-  context: DocumentContext,
-): ReadonlyMap<NodeId, Folded> => {
+export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentContext): Folds => {
   const folded = new Map<NodeId, { readonly held: Held; readonly under: Under }>();
 
   for (const node of nodes) {

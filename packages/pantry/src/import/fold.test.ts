@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
+import type { Folds } from "#pantry/import/fold.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -31,11 +32,12 @@ const idsFrom =
 
 describe("foldAt", () => {
   it.effect("read every node's fold, and refuse a node of another document by its id", () =>
-    // Oracle: foldOf's own map, every node it is given; an id of the other document is none of
-    // its nodes. Bound: two documents, every node of each.
+    // Oracle: the specification as a checker: every node folds, to a nearest node of its own
+    // document, alike on a second fold, and an id of the other document is none of its nodes.
+    // Bound: two documents, every node of each.
     Effect.gen(function* everyNode() {
       const folded: {
-        readonly folds: ReturnType<typeof foldOf>;
+        readonly folds: Folds;
         readonly rows: FlatRows<Composed>;
       }[] = [];
       for (const [at, text] of documents.entries()) {
@@ -46,8 +48,12 @@ describe("foldAt", () => {
       }
 
       for (const [at, { folds, rows }] of folded.entries()) {
+        const own = new Set(rows.nodes.map(({ id }) => id));
+        const again = foldOf(rows.nodes, ownContext(rows.document.node));
         for (const node of rows.nodes) {
-          assert.strictEqual(foldAt(folds, node.id), folds.get(node.id), node.id);
+          const fold = foldAt(folds, node.id);
+          assert.isTrue(own.has(fold.nearest), `${node.id}'s nearest is a node of its document`);
+          assert.deepStrictEqual(fold, foldAt(again, node.id), node.id);
         }
 
         const other = folded[1 - at];
