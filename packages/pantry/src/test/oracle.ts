@@ -116,7 +116,6 @@ import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { splicingParents } from "#pantry/qti/tests.ts";
 import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
@@ -4314,15 +4313,29 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
 };
 
 /**
- * Decide whether an include under a parent is spliced in place, by the schema's one statement of it
- * (`#pantry/qti/tests.ts` `splicingParents`, spec reading 117): one a section holds is a site of
- * the test's assembly instead, which reading 86 reads as Q5.13's instances do, each written element
- * once, so its document is judged as written.
+ * The include parents whose include splices its fragment in place, as the oracle reads reading 117
+ * itself: every parent the composed grammar gives an Include (reading 114) but a section, since an
+ * include in a section follows reading 86's rule for a section document ("includes in a section
+ * follow it"), a site of the test's assembly that writes each element once, so its document is
+ * judged as written. The schema states its own list (`#pantry/qti/tests.ts` `splicingParents`), and
+ * `splicing-parents.oracle.test.ts` holds the two equal, so a bug in either shows there and is not
+ * shared.
  *
+ * @param grammar - The composed grammar.
+ * @returns The parents' kinds.
+ */
+export const splicingParentsOf = (grammar: ComposedGrammar): ReadonlySet<string> =>
+  new Set([...includeParentsOf(grammar)].filter((parent) => parent !== "qti-assessment-section"));
+
+/**
+ * Decide whether an include under a parent is spliced in place ({@link splicingParentsOf}).
+ *
+ * @param grammar - The composed grammar.
  * @param parent - The include's parent's kind.
  * @returns Whether it is.
  */
-const splices = (parent: string): boolean => splicingParents.some((kind) => kind === parent);
+const splices = (grammar: ComposedGrammar, parent: string): boolean =>
+  splicingParentsOf(grammar).has(parent);
 
 /**
  * Decide whether a site splices its target in place: an include outside a section whose target is
@@ -4333,7 +4346,7 @@ const splices = (parent: string): boolean => splicingParents.some((kind) => kind
  * @returns The target, none for a site that splices nothing.
  */
 const splicedTarget = (grammar: ComposedGrammar, site: SiteOf): Option.Option<Listed> =>
-  site.node.kind === "xi:include" && splices(site.node.parentKind)
+  site.node.kind === "xi:include" && splices(grammar, site.node.parentKind)
     ? site.target.pipe(
         Option.filter((target) =>
           standsFor(grammar, site.node.version, site.node.parentKind, target.rootKind),
@@ -4572,7 +4585,7 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
         : child;
     }
 
-    if (child.kind === "xi:include" && splices(parent)) {
+    if (child.kind === "xi:include" && splices(grammar, parent)) {
       const href = closedValueOf(child, "href");
       const resolution = href.pipe(
         Option.map((value) =>
@@ -5264,13 +5277,14 @@ interface Assembly {
 
 /**
  * Decide whether a site places its target whole, an instance of its own, rather than splicing it
- * in place: a section ref, or an include under a section (`splicingParents`).
+ * in place: a section ref, or an include under a section ({@link splicingParentsOf}).
  *
+ * @param grammar - The composed grammar.
  * @param site - The site.
  * @returns Whether it does.
  */
-const placesWhole = (site: SiteOf): boolean =>
-  site.node.kind !== "xi:include" || !splices(site.node.parentKind);
+const placesWhole = (grammar: ComposedGrammar, site: SiteOf): boolean =>
+  site.node.kind !== "xi:include" || !splices(grammar, site.node.parentKind);
 
 /**
  * Drop the breaches two assemblies report alike, a nested one's and its container's.
@@ -5289,6 +5303,7 @@ const dedupedBreaches = (breaches: readonly Breach[]): readonly Breach[] => [
  * document a site of an instance places whole, in pre-order, a document already on the chain left
  * out (the chain is "Inclusion cycle"'s), each instance's ids its document's in place.
  *
+ * @param grammar - The composed grammar.
  * @param byPath - The listed documents, by path.
  * @param sites - Every site of the package.
  * @param read - Each judged document's fold in place: its rows, where the fold kept its root, and
@@ -5297,6 +5312,7 @@ const dedupedBreaches = (breaches: readonly Breach[]): readonly Breach[] => [
  * @returns Each judged document's assembly, by path.
  */
 const assembliesOf = (
+  grammar: ComposedGrammar,
   byPath: ReadonlyMap<string, Listed>,
   sites: readonly SiteOf[],
   read: ReadonlyMap<string, Folded>,
@@ -5309,7 +5325,7 @@ const assembliesOf = (
   );
   const ids = new Map([...views].map(([path, view]) => [path, idsOf(view, laws)] as const));
   const placements = new Map<string, readonly string[]>();
-  for (const site of sites.filter(placesWhole)) {
+  for (const site of sites.filter((held) => placesWhole(grammar, held))) {
     for (const target of Option.toArray(site.target)) {
       placements.set(site.document.path, [
         ...(placements.get(site.document.path) ?? []),
@@ -5441,7 +5457,7 @@ const inPlaceBreaches = (
       })
       .toReversed(),
   );
-  const assemblies = assembliesOf(byPath, sites, read, laws);
+  const assemblies = assembliesOf(grammar, byPath, sites, read, laws);
 
   return [
     ...documents.flatMap((listed) =>
