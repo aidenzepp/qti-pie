@@ -454,8 +454,8 @@ const builtInBaseOf = (
 
 /**
  * Each built-in variable `BuiltInVariable` holds, with its type: its declaration kind from the
- * closed relation, its base type and cardinality from {@link builtInBase}. `interactions.test.ts`
- * holds the two to name the same variables.
+ * closed relation, its base type and cardinality from {@link builtInBase}.
+ * `interactions.oracle.test.ts` holds the two to name the same variables.
  */
 export const builtIns: readonly BuiltInType[] = BuiltInVariable.rows.flatMap(
   ({ declaration, variable }) =>

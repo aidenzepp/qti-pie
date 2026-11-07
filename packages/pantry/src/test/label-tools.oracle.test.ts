@@ -7,7 +7,8 @@
  *
  * Oracle: the information model's description of each label characteristic, as the case model
  * records which element carries a label, so no expected breach or row is computed by the oracle's
- * or the builder's own selection. The database's side is `program.db.test.ts`'s pair of packages.
+ * or the builder's own selection. The database's side is `program.oracle.db.test.ts`'s pair of
+ * packages.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";

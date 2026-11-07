@@ -6,7 +6,7 @@
  *
  * Oracle: the XSD's section model and §4.2.15, as the case model records which children each
  * section holds, so no expected verdict or row is computed by the oracle's or the builder's own
- * reading. The database's side is `tests.db.test.ts`'s and `program.db.test.ts`'s.
+ * reading. The database's side is `tests.db.test.ts`'s and `program.oracle.db.test.ts`'s.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";

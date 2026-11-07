@@ -1,7 +1,7 @@
 /**
  * The processing packages' stated verdicts (`processing-verdicts.ts`), judged by the law oracle and
- * the import's reader with no database: the verdict `import/program.db.test.ts` holds PostgreSQL to
- * is the one the oracle predicts for the same package.
+ * the import's reader with no database: the verdict `import/program.oracle.db.test.ts` holds
+ * PostgreSQL to is the one the oracle predicts for the same package.
  *
  * Oracle: the law oracle (`judge`, `verdictOf`) over each package as `readPackage` reads it, and
  * the import's own reader for the codec's refusals, which happen before any row exists.
@@ -28,8 +28,8 @@ const grammar = Result.getOrThrow(composed());
 const laws = lawsOf(grammar);
 
 /**
- * The laws a guard's package is refused under, as `import/program.db.test.ts` picks them from the
- * database's outcome: AL3's required attribute, N7's last slot and N5's follow.
+ * The laws a guard's package is refused under, as `import/program.oracle.db.test.ts` picks them
+ * from the database's outcome: AL3's required attribute, N7's last slot and N5's follow.
  */
 const guardLaws: ReadonlySet<LawName> = new Set(["AL3 required", "N5 Follow", "N7 Last"]);
 

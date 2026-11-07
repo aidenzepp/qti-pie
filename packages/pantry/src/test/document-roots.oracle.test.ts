@@ -196,8 +196,8 @@ const pairCases: Gen<RootCase> = (source) => ({
 });
 
 /**
- * A situation the pair box must reach: a pair `RootOfType` holds, one it does not, and the
- * database case's item listed as a stimulus (`import/program.db.test.ts`, root-type-reverse).
+ * A situation the pair box must reach: a pair `RootOfType` holds, one it does not, and the database
+ * case's item listed as a stimulus (`import/program.oracle.db.test.ts`, root-type-reverse).
  */
 type PairSituation =
   | "a pair RootOfType holds"

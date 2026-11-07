@@ -1,7 +1,7 @@
 /**
  * Spec readings 119 and 121 written as checkers, straight from the information model's sentences,
  * for the operator tests to judge the law oracle, the builder's rows and the database's patterns by
- * (`#pantry/qti/operators.test.ts`, `#pantry/import/overlays/operators.test.ts`).
+ * (`#pantry/qti/operators.oracle.test.ts`, `#pantry/import/overlays/operators.test.ts`).
  *
  * Nothing here reads the module under test: each reading is restated from its source, a value's
  * lexical space by a hand-written parser of XML Schema's grammar rather than a pattern, so a

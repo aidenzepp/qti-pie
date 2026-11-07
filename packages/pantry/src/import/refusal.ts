@@ -380,8 +380,8 @@ interface LawEntry {
  * Every law the schema states, by name, with the rule its refusal keeps and its spec source.
  *
  * The names are the law oracle's, each with the oracle's rule and source (`src/test/oracle.ts`
- * `lawRules`, `lawSources`, which `refusal.test.ts` holds equal), and a name of its own for each
- * law the oracle states no host predicate for: the tree as grizzle states it, the package's
+ * `lawRules`, `lawSources`, which `refusal.oracle.test.ts` holds equal), and a name of its own for
+ * each law the oracle states no host predicate for: the tree as grizzle states it, the package's
  * structure, a dependency's target and a choice's key.
  */
 export const lawTable = {
@@ -1220,11 +1220,11 @@ const sideText = (side: LawSide): string =>
  * A check is its name alone, since every check is named by its law ({@link checkNameOf}) and one
  * law may be checked on several relations, as E1 is on `Node`, `Attribute` and `Idref`. A side is
  * its relation and its terms; its selection is no part of the identity, since no two laws the
- * schema states differ by a selection alone, which the census in `refusal.test.ts` holds. A family
- * and a tree are their slots, since one count counts one family, and a fold is its family's slots,
- * its monoid and its end, since an accumulated end is filled by one statement. A generated field
- * is its relation and field, since grizzle names one by them where a closed read in its term has
- * no row and its column's NOT NULL refuses the row.
+ * schema states differ by a selection alone, which the census in `refusal.oracle.test.ts` holds. A
+ * family and a tree are their slots, since one count counts one family, and a fold is its family's
+ * slots, its monoid and its end, since an accumulated end is filled by one statement. A generated
+ * field is its relation and field, since grizzle names one by them where a closed read in its term
+ * has no row and its column's NOT NULL refuses the row.
  *
  * @param law - A law as an `invariant-rejected` outcome names it.
  * @returns Its identity.
@@ -3233,8 +3233,8 @@ const ranks: ReadonlyMap<Rule, number> = new Map(precedence.map((rule, rank) => 
  * theirs, by {@link precedence}.
  *
  * The laws are a set: their order and any repeat change nothing. A law no row of the table states
- * is left out, so the rule is the most specific of the others; the census in `refusal.test.ts`
- * keeps every law the schema states in the table.
+ * is left out, so the rule is the most specific of the others; the census in
+ * `refusal.oracle.test.ts` keeps every law the schema states in the table.
  *
  * @param laws - The `laws` of an `invariant-rejected` outcome.
  * @returns The rule, or none when no law of the set is in the table.
@@ -3639,8 +3639,8 @@ export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRe
 
 /**
  * The database refused an apply under laws no row of the law table states, so no rule names the
- * refusal. It is a defect of this module's table, which the census in `refusal.test.ts` keeps
- * whole, never a verdict on the package.
+ * refusal. It is a defect of this module's table, which the census in `refusal.oracle.test.ts`
+ * keeps whole, never a verdict on the package.
  */
 export class UnownedLaws extends Schema.TaggedError<UnownedLaws>()("UnownedLaws", {
   laws: Schema.Array(Schema.String),
@@ -3649,7 +3649,7 @@ export class UnownedLaws extends Schema.TaggedError<UnownedLaws>()("UnownedLaws"
    * The laws, and the repair.
    */
   override get message(): string {
-    return `No rule owns the laws ${this.laws.join("; ")}. Add each to statedLaws in src/import/refusal.ts under the law it states, and run the census in refusal.test.ts.`;
+    return `No rule owns the laws ${this.laws.join("; ")}. Add each to statedLaws in src/import/refusal.ts under the law it states, and run the census in refusal.oracle.test.ts.`;
   }
 }
 

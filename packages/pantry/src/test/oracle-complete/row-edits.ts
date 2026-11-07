@@ -1,7 +1,7 @@
 /**
  * The mutations of the law oracle's laws over a document's attribute, name and character-data rows
  * (§1.3 to §1.5), each an edit of the every-relation package's folded rows at a target drawn among
- * those the rows hold, judged by `documentBreaches` (`src/test/oracle.complete.test.ts`).
+ * those the rows hold, judged by `documentBreaches` (`src/test/complete.oracle.test.ts`).
  *
  * These laws hold the rows the folds and the codec write to the tree they come from, so no package
  * text breaks one; each edit is the smallest that does: one count, one copy, one row dropped or one

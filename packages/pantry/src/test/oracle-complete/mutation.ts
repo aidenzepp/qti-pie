@@ -1,5 +1,5 @@
 /**
- * The mutations the oracle-completeness property draws (`src/test/oracle.complete.test.ts`), and
+ * The mutations the oracle-completeness property draws (`src/test/complete.oracle.test.ts`), and
  * the base packages they break.
  *
  * A {@link Mutation} names one law of the law oracle (`#pantry/test/oracle.ts`) and breaks exactly

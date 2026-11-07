@@ -1,7 +1,7 @@
 /**
  * The mutations of the law oracle's package laws (§1.6) and the overlay laws it stated before lane
  * OL (§1.7), each drawn to break exactly its law in an accepted package
- * (`src/test/oracle.complete.test.ts`).
+ * (`src/test/complete.oracle.test.ts`).
  *
  * Each edits the every-relation package: its manifest, its usage data, its first item's body,
  * declarations and processing, or its section document. A site is drawn where the base holds

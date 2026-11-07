@@ -4,7 +4,7 @@
  * 1.0 (Third Edition) §3 asks a namespace declaration's normalized value to be "either a URI
  * reference … or an empty string", and its §2.1 names RFC 3986, so the oracle's "Namespace name"
  * law reads this recogniser, and `NamespaceUri`'s pattern (`#pantry/qti/chardata.ts`) is judged
- * against it in `chardata.test.ts`, never against itself.
+ * against it in `chardata.oracle.test.ts`, never against itself.
  *
  * Each rule maps a text and a start offset to every offset one of its derivations ends at, so an
  * alternation keeps every branch and a repetition every count, as ABNF's own semantics does: no

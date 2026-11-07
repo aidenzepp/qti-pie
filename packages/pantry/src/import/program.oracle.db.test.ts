@@ -395,7 +395,7 @@ const metadataVerdicts: readonly (readonly [FixtureName, readonly string[]])[] =
 ];
 
 describe.skipIf(!hasLease)(
-  "import/program.db.test.ts, on the lease",
+  "import/program.oracle.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {

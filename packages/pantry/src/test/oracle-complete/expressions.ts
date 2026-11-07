@@ -1,7 +1,7 @@
 /**
  * The mutations of the law oracle's laws over the expressions
  * (`#pantry/test/oracle-laws/expressions.ts`), each drawn to break exactly its law in an accepted
- * package (`src/test/oracle.complete.test.ts`).
+ * package (`src/test/complete.oracle.test.ts`).
  *
  * Each edits the every-relation package's processing: the item's response processing (a sum of a
  * map response and a map response point into SCORE, a round into COUNT, two lookups, and a match

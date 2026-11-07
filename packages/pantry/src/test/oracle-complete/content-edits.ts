@@ -3,7 +3,7 @@
  * (§1.5, §1.6): SSML's attribute counts, lexicons and marks, a foreign element's simple content, a
  * fragment's context, the default hotspots, an href's form, a family's last slot and a namespace
  * name, each drawn to break exactly its law in the every-relation package
- * (`src/test/oracle.complete.test.ts`).
+ * (`src/test/complete.oracle.test.ts`).
  *
  * Each edits the package text the codec reads without refusing it, at a site drawn where the base
  * holds several and with a value drawn among several the law refuses. No edit renames an id,

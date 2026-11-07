@@ -14,7 +14,7 @@
  *   laws, and no judgment of it raises them, so it accepts every package reading 87 refuses (R87's
  *   finding), and the model stands in for it.
  *
- * The same packages' write programs are compiled in `assembly.compile.test.ts`.
+ * The same packages' write programs are compiled in `assembly.compile.oracle.test.ts`.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";

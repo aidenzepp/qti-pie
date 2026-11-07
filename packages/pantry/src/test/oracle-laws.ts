@@ -15,7 +15,7 @@
  * The oracle reads them through {@link lawDocumentBreaches}, over each document it judges, after
  * its own laws, and {@link lawPackageBreaches}, over the package, after its own. A law the schema
  * states that no package can break, and so no host predicate can judge, is a row of
- * {@link hostlessLaws} with the reason, never a silent gap: `src/test/oracle.complete.test.ts`
+ * {@link hostlessLaws} with the reason, never a silent gap: `src/test/complete.oracle.test.ts`
  * holds that every law the schema states is the oracle's or hostless, and that every law the oracle
  * declares is raised by a package drawn to break it.
  */

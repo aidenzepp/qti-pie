@@ -2,7 +2,7 @@
  * The mutations of the law oracle's laws over a document's tree and folds (§1.3), each a named
  * corruption of the every-relation item's folded rows (`#pantry/test/gen/xdm.ts` `corrupt`) at a
  * target drawn among those the rows hold, judged by `documentBreaches`
- * (`src/test/oracle.complete.test.ts`).
+ * (`src/test/complete.oracle.test.ts`).
  *
  * No package text breaks these laws: the folds write the rows they read. So each mutation edits the
  * rows the folds wrote, with the generator's own corruptions, whose law `lawOf` names, at a target

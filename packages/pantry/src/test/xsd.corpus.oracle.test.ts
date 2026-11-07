@@ -1293,139 +1293,142 @@ const corpusDocuments = Effect.fn("xsd.corpusDocuments")(function* corpusDocumen
   return documents;
 });
 
-describe.skipIf(!settings.corpusRequested || !cached)("xsd.corpus.test.ts, the corpus", () => {
-  layer(TestLayer, { excludeTestServices: true })("xmllint against the law oracle", (it) => {
-    it.effect(
-      "every corpus document's two verdicts, per class, differ only as recorded",
-      () =>
-        Effect.gen(function* compareCorpus() {
-          const fs = yield* FileSystem.FileSystem;
-          const grammar = yield* Effect.fromResult(composed()).pipe(Effect.orDie);
-          const laws = lawsOf(grammar);
+describe.skipIf(!settings.corpusRequested || !cached)(
+  "xsd.corpus.oracle.test.ts, the corpus",
+  () => {
+    layer(TestLayer, { excludeTestServices: true })("xmllint against the law oracle", (it) => {
+      it.effect(
+        "every corpus document's two verdicts, per class, differ only as recorded",
+        () =>
+          Effect.gen(function* compareCorpus() {
+            const fs = yield* FileSystem.FileSystem;
+            const grammar = yield* Effect.fromResult(composed()).pipe(Effect.orDie);
+            const laws = lawsOf(grammar);
 
-          yield* fs.remove(outputRoot, { force: true, recursive: true });
+            yield* fs.remove(outputRoot, { force: true, recursive: true });
 
-          const documents = yield* corpusDocuments();
-          const oracle = yield* writeXsdOracle(oracleRoot);
-          const judged: Judged[] = [];
+            const documents = yield* corpusDocuments();
+            const oracle = yield* writeXsdOracle(oracleRoot);
+            const judged: Judged[] = [];
 
-          for (const version of schemaVersions) {
-            const verdicts = yield* validated(oracle, version, documents);
+            for (const version of schemaVersions) {
+              const verdicts = yield* validated(oracle, version, documents);
 
-            for (const [at, document] of documents.entries()) {
-              const xsd =
-                verdicts[at] ??
-                (yield* Effect.die(new Error(`xmllint gave no verdict for ${document.file}`)));
+              for (const [at, document] of documents.entries()) {
+                const xsd =
+                  verdicts[at] ??
+                  (yield* Effect.die(new Error(`xmllint gave no verdict for ${document.file}`)));
 
-              const law = yield* judgeDocument({
-                bytes: document.bytes,
-                grammar,
-                laws,
-                path: document.path,
-                version,
-              });
-              const comparison = compareJudgments(xsd, law);
+                const law = yield* judgeDocument({
+                  bytes: document.bytes,
+                  grammar,
+                  laws,
+                  path: document.path,
+                  version,
+                });
+                const comparison = compareJudgments(xsd, law);
 
-              judged.push({
-                comparison,
-                document,
-                matches: comparison.differences.map((difference) =>
-                  recordOf(document, version, difference, [...recorded, ...libxml2Records]),
-                ),
-                version,
-              });
+                judged.push({
+                  comparison,
+                  document,
+                  matches: comparison.differences.map((difference) =>
+                    recordOf(document, version, difference, [...recorded, ...libxml2Records]),
+                  ),
+                  version,
+                });
+              }
             }
-          }
 
-          yield* fs.writeFileString(
-            `${outputRoot}/agreement.tsv`,
-            tsv(
-              [
-                "zip",
-                "document",
-                "declared",
-                "version",
-                "verdicts",
-                "xmllint",
-                "laws",
-                "masked",
-                "differences",
-              ],
-              judged.map(({ comparison, document, version }) => [
-                document.zip,
-                document.path,
-                document.declared,
-                version,
-                comparison.verdicts,
-                comparison.xsdClasses.join(" "),
-                comparison.lawClasses.join(" "),
-                comparison.masked.join(" "),
-                String(comparison.differences.length),
-              ]),
-            ),
-          );
-          yield* fs.writeFileString(
-            `${outputRoot}/differences.tsv`,
-            tsv(
-              ["zip", "document", "version", "direction", "class", "rule", "record", "detail"],
-              judged.flatMap(({ comparison, document, matches, version }) =>
-                comparison.differences.map((difference, at) => {
-                  const match = matches[at];
-
-                  return [
-                    document.zip,
-                    document.path,
-                    version,
-                    difference.direction,
-                    difference.class,
-                    difference.rule,
-                    match === undefined ? "UNRECORDED" : reasonText(match.reason),
-                    difference.detail.slice(0, 600),
-                  ];
-                }),
+            yield* fs.writeFileString(
+              `${outputRoot}/agreement.tsv`,
+              tsv(
+                [
+                  "zip",
+                  "document",
+                  "declared",
+                  "version",
+                  "verdicts",
+                  "xmllint",
+                  "laws",
+                  "masked",
+                  "differences",
+                ],
+                judged.map(({ comparison, document, version }) => [
+                  document.zip,
+                  document.path,
+                  document.declared,
+                  version,
+                  comparison.verdicts,
+                  comparison.xsdClasses.join(" "),
+                  comparison.lawClasses.join(" "),
+                  comparison.masked.join(" "),
+                  String(comparison.differences.length),
+                ]),
               ),
-            ),
-          );
+            );
+            yield* fs.writeFileString(
+              `${outputRoot}/differences.tsv`,
+              tsv(
+                ["zip", "document", "version", "direction", "class", "rule", "record", "detail"],
+                judged.flatMap(({ comparison, document, matches, version }) =>
+                  comparison.differences.map((difference, at) => {
+                    const match = matches[at];
 
-          const tally = (verdicts: Comparison["verdicts"]) =>
-            judged.filter(({ comparison }) => comparison.verdicts === verdicts).length;
-          const unrecorded = judged.flatMap(({ comparison, document, matches, version }) =>
-            comparison.differences.flatMap((difference, at) =>
-              matches[at] === undefined
-                ? [
-                    `${document.zip}/${document.path} ${version} ${difference.direction} ${difference.class} ${difference.rule}: ${difference.detail.slice(0, 300)}`,
-                  ]
-                : [],
-            ),
-          );
-          const used = new Set(judged.flatMap(({ matches }) => matches));
-          const stale = recorded.filter((record) => !used.has(record));
+                    return [
+                      document.zip,
+                      document.path,
+                      version,
+                      difference.direction,
+                      difference.class,
+                      difference.rule,
+                      match === undefined ? "UNRECORDED" : reasonText(match.reason),
+                      difference.detail.slice(0, 600),
+                    ];
+                  }),
+                ),
+              ),
+            );
 
-          yield* Console.log(
-            [
-              `xsd.corpus: ${String(documents.length)} documents x ${String(schemaVersions.length)} versions = ${String(judged.length)} judgments`,
-              `  accepted by both ${String(tally("accepted by both"))}, refused by both ${String(tally("refused by both"))}, xmllint only ${String(tally("xmllint only"))}, laws only ${String(tally("laws only"))}`,
-              `  differences ${String(judged.reduce((sum, { comparison }) => sum + comparison.differences.length, 0))}, unrecorded ${String(unrecorded.length)}, stale records ${String(stale.length)}, libxml2 ${String(libxml2Count(judged.flatMap(({ matches }) => matches)))} (${libxml2Records.map(({ reason }) => reasonText(reason)).join("; ")})`,
-            ].join("\n"),
-          );
+            const tally = (verdicts: Comparison["verdicts"]) =>
+              judged.filter(({ comparison }) => comparison.verdicts === verdicts).length;
+            const unrecorded = judged.flatMap(({ comparison, document, matches, version }) =>
+              comparison.differences.flatMap((difference, at) =>
+                matches[at] === undefined
+                  ? [
+                      `${document.zip}/${document.path} ${version} ${difference.direction} ${difference.class} ${difference.rule}: ${difference.detail.slice(0, 300)}`,
+                    ]
+                  : [],
+              ),
+            );
+            const used = new Set(judged.flatMap(({ matches }) => matches));
+            const stale = recorded.filter((record) => !used.has(record));
 
-          assert.deepStrictEqual(
-            unrecorded,
-            [],
-            "every difference between the two oracles is recorded",
-          );
-          assert.deepStrictEqual(
-            stale.map(
-              ({ class: cls, direction, reason }) => `${direction} ${cls}: ${reasonText(reason)}`,
-            ),
-            [],
-            "every record still matches a difference",
-          );
-        }),
-      { timeout: testTimeoutMs },
-    );
-  });
-});
+            yield* Console.log(
+              [
+                `xsd.corpus: ${String(documents.length)} documents x ${String(schemaVersions.length)} versions = ${String(judged.length)} judgments`,
+                `  accepted by both ${String(tally("accepted by both"))}, refused by both ${String(tally("refused by both"))}, xmllint only ${String(tally("xmllint only"))}, laws only ${String(tally("laws only"))}`,
+                `  differences ${String(judged.reduce((sum, { comparison }) => sum + comparison.differences.length, 0))}, unrecorded ${String(unrecorded.length)}, stale records ${String(stale.length)}, libxml2 ${String(libxml2Count(judged.flatMap(({ matches }) => matches)))} (${libxml2Records.map(({ reason }) => reasonText(reason)).join("; ")})`,
+              ].join("\n"),
+            );
+
+            assert.deepStrictEqual(
+              unrecorded,
+              [],
+              "every difference between the two oracles is recorded",
+            );
+            assert.deepStrictEqual(
+              stale.map(
+                ({ class: cls, direction, reason }) => `${direction} ${cls}: ${reasonText(reason)}`,
+              ),
+              [],
+              "every record still matches a difference",
+            );
+          }),
+        { timeout: testTimeoutMs },
+      );
+    });
+  },
+);
 
 /**
  * The folder the differential property writes to, `packages/pantry/work/xsd-generated-*`, the
@@ -1826,7 +1829,7 @@ const generatedCaseOf = (grammar: ComposedGrammar): Gen<GeneratedCase> => {
   };
 };
 
-describe.skipIf(!cached)("xsd.corpus.test.ts, generated documents", () => {
+describe.skipIf(!cached)("xsd.corpus.oracle.test.ts, generated documents", () => {
   layer(TestLayer, { excludeTestServices: true })("xmllint against the law oracle", (it) => {
     it.effect(
       "every generated document, valid or a named invalid variant, has the same verdict from both",
@@ -2120,7 +2123,7 @@ const controlled = Effect.fn("test.controlled")(function* controlled(
 });
 
 describe.skipIf(!cached)(
-  "xsd.corpus.test.ts, the libxml2 classes and reading 6 on their controls, and xmllint on a retyped element",
+  "xsd.corpus.oracle.test.ts, the libxml2 classes and reading 6 on their controls, and xmllint on a retyped element",
   () => {
     layer(TestLayer, { excludeTestServices: true })("the control", (it) => {
       it.effect(
@@ -2389,7 +2392,7 @@ const xsdOnly = (detail: string): Difference => ({
   rule: "",
 });
 
-describe("xsd.corpus.test.ts, reading 6's class", () => {
+describe("xsd.corpus.oracle.test.ts, reading 6's class", () => {
   unit(
     "matches an xsd-only difference whose every message is on an element within a nested root",
     () => {
@@ -2416,7 +2419,7 @@ describe("xsd.corpus.test.ts, reading 6's class", () => {
   );
 });
 
-describe("xsd.corpus.test.ts, reading 60's class of a lax xsi:type", () => {
+describe("xsd.corpus.oracle.test.ts, reading 60's class of a lax xsi:type", () => {
   unit(
     "matches an unresolvable xsi:type on a laxly assessed element, and never a strictly assessed one",
     () => {

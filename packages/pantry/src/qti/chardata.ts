@@ -361,16 +361,16 @@ const uriReference = `(?:[A-Za-z][A-Za-z0-9+\\-.]*:(?:${uriNetworkPath}|${uriPat
 
 /**
  * A namespace declaration's value as read, after attribute-value normalization: an RFC 3986
- * `URI-reference` (spec reading 131), which Namespaces in XML 1.0 (Third Edition) asks of it
- * ("The attribute's normalized value MUST be either a URI reference — the namespace name
- * identifying the namespace — or an empty string", §3; "An XML namespace is identified by a URI
- * reference [RFC3986]", §2.1). The empty string is one, a `relative-ref` of an empty path; the
- * reader admits it only where an unprefixed declaration undeclares the default namespace. A
- * relative reference is deprecated (§2.2), not refused. Its characters are US-ASCII, so a space,
- * a `%` with no two hex digits after it and any character beyond ASCII are refused, as is an IP
- * literal that is no IPv6 or IPvFuture address and a port that is not digits. The foreign names'
- * namespaces (`ForeignNamespace`, the open names' `uri`) come from these declarations, so they
- * need no pattern of their own. `chardata.test.ts` judges the pattern against the law oracle's own
+ * `URI-reference` (spec reading 131), which Namespaces in XML 1.0 (Third Edition) asks of it ("The
+ * attribute's normalized value MUST be either a URI reference — the namespace name identifying the
+ * namespace — or an empty string", §3; "An XML namespace is identified by a URI reference
+ * [RFC3986]", §2.1). The empty string is one, a `relative-ref` of an empty path; the reader admits
+ * it only where an unprefixed declaration undeclares the default namespace. A relative reference is
+ * deprecated (§2.2), not refused. Its characters are US-ASCII, so a space, a `%` with no two hex
+ * digits after it and any character beyond ASCII are refused, as is an IP literal that is no IPv6
+ * or IPvFuture address and a port that is not digits. The foreign names' namespaces
+ * (`ForeignNamespace`, the open names' `uri`) come from these declarations, so they need no pattern
+ * of their own. `chardata.oracle.test.ts` judges the pattern against the law oracle's own
  * recogniser of Appendix A's grammar (`#pantry/test/uri-reference.ts`).
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
