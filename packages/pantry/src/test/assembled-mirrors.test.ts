@@ -26,7 +26,7 @@ import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-rela
 import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
 import type { HostRow, HostRows } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/key-copies.ts";
-import { oracleVerdict } from "#pantry/test/locate.ts";
+import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

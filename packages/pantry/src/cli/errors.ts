@@ -12,7 +12,7 @@ import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
 import type { exportPackage } from "#pantry/export/package.ts";
 import type { OverlayConflict } from "#pantry/import/overlays/index.ts";
-import type { importPackage, LocateDisagreement } from "#pantry/import/package.ts";
+import type { importPackage } from "#pantry/import/package.ts";
 import type { UnownedLaws } from "#pantry/import/refusal.ts";
 
 /**
@@ -117,10 +117,11 @@ export const grizzleErrorTags: ReadonlySet<string> = new Set(grizzleTags);
 
 /**
  * The tags of the failures {@link describeFailure} maps to a kind of their own: grizzle's, the
- * file system's, a refused import's and an absent package's.
+ * file system's, a refused import's, an import's unsettled commit and an absent package's.
  */
 type KindedTag =
   | (typeof grizzleTags)[number]
+  | "CommitUnresolved"
   | "ImportRefused"
   | "PackageNotFound"
   | "PlatformError";
@@ -138,13 +139,11 @@ export type ExportDefectTag = Exclude<
 
 /**
  * Every other way the import ends (`#pantry/import/package.ts`): the codec refusing a value the
- * builders wrote (grizzle's `EncodingFailure`), and the three defects it dies with, a locator that
- * finds no breach of the refusal's laws, laws no rule owns, and two builders that disagree on a
- * row. Each is a defect of qti, never of the package.
+ * builders wrote (grizzle's `EncodingFailure`), and the two defects it dies with, laws no rule owns
+ * and two builders that disagree on a row. Each is a defect of qti, never of the package.
  */
 export type ImportDefectTag =
   | Exclude<Effect.Error<ReturnType<typeof importPackage>>["_tag"], KindedTag>
-  | LocateDisagreement["_tag"]
   | OverlayConflict["_tag"]
   | UnownedLaws["_tag"];
 
@@ -163,7 +162,7 @@ const importDefectHelp =
 /**
  * What to do next after a refusal the database gave, by the kind of its witness: it names the law
  * and where the law is stated, and names the failing row only when its witness holds one, a key
- * grizzle reported or a row a locator found.
+ * grizzle reported or a row the caller holds.
  */
 const databaseRefusalHelp = {
   key: "Find what the law describes in the package, at the row the message names, fix it, then import the package again. Nothing was written.",
@@ -189,7 +188,6 @@ const namedHelp = {
   DocumentRowCount: exportDefectHelp,
   EncodeError: exportDefectHelp,
   EncodingFailure: importDefectHelp,
-  LocateDisagreement: importDefectHelp,
   OverlayConflict: importDefectHelp,
   RootMissing: exportDefectHelp,
   RowMissing: exportDefectHelp,
@@ -361,6 +359,14 @@ const uncompiledHelp =
   "This is a defect in qti, not in the package or the database: grizzle refused to compile qti's program before sending any SQL, so the database is as it was. Report it with the command you ran and everything it printed.";
 
 /**
+ * What to do next after an import whose commit got no answer and whose read-back failed
+ * (`CommitUnresolved` of `#pantry/import/package.ts`): the package may be stored, so importing it
+ * again before looking could store it twice.
+ */
+const commitUnresolvedHelp =
+  "The package may have been stored. Check that the local database cluster is running (`pnpm pg start` in the grizzle clone), then look for the package by the id the message names (`qti export --dry-run <dir> <package-id>`). Import the package again only if the export answers that no package has that id: importing a stored package again stores a second copy.";
+
+/**
  * Name the kind of a failure by what it is.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
@@ -385,6 +391,10 @@ const kindOf = (failure: unknown): Kind => {
     return "not-found";
   }
 
+  if (tag === "CommitUnresolved") {
+    return "database";
+  }
+
   if (tag === "PlatformError") {
     return "io";
   }
@@ -403,8 +413,9 @@ const kindOf = (failure: unknown): Kind => {
 /**
  * What to do next: the failure's own `help` when this program defined it and it has one; for a
  * named failure (`namedFailureOf`) the help of its own; for a program grizzle refused to compile
- * (`isUncompiled`), that a defect of qti left the database as it was; for a refusal the database
- * gave, the help of a law's refusal by the kind of its witness; else the help of its kind.
+ * (`isUncompiled`), that a defect of qti left the database as it was; for an import's unsettled
+ * commit, to look for the package before importing it again; for a refusal the database gave, the
+ * help of a law's refusal by the kind of its witness; else the help of its kind.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 const helpOf = (failure: unknown, kind: Kind): string => {
@@ -426,6 +437,10 @@ const helpOf = (failure: unknown, kind: Kind): string => {
     return uncompiledHelp;
   }
 
+  if (tagOf(failure) === "CommitUnresolved") {
+    return commitUnresolvedHelp;
+  }
+
   return Option.match(Option.flatMap(refusalFieldsOf(failure), databaseRefusalOf), {
     onNone: () => kindHelp[kind],
     onSome: ({ witness }) => databaseRefusalHelp[witness],
@@ -438,9 +453,10 @@ const helpOf = (failure: unknown, kind: Kind): string => {
  * An error this program defines names its own kind through {@link cliKind}. Every other failure is
  * mapped by what it is, without importing the module that defines it, so the program starts
  * without loading the engine: Effect's CLI errors are `cli-usage`, an `ImportRefused` is
- * `import-refused`, a `PackageNotFound` is `not-found`, a `PlatformError` is `io`, a missing or
- * unreadable local set-up is `config`, a program grizzle refused to compile before sending any SQL
- * is `internal`, and grizzle's other errors are `database`. Anything else, a defect included, is
+ * `import-refused`, a `PackageNotFound` is `not-found`, an import's `CommitUnresolved` is
+ * `database`, a `PlatformError` is `io`, a missing or unreadable local set-up is `config`, a
+ * program grizzle refused to compile before sending any SQL is `internal`, and grizzle's other
+ * errors are `database`. Anything else, a defect included, is
  * `internal`; the export's and the import's defects that {@link namedFailureOf} names keep that
  * kind, with a help of their own.
  *

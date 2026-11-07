@@ -165,8 +165,8 @@ export type LawFact = typeof ErrorLaw.Type;
 /**
  * How a refusal the database gave names the row that broke its laws, as the error object prints
  * it: the refusal's own `WitnessKind` (`#pantry/package/refusal-origin.ts`). `key` (grizzle's key
- * witness) and `row` (a row the host located) name one in the message, and `unreported` names
- * none, for a constraint PostgreSQL reports by its name alone.
+ * witness) and `row` (a row the caller holds) name one in the message, and `unreported` names
+ * none, for a foreign key or a law no row the ChangeSet states breaks as grizzle judges it.
  */
 export const ErrorWitness = WitnessKind;
 

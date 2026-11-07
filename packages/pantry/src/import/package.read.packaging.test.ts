@@ -13,7 +13,7 @@ import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { oracleCodecRule, packagingFixtures } from "#pantry/test/locate.ts";
+import { oracleCodecRule, packagingFixtures } from "#pantry/test/oracle-verdict.ts";
 
 const fixtures = inject("fixtures");
 

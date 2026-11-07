@@ -1,8 +1,9 @@
 /**
- * The importer's front door (`#pantry/import/package.ts`): its retry schedule on the host, and on
- * the lease its verdicts, its retries and `CommitUnknown`'s resolution.
+ * The importer's front door (`#pantry/import/package.ts`): its retry schedule and the read-back
+ * that settles a `CommitUnknown` on the host, and on the lease its verdicts, its retries and
+ * `CommitUnknown`'s resolution.
  *
- * A verdict on the lease is judged against the law oracle (`#pantry/test/locate.ts`
+ * A verdict on the lease is judged against the law oracle (`#pantry/test/oracle-verdict.ts`
  * `oracleVerdict`, a second implementation): a package the oracle accepts commits, and one it
  * refuses is refused under one of the rules its breaches keep. A disagreement is a finding of the
  * schema or the oracle, never of the package.
@@ -11,18 +12,23 @@ import { CommitUnknown, Db, query, TransientFailure, uuid, v } from "@bjornpagen
 import type { SerializationFailure, ServerError, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
-import { Clock, Effect, Fiber, Layer, Ref, Result, Schedule } from "effect";
+import { Clock, Effect, Fiber, Layer, Option, Ref, Result, Schedule } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage, retrySchedule } from "#pantry/import/package.ts";
+import {
+  CommitUnresolved,
+  importPackage,
+  retrySchedule,
+  settleCommitUnknown,
+} from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { importAgreesWithOracle } from "#pantry/test/locate.ts";
+import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -193,6 +199,59 @@ describe("import/package.test.ts, the retry budget", () => {
     // Oracle: the specification as a checker, `Schedule.recurs(2)`: three attempts in all.
     Effect.gen(function* gaveUp() {
       assert.strictEqual(yield* attemptsUnder(quickly, 3), 3);
+    }),
+  );
+});
+
+/**
+ * The id a settled `CommitUnknown` reads back, as the import gives it.
+ */
+const readBackId: Uuid = "00000000-0000-4000-8000-000000000001";
+
+describe("import/package.test.ts, CommitUnknown's read-back", () => {
+  plainIt.effect(
+    "fails with CommitUnresolved, carrying both failures, when the read-back fails",
+    () =>
+      // Oracle: the specification as a checker, grizzle's README on `CommitUnknown` ("read back
+      // before you run it again"): a read-back that fails settles nothing, so it must not answer as
+      // a read-back that found no package, which fails with the `CommitUnknown` alone.
+      Effect.gen(function* readBackFails() {
+        const commit = new CommitUnknown();
+        const failure = yield* Effect.flip(
+          settleCommitUnknown(commit, readBackId, Effect.fail(serializationFailure)),
+        );
+
+        assert.instanceOf(failure, CommitUnresolved, failure.message);
+        assert.strictEqual(failure.commit, commit);
+        assert.strictEqual(failure.cause, serializationFailure);
+        assert.include(failure.message, readBackId);
+        assert.include(failure.message, serializationFailure.message);
+      }),
+  );
+
+  plainIt.effect("fails with the CommitUnknown itself when the read-back finds no package", () =>
+    // Oracle: the specification as a checker, the same resolution: a read-back that succeeds and
+    // finds nothing says the apply did not commit.
+    Effect.gen(function* readBackAbsent() {
+      const commit = new CommitUnknown();
+      const failure = yield* Effect.flip(
+        settleCommitUnknown(commit, readBackId, Effect.succeed(Option.none())),
+      );
+
+      assert.strictEqual(failure, commit);
+    }),
+  );
+
+  plainIt.effect("answers committed when the read-back finds the package", () =>
+    // Oracle: the specification as a checker, the same resolution: a package read back committed.
+    Effect.gen(function* readBackPresent() {
+      const settled = yield* settleCommitUnknown(
+        new CommitUnknown(),
+        readBackId,
+        Effect.succeed(Option.some({ id: readBackId })),
+      );
+
+      assert.deepStrictEqual(settled, { kind: "committed" });
     }),
   );
 });

@@ -256,7 +256,7 @@ describe("the test helpers", () => {
   // The law oracle is a test's judge, so a test that judges by it says so in its name: it is named
   // `*.oracle.test.ts`, or `*.oracle.db.test.ts` in the database tier. The support under `src/test/`
   // may import it as well: the XDM generator names its laws, so a renamed law breaks the build, and
-  // the importer's test locator (`test/locate.ts`) finds the row a refusal breaks by its verdicts.
+  // `test/oracle-verdict.ts` predicts the verdict an import test holds the database's to.
   // A rule over names, not a list of files, so a lane that adds an oracle test names it and edits
   // nothing here.
   it("reach the law oracle only from tests named for it and from the test support", () => {
@@ -319,7 +319,7 @@ describe("the test helpers", () => {
       ["qti/metadata.oracle.test.ts", true],
       ["import/program.oracle.db.test.ts", true],
       ["test/gen/xdm.ts", true],
-      ["test/locate.ts", true],
+      ["test/oracle-verdict.ts", true],
       ["qti/metadata.test.ts", false],
       ["import/program.db.test.ts", false],
       ["test/oracle.test.ts", false],

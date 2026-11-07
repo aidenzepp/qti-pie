@@ -18,7 +18,7 @@ import {
   scopedPackage,
   memberCounts,
 } from "#pantry/test/gen/every-relation.ts";
-import { oracleVerdict } from "#pantry/test/locate.ts";
+import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

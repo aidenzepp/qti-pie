@@ -1,7 +1,8 @@
 /**
  * The packaging fixtures on the lease (the spec's 4.12 to 4.14), PostgreSQL the judge: each
- * fixture's verdict is the law oracle's (`#pantry/test/locate.ts`, a second implementation), and a
- * package read from its zip writes the same rows as the same package read from its directory.
+ * fixture's verdict is the law oracle's (`#pantry/test/oracle-verdict.ts`, a second
+ * implementation), and a package read from its zip writes the same rows as the same package read
+ * from its directory.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -12,7 +13,7 @@ import { importPackage } from "#pantry/import/package.ts";
 import { previewPackage } from "#pantry/import/preview.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import { importAgreesWithOracle, packagingFixtures } from "#pantry/test/locate.ts";
+import { importAgreesWithOracle, packagingFixtures } from "#pantry/test/oracle-verdict.ts";
 import { danglingIncludeName, materializeProcessing } from "#pantry/test/processing-fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 

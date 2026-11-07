@@ -1,24 +1,15 @@
 /**
- * The importer's test locator, and the law oracle (`#pantry/test/oracle.ts`) as the importer's
- * tests use it: the locator ({@link oracleLocate}, `ImportOptions.locate` of
- * `#pantry/import/package.ts`) finds where a package breaks the laws the database refused it under
- * without naming a row, over the same entries; beside it, the oracle's verdicts and the packaging
- * fixtures the import tests judge by them.
- *
- * Production imports run without it, so their refusals say the database names no row; a test that
- * imports through it gets the row the oracle finds, or a defect when the oracle finds none (the
- * schema and the oracle disagree). {@link oracleVerdict} is the verdict the same oracle predicts,
- * which an import test compares with the database's ({@link importAgreesWithOracle}), and
- * {@link oracleCodecRule} the rule its reader and codec refuse a package under before any law.
+ * The law oracle (`#pantry/test/oracle.ts`) as the importer's tests use it: the verdict it
+ * predicts of a package ({@link oracleVerdict}), which an import test compares with the
+ * database's ({@link importAgreesWithOracle}); the rule its reader and codec refuse a package under
+ * before any law ({@link oracleCodecRule}); and the packaging fixtures the import tests judge by
+ * it.
  */
-import type { Law } from "@bjornpagen/grizzle";
 import { assert } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import type { Array as Arr } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import type { Located } from "#pantry/import/package.ts";
-import { ImportRefused, lawNameOf } from "#pantry/import/refusal.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -28,32 +19,6 @@ import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
  * The oracle's tables over the installed grammar, built once.
  */
 const laws = lawsOf(grammar);
-
-/**
- * Find the first breach, in the oracle's order, of one of the laws a refusal names, as the row of
- * the node it breaks at: the breach's keys, with its document's path.
- *
- * @param files - The package's entries, as `readPackage` read them.
- * @param refused - The laws the refusal names.
- * @returns The node's row, or none when the oracle judges the package and finds no breach of any of
- *   the laws, or refuses it in the codec before any law is judged.
- */
-export const oracleLocate = (
-  files: readonly PackageFile[],
-  refused: Arr.NonEmptyReadonlyArray<Law>,
-): Effect.Effect<Option.Option<Located>> =>
-  Effect.map(judge(files, grammar, laws), (judgment) => {
-    if (judgment._tag !== "Judged") {
-      return Option.none();
-    }
-
-    const names = new Set(refused.flatMap((law) => Option.toArray(lawNameOf(law))));
-
-    return Option.map(
-      Option.fromNullishOr(judgment.breaches.find(({ law }) => names.has(law))),
-      ({ document, keys }): Located => ({ relation: "Node", values: { ...keys, document } }),
-    );
-  });
 
 /**
  * What the law oracle predicts of a package: accepted, or refused under one of the rules its
@@ -96,9 +61,8 @@ export const oracleCodecRule = (
   );
 
 /**
- * Import a package on the lease, with the oracle's locator, and hold its verdict to the oracle's:
- * accepted where the oracle accepts, and refused under one of the rules the oracle's breaches keep
- * where it refuses.
+ * Import a package on the lease, and hold its verdict to the oracle's: accepted where the oracle
+ * accepts, and refused under one of the rules the oracle's breaches keep where it refuses.
  *
  * @param dir - The package directory or `.zip` file.
  * @param label - Its name, for the assertion's message.
@@ -108,7 +72,7 @@ export const oracleCodecRule = (
 export const importAgreesWithOracle = (dir: string, label: string) =>
   Effect.gen(function* agreesWithOracle() {
     const expected = yield* oracleVerdict(yield* readPackage(dir));
-    const outcome = yield* Effect.result(importPackage(dir, { locate: oracleLocate }));
+    const outcome = yield* Effect.result(importPackage(dir));
 
     if (Result.isSuccess(outcome)) {
       assert.strictEqual(

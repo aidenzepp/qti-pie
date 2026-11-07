@@ -222,7 +222,7 @@ const refusedLaws = (checkName: string): readonly [Law, Law] => [
 /**
  * A command named `import` that fails as the database refuses a package: with the refusal
  * `refusalOfLaws` builds from AL1's admission check and a check of no law, under an unreported
- * witness, as the importer builds it when it passes no locator.
+ * witness, as the importer builds it when grizzle names no row.
  */
 const refusing = Command.make(
   "import",
@@ -365,8 +365,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
 });
 
 /**
- * A witness of each kind a database refusal names its row by, as the importer passes it: grizzle's
- * key witness, a located row, and none. A kind `WitnessKind` adds fails to compile here.
+ * A witness of each kind a database refusal names its row by: grizzle's key witness, a row the
+ * caller holds, and none. A kind `WitnessKind` adds fails to compile here.
  */
 const witnessesByKind = {
   key: { kind: "key", relation: "Attribute", values: { local: "href", node: "n-1" } },

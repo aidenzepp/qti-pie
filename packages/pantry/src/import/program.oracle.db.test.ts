@@ -43,7 +43,6 @@ import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
-import { oracleLocate } from "#pantry/test/locate.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -464,8 +463,8 @@ describe.skipIf(!hasLease)(
         // packages grows by two.
         Effect.gen(function* twice() {
           const before = yield* storedPackages;
-          const first = yield* importPackage(fixtures.simple, { locate: oracleLocate });
-          const second = yield* importPackage(fixtures.simple, { locate: oracleLocate });
+          const first = yield* importPackage(fixtures.simple);
+          const second = yield* importPackage(fixtures.simple);
 
           assert.notStrictEqual(first, second);
           assert.strictEqual(yield* storedPackages, before + 2n);
@@ -1151,12 +1150,11 @@ describe.skipIf(!hasLease)(
         );
       }
 
-      it.effect("refuses lti under attribute-lexical, locating the breach through the oracle", () =>
+      it.effect("refuses lti under attribute-lexical", () =>
         // Oracle: PostgreSQL, the value domain of cp:resource's type, its 3.0.0 enumeration (spec
-        // reading 67), with the importer's refusal: its rule, and the node the oracle finds (Q5.06's
-        // case).
+        // reading 67), with the importer's refusal: its rule (Q5.06's case).
         Effect.gen(function* lti() {
-          const refused = yield* Effect.flip(importPackage(fixtures.lti, { locate: oracleLocate }));
+          const refused = yield* Effect.flip(importPackage(fixtures.lti));
 
           assert.instanceOf(refused, ImportRefused);
           assert.strictEqual(

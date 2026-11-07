@@ -1,8 +1,6 @@
 /**
  * The bindings the fit laws judge, on the lease: the database's verdict over the small scope of
- * `#pantry/test/binding-cases.ts`, held to the law oracle's (`importAgreesWithOracle`), each import
- * through the oracle's locator, so a refusal under a law the oracle finds no breach of fails as the
- * `LocateDisagreement` it is.
+ * `#pantry/test/binding-cases.ts`, held to the law oracle's (`importAgreesWithOracle`).
  *
  * Lane N2's tier at dadbbbd4 found the `undeclared-response` fixture refused under BindingFit, over
  * the nil declaration's `single` and no base type, where the oracle refuses it under "Binding
@@ -34,7 +32,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { bindingCase, bindingSites, bindingStates } from "#pantry/test/binding-cases.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { importAgreesWithOracle } from "#pantry/test/locate.ts";
+import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
@@ -55,8 +53,7 @@ describe.skipIf(!hasLease)("import/binding-fit.db.test.ts, on the lease", () => 
     it.effect(
       "the database refuses every binding case under a rule the law oracle predicts, or accepts it where the oracle does",
       (ctx) =>
-        // Oracle: a second implementation, the law oracle's verdict over the same entries, and its
-        // locator over each refusal's laws. Bound: every site of binding-cases.ts under every
+        // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound: every site of binding-cases.ts under every
         // state, exhausted, one import each.
         searched(
           ctx,

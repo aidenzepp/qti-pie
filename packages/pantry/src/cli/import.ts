@@ -36,8 +36,8 @@ export const ImportData = Schema.Union([ImportStored, ImportPreview]);
  * do not judge the rows: a package it accepts can still be refused by the real import.
  *
  * A refusal prints its rule and explanation, and, when the database gave it, where each of its laws
- * is stated (`#pantry/cli/present.ts`). The command passes the importer no locator, so a law the
- * database checks itself is named without the row that broke it, and the refusal says so.
+ * is stated (`#pantry/cli/present.ts`), and the key of the row that broke them where grizzle's
+ * witness names one; where it names none, as for a foreign key, the refusal says so.
  *
  * `importPackage` and the dry run read through `readPackage`, which reads a zip as it reads a
  * directory. The engine loads when the handler runs, so `--help` and a usage error never pay for

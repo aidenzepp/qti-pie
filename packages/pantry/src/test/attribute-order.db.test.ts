@@ -5,8 +5,7 @@
  * refuses it refuses under the same rule, one of the law oracle's.
  *
  * Each case is a package of `#pantry/test/gen/attribute-order.ts`, drawn under its own swarm and
- * imported twice, as read and reordered, each through the oracle's locator, so a refusal names the
- * row the oracle finds. The free tier holds the oracle to the same relation
+ * imported twice, as read and reordered. The free tier holds the oracle to the same relation
  * (`attribute-order.oracle.test.ts`) and the export's path without the database
  * (`attribute-order.export.test.ts`).
  */
@@ -41,7 +40,7 @@ import {
   writtenOf,
 } from "#pantry/test/gen/attribute-order.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { oracleLocate, oracleVerdict } from "#pantry/test/locate.ts";
+import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
@@ -63,7 +62,7 @@ type Imported =
   | { readonly rule: string; readonly verdict: "refused" };
 
 /**
- * Import a package's files on the lease, through the oracle's locator.
+ * Import a package's files on the lease.
  *
  * @param files - The package's files.
  * @returns What the import did; a failure that is no refusal fails the test.
@@ -72,7 +71,7 @@ const importedOf = Effect.fn("test.attributeOrder.imported")(function* importedO
   files: readonly PackageFile[],
 ) {
   const dir = yield* scopedPackage(new Map(files.map(({ bytes, path }) => [path, bytes])));
-  const outcome = yield* Effect.result(importPackage(dir, { locate: oracleLocate }));
+  const outcome = yield* Effect.result(importPackage(dir));
   if (Result.isSuccess(outcome)) {
     return { id: outcome.success, verdict: "accepted" } satisfies Imported;
   }
