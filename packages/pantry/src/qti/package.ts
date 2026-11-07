@@ -77,8 +77,8 @@ import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
- * The path of a package's manifest, the one entry no `cp:file` lists and the one document no
- * resource names.
+ * The path of a package's manifest, the one entry no `cp:file` need list and the one document that
+ * is no resource's (spec reading 146).
  */
 export const manifestPath = "imsmanifest.xml";
 

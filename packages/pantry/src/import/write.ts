@@ -103,9 +103,9 @@ export interface NodeIds {
    */
   readonly entryAt: (path: string) => boolean;
   /**
-   * The document's type, the type of the resource that lists it, `none` for the manifest, which no
-   * resource lists: every node of the document copies it (`Node.documentType`), so a law can
-   * tell the manifest's elements from another document's.
+   * The document's type, the type of the resource that lists it, `none` for the manifest, which is
+   * no resource's document (spec reading 146): every node of the document copies it
+   * (`Node.documentType`), so a law can tell the manifest's elements from another document's.
    */
   readonly documentType: ListedDocument["resourceType"];
   /**
@@ -131,7 +131,7 @@ export interface NodeIds {
    *
    * @param path - A document's path in the package.
    * @returns The document a resource names there, none when no resource names one at the path,
-   *   the manifest's included (spec reading 115).
+   *   the manifest's included (spec readings 115 and 146).
    */
   readonly targetAt: (path: string) => Option.Option<ListedTarget>;
   /**
@@ -142,8 +142,9 @@ export interface NodeIds {
 }
 
 /**
- * A document as the importer lists it: its path, its tree as shred gives it, and the type of the
- * resource that names it, `none` for the manifest, which no resource names.
+ * A document as the importer lists it, one per path: its path, its tree as shred gives it, and the
+ * type of the resource that names it, `none` for the manifest, which is no resource's document
+ * (spec reading 146).
  */
 export interface ListedDocument {
   readonly path: string;
@@ -166,10 +167,10 @@ export interface PackageIds {
  * packages, every id fresh.
  *
  * A document's `documentAt` reads every listed document's document node, one per path, since the
- * import reads a path named under two resource types once (`#pantry/import/program.ts`). Its
- * `targetAt` reads only the documents a resource names: a site
- * never names the manifest, which no resource names (spec reading 115), so an href that resolves
- * to it names no target, and "Include target" refuses an include of it.
+ * import reads each path once, the manifest's as the manifest (`#pantry/import/program.ts`). Its
+ * `targetAt` reads only the documents a resource names: a site never names the manifest, which is
+ * no resource's document (spec readings 115 and 146), so an href that resolves to it names no
+ * target, and "Include target" refuses an include of it.
  *
  * @param documents - The package's documents, in the listing's order.
  * @param entries - The paths of the package's entries.

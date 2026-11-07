@@ -854,6 +854,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    146,
+    {
+      owner:
+        "the import's listing, one document per path with the manifest's `none` first (`listDocuments`, `src/import/program.ts`), under \"Document entry\"'s key over `Document`'s (package, path) and its containment of each document-typed href in a document of its type (`src/qti/package.ts`); the oracle's listing and its `typesAt` from the manifest's `none` (`judge`, `packageBreaches`, `src/test/oracle.ts`), held by `src/import/manifest-document.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

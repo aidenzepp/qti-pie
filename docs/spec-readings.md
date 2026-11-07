@@ -2575,3 +2575,32 @@ against it. A reading that is not an information-model-over-XSD case says which 
      fragment's types and language, stay the under-refusals reading 117 lists. This binds pantry and plate alike. This
      is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing
      ruling of 2026-11-05, from seat FIX-ASM.)
+
+146. **The manifest is the package's one document at `imsmanifest.xml`, and no resource's: a document-typed resource
+     whose `href` names it names no document of its type, and the manifest is read once.** IMS Content Packaging 1.2
+     sets the manifest apart from the files it describes: "The InterchangePackage shall include a Manifest object and
+     may include content files and control files", and a package interchange file "shall contain a single 1EdTech
+     manifest document object at the root of the PIF. That object shall be bound as an XML document named
+     imsmanifest.xml" (Information Model, Version 1.2 Public Draft v2.0, section 6.3, the InterchangePackage class).
+     "Resource and File are used to reference content files and control files" (section 6.4.1, the Manifest class),
+     and the manifest is neither: a content file embodies "the content described by the logical package" (section
+     3.1.3), and a control file "governs the binding of the information model" (section 3.1.4), of which the manifest
+     is the bound instance. QTI 3.0's profile says the same: "a single manifest called imsmanifest.xml MUST be present
+     at the root of the content package", and "each resource is declared using a resource element which references a
+     single separate XML instance file. All files in the Content Package other than the manifest must be referenced in
+     a resource declaration" (implementation guide, sections 6.1 and 6.1.1). So the manifest is the one document of
+     its path, of no resource type (`none`), and a path is one document, of one type (reading 93). A resource of a
+     type `RootOfType` maps whose `href` names `imsmanifest.xml` names no document of its type, and "Document entry"
+     (`entry-kind`) refuses it, as it refuses the href of a second type at a path a first type names. The manifest is
+     never read again as that resource's document: the importer and the law oracle each read it once, as the
+     manifest. A `cp:file` that names it is a locator "with no other implication as to the use of the resource so
+     identified" (section 6.11.3, the Href class), and is admitted, as is the `href` of a resource of a type
+     `RootOfType` does not map, which names no document (reading 93); no `cp:file` need list the manifest. A site
+     whose href names the manifest names no document (readings 114 and 115), whatever resource names it. This sets
+     aside the reading of the manifest as the document of each document-typed resource that named it, under which the
+     importer and the oracle read it twice: the copy wrote the manifest overlays again, a second `ManifestId` of the
+     package ("Manifest overlay"), broke "DocumentId key", "E1 derived" and `RootOfType`, and a site could target it.
+     The corpus moves no verdict: no resource or file of any manifest of its 29 zips names `imsmanifest.xml`, by a
+     scan of their 1,100 `resource` and `file` elements. This binds pantry and plate alike. This is not a case of
+     documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
+     2026-11-05, from seat FIX-MANIFEST.)

@@ -4,9 +4,10 @@
  *
  * The package is read whole (`readPackage`), its manifest is decoded and its schema version read,
  * and the manifest is shredded. The documents it names are the (href, type) pairs of its resources
- * whose type `RootOfType` maps (spec reading 93, `namedDocuments`), and each one an entry holds is
- * shredded in the version the manifest declares. A named href no entry holds is shredded as
- * nothing: the record's laws refuse it in the database (`entry-kind`). Then one id is minted per
+ * whose type `RootOfType` maps (spec reading 93, `namedDocuments`), and each path one names that an
+ * entry holds is shredded once, in the version the manifest declares: the manifest's path is the
+ * manifest's alone, no resource's document (reading 146). A named href no entry holds is shredded
+ * as nothing: the record's laws refuse it in the database (`entry-kind`). Then one id is minted per
  * package, node and attribute ({@link nodeIdsOf}), and the rows are built: each document's tree,
  * its document layer's flat rows, every overlay's, and the package's record.
  *
@@ -116,8 +117,8 @@ const shredFile = (file: PackageFile, version: (typeof versions)[number]) =>
   Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar)));
 
 /**
- * Read the package at `dir` and list its documents: the manifest, then each document its resources
- * name that an entry holds, in the manifest's order, each shredded.
+ * Read the package at `dir` and list its documents, one per path: the manifest, then each other
+ * document its resources name that an entry holds, in the manifest's order, each shredded once.
  *
  * @param dir - The package directory or `.zip` file.
  * @returns The entries and the documents; the reader's, the container's or the codec's refusal.
@@ -136,22 +137,22 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
   const named = namedDocuments(
     packageRowsOf(manifestTree, { idOf: provisionalIdOf, package: provisionalIdOf(0) }),
   );
-  const documents: ListedDocument[] = [
-    { path: manifest.path, resourceType: "none", tree: manifestTree },
-  ];
-  // A path is one document, of the first type a resource names it under (reading 93): a second
-  // type's href then names no document of its type, which "Document entry" refuses alone, and the
-  // document is judged once, where its sites place it.
-  const read = new Set<string>();
+  // A path is one document, of one type (reading 93): the manifest's, `none`, read before any
+  // resource names a path (reading 146), else the first type a resource names it under. A second
+  // type's href, the manifest's path's included, then names no document of its type, which
+  // "Document entry" refuses alone, and the document is read once and judged where its sites
+  // place it.
+  const documents = new Map<string, ListedDocument>([
+    [manifest.path, { path: manifest.path, resourceType: "none", tree: manifestTree }],
+  ]);
   for (const { path, type } of named.values()) {
     const file = byPath.get(path);
-    if (file !== undefined && !read.has(path)) {
-      read.add(path);
-      documents.push({ path, resourceType: type, tree: yield* shredFile(file, version) });
+    if (file !== undefined && !documents.has(path)) {
+      documents.set(path, { path, resourceType: type, tree: yield* shredFile(file, version) });
     }
   }
 
-  return { documents, files };
+  return { documents: [...documents.values()], files };
 });
 
 /**

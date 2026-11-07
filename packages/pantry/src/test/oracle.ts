@@ -2223,11 +2223,11 @@ const manifestEntry = "imsmanifest.xml";
 
 /**
  * The type of the resource that lists a document, as its nodes and attributes copy it
- * (`Node.documentType`): `none` for the package's manifest, its one `imsmanifest.xml`, which no
- * resource lists, and for every other document the type `RootOfType` pairs with its root's kind,
- * which is the type a resource lists it under wherever `RootOfType` holds: an external record
- * file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type pairs gives the empty
- * text, which is no type.
+ * (`Node.documentType`): `none` for the package's manifest, its one `imsmanifest.xml`, which is no
+ * resource's document (reading 146), and for every other document the type `RootOfType` pairs
+ * with its root's kind, which is the type a resource lists it under wherever `RootOfType` holds:
+ * an external record file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type pairs
+ * gives the empty text, which is no type.
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
@@ -4851,7 +4851,9 @@ const packageBreaches = (
     Option.exists(resource.handle, (type) =>
       grammar.package.rootOfType.rows.some((row) => row.type === type),
     );
-  const typesAt = new Map<string, ReadonlySet<string>>();
+  // The types each path is read under: the manifest's own, `none` (reading 146), then each type a
+  // resource names the path under.
+  const typesAt = new Map<string, ReadonlySet<string>>([[manifest.path, new Set(["none"])]]);
   for (const { path, resource } of documentsOf(resources, grammar)) {
     typesAt.set(path, new Set([...(typesAt.get(path) ?? []), resource.type]));
   }
@@ -4920,9 +4922,9 @@ const packageBreaches = (
       .flatMap((resource) => Option.toArray(resource.resolved))
       .filter(({ resolution }) => resolution.scope !== "entry")
       .map(({ path }) => breach("Document entry", { path })),
-    // A path two resources name under two document types is one document, of the first type
-    // (reading 93), so the second's href names no document of its type: "Document entry" alone,
-    // and the document is judged once, where its sites place it.
+    // A path two types name, the manifest's `none` among them, is one document, of the first type
+    // (readings 93 and 146), so the second's href names no document of its type: "Document entry"
+    // alone, and the document is judged once, where its sites place it.
     ...[...typesAt]
       .filter(([, types]) => types.size > 1)
       .map(([path, types]) =>
@@ -5598,7 +5600,9 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
     const byPath = new Map(files.map((file) => [file.path, file]));
     const documents: Listed[] = [];
     const missing: string[] = [];
-    const read = new Set<string>();
+    // A path is one document (reading 93), and the manifest's is the manifest, read above
+    // (reading 146), so a resource naming it reads nothing more.
+    const read = new Set<string>([manifestFile.path]);
     for (const [index, { path, resource }] of listing.entries()) {
       const file = byPath.get(path);
       if (file === undefined) {

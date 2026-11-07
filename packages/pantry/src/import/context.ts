@@ -12,11 +12,12 @@
  *
  * A site is a section ref, or an `xi:include` under a parent whose model holds an explicit include
  * particle (spec reading 114), whose href resolves, as its `ReferencePath` does, to a listed
- * document a resource names: never the manifest, which no resource names (reading 115: "Fragments
- * are packaged as separate resources"), so a site whose href names it names no document. The
- * contexts are a fixpoint over the sites: a fragment a fragment includes inherits through the
- * includer's own context, and a chain that returns to a document on it, which the database refuses
- * as an inclusion cycle, is cut where the walk meets the bound.
+ * document a resource names: never the manifest, which is no resource's document (reading 115:
+ * "Fragments are packaged as separate resources"; reading 146: a resource whose href names the
+ * manifest names no document), so a site whose href names it names no document. The contexts are
+ * a fixpoint over the sites: a fragment a fragment includes inherits through the includer's own
+ * context, and a chain that returns to a document on it, which the database refuses as an
+ * inclusion cycle, is cut where the walk meets the bound.
  */
 import { Option } from "effect";
 import type { Kind } from "#pantry/grammar/compose.ts";
@@ -77,8 +78,8 @@ export const isSiteKind = (kind: string, parentKind: string): boolean =>
 interface Listed {
   readonly idOf: (index: number) => NodeId;
   /**
-   * Whether a resource names the document, so a site may name it: every listed document but the
-   * manifest.
+   * Whether the document is a resource's, so a site may name it: every listed document but the
+   * manifest, which is no resource's (spec reading 146).
    */
   readonly named: boolean;
   readonly path: string;
