@@ -110,6 +110,18 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: FB-EXPR's Rounding guard (33a71bb7) ran at a load average below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/qti/item-ref-href.oracle.test.ts",
+    "measurement owed: FIX-ITEMREF's 128-package exhaust (65a3c4dd) ran 8.8 s at a load average of 21 to 22, its slowest run; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/qti/duplicate-declaration.oracle.test.ts",
+    "measurement owed: FIX-DUPDECL's 21-package guard (8c6394a1) ran in a run of 2026-11-07 that recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/collapsed-values.oracle.test.ts",
+    "measurement owed: FIX-ATOMIC's 160-package guard (9a9074d4) ran in a run of 2026-11-07 that recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/test/census.migration.test.ts",
     "LANES.md: no lane touches census.migration.test.ts, so its timeout is named when its owner edits it",
   ],

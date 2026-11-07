@@ -32,12 +32,6 @@ import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
- * The timeout, in milliseconds, of the exhaustion: a hang guard, never a budget. Measured
- * 2026-11-07: 8.8 s at a load average of 21 to 22, its slowest run.
- */
-const testTimeoutMs = 600_000;
-
-/**
  * The oracle's law tables over the composed grammar.
  */
 const laws = lawsOf(grammar);
@@ -246,6 +240,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("an item ref's href", (
           );
         }).pipe(Effect.scoped),
       ),
-    testTimeoutMs,
+    600_000,
   );
 });
