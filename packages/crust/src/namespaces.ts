@@ -1,5 +1,6 @@
 import { Option, Result } from "effect";
-import { NAME_START } from "#crust/dtd.ts";
+import { qnameOf } from "#crust/names.ts";
+import type { QName } from "#crust/names.ts";
 import type { Attribute, Element } from "#crust/tree.ts";
 import { isNamespaceName } from "#crust/uri.ts";
 
@@ -51,51 +52,6 @@ export const rootScope = {
   xml: XML_NAMESPACE,
   xmlns: XMLNS_NAMESPACE,
 } as const satisfies Scope;
-
-/**
- * The first character of a name, as XML 1.0's [4] NameStartChar admits it.
- */
-const nameStart = new RegExp(`^[${NAME_START}]`, "u");
-
-/**
- * A name's two parts, by Namespaces in XML 1.0's [7] QName: the prefix, empty for an unprefixed
- * name, and the local part.
- */
-interface QName {
-  readonly local: string;
-  readonly prefix: string;
-}
-
-/**
- * Split a name the parser has read as an XML Name into its QName parts.
- *
- * A Name is a QName when it holds at most one colon, which neither begins nor ends it, and the
- * local part after it begins with a NameStartChar other than the colon ([7] to [9] and [4]
- * NCName): `a:1b` is a Name and no QName, its local part beginning with a digit.
- *
- * @param name - The name, an XML Name.
- * @returns The parts; `None` when the name is no QName.
- */
-const qnameOf = (name: string): Option.Option<QName> => {
-  const parts = name.split(":");
-  const [prefix = "", local = ""] = parts.length === 1 ? ["", name] : parts;
-
-  return parts.length <= 2 &&
-    local !== "" &&
-    nameStart.test(local) &&
-    (parts.length === 1 || prefix !== "")
-    ? Option.some({ local, prefix })
-    : Option.none();
-};
-
-/**
- * Test whether a name the parser has read as an XML Name is an NCName: a Name with no colon, as
- * Namespaces in XML 1.0 section 7 asks of every entity name and processing instruction target.
- *
- * @param name - The name, an XML Name.
- * @returns Whether it holds no colon.
- */
-export const isNCName = (name: string): boolean => !name.includes(":");
 
 /**
  * Check a namespace declaration's binding against Namespaces in XML's constraint Reserved Prefixes

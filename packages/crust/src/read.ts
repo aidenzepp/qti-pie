@@ -2,10 +2,11 @@ import { Effect, Option, Result } from "effect";
 import { SaxesParser } from "saxes";
 import { decode } from "#crust/decode.ts";
 import type { Decoded } from "#crust/decode.ts";
-import { NAME_CHAR, NAME_START, lexProlog, substitute, undeclaredEntity } from "#crust/dtd.ts";
+import { lexProlog, positionOf, substitute, undeclaredEntity } from "#crust/dtd.ts";
 import type { AttlistEntry, Prolog, Substituted, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
-import { isNCName, namespacesVersionOf, resolved, rootScope } from "#crust/namespaces.ts";
+import { NAME_CHAR, NAME_START, isNCName, productionViolation } from "#crust/names.ts";
+import { namespacesVersionOf, resolved, rootScope } from "#crust/namespaces.ts";
 import type { Scope } from "#crust/namespaces.ts";
 import { rebuild } from "#crust/rebuild.ts";
 import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
@@ -73,6 +74,10 @@ const PREDEFINED: ReadonlySet<string> = new Set(["lt", "gt", "amp", "apos", "quo
  * body already holds in the sentinel range, whether written out or named by a character reference.
  */
 interface Scanned {
+  /**
+   * The first reference whose name is no NCName, and where it stands in the body.
+   */
+  readonly colon: Option.Option<{ readonly name: string; readonly offset: number }>;
   readonly names: readonly string[];
   readonly used: ReadonlySet<number>;
 }
@@ -84,8 +89,13 @@ interface Scanned {
 const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Scanned => {
   const names = new Set<string>();
   const used = sentinelsWritten(body);
+  let colon: Scanned["colon"] = Option.none();
   for (const match of body.matchAll(SCAN)) {
     const { decimal, hex, name } = match.groups ?? {};
+    if (name !== undefined && Option.isNone(colon) && !isNCName(name)) {
+      colon = Option.some({ name, offset: match.index });
+    }
+
     if (name !== undefined && !PREDEFINED.has(name) && !declared.has(name)) {
       names.add(name);
     } else if (hex !== undefined || decimal !== undefined) {
@@ -93,57 +103,79 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
     }
   }
 
-  return { names: [...names], used };
+  return { colon, names: [...names], used };
 };
 
 /**
  * Give each undeclared entity name in the body a stand-in character, or refuse.
  *
- * The prolog's {@link Prolog.undeclared} treatment decides, as it decided each attribute default's
- * references: a refused reference is a well-formedness error, refused naming the entity. A kept one
- * may be declared in the external subset, which is never read: the name gets a private use
- * character that occurs nowhere in the body, and the parser appends it as plain text.
+ * A reference whose name holds a colon is refused first, as a well-formedness error at the
+ * reference: Namespaces in XML section 7 asks every entity name to be an NCName, and the internal
+ * subset declares none that is not (`#crust/dtd.ts`). Then the prolog's {@link Prolog.undeclared}
+ * treatment decides, as it decided each attribute default's references: a refused reference is a
+ * well-formedness error, refused naming the entity. A kept one may be declared in the external
+ * subset, which is never read: the name gets a private use character that occurs nowhere in the
+ * body, and the parser appends it as plain text.
  *
- * @returns The stand-in character of each name; the map is empty when the body has no such
- *   reference.
+ * @param substituted - The document text with its declared entities substituted.
+ * @param prolog - The prolog, for its declared entities and its treatment of undeclared ones.
+ * @returns The stand-in character of each name, the map empty when the body has no such
+ *   reference; the `WellFormednessError` for a reference whose name holds a colon, or the
+ *   `ReaderRefusal` for one the treatment refuses.
  */
 const assignSentinels = (
   substituted: Substituted,
   prolog: Prolog,
-): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal> =>
-  Effect.suspend(() => {
-    const scanned = scanReferences(substituted.body.slice(prolog.bodyStart), prolog.entities);
-    const [firstName] = scanned.names;
-    if (firstName === undefined) {
-      return Effect.succeed(new Map<string, string>());
-    }
+): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal | WellFormednessError> =>
+  Effect.suspend(
+    (): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal | WellFormednessError> => {
+      const scanned = scanReferences(substituted.body.slice(prolog.bodyStart), prolog.entities);
+      if (Option.isSome(scanned.colon)) {
+        const { name, offset } = scanned.colon.value;
+        const at = prolog.bodyStart + offset;
+        const position = positionOf(substituted.body, at);
 
-    if (prolog.undeclared._tag === "refused") {
-      return Effect.fail(undeclaredEntity(firstName, prolog.undeclared.why));
-    }
-
-    const sentinels = new Map<string, string>();
-    let point = SENTINEL_FIRST;
-    for (const name of scanned.names) {
-      while (point <= SENTINEL_LAST && scanned.used.has(point)) {
-        point += 1;
-      }
-
-      if (point > SENTINEL_LAST) {
         return Effect.fail(
-          undeclaredEntity(
-            name,
-            "the document leaves no private use character free to stand for it",
-          ),
+          new WellFormednessError({
+            afterSubstitution: substituted.afterSubstitution(at),
+            ...position,
+            message: `${String(position.line)}:${String(position.column)}: entity reference: ${Option.getOrElse(productionViolation(name, "NCName"), () => name)}.`,
+          }),
         );
       }
 
-      sentinels.set(name, String.fromCodePoint(point));
-      point += 1;
-    }
+      const [firstName] = scanned.names;
+      if (firstName === undefined) {
+        return Effect.succeed(new Map<string, string>());
+      }
 
-    return Effect.succeed(sentinels);
-  });
+      if (prolog.undeclared._tag === "refused") {
+        return Effect.fail(undeclaredEntity(firstName, prolog.undeclared.why));
+      }
+
+      const sentinels = new Map<string, string>();
+      let point = SENTINEL_FIRST;
+      for (const name of scanned.names) {
+        while (point <= SENTINEL_LAST && scanned.used.has(point)) {
+          point += 1;
+        }
+
+        if (point > SENTINEL_LAST) {
+          return Effect.fail(
+            undeclaredEntity(
+              name,
+              "the document leaves no private use character free to stand for it",
+            ),
+          );
+        }
+
+        sentinels.set(name, String.fromCodePoint(point));
+        point += 1;
+      }
+
+      return Effect.succeed(sentinels);
+    },
+  );
 
 /**
  * The UTF-16 index in `text` of the code point at `position`, which `saxes` counts in code points.
