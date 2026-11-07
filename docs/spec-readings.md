@@ -2044,6 +2044,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
      - its IDs and IDREFs are its assembly's: an item's IDREF may name an ID its fragment holds, a fragment's IDREF one
        its item holds, and a fragment's IDs are distinct from its item's ("Idref target" and "DocumentId key" over the
        assembly);
+     - its catalog references are its assembly's: a `data-catalog-idref` in a fragment names a `qti-catalog` of the
+       item that places it, and a test's names one of the test or of a section document it places ("Catalog reference"
+       over the assembly, as "Idref target");
      - its choices and hottexts are its item's: their identifiers are distinct from the item's and from every other
        placed fragment's ("Choice identifier key" over the assembly), and name no variable of the item ("Choice not
        variable" against the item's declarations and built-in variables);
@@ -2069,7 +2072,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      declarations and listed by its records; and a rule fragment's types and language, the type laws over its references
      and expressions (P20 to P29) and the processing language its rules are written in (O4), which read its variables
      untyped and its language as none. This binds pantry and plate alike. This is not a case of documents in conflict.
-     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
+     2026-11-07 by the Mind, decision 416, on audit e8db90e1's F2.)
 
 118. **An include holds at most one fallback, and its `accept` and `accept-language` hold header characters alone,
      though `XInclude.xsd` admits more.** XInclude says "The children property of the xi:include element may include a

@@ -6,8 +6,11 @@
  * (`#pantry/test/oracle.ts`); the import's rows are judged by the schema's own laws on the host
  * (`#pantry/test/host-judge.ts`), and the two verdicts must be one.
  *
- * The cases are the audit's `ccat` inputs (F2), built here, and a fragment two items include whose
- * catalog only one of them holds.
+ * The cases are the audit's `ccat` inputs (F2), built here, a fragment two items include whose
+ * catalog only one of them holds, and a test and the section document it places, each naming a
+ * catalog in the other's rubric: a test's assembly places its section documents whole, so its
+ * reference may name theirs, as "Idref target" may, and a section document's assembly does not
+ * place its test.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -16,7 +19,8 @@ import { lawIdentity, ruleOfLaws } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
@@ -91,6 +95,15 @@ const itemResourceOf = (identifier: string, href: string): string =>
 const fragmentResource = `<resource identifier="F" type="imsqti_fragment_xmlv3p0" href="fragment.xml"><file href="fragment.xml"/></resource>`;
 
 /**
+ * A package's files as entries.
+ *
+ * @param files - Each path's text.
+ * @returns The entries.
+ */
+const entriesOf = (files: Readonly<Record<string, string>>): PackageEntries =>
+  new Map(Object.entries(files).map(([path, text]) => [path, new TextEncoder().encode(text)]));
+
+/**
  * A package of one item that includes the fragment.
  *
  * @param spec - The package.
@@ -107,18 +120,89 @@ const onePackage = ({
   readonly before: string;
   readonly catalog: boolean;
   readonly fragment: string;
-}) => ({
-  "fragment.xml": fragmentOf(fragment),
-  "imsmanifest.xml": manifestOf(`${itemResourceOf("R", "item.xml")}${fragmentResource}`),
-  "item.xml": itemOf({ before, catalog, identifier: "item" }),
-});
+}) =>
+  entriesOf({
+    "fragment.xml": fragmentOf(fragment),
+    "imsmanifest.xml": manifestOf(`${itemResourceOf("R", "item.xml")}${fragmentResource}`),
+    "item.xml": itemOf({ before, catalog, identifier: "item" }),
+  });
+
+/**
+ * A rubric block holding a paragraph with the given attribute and, where it holds one, a catalog
+ * `C`.
+ *
+ * @param spec - The rubric.
+ * @param spec.attribute - The paragraph's attribute, as written.
+ * @param spec.catalog - Whether it writes a `qti-catalog` with the id `C`.
+ * @returns The `qti-rubric-block` element.
+ */
+const rubricOf = ({
+  attribute,
+  catalog,
+}: {
+  readonly attribute: string;
+  readonly catalog: boolean;
+}): string =>
+  `<qti-rubric-block use="instructions" view="candidate"><qti-content-body><p ${attribute}>Rubric.</p></qti-content-body>${catalog ? `<qti-catalog-info><qti-catalog id="C"><qti-card support="spoken"><qti-html-content/></qti-card></qti-catalog></qti-catalog-info>` : ""}</qti-rubric-block>`;
+
+/**
+ * Replace the one occurrence of a text in an entry of a package.
+ *
+ * @param entries - The package's entries.
+ * @param path - The entry.
+ * @param search - The text, which must occur exactly once.
+ * @param replacement - Its replacement.
+ * @returns The entries, that entry edited.
+ */
+const replaced = (
+  entries: PackageEntries,
+  path: string,
+  search: string,
+  replacement: string,
+): PackageEntries => {
+  const text = new TextDecoder().decode(entries.get(path));
+  assert.lengthOf(text.split(search), 2, `${path}: ${search}`);
+
+  return new Map([
+    ...entries,
+    [path, new TextEncoder().encode(text.replace(search, () => replacement))],
+  ]);
+};
+
+/**
+ * A package of a test and the section document it places, each with a rubric: the test's in its
+ * first section, the section document's before its item ref.
+ *
+ * @param spec - The package.
+ * @param spec.section - The section document's rubric.
+ * @param spec.test - The test's rubric.
+ * @returns The package's entries.
+ */
+const testPackage = ({
+  section,
+  test,
+}: {
+  readonly section: Parameters<typeof rubricOf>[0];
+  readonly test: Parameters<typeof rubricOf>[0];
+}): PackageEntries =>
+  replaced(
+    replaced(
+      everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 }),
+      "test.xml",
+      '<qti-assessment-section identifier="first" title="First" visible="true">\n',
+      `<qti-assessment-section identifier="first" title="First" visible="true">\n      ${rubricOf(test)}\n`,
+    ),
+    "section.xml",
+    '  <qti-assessment-item-ref identifier="placedItem"',
+    `  ${rubricOf(section)}\n  <qti-assessment-item-ref identifier="placedItem"`,
+  );
 
 /**
  * One case: a package and the rule both judges must give, or `accepted`.
  */
 interface CatalogCase {
   readonly expected: string;
-  readonly files: Readonly<Record<string, string>>;
+  readonly files: PackageEntries;
   readonly name: string;
 }
 
@@ -149,27 +233,51 @@ const cases: readonly CatalogCase[] = [
   },
   {
     expected: "idref-target",
-    files: {
+    files: entriesOf({
       "fragment.xml": fragmentOf('data-catalog-idref="C"'),
       "imsmanifest.xml": manifestOf(
         `${itemResourceOf("R", "item.xml")}${itemResourceOf("R2", "item2.xml")}${fragmentResource}`,
       ),
       "item.xml": itemOf({ before: "", catalog: true, identifier: "item" }),
       "item2.xml": itemOf({ before: "", catalog: false, identifier: "item2" }),
-    },
+    }),
     name: "a fragment two items include, one holding the catalog and one not",
   },
   {
     expected: "accepted",
-    files: {
+    files: entriesOf({
       "fragment.xml": fragmentOf('data-catalog-idref="C"'),
       "imsmanifest.xml": manifestOf(
         `${itemResourceOf("R", "item.xml")}${itemResourceOf("R2", "item2.xml")}${fragmentResource}`,
       ),
       "item.xml": itemOf({ before: "", catalog: true, identifier: "item" }),
       "item2.xml": itemOf({ before: "", catalog: true, identifier: "item2" }),
-    },
+    }),
     name: "a fragment two items include, both holding the catalog",
+  },
+  {
+    expected: "accepted",
+    files: testPackage({
+      section: { attribute: "", catalog: true },
+      test: { attribute: 'data-catalog-idref="C"', catalog: false },
+    }),
+    name: "a test's reference names the catalog of a section document it places",
+  },
+  {
+    expected: "idref-target",
+    files: testPackage({
+      section: { attribute: 'data-catalog-idref="C"', catalog: false },
+      test: { attribute: "", catalog: true },
+    }),
+    name: "a section document's reference names the catalog of the test that places it",
+  },
+  {
+    expected: "idref-target",
+    files: testPackage({
+      section: { attribute: "", catalog: true },
+      test: { attribute: 'data-catalog-idref="Z"', catalog: false },
+    }),
+    name: "a test's reference names no catalog of the test or of a section document it places",
   },
 ];
 
@@ -183,13 +291,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           for (const { expected, files, name } of cases) {
             yield* Effect.scoped(
               Effect.gen(function* oneCase() {
-                const entries = new Map(
-                  Object.entries(files).map(([path, text]) => [
-                    path,
-                    new TextEncoder().encode(text),
-                  ]),
-                );
-                const dir = yield* scopedPackage(entries);
+                const dir = yield* scopedPackage(files);
                 const verdict = yield* oracleVerdict(yield* readPackage(dir));
                 const program = yield* readProgram(dir);
                 const { broken } = judge(hostRowsOf(program.inputs), laws);
