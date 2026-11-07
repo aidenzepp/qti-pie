@@ -8,12 +8,15 @@
  * per key. Wild: a batch whose one probe changed, under a cache that holds the report of the batch
  * before it, keys anew and runs the validator again, as a change to the version, a pin, the catalog
  * or the driver does; a cache file that holds no report is a miss.
+ *
+ * A slot keeps one generation: after a run, the reports of the keys it asked for, and nothing an
+ * earlier run kept under another key or left half-written.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Ref } from "effect";
 import { Digest } from "effect/crypto";
-import { cachedReport, verdictKey } from "#pantry/test/gen/verdict-cache.ts";
+import { cachedReport, keepOnly, slotOf, verdictKey } from "#pantry/test/gen/verdict-cache.ts";
 import type { VerdictInputs } from "#pantry/test/gen/verdict-cache.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import type { XmllintReport } from "#pantry/xml/oracle.ts";
@@ -128,6 +131,42 @@ describe("test/gen/verdict-cache.ts", () => {
         });
         assert.deepStrictEqual(torn, { code: 0, report: `${reader}/batch-0.xml validates\n` });
         assert.deepStrictEqual(yield* Ref.get(runs), ["miss", "changed probe", "torn file"]);
+      }).pipe(Effect.scoped, Effect.provide(CacheLayer)),
+  );
+
+  it.effect(
+    "keeps a slot's latest run alone, a stale generation removed and the current kept",
+    () =>
+      Effect.gen(function* evict() {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* scratchDirectory("verdict-cache-");
+        const slot = `${root}/vocab-derive-models-3.0.1`;
+        const current = yield* verdictKey(inputs);
+        const [, probe] = changed[0] ?? ["", inputs];
+        const stale = yield* verdictKey(probe);
+        const kept = { code: 0, report: "batch-0.xml validates\n" };
+
+        yield* fs.makeDirectory(slot, { recursive: true });
+        yield* Effect.forEach(
+          [`${current}.json`, `${stale}.json`, `${current}.json.41.7.tmp`],
+          (name) => fs.writeFileString(`${slot}/${name}`, JSON.stringify(kept)),
+          { discard: true },
+        );
+
+        assert.deepStrictEqual(
+          yield* keepOnly(slot, [current]),
+          [`${current}.json.41.7.tmp`, `${stale}.json`].toSorted(),
+        );
+        assert.deepStrictEqual(yield* fs.readDirectory(slot), [`${current}.json`]);
+        assert.deepStrictEqual(
+          yield* cachedReport(slot, current, root, Effect.die("a kept report is read, not run")),
+          kept,
+        );
+        assert.deepStrictEqual(yield* keepOnly(`${root}/no-slot`, [current]), []);
+        assert.strictEqual(
+          slotOf("vocab-open", "3.0.0").endsWith("/xmllint-verdicts/vocab-open-3.0.0"),
+          true,
+        );
       }).pipe(Effect.scoped, Effect.provide(CacheLayer)),
   );
 });

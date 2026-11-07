@@ -281,6 +281,7 @@ const judgeVersion = Effect.fn("test.judgeVersion")(function* judgeVersion(versi
   }
 
   const errors = yield* validate(
+    "vocab-derive-models",
     `${oracleRoot}/${version}`,
     driver,
     posed.map(({ probe }) => probe),

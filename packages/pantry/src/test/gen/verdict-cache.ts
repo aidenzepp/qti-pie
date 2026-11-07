@@ -9,22 +9,68 @@
  * anew. A report names the folder its batch was written in; the cache keeps it with that folder
  * read as a placeholder, so a run in another scratch folder reads it back as its own.
  *
- * Nothing evicts an entry: a key no run asks for again is a file no run reads. Removing
- * `work/xmllint-verdicts` costs one uncached run.
+ * Each suite keeps one version's reports in a slot of its own ({@link slotOf}), and a run leaves in
+ * its slot only the reports it read or wrote ({@link keepOnly}), so the cache holds one generation:
+ * the reports of each slot's latest run. A change to the pins, the validator, the driver or a probe
+ * writes new reports, and the old ones leave with the run that wrote the new. A slot belongs to one
+ * suite, whose file runs in one worker, so no two runs share it at once.
  */
 import path from "node:path";
 import { Effect, FileSystem, Option, Random, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { workRoot } from "#pantry/test/scratch.ts";
 import { sourcePaths } from "#pantry/vocab/derive/sources.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { xmllintRun } from "#pantry/xml/oracle.ts";
 import type { XmllintReport } from "#pantry/xml/oracle.ts";
 
 /**
- * The folder the cache keeps its reports in, one file per key.
+ * The folder the cache keeps its slots in.
  */
 export const verdictCacheRoot = path.join(workRoot, "xmllint-verdicts");
+
+/**
+ * The folder one suite keeps one version's reports in, one file per key.
+ *
+ * @param suite - The suite, a name of its own among the suites that validate, as
+ *   `vocab-derive-models`.
+ * @param version - The version its driver is.
+ * @returns The slot's folder.
+ */
+export const slotOf = (suite: string, version: SchemaVersion): string =>
+  path.join(verdictCacheRoot, `${suite}-${version}`);
+
+/**
+ * Remove every file of a slot but the reports of the given keys, so the slot keeps its latest
+ * run's reports alone: a report an earlier run kept, under a key this run did not ask for, and a
+ * file a stopped run left half-written.
+ *
+ * @param slot - The slot's folder; none is a slot with nothing to remove.
+ * @param keys - The keys of the batches the run read or wrote.
+ * @returns The names of the files it removed.
+ */
+export const keepOnly = Effect.fn("test.verdictCache.keepOnly")(function* keepOnly(
+  slot: string,
+  keys: readonly string[],
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const kept = new Set(keys.map((key) => `${key}.json`));
+  const none: readonly string[] = [];
+  const names = yield* fs.readDirectory(slot).pipe(
+    Effect.catchIf(
+      (error) => error.reason._tag === "NotFound",
+      () => Effect.succeed(none),
+    ),
+  );
+  const stale = names.filter((name) => !kept.has(name)).toSorted();
+
+  yield* Effect.forEach(stale, (name) => fs.remove(path.join(slot, name), { force: true }), {
+    discard: true,
+  });
+
+  return stale;
+});
 
 /**
  * Everything a batch's report depends on, each as the run writes or reads it: the validator's

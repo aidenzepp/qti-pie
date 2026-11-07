@@ -295,6 +295,7 @@ const judgeVersion = Effect.fn("test.judgeAttributes")(function* judgeVersion(
   }
 
   const errors = yield* validate(
+    "vocab-derive-declarations",
     `${oracleRoot}/${version}`,
     driver,
     posed.map(({ probe }) => probe),

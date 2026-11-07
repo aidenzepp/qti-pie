@@ -38,8 +38,9 @@ import { catalogText } from "#pantry/test/xsd-catalog.ts";
 import { xsNamespace } from "#pantry/vocab/namespaces.ts";
 import {
   cachedReport,
+  keepOnly,
   pinDigestsOf,
-  verdictCacheRoot,
+  slotOf,
   verdictKey,
   xmllintVersion,
 } from "#pantry/test/gen/verdict-cache.ts";
@@ -288,9 +289,12 @@ export const probeErrorsOf = (
  * report reader reads libxml2 2.12's messages and the unprefixed ones 2.13 and later write alike.
  * Probe `i` of a batch stands on its line `i + 2`, so each error is the probe's on the line it
  * names; a warning judges nothing. A batch's report is read from the verdict cache
- * (`#pantry/test/gen/verdict-cache.ts`) when one is kept under the key of everything it depends
- * on, and its run's report is kept there otherwise.
+ * (`#pantry/test/gen/verdict-cache.ts`) when the suite's slot keeps one under the key of everything
+ * it depends on, and its run's report is kept there otherwise; the slot then keeps this call's
+ * reports alone.
  *
+ * @param suite - The suite that validates, its cache slot's name with the driver's version, as
+ *   `vocab-derive-models`.
  * @param directory - A scratch directory under the package's `work/`, which this writes the
  *   driver, the catalog and the batches into.
  * @param driver - The version's driver.
@@ -300,6 +304,7 @@ export const probeErrorsOf = (
  *   not run or does not compile the driver.
  */
 export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
+  suite: string,
   directory: string,
   driver: Driver,
   probes: readonly string[],
@@ -307,6 +312,7 @@ export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
   const fs = yield* FileSystem.FileSystem;
   const cache = yield* Effect.orDie(xsdDirectory);
   const chunks = Arr.chunksOf(probes, batchSize);
+  const slot = slotOf(suite, driver.version);
 
   const inputs = {
     catalog: catalogText(cache),
@@ -328,9 +334,10 @@ export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
 
         yield* fs.writeFileString(batch, text);
 
+        const key = yield* verdictKey({ ...inputs, batch: text });
         const report = yield* cachedReport(
-          verdictCacheRoot,
-          yield* verdictKey({ ...inputs, batch: text }),
+          slot,
+          key,
           directory,
           xmllintReportOf({
             catalog: `${directory}/catalog.xml`,
@@ -340,16 +347,24 @@ export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
         );
         const [verdict] = yield* verdictsOfReport([batch], report);
 
-        return yield* probeErrorsOf(
-          batch,
-          chunk.length,
-          verdict?._tag === "Invalid" ? verdict.messages : [],
-        );
+        return {
+          errors: yield* probeErrorsOf(
+            batch,
+            chunk.length,
+            verdict?._tag === "Invalid" ? verdict.messages : [],
+          ),
+          key,
+        };
       }),
     { concurrency: 4 },
   );
 
-  return judged.flat();
+  yield* keepOnly(
+    slot,
+    judged.map(({ key }) => key),
+  );
+
+  return judged.flatMap(({ errors }) => errors);
 });
 
 /**
