@@ -99,6 +99,34 @@ export interface Reduced {
 }
 
 /**
+ * The isolation phase's budget: how many of the laws the run raised but never broke alone it
+ * reduces a package of toward that law alone, the rarest first, and the tries each reduction takes.
+ */
+export interface Isolating {
+  readonly laws: number;
+  readonly tries: number;
+}
+
+/**
+ * No isolation phase.
+ */
+const noIsolation: Isolating = { laws: 0, tries: 0 };
+
+/**
+ * Read the laws the oracle raises over a judged package.
+ *
+ * @param judgment - The judgment.
+ * @returns The laws, none where the oracle accepts or its codec refuses.
+ */
+const lawsOf = (judgment: Judged): readonly string[] =>
+  judgment.summary.oracle.startsWith("laws ")
+    ? judgment.summary.oracle
+        .slice("laws ".length)
+        .split(", ")
+        .filter((law) => law !== "")
+    : [];
+
+/**
  * What a run learned of each law the oracle raised (the history's 5.1, a law broken alone): the
  * candidates that raised it, whether one raised it alone, and the laws every candidate that raised
  * it raised beside it, the evidence that a law no candidate broke alone is subsumed by another.
@@ -127,6 +155,9 @@ export interface HuntReport {
  * @param budget - The run's budget.
  * @param tries - The most candidates each reduction judges.
  * @param sketch - The run.
+ * @param isolating - The isolation phase's budget: after breeding, each law raised but never broken
+ *   alone has a package that raised it reduced toward it alone, a cut kept only where the law
+ *   still breaks and no more laws break beside it; none by default.
  * @returns The report.
  */
 export const hunt = Effect.fnUntraced(function* hunt(
@@ -135,6 +166,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
   budget: Budget,
   tries: number,
   sketch: RunSketch,
+  isolating: Isolating = noIsolation,
 ) {
   let judged = 0;
   const judgeAt = (genome: Genome) => {
@@ -162,18 +194,18 @@ export const hunt = Effect.fnUntraced(function* hunt(
   const raised = new Map<string, number>();
   const beside = new Map<string, Set<string>>();
   const alone = new Set<string>();
-  const isolate = (judgment: Judged): void => {
-    const laws = judgment.summary.oracle.startsWith("laws ")
-      ? judgment.summary.oracle
-          .slice("laws ".length)
-          .split(", ")
-          .filter((law) => law !== "")
-      : [];
+  const firstRaising = new Map<string, Genome>();
+  const isolate = (genome: Genome, judgment: Judged): void => {
+    const laws = lawsOf(judgment);
     if (laws.length === 1) {
       alone.add(laws[0] ?? "");
     }
 
     for (const law of laws) {
+      if (!firstRaising.has(law)) {
+        firstRaising.set(law, genome);
+      }
+
       raised.set(law, (raised.get(law) ?? 0) + 1);
 
       const others = laws.filter((other) => other !== law);
@@ -186,7 +218,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
   };
   const rewarded = new Set<string>();
   const reward = (genome: Genome, judgment: Judged): Judged => {
-    isolate(judgment);
+    isolate(genome, judgment);
 
     const operator = breeding.lastEdit.get(genome);
     for (const disagreement of judgment.disagreements) {
@@ -251,7 +283,61 @@ export const hunt = Effect.fnUntraced(function* hunt(
     }),
   );
 
-  return { evolved, isolation: { alone, beside, raised }, reduced } satisfies HuntReport;
+  const unisolated = [...raised]
+    .filter(([law]) => !alone.has(law))
+    .toSorted(([, left], [, right]) => left - right)
+    .slice(0, isolating.laws);
+  const isolated = yield* Effect.forEach([...unisolated], ([law]) =>
+    Effect.gen(function* isolateOne() {
+      const start = firstRaising.get(law);
+      if (start === undefined) {
+        return [];
+      }
+
+      let fewest = Number.POSITIVE_INFINITY;
+      const { genome } = yield* reduce(
+        start,
+        cutsOf,
+        (genomes) =>
+          Effect.forEach([...genomes], (candidate) =>
+            Effect.map(judgeAt(candidate), (judgment) => {
+              const laws = lawsOf(judgment);
+              const kept = laws.includes(law) && laws.length <= fewest;
+              fewest = kept ? laws.length : fewest;
+
+              return kept;
+            }),
+          ),
+        isolating.tries,
+        1,
+      );
+      const last = yield* judgeAt(genome);
+      if (lawsOf(last).length === 1) {
+        alone.add(law);
+      }
+
+      return last.disagreements.map((disagreement): Reduced => ({
+        disagreement,
+        lineage: [`isolated toward ${law} alone`],
+        package: "",
+        signature: signatureOf(disagreement),
+        tries: isolating.tries,
+      }));
+    }),
+  );
+  const shownSignatures = new Set(reduced.map(({ signature }) => signature));
+  const isolationFound = isolated.flat().filter(({ signature }) => {
+    const fresh = !shownSignatures.has(signature);
+    shownSignatures.add(signature);
+
+    return fresh;
+  });
+
+  return {
+    evolved,
+    isolation: { alone, beside, raised },
+    reduced: [...reduced, ...isolationFound],
+  } satisfies HuntReport;
 });
 
 /**

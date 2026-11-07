@@ -173,10 +173,16 @@ export interface Doctype {
 }
 
 /**
- * An XML declaration: its encoding label and its `standalone`, each as written or absent.
+ * An XML declaration: its encoding label and its `standalone`, each as written or absent, and the
+ * spaces before its encoding.
  */
 export interface Declared {
   readonly encoding: Option.Option<string>;
+  /**
+   * The spaces written before the `encoding` pseudo-attribute beyond the one it needs, which push
+   * the declaration's end toward a reader's sniff window.
+   */
+  readonly pad: number;
   readonly standalone: Option.Option<"no" | "yes">;
 }
 
@@ -212,6 +218,11 @@ export interface CodecGenome {
   readonly epilog: readonly Misc[];
   readonly prolog: readonly Misc[];
   readonly root: ElementNode;
+  /**
+   * Characters written after the epilog, as they are: whitespace, or a lone surrogate the input
+   * ends on.
+   */
+  readonly trailer: string;
 }
 
 /**
@@ -236,8 +247,11 @@ export const labels = [
 
 /**
  * The characters a text piece is drawn from: plain ones; each line end and the tab; each
- * character an escape or a production turns on; one of each UTF-8 width; the no-break space,
- * U+0085 and U+2028, which XML 1.0 does not treat as line ends; and U+FFFD.
+ * character an escape or a production turns on; one of each UTF-8 width; the code points either
+ * side of ASCII's last, U+007F to U+0081, which a single-byte charset writes as raw bytes; UTF-8's
+ * encoding of a surrogate spelt in Latin-1, which a Latin-1 document declared UTF-8 carries as
+ * those bytes; a lone high and a lone low surrogate, which UTF-16 carries as code units; the
+ * no-break space, U+0085 and U+2028, which XML 1.0 does not treat as line ends; and U+FFFD.
  */
 const characters = [
   "a",
@@ -258,6 +272,12 @@ const characters = [
   "Ā",
   "€",
   "𝔸",
+  "\u007F",
+  "\u0080",
+  "\u0081",
+  "\u00ED\u00A0\u0080",
+  "\uD800",
+  "\uDC00",
   "\u00A0",
   "\u0085",
   "\u2028",
@@ -328,9 +348,11 @@ const tokens = [
 const entityNames = ["e", "f", "g", "amp", "lt", "gt", "quot", "apos", "e1"] as const;
 
 /**
- * The element names an inserted element takes beside those the genome already writes.
+ * The element names an inserted element takes beside those the genome already writes, among them
+ * two whose first UTF-16 code unit's low byte is ASCII markup (U+013F's is `?`, U+013C's `<`),
+ * so the bytes of `<` and the name start as XML 1.0 Appendix F's patterns nearly do.
  */
-const elementNames = ["r", "a", "b", "p:a", "q:b", "xml:a", "é", "a-b.c"] as const;
+const elementNames = ["r", "a", "b", "p:a", "q:b", "xml:a", "é", "a-b.c", "Ŀ", "Ļa"] as const;
 
 /**
  * The attribute names an added attribute or an attribute-list declaration takes beside those the
@@ -672,8 +694,8 @@ const charsetLabel: Readonly<Record<Charset, string>> = {
 export const sourceText = (genome: CodecGenome): string => {
   const declaration = Option.match(genome.declaration, {
     onNone: () => "",
-    onSome: ({ encoding, standalone }) =>
-      `<?xml version="1.0"${Option.match(encoding, { onNone: () => "", onSome: (label) => ` encoding="${label}"` })}${Option.match(standalone, { onNone: () => "", onSome: (value) => ` standalone="${value}"` })}?>`,
+    onSome: ({ encoding, pad, standalone }) =>
+      `<?xml version="1.0"${Option.match(encoding, { onNone: () => "", onSome: (label) => `${" ".repeat(pad)} encoding="${label}"` })}${Option.match(standalone, { onNone: () => "", onSome: (value) => ` standalone="${value}"` })}?>`,
   });
   const doctype = Option.match(genome.doctype, {
     onNone: () => "",
@@ -681,7 +703,7 @@ export const sourceText = (genome: CodecGenome): string => {
       `<!DOCTYPE ${name}${external ? ' SYSTEM "doc.dtd"' : ""}${Option.match(subset, { onNone: () => "", onSome: (declarations) => ` [${declarations.map(declarationText).join("")}]` })}>`,
   });
 
-  return `${declaration}${doctype}${genome.prolog.map(miscText).join("")}${elementText(genome.root)}${genome.epilog.map(miscText).join("")}`;
+  return `${declaration}${doctype}${genome.prolog.map(miscText).join("")}${elementText(genome.root)}${genome.epilog.map(miscText).join("")}${genome.trailer}`;
 };
 
 /**
@@ -1114,6 +1136,7 @@ export const genomeOfTree = (document: XmlDocument): CodecGenome => {
     declaration: document.declaration.pipe(
       Option.map(({ standalone }) => ({
         encoding: Option.none(),
+        pad: 0,
         standalone: standalone.pipe(
           Option.filter((value): value is "no" | "yes" => value === "yes" || value === "no"),
         ),
@@ -1124,6 +1147,7 @@ export const genomeOfTree = (document: XmlDocument): CodecGenome => {
     prolog: document.prolog.map(miscOf),
     root:
       root._tag === "element" ? root : { _tag: "element", attributes: [], children: [], name: "r" },
+    trailer: "",
   };
 };
 
@@ -1145,7 +1169,13 @@ export const reversedAttributes = (genome: CodecGenome): CodecGenome => {
 };
 
 /**
- * Draw a small generic document by construction: a root named from {@link elementNames}, a few
+ * The powers of two a padded declaration ends near.
+ */
+const windowEdges = [256, 512, 1024, 2048] as const;
+
+/**
+ * Draw a small generic document by construction, in any charset: a root named `r` or with a
+ * name whose UTF-16 bytes nearly match Appendix F's patterns, a few
  * children of every kind with pieces from the dictionaries, and, half the time, a doctype whose
  * internal subset declares an entity or two the body references and an attribute list on an
  * element the body writes.
@@ -1204,30 +1234,81 @@ export const genericGenome: Gen<CodecGenome> = (source) => {
       // claims, and a seed claimed by it from the start would hide every other defect it holds.
       attribute: source.draw(oneOf(["a", "b", "c", "id"] as const)) ?? "a",
       default: { _tag: "value", fixed: false, pieces: pieces(2), quote: '"' },
-      element: "r",
+      element: root.name,
       type: source.draw(oneOf(attTypes)) ?? "CDATA",
     },
   ];
   const withDoctype = source.draw(below(2)) === 1 || entities.length > 0;
+  // A seed is written in any charset; half the time its declaration names it, a quarter of the time
+  // names none, and the rest of the time there is no declaration. Each draws the edge the reader's
+  // first look turns on half the time: a single-byte document's text holds a code point at
+  // ASCII's last byte or either side of it; a declaration that names its label ends near a power
+  // of two; and a document with no declaration starts with a root whose name's first UTF-16 unit
+  // nearly matches Appendix F's patterns.
+  const charset = source.draw(oneOf(charsets)) ?? "UTF-8";
+  const declared = source.draw(below(4));
+  const edged = source.draw(below(2)) === 0;
+  const label = charsetLabel[charset];
+  const pad =
+    declared < 2 && edged
+      ? Math.max(
+          0,
+          (source.draw(oneOf(windowEdges)) ?? 1024) +
+            source.draw(below(7)) -
+            3 -
+            '<?xml version="1.0" encoding=""'.length -
+            label.length,
+        )
+      : 0;
+  const boundary: readonly Node[] =
+    edged && (charset === "ISO-8859-1" || charset === "US-ASCII")
+      ? [
+          {
+            _tag: "text",
+            pieces: [
+              {
+                _tag: "text",
+                value: source.draw(oneOf(["\u007F", "\u0080", "\u0081"] as const)) ?? "\u007F",
+              },
+            ],
+          },
+        ]
+      : [];
+  const named: ElementNode = {
+    ...root,
+    children: [...boundary, ...root.children],
+    name: declared === 3 && edged ? (source.draw(oneOf(["Ŀ", "Ļa"] as const)) ?? "Ŀ") : root.name,
+  };
 
   return {
-    charset: "UTF-8",
+    charset,
     declaration:
-      source.draw(below(2)) === 1
-        ? Option.some({ encoding: Option.none(), standalone: Option.none() })
-        : Option.none(),
+      declared === 3
+        ? Option.none()
+        : Option.some({
+            encoding: declared === 2 ? Option.none() : Option.some(label),
+            pad,
+            standalone: Option.none(),
+          }),
     doctype: withDoctype
       ? Option.some({
           external: source.draw(below(3)) === 0,
-          name: "r",
+          name: named.name,
           subset: Option.some(subset),
         })
       : Option.none(),
     epilog: [],
     prolog: [],
-    root,
+    root: named,
+    trailer: "",
   };
 };
+
+/**
+ * What a document's trailer is drawn from: nothing, whitespace, and a lone surrogate of each
+ * kind, the input ending on a high one.
+ */
+const trailers = ["", " ", "\n", "\uD800", "\uDC00"] as const;
 
 /**
  * The edits a run's genomes breed by.
@@ -1258,6 +1339,7 @@ export const operators = [
   "charset",
   "re-encode",
   "misc",
+  "trail",
 ] as const;
 
 /**
@@ -1738,9 +1820,10 @@ const operations: Readonly<
   "edit-xml-declaration": (genome) => (source) => {
     const held = Option.getOrElse(genome.declaration, (): Declared => ({
       encoding: Option.none(),
+      pad: 0,
       standalone: Option.none(),
     }));
-    switch (source.draw(below(3))) {
+    switch (source.draw(below(4))) {
       case 0: {
         return edited(
           {
@@ -1748,6 +1831,22 @@ const operations: Readonly<
             declaration: Option.isSome(genome.declaration) ? Option.none() : Option.some(held),
           },
           "edit-xml-declaration toggle",
+        );
+      }
+      case 3: {
+        // End the encoding pseudo-attribute a few characters either side of a power of two, the
+        // sizes a reader's buffers and sniff windows come in.
+        const label = Option.getOrElse(held.encoding, () => charsetLabel[genome.charset]);
+        const edge = source.draw(oneOf(windowEdges)) ?? 1024;
+        const written = '<?xml version="1.0" encoding=""'.length + label.length;
+        const pad = Math.max(0, edge + source.draw(below(7)) - 3 - written);
+
+        return edited(
+          {
+            ...genome,
+            declaration: Option.some({ ...held, encoding: Option.some(label), pad }),
+          },
+          `edit-xml-declaration pad ${String(pad)}`,
         );
       }
       case 1: {
@@ -1876,6 +1975,7 @@ const operations: Readonly<
     const charset = source.draw(oneOf(charsets)) ?? "UTF-8";
     const held = Option.getOrElse(genome.declaration, (): Declared => ({
       encoding: Option.none(),
+      pad: 0,
       standalone: Option.none(),
     }));
 
@@ -1993,6 +2093,13 @@ const operations: Readonly<
       },
       "toggle-subset",
     ),
+  trail: (genome) => (source) => {
+    const trailer = source.draw(oneOf(trailers)) ?? "";
+
+    return trailer === genome.trailer
+      ? Option.none()
+      : edited({ ...genome, trailer }, `trail ${JSON.stringify(trailer)}`);
+  },
   wrap: (genome) => (source) => {
     const site = source.draw(oneOf(nodesOf(genome.root)));
     if (site === undefined) {
@@ -2106,6 +2213,10 @@ const prologSmaller = (genome: CodecGenome): readonly CodecGenome[] => {
     if (Option.isSome(held.standalone)) {
       out.push({ ...genome, declaration: Option.some({ ...held, standalone: Option.none() }) });
     }
+
+    if (held.pad > 0) {
+      out.push({ ...genome, declaration: Option.some({ ...held, pad: 0 }) });
+    }
   }
 
   if (genome.prolog.length > 0) {
@@ -2118,6 +2229,10 @@ const prologSmaller = (genome: CodecGenome): readonly CodecGenome[] => {
 
   if (genome.charset !== "UTF-8") {
     out.push({ ...genome, charset: "UTF-8" });
+  }
+
+  if (genome.trailer !== "") {
+    out.push({ ...genome, trailer: "" });
   }
 
   return out;
@@ -2486,6 +2601,48 @@ const prologFeature = (genome: CodecGenome): string => {
 };
 
 /**
+ * The feature of where a padded declaration ends: before, at or after the nearest power of two of
+ * {@link windowEdges}, in characters; and of what the document's trailer holds.
+ *
+ * @param genome - The genome.
+ * @returns The features, the family `prolog`.
+ */
+const edgeFeatures = (genome: CodecGenome): readonly string[] => {
+  const end = Option.match(genome.declaration, {
+    onNone: () => 0,
+    onSome: ({ encoding, pad }) =>
+      Option.match(encoding, {
+        onNone: () => 0,
+        onSome: (label) => '<?xml version="1.0" encoding=""'.length + label.length + pad,
+      }),
+  });
+  let edge: number = windowEdges[0];
+  for (const held of windowEdges) {
+    if (Math.abs(held - end) < Math.abs(edge - end)) {
+      edge = held;
+    }
+  }
+
+  const sides = new Map([
+    [-1, "before"],
+    [0, "at"],
+    [1, "after"],
+  ]);
+  const side = sides.get(Math.sign(end - edge)) ?? "at";
+  const trailerClasses = new Map([
+    ["", "none"],
+    [" ", "space"],
+    ["\n", "space"],
+  ]);
+  const trailer = trailerClasses.get(genome.trailer) ?? "surrogate";
+
+  return [
+    end > 64 ? `prolog declaration-end ${side} ${String(edge)}` : "prolog declaration-end short",
+    `prolog trailer ${trailer}`,
+  ];
+};
+
+/**
  * Class a CDATA section's text: holding `]]`, holding a CR, empty, or plain.
  *
  * @param value - The text.
@@ -2692,6 +2849,7 @@ export const genomeFeatures = (genome: CodecGenome): ReadonlySet<string> => {
   return new Set([
     ...subsetFeatures(subset, all),
     prologFeature(genome),
+    ...edgeFeatures(genome),
     `depth ${depthBucket(depthOf(genome.root))}`,
     ...treeFeatures(genome, attlists, all),
   ]);

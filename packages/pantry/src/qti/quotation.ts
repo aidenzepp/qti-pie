@@ -123,37 +123,47 @@ const filled = select(Quotation, (q) => q.gt(q.children, 0n));
  *   `last`, which hold since `(parent, at)` names one member, and the four copies into them;
  * - **`Quotation_punctuation`:** none of the four ends is a quotation mark.
  */
-export const quotationLaws = [
-  contained(
-    on(Quotation, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  mirrors(on(Quotation, "node"), on(quotations, "id")),
-  contained(on(Quotation, "node", "at", "children"), on(Node, "id", "at", "children")),
-  contained(on(Quotation, "parent", "parentAt", "siblings"), on(Node, "id", "at", "children")),
-  check("E1_derived", Quotation, (q) =>
-    q.and(
-      q.eq(Compute.base(q.nextAt), Compute.add(Compute.base(q.at), 1n)),
-      q.eq(q.firstAt, 0n),
-      q.or(q.gt(q.at, 0n), q.eq(q.before, "")),
-      q.or(q.lt(q.nextAt, q.siblings), q.eq(q.after, "")),
-      q.or(q.gt(q.children, 0n), q.and(q.eq(q.first, ""), q.eq(q.last, ""))),
+export const quotationLawsByName = {
+  "E1 derived": [
+    contained(
+      on(Quotation, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
     ),
-  ),
-  key(on(members, "parent", "at", "first")),
-  key(on(members, "parent", "at", "last")),
-  contained(on(Quotation, "parent", pred("at"), "before"), on(members, "parent", "at", "last")),
-  contained(on(followed, "parent", "nextAt", "after"), on(members, "parent", "at", "first")),
-  contained(on(filled, "node", "firstAt", "first"), on(members, "parent", "at", "first")),
-  contained(on(Quotation, "node", pred("children"), "last"), on(members, "parent", "at", "last")),
-  check("Quotation_punctuation", Quotation, (q) =>
-    q.not(
-      q.or(
-        q.in(q.before, quotationMarks),
-        q.in(q.after, quotationMarks),
-        q.in(q.first, quotationMarks),
-        q.in(q.last, quotationMarks),
+    mirrors(on(Quotation, "node"), on(quotations, "id")),
+    contained(on(Quotation, "node", "at", "children"), on(Node, "id", "at", "children")),
+    contained(on(Quotation, "parent", "parentAt", "siblings"), on(Node, "id", "at", "children")),
+    check("E1_derived", Quotation, (q) =>
+      q.and(
+        q.eq(Compute.base(q.nextAt), Compute.add(Compute.base(q.at), 1n)),
+        q.eq(q.firstAt, 0n),
+        q.or(q.gt(q.at, 0n), q.eq(q.before, "")),
+        q.or(q.lt(q.nextAt, q.siblings), q.eq(q.after, "")),
+        q.or(q.gt(q.children, 0n), q.and(q.eq(q.first, ""), q.eq(q.last, ""))),
       ),
     ),
-  ),
-] as const;
+    key(on(members, "parent", "at", "first")),
+    key(on(members, "parent", "at", "last")),
+    contained(on(Quotation, "parent", pred("at"), "before"), on(members, "parent", "at", "last")),
+    contained(on(followed, "parent", "nextAt", "after"), on(members, "parent", "at", "first")),
+    contained(on(filled, "node", "firstAt", "first"), on(members, "parent", "at", "first")),
+    contained(on(Quotation, "node", pred("children"), "last"), on(members, "parent", "at", "last")),
+  ],
+  "Quotation punctuation": [
+    check("Quotation_punctuation", Quotation, (q) =>
+      q.not(
+        q.or(
+          q.in(q.before, quotationMarks),
+          q.in(q.after, quotationMarks),
+          q.in(q.first, quotationMarks),
+          q.in(q.last, quotationMarks),
+        ),
+      ),
+    ),
+  ],
+} as const;
+
+/**
+ * {@link quotationLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const quotationLaws = Object.values(quotationLawsByName).flat();

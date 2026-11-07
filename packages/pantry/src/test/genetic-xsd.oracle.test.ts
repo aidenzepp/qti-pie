@@ -480,18 +480,18 @@ describe("genetic-xsd.oracle.test.ts, the records' readings", () => {
 
 describe("genetic-xsd.oracle.test.ts, reading 129's record", () => {
   unit(
-    "holds for an xml:lang value RFC 5646 refuses, and never for a well-formed language tag",
+    "holds for a language value RFC 5646 refuses, as each attribute and element reads it, and never for one it admits",
     () => {
       const record = everyRecord.find(
         ({ reason }) => reason._tag === "reading" && reason.reading === 129,
       );
-      const matches = (value: string): boolean =>
+      const matches = ([place, attribute, value]: readonly [string, string, string]): boolean =>
         record?.detail?.test(
-          `value domain at /qti-assessment-stimulus: xml:lang: "${value}" is outside qti-assessment-item@xml:lang (reading 129), whose pattern is ^x$`,
+          `value domain at /${place}: ${attribute}: "${value}" is outside qti-assessment-item@xml:lang (reading 129) (2), whose pattern is ^x$`,
         ) ?? false;
-      // RFC 5646 section 2.1's Language-Tag, one of each production, and the nearest values the
-      // RFC refuses.
-      const wellFormed = [
+      // RFC 5646 section 2.1's Language-Tag, one of each production; the empty value where the
+      // attribute admits it; and the nearest values the RFC or the reading refuses.
+      const tags = [
         "en",
         "EN-us",
         "zh-Hant-TW",
@@ -501,26 +501,39 @@ describe("genetic-xsd.oracle.test.ts, reading 129's record", () => {
         "x-whatever",
         "i-klingon",
         "zh-min-nan",
-        " en ",
-        "\\ten",
       ];
-      const refused = [
-        "",
-        " ",
-        "e",
-        "en_US",
-        "en-",
-        "-en",
-        "abcdefghi",
-        "en-x",
-        "en--us",
-        "i-unknown",
+      const admitted: readonly (readonly [string, string, string])[] = [
+        ...tags.flatMap((tag) => [
+          ["qti-assessment-item", "xml:lang", tag] as const,
+          ["p", "xml:lang", tag] as const,
+          ["track", "srclang", tag] as const,
+          ["p", "lang", tag] as const,
+        ]),
+        ["qti-assessment-stimulus", "xml:lang", " en "],
+        ["p", "xml:lang", "\\ten"],
+        ["p", "xml:lang", ""],
+        ["p", "lang", ""],
+      ];
+      const refused: readonly (readonly [string, string, string])[] = [
+        ...["e", "en_US", "en-", "-en", "abcdefghi", "en-x", "en--us", "i-unknown"].flatMap(
+          (value) => [
+            ["qti-assessment-item", "xml:lang", value] as const,
+            ["p", "xml:lang", value] as const,
+            ["track", "srclang", value] as const,
+            ["p", "lang", value] as const,
+          ],
+        ),
+        ["qti-assessment-item", "xml:lang", ""],
+        ["qti-assessment-stimulus", "xml:lang", " "],
+        ["track", "srclang", ""],
+        ["track", "srclang", "en "],
+        ["p", "lang", "en "],
       ];
 
       assert.deepStrictEqual(
-        [...wellFormed.filter(matches), ...refused.filter((value) => !matches(value))],
+        [...admitted.filter(matches), ...refused.filter((held) => !matches(held))],
         [],
-        "the record matches exactly the values RFC 5646 refuses",
+        "the record matches exactly the values reading 129 refuses",
       );
     },
   );

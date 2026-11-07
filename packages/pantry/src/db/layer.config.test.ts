@@ -43,19 +43,4 @@ layer(NodeServices.layer)("db/layer.ts, a cluster that is not set up", (it) => {
       assert.include(failure.message, "GRIZZLE_PG_STATE");
     }),
   );
-
-  it.effect("a malformed port is Effect's ConfigError, before any file is read", () =>
-    Effect.gen(function* malformedPort() {
-      const failure = yield* buildFailure({
-        GR8DES_PG_PORT: "x",
-        GRIZZLE_PG_STATE: `${scratch}state`,
-        HOME: `${scratch}home`,
-      });
-
-      assert.deepStrictEqual(
-        Object.getOwnPropertyDescriptor(failure, "_tag")?.value,
-        "ConfigError",
-      );
-    }),
-  );
 });

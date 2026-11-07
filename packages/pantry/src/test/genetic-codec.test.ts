@@ -117,6 +117,32 @@ const recorded: readonly Recorded[] = [
     why: "a namespace declaration whose value references an entity only the unread external subset may declare has an unknown namespace name; libxml2 2.9.13 reads the reference as empty text and then refuses an empty prefixed namespace name or a URI it makes of the rest; crust keeps the reference, and shred refuses the declaration under namespace-entity",
   },
   {
+    signature:
+      /^O1 UTF-16 input ends inside a surrogate pair: crust refuse[ds][^,]*, libxml2 accepts$|^O5 UTF-16 input ends inside a surrogate pair: .+$/u,
+    source:
+      'XML 1.0 (Fifth Edition) section 4.3.3: "It is a fatal error if an XML entity is determined ... to be in a certain encoding but contains byte sequences that are not legal in that encoding"; section 2.2, [2] Char excludes the surrogate blocks',
+    why: "a UTF-16 document whose last code unit is a high surrogate no low one follows, or half a code unit, holds a sequence UTF-16 does not; crust's fatal decoder refuses it (decode.ts); libxml2 2.9.13 keeps the incomplete unit as unread input and reports nothing",
+  },
+  {
+    signature: /^O\d default names an entity declared after it: .+$/u,
+    source:
+      'XML 1.0 (Fifth Edition) section 4.1, WFC Entity Declared: "The declaration of a general entity MUST precede any reference to it which appears in a default value in an attribute-list declaration" (crust\'s reading since 3fe6a888)',
+    why: "crust refuses a default naming an entity the subset declares only after the list, an external subset or none; libxml2 2.9.13 reads it when an external subset is named. A spec question for the coordinator: whether the sentence binds outside the WFC's first sentence's scope",
+  },
+  {
+    signature:
+      /^O1 crust refused-well-formedness \(invalid attempt to undefine prefix in XML N\.N\), libxml2 accepts$/u,
+    source:
+      'Namespaces in XML 1.0 (Third Edition) section 2.2: the normalized value "MUST be either a URI reference ... or an empty string", and a prefixed declaration\'s MUST NOT be empty',
+    why: "a prefixed declaration whose normalized value is whitespace alone, written through an entity or a character reference, is no URI reference and not empty, so the document is not namespace-well-formed; crust refuses it (saxes reads it as an undeclaration, the wrong reason but the right verdict); libxml2 2.9.13 accepts it",
+  },
+  {
+    signature: /^O\d declaration past the sniff window: .+$/u,
+    source:
+      "crust's documented reader limit, decode.ts declarationWindow: the first 1024 bytes of an ASCII-compatible document, and the first 1024 characters of a UTF-16 one, are searched for the declaration's encoding; XML 1.0 [23] XMLDecl and [3] S bound no declaration",
+    why: "a declaration whose encoding pseudo-attribute ends past crust's window is read as if it named none: an unmarked UTF-16 one is then bare-utf16 and an ASCII-compatible one UTF-8, where libxml2 reads the label; a limit crust states, kept apart so a change of the window is seen",
+  },
+  {
     signature: /^O1 crust refused-element-depth, libxml2 accepts$/u,
     source:
       "crust's reader bound, read.ts defaultElementDepth (256), which XML 1.0 leaves to the processor (section 5.1 sets no limit); libxml2 2.9.13's xmlParserMaxDepth of 256 is checked after the 257th element is pushed, so it reads 257 levels and refuses 258",
@@ -235,7 +261,7 @@ const qtiSeeds: readonly CodecGenome[] = sample(
 const genericSeeds: readonly CodecGenome[] = sample(
   genericGenome,
   floorSeed("pantry/genetic-codec/generic-seeds"),
-  24,
+  64,
 );
 
 /**
@@ -244,8 +270,8 @@ const genericSeeds: readonly CodecGenome[] = sample(
 const longFactor = 25;
 
 /**
- * Each stream's budget: generations of 48, three edits at most per child, all 48 seeds judged
- * first; 192 children in a free run.
+ * Each stream's budget: generations of 48, three edits at most per child, 48 seeds drawn from the
+ * 112 first; 384 children in a free run.
  */
 const budget: Budget = {
   candidates: settings.geneticRequested ? 384 * longFactor : 384,

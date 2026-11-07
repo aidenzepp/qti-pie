@@ -533,8 +533,9 @@ export const xsdMutationOf = (breeding: Breeding) => {
 
 /**
  * The namespaces of the elements an edit changed: where two elements at one address differ in
- * name or attributes, both; where their children differ in number, the parent's and every child
- * element's on either side. A seed and itself give none.
+ * name or attributes, both; where their children differ in number, the parent's and every element
+ * of every child subtree on either side, since an edit there may have inserted, removed or edited
+ * any of them. A seed and itself give none.
  *
  * @param before - The seed's root.
  * @param after - The bred root.
@@ -571,7 +572,9 @@ export const editedNamespaces = (before: Element, after: Element): ReadonlySet<s
       found.add(right.namespace);
       for (const child of [...left.children, ...right.children]) {
         if (child.kind === "element") {
-          found.add(child.namespace);
+          for (const { element } of elementsOf(child)) {
+            found.add(element.namespace);
+          }
         }
       }
     }

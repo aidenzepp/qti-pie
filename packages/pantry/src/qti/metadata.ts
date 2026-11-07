@@ -831,267 +831,293 @@ const usageRecordValues = select(Node, (n) =>
  *   form spells ("E1 derived"); and its text is a lexical form of that base type ("Usage typed
  *   value").
  */
-export const metadataLaws = [
-  mirrors(on(LomResource, "node", "type"), on(Resource, "node", "type")),
-  lomResourceHrefs,
-  check("E1_derived", LomResource, (r) =>
-    r.or(
-      r.and(r.eq(r.hrefs, 1n), r.in(r.type, objectTypes), r.eq(r.named, r.type)),
-      r.and(r.or(r.eq(r.hrefs, 0n), r.not(r.in(r.type, objectTypes))), r.eq(r.named, "none")),
-    ),
-  ),
-
-  contained(
-    on(LomRecord, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(LomRecord, "parent", "document", "owner", "ownerStart", "nearest", "version", "ownerParent"),
-    nodeRef,
-  ),
-  contained(on(recordNodes, "id"), on(LomRecord, "node")),
-  check("E1_derived", LomRecord, (r) =>
-    r.and(r.eq(r.kind, "lom:lom"), r.or(r.eq(r.owner, resourceMetadata), r.eq(r.named, "none"))),
-  ),
-  contained(on(resourceRecords, "ownerParent", "named"), on(LomResource, "node", "named")),
-
-  contained(
-    on(namingRecords, "node", "named", "ownerParent"),
-    on(LomObject, "record", "type", "resource"),
-  ),
-  contained(
-    on(LomObject, "record", "type", "resource"),
-    on(LomRecord, "node", "named", "ownerParent"),
-  ),
-  contained(
-    on(LomObject, "resource", "package", "path", "type"),
-    on(ResourceHref, "node", "package", "path", "type"),
-  ),
-  contained(on(LomObject, "package", "path", "document"), on(Document, "package", "path", "node")),
-
-  contained(
-    on(LomGeneral, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(generalNodes, "id"), on(LomGeneral, "node")),
-  contained(
-    on(LomGeneral, "parent", "owner", "ownerParent"),
-    on(LomRecord, "node", "owner", "ownerParent"),
-  ),
-  check("E1_derived", LomGeneral, (g) => g.eq(g.kind, "lom:general")),
-  mirrors(on(ResourceLomGeneral, "node", "resource"), on(resourceGenerals, "node", "ownerParent")),
-
-  contained(
-    on(LomEntry, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(
-      LomEntry,
-      "parent",
-      "document",
-      "identifierKind",
-      "identifierStart",
-      "nearest",
-      "version",
-      "holder",
-    ),
-    nodeRef,
-  ),
-  contained(
-    on(
-      LomEntry,
-      "holder",
-      "document",
-      "holderKind",
-      "holderStart",
-      "nearest",
-      "version",
-      "holderParent",
-    ),
-    nodeRef,
-  ),
-  key(on(entryNodes, "id")),
-  contained(on(entryNodes, "id", "stringValue"), on(LomEntry, "node", "text")),
-  check("E1_derived", LomEntry, (e) =>
-    e.and(
-      e.eq(e.kind, "lom:entry"),
-      e.eq(e.identifierKind, "lom:identifier"),
-      e.eq(e.text, Compute.concat(Compute.concat(e.lead, e.token), e.trail)),
-      Compute.matches(e.token, trimmedPattern),
-      e.or(e.ne(e.token, ""), e.eq(e.trail, "")),
-      e.or(e.eq(e.holderKind, "lom:general"), e.eq(e.named, "none")),
-    ),
-  ),
-  contained(on(generalEntries, "holderParent", "named"), on(LomRecord, "node", "named")),
-
-  contained(
-    on(LomTitle, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(
-      LomTitle,
-      "parent",
-      "document",
-      "generalKind",
-      "generalStart",
-      "nearest",
-      "version",
-      "record",
-    ),
-    nodeRef,
-  ),
-  contained(on(titleNodes, "id"), on(LomTitle, "node")),
-  check("E1_derived", LomTitle, (t) =>
-    t.and(t.eq(t.kind, "lom:title"), t.eq(t.generalKind, "lom:general")),
-  ),
-  contained(on(LomTitle, "record", "named"), on(LomRecord, "node", "named")),
-
-  mirrors(on(LomString, "node"), on(stringNodes, "id")),
-  lomStringLanguages,
-  key(on(stringLanguageAttributes, "node")),
-  contained(
-    on(stringLanguageAttributes, "node", "lexical"),
-    on(LomStringLanguage, "node", "language"),
-  ),
-  contained(
-    on(
-      select(LomString, (s) => s.eq(s.languages, 1n)),
-      "node",
-      "language",
-    ),
-    on(LomStringLanguage, "node", "language"),
-  ),
-  check("E1_derived", LomString, (s) => s.or(s.eq(s.languages, 1n), s.eq(s.language, ""))),
-
-  contained(
-    on(LomTitleString, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  key(on(titleStringNodes, "id")),
-  contained(on(titleStringNodes, "id", "stringValue"), on(LomTitleString, "node", "text")),
-  contained(on(LomTitleString, "parent", "record"), on(LomTitle, "node", "record")),
-  contained(on(LomTitleString, "node", "language"), on(LomString, "node", "language")),
-  check("E1_derived", LomTitleString, (s) =>
-    s.and(
-      s.eq(s.kind, "lom:string"),
-      s.eq(s.textValue, Compute.replaceWhitespace(s.text)),
-      s.eq(s.languageTag, Compute.lowerAscii(s.language)),
-    ),
-  ),
-
-  contained(
-    on(AssessmentObject, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  key(on(objectIdentifiers, "node")),
-  contained(
-    on(objectIdentifiers, "node", "lexical"),
-    on(AssessmentObject, "node", "identifierLexical"),
-  ),
-  key(on(objectTitles, "node")),
-  contained(on(objectTitles, "node", "lexical"), on(AssessmentObject, "node", "title")),
-  key(on(AssessmentObject, "document")),
-  objectLangs,
-  key(on(objectLangAttributes, "node")),
-  contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
-  contained(
-    on(
-      select(AssessmentObject, (o) => o.eq(o.langs, 1n)),
-      "node",
-      "lang",
-    ),
-    on(ObjectLang, "node", "lang"),
-  ),
-  check("E1_derived", AssessmentObject, (o) =>
-    o.and(
-      o.in(o.kind, objectKinds),
-      o.eq(o.parent, o.document),
-      o.eq(
-        o.identifierLexical,
-        Compute.concat(Compute.concat(o.identifierLead, o.identifier), o.identifierTrail),
+export const metadataLawsByName = {
+  "DocumentId key": [
+    key(on(stringLanguageAttributes, "node")),
+    key(on(objectIdentifiers, "node")),
+    key(on(objectTitles, "node")),
+    key(on(objectLangAttributes, "node")),
+    key(on(lastUpdateds, "node")),
+    key(on(usageBaseTypes, "node")),
+  ],
+  "E1 derived": [
+    mirrors(on(LomResource, "node", "type"), on(Resource, "node", "type")),
+    lomResourceHrefs,
+    check("E1_derived", LomResource, (r) =>
+      r.or(
+        r.and(r.eq(r.hrefs, 1n), r.in(r.type, objectTypes), r.eq(r.named, r.type)),
+        r.and(r.or(r.eq(r.hrefs, 0n), r.not(r.in(r.type, objectTypes))), r.eq(r.named, "none")),
       ),
-      Compute.matches(o.identifier, identifierPattern),
-      o.or(o.eq(o.langs, 1n), o.eq(o.lang, "")),
-      o.eq(o.titleValue, Compute.replaceWhitespace(o.title)),
-      o.eq(o.langTag, Compute.lowerAscii(Compute.collapse(o.lang))),
     ),
-  ),
-
-  contained(on(namingEntries, "holderParent"), on(LomObjectIdentifier, "record")),
-  contained(on(LomObjectIdentifier, "record", "document"), on(LomObject, "record", "document")),
-  contained(
-    on(LomObjectIdentifier, "document", "identifier"),
-    on(AssessmentObject, "document", "identifier"),
-  ),
-  contained(
-    on(LomObjectIdentifier, "entry", "general", "record", "identifier"),
-    on(generalEntries, "node", "holder", "holderParent", "token"),
-  ),
-
-  contained(on(namingTitles, "record"), on(LomObjectTitle, "record")),
-  contained(on(LomObjectTitle, "record", "document"), on(LomObject, "record", "document")),
-  contained(
-    on(LomObjectTitle, "document", "title"),
-    on(AssessmentObject, "document", "titleValue"),
-  ),
-  contained(
-    on(LomObjectTitle, "document", "objectLang"),
-    on(AssessmentObject, "document", "langTag"),
-  ),
-  contained(
-    on(LomObjectTitle, "string", "record", "title"),
-    on(LomTitleString, "node", "record", "textValue"),
-  ),
-  contained(
-    on(LomObjectTitle, "string", "stringLanguage"),
-    on(LomTitleString, "node", "languageTag"),
-  ),
-  check("LomObjectTitle", LomObjectTitle, (l) =>
-    l.or(l.eq(l.objectLang, ""), l.eq(l.stringLanguage, ""), l.eq(l.stringLanguage, l.objectLang)),
-  ),
-
-  key(on(resourceTypeValues, "id")),
-  contained(
-    on(resourceTypeValues, "id", "parent", "stringValue"),
-    on(LomResourceType, "term", "node", "text"),
-  ),
-  contained(on(LomResourceType, "term"), on(resourceTypeValues, "id")),
-  key(on(LomResourceType, "term")),
-  key(on(resourceTypeSources, "id")),
-  contained(
-    on(resourceTypeSources, "id", "parent", "stringValue"),
-    on(LomResourceTypeSource, "term", "node", "text"),
-  ),
-  contained(on(LomResourceTypeSource, "term"), on(resourceTypeSources, "id")),
-  key(on(LomResourceTypeSource, "term")),
-  contained(on(forbiddenResourceTypeValues, "node"), on(otherVocabularySources, "node")),
-
-  key(on(lastUpdateds, "node")),
-  contained(on(lastUpdateds, "node", "lexical"), on(StatisticDate, "node", "lexical")),
-  contained(on(StatisticDate, "node"), on(lastUpdateds, "node")),
-  check("E1_derived", StatisticDate, (s) =>
-    s.eq(s.lexical, Compute.concat(Compute.concat(s.lead, s.day), s.trail)),
-  ),
-
-  key(on(usageBaseTypes, "node")),
-  contained(on(usageBaseTypes, "node", "lexical"), on(UsageBaseType, "node", "lexical")),
-  contained(on(UsageBaseType, "node"), on(usageBaseTypes, "node")),
-  contained(on(UsageValue, "node", "baseTypeLexical"), on(UsageBaseType, "node", "lexical")),
-  contained(on(usageRecordValues, "id"), on(UsageValue, "node")),
-  contained(on(UsageValue, "node"), on(usageRecordValues, "id")),
-  contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
-  check("E1_derived", UsageValue, (u) =>
-    u.and(
-      u.ne(u.baseType, "none"),
-      u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
+    contained(
+      on(LomRecord, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
     ),
-  ),
-  check("Usage_typed_value", UsageValue, (u) =>
-    u.or(
-      u.in(u.baseType, unjudgedBaseTypes),
-      Compute.matches(u.text, BaseTypePattern.at("pattern", u.baseType)),
+    contained(
+      on(
+        LomRecord,
+        "parent",
+        "document",
+        "owner",
+        "ownerStart",
+        "nearest",
+        "version",
+        "ownerParent",
+      ),
+      nodeRef,
     ),
-  ),
-] as const;
+    contained(on(recordNodes, "id"), on(LomRecord, "node")),
+    check("E1_derived", LomRecord, (r) =>
+      r.and(r.eq(r.kind, "lom:lom"), r.or(r.eq(r.owner, resourceMetadata), r.eq(r.named, "none"))),
+    ),
+    contained(on(resourceRecords, "ownerParent", "named"), on(LomResource, "node", "named")),
+    contained(
+      on(namingRecords, "node", "named", "ownerParent"),
+      on(LomObject, "record", "type", "resource"),
+    ),
+    contained(
+      on(LomObject, "record", "type", "resource"),
+      on(LomRecord, "node", "named", "ownerParent"),
+    ),
+    contained(
+      on(LomObject, "resource", "package", "path", "type"),
+      on(ResourceHref, "node", "package", "path", "type"),
+    ),
+    contained(
+      on(LomObject, "package", "path", "document"),
+      on(Document, "package", "path", "node"),
+    ),
+    contained(
+      on(LomGeneral, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(generalNodes, "id"), on(LomGeneral, "node")),
+    contained(
+      on(LomGeneral, "parent", "owner", "ownerParent"),
+      on(LomRecord, "node", "owner", "ownerParent"),
+    ),
+    check("E1_derived", LomGeneral, (g) => g.eq(g.kind, "lom:general")),
+    mirrors(
+      on(ResourceLomGeneral, "node", "resource"),
+      on(resourceGenerals, "node", "ownerParent"),
+    ),
+    contained(
+      on(LomEntry, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(
+        LomEntry,
+        "parent",
+        "document",
+        "identifierKind",
+        "identifierStart",
+        "nearest",
+        "version",
+        "holder",
+      ),
+      nodeRef,
+    ),
+    contained(
+      on(
+        LomEntry,
+        "holder",
+        "document",
+        "holderKind",
+        "holderStart",
+        "nearest",
+        "version",
+        "holderParent",
+      ),
+      nodeRef,
+    ),
+    contained(on(entryNodes, "id", "stringValue"), on(LomEntry, "node", "text")),
+    check("E1_derived", LomEntry, (e) =>
+      e.and(
+        e.eq(e.kind, "lom:entry"),
+        e.eq(e.identifierKind, "lom:identifier"),
+        e.eq(e.text, Compute.concat(Compute.concat(e.lead, e.token), e.trail)),
+        Compute.matches(e.token, trimmedPattern),
+        e.or(e.ne(e.token, ""), e.eq(e.trail, "")),
+        e.or(e.eq(e.holderKind, "lom:general"), e.eq(e.named, "none")),
+      ),
+    ),
+    contained(on(generalEntries, "holderParent", "named"), on(LomRecord, "node", "named")),
+    contained(
+      on(LomTitle, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(
+        LomTitle,
+        "parent",
+        "document",
+        "generalKind",
+        "generalStart",
+        "nearest",
+        "version",
+        "record",
+      ),
+      nodeRef,
+    ),
+    contained(on(titleNodes, "id"), on(LomTitle, "node")),
+    check("E1_derived", LomTitle, (t) =>
+      t.and(t.eq(t.kind, "lom:title"), t.eq(t.generalKind, "lom:general")),
+    ),
+    contained(on(LomTitle, "record", "named"), on(LomRecord, "node", "named")),
+    mirrors(on(LomString, "node"), on(stringNodes, "id")),
+    lomStringLanguages,
+    contained(
+      on(stringLanguageAttributes, "node", "lexical"),
+      on(LomStringLanguage, "node", "language"),
+    ),
+    contained(
+      on(
+        select(LomString, (s) => s.eq(s.languages, 1n)),
+        "node",
+        "language",
+      ),
+      on(LomStringLanguage, "node", "language"),
+    ),
+    check("E1_derived", LomString, (s) => s.or(s.eq(s.languages, 1n), s.eq(s.language, ""))),
+    contained(
+      on(LomTitleString, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(titleStringNodes, "id", "stringValue"), on(LomTitleString, "node", "text")),
+    contained(on(LomTitleString, "parent", "record"), on(LomTitle, "node", "record")),
+    contained(on(LomTitleString, "node", "language"), on(LomString, "node", "language")),
+    check("E1_derived", LomTitleString, (s) =>
+      s.and(
+        s.eq(s.kind, "lom:string"),
+        s.eq(s.textValue, Compute.replaceWhitespace(s.text)),
+        s.eq(s.languageTag, Compute.lowerAscii(s.language)),
+      ),
+    ),
+    contained(
+      on(AssessmentObject, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(objectIdentifiers, "node", "lexical"),
+      on(AssessmentObject, "node", "identifierLexical"),
+    ),
+    contained(on(objectTitles, "node", "lexical"), on(AssessmentObject, "node", "title")),
+    key(on(AssessmentObject, "document")),
+    objectLangs,
+    contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
+    contained(
+      on(
+        select(AssessmentObject, (o) => o.eq(o.langs, 1n)),
+        "node",
+        "lang",
+      ),
+      on(ObjectLang, "node", "lang"),
+    ),
+    check("E1_derived", AssessmentObject, (o) =>
+      o.and(
+        o.in(o.kind, objectKinds),
+        o.eq(o.parent, o.document),
+        o.eq(
+          o.identifierLexical,
+          Compute.concat(Compute.concat(o.identifierLead, o.identifier), o.identifierTrail),
+        ),
+        Compute.matches(o.identifier, identifierPattern),
+        o.or(o.eq(o.langs, 1n), o.eq(o.lang, "")),
+        o.eq(o.titleValue, Compute.replaceWhitespace(o.title)),
+        o.eq(o.langTag, Compute.lowerAscii(Compute.collapse(o.lang))),
+      ),
+    ),
+    contained(on(LomObjectIdentifier, "record", "document"), on(LomObject, "record", "document")),
+    contained(
+      on(LomObjectIdentifier, "document", "identifier"),
+      on(AssessmentObject, "document", "identifier"),
+    ),
+    contained(on(LomObjectTitle, "record", "document"), on(LomObject, "record", "document")),
+    contained(
+      on(LomObjectTitle, "document", "title"),
+      on(AssessmentObject, "document", "titleValue"),
+    ),
+    contained(
+      on(LomObjectTitle, "document", "objectLang"),
+      on(AssessmentObject, "document", "langTag"),
+    ),
+    contained(
+      on(resourceTypeValues, "id", "parent", "stringValue"),
+      on(LomResourceType, "term", "node", "text"),
+    ),
+    contained(on(LomResourceType, "term"), on(resourceTypeValues, "id")),
+    key(on(LomResourceType, "term")),
+    contained(
+      on(resourceTypeSources, "id", "parent", "stringValue"),
+      on(LomResourceTypeSource, "term", "node", "text"),
+    ),
+    contained(on(LomResourceTypeSource, "term"), on(resourceTypeSources, "id")),
+    key(on(LomResourceTypeSource, "term")),
+    contained(on(lastUpdateds, "node", "lexical"), on(StatisticDate, "node", "lexical")),
+    contained(on(StatisticDate, "node"), on(lastUpdateds, "node")),
+    check("E1_derived", StatisticDate, (s) =>
+      s.eq(s.lexical, Compute.concat(Compute.concat(s.lead, s.day), s.trail)),
+    ),
+    contained(on(usageBaseTypes, "node", "lexical"), on(UsageBaseType, "node", "lexical")),
+    contained(on(UsageBaseType, "node"), on(usageBaseTypes, "node")),
+    contained(on(UsageValue, "node", "baseTypeLexical"), on(UsageBaseType, "node", "lexical")),
+    contained(on(usageRecordValues, "id"), on(UsageValue, "node")),
+    contained(on(UsageValue, "node"), on(usageRecordValues, "id")),
+    contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
+    check("E1_derived", UsageValue, (u) =>
+      u.and(
+        u.ne(u.baseType, "none"),
+        u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
+      ),
+    ),
+  ],
+  "LOM learning resource type": [
+    contained(on(forbiddenResourceTypeValues, "node"), on(otherVocabularySources, "node")),
+  ],
+  LomObjectIdentifier: [
+    contained(on(namingEntries, "holderParent"), on(LomObjectIdentifier, "record")),
+    contained(
+      on(LomObjectIdentifier, "entry", "general", "record", "identifier"),
+      on(generalEntries, "node", "holder", "holderParent", "token"),
+    ),
+  ],
+  LomObjectTitle: [
+    contained(on(namingTitles, "record"), on(LomObjectTitle, "record")),
+    contained(
+      on(LomObjectTitle, "string", "record", "title"),
+      on(LomTitleString, "node", "record", "textValue"),
+    ),
+    contained(
+      on(LomObjectTitle, "string", "stringLanguage"),
+      on(LomTitleString, "node", "languageTag"),
+    ),
+    check("LomObjectTitle", LomObjectTitle, (l) =>
+      l.or(
+        l.eq(l.objectLang, ""),
+        l.eq(l.stringLanguage, ""),
+        l.eq(l.stringLanguage, l.objectLang),
+      ),
+    ),
+  ],
+  "Node key": [
+    key(on(entryNodes, "id")),
+    key(on(titleStringNodes, "id")),
+    key(on(resourceTypeValues, "id")),
+    key(on(resourceTypeSources, "id")),
+  ],
+  "Usage typed value": [
+    check("Usage_typed_value", UsageValue, (u) =>
+      u.or(
+        u.in(u.baseType, unjudgedBaseTypes),
+        Compute.matches(u.text, BaseTypePattern.at("pattern", u.baseType)),
+      ),
+    ),
+  ],
+} as const;
+
+/**
+ * {@link metadataLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const metadataLaws = Object.values(metadataLawsByName).flat();
