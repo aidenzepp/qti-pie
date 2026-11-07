@@ -23,11 +23,12 @@ and both of its entry points are unstable until M3.
 - The verdict still marks `qti-custom-operator`, but its processing now runs, with the operator's
   value NULL. That NULL stands for a value plate cannot know, so a `qti-multiple`, `qti-ordered`,
   or `qti-repeat` that holds the operator's value is NULL as well. `qti-container-size` of such a
-  container is 0, and `qti-member` and `qti-contains` of it are NULL.
+  container is 0, `qti-is-null` of it is true, and `qti-member` and `qti-contains` of it are NULL.
 - The verdict still marks processing that holds any of these, and `score` does not run it: one of
   the later expressions that an item may hold, an `xi:include`, a `%` coordinate in a `qti-inside`
-  or an area mapping, a `qti-pattern-match` pattern that plate cannot translate, or a variable that
-  plate holds no value for.
+  or an area mapping, a `qti-pattern-match` pattern that plate cannot translate, a
+  `qti-lookup-outcome-value` that sets an outcome of cardinality `multiple` or `ordered`, or a
+  variable that plate holds no value for.
 - `open` refuses each of the following, as pantry's processing checker does. The refusals with
   `expression-type` and `undeclared-variable` judge only inline response processing.
   - With `expression-type`: a `qti-response-if` or `qti-response-else-if` whose condition is not a
@@ -42,6 +43,15 @@ and both of its entry points are unstable until M3.
     and a literal `n` of `qti-index` below 1 (P11).
   - With `missing-attribute`: a `qti-equal` in `absolute` or `relative` mode that has no
     `tolerance` (P36).
+- `open` also refuses each of the following with `attribute-type`, as pantry does. Before, `open`
+  refused none of them.
+  - A declaration named `completionStatus`, `numAttempts` or `duration`, the names of the built-in
+    variables, in an item or a test (`DeclarationNotReserved`).
+  - An outcome declaration named `SCORE` or `MAXSCORE` with a base type other than `float`, or one
+    named `PASSED` with a base type other than `boolean`, in an item or a test
+    (`ReservedOutcomeTypes`).
+  - A `qti-equal` whose `tolerance` holds a token that is neither an `xs:double` nor a variable's
+    name (an NCName), such as `1,5` (P6).
 - Where QTI makes an integer a float, an integer beyond the largest finite float becomes the
   largest finite float of its sign (reading 45). Before, it became an infinity.
 - The math functions run on plate's own port of FDLIBM 5.3, so they give the same result in Node,
@@ -51,12 +61,12 @@ and both of its entry points are unstable until M3.
   more than 1,000,000 values. Values written in an item or stored in a record are never bounded.
   These bounds limit size, not time, so call `score` and `advance` on items you do not trust under
   a time limit.
-- Processing reads and sets the built-in `completionStatus`. Unless a declaration names it, an
-  item's `StoredRecord` holds it among the outcomes. It is `not_attempted` before the first
-  attempt and `unknown` when the first attempt's processing starts, and each later attempt starts
-  from the value the last one left. The record's `version` stays 1. A record that does not hold
-  `completionStatus`, such as one written before this change, still reads, and its next attempt
-  starts it at `unknown`. Once an attempt has run, `results` reports the value the record holds.
+- Processing reads and sets the built-in `completionStatus`, and an item's `StoredRecord` holds it
+  among the outcomes. It is `not_attempted` before the first attempt and `unknown` when the first
+  attempt's processing starts, and each later attempt starts from the value the last one left. The
+  record's `version` stays 1. A record that does not hold `completionStatus`, such as one written
+  before this change, still reads, and its next attempt starts it at `unknown`. Once an attempt has
+  run, `results` reports the value the record holds.
 - The verdict still marks an adaptive item `adaptive="true"`, and its processing runs as a
   non-adaptive item's. Each attempt starts from the declared defaults, so outcomes do not add up
   across attempts until M5.
