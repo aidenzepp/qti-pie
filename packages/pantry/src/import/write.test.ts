@@ -22,6 +22,8 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Predicate, Result } from "effect";
 import { inject } from "vitest";
+import { readXml } from "@qti-pie/crust/read.ts";
+import { placementOf } from "#pantry/grammar/content.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { unionOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
@@ -49,9 +51,10 @@ import type {
 } from "#pantry/import/write.ts";
 import type { EntryRow } from "#pantry/package/record.ts";
 import { assemble } from "#pantry/model/assemble.ts";
-import { foldGrammarOf } from "#pantry/model/composed.ts";
+import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
+import { shred } from "#pantry/model/shred.ts";
 import type {
   AttributeEntityRow,
   AttributeRow,
@@ -63,6 +66,7 @@ import type {
   NodeRow,
   OpenNameRow,
   XdmChild,
+  XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
 import type {
@@ -364,7 +368,131 @@ const nodesOf = (root: NodeRoot): readonly NodeMember[] => {
   return found;
 };
 
+/**
+ * A lawful item with families whose models admit no character data (the item, its response
+ * declaration, its body and its choice interaction) beside mixed ones.
+ */
+const familiesItem = `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-item-body><p>Pick one.</p><qti-choice-interaction response-identifier="RESPONSE" max-choices="1"><qti-prompt>Which?</qti-prompt><qti-simple-choice identifier="A">A</qti-simple-choice><qti-simple-choice identifier="B">B</qti-simple-choice></qti-choice-interaction></qti-item-body></qti-assessment-item>`;
+
+/**
+ * The text a case writes where its family's model admits none; {@link familiesItem} holds no other
+ * text of it.
+ */
+const stray = "stray";
+
+/**
+ * One place character data stands unadmitted: an element whose model admits no text, by the child
+ * places from the root down to it, and a slot among its children.
+ */
+interface UnadmittedSlot {
+  readonly kind: string;
+  readonly path: readonly number[];
+  readonly slot: number;
+}
+
+/**
+ * Find every place of a tree where character data stands unadmitted: each slot of each element
+ * whose model's `Admission` holds no row for text.
+ *
+ * @param tree - The tree.
+ * @returns The places, in document order.
+ */
+const unadmittedSlotsOf = (tree: XdmDocument<Composed>): readonly UnadmittedSlot[] => {
+  const walk = (node: XdmChild<Composed>, path: readonly number[]): readonly UnadmittedSlot[] =>
+    node._tag === "element"
+      ? [
+          ...(Option.isNone(
+            placementOf(grammar, { child: "text", parent: node.kind, version: tree.version }),
+          )
+            ? Array.from({ length: node.children.length + 1 }, (_, slot) => ({
+                kind: node.kind,
+                path,
+                slot,
+              }))
+            : []),
+          ...node.children.flatMap((child, at) => walk(child, [...path, at])),
+        ]
+      : [];
+
+  return walk(tree.root, []);
+};
+
+/**
+ * Write {@link stray} into an element below a root at one place.
+ *
+ * @param node - The root.
+ * @param place - The place, its path read from the root.
+ * @returns The root with the text written.
+ */
+const withStray = (
+  node: XdmClosedElement<Composed>,
+  { path, slot }: Pick<UnadmittedSlot, "path" | "slot">,
+): XdmClosedElement<Composed> => {
+  const [head, ...rest] = path;
+
+  return {
+    ...node,
+    children:
+      head === undefined
+        ? node.children.toSpliced(slot, 0, { _tag: "text", value: stray })
+        : node.children.map((child, at) =>
+            at === head && child._tag === "element"
+              ? withStray(child, { path: rest, slot })
+              : child,
+          ),
+  };
+};
+
+/**
+ * Read each node's kind and state in pre-order, as the insert writes them.
+ *
+ * @param nodes - The nodes, in pre-order.
+ * @returns Each as `kind state`.
+ */
+const statesOf = (nodes: readonly NodeMember[]): readonly string[] =>
+  nodes.map(({ kind, state }) => `${kind} ${state}`);
+
 describe("rootInsertOf", { timeout: searchTimeout }, () => {
+  it.effect(
+    "writes character data its family's model does not admit at its predecessor's state, and leaves every other node's state as it was",
+    () =>
+      // Oracle: the specification as a checker, C5 and N5 (`#pantry/qti/node.ts` N5_admitted):
+      // character data steps no automaton, so it holds its predecessor's state, 0 for a first
+      // child, and an unadmitted kind is refused by name while every member after it is judged as
+      // though it were not there. Bound: every slot of every family of the item whose model admits
+      // no text.
+      Effect.gen(function* unadmitted() {
+        const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(familiesItem)));
+        const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
+        const insertOf = (root: XdmClosedElement<Composed>) =>
+          nodesOf(rootInsertOf({ ...tree, root }, { documentType: "imsqti_item_xmlv3p0", idOf }));
+        const held = statesOf(insertOf(tree.root));
+        const slots = unadmittedSlotsOf(tree);
+        assert.includeMembers(
+          slots.map(({ kind }) => kind),
+          ["qti-assessment-item", "qti-response-declaration", "qti-item-body"],
+        );
+
+        for (const slot of slots) {
+          const label = `${slot.kind} slot ${String(slot.slot)}`;
+          const nodes = insertOf(withStray(tree.root, slot));
+          const written = nodes.find(({ chars, kind }) => kind === "text" && chars === stray);
+          const family = nodes.find(
+            ({ children }) => written !== undefined && children.includes(written),
+          );
+          const at = written === undefined ? -1 : (family?.children.indexOf(written) ?? -1);
+
+          assert.isAbove(at, -1, label);
+          assert.strictEqual(
+            written?.state,
+            at === 0 ? "0" : family?.children[at - 1]?.state,
+            label,
+          );
+          assert.deepStrictEqual(statesOf(nodes.filter((node) => node !== written)), held, label);
+        }
+      }),
+  );
+
   it.effect(
     "nests every generated document's tree exactly as the XDM holds it, under ids in any order",
     (ctx) =>
@@ -1065,6 +1193,45 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
         for (const ids of first.documents) {
           assert.deepStrictEqual(ids.documentAt(ids.path), Option.some(ids.idOf(0)));
           assert.strictEqual(ids.package, first.package);
+        }
+      }),
+  );
+
+  suite.effect(
+    "reads a path listed twice as the first document listed at it, and a site's target there as the first a resource names",
+    () =>
+      // Oracle: the specification as a checker, a path is one document (reading 93): the import
+      // lists a resource's path once, and the manifest again where a resource names it
+      // (`#pantry/import/program.ts`), so `documentAt` names the first document listed at a path,
+      // the manifest's own, and `targetAt` the first listed under a resource type, never the
+      // manifest's own listing, which names none (reading 115). Bound: the simple package's
+      // listing with each of its documents listed again at its end under the item type, the
+      // manifest's the one an import writes.
+      Effect.gen(function* relisted() {
+        const program = yield* readProgram(fixtures.simple);
+        const listed = program.documents.map(({ listed: held }) => held);
+        const entries = program.files.map(({ path }) => path);
+        for (const again of listed) {
+          const minted = nodeIdsOf(
+            [...listed, { ...again, resourceType: "imsqti_item_xmlv3p0" }],
+            entries,
+          );
+          const firstAt = (path: string, named: boolean) =>
+            Option.fromUndefinedOr(
+              minted.documents
+                .find((ids) => ids.path === path && (!named || ids.documentType !== "none"))
+                ?.idOf(0),
+            );
+
+          for (const ids of minted.documents) {
+            const label = `${again.path} again, read at ${ids.path}`;
+            assert.deepStrictEqual(ids.documentAt(ids.path), firstAt(ids.path, false), label);
+            assert.deepStrictEqual(
+              Option.map(ids.targetAt(ids.path), ({ node }) => node),
+              firstAt(ids.path, true),
+              label,
+            );
+          }
         }
       }),
   );
