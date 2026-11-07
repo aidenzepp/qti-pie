@@ -125,7 +125,7 @@ const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as 
  *
  * An inline `qti-response-processing` that uses only these rules and landed expression kinds
  * becomes a rule tree; one that uses any other element is a mark keyed by that element's name, and
- * an XInclude `include` the mark `xi:include`, as it is never fetched.
+ * one that holds an XInclude `include` is the mark `xi:include`, since it is never fetched.
  */
 const engine = [
   "qti-response-condition",

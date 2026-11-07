@@ -1328,8 +1328,8 @@ const operandType = (refusal: Refusal, element: string, expression: string): str
 };
 
 /**
- * Word an `expression-type` refusal without a `check`, as before the checks had one: a lookup
- * operand against its table (reading 28), or an expression against the outcome it sets.
+ * Word an `expression-type` refusal whose detail names no `check`: a lookup operand against its
+ * table (reading 28), or an expression against the outcome it sets.
  *
  * @param refusal The refusal.
  * @param element The element's local name.
