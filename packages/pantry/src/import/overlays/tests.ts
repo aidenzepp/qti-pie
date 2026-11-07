@@ -15,8 +15,9 @@
  * The rows restate what the documents say and nothing else, and the database proves every one of
  * them (`testLaws`), so a row a builder gets wrong is refused, never accepted. Where a document
  * breaks a law, the builder still writes what the document says, so the law that refuses it is the
- * one its rows name: an inclusion cycle is cut where it closes, leaving the instance that would
- * repeat a document on its chain without the children its sites require, and a branch target with
+ * one its rows name: an inclusion cycle is cut where it closes, leaving the site that closes it
+ * without the child it requires, so no instance repeats a document on its chain and the cycle's
+ * law alone refuses it ("Inclusion cycle"), and a branch target with
  * no lawful candidate resolves to the first name that spells it, or to none.
  */
 import { Option } from "effect";
@@ -1002,9 +1003,11 @@ interface Walk {
 }
 
 /**
- * Place a document and, unless it is already on its chain, one child per site of it, each the
- * section document the site names. A site that names no document of the package places nothing,
- * and its own laws refuse it.
+ * Place a document and one child per site of it, each the document the site names. A site that
+ * names no document of the package places nothing, and its own laws refuse it; nor does a site that
+ * names a document on the chain, the document itself included, which would close an inclusion
+ * cycle: its instance holds fewer children than its document has sites, which "Inclusion cycle"
+ * refuses, and no instance repeats a document, whose placements would break the assembly's keys.
  *
  * @param walk - The assembly's walk.
  * @param chain - The documents of the instance's ancestors.
@@ -1033,32 +1036,31 @@ const place = (
 
   const rows = walk.byDocument.get(self.document);
   const sites = [...(rows?.Site.values() ?? [])].toSorted((a, b) => (a.start < b.start ? -1 : 1));
-  const children = chain.includes(self.document)
-    ? []
-    : sites.flatMap((site) => {
-        const target = rows?.SiteTarget.get(site.node)?.target;
+  const closing = new Set([...chain, self.document]);
+  const children = sites.flatMap((site) => {
+    const target = rows?.SiteTarget.get(site.node)?.target;
 
-        return target !== undefined && walk.byDocument.has(target)
-          ? [
-              place(walk, [...chain, self.document], self, {
-                assemblyKind: walk.assemblyKind,
-                document: target,
-                id: walk.newId(),
-                mixes: site.parentMixes || (site.parentLooseChain && self.mixes),
-                part: site.part === self.document ? self.part : site.part,
-                replaced: site.replaced || self.replaced,
-                rootKind:
-                  walk.byDocument.get(target)?.TestDocument.get(target)?.rootKind ?? sectionKind,
-                site: site.node,
-                siteLooseChain: site.parentLooseChain,
-                siteMixes: site.parentMixes,
-                sitePart: site.part,
-                siteReplaced: site.replaced,
-                siteStart: site.start,
-              }),
-            ]
-          : [];
-      });
+    return target !== undefined && walk.byDocument.has(target) && !closing.has(target)
+      ? [
+          place(walk, [...chain, self.document], self, {
+            assemblyKind: walk.assemblyKind,
+            document: target,
+            id: walk.newId(),
+            mixes: site.parentMixes || (site.parentLooseChain && self.mixes),
+            part: site.part === self.document ? self.part : site.part,
+            replaced: site.replaced || self.replaced,
+            rootKind:
+              walk.byDocument.get(target)?.TestDocument.get(target)?.rootKind ?? sectionKind,
+            site: site.node,
+            siteLooseChain: site.parentLooseChain,
+            siteMixes: site.parentMixes,
+            sitePart: site.part,
+            siteReplaced: site.replaced,
+            siteStart: site.start,
+          }),
+        ]
+      : [];
+  });
   self.end = walk.walked.length;
 
   return { ...fields, children };
