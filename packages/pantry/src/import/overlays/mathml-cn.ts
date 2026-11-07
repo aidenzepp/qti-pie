@@ -24,14 +24,15 @@
  * The rows restate what the tree says and nothing else.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { CnPart, nonElementKinds } from "#pantry/grammar/install.ts";
+import { CnPart } from "#pantry/grammar/install.ts";
 import { cnDefaultType, cnForms } from "#pantry/grammar/expression.ts";
 import type { CnForm } from "#pantry/grammar/expression.ts";
+import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import type { CnAttribute, CnPartText, MathCn } from "#pantry/qti/mathml-cn.ts";
 
 /**
@@ -49,11 +50,6 @@ export interface MathmlCnRows {
  * The radix a `cn` is judged under when it writes no `base` (MathML 3 §4.2.1, "default is 10").
  */
 const defaultBase = "10";
-
-/**
- * The kinds that are no element, among which the character data and the entity reference.
- */
-const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 
 /**
  * The radixes a `cn` is judged under, as the numerals `CnBase` spells them.
@@ -132,28 +128,9 @@ const stretchesOf = (
 };
 
 /**
- * Read the `type` and `base` attributes each element writes, the first of each by name.
- *
- * @param attributes - A document's attribute rows.
- * @returns Each element's lexical forms, by its id.
+ * The attributes a `cn` is judged by: its `type` and `base`.
  */
-const writtenOf = (
-  attributes: FlatRows<Composed>["attributes"],
-): ReadonlyMap<NodeId, ReadonlyMap<string, string>> => {
-  const written = new Map<NodeId, Map<string, string>>();
-  for (const { lexical, name, node } of attributes) {
-    if (name === "type" || name === "base") {
-      const values = written.get(node) ?? new Map<string, string>();
-      if (!values.has(name)) {
-        values.set(name, lexical);
-      }
-
-      written.set(node, values);
-    }
-  }
-
-  return written;
-};
+const judgedAttributes: ReadonlySet<string> = new Set(["type", "base"]);
 
 /**
  * The type and radix a `cn` is judged under, and the form of each place of its parts.
@@ -218,7 +195,7 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: Pick<NodeIds, "idOf">):
     textOf.set(node, value);
   }
 
-  const written = writtenOf(flat.attributes);
+  const written = writtenOf(flat.attributes, judgedAttributes);
   const attributes = new Map<string, Addition<typeof CnAttribute>>();
   for (const [node, values] of written) {
     if (cnIds.has(node)) {

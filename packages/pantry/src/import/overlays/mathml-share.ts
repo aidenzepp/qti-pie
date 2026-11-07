@@ -18,17 +18,16 @@
  *
  * A target that is no MathML element gets a row as any other element does, with those of its
  * ancestors, which end at an `m:math` only when an `m:math` holds it (an annotation's HTML). A
- * target no `m:math` holds has rows up to the document node, whose own row no rank can satisfy
- * (its parent is itself), so the law refuses a document the oracle accepts; that is the law's
- * gap, not the builder's.
+ * target no `m:math` holds has rows up to the document node, the one node that is its own parent:
+ * the law frees its rank as it frees an `m:math`'s, so the database accepts what the oracle does.
  *
  * The rows restate what the tree says and nothing else. Each element's children are collected in
  * one pass, appended in place, so the work is linear in the document.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { interactionKinds } from "#pantry/grammar/install.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
+import { nearestOf } from "#pantry/import/overlays/mathml-tree.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -46,45 +45,6 @@ export interface MathmlShareRows {
  * The kind of the root of a MathML tree, whose rank no parent's bounds.
  */
 const mathRoot = "m:math";
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
-
-/**
- * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
- * its context's, or itself; a child of an interaction's is that interaction; every other node's is
- * its parent's.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param rootNearest - The document node's own, its context's; itself where none is given.
- * @returns Each node's nearest interaction, by its id.
- */
-const nearestOf = (
-  nodes: readonly NodeRow<Composed>[],
-  rootNearest: NodeId | undefined,
-): ReadonlyMap<NodeId, NodeId> => {
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-      continue;
-    }
-
-    nearest.set(
-      node.id,
-      interactions.has(kinds.get(node.parent) ?? "")
-        ? node.parent
-        : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
-
-  return nearest;
-};
 
 /**
  * Collect the elements that hold a row: each share with a target and each target, with their
