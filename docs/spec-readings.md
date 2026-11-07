@@ -2424,3 +2424,36 @@ against it. A reading that is not an information-model-over-XSD case says which 
 
      This binds pantry and plate alike. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
      2026-11-05, from RV seat GEN-B/codec (`3fe6a888`, `bb71b197`; its guard `2e4d053b`).)
+
+141. **A document's encoding is the row of XML 1.0 Appendix F.1 its first bytes are in, and the label it is read as must
+     name an encoding of that row: UTF-16 with a byte order mark is `UTF-16` alone, UTF-16 without one is `UTF-16BE` or
+     `UTF-16LE` in its own order, and the writer gives each scheme the opening it is read by.** XML 1.0 (Fifth Edition)
+     section 4.3.3 says "it is a fatal error for an entity including an encoding declaration to be presented to the XML
+     processor in an encoding other than that named in the declaration, or for an entity which begins with neither a
+     Byte Order Mark nor an encoding declaration to use an encoding other than UTF-8", and Appendix F.1's note says that
+     where the opening bytes settle the encoding "section 4.3.3 still requires that the encoding declaration, if
+     present, be read and that the encoding name be checked to match the actual encoding of the entity". Section 4.3.3
+     also says "The terms "UTF-8" and "UTF-16" in this specification do not apply to related character encodings,
+     including but not limited to UTF-16BE, UTF-16LE", and "Entities encoded in UTF-16 MUST ... begin with the Byte
+     Order Mark". Unicode 16.0 section 3.10 says "In UTF-16BE, an initial byte sequence <FE FF> is interpreted as U+FEFF
+     ZERO WIDTH NO-BREAK SPACE" (D96), and likewise `<FF FE>` in UTF-16LE (D97); RFC 2781 says "Systems labelling
+     UTF-16BE text MUST NOT prepend a BOM to the text", and likewise UTF-16LE (section 3.3), and that "The detection of
+     an initial BOM does not affect de-serialization of text labelled as UTF-16BE" (sections 4.1 and 4.2). So `FE FF` or
+     `FF FE` (not followed by `00 00`, the table's `##` rule) is UTF-16 and reads only under the label `UTF-16` or none;
+     `EF BB BF` is UTF-8 and reads only under `UTF-8` or none; `00 3C 00 3F` and `3C 00 3F 00` are UTF-16BE and UTF-16LE
+     and read only under that label, so `UTF-16`, which must open with a mark, the other order, and no encoding
+     declaration at all (which makes the document UTF-8) are each refused; anything else writes ASCII as single bytes
+     and reads under any label but a UTF-16 one, `UTF-8` when it names none. UCS-4 in its four orders, with a mark or
+     without, and EBCDIC are encodings crust's reader "is unable to process", a fatal error of section 4.3.3. A label
+     the bytes rule out is refused under crust's rule `encoding-mismatch` (`decode.ts`), which replaces the narrower
+     `bare-utf16`. The declaration is read in the row's code units however far its white space runs ([3] S bounds none),
+     so no declaration is unread for its length. crust's writer gives `UTF-16` the mark `FF FE` and little-endian units,
+     and `UTF-16LE` and `UTF-16BE` no mark (`encode.ts`), so every document it writes in its own label reads back under
+     that label. libxml2 2.9.13's `xmllint` reads a UTF-16 mark under `UTF-16LE` or `UTF-16BE`, and unmarked UTF-16
+     under `UTF-8` or with no encoding declaration, in the encoding its first bytes say, and a UTF-8 mark under
+     `ISO-8859-1` in the declared label, so `é` reads as `Ã©`; it exits 0 for each, and this reading refuses each, so
+     its verdict is not this reading's. The 1EdTech example corpus holds no document with a mark or in UTF-16, and of
+     the QTI 3.0 schema set only `w3/XInclude.xsd` opens with one (`FF FE`, no declaration), which reads as `UTF-16` as
+     before. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by lane
+     CRUST (`23329950`), on GEN-B/codec's findings N3 and N4, under the operator's standing ruling of 2026-11-05 that
+     the spec wins.)
