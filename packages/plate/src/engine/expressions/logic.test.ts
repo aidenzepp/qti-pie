@@ -152,6 +152,10 @@ describe("the logic family's evaluators", () => {
     assert.deepStrictEqual(evaluated(anyNOf(min, max, [true, true, true, null])), valueOf(true));
   });
 
+  it("[I-9a] qti-any-n with min 1 and max 1 gives NULL for {T,NULL}, since the NULL decides it (info.txt:9406)", () => {
+    assert.deepStrictEqual(evaluated(anyNOf(literal(1n), literal(1n), [true, null])), unknown);
+  });
+
   it("[I-9a] qti-any-n gives false when more operands are true than max, NULLs notwithstanding", () => {
     assert.deepStrictEqual(
       evaluated(anyNOf(literal(1n), literal(2n), [true, true, true, null])),

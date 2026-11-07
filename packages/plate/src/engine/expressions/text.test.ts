@@ -381,6 +381,42 @@ describe("the text family's evaluators", () => {
     }
   });
 
+  it("[I-9a] qti-inside reads coords that do not fit the shape as HTML's image maps do: too few hold no point, those beyond are ignored (reading 59)", () => {
+    const cases: readonly (readonly [
+      AreaShape,
+      readonly number[],
+      readonly [bigint, bigint],
+      boolean,
+    ])[] = [
+      ["rect", [10, 20, 30], [15n, 25n], false],
+      ["circle", [50, 50], [50n, 50n], false],
+      ["ellipse", [50, 50, 20], [50n, 50n], false],
+      ["poly", [0, 0, 10, 0], [5n, 0n], false],
+      ["poly", [0, 0, 10, 0, 0], [0n, 0n], false],
+      ["rect", [10, 20, 30, 40, 0, 0], [20n, 30n], true],
+      ["rect", [10, 20, 30, 40, 0, 0], [5n, 5n], false],
+      ["circle", [50, 50, 10, 90], [55n, 55n], true],
+      ["circle", [50, 50, 10, 90], [61n, 50n], false],
+      ["ellipse", [50, 50, 20, 10, 90, 90], [70n, 50n], true],
+      ["ellipse", [50, 50, 20, 10, 90, 90], [50n, 61n], false],
+      ["poly", [0, 0, 10, 0, 0, 10, 90], [2n, 2n], true],
+      ["poly", [0, 0, 10, 0, 0, 10, 90], [6n, 6n], false],
+      ["default", [1, 2, 3], [1000n, -1000n], true],
+      ["rect", [30, 40, 10, 20], [20n, 30n], true],
+      ["circle", [50, 50, 0], [50n, 50n], false],
+      ["ellipse", [50, 50, 0, 10], [50n, 50n], false],
+      ["ellipse", [50, 50, 20, 0], [50n, 50n], false],
+    ];
+
+    for (const [shape, coords, point, held] of cases) {
+      assert.deepStrictEqual(
+        insideAt(shape, coords, point),
+        truth(held),
+        `${shape} ${coords.join(",")} at ${point.join(" ")}`,
+      );
+    }
+  });
+
   it("[I-9a] qti-inside over a container gives true when any point is inside, and NULL for NULL", () => {
     const rect = [10, 20, 30, 40];
 

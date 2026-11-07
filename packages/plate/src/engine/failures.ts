@@ -53,12 +53,13 @@ export class UnknownIdentifierError extends Data.TaggedError("UnknownIdentifierE
 }
 
 /**
- * The failure of a `qti-set-outcome-value` whose expression's base type or cardinality differs
- * from the outcome's declaration, which the evaluator returns.
+ * The failure of a `qti-set-outcome-value` whose expression gives a value, not NULL, of a base type
+ * or cardinality that differs from the outcome's declaration, which the evaluator returns.
  *
  * QTI assigns without conversion: "floating point values can not be assigned to integer variables
- * and vice-versa", and the expression's type must match the target's. A NULL keeps the type of the
- * expression that gave it, so it is checked the same way. The engine stores no value of another
+ * and vice-versa", and the expression's type must match the target's. A NULL is never checked: it
+ * is the absence of a value, so it has no type to differ from the outcome's, and the outcome takes
+ * its own NULL, of its declared base type and cardinality. The engine stores no value of another
  * type, so the record always holds each outcome at its declared type.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_SetValue
