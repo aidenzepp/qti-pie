@@ -154,6 +154,23 @@ export const libxml2Class = (stderr: string, exited: number): string => {
 };
 
 /**
+ * Class the parser's own refusal by its message, its position and quoted parts blanked, so a
+ * well-formedness refusal libxml2 does not make is keyed by what crust's parser said; a refusal
+ * under a named rule is keyed by the rule alone.
+ *
+ * @param failure - The refusal.
+ * @returns ` (the class)` for the parser's refusal, empty for a named rule's.
+ */
+const parserClass = (failure: ReaderRefusal | WellFormednessError): string =>
+  failure._tag === "ReaderRefusal"
+    ? ""
+    : ` (${failure.message
+        .replace(/^\d+:\d+: /u, "")
+        .replaceAll(/"[^"]*"/gu, '"_"')
+        .replaceAll(/\b\d+\b/gu, "N")
+        .slice(0, 80)})`;
+
+/**
  * Write a reader's refusal as one line: its rule and detail, or its message.
  *
  * @param failure - The refusal.
@@ -195,22 +212,94 @@ const familyOf = (bytes: Uint8Array): Option.Option<string> => {
 };
 
 /**
+ * Read bytes as code points one to one, as ISO-8859-1 and ASCII are defined.
+ *
+ * @param bytes - The bytes.
+ * @returns The text.
+ */
+const codePointsOf = (bytes: Uint8Array): string =>
+  Array.from(bytes, (byte) => String.fromCodePoint(byte)).join("");
+
+/**
+ * The encoding pseudo-attribute of a document's XML declaration, read in the encoding its first
+ * bytes say over the whole document, as XML 1.0's [23] XMLDecl bounds no whitespace: its label,
+ * and the number of characters from the document's start to its end.
+ *
+ * @param bytes - The document.
+ * @param family - Its encoding by its first bytes.
+ * @returns The label and where it ends, none when the declaration names none.
+ */
+const declarationOf = (
+  bytes: Uint8Array,
+  family: Option.Option<string>,
+): Option.Option<{ readonly end: number; readonly label: string }> => {
+  const text = Option.match(family, {
+    onNone: () => codePointsOf(bytes),
+    onSome: (held) =>
+      new TextDecoder(held === "UTF-8" ? "utf-8" : held.toLowerCase()).decode(bytes),
+  });
+  const found = /^\uFEFF?<\?xml\s[^?]*?encoding\s*=\s*["'](?<label>[^"']*)["']/u.exec(text);
+  const label = found?.groups?.["label"];
+
+  return found === null || label === undefined
+    ? Option.none()
+    : Option.some({ end: found[0].length, label });
+};
+
+/**
  * The label a document's XML declaration names, read in the encoding its first bytes say.
  *
  * @param bytes - The document.
  * @param family - Its encoding by its first bytes.
  * @returns The label, none when it names none.
  */
-const declaredLabel = (bytes: Uint8Array, family: Option.Option<string>): Option.Option<string> => {
-  const head = bytes.subarray(0, 400);
-  const text = Option.match(family, {
-    onNone: () => Array.from(head, (byte) => String.fromCodePoint(byte)).join(""),
-    onSome: (held) => new TextDecoder(held === "UTF-8" ? "utf-8" : held.toLowerCase()).decode(head),
-  });
+const declaredLabel = (bytes: Uint8Array, family: Option.Option<string>): Option.Option<string> =>
+  Option.map(declarationOf(bytes, family), ({ label }) => label);
 
-  return Option.fromNullishOr(
-    /^\uFEFF?<\?xml\s[^?]*?encoding\s*=\s*["'](?<label>[^"']*)["']/u.exec(text)?.groups?.["label"],
-  );
+/**
+ * How many leading characters crust's reader searches for the XML declaration's encoding, as
+ * crust documents it (decode.ts `declarationWindow`: 1024 bytes of an ASCII-compatible document,
+ * 1024 characters of a UTF-16 one). XML 1.0 bounds no declaration, so a longer one is crust's
+ * limit, recorded, never a defect of the search.
+ */
+const sniffWindow = 1024;
+
+/**
+ * Whether a UTF-16 document, by its mark or its Appendix F pattern, ends on half a code unit or
+ * on a high surrogate no low one follows.
+ *
+ * @param bytes - The document.
+ * @returns Whether it does.
+ */
+const endsInsidePair = (bytes: Uint8Array): boolean => {
+  const family = familyOf(bytes);
+  if (!Option.exists(family, (held) => held !== "UTF-8")) {
+    return false;
+  }
+
+  if (bytes.length % 2 === 1) {
+    return true;
+  }
+
+  const [first = 0, second = 0] = bytes.subarray(-2);
+  const unit = Option.contains(family, "UTF-16BE")
+    ? first * 0x1_00 + second
+    : second * 0x1_00 + first;
+
+  return unit >= 0xd8_00 && unit <= 0xdb_ff;
+};
+
+/**
+ * Whether an unmarked document's declaration names its encoding past crust's sniff window.
+ *
+ * @param bytes - The document.
+ * @returns Whether it does.
+ */
+const pastSniffWindow = (bytes: Uint8Array): boolean => {
+  const family = familyOf(bytes);
+  const marked = bytes[0] === 0xef || bytes[0] === 0xfe || bytes[0] === 0xff;
+
+  return !marked && Option.exists(declarationOf(bytes, family), ({ end }) => end > sniffWindow);
 };
 
 /**
@@ -769,15 +858,6 @@ interface LabelDecoder {
 }
 
 /**
- * Read bytes as code points one to one, as ISO-8859-1 and ASCII are defined.
- *
- * @param bytes - The bytes.
- * @returns The text.
- */
-const codePointsOf = (bytes: Uint8Array): string =>
-  Array.from(bytes, (byte) => String.fromCodePoint(byte)).join("");
-
-/**
  * Decode bytes with Node's WHATWG decoder for an encoding, every error fatal.
  *
  * @param encoding - The decoder's encoding.
@@ -905,7 +985,7 @@ const wellFormedness = Effect.fnUntraced(function* wellFormedness(
   const signature = Option.match(mismatch, {
     onNone: () =>
       libxml2Accepts
-        ? `O1 crust ${crustVerdict}, libxml2 accepts`
+        ? `O1 crust ${crustVerdict}${Result.match(read, { onFailure: parserClass, onSuccess: () => "" })}, libxml2 accepts`
         : `O1 crust accepts, libxml2 refuses: ${libxml2Class(linted.stderr, linted.code)}`,
     onSome: () =>
       `O1 crust ${Result.isSuccess(read) ? "accepts" : "refuses"}, libxml2 ${libxml2Accepts ? "accepts" : "refuses"}`,
@@ -1198,7 +1278,32 @@ const decodeDifferential = Effect.fnUntraced(function* decodeDifferential(
     } satisfies Found;
   }
 
-  if (Result.isFailure(read) || again === undefined || Result.isFailure(again)) {
+  if (Result.isFailure(read)) {
+    // Both refuse: by one rule, the decoder being the only difference between the two reads.
+    // Where the independent decoder refuses the bytes, crust's rule is decode's.
+    const crustRule = refusalRule(read.failure);
+    const decodedRule =
+      again === undefined || Result.isSuccess(again) ? "decode" : refusalRule(again.failure);
+
+    return crustRule === decodedRule
+      ? ({ disagreements: [], features: [`o5 both refuse ${crustRule}`] } satisfies Found)
+      : ({
+          disagreements: [
+            {
+              detail:
+                `crust refuses the bytes (${refusalText(read.failure)}); the decoded text is refused under ${decodedRule}`.slice(
+                  0,
+                  400,
+                ),
+              oracle: "O5",
+              signature: `O5 decode: crust refuses under ${crustRule}, the decoded text under ${decodedRule}`,
+            },
+          ],
+          features: [`o5 rules differ ${crustRule} ${decodedRule}`],
+        } satisfies Found);
+  }
+
+  if (again === undefined || Result.isFailure(again)) {
     return { disagreements: [], features: ["o5 both refuse"] } satisfies Found;
   }
 
@@ -1229,7 +1334,12 @@ type TreeClass = "defaulted name in no namespace" | "namespace name holds a refe
  * A class of input whose every disagreement has one cause: a {@link TreeClass}, or a document
  * whose declaration names another encoding than its bytes are in.
  */
-export type InputClass = TreeClass | "encoding declared against the bytes";
+export type InputClass =
+  | TreeClass
+  | "UTF-16 input ends inside a surrogate pair"
+  | "default names an entity declared after it"
+  | "declaration past the sniff window"
+  | "encoding declared against the bytes";
 
 /**
  * Find the class of input a tree crust read falls in, if any.
@@ -1265,6 +1375,14 @@ const inputClassOf = (
   bytes: Uint8Array,
   read: Result.Result<XmlDocument, ReaderRefusal | WellFormednessError>,
 ): InputClass | undefined => {
+  if (endsInsidePair(bytes)) {
+    return "UTF-16 input ends inside a surrogate pair";
+  }
+
+  if (pastSniffWindow(bytes)) {
+    return "declaration past the sniff window";
+  }
+
   if (Option.isSome(declaredAgainstBytes(bytes))) {
     return "encoding declared against the bytes";
   }
@@ -1279,7 +1397,7 @@ const inputClassOf = (
  * @returns Whether it does.
  */
 const isClassed = (held: CodecDisagreement): boolean =>
-  /^O\d (?:defaulted name in no namespace|namespace name holds a reference|encoding declared against the bytes): /u.test(
+  /^O\d (?:defaulted name in no namespace|namespace name holds a reference|encoding declared against the bytes|declaration past the sniff window|UTF-16 input ends inside a surrogate pair|default names an entity declared after it): /u.test(
     held.signature,
   );
 
@@ -1521,6 +1639,41 @@ const namespacedDefault = (genome: CodecGenome): boolean =>
     );
 
 /**
+ * Whether a genome's internal subset holds an attribute-list default that references a general
+ * entity the subset declares only after it.
+ *
+ * @param genome - The genome.
+ * @returns Whether it does.
+ */
+const defaultBeforeEntity = (genome: CodecGenome): boolean => {
+  const subset = genome.doctype.pipe(
+    Option.flatMap(({ subset: held }) => held),
+    Option.getOrElse((): readonly Declaration[] => []),
+  );
+
+  return subset.some(
+    (declaration, at) =>
+      declaration._tag === "attlist" &&
+      declaration.default._tag === "value" &&
+      declaration.default.pieces.some(
+        (piece) =>
+          piece._tag === "ref" &&
+          subset
+            .slice(at + 1)
+            .some(
+              (later) => later._tag === "entity" && !later.parameter && later.name === piece.name,
+            ) &&
+          !subset
+            .slice(0, at)
+            .some(
+              (earlier) =>
+                earlier._tag === "entity" && !earlier.parameter && earlier.name === piece.name,
+            ),
+      ),
+  );
+};
+
+/**
  * Whether a genome's internal subset references a parameter entity that no declaration before the
  * reference declares, which a non-validating processor does not read (XML 1.0 section 5.1).
  *
@@ -1582,6 +1735,13 @@ const judgeOne = Effect.fnUntraced(function* judgeOne(
         // class even where crust refused the document over it and left no tree to see it in.
         namespacedDefault(genome) && Result.isFailure(read) && !isClassed(held)
           ? classed(held, "defaulted name in no namespace")
+          : held,
+      )
+      .map((held) =>
+        // A default naming an entity the subset declares after it is crust's refusal by XML 1.0
+        // section 4.1's last sentence, whatever else the document holds.
+        defaultBeforeEntity(genome) && Result.isFailure(read) && !isClassed(held)
+          ? classed(held, "default names an entity declared after it")
           : held,
       )
       .map((held) =>
