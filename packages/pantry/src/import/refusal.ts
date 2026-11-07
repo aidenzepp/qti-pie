@@ -3032,6 +3032,11 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
   [primaryKeyOf("CnPartText", "node", "part"), "E1 derived"],
   [primaryKeyOf("MathCn", "node"), "E1 derived"],
+  [primaryKeyOf("CellLeaf", "cell", "at"), "E1 derived"],
+  [primaryKeyOf("MathAction", "node"), "E1 derived"],
+  [primaryKeyOf("MathAlignGroup", "node"), "E1 derived"],
+  [primaryKeyOf("MathAlignScope", "node"), "E1 derived"],
+  [primaryKeyOf("MathCell", "node"), "E1 derived"],
 ];
 
 /**
