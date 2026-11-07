@@ -22,7 +22,7 @@ import type {
 import { runAttempt } from "#plate/engine/attempt.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
-import type { TemplateRule } from "#plate/model/expression.ts";
+import type { IntegerOrRef, TemplateRule } from "#plate/model/expression.ts";
 import { landedKinds } from "#plate/model/expressions/read.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type {
@@ -2197,6 +2197,94 @@ describe("buildItem", () => {
         { feature: "qti-portable-custom-interaction", path, shown: "notice" },
       ]);
     }),
+  );
+
+  it.effect(
+    "[I-5] holds a qti-printed-variable as a printed-variable node with every attribute it carries, and lists no unsupported feature for it",
+    () =>
+      Effect.gen(function* holdsPrintedVariable() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "p",
+                [],
+                [
+                  text("Score: "),
+                  el("qti-printed-variable", [
+                    attr("base", "B"),
+                    attr("delimiter", ", "),
+                    attr("field", "x"),
+                    attr("format", "%.1f"),
+                    attr("identifier", " SCORE "),
+                    attr("index", "2"),
+                    attr("mapping-indicator", ":"),
+                    attr("power-form", "true"),
+                  ]),
+                ],
+              ),
+            ],
+            declarations: [
+              declaration("qti-outcome-declaration", "B", "integer", "single"),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(built.body, [
+          {
+            attributes: [],
+            children: [
+              { kind: "text", text: "Score: " },
+              {
+                base: { _tag: "ref", identifier: "B" },
+                delimiter: ", ",
+                field: Option.some("x"),
+                format: Option.some("%.1f"),
+                identifier: "SCORE",
+                index: Option.some<IntegerOrRef>({ _tag: "literal", value: 2n }),
+                kind: "printed-variable",
+                mappingIndicator: ":",
+                path: `${body}/p/qti-printed-variable`,
+                powerForm: true,
+              },
+            ],
+            kind: "element",
+            path: `${body}/p`,
+            tag: "p",
+          },
+        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-5] holds a qti-printed-variable that carries only its identifier at the attributes' defaults: base 10, the delimiter ;, the mapping indicator =, no power form, and no format, field or index",
+    () =>
+      Effect.gen(function* printedVariableDefaults() {
+        const built = yield* buildItem(
+          item({
+            body: [el("qti-printed-variable", [attr("identifier", "SCORE")])],
+            declarations: [declaration("qti-outcome-declaration", "SCORE", "float", "single")],
+          }),
+        );
+
+        assert.deepStrictEqual(built.body, [
+          {
+            base: { _tag: "literal", value: 10n },
+            delimiter: ";",
+            field: Option.none(),
+            format: Option.none(),
+            identifier: "SCORE",
+            index: Option.none(),
+            kind: "printed-variable",
+            mappingIndicator: "=",
+            path: `${body}/qti-printed-variable`,
+            powerForm: false,
+          },
+        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
   );
 
   it.effect("[I-0] [I-8] marks what it does not render outside the body and on body elements", () =>

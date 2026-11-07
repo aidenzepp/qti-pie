@@ -288,8 +288,8 @@ const namesOf = (element: BodyElement): readonly string[] =>
   element.attributes.map((attribute) => attribute.name);
 
 /**
- * Write a body's nodes compactly: an element as its tag with its children, text as itself and a
- * notice as `notice:<feature>@<path>`.
+ * Write a body's nodes compactly: an element as its tag with its children, text as itself, a
+ * printed variable as `printed:<identifier>@<path>` and a notice as `notice:<feature>@<path>`.
  *
  * @param nodes The nodes.
  * @returns One entry per node.
@@ -305,6 +305,9 @@ const outline = (nodes: readonly BodyNode[]): readonly unknown[] =>
       }
       case "unsupported": {
         return `notice:${node.feature}@${node.path}`;
+      }
+      case "printed-variable": {
+        return `printed:${node.identifier}@${node.path}`;
       }
       case "choice":
       case "extended-text":
@@ -344,6 +347,29 @@ describe("check", () => {
     assert.strictEqual(accepted.item.identifier, "item-1");
     assert.deepStrictEqual(accepted.unsupported, []);
     assert.deepStrictEqual(outline(accepted.item.body), [{ p: ["Hello"] }]);
+  });
+
+  it("[I-5] accepts an item whose body prints a variable as accepted, holding the printed variable as a body node and naming it no unsupported feature", () => {
+    const accepted = acceptedOf(
+      verdictOf(
+        item([
+          score(),
+          body([
+            el(
+              "p",
+              [],
+              [text("Score: "), el("qti-printed-variable", [attr("identifier", "SCORE")])],
+            ),
+          ]),
+        ]),
+      ),
+      "accepted",
+    );
+
+    assert.deepStrictEqual(accepted.unsupported, []);
+    assert.deepStrictEqual(outline(accepted.item.body), [
+      { p: ["Score: ", `printed:SCORE@${bodyPath}/p/qti-printed-variable`] },
+    ]);
   });
 
   it("refuses a root outside the QTI namespace with not-qti-root alone", () => {

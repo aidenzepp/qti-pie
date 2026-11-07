@@ -43,6 +43,7 @@ export const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction
       case "text-entry": {
         return [node];
       }
+      case "printed-variable":
       case "text":
       case "unsupported": {
         return [];

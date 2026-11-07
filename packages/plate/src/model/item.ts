@@ -49,11 +49,13 @@ import type {
   DeclarationFacet,
   Expression,
   ExpressionType,
+  IntegerOrRef,
   KindRule,
   ResultAttributes,
   Rule,
   TemplateRule,
 } from "#plate/model/expression.ts";
+import { integerOrRefOf } from "#plate/model/expression.ts";
 import { kindRules, landedKinds, readExpression } from "#plate/model/expressions/read.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { translate } from "#plate/model/regex.ts";
@@ -572,6 +574,58 @@ export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kin
 }
 
 /**
+ * A `qti-printed-variable` (the information model's PrintedVariable): the place in the body where
+ * the value of an outcome or a template variable is written as text, with the attributes that say
+ * how. The validator has judged what it names (`printed-variable-ref`) and its `format` (R38).
+ *
+ * The model holds it whatever the variable's value, which comes from an attempt's record, so
+ * `redactItem` in `#plate/payload.ts` decides what the page sees in its place. Its `format`,
+ * `field`, `delimiter` and `mapping-indicator` are `xs:normalizedString`s, held as XSD reads them:
+ * each tab and line break a space, nothing trimmed.
+ */
+export interface PrintedVariable {
+  /**
+   * `base`, 10 when absent: the number base the `i` conversion writes an integer in, as a literal
+   * or as the name of the single integer outcome or template variable that holds it (the XSD's
+   * union of `xs:integer` and a variable's name).
+   */
+  readonly base: IntegerOrRef;
+  /**
+   * `delimiter`, `;` when absent: what separates the values of a container.
+   */
+  readonly delimiter: string;
+  /**
+   * `field`, none when absent: the field of a record value to write.
+   */
+  readonly field: Option.Option<string>;
+  /**
+   * `format`, none when absent: one printf conversion, which R38 has judged; with none, the value
+   * is written in its default form.
+   */
+  readonly format: Option.Option<string>;
+  /**
+   * `identifier`: the outcome or template variable whose value is written.
+   */
+  readonly identifier: string;
+  /**
+   * `index`, none when absent: which value of a container to write, counted from 1, as a literal or
+   * as the name of the single integer outcome or template variable that holds it.
+   */
+  readonly index: Option.Option<IntegerOrRef>;
+  readonly kind: "printed-variable";
+  /**
+   * `mapping-indicator`, `=` when absent: what separates a record field's name from its value.
+   */
+  readonly mappingIndicator: string;
+  readonly path: string;
+  /**
+   * `power-form`, an `xs:boolean`, false when absent: whether a float written with no `format`
+   * shows its exponent as a power of ten.
+   */
+  readonly powerForm: boolean;
+}
+
+/**
  * A body part plate does not render, shown as a notice in its place; its subtree is dropped.
  */
 export interface Unsupported {
@@ -594,7 +648,8 @@ export type Interaction =
   | TextEntryInteraction;
 
 /**
- * A node of the item body: an element, a text, one of the four interactions, or a notice.
+ * A node of the item body: an element, a text, one of the four interactions, a printed variable,
+ * or a notice.
  */
 export type BodyNode =
   | BodyElement
@@ -603,6 +658,7 @@ export type BodyNode =
   | InlineChoiceInteraction
   | TextEntryInteraction
   | ExtendedTextInteraction
+  | PrintedVariable
   | Unsupported;
 
 /**
@@ -1710,13 +1766,62 @@ const interactionNode = (
   });
 
 /**
+ * Read an `xs:normalizedString` attribute's value as XSD reads it (`whiteSpace="replace"`): each
+ * tab, line feed and carriage return becomes a space, and nothing is trimmed.
+ *
+ * @param written The attribute's value as written.
+ * @returns The value.
+ */
+const normalizedString = (written: string): string => written.replaceAll(/[\t\n\r]/gu, " ");
+
+/**
+ * Read a `qti-printed-variable` into its body node, with the marks it carries as a body element.
+ * `identifier` is read as an identifier; `base` and `index` are each a literal or a name, split as
+ * the validator splits them ({@link integerOrRefOf}); `format`, `field`, `delimiter` and
+ * `mapping-indicator` are `xs:normalizedString`s; and an absent attribute takes its default.
+ *
+ * @param build The build.
+ * @param element The printed variable.
+ * @returns Its body node, or the refusal `missing-attribute` when it has no `identifier`, or
+ *   `value-type` when `power-form` is no `xs:boolean`; the validator refuses both first.
+ */
+const printedVariable = (
+  build: Build,
+  element: SourceElement,
+): Effect.Effect<PrintedVariable, Refusal> =>
+  Effect.gen(function* readPrintedVariable() {
+    markElement(build, element, true);
+
+    const identifier = yield* identifierAttribute(build, element, "identifier");
+    const powerForm = yield* xsBoolean(build, element, "power-form", false);
+    const written = (name: string): Option.Option<string> =>
+      Option.map(valueOf(element, name), normalizedString);
+
+    return {
+      base: Option.match(valueOf(element, "base"), {
+        onNone: (): IntegerOrRef => ({ _tag: "literal", value: 10n }),
+        onSome: integerOrRefOf,
+      }),
+      delimiter: Option.getOrElse(written("delimiter"), () => ";"),
+      field: written("field"),
+      format: written("format"),
+      identifier,
+      index: Option.map(valueOf(element, "index"), integerOrRefOf),
+      kind: "printed-variable",
+      mappingIndicator: Option.getOrElse(written("mapping-indicator"), () => "="),
+      path: pathOf(build, element),
+      powerForm,
+    };
+  });
+
+/**
  * Read one child of a body element.
  *
  * @param build The build.
  * @param parent The element that holds it.
  * @param child The child.
  * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model,
- *   or a notice for anything else, its subtree dropped; or a refusal.
+ *   a printed variable's, or a notice for anything else, its subtree dropped; or a refusal.
  */
 const bodyNode = (
   build: Build,
@@ -1734,6 +1839,10 @@ const bodyNode = (
   const interaction = interactionNames.find((name) => isQti(child, name));
   if (interaction !== undefined) {
     return interactionNode(build, child, interaction);
+  }
+
+  if (isQti(child, "qti-printed-variable")) {
+    return printedVariable(build, child);
   }
 
   if (!isQti(child) || child.local.startsWith("qti-")) {
@@ -2882,8 +2991,9 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * Build the item model of a valid `qti-assessment-item`.
  *
  * The body keeps text and HTML elements as written. Choice, Text Entry and Extended Text become
- * their models when their binding is one `renders` lists and they carry no notice feature; any
- * other `qti-*` element in the body becomes a notice, its subtree dropped. Each `renders` mark adds
+ * their models when their binding is one `renders` lists and they carry no notice feature, and a
+ * `qti-printed-variable` becomes its model; any other `qti-*` element in the body becomes a notice,
+ * its subtree dropped. Each `renders` mark adds
  * an unsupported feature, and so does each `qti-*` element outside the body that the model does not
  * read. Response processing is a rule tree: a built-in template resolves to the tree its text
  * gives, and inline rules become their tree when every element is in the engine. The tree is kept
