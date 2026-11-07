@@ -52,7 +52,7 @@ import type {
 } from "#pantry/grammar/attributes.ts";
 import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
-import { idField, roster, sourced } from "#pantry/grammar/closed.ts";
+import { idField, roster, rowsAt, sourced } from "#pantry/grammar/closed.ts";
 import type { ClosedRelationError, Roster } from "#pantry/grammar/closed.ts";
 import { compositions } from "#pantry/grammar/compositions.ts";
 import {
@@ -105,13 +105,7 @@ import {
 import { contentModels, typeDerivations } from "#pantry/vocab/inventory/models.ts";
 import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import { globalKinds, vocabularies as rosters } from "#pantry/vocab/inventory/vocabularies.ts";
-import type {
-  ContentModel,
-  Domain,
-  Source,
-  TypeText,
-  VocabularyRoster,
-} from "#pantry/vocab/inventory/types.ts";
+import type { ContentModel, Domain, Source, TypeText } from "#pantry/vocab/inventory/types.ts";
 import { namespaceClassOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import * as open from "#pantry/vocab/open.ts";
 
@@ -163,16 +157,16 @@ export const spelledCardinalities: ReadonlySet<string> = new Set([
  * @param declared - The vocabulary's roster.
  * @returns The vocabulary as the composition reads it.
  */
-const vocabulary = <const R extends VocabularyRoster>(
+const vocabulary = <const R extends (typeof rosters)[number]>(
   declared: R,
 ): Vocabulary & { readonly attributes: R["attributes"]; readonly kinds: R["kinds"] } => {
-  const held = new Set(declared.kinds.map(({ handle }) => handle));
+  const held = new Set<string>(declared.kinds.map(({ handle }) => handle));
 
   return {
     admission: [],
     attributes: declared.attributes,
     declarations: readDeclarations(attributeDeclarations.filter(({ kind }) => held.has(kind))),
-    facets: facets.vocabularyFacets.get(declared.name) ?? facets.noFacets,
+    facets: facets.vocabularyFacets[declared.name],
     kinds: declared.kinds,
     models: contentModels.filter(({ kind }) => held.has(kind)),
     namespace: declared.namespace,
@@ -306,7 +300,7 @@ export const coveredBy = (
  * @param kind - The kind.
  * @returns Its namespace name.
  */
-const namespaceOfKind = (kinds: Kinds<string, string>, kind: string): string =>
+const namespaceOfKind = (kinds: Pick<Kinds<string, string>, "elementName">, kind: string): string =>
   Option.match(kinds.elementName.lookup({ kind }), {
     onNone: () => "",
     onSome: ({ namespace }) => namespace,
@@ -459,8 +453,7 @@ const byOwner = <R extends { readonly owner: string; readonly versions: readonly
   const grouped = new Map<string, R[]>();
   for (const row of rows) {
     for (const version of row.versions) {
-      const key = `${version} ${row.owner}`;
-      grouped.set(key, [...(grouped.get(key) ?? []), row]);
+      grouped.getOrInsertComputed(`${version} ${row.owner}`, () => []).push(row);
     }
   }
 
@@ -524,7 +517,7 @@ const governedOf = (
   const governed = governors.flatMap(({ governs, kind, version }) => {
     const key = `${version} ${governs}`;
     const own = readDeclarations(
-      (declaredBy.get(key) ?? []).map(({ domain, name, type, use }): Declared => ({
+      rowsAt(declaredBy, key).map(({ domain, name, type, use }): Declared => ({
         domain,
         kind,
         name,
@@ -535,7 +528,7 @@ const governedOf = (
     );
     const declaresId = own.some(isIdType);
     const hosts = [
-      ...(wildcardOf.get(key) ?? []).flatMap(({ namespace, processing }) =>
+      ...rowsAt(wildcardOf, key).flatMap(({ namespace, processing }) =>
         open
           .attributesUnder({ namespace, processing }, namespaceOfKind(kinds, kind))
           .filter(({ name }) => !covered(version, kind) || name === "data-*")
@@ -682,11 +675,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
       ),
       vocabularies: list,
     });
-    const namespaceOf = (kind: string) =>
-      Option.getOrElse(
-        Option.map(base.elementName.lookup({ kind }), ({ namespace }) => namespace),
-        () => "",
-      );
+    const namespaceOf = (kind: string) => namespaceOfKind(base, kind);
     const installed = yield* contentOf({
       facets: stated.map((facet) => facet.content),
       foreignRoots: open.foreignRoots,
@@ -814,7 +803,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
       kindByNameUnder: yield* namesUnder({
         admitted: admission.rows,
         kinds: kinds.nodeKind,
-        nameOf: (kind) => Option.getOrUndefined(kinds.elementName.lookup({ kind })),
+        nameOf: (kind) => kinds.elementName.lookup({ kind }),
         versions: kinds.versions,
       }),
       kinds,

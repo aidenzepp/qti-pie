@@ -729,7 +729,7 @@ const widenedOnly = (
  */
 const statedReadings: ReadonlyMap<string, ReadonlySet<number>> = (() => {
   const stated = new Map<string, Set<number>>();
-  for (const facets of [...vocabularyFacets.values(), documentLayer, openVocabulary]) {
+  for (const facets of [...Object.values(vocabularyFacets), documentLayer, openVocabulary]) {
     for (const edit of facets.content.edits) {
       const cited = /^spec reading (?<reading>\d+)\b/u.exec(edit.source)?.groups?.["reading"];
       if (cited !== undefined) {

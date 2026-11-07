@@ -282,6 +282,20 @@ export const ownContext = (self: NodeId): DocumentContext => ({
 });
 
 /**
+ * The key a document's folds are held under in {@link Folds}: this module's alone, so no reader but
+ * {@link foldAt} reaches them.
+ */
+const byNode: unique symbol = Symbol("folds");
+
+/**
+ * A document's folds, as {@link foldOf} gives them: opaque, each node's read by {@link foldAt}, the
+ * one reader, which is total.
+ */
+export interface Folds {
+  readonly [byNode]: ReadonlyMap<NodeId, Folded>;
+}
+
+/**
  * Read one node's fold: total, since {@link foldOf} folds every node it is given or throws.
  *
  * @param folds - A document's folds, as {@link foldOf} gives them.
@@ -290,8 +304,8 @@ export const ownContext = (self: NodeId): DocumentContext => ({
  * @throws {Error} When the node is no node of the folded document: a defect of the caller, which
  *   read a node of one document in another's folds.
  */
-export const foldAt = (folds: ReadonlyMap<NodeId, Folded>, node: NodeId): Folded => {
-  const folded = folds.get(node);
+export const foldAt = (folds: Folds, node: NodeId): Folded => {
+  const folded = folds[byNode].get(node);
   if (folded === undefined) {
     throw new Error(
       `Node ${node} is no node of the folded document, and foldOf folds every node it is given. Read each node in the folds of its own document.`,
@@ -311,14 +325,11 @@ export const foldAt = (folds: ReadonlyMap<NodeId, Folded>, node: NodeId): Folded
  *
  * @param nodes - The document's node rows as `flatten` writes them, in document order.
  * @param context - The document's context.
- * @returns Each node's fold, by its id, which {@link foldAt} reads.
+ * @returns Each node's fold, which {@link foldAt} reads.
  * @throws {Error} When a node comes before its parent, which `flatten`'s document order rules out:
  *   a defect of the caller, never of the document.
  */
-export const foldOf = (
-  nodes: readonly NodeRow<Composed>[],
-  context: DocumentContext,
-): ReadonlyMap<NodeId, Folded> => {
+export const foldOf = (nodes: readonly NodeRow<Composed>[], context: DocumentContext): Folds => {
   const folded = new Map<NodeId, { readonly held: Held; readonly under: Under }>();
 
   for (const node of nodes) {
@@ -371,7 +382,12 @@ export const foldOf = (
     });
   }
 
-  return new Map(
-    [...folded].map(([id, { held, under }]) => [id, { ...held, elementChildren: under.elements }]),
-  );
+  return {
+    [byNode]: new Map(
+      [...folded].map(([id, { held, under }]) => [
+        id,
+        { ...held, elementChildren: under.elements },
+      ]),
+    ),
+  };
 };

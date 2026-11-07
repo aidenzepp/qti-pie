@@ -23,7 +23,7 @@ import { Option } from "effect";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { includeParentKinds } from "#pantry/grammar/install.ts";
 import type { Flag } from "#pantry/grammar/install.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
 import { entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -179,8 +179,8 @@ const stepOf = (
     const folds = foldOf(nodes, contexts.get(self) ?? ownContext(self));
     for (const site of sites) {
       const target = byPath.get(site.path);
-      const folded = folds.get(site.node);
-      if (target !== undefined && folded !== undefined) {
+      if (target !== undefined) {
+        const folded = foldAt(folds, site.node);
         const union = unions.get(target) ?? new Set<FlagHandle>();
         for (const flag of folded.ancestry) {
           union.add(flag);

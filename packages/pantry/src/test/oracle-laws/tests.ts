@@ -981,17 +981,18 @@ const contentBreachesOf = (
   const outcome = Option.fromNullishOr(
     attribute === "outcome-identifier" && declared ? context.outcomes.get(identifier) : undefined,
   );
-  // An outcome that writes no cardinality is refused by AL3 alone, never judged as the `single` the
-  // schema holds it as (the orchestrator's ruling of 2026-11-06), as an item's feedback is.
+  // The outcome's type as its type reads it, as an item's feedback reads it: an unwritten base type
+  // reads as empty, which is no identifier. An outcome that writes no cardinality is refused by AL3
+  // alone, and one that writes its cardinality or base type outside its value domain (empty,
+  // spelling nothing, or padded, as the type's whiteSpace is `preserve`) by that domain alone, never
+  // judged as a type the outcome does not have (the orchestrator's ruling of 2026-11-06; lane NIL's
+  // audit, B11).
   const typed = outcome.pipe(
     Option.flatMap((held) =>
-      Option.map(valueOf(held.rows, held.node.id, "cardinality"), (written) => ({
-        baseType: Option.getOrElse(
-          Option.map(valueOf(held.rows, held.node.id, "base-type"), collapsed),
-          () => "",
-        ),
-        cardinality: collapsed(written),
-      })),
+      Option.all({
+        baseType: typedOr(held.rows, held.node.id, "base-type", ""),
+        cardinality: typedValueOf(held.rows, held.node.id, "cardinality"),
+      }),
     ),
   );
 

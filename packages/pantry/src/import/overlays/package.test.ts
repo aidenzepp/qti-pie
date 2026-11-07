@@ -7,7 +7,6 @@
  * `xml:base` values the walk meets on its way down. The walk shares no code with the builder,
  * which reads the tree's flat rows (`flatten`) and resolves by `resolveIn`.
  */
-import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -28,7 +27,6 @@ import {
   ResourceTypeLexical,
 } from "#pantry/grammar/install.ts";
 import {
-  directoryOf,
   hrefPiecesOf,
   namedDocuments,
   referenceCensus,
@@ -1058,37 +1056,6 @@ describe("import/overlays/package.ts, hrefs and references", () => {
             }),
         ),
       ),
-  );
-
-  it.effect("splits every path of the box at its last slash as Node's path.posix does", (ctx) =>
-    // Oracle: a second implementation, Node's `path.posix.dirname` and `basename`.
-    // Bound: every path of one to three segments of 3, 39.
-    searched(
-      ctx,
-      exhaust(
-        {
-          box: "every path of one to three segments of a, b.c and ü",
-          caseHang: Duration.seconds(10),
-          coverage: requiredInSpace<"root" | "below">(["root", "below"]),
-          generator: (source) =>
-            source.draw(array(element(["a", "b.c", "ü"] as const), { max: 3, min: 1 })).join("/"),
-          limit: 100,
-          literal: (entry) => entry,
-          oracle: { kind: "second-implementation", name: "Node's path.posix" },
-          suite: "import/overlays-package-directory",
-        },
-        (entry: string, c) =>
-          Effect.sync(() => {
-            const dirname = path.posix.dirname(entry);
-
-            c.note(dirname === "." ? "root" : "below");
-            assert.deepStrictEqual(directoryOf(entry), {
-              directory: dirname === "." ? "" : `${dirname}/`,
-              name: path.posix.basename(entry),
-            });
-          }),
-      ),
-    ),
   );
 
   it.effect(

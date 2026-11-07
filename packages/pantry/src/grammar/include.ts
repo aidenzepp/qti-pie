@@ -157,8 +157,7 @@ export const includeAlternativesOf = (
  * document's root is read by its name alone.
  *
  * @param alternatives - The include alternatives.
- * @param nameOf - A kind's expanded name, `namespace}local`; its handle's for a kind of no
- *   vocabulary.
+ * @param nameOf - A kind's expanded name, `namespace}local`.
  * @param localOf - A kind's local name.
  * @returns The fragment root kinds, once each, in the alternatives' order.
  */
@@ -168,13 +167,15 @@ export const fragmentRootsOf = (
   localOf: (kind: string) => string,
 ): readonly string[] => {
   const kinds = [...new Set(alternatives.map(({ kind }) => kind))];
-  const named = Map.groupBy(kinds, nameOf);
+  const rooting = new Set(
+    [...Map.groupBy(kinds, nameOf).values()].flatMap((sharing) =>
+      sharing.length === 1
+        ? sharing
+        : sharing.filter((kind) => kind.replace(/^[^:]*:/u, "") === localOf(kind)),
+    ),
+  );
 
-  return kinds.filter((kind) => {
-    const sharing = named.get(nameOf(kind)) ?? [];
-
-    return sharing.length === 1 || kind.replace(/^[^:]*:/u, "") === localOf(kind);
-  });
+  return kinds.filter((kind) => rooting.has(kind));
 };
 
 /**

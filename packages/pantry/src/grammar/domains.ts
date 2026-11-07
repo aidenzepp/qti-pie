@@ -95,9 +95,14 @@ const intersect = (left: CodeSet, right: CodeSet): CodeSet => {
   const runs: CodeRange[] = [];
   let at = 0;
   let other = 0;
-  while (at < left.length && other < right.length) {
-    const [lo, hi] = left[at] ?? [0, -1];
-    const [from, to] = right[other] ?? [0, -1];
+  // Each set's runs are read in order until either set has no run left.
+  for (
+    let mine = left[at], theirs = right[other];
+    mine !== undefined && theirs !== undefined;
+    mine = left[at], theirs = right[other]
+  ) {
+    const [lo, hi] = mine;
+    const [from, to] = theirs;
     if (Math.max(lo, from) <= Math.min(hi, to)) {
       runs.push([Math.max(lo, from), Math.min(hi, to)]);
     }
@@ -150,7 +155,20 @@ const holds = (set: CodeSet, point: number): boolean =>
  */
 const sameSet = (left: CodeSet, right: CodeSet): boolean =>
   left.length === right.length &&
-  left.every(([lo, hi], index) => right[index]?.[0] === lo && right[index]?.[1] === hi);
+  Arr.zip(left, right).every(([[lo, hi], [from, to]]) => lo === from && hi === to);
+
+/**
+ * Read a character's code point: a string the string iterator yields, one code point long.
+ *
+ * @param character - The character.
+ * @returns Its code point.
+ * @throws {Error} When the string is empty, so it holds no character.
+ */
+const codePointOf = (character: string): number =>
+  Option.getOrThrowWith(
+    Option.fromNullishOr(character.codePointAt(0)),
+    () => new Error("An empty string was read as a character, and a character is one code point."),
+  );
 
 /**
  * The set of the characters of a string.
@@ -161,11 +179,42 @@ const sameSet = (left: CodeSet, right: CodeSet): boolean =>
 const charactersOf = (characters: string): CodeSet =>
   setOf(
     Array.from(characters, (character): CodeRange => {
-      const point = character.codePointAt(0) ?? 0;
+      const point = codePointOf(character);
 
       return [point, point];
     }),
   );
+
+/**
+ * The code point of `-`, which joins a run's ends in {@link ascii}'s spelling.
+ */
+const hyphen = codePointOf("-");
+
+/**
+ * Read {@link ascii}'s runs off its code points: a point, `-` and a point are a run, and any other
+ * point is itself.
+ *
+ * @param points - The spelling's code points.
+ * @returns The runs, in order.
+ */
+const asciiRuns = (points: readonly number[]): readonly CodeRange[] =>
+  Arr.matchLeft(points, {
+    onEmpty: () => [],
+    onNonEmpty: (lo, rest) =>
+      Arr.matchLeft(rest, {
+        onEmpty: () => [[lo, lo]],
+        onNonEmpty: (next, after) =>
+          next === hyphen
+            ? Arr.matchLeft(after, {
+                onEmpty: () => [
+                  [lo, lo],
+                  [next, next],
+                ],
+                onNonEmpty: (hi, tail) => [[lo, hi], ...asciiRuns(tail)],
+              })
+            : [[lo, lo], ...asciiRuns(rest)],
+      }),
+  });
 
 /**
  * The set of ASCII runs written as `a-zA-Z0-9`: each pair around a hyphen a run, any other
@@ -174,20 +223,7 @@ const charactersOf = (characters: string): CodeSet =>
  * @param spec - The runs, ASCII only, no escapes.
  * @returns The set.
  */
-const ascii = (spec: string): CodeSet => {
-  const runs: CodeRange[] = [];
-  for (let at = 0; at < spec.length; at += 1) {
-    const lo = spec.codePointAt(at) ?? 0;
-    if (spec[at + 1] === "-" && at + 2 < spec.length) {
-      runs.push([lo, spec.codePointAt(at + 2) ?? 0]);
-      at += 2;
-    } else {
-      runs.push([lo, lo]);
-    }
-  }
-
-  return setOf(runs);
-};
+const ascii = (spec: string): CodeSet => setOf(asciiRuns(Array.from(spec, codePointOf)));
 
 /**
  * XML 1.0's `Char`: every character a document may hold. Every set a pattern reads is within it, so
@@ -866,9 +902,25 @@ export class UnreadDefinition extends Schema.TaggedError<UnreadDefinition>()("Un
 }
 
 /**
+ * A resolved definition whose lexical space holds no value, which no pattern grizzle admits spells
+ * (it refuses a `Compute.matches` pattern no text matches): the attribute grammar reads such a
+ * definition as an empty domain, one with no pattern.
+ */
+export class EmptyDefinition extends Schema.TaggedError<EmptyDefinition>()("EmptyDefinition", {
+  primitive: Schema.String,
+}) {
+  /**
+   * The definition's primitive, what has no pattern, and the repair.
+   */
+  override get message(): string {
+    return `A value domain of ${this.primitive} is not compiled: its definition's lexical space holds no value, so no pattern spells it. Read it as an empty domain, or give the attribute a reading in the attribute grammar.`;
+  }
+}
+
+/**
  * The ways a resolved definition has no compiled domain.
  */
-export type CompileError = UnreadDefinition | UnreadPattern;
+export type CompileError = EmptyDefinition | UnreadDefinition | UnreadPattern;
 
 /**
  * The single-character escapes of XSD's regex grammar, by the character after the backslash
@@ -880,7 +932,7 @@ const singleEscapes: ReadonlyMap<string, number> = new Map([
   ["t", 0x9],
   ...Array.from("\\|.?*+(){}-[]^", (character): [string, number] => [
     character,
-    character.codePointAt(0) ?? 0,
+    codePointOf(character),
   ]),
 ]);
 
@@ -981,15 +1033,30 @@ const readProperty = (
 };
 
 /**
+ * What a class item or an escape stands for: one character, which may start or end a range, or a
+ * set of characters, which may not.
+ */
+type Escaped =
+  | { readonly _tag: "point"; readonly point: number }
+  | { readonly _tag: "set"; readonly set: CodeSet };
+
+/**
+ * The characters an item stands for.
+ *
+ * @param escaped - The item.
+ * @returns Its set.
+ */
+const setOfEscaped = (escaped: Escaped): CodeSet =>
+  escaped._tag === "point" ? [[escaped.point, escaped.point]] : escaped.set;
+
+/**
  * Read an escape after its backslash: a single character, a multi-character set, or a category or
  * block.
  *
  * @param cursor - The cursor, past the backslash.
- * @returns The set it stands for, and whether it is one character (which may end a range).
+ * @returns The character or the set it stands for.
  */
-const readEscape = (
-  cursor: Cursor,
-): Result.Result<{ readonly set: CodeSet; readonly single: boolean }, UnreadPattern> => {
+const readEscape = (cursor: Cursor): Result.Result<Escaped, UnreadPattern> => {
   const letter = peek(cursor);
   if (letter === undefined) {
     return unread(cursor, "a backslash at the end");
@@ -998,16 +1065,16 @@ const readEscape = (
   cursor.at += 1;
   const single = singleEscapes.get(letter);
   if (single !== undefined) {
-    return Result.succeed({ set: [[single, single]], single: true });
+    return Result.succeed({ _tag: "point", point: single });
   }
 
   if (letter === "p" || letter === "P") {
-    return Result.map(readProperty(cursor, letter === "P"), (set) => ({ set, single: false }));
+    return Result.map(readProperty(cursor, letter === "P"), (set) => ({ _tag: "set", set }));
   }
 
   return Option.match(multiEscape(letter), {
     onNone: () => unread(cursor, `the escape \\${letter}, which XSD does not define`),
-    onSome: (set) => Result.succeed({ set, single: false }),
+    onSome: (set) => Result.succeed({ _tag: "set", set }),
   });
 };
 
@@ -1022,13 +1089,13 @@ const readEscape = (
 const readClassItem = (cursor: Cursor, character: string): Result.Result<CodeSet, UnreadPattern> =>
   Result.gen(function* readClassItemBody() {
     cursor.at += 1;
-    const start =
+    const start: Escaped =
       character === "\\"
         ? yield* readEscape(cursor)
-        : { set: charactersOf(character), single: true };
+        : { _tag: "point", point: codePointOf(character) };
     const dash = peek(cursor) === "-" && peek(cursor, 1) !== "]" && peek(cursor, 1) !== "[";
-    if (!start.single || !dash) {
-      return start.set;
+    if (start._tag !== "point" || !dash) {
+      return setOfEscaped(start);
     }
 
     cursor.at += 1;
@@ -1038,17 +1105,15 @@ const readClassItem = (cursor: Cursor, character: string): Result.Result<CodeSet
     }
 
     cursor.at += 1;
-    const end =
+    const end: Escaped =
       endCharacter === "\\"
         ? yield* readEscape(cursor)
-        : { set: charactersOf(endCharacter), single: true };
-    const [lo] = start.set[0] ?? [0];
-    const [hi] = end.set[0] ?? [0];
-    if (!end.single || hi < lo) {
+        : { _tag: "point", point: codePointOf(endCharacter) };
+    if (end._tag !== "point" || end.point < start.point) {
       return yield* unread(cursor, "a range whose end is not one character after its start");
     }
 
-    const range: CodeSet = [[lo, hi]];
+    const range: CodeSet = [[start.point, end.point]];
 
     return range;
   });
@@ -1118,15 +1183,19 @@ const readBraces = (
 ): Result.Result<{ readonly max: Option.Option<number>; readonly min: number }, UnreadPattern> => {
   const close = cursor.points.indexOf("}", cursor.at);
   const body = close === -1 ? "" : cursor.points.slice(cursor.at, close).join("");
-  const match = /^(?<min>[0-9]+)(?<comma>,(?<max>[0-9]*))?$/u.exec(body)?.groups;
-  if (match === undefined) {
+  if (!/^[0-9]+(?:,[0-9]*)?$/u.test(body)) {
     return unread(cursor, "a { that opens no quantity");
   }
 
   cursor.at = close + 1;
-  const min = Number(match["min"]);
-  const greatest = match["max"] === "" ? Option.none() : Option.some(Number(match["max"]));
-  const max = match["comma"] === undefined ? Option.some(min) : greatest;
+  // `{n}` is n times, `{n,}` n or more, and `{n,m}` n to m.
+  const comma = body.indexOf(",");
+  const min = Number(comma === -1 ? body : body.slice(0, comma));
+  const upper = body.slice(comma + 1);
+  let max: Option.Option<number> = Option.some(min);
+  if (comma !== -1) {
+    max = upper === "" ? Option.none() : Option.some(Number(upper));
+  }
 
   return Option.exists(max, (most) => most < min)
     ? unread(cursor, "a quantity whose most is below its least")
@@ -1162,7 +1231,7 @@ const readAlternation = (cursor: Cursor): Result.Result<Regex, UnreadPattern> =>
         } else if (character === "[") {
           atom = chars(yield* readClass(cursor));
         } else if (character === "\\") {
-          atom = chars((yield* readEscape(cursor)).set);
+          atom = chars(setOfEscaped(yield* readEscape(cursor)));
         } else if (character === ".") {
           atom = chars(subtract(xmlChar, charactersOf("\n\r")));
         } else if ("?*+{}]".includes(character)) {
@@ -1601,20 +1670,21 @@ const digitsIn = (lo: bigint, hi: Option.Option<bigint>): Option.Option<Regex> =
       return empty;
     }
 
-    const [a = "0", ...aRest] = from;
-    const [b = "0", ...bRest] = to;
+    // The digits are ASCII, so a code unit is a digit.
+    const [a, aRest] = [from.slice(0, 1), from.slice(1)];
+    const [b, bRest] = [to.slice(0, 1), to.slice(1)];
     if (a === b) {
-      return seq(literal(a), sameLength(aRest.join(""), bRest.join("")));
+      return seq(literal(a), sameLength(aRest, bRest));
     }
 
     const rest = from.length - 1;
-    const lowFull = aRest.every((d) => d === "0");
-    const highFull = bRest.every((d) => d === "9");
+    const lowFull = /^0*$/u.test(aRest);
+    const highFull = /^9*$/u.test(bRest);
     const midFrom = Number(a) + (lowFull ? 0 : 1);
     const midTo = Number(b) - (highFull ? 0 : 1);
 
     return alt(
-      ...(lowFull ? [] : [seq(literal(a), sameLength(aRest.join(""), "9".repeat(rest)))]),
+      ...(lowFull ? [] : [seq(literal(a), sameLength(aRest, "9".repeat(rest)))]),
       ...(midFrom <= midTo
         ? [
             seq(
@@ -1623,7 +1693,7 @@ const digitsIn = (lo: bigint, hi: Option.Option<bigint>): Option.Option<Regex> =
             ),
           ]
         : []),
-      ...(highFull ? [] : [seq(literal(b), sameLength("0".repeat(rest), bRest.join("")))]),
+      ...(highFull ? [] : [seq(literal(b), sameLength("0".repeat(rest), bRest))]),
     );
   };
   if (Option.exists(hi, (most) => most < lo)) {
@@ -1631,7 +1701,8 @@ const digitsIn = (lo: bigint, hi: Option.Option<bigint>): Option.Option<Regex> =
   }
 
   const lowLength = String(lo).length;
-  const top = Option.getOrElse(hi.pipe(Option.map((most) => String(most).length)), () => lowLength);
+  // With no greatest, the lengths run to the least's, and an unbounded arm takes the rest.
+  const top = Option.match(hi, { onNone: () => lowLength, onSome: (most) => String(most).length });
   const arms: Regex[] = [];
   let full: Option.Option<readonly [number, number]> = Option.none();
   const flush = () => {
@@ -1645,7 +1716,10 @@ const digitsIn = (lo: bigint, hi: Option.Option<bigint>): Option.Option<Regex> =
     const floor = 10n ** BigInt(length - 1);
     const ceiling = 10n ** BigInt(length) - 1n;
     const from = length === lowLength && lo > floor ? lo : floor;
-    const to = length === top ? Option.getOrElse(hi, () => ceiling) : ceiling;
+    const to = Option.match(hi, {
+      onNone: () => ceiling,
+      onSome: (most) => (length === top ? most : ceiling),
+    });
     if (from === floor && to === ceiling) {
       full = Option.some([
         Option.match(full, { onNone: () => length, onSome: ([first]) => first }),
@@ -1677,22 +1751,22 @@ const digitsIn = (lo: bigint, hi: Option.Option<bigint>): Option.Option<Regex> =
  * @returns The tree, or none for an empty interval.
  */
 const integerIn = (lo: Option.Option<bigint>, hi: Option.Option<bigint>): Option.Option<Regex> => {
+  // A bound that is none bounds nothing: no least is above a value, no greatest below it.
   const has = (value: bigint) =>
-    Option.getOrElse(lo.pipe(Option.map((least) => least <= value)), () => true) &&
-    Option.getOrElse(hi.pipe(Option.map((most) => value <= most)), () => true);
+    !Option.exists(lo, (least) => value < least) && !Option.exists(hi, (most) => most < value);
   const zeros = plus(literal("0"));
-  const positive = Option.getOrElse(hi.pipe(Option.map((most) => most >= 1n)), () => true)
-    ? digitsIn(
-        Option.getOrElse(lo.pipe(Option.map((least) => (least > 1n ? least : 1n))), () => 1n),
+  const positive = Option.exists(hi, (most) => most < 1n)
+    ? Option.none()
+    : digitsIn(
+        Option.match(lo, { onNone: () => 1n, onSome: (least) => (least > 1n ? least : 1n) }),
         hi,
-      )
-    : Option.none();
-  const negative = Option.getOrElse(lo.pipe(Option.map((least) => least <= -1n)), () => true)
-    ? digitsIn(
-        Option.getOrElse(hi.pipe(Option.map((most) => (most < -1n ? -most : 1n))), () => 1n),
+      );
+  const negative = Option.exists(lo, (least) => least > -1n)
+    ? Option.none()
+    : digitsIn(
+        Option.match(hi, { onNone: () => 1n, onSome: (most) => (most < -1n ? -most : 1n) }),
         lo.pipe(Option.map((least) => -least)),
-      )
-    : Option.none();
+      );
   const arms = [
     ...(has(0n) ? [seq(sign, zeros)] : []),
     ...Option.toArray(
@@ -1814,10 +1888,16 @@ export const collapse = (text: string): string =>
     .replace(/ $/u, "");
 
 /**
- * A QName's two parts once its whitespace is collapsed: its prefix, empty for an unprefixed name,
- * and its local name, each with no colon and no whitespace (Namespaces in XML 1.0, section 4).
+ * A QName once its whitespace is collapsed: an optional prefix and a colon, then its local name,
+ * each with no colon and no whitespace (Namespaces in XML 1.0, section 4).
  */
-const qNameParts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u;
+const qName = /^(?:[^\s:]+:)?[^\s:]+$/u;
+
+/**
+ * The prefix of an unprefixed QName: the empty prefix, which a default namespace declaration binds
+ * (Namespaces in XML 1.0, section 3, `xmlns="…"`) and the XDM's namespace bindings spell `""`.
+ */
+const unprefixed = "";
 
 /**
  * Read a QName's prefix and local name.
@@ -1827,11 +1907,20 @@ const qNameParts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u;
  */
 export const qNamePartsOf = (
   text: string,
-): Option.Option<{ readonly local: string; readonly prefix: string }> =>
-  Option.map(Option.fromNullishOr(qNameParts.exec(text)?.groups), (groups) => ({
-    local: groups["local"] ?? "",
-    prefix: groups["prefix"] ?? "",
-  }));
+): Option.Option<{ readonly local: string; readonly prefix: string }> => {
+  if (!qName.test(text)) {
+    return Option.none();
+  }
+
+  // A QName holds at most one colon, which ends its prefix.
+  const colon = text.indexOf(":");
+
+  return Option.some(
+    colon === -1
+      ? { local: text, prefix: unprefixed }
+      : { local: text.slice(colon + 1), prefix: text.slice(0, colon) },
+  );
+};
 
 /**
  * The prefixes a value of a QName domain names that no binding in scope declares: of each QName
@@ -1961,11 +2050,7 @@ const includes = (big: Regex, small: Regex): boolean => {
   if (big._tag === "seq" && small._tag === "seq") {
     return (
       big.parts.length === small.parts.length &&
-      big.parts.every((part, index) => {
-        const other = small.parts[index];
-
-        return other !== undefined && includes(part, other);
-      })
+      Arr.zip(big.parts, small.parts).every(([part, other]) => includes(part, other))
     );
   }
 
@@ -2123,16 +2208,17 @@ const lexicalOf = (
       return { bound: Option.none(), tree: lexical.value };
     }
 
+    const [only, ...more] = bounds;
     if (
       primitive === "decimal" &&
-      bounds.length === 1 &&
-      bounds[0]?.facet === "minInclusive" &&
-      Number(bounds[0].value) === 0
+      only !== undefined &&
+      more.length === 0 &&
+      only.facet === "minInclusive" &&
+      Number(only.value) === 0
     ) {
       return { bound: Option.none(), tree: nonNegativeDecimal };
     }
 
-    const [only, ...more] = bounds;
     if (
       (primitive === "double" || primitive === "float") &&
       only !== undefined &&
@@ -2276,7 +2362,11 @@ const lengthsOf = (tree: Regex): Lengths => {
       }
       case "repeat": {
         const body = lengthsOf(tree.body);
-        const most = Option.getOrElse(tree.max, () => Number.POSITIVE_INFINITY);
+        // An unbounded repetition of a nonempty word has no longest word.
+        const most = Option.match(tree.max, {
+          onNone: () => Number.POSITIVE_INFINITY,
+          onSome: (held) => held,
+        });
 
         return { max: body.max === 0 ? 0 : body.max * most, min: body.min * tree.min };
       }
@@ -2458,6 +2548,15 @@ const automatonPositions = 20_000;
 const inclusionStates = 100_000;
 
 /**
+ * Whether a repetition may run its body twice in a row: it is unbounded, or its most is 2 or more.
+ *
+ * @param tree - The repetition.
+ * @returns Whether one iteration may follow another.
+ */
+const repeats = (tree: Extract<Regex, { readonly _tag: "repeat" }>): boolean =>
+  !Option.exists(tree.max, (most) => most < 2);
+
+/**
  * The positions of a tree once each counted repetition is written out: what its automaton holds.
  *
  * @param tree - The tree.
@@ -2475,13 +2574,36 @@ const positionsOf = (tree: Regex): number => {
       return tree.arms.reduce((total, arm) => total + positionsOf(arm), 0);
     }
     case "repeat": {
-      return positionsOf(tree.body) * Option.getOrElse(tree.max, () => tree.min + 1);
+      // `{n,}` is written out as n copies and one starred copy, `{n,m}` as m copies.
+      return (
+        positionsOf(tree.body) *
+        Option.match(tree.max, { onNone: () => tree.min + 1, onSome: (most) => most })
+      );
     }
     default: {
       return tree satisfies never;
     }
   }
 };
+
+/**
+ * Read an automaton's entry at a number its construction gave it: a position's set or successors,
+ * a state's moves, block or acceptance.
+ *
+ * @param entries - The entries, by number.
+ * @param at - The number.
+ * @returns The entry.
+ * @throws {Error} When no entry has the number: an automaton read past its own positions or
+ *   states, a defect of its construction.
+ */
+const entryAt = <A>(entries: readonly A[], at: number): A =>
+  Option.getOrThrowWith(
+    Arr.get(entries, at),
+    () =>
+      new Error(
+        `An automaton reads its entry ${String(at)} of ${String(entries.length)}, which its construction did not make.`,
+      ),
+  );
 
 /**
  * A tree's position automaton (Glushkov's), each counted repetition written out: one position per
@@ -2519,7 +2641,7 @@ const automatonOf = (tree: Regex): Automaton => {
   const link = (from: readonly number[], to: readonly number[]): void => {
     for (const at of from) {
       for (const next of to) {
-        follow[at]?.add(next);
+        entryAt(follow, at).add(next);
       }
     }
   };
@@ -2590,6 +2712,11 @@ const automatonOf = (tree: Regex): Automaton => {
 };
 
 /**
+ * One past the last code point, U+10FFFF: where the code space's last run ends.
+ */
+const codeSpaceEnd = 0x11_00_00;
+
+/**
  * One code point of each run of the code space on which a family of sets each either holds every
  * point or none: the start of every run of every set, and the point after its end.
  *
@@ -2618,7 +2745,7 @@ type Subset = readonly number[] | "start";
 const successorsOf = (automaton: Automaton, state: Subset): readonly number[] =>
   [
     ...new Set(
-      state === "start" ? automaton.first : state.flatMap((at) => automaton.follow[at] ?? []),
+      state === "start" ? automaton.first : state.flatMap((at) => entryAt(automaton.follow, at)),
     ),
   ].toSorted((a, b) => a - b);
 
@@ -2660,12 +2787,13 @@ const includedIn = (small: Regex, big: Regex): boolean => {
 
     const fromLeft = successorsOf(mine, left);
     const fromRight = successorsOf(theirs, right);
-    const candidates = [...fromLeft, ...fromRight].map(
-      (at, index) => (index < fromLeft.length ? mine.sets[at] : theirs.sets[at]) ?? [],
-    );
+    const candidates = [
+      ...fromLeft.map((at) => entryAt(mine.sets, at)),
+      ...fromRight.map((at) => entryAt(theirs.sets, at)),
+    ];
     for (const point of representatives(candidates)) {
-      const toLeft = fromLeft.filter((at) => holds(mine.sets[at] ?? [], point));
-      const toRight = fromRight.filter((at) => holds(theirs.sets[at] ?? [], point));
+      const toLeft = fromLeft.filter((at) => holds(entryAt(mine.sets, at), point));
+      const toRight = fromRight.filter((at) => holds(entryAt(theirs.sets, at), point));
       const key = `${toLeft.join(",")}|${toRight.join(",")}`;
       if (toLeft.length > 0 && !seen.has(key)) {
         if (toRight.length === 0 || seen.size >= inclusionStates) {
@@ -2718,18 +2846,15 @@ const minimized = (dfa: Dfa): Dfa => {
     const next = dfa.moves.map((moves, state) => {
       const byBlock = new Map<number, CodeRange[]>();
       for (const [set, target] of moves) {
-        const block = partition[target] ?? -1;
-        byBlock.set(block, [...(byBlock.get(block) ?? []), ...set]);
+        byBlock.getOrInsertComputed(entryAt(partition, target), () => []).push(...set);
       }
 
-      const signature = `${partition[state] ?? -1}/${[...byBlock]
+      const signature = `${entryAt(partition, state)}/${[...byBlock]
         .toSorted(([a], [b]) => a - b)
         .map(([block, runs]) => `${block}:${JSON.stringify(setOf(runs))}`)
         .join(";")}`;
-      const known = numbering.get(signature) ?? numbering.size;
-      numbering.set(signature, known);
 
-      return known;
+      return numbering.getOrInsertComputed(signature, () => numbering.size);
     });
 
     return new Set(next).size === new Set(partition).size ? next : refine(next);
@@ -2739,12 +2864,11 @@ const minimized = (dfa: Dfa): Dfa => {
   const representative = Array.from({ length: count }, (_, block) => merged.indexOf(block));
 
   return {
-    accepting: representative.map((state) => dfa.accepting[state] ?? false),
+    accepting: representative.map((state) => entryAt(dfa.accepting, state)),
     moves: representative.map((state) => {
       const byBlock = new Map<number, CodeRange[]>();
-      for (const [set, target] of dfa.moves[state] ?? []) {
-        const block = merged[target] ?? 0;
-        byBlock.set(block, [...(byBlock.get(block) ?? []), ...set]);
+      for (const [set, target] of entryAt(dfa.moves, state)) {
+        byBlock.getOrInsertComputed(entryAt(merged, target), () => []).push(...set);
       }
 
       return [...byBlock].map(([block, runs]): readonly [CodeSet, number] => [setOf(runs), block]);
@@ -2774,20 +2898,18 @@ const dfaOf = (tree: Regex): Option.Option<Dfa> => {
     }
 
     const candidates = successorsOf(automaton, state);
-    const points = representatives(candidates.map((at) => automaton.sets[at] ?? []));
+    const points = representatives(candidates.map((at) => entryAt(automaton.sets, at)));
     const byTarget = new Map<number, CodeRange[]>();
-    for (const [index, point] of points.entries()) {
-      const next = candidates.filter((at) => holds(automaton.sets[at] ?? [], point));
+    // Each point's run ends before the next point, the last's at the code space's end.
+    for (const [point, after] of Arr.zip(points, [...points.slice(1), codeSpaceEnd])) {
+      const next = candidates.filter((at) => holds(entryAt(automaton.sets, at), point));
       if (next.length > 0) {
-        const key = next.join(",");
-        const target = numbered.get(key) ?? states.length;
-        if (target === states.length) {
-          numbered.set(key, target);
+        const target = numbered.getOrInsertComputed(next.join(","), () => {
           states.push(next);
-        }
 
-        const end = (points[index + 1] ?? 0x11_00_00) - 1;
-        byTarget.set(target, [...(byTarget.get(target) ?? []), [point, end]]);
+          return states.length - 1;
+        });
+        byTarget.getOrInsertComputed(target, () => []).push([point, after - 1]);
       }
     }
 
@@ -2808,6 +2930,20 @@ const dfaOf = (tree: Regex): Option.Option<Dfa> => {
 type Reads = ReadonlyMap<number, Regex>;
 
 /**
+ * The tree of the words a subtree's reading leads to a state: {@link nothing} where none leads
+ * there, since a reading holds a state exactly when some word leads to it.
+ *
+ * @param reads - The trees, by the state they lead to.
+ * @param state - The state.
+ * @returns The tree.
+ */
+const wordsTo = (reads: Reads, state: number): Regex =>
+  Option.match(Option.fromNullishOr(reads.get(state)), {
+    onNone: () => nothing,
+    onSome: (tree) => tree,
+  });
+
+/**
  * Add a tree of words to those that lead to a state, unless it has no word.
  *
  * @param into - The trees, by the state they lead to.
@@ -2816,7 +2952,7 @@ type Reads = ReadonlyMap<number, Regex>;
  */
 const joinAt = (into: Map<number, Regex>, state: number, piece: Regex): void => {
   if (!isNothing(piece)) {
-    into.set(state, alt(into.get(state) ?? nothing, piece));
+    into.set(state, alt(wordsTo(into, state), piece));
   }
 };
 
@@ -2874,21 +3010,22 @@ const closureFrom = (
     }
   }
 
-  let paths = reached.map((from) => reached.map((to) => read(once, from).get(to) ?? nothing));
+  let paths = reached.map((from) => reached.map((to) => wordsTo(read(once, from), to)));
   for (const [via] of reached.entries()) {
     const before = paths;
-    const loop = star(before[via]?.[via] ?? nothing);
-    paths = before.map((row, from) =>
-      row.map((cell, to) =>
-        alt(cell, seq(before[from]?.[via] ?? nothing, loop, before[via]?.[to] ?? nothing)),
-      ),
+    const through = entryAt(before, via);
+    const loop = star(entryAt(through, via));
+    paths = before.map((row) =>
+      row.map((cell, to) => alt(cell, seq(entryAt(row, via), loop, entryAt(through, to)))),
     );
   }
 
-  const out = new Map<number, Regex>([[state, opt(paths[0]?.[0] ?? nothing)]]);
-  for (const [index, to] of reached.entries()) {
+  // The state itself is the first one reached, so the first row holds the words from it.
+  const fromState = entryAt(paths, 0);
+  const out = new Map<number, Regex>([[state, opt(entryAt(fromState, 0))]]);
+  for (const [to, words] of Arr.zip(reached, fromState)) {
     if (to !== state) {
-      joinAt(out, to, paths[0]?.[index] ?? nothing);
+      joinAt(out, to, words);
     }
   }
 
@@ -2913,105 +3050,97 @@ const tracked = (tree: Regex, dfa: Dfa): Regex => {
   const loops = dfa.moves.map((moves, state) =>
     setOf(moves.filter(([, target]) => target === state).flatMap(([set]) => set)),
   );
-  const after = (node: Regex, state: number): Reads => {
-    const byState = memo.get(node) ?? new Map<number, Reads>();
-    memo.set(node, byState);
+  const after = (node: Regex, state: number): Reads =>
+    memo
+      .getOrInsertComputed(node, () => new Map())
+      .getOrInsertComputed(state, () => {
+        const alphabet = alphabetOf(node);
+        let read: Reads = new Map([[state, node]]);
+        if (!sameSet(intersect(alphabet, entryAt(loops, state)), alphabet)) {
+          switch (node._tag) {
+            case "chars": {
+              const out = new Map<number, Regex>();
+              for (const [set, to] of entryAt(dfa.moves, state)) {
+                joinAt(out, to, chars(intersect(node.set, set)));
+              }
 
-    const known = byState.get(state);
-    if (known !== undefined) {
-      return known;
-    }
+              read = out;
+              break;
+            }
+            case "alt": {
+              const out = new Map<number, Regex>();
+              for (const arm of node.arms) {
+                for (const [to, piece] of after(arm, state)) {
+                  joinAt(out, to, piece);
+                }
+              }
 
-    const alphabet = alphabetOf(node);
-    let read: Reads = new Map([[state, node]]);
-    if (!sameSet(intersect(alphabet, loops[state] ?? []), alphabet)) {
-      switch (node._tag) {
-        case "chars": {
-          const out = new Map<number, Regex>();
-          for (const [set, to] of dfa.moves[state] ?? []) {
-            joinAt(out, to, chars(intersect(node.set, set)));
-          }
+              read = out;
+              break;
+            }
+            case "seq": {
+              read = sequenceFrom(node.parts, state, after);
+              break;
+            }
+            case "repeat": {
+              if (node.min === 0 && Option.isNone(node.max)) {
+                read = closureFrom(node.body, state, after);
+                break;
+              }
 
-          read = out;
-          break;
-        }
-        case "alt": {
-          const out = new Map<number, Regex>();
-          for (const arm of node.arms) {
-            for (const [to, piece] of after(arm, state)) {
-              joinAt(out, to, piece);
+              const tail = tails.getOrInsertComputed(node, () =>
+                repeat(
+                  node.body,
+                  Math.max(node.min - 1, 0),
+                  node.max.pipe(Option.map((most) => most - 1)),
+                ),
+              );
+
+              const out = sequenceFrom([node.body, tail], state, after);
+              if (node.min === 0) {
+                joinAt(out, state, empty);
+              }
+
+              read = out;
+              break;
+            }
+            default: {
+              read = node satisfies never;
             }
           }
-
-          read = out;
-          break;
         }
-        case "seq": {
-          read = sequenceFrom(node.parts, state, after);
-          break;
-        }
-        case "repeat": {
-          if (node.min === 0 && Option.isNone(node.max)) {
-            read = closureFrom(node.body, state, after);
-            break;
-          }
 
-          const tail =
-            tails.get(node) ??
-            repeat(
-              node.body,
-              Math.max(node.min - 1, 0),
-              node.max.pipe(Option.map((most) => most - 1)),
-            );
-          tails.set(node, tail);
-
-          const out = sequenceFrom([node.body, tail], state, after);
-          if (node.min === 0) {
-            joinAt(out, state, empty);
-          }
-
-          read = out;
-          break;
-        }
-        default: {
-          read = node satisfies never;
-        }
-      }
-    }
-
-    byState.set(state, read);
-
-    return read;
-  };
+        return read;
+      });
 
   return alt(
     ...[...after(tree, 0)].flatMap(([state, words]) =>
-      dfa.accepting[state] === true ? [words] : [],
+      entryAt(dfa.accepting, state) ? [words] : [],
     ),
   );
 };
 
 /**
- * Narrow every tree to the characters all of them may hold, until no alphabet shrinks: a word of
- * the intersection reads only characters every language may read, so each tree keeps exactly its
+ * Narrow two trees to the characters both may hold, until neither alphabet shrinks: a word of the
+ * intersection reads only characters both languages may read, so each tree keeps exactly its
  * words over that common alphabet ({@link mapSets}, each character of a word read by one set), and
  * the intersection is unchanged.
  *
- * @param trees - The trees.
- * @returns The narrowed trees.
+ * @param left - A tree.
+ * @param right - A tree.
+ * @returns The two trees, narrowed.
  */
-const narrowed = (trees: readonly Regex[]): readonly Regex[] => {
-  const alphabets = trees.map(alphabetOf);
-  let common: CodeSet = xmlChar;
-  for (const alphabet of alphabets) {
-    common = intersect(common, alphabet);
+const narrowed = (left: Regex, right: Regex): readonly [Regex, Regex] => {
+  const mine = alphabetOf(left);
+  const theirs = alphabetOf(right);
+  const common = intersect(intersect(xmlChar, mine), theirs);
+  if (sameSet(mine, common) && sameSet(theirs, common)) {
+    return [left, right];
   }
 
-  if (alphabets.every((alphabet) => sameSet(alphabet, common))) {
-    return trees;
-  }
+  const narrow = (tree: Regex): Regex => mapSets(tree, (set) => chars(intersect(set, common)));
 
-  return narrowed(trees.map((tree) => mapSets(tree, (set) => chars(intersect(set, common)))));
+  return narrowed(narrow(left), narrow(right));
 };
 
 /**
@@ -3033,7 +3162,7 @@ const narrowed = (trees: readonly Regex[]): readonly Regex[] => {
  * @returns The tree of the words of both, or an {@link UnreadDefinition}.
  */
 const intersectTwo = (left: Regex, right: Regex): Result.Result<Regex, UnreadDefinition> => {
-  const [mine = nothing, theirs = nothing] = narrowed([left, right]);
+  const [mine, theirs] = narrowed(left, right);
   if (isNothing(mine) || isNothing(theirs)) {
     return Result.succeed(nothing);
   }
@@ -3082,14 +3211,17 @@ const intersectTwo = (left: Regex, right: Regex): Result.Result<Regex, UnreadDef
  * @returns The tree of the words of every one, or an {@link UnreadDefinition}.
  */
 const intersection = (arms: readonly Regex[]): Result.Result<Regex, UnreadDefinition> =>
-  Result.gen(function* intersectionBody() {
-    const [first = anything, ...rest] = arms;
-    let held = first;
-    for (const arm of rest) {
-      held = yield* intersectTwo(held, arm);
-    }
+  Arr.matchLeft(arms, {
+    onEmpty: () => Result.succeed(anything),
+    onNonEmpty: (first, rest) =>
+      Result.gen(function* intersectionBody() {
+        let held = first;
+        for (const arm of rest) {
+          held = yield* intersectTwo(held, arm);
+        }
 
-    return held;
+        return held;
+      }),
   });
 
 /**
@@ -3205,7 +3337,7 @@ const spacesOf = (tree: Regex): Spaces => {
     }
     case "repeat": {
       const body = spacesOf(tree.body);
-      const loops = Option.getOrElse(tree.max, () => 2) >= 2;
+      const loops = repeats(tree);
 
       return {
         doubled: body.doubled || (loops && body.last && body.first),
@@ -3340,7 +3472,7 @@ const glushkovOf = (tree: Regex, run: Option.Option<Run> = Option.none()): Glush
         ? Option.some({ min: tree.min })
         : Option.none();
       const inner = glushkovOf(tree.body, own);
-      const loops = Option.getOrElse(tree.max, () => 2) >= 2;
+      const loops = repeats(tree);
 
       return {
         first: inner.first,
@@ -3852,22 +3984,6 @@ const hidesIdentity = (domain: Domain): boolean =>
 export type Reading = "exact" | "xsd";
 
 /**
- * The detail of {@link UnreadDefinition} for a definition whose lexical space is empty, which no
- * pattern grizzle admits spells (it refuses a `Compute.matches` pattern no text matches): the
- * attribute grammar reads such a definition as an empty domain, one with no pattern.
- */
-export const emptyDefinition = "a definition whose lexical space holds no value";
-
-/**
- * Whether a compile failure is a definition's empty lexical space, {@link emptyDefinition}.
- *
- * @param failure - The failure.
- * @returns Whether the definition holds no value.
- */
-export const isEmptyDefinition = (failure: CompileError): boolean =>
-  failure._tag === "UnreadDefinition" && failure.detail === emptyDefinition;
-
-/**
  * The flags a compiled pattern is read with by a JavaScript host: `u`, so its `\u` escapes and
  * supplementary characters read as code points, as PostgreSQL reads them.
  */
@@ -3901,7 +4017,11 @@ export const compile = (
       exact: reading === "exact",
     });
     if (isNothing(tree)) {
-      return yield* refuse(emptyDefinition);
+      return yield* Result.fail(
+        new EmptyDefinition({
+          primitive: domain._tag === "atomic" ? domain.primitive : domain._tag,
+        }),
+      );
     }
 
     const pattern = emitWhole(tree);

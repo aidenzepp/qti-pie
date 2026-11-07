@@ -132,12 +132,12 @@ export const includeKind = "xi:include" satisfies Kind;
 /**
  * A section's selection.
  */
-const selectionKind = "qti-selection" satisfies Kind;
+export const selectionKind = "qti-selection" satisfies Kind;
 
 /**
  * A section's ordering.
  */
-const orderingKind = "qti-ordering" satisfies Kind;
+export const orderingKind = "qti-ordering" satisfies Kind;
 
 /**
  * A branch rule.

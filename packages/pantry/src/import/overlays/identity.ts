@@ -34,7 +34,7 @@ import {
 } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
-import type { Folded } from "#pantry/import/fold.ts";
+import type { Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -390,7 +390,7 @@ interface Tree {
    * Each node's fold (`#pantry/import/fold.ts`): its nearest interaction among the rest, the
    * document node's its context's (spec reading 117).
    */
-  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly folds: Folds;
   /**
    * Read the node a row of the tree names, its element or its parent, which `flatten` writes
    * before every row that names it.

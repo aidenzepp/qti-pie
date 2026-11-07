@@ -435,11 +435,17 @@ const leavesOf = (particle: Particle): readonly Exclude<Particle, { readonly _ta
  *
  * @param particle - The model's particle.
  * @param leading - The kinds that come first.
- * @returns The restated model, and whether the model names every leading kind.
+ * @param source - The reading, which the restated groups and the text position cite.
+ * @returns The restated model, and whether the model names every leading kind; the model as it
+ *   is where it names one not, which leaves the reading unread ({@link UnreadEdit}).
  */
 const leadingFirst = (particle: Particle, leading: readonly string[], source: string): Edited => {
   const leaves = leavesOf(particle).filter(({ occurs }) => !Option.contains(occurs.max, 0));
   const named = leaves.flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : []));
+  if (!leading.every((kind) => named.includes(kind))) {
+    return { found: false, particle };
+  }
+
   const others = [...new Set(named)].filter((kind) => !leading.includes(kind));
   const wildcards = [
     ...new Map(
@@ -451,25 +457,34 @@ const leadingFirst = (particle: Particle, leading: readonly string[], source: st
   const once: Occurs = { max: Option.some(1), min: 1 };
   const many: Occurs = { max: Option.none(), min: 0 };
   // The restated groups and the text position are the reading's; a kind's particle keeps the
-  // XSD's own source where the model states it.
+  // XSD's own source, its first particle's in the model.
   const sources: Sources = pipe(
     particle.sources,
     Arr.map((): Source => ({ _tag: "spec", cite: source })),
   );
-  const element = (kind: string): Particle => ({
+  const element = (kind: string, held: Sources): Particle => ({
     _tag: "element",
     kinds: [kind],
     occurs: once,
-    sources: Option.getOrElse(
-      Arr.findFirst(leaves, (leaf) => leaf._tag === "element" && leaf.kinds.includes(kind)).pipe(
-        Option.map((leaf) => leaf.sources),
-      ),
-      () => sources,
-    ),
+    sources: held,
   });
+  // Every kind restated here is one the model names: a leading kind, or one of the others.
+  const restated = (kind: string): Particle =>
+    element(
+      kind,
+      Option.getOrThrowWith(
+        Arr.findFirst(leaves, (leaf) => leaf._tag === "element" && leaf.kinds.includes(kind)).pipe(
+          Option.map((leaf) => leaf.sources),
+        ),
+        () =>
+          new Error(
+            `The reading ${source} restates ${kind}, which no particle of the model names.`,
+          ),
+      ),
+    );
 
   return {
-    found: leading.every((kind) => named.includes(kind)),
+    found: true,
     particle: {
       _tag: "group",
       compositor: "sequence",
@@ -480,7 +495,7 @@ const leadingFirst = (particle: Particle, leading: readonly string[], source: st
           compositor: "choice",
           occurs: many,
           particles: [
-            ...leading.map(element),
+            ...leading.map(restated),
             ...wildcards.map((wildcard) => ({ ...wildcard, occurs: once })),
           ],
           sources,
@@ -499,7 +514,7 @@ const leadingFirst = (particle: Particle, leading: readonly string[], source: st
                   _tag: "group",
                   compositor: "choice",
                   occurs: once,
-                  particles: ["text", ...others].map(element),
+                  particles: [element("text", sources), ...others.map(restated)],
                   sources,
                 },
                 ...wildcards.map((wildcard) => ({ ...wildcard, occurs: many })),

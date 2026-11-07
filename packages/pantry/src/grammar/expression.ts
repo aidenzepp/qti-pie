@@ -10,9 +10,9 @@
  * and 3.0.1 XSDs give the same arity rows, which `expression.test.ts` checks over the pinned XSD
  * cache, and the binding and mapping rules are stated once for both versions.
  */
-import { Option } from "effect";
 import type { Array as Arr, Result } from "effect";
 import { closed, idField, int8Max, valueField } from "#pantry/grammar/closed.ts";
+import { maxOccursOf } from "#pantry/grammar/content.ts";
 import type {
   Closed,
   ClosedRelationError,
@@ -142,7 +142,7 @@ const childBoundsOf = (particle: Particle): ChildBounds => {
       }
     }
   })();
-  const most = Option.getOrElse(particle.occurs.max, () => Number.POSITIVE_INFINITY);
+  const most = maxOccursOf(particle.occurs);
 
   return {
     max: inner.max === 0 || most === 0 ? 0 : inner.max * most,
@@ -845,12 +845,33 @@ const notRecord: readonly ValueCardinality[] = ["single", "multiple", "ordered"]
 const containers: readonly ValueCardinality[] = ["multiple", "ordered"];
 
 /**
+ * What a kind's operands must share: one base type, one cardinality, both or neither.
+ */
+type Sharing = Pick<ExpressionTyping, "oneBase" | "oneCardinality">;
+
+/**
+ * Operands that share nothing: each may have any of the kind's base types and cardinalities.
+ */
+const sharingNothing: Sharing = { oneBase: false, oneCardinality: false };
+
+/**
+ * Operands of one base type.
+ */
+const sharingBase: Sharing = { oneBase: true, oneCardinality: false };
+
+/**
+ * Operands of one base type and one cardinality.
+ */
+const sharingBoth: Sharing = { oneBase: true, oneCardinality: true };
+
+/**
  * A kind that takes operands, every one of the same base types and cardinalities.
  *
  * @param kind - The kind.
  * @param operandBases - The base types its operands may have.
  * @param cardinalities - The cardinalities its operands may have.
  * @param result - Its result.
+ * @param shared - What its operands must share.
  * @returns The typing, its result fixed unless `result` says how.
  */
 const operator = (
@@ -858,12 +879,12 @@ const operator = (
   operandBases: readonly ValueBase[],
   cardinalities: readonly ValueCardinality[],
   result: Pick<ExpressionTyping, "resultBases" | "resultCardinalities" | "typing">,
-  shared: Partial<Pick<ExpressionTyping, "oneBase" | "oneCardinality">> = {},
+  shared: Sharing,
 ): ExpressionTyping => ({
   kind,
   lead: cardinalities,
-  oneBase: shared.oneBase ?? false,
-  oneCardinality: shared.oneCardinality ?? false,
+  oneBase: shared.oneBase,
+  oneCardinality: shared.oneCardinality,
   operandBases,
   outcomeOnly: false,
   resultBases: result.resultBases,
@@ -903,7 +924,7 @@ const leaf = (
   cardinality: ValueCardinality,
   outcomeOnly = false,
 ): ExpressionTyping => ({
-  ...operator(kind, [], [], fixed(base, cardinality)),
+  ...operator(kind, [], [], fixed(base, cardinality), sharingNothing),
   outcomeOnly,
 });
 
@@ -925,25 +946,28 @@ const predicate = fixed("boolean", "single");
  */
 export const expressionTypings: readonly ExpressionTyping[] = [
   ...["qti-and", "qti-any-n", "qti-not", "qti-or"].map((kind) =>
-    operator(kind, ["boolean"], ["single"], predicate),
+    operator(kind, ["boolean"], ["single"], predicate, sharingNothing),
   ),
   {
     ...leaf("qti-base-value", "boolean", "single"),
     resultBases: allBases,
     typing: "attribute",
   },
-  operator("qti-container-size", allBases, containers, fixed("integer", "single")),
-  operator("qti-contains", notDuration, containers, predicate, {
-    oneBase: true,
-    oneCardinality: true,
-  }),
+  operator("qti-container-size", allBases, containers, fixed("integer", "single"), sharingNothing),
+  operator("qti-contains", notDuration, containers, predicate, sharingBoth),
   ...["qti-correct", "qti-default", "qti-variable"].map((kind): ExpressionTyping => ({
     ...leaf(kind, "unknown", "unknown"),
     resultBases: [...allBases, "unknown"],
     resultCardinalities: valueCardinalities,
     typing: "declared",
   })),
-  operator("qti-custom-operator", allBases, allCardinalities, fixed("unknown", "unknown")),
+  operator(
+    "qti-custom-operator",
+    allBases,
+    allCardinalities,
+    fixed("unknown", "unknown"),
+    sharingNothing,
+  ),
   {
     ...operator(
       "qti-delete",
@@ -954,62 +978,77 @@ export const expressionTypings: readonly ExpressionTyping[] = [
         resultCardinalities: valueCardinalities,
         typing: "second",
       },
-      { oneBase: true },
+      sharingBase,
     ),
     lead: ["single"],
   },
   ...["qti-duration-gte", "qti-duration-lt"].map((kind) =>
-    operator(kind, ["duration"], ["single"], predicate),
+    operator(kind, ["duration"], ["single"], predicate, sharingNothing),
   ),
   ...["qti-equal", "qti-equal-rounded", "qti-gt", "qti-gte", "qti-lt", "qti-lte"].map((kind) =>
-    operator(kind, numerical, ["single"], predicate),
+    operator(kind, numerical, ["single"], predicate, sharingNothing),
   ),
-  operator("qti-field-value", allBases, ["record"], fixed("unknown", "single")),
+  operator("qti-field-value", allBases, ["record"], fixed("unknown", "single"), sharingNothing),
   ...["qti-gcd", "qti-lcm"].map((kind) =>
-    operator(kind, ["integer"], notRecord, fixed("integer", "single")),
+    operator(kind, ["integer"], notRecord, fixed("integer", "single"), sharingNothing),
   ),
   ...["qti-index", "qti-random"].map((kind) =>
-    operator(kind, allBases, containers, {
-      resultBases: valueBases,
-      resultCardinalities: ["single"],
-      typing: "first",
-    }),
+    operator(
+      kind,
+      allBases,
+      containers,
+      { resultBases: valueBases, resultCardinalities: ["single"], typing: "first" },
+      sharingNothing,
+    ),
   ),
-  operator("qti-inside", ["point"], notRecord, predicate),
+  operator("qti-inside", ["point"], notRecord, predicate, sharingNothing),
   ...(
     [
       ["qti-integer-divide", "integer"],
       ["qti-integer-modulus", "integer"],
       ["qti-integer-to-float", "float"],
     ] as const
-  ).map(([kind, result]) => operator(kind, ["integer"], ["single"], fixed(result, "single"))),
-  operator("qti-is-null", allBases, allCardinalities, predicate),
+  ).map(([kind, result]) =>
+    operator(kind, ["integer"], ["single"], fixed(result, "single"), sharingNothing),
+  ),
+  operator("qti-is-null", allBases, allCardinalities, predicate, sharingNothing),
   leaf("qti-map-response", "float", "single"),
   leaf("qti-map-response-point", "float", "single"),
-  operator("qti-match", notDuration, allCardinalities, predicate, {
-    oneBase: true,
-    oneCardinality: true,
-  }),
+  operator("qti-match", notDuration, allCardinalities, predicate, sharingBoth),
   leaf("qti-math-constant", "float", "single"),
-  operator("qti-math-operator", numerical, ["single"], {
-    resultBases: numerical,
-    resultCardinalities: ["single"],
-    typing: "attribute",
-  }),
+  operator(
+    "qti-math-operator",
+    numerical,
+    ["single"],
+    { resultBases: numerical, resultCardinalities: ["single"], typing: "attribute" },
+    sharingNothing,
+  ),
   ...["qti-max", "qti-min", "qti-product", "qti-sum"].map((kind) =>
-    operator(kind, numerical, notRecord, {
+    operator(
+      kind,
+      numerical,
+      notRecord,
+      {
+        resultBases: ["integer", "float", "unknown"],
+        resultCardinalities: ["single"],
+        typing: "numeric",
+      },
+      sharingNothing,
+    ),
+  ),
+  operator(
+    "qti-subtract",
+    numerical,
+    ["single"],
+    {
       resultBases: ["integer", "float", "unknown"],
       resultCardinalities: ["single"],
       typing: "numeric",
-    }),
+    },
+    sharingNothing,
   ),
-  operator("qti-subtract", numerical, ["single"], {
-    resultBases: ["integer", "float", "unknown"],
-    resultCardinalities: ["single"],
-    typing: "numeric",
-  }),
   {
-    ...operator("qti-member", notDuration, containers, predicate, { oneBase: true }),
+    ...operator("qti-member", notDuration, containers, predicate, sharingBase),
     lead: ["single"],
   },
   operator(
@@ -1017,7 +1056,7 @@ export const expressionTypings: readonly ExpressionTyping[] = [
     allBases,
     ["single", "multiple"],
     { resultBases: valueBases, resultCardinalities: ["multiple"], typing: "container" },
-    { oneBase: true },
+    sharingBase,
   ),
   ...["qti-ordered", "qti-repeat"].map((kind) =>
     operator(
@@ -1025,7 +1064,7 @@ export const expressionTypings: readonly ExpressionTyping[] = [
       allBases,
       ["single", "ordered"],
       { resultBases: valueBases, resultCardinalities: ["ordered"], typing: "container" },
-      { oneBase: true },
+      sharingBase,
     ),
   ),
   leaf("qti-null", "any", "unknown"),
@@ -1042,7 +1081,7 @@ export const expressionTypings: readonly ExpressionTyping[] = [
     leaf(kind, "float", "multiple", true),
   ),
   ...["qti-pattern-match", "qti-string-match", "qti-substring"].map((kind) =>
-    operator(kind, ["string"], ["single"], predicate),
+    operator(kind, ["string"], ["single"], predicate, sharingNothing),
   ),
   ...(
     [
@@ -1052,10 +1091,12 @@ export const expressionTypings: readonly ExpressionTyping[] = [
       ["qti-round-to", "float"],
       ["qti-truncate", "integer"],
     ] as const
-  ).map(([kind, result]) => operator(kind, numerical, ["single"], fixed(result, "single"))),
+  ).map(([kind, result]) =>
+    operator(kind, numerical, ["single"], fixed(result, "single"), sharingNothing),
+  ),
   leaf("qti-random-float", "float", "single"),
   leaf("qti-random-integer", "integer", "single"),
-  operator("qti-stats-operator", numerical, containers, fixed("float", "single")),
+  operator("qti-stats-operator", numerical, containers, fixed("float", "single"), sharingNothing),
   {
     ...leaf("qti-test-variables", "unknown", "multiple", true),
     resultBases: [...allBases, "unknown"],

@@ -667,15 +667,16 @@ export const entryPathOf = (resolution: HrefResolution): string | undefined =>
   resolution.scope === "entry" ? resolution.path : undefined;
 
 /**
- * The path a manifest href is compared by, `ResourceHref`'s and `File`'s `path`: the entry path it
- * resolves to in the package, and otherwise its path piece as read, so two external hrefs are
- * compared as written (reading 102).
+ * The path an href is compared by, `ResourceHref`'s and `File`'s `path`, and an item ref's or a
+ * site's (`#pantry/import/overlays/tests.ts` `ResolvedHref`): the entry path it resolves to in the
+ * package, and otherwise its path piece as read, so two external hrefs are compared as written
+ * (reading 102).
  *
  * @param resolution - Its resolution.
  * @param lexical - Its lexical form, an `xs:anyURI`'s.
  * @returns The path.
  */
-const comparedPathOf = (resolution: HrefResolution, lexical: string): string =>
+export const comparedPathOf = (resolution: HrefResolution, lexical: string): string =>
   resolution.scope === "entry" ? resolution.path : hrefPathOf(hrefValueOf(lexical, "collapse"));
 
 /**
@@ -1135,26 +1136,4 @@ export const referenceRowsOf = (
     TextReference: textReferences,
     TextReferencePath: textPaths,
   };
-};
-
-/**
- * An entry's path split at its last `/`, `path = directory ‖ name`.
- */
-export interface DirectorySplit {
-  readonly directory: string;
-  readonly name: string;
-}
-
-/**
- * Split an entry's path at its last `/`: its directory, empty at the package root and ending with
- * `/` below it, and its name. A builder that writes a path beside an href it cannot resolve reads
- * the directory here (`#pantry/import/overlays/tests.ts`).
- *
- * @param path - The path, an entry's.
- * @returns Its directory and its name, `path = directory ‖ name`.
- */
-export const directoryOf = (path: string): DirectorySplit => {
-  const at = path.lastIndexOf("/") + 1;
-
-  return { directory: path.slice(0, at), name: path.slice(at) };
 };

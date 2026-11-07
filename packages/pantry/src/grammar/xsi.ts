@@ -306,7 +306,12 @@ export const xsiTypesOf = (input: {
     const typeName = yield* roster("TypeName", names);
 
     return {
-      declaredType: (version, kind) => declared.get(`${version} ${kind}`) ?? noType,
+      // A kind no model declares in the version is governed by no named type.
+      declaredType: (version, kind) =>
+        Option.match(Option.fromNullishOr(declared.get(`${version} ${kind}`)), {
+          onNone: () => noType,
+          onSome: (type) => type,
+        }),
       definedIn: (version, handle) =>
         Option.exists(Option.fromNullishOr(namesIn.get(version)), (held) => held.has(handle)),
       typeName,

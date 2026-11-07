@@ -20,7 +20,7 @@
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info | QTI 3.0 ASI Information Model}
  */
 import { Array as Arr, Option, Result } from "effect";
-import { closed, idField, roster, valueField } from "#pantry/grammar/closed.ts";
+import { closed, idField, roster, rowsAt, valueField } from "#pantry/grammar/closed.ts";
 import type {
   Closed,
   ClosedRelationError,
@@ -765,7 +765,7 @@ const declarationsIn = (declarations: readonly AttributeDeclaration[]): readonly
 const boundsIn = (declarations: readonly AttributeDeclaration[]): readonly BoundRow[] => {
   const declared = new Map<string, Set<string>>();
   for (const { kind, name } of declarations) {
-    declared.set(kind, (declared.get(kind) ?? new Set()).add(name));
+    declared.getOrInsertComputed(kind, () => new Set()).add(name);
   }
 
   return [...declared].flatMap(([kind, names]) =>
@@ -836,7 +836,7 @@ const reachedFrom = (
   const children = new Map<string, string[]>();
   for (const { content, kind } of models) {
     if (content._tag === "element-only" || content._tag === "mixed") {
-      children.set(kind, [...(children.get(kind) ?? []), ...kindsWithin(content.particle)]);
+      children.getOrInsertComputed(kind, () => []).push(...kindsWithin(content.particle));
     }
   }
 
@@ -845,7 +845,7 @@ const reachedFrom = (
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     if (!reached.has(next)) {
       reached.add(next);
-      pending.push(...(children.get(next) ?? []));
+      pending.push(...rowsAt(children, next));
     }
   }
 

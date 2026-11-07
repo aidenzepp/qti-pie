@@ -13,7 +13,7 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { Option } from "effect";
+import { Array as Arr, Option } from "effect";
 import {
   integerMathOperators,
   lookupKind,
@@ -21,7 +21,6 @@ import {
   rpTemplates,
   tableReaders,
   valueBases,
-  valueCardinalities,
 } from "#pantry/grammar/expression.ts";
 import type {
   Language,
@@ -38,6 +37,7 @@ import {
   spelledBaseTypeOf,
   typedDeclarationOf,
 } from "#pantry/import/overlays/declarations.ts";
+import { charactersIn } from "#pantry/import/overlays/quotation.ts";
 import { itemRefPathsOf, keyOf } from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledRows,
@@ -46,8 +46,8 @@ import type {
   TestIds,
   TestRows,
 } from "#pantry/import/overlays/tests.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
-import type { Folded } from "#pantry/import/fold.ts";
+import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import type { Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -61,6 +61,8 @@ import {
   ruleKindHandles,
   setterKinds,
   typings,
+  valueBaseOf,
+  valueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
 import type {
   AssembledReference,
@@ -112,10 +114,11 @@ import type { Declaration } from "#pantry/qti/declarations.ts";
  */
 export interface ExpressionIds {
   /**
-   * The document's context (spec reading 117), its own where none is given: an included
-   * fragment's nodes take the interaction their includes stand in as their nearest.
+   * The document's context (spec reading 117), `ownContext` of `#pantry/import/fold.ts` for a
+   * document no site names: an included fragment's nodes take the interaction their includes stand
+   * in as their nearest.
    */
-  readonly context?: DocumentContext;
+  readonly context: DocumentContext;
   readonly idOf: (index: number) => NodeId;
 }
 
@@ -142,9 +145,24 @@ export interface ExpressionRows {
 }
 
 /**
- * The nil uuid, a reference's `declaration` where it names no declaration.
+ * The nil uuid, a reference's `declaration` where it names no declaration: NIL's NS1 (a reference
+ * that names no declaration is a row of its own relation, never the nil uuid) is open, and its
+ * known entries `dangling-uuid: VariableRef.declaration` and `PlacedVariableRef.declaration` show
+ * it.
  */
 const nilUuid = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * The declaration codes a row holds where it names no declaration: the null objects
+ * `#pantry/qti/expressions.ts` states for `VariableLookup`'s absent rows (M2: a name's absence is
+ * proved by the key of a row of its own), for a `Reading` whose source is none, and for a reference
+ * that names none.
+ */
+const undeclared = {
+  baseType: "none",
+  cardinality: "single",
+  declarationKind: "qti-outcome-declaration",
+} as const;
 
 /**
  * A type as the laws give it: a base type and a cardinality.
@@ -158,6 +176,18 @@ interface Typed {
  * The type of a value no declaration says.
  */
 const unknownType: Typed = { baseType: "unknown", cardinality: "unknown" };
+
+/**
+ * A reference's element type and its held expression's type as {@link unknownType} gives them,
+ * which `withTypes` fills once every expression is typed, and which stay where its element holds
+ * none: the null objects `VariableRef` holds in the fields its case leaves unread.
+ */
+const unfilledTypes = {
+  elementBase: unknownType.baseType,
+  elementCardinality: unknownType.cardinality,
+  heldBase: unknownType.baseType,
+  heldCardinality: unknownType.cardinality,
+} as const;
 
 /**
  * One declaration of the document as a reference resolves to it: its node, kind and codes.
@@ -201,11 +231,6 @@ const notElements: ReadonlySet<string> = new Set(nonElementKinds);
 const expressions: ReadonlySet<string> = new Set(expressionKinds);
 
 /**
- * Each expression kind's typing.
- */
-const typingOf = new Map(typings.map((typing) => [typing.kind, typing] as const));
-
-/**
  * The rule and processing kinds.
  */
 const rules: ReadonlySet<string> = new Set(ruleKindHandles);
@@ -239,17 +264,9 @@ const tests: ReadonlySet<string> = new Set(testRoots);
 const trueForm = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
 
 /**
- * A bare reference's lexical form: the name with the whitespace a collapsing type absorbs.
+ * A name a reference spells: an NCName.
  */
-const bareForm = new RegExp(
-  `^(?<before>[\\t\\n\\r ]*)(?<name>[${ncStart}][${ncChar}]*)(?<after>[\\t\\n\\r ]*)$`,
-  "u",
-);
-
-/**
- * A braced reference's lexical form: the name between braces.
- */
-const bracedForm = new RegExp(`^\\{(?<name>[${ncStart}][${ncChar}]*)\\}$`, "u");
+const nameForm = new RegExp(`^[${ncStart}][${ncChar}]*$`, "u");
 
 /**
  * What a reference's lexical form holds around its name, as `VariableRef` types it.
@@ -265,6 +282,23 @@ type Affix = Addition<typeof VariableRef>["before"];
 const isSpace = (text: string): text is Affix => /^[\t\n\r ]*$/u.test(text);
 
 /**
+ * Read the whitespace a bare reference's split leaves around its name as the affix it is.
+ *
+ * @param text - The whitespace.
+ * @returns It, as an {@link Affix}.
+ * @throws {Error} When it holds a character that is no XML whitespace, which the split strips
+ *   nothing else of: a defect of the split.
+ */
+const affixOf = (text: string): Affix =>
+  Option.getOrThrowWith(
+    Option.liftPredicate(text, isSpace),
+    () =>
+      new Error(
+        `A bare reference's split left ${JSON.stringify(text)} beside its name, which is no XML whitespace. Strip only tab, line feed, carriage return and space.`,
+      ),
+  );
+
+/**
  * A float literal that is also a name, which a float-or-reference attribute reads as the literal.
  */
 const floatName = /^[\t\n\r ]*(?:INF|NaN)[\t\n\r ]*$/u;
@@ -275,26 +309,32 @@ const floatName = /^[\t\n\r ]*(?:INF|NaN)[\t\n\r ]*$/u;
 const integerNames = new RegExp(integerMathOperators, "u");
 
 /**
- * The published template a `template` URI names, `none` for any other.
+ * The `RpTemplate` handle of a `template` URI that names none of the published templates, as
+ * `ProcessingTemplate` holds it (`E1_derived`'s last arm, `#pantry/qti/expressions.ts`): a URI may
+ * name a template of its own, which no law refuses.
+ */
+const unpublished = "none" satisfies (typeof rpTemplates)[number];
+
+/**
+ * The published templates, each with the pattern its `template` URI matches.
+ */
+const published = rpTemplates.flatMap((template) =>
+  template === unpublished
+    ? []
+    : [{ pattern: new RegExp(rpTemplatePattern(template), "u"), template }],
+);
+
+/**
+ * The published template a `template` URI names, {@link unpublished} for any other.
  *
  * @param uri - The URI as written.
  * @returns The `RpTemplate` handle.
  */
 const templateOf = (uri: string): (typeof rpTemplates)[number] =>
-  rpTemplates.find(
-    (template) => template !== "none" && new RegExp(rpTemplatePattern(template), "u").test(uri),
-  ) ?? "none";
-
-/**
- * Read a coded attribute's handle from its lexical form, exactly, as a `whiteSpace` preserve
- * enumeration spells it.
- *
- * @param handles - The roster's handles.
- * @param lexical - The lexical form, if written.
- * @returns The handle it spells, or none.
- */
-const handleOf = <H extends string>(handles: readonly H[], lexical: string | undefined) =>
-  handles.find((handle) => handle === lexical);
+  Option.match(
+    Arr.findFirst(published, ({ pattern }) => pattern.test(uri)),
+    { onNone: () => unpublished, onSome: ({ template }) => template },
+  );
 
 /**
  * Index a document's attribute rows by their element and name.
@@ -304,66 +344,52 @@ const handleOf = <H extends string>(handles: readonly H[], lexical: string | und
  */
 const attributesOf = (
   rows: FlatRows<Composed>,
-): ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>> => {
-  const byNode = new Map<NodeId, Map<string, AttributeRow<Composed>>>();
-
-  for (const row of rows.attributes) {
-    const named = byNode.get(row.node) ?? new Map<string, AttributeRow<Composed>>();
-    named.set(row.name, row);
-    byNode.set(row.node, named);
-  }
-
-  return byNode;
-};
+): ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>> =>
+  new Map(
+    [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
+      ([node, attributes]) => [node, new Map(attributes.map((row) => [row.name, row]))] as const,
+    ),
+  );
 
 /**
- * The expression-typing base type of a declaration's base type: itself among QTI's eleven, and
- * `unknown` for a record's `none` (`ValueBaseOf`).
- *
- * @param baseType - The declaration's code.
- * @returns The expression-typing code.
+ * A built-in variable as a root holds it: the declaration kind it stands as there, and its type,
+ * its declaration codes read as expression-typing codes.
  */
-const valueBaseOf = (baseType: string): ValueBase =>
-  valueBases.find((base) => base === baseType && base !== "any") ?? "unknown";
+interface BuiltIn {
+  readonly declarationKind: Addition<typeof VariableRef>["declarationKind"];
+  readonly type: Typed;
+}
 
 /**
- * The expression-typing cardinality of a declaration's cardinality (`ValueCardinalityOf`).
- *
- * @param cardinality - The declaration's code.
- * @returns The expression-typing code.
+ * Each root's built-in variables, as the installed `BuiltInVariable` holds them (the UP audit's
+ * A63).
  */
-const valueCardinalityOf = (cardinality: string): ValueCardinality =>
-  valueCardinalities.find((held) => held === cardinality) ?? "unknown";
-
-/**
- * Each root's built-in variables with their types, as the installed `BuiltInVariable` holds them
- * (the UP audit's A63), their declaration codes read as expression-typing codes.
- */
-export const builtInsByRoot: ReadonlyMap<string, ReadonlyMap<string, Typed>> = new Map(
+const builtInsByRoot: ReadonlyMap<string, ReadonlyMap<string, BuiltIn>> = new Map(
   [...Map.groupBy(BuiltInVariable.rows, ({ root }) => root)].map(([root, rows]) => [
     root,
     new Map(
-      rows.map(({ baseType, cardinality, variable }) => [
+      rows.map(({ baseType, cardinality, declaration, variable }) => [
         variable,
-        { baseType: valueBaseOf(baseType), cardinality: valueCardinalityOf(cardinality) },
+        {
+          declarationKind: declaration,
+          type: { baseType: valueBaseOf(baseType), cardinality: valueCardinalityOf(cardinality) },
+        },
       ]),
     ),
   ]),
 );
 
 /**
- * Each root's built-in variables with the declaration kind each stands as there (the installed
- * `BuiltInVariable`).
+ * Read the built-in variable a root holds under a name.
+ *
+ * @param root - The root's kind.
+ * @param name - The name.
+ * @returns The built-in, none where the root holds no built-in of the name, or none at all.
  */
-export const builtInKindsByRoot: ReadonlyMap<
-  string,
-  ReadonlyMap<string, Addition<typeof VariableRef>["declarationKind"]>
-> = new Map(
-  [...Map.groupBy(BuiltInVariable.rows, ({ root }) => root)].map(([root, rows]) => [
-    root,
-    new Map(rows.map(({ declaration, variable }) => [variable, declaration])),
-  ]),
-);
+const builtInOf = (root: string, name: string): Option.Option<BuiltIn> =>
+  Option.flatMap(Option.fromNullishOr(builtInsByRoot.get(root)), (held) =>
+    Option.fromNullishOr(held.get(name)),
+  );
 
 /**
  * The operand bits of some types' base types: each but `any`, once.
@@ -375,19 +401,23 @@ const basesOf = (types: readonly Typed[]): ReadonlySet<ValueBase> =>
   new Set(types.flatMap(({ baseType }) => (baseType === "any" ? [] : [baseType])));
 
 /**
- * The base type a set of operand bits gives a container or an index: `any` for none, the one for
- * one, `unknown` for several.
+ * The base type of no operand: `any`, as `baseOfOperands` and `baseOfTail` of
+ * `#pantry/qti/expressions.ts` state it for an expression whose operands set no bit.
+ */
+const noOperandBase = "any" satisfies ValueBase;
+
+/**
+ * The base type a set of operand bits gives a container or an index: {@link noOperandBase} for
+ * none, the one for one, `unknown` for several (`resultDerived`'s container arm).
  *
  * @param bases - The bits.
  * @returns The base type.
  */
-const oneOf = (bases: ReadonlySet<ValueBase>): ValueBase => {
-  if (bases.size === 0) {
-    return "any";
-  }
-
-  return bases.size === 1 ? ([...bases][0] ?? "unknown") : "unknown";
-};
+const oneOf = (bases: ReadonlySet<ValueBase>): ValueBase =>
+  Arr.match([...bases], {
+    onEmpty: () => noOperandBase,
+    onNonEmpty: ([only, ...rest]) => (rest.length === 0 ? only : unknownType.baseType),
+  });
 
 /**
  * The tables each kind of reference reads, in the order it reads them (`tableReaders` of
@@ -401,15 +431,28 @@ const tablesRead: ReadonlyMap<string, readonly ReferencedTable[]> = new Map(
 );
 
 /**
+ * The table a reference claims where it reads none, and the slot of a declaration that holds none:
+ * `none`, the null object `VariableRef.table` and `DeclarationTable`'s slots hold, so a law reads a
+ * declaration's lack of a table from a row (M2, `representation-gaps.md` §1).
+ */
+const noTable = "none" satisfies ReferencedTable;
+
+/**
  * Read the table a reference of a kind reads among those its declaration holds: the first it
- * reads that the declaration holds, else none.
+ * reads that the declaration holds, else {@link noTable}, which a kind that reads no table claims
+ * too.
  *
  * @param kind - The reference's kind.
  * @param held - The tables its declaration holds.
  * @returns The table.
  */
 const heldTableOf = (kind: string, held: ReadonlySet<string>): ReferencedTable =>
-  (tablesRead.get(kind) ?? []).find((table) => held.has(table)) ?? "none";
+  Option.getOrElse(
+    Option.flatMap(Option.fromNullishOr(tablesRead.get(kind)), (tables) =>
+      Arr.findFirst(tables, (table) => held.has(table)),
+    ),
+    () => noTable,
+  );
 
 /**
  * The table a reference's element needs its declaration to hold, as the declaration holds it: a map
@@ -427,7 +470,9 @@ const tableOf = (
   attribute: string,
   declared: DeclarationEntry | undefined,
 ): ReferencedTable =>
-  attribute === "identifier" ? heldTableOf(kind, declared?.tables ?? new Set<string>()) : "none";
+  attribute === "identifier" && declared !== undefined
+    ? heldTableOf(kind, declared.tables)
+    : noTable;
 
 /**
  * The base type a numeric aggregate gives: `unknown` when an operand is unknown, `integer` when
@@ -446,9 +491,18 @@ const numericOf = (operands: readonly Typed[]): ValueBase => {
 };
 
 /**
- * The base type an expression's own attribute gives: a math operator's by its `name`, a base
- * value's and a test variables' by its `base-type`, `unknown` where none is written or the one
- * written spells no base (`E1_derived` on `ExpressionAttribute`).
+ * QTI's eleven base types, the bases a `base-type` spells.
+ */
+const spelledBases: readonly ValueBase[] = valueBases.filter(
+  (base) => base !== noOperandBase && base !== unknownType.baseType,
+);
+
+/**
+ * The base type an expression's own attribute gives (`E1_derived` on `ExpressionAttribute`): a
+ * math operator's `integer` where its `name` is one of the integer operators and `float` for every
+ * other (information model §2.11.3.32), an unwritten one among them, as the law oracle reads it;
+ * a base value's and a test variables' the base its `base-type` spells exactly, `unknown` where
+ * none is written or the one written spells none.
  *
  * @param kind - The expression's kind.
  * @param baseTypeLexical - Its `base-type`, if written.
@@ -457,36 +511,112 @@ const numericOf = (operands: readonly Typed[]): ValueBase => {
  */
 const attributeBaseOf = (
   kind: string,
-  baseTypeLexical: string | undefined,
-  name: string | undefined,
+  baseTypeLexical: Option.Option<string>,
+  name: Option.Option<string>,
 ): ValueBase => {
   if (kind === "qti-math-operator") {
-    return integerNames.test(name ?? "") ? "integer" : "float";
+    return Option.exists(name, (written) => integerNames.test(written)) ? "integer" : "float";
   }
 
-  const written = handleOf(valueBases, baseTypeLexical);
-
-  return written === undefined || written === "any" ? "unknown" : written;
+  return baseTypeLexical.pipe(
+    Option.flatMap((lexical) => Arr.findFirst(spelledBases, (base) => base === lexical)),
+    Option.getOrElse(() => unknownType.baseType),
+  );
 };
 
 /**
- * The type a row holds, as a type alone: its base type and cardinality, `unknown` for none.
+ * The type a row holds, as a type alone: its base type and cardinality, `unknown` for none, the
+ * type of a variable no declaration types and of an operand an expression lacks.
  *
- * @param row - A typed row, an operand's type or a reference's.
+ * @param row - A typed row, an operand's type or a reference's, where it has one.
  * @returns Its type.
  */
-const typeIn = (row: Typed | undefined): Typed =>
-  row === undefined ? unknownType : { baseType: row.baseType, cardinality: row.cardinality };
+const typeIn = (row: Option.Option<Typed>): Typed =>
+  Option.match(row, {
+    onNone: () => unknownType,
+    onSome: ({ baseType, cardinality }) => ({ baseType, cardinality }),
+  });
 
 /**
  * What an expression's type derives from beside its kind.
  */
 interface TypeInputs {
-  readonly baseTypeLexical: string | undefined;
-  readonly name: string | undefined;
+  readonly baseTypeLexical: Option.Option<string>;
+  readonly name: Option.Option<string>;
   readonly operands: readonly Typed[];
-  readonly reference: Typed | undefined;
+  readonly reference: Option.Option<Typed>;
 }
+
+/**
+ * A kind's typing as the host derives its type: the typing, and the one result cardinality, and
+ * for a fixed typing the one result base, the typing gives where its type is its own.
+ */
+type Rule =
+  | {
+      readonly cardinality: ValueCardinality;
+      readonly typing: "attribute" | "container" | "first" | "numeric";
+    }
+  | {
+      readonly baseType: ValueBase;
+      readonly cardinality: ValueCardinality;
+      readonly typing: "fixed";
+    }
+  | { readonly typing: "declared" | "second" };
+
+/**
+ * Read the one value a typing gives where its kind's type is its own.
+ *
+ * @param kind - The typing's kind.
+ * @param values - The values it gives.
+ * @param what - What they are, for the defect.
+ * @returns The one value.
+ * @throws {Error} When the typing gives none or several, which the generator gives no kind of a
+ *   typing whose type is its own: a defect of the generated table.
+ */
+const onlyOf = <A>(kind: string, values: readonly A[], what: string): A =>
+  Option.getOrThrowWith(
+    values.length === 1 ? Arr.head(values) : Option.none(),
+    () =>
+      new Error(
+        `The typing of ${kind} gives ${String(values.length)} ${what}s, and a typing whose type is its kind's own gives one. Check expressionTypings in #pantry/grammar/expression.ts.`,
+      ),
+  );
+
+/**
+ * Each expression kind's {@link Rule}, read once from the generated typings.
+ */
+const ruleOf: ReadonlyMap<string, Rule> = new Map(
+  typings.map(({ kind, resultBases, resultCardinalities, typing }): readonly [string, Rule] => {
+    switch (typing) {
+      case "attribute":
+      case "container":
+      case "first":
+      case "numeric": {
+        return [
+          kind,
+          { cardinality: onlyOf(kind, resultCardinalities, "result cardinality"), typing },
+        ];
+      }
+      case "fixed": {
+        return [
+          kind,
+          {
+            baseType: onlyOf(kind, resultBases, "result base"),
+            cardinality: onlyOf(kind, resultCardinalities, "result cardinality"),
+            typing,
+          },
+        ];
+      }
+      case "declared":
+      case "second": {
+        return [kind, { typing }];
+      }
+      default: {
+        return typing satisfies never;
+      }
+    }
+  }),
+);
 
 /**
  * Derive an expression's type as the laws do: its kind's typing over its operands' types, its own
@@ -496,38 +626,50 @@ interface TypeInputs {
  * @param inputs - Its operands' types, in order, its `base-type` and `name`, and its
  *   `identifier`'s reference.
  * @returns The type.
+ * @throws {Error} When the kind has no typing, which every expression kind has: a defect of the
+ *   caller, which typed a node that is no expression.
  */
 const typeOf = (kind: string, inputs: TypeInputs): Typed => {
-  const typing = typingOf.get(kind);
-  if (typing === undefined) {
-    return unknownType;
-  }
-
-  const cardinality = typing.resultCardinalities[0] ?? "unknown";
-  switch (typing.typing) {
+  const rule = Option.getOrThrowWith(
+    Option.fromNullishOr(ruleOf.get(kind)),
+    () =>
+      new Error(
+        `The kind ${kind} has no expression typing, and every expression kind has one. Type expressions alone.`,
+      ),
+  );
+  switch (rule.typing) {
     case "numeric": {
-      return { baseType: numericOf(inputs.operands), cardinality };
+      return { baseType: numericOf(inputs.operands), cardinality: rule.cardinality };
     }
     case "container": {
-      return { baseType: oneOf(basesOf(inputs.operands)), cardinality };
+      return { baseType: oneOf(basesOf(inputs.operands)), cardinality: rule.cardinality };
     }
     case "first": {
-      return { baseType: inputs.operands[0]?.baseType ?? "any", cardinality };
+      return {
+        baseType: Option.match(Arr.head(inputs.operands), {
+          onNone: () => noOperandBase,
+          onSome: ({ baseType }) => baseType,
+        }),
+        cardinality: rule.cardinality,
+      };
     }
     case "second": {
-      return typeIn(inputs.operands[1]);
+      return typeIn(Arr.get(inputs.operands, 1));
     }
     case "declared": {
       return typeIn(inputs.reference);
     }
     case "attribute": {
-      return { baseType: attributeBaseOf(kind, inputs.baseTypeLexical, inputs.name), cardinality };
+      return {
+        baseType: attributeBaseOf(kind, inputs.baseTypeLexical, inputs.name),
+        cardinality: rule.cardinality,
+      };
     }
     case "fixed": {
-      return { baseType: typing.resultBases[0] ?? "unknown", cardinality };
+      return { baseType: rule.baseType, cardinality: rule.cardinality };
     }
     default: {
-      return typing.typing satisfies never;
+      return rule satisfies never;
     }
   }
 };
@@ -538,19 +680,68 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
  * language, its root's kind, its declarations that have a `Declaration` row, and the names only a
  * declaration with none holds.
  */
-interface Document {
+interface Document extends Tree {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>>;
-  readonly byId: ReadonlyMap<NodeId, NodeRow<Composed>>;
-  readonly childrenOf: ReadonlyMap<NodeId, readonly NodeRow<Composed>[]>;
+  /**
+   * A node's own characters as `Node.chars` holds them (`charactersIn` of
+   * `#pantry/import/overlays/quotation.ts`).
+   */
+  readonly charsOf: (node: NodeRow<Composed>) => string;
   readonly declarations: ReadonlyMap<string, DeclarationEntry>;
-  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly folds: Folds;
   readonly untyped: ReadonlySet<string>;
   readonly id: NodeId;
-  readonly language: ReadonlyMap<NodeId, Language>;
+  /**
+   * A node's processing language ({@link languagesOf}), which every node of the document has.
+   */
+  readonly languageOf: (node: NodeId) => Language;
   readonly rootKind: NodeRow<Composed>["kind"];
   readonly rows: FlatRows<Composed>;
   readonly timeDependent: boolean;
 }
+
+/**
+ * A document's tree as its flat rows hold it, read through two readers that cannot miss: a
+ * node's row by its id, and a node's children.
+ */
+interface Tree {
+  /**
+   * A node's children, in order: none for a node no row names as its parent.
+   */
+  readonly childrenOf: (node: NodeId) => readonly NodeRow<Composed>[];
+  /**
+   * A node's row by its id: a node's parent's among them, the document node its own parent.
+   */
+  readonly nodeOf: (node: NodeId) => NodeRow<Composed>;
+}
+
+/**
+ * Index a document's flat rows as a {@link Tree}.
+ *
+ * @param rows - The document's flat rows.
+ * @returns The tree.
+ * @throws {Error} From `nodeOf`, when the id is no node's of the rows, which every node's parent
+ *   is: a defect of the caller, which read a node of another document.
+ */
+const treeOf = (rows: FlatRows<Composed>): Tree => {
+  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
+  const byParent = Map.groupBy(
+    rows.nodes.filter((node) => node.parent !== node.id),
+    ({ parent }) => parent,
+  );
+
+  return {
+    childrenOf: (node) => Option.getOrElse(Option.fromNullishOr(byParent.get(node)), Arr.empty),
+    nodeOf: (node) =>
+      Option.getOrThrowWith(
+        Option.fromNullishOr(byId.get(node)),
+        () =>
+          new Error(
+            `Node ${node} is no node of the document's rows, and every node's parent is one. Read a node in its own document's rows.`,
+          ),
+      ),
+  };
+};
 
 /**
  * Read an attribute's lexical form.
@@ -570,42 +761,59 @@ const valueOf = (doc: Document, node: NodeId, name: string): string | undefined 
  * @param node - The element.
  * @returns Its children that are elements.
  */
-const elementsOf = (doc: Document, node: NodeId): readonly NodeRow<Composed>[] =>
-  (doc.childrenOf.get(node) ?? []).filter(({ kind }) => !notElements.has(kind));
+const elementsOf = (doc: Tree, node: NodeId): readonly NodeRow<Composed>[] =>
+  doc.childrenOf(node).filter(({ kind }) => !notElements.has(kind));
 
 /**
- * A node's parent's kind, `document` for the document node's own.
+ * A node's parent's kind, `document` for the document node, its own parent.
  *
  * @param doc - The document.
  * @param node - The node.
  * @returns The kind.
  */
-const parentKindOf = (doc: Document, node: NodeRow<Composed>): NodeRow<Composed>["kind"] =>
-  doc.byId.get(node.parent)?.kind ?? "document";
+const parentKindOf = (doc: Tree, node: NodeRow<Composed>): NodeRow<Composed>["kind"] =>
+  doc.nodeOf(node.parent).kind;
+
+/**
+ * The language of a node outside every processing root: `none`, as `Processing`'s `E1_derived`
+ * holds a node that is no root and sits under no rule.
+ */
+const outsideProcessing = "none" satisfies Language;
 
 /**
  * Read each node's processing language in document order: a root's its own, a rule's or an
- * expression's under a rule or an expression its parent's, and every other node's `none`.
+ * expression's under a rule or an expression its parent's, and every other node's
+ * {@link outsideProcessing}.
  *
  * @param rows - The document's flat rows, in document order.
- * @param byId - The nodes by id.
- * @returns Each node's language.
+ * @param tree - The rows' tree.
+ * @returns The reader of each node's language.
+ * @throws {Error} From the reader, when the id is no node's of the rows, every one of which this
+ *   reads: a defect of the caller.
  */
-const languagesOf = (
-  rows: FlatRows<Composed>,
-  byId: ReadonlyMap<NodeId, NodeRow<Composed>>,
-): ReadonlyMap<NodeId, Language> => {
+const languagesOf = (rows: FlatRows<Composed>, tree: Tree): ((node: NodeId) => Language) => {
   const language = new Map<NodeId, Language>();
+  const languageOf = (node: NodeId): Language =>
+    Option.getOrThrowWith(
+      Option.fromNullishOr(language.get(node)),
+      () =>
+        new Error(
+          `Node ${node} has no processing language, and every node of the document has one, each read after its parent. Read the language of a node of the same document.`,
+        ),
+    );
   for (const node of rows.nodes) {
-    const parentKind = byId.get(node.parent)?.kind ?? "document";
-    const carried = rules.has(parentKind) || expressions.has(parentKind);
+    const parent = tree.nodeOf(node.parent);
+    const carried =
+      parent.id !== node.id && (rules.has(parent.kind) || expressions.has(parent.kind));
     language.set(
       node.id,
-      rootLanguage.get(node.kind) ?? (carried ? (language.get(node.parent) ?? "none") : "none"),
+      Option.getOrElse(Option.fromNullishOr(rootLanguage.get(node.kind)), () =>
+        carried ? languageOf(parent.id) : outsideProcessing,
+      ),
     );
   }
 
-  return language;
+  return languageOf;
 };
 
 /**
@@ -624,7 +832,7 @@ const languagesOf = (
 const declarationsOf = (
   rows: FlatRows<Composed>,
   attributes: Document["attributes"],
-  childrenOf: Document["childrenOf"],
+  childrenOf: Tree["childrenOf"],
 ): Pick<Document, "declarations" | "untyped"> => {
   const declarations = new Map<string, DeclarationEntry>();
   const unnamed = new Set<string>();
@@ -647,9 +855,7 @@ const declarationsOf = (
           kind: node.kind,
           node: node.id,
           tables: new Set(
-            (childrenOf.get(node.id) ?? []).flatMap(({ kind }) =>
-              tableKinds.has(kind) ? [kind] : [],
-            ),
+            childrenOf(node.id).flatMap(({ kind }) => (tableKinds.has(kind) ? [kind] : [])),
           ),
         });
       }
@@ -672,26 +878,25 @@ const declarationsOf = (
 const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document => {
   const rows = flatten(tree, ids.idOf);
   const attributes = attributesOf(rows);
-  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
-  const childrenOf: ReadonlyMap<NodeId, readonly NodeRow<Composed>[]> = Map.groupBy(
-    rows.nodes.filter((node) => node.parent !== node.id),
-    ({ parent }) => parent,
-  );
+  const indexed = treeOf(rows);
 
   return {
+    ...indexed,
     attributes,
-    byId,
-    childrenOf,
-    ...declarationsOf(rows, attributes, childrenOf),
-    folds: foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node)),
+    charsOf: charactersIn(rows),
+    ...declarationsOf(rows, attributes, indexed.childrenOf),
+    folds: foldOf(rows.nodes, ids.context),
     id: rows.document.node,
-    language: languagesOf(rows, byId),
+    languageOf: languagesOf(rows, indexed),
     rootKind: tree.root.kind,
     rows,
-    timeDependent: trueForm.test(
-      rows.attributes.find(
-        ({ name, node }) => name === "time-dependent" && byId.get(node)?.kind === itemKind,
-      )?.lexical ?? "",
+    timeDependent: Option.exists(
+      Option.fromNullishOr(
+        rows.attributes.find(
+          ({ name, node }) => name === "time-dependent" && indexed.nodeOf(node).kind === itemKind,
+        ),
+      ),
+      ({ lexical }) => trueForm.test(lexical),
     ),
   };
 };
@@ -709,26 +914,28 @@ const spelledBy = (
   attribute: AttributeRow<Composed>,
 ): { readonly after: Affix; readonly before: Affix; readonly name: string } | undefined => {
   const spelling = spellingOf.get(`${node.kind} ${attribute.name}`);
-  if (
-    spelling === undefined ||
-    (node.kind === "qti-random-float" && floatName.test(attribute.lexical))
-  ) {
+  const { lexical } = attribute;
+  if (spelling === undefined || (node.kind === "qti-random-float" && floatName.test(lexical))) {
     return undefined;
   }
 
-  const groups = (spelling === "braced" ? bracedForm : bareForm).exec(attribute.lexical)?.groups;
-  if (groups === undefined) {
-    return undefined;
-  }
-
-  const before = groups["before"] ?? "";
-  const after = groups["after"] ?? "";
   if (spelling === "braced") {
-    return { after: "}", before: "{", name: groups["name"] ?? "" };
+    const name = lexical.slice(1, -1);
+
+    return lexical.startsWith("{") && lexical.endsWith("}") && nameForm.test(name)
+      ? { after: "}", before: "{", name }
+      : undefined;
   }
 
-  return isSpace(before) && isSpace(after)
-    ? { after, before, name: groups["name"] ?? "" }
+  const rest = lexical.replace(/^[\t\n\r ]+/u, "");
+  const name = rest.replace(/[\t\n\r ]+$/u, "");
+
+  return nameForm.test(name)
+    ? {
+        after: affixOf(rest.slice(name.length)),
+        before: affixOf(lexical.slice(0, lexical.length - rest.length)),
+        name,
+      }
     : undefined;
 };
 
@@ -742,9 +949,9 @@ const spelledBy = (
  */
 const resolve = (doc: Document, name: string) => {
   const declared = doc.declarations.get(name);
-  const builtIn = builtInsByRoot.get(doc.rootKind)?.get(name);
   if (declared !== undefined) {
     return {
+      declarationKind: Option.some(declared.kind),
       declared,
       resolution: "declared" as const,
       type: {
@@ -754,9 +961,20 @@ const resolve = (doc: Document, name: string) => {
     };
   }
 
-  return builtIn === undefined
-    ? { declared, resolution: "unresolved" as const, type: unknownType }
-    : { declared, resolution: "builtIn" as const, type: builtIn };
+  return Option.match(builtInOf(doc.rootKind, name), {
+    onNone: () => ({
+      declarationKind: Option.none(),
+      declared,
+      resolution: "unresolved" as const,
+      type: unknownType,
+    }),
+    onSome: (builtIn) => ({
+      declarationKind: Option.some(builtIn.declarationKind),
+      declared,
+      resolution: "builtIn" as const,
+      type: builtIn.type,
+    }),
+  });
 };
 
 /**
@@ -778,7 +996,7 @@ const referenceOf = (
     return undefined;
   }
 
-  const { declared, resolution, type } = resolve(doc, spelled.name);
+  const { declarationKind, declared, resolution, type } = resolve(doc, spelled.name);
 
   return {
     after: spelled.after,
@@ -786,23 +1004,15 @@ const referenceOf = (
     baseType: type.baseType,
     before: spelled.before,
     cardinality: type.cardinality,
-    declBaseType: declared?.baseType ?? "none",
-    declCardinality: declared?.cardinality ?? "single",
-    declaration: declared?.node ?? nilUuid,
-    declarationKind:
-      declared?.kind ??
-      (resolution === "builtIn"
-        ? builtInKindsByRoot.get(doc.rootKind)?.get(spelled.name)
-        : undefined) ??
-      "qti-outcome-declaration",
+    declBaseType: declared === undefined ? undeclared.baseType : declared.baseType,
+    declCardinality: declared === undefined ? undeclared.cardinality : declared.cardinality,
+    declaration: declared === undefined ? nilUuid : declared.node,
+    declarationKind: Option.getOrElse(declarationKind, () => undeclared.declarationKind),
     document: doc.id,
-    elementBase: "unknown",
-    elementCardinality: "unknown",
-    heldBase: "unknown",
-    heldCardinality: "unknown",
+    ...unfilledTypes,
     identifier: spelled.name,
     kind: node.kind,
-    language: doc.language.get(node.id) ?? "none",
+    language: doc.languageOf(node.id),
     lexical: attribute.lexical,
     node: node.id,
     parent: node.parent,
@@ -835,17 +1045,25 @@ const typesOf = (
   references: ReadonlyMap<string, Addition<typeof VariableRef>>,
 ): ReadonlyMap<NodeId, Typed> => {
   const typed = new Map<NodeId, Typed>();
+  const operandOf = (child: NodeRow<Composed>): Typed =>
+    Option.getOrThrowWith(
+      Option.fromNullishOr(typed.get(child.id)),
+      () =>
+        new Error(
+          `The operand ${child.id} is untyped when its operator is typed, and reverse document order types every expression after the ones below it. Type a document's expressions in reverse document order.`,
+        ),
+    );
   for (const node of doc.rows.nodes.toReversed()) {
     if (expressions.has(node.kind)) {
       typed.set(
         node.id,
         typeOf(node.kind, {
-          baseTypeLexical: valueOf(doc, node.id, "base-type"),
-          name: valueOf(doc, node.id, "name"),
+          baseTypeLexical: Option.fromNullishOr(valueOf(doc, node.id, "base-type")),
+          name: Option.fromNullishOr(valueOf(doc, node.id, "name")),
           operands: elementsOf(doc, node.id).flatMap((child) =>
-            expressions.has(child.kind) ? [typed.get(child.id) ?? unknownType] : [],
+            expressions.has(child.kind) ? [operandOf(child)] : [],
           ),
-          reference: references.get(pairKey(node.id, "identifier")),
+          reference: Option.fromNullishOr(references.get(pairKey(node.id, "identifier"))),
         }),
       );
     }
@@ -864,7 +1082,7 @@ const typesOf = (
 const tupleOf = (doc: Document, node: NodeRow<Composed>) => ({
   document: doc.id,
   kind: node.kind,
-  nearest: doc.folds.get(node.id)?.nearest ?? doc.id,
+  nearest: foldAt(doc.folds, node.id).nearest,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -908,7 +1126,7 @@ const processingRowsOf = (
 ): void => {
   built.Processing.set(node.id, {
     ...tupleOf(doc, node),
-    language: doc.language.get(node.id) ?? "none",
+    language: doc.languageOf(node.id),
     parentKind: parentKindOf(doc, node),
   });
 
@@ -917,28 +1135,6 @@ const processingRowsOf = (
   if (uri !== undefined) {
     built.ProcessingTemplate.set(node.id, { node: node.id, template: templateOf(uri), uri });
   }
-};
-
-/**
- * A node's characters as `Node.chars` holds them: a text's or whitespace's value, an entity
- * reference's `&name;`, and nothing for any other node, so a base value's text is its string
- * value.
- *
- * @param doc - The document.
- * @param node - The node.
- * @returns Its characters.
- */
-const charsOf = (doc: Document, node: NodeId): string => {
-  const text =
-    doc.rows.texts.find((row) => row.node === node) ??
-    doc.rows.whitespace.find((row) => row.node === node);
-  if (text !== undefined) {
-    return text.value;
-  }
-
-  const reference = doc.rows.entityRefs.find((row) => row.node === node);
-
-  return reference === undefined ? "" : `&${reference.name};`;
 };
 
 /**
@@ -964,7 +1160,7 @@ const expressionRowsOf = (
   },
 ): void => {
   const parentKind = parentKindOf(doc, node);
-  const language = doc.language.get(node.id) ?? "none";
+  const language = doc.languageOf(node.id);
   const own = { ...type, kind: node.kind, language, node: node.id, parent: node.parent };
   built.Expression.set(node.id, { ...tupleOf(doc, node), ...type, language, parentKind });
 
@@ -976,11 +1172,22 @@ const expressionRowsOf = (
       language,
       node: node.id,
       operator: node.parent,
-      rank: BigInt(elementsOf(doc, node.parent).findIndex(({ id }) => id === node.id) + 1),
+      rank: BigInt(
+        Option.getOrThrowWith(
+          Arr.findFirstIndex(elementsOf(doc, node.parent), ({ id }) => id === node.id),
+          () =>
+            new Error(
+              `The operand ${node.id} is not among its operator ${node.parent}'s elements, which every element child is. Rank an element among its own parent's.`,
+            ),
+        ) + 1,
+      ),
     });
   }
 
-  for (const name of typingAttributes.get(node.kind) ?? []) {
+  for (const name of Option.getOrElse(
+    Option.fromNullishOr(typingAttributes.get(node.kind)),
+    Arr.empty,
+  )) {
     const attribute = doc.attributes.get(node.id)?.get(name);
     if (attribute !== undefined) {
       built.ExpressionAttribute.set(pairKey(node.id, name), {
@@ -1003,7 +1210,7 @@ const expressionRowsOf = (
   }
 
   if (node.kind === "qti-base-value") {
-    const text = (doc.childrenOf.get(node.id) ?? []).map(({ id }) => charsOf(doc, id)).join("");
+    const text = doc.childrenOf(node.id).map(doc.charsOf).join("");
     built.Literal.set(node.id, { ...own, text });
 
     // A literal is typed where its base-type spells a code, the one its type is (7230d050).
@@ -1029,7 +1236,7 @@ const expressionRowsOf = (
  */
 const itemTimingOf = (doc: Document): Map<string, Addition<typeof ItemTiming>> => {
   const attribute = doc.rows.attributes.find(
-    ({ name, node }) => name === "time-dependent" && doc.byId.get(node)?.kind === itemKind,
+    ({ name, node }) => name === "time-dependent" && doc.nodeOf(node).kind === itemKind,
   );
 
   return attribute === undefined
@@ -1061,17 +1268,19 @@ const withTypes = (
   typed: ReadonlyMap<NodeId, Typed>,
   reference: Addition<typeof VariableRef>,
 ): Addition<typeof VariableRef> => {
-  const element = typed.get(reference.node);
+  const element = typeIn(Option.fromNullishOr(typed.get(reference.node)));
   const holding = holders.has(reference.kind) && reference.attribute === "identifier";
-  const operand = holding ? elementsOf(doc, reference.node)[0] : undefined;
-  const holds = operand === undefined ? undefined : typed.get(operand.id);
+  const operand = holding ? Arr.head(elementsOf(doc, reference.node)) : Option.none();
+  const holds = typeIn(
+    operand.pipe(Option.flatMap(({ id }) => Option.fromNullishOr(typed.get(id)))),
+  );
 
   return {
     ...reference,
-    elementBase: element?.baseType ?? "unknown",
-    elementCardinality: element?.cardinality ?? "unknown",
-    heldBase: holds?.baseType ?? "unknown",
-    heldCardinality: holds?.cardinality ?? "unknown",
+    elementBase: element.baseType,
+    elementCardinality: element.cardinality,
+    heldBase: holds.baseType,
+    heldCardinality: holds.cardinality,
   };
 };
 
@@ -1109,17 +1318,15 @@ const declaredLookup = (
 
 /**
  * A declaration lookup's row where the document declares no such name: the document itself, and
- * the null objects.
+ * the null objects ({@link undeclared}).
  *
  * @param document - The document.
  * @param name - The name.
  * @returns The row.
  */
-export const absentLookup = (document: NodeId, name: string): Addition<typeof VariableLookup> => ({
-  baseType: "none",
-  cardinality: "single",
+const absentLookup = (document: NodeId, name: string): Addition<typeof VariableLookup> => ({
+  ...undeclared,
   declaration: document,
-  declarationKind: "qti-outcome-declaration",
   declared: false,
   document,
   name,
@@ -1194,16 +1401,14 @@ const declarationTablesOf = (
   const tables = new Map<string, Addition<typeof DeclarationTable>>();
   for (const node of doc.rows.nodes.filter(({ id }) => typed.has(id))) {
     const held = new Set(
-      (doc.childrenOf.get(node.id) ?? []).flatMap(({ kind }) =>
-        tableKinds.has(kind) ? [kind] : [],
-      ),
+      doc.childrenOf(node.id).flatMap(({ kind }) => (tableKinds.has(kind) ? [kind] : [])),
     );
     if (declarationKinds.has(node.kind) && (held.size > 0 || named.has(node.id))) {
       tables.set(node.id, {
-        areaMapping: held.has("qti-area-mapping") ? "qti-area-mapping" : "none",
+        areaMapping: held.has("qti-area-mapping") ? "qti-area-mapping" : noTable,
         declaration: node.id,
         lookup: lookupOf(held),
-        mapping: held.has("qti-mapping") ? "qti-mapping" : "none",
+        mapping: held.has("qti-mapping") ? "qti-mapping" : noTable,
       });
     }
   }
@@ -1220,11 +1425,11 @@ const declarationTablesOf = (
 const sectionIdentifiersOf = (doc: Document): Map<string, Addition<typeof SectionIdentifier>> =>
   new Map(
     doc.rows.attributes.flatMap((attribute) => {
-      const node = doc.byId.get(attribute.node);
-      if (attribute.name !== "section-identifier" || node === undefined) {
+      if (attribute.name !== "section-identifier") {
         return [];
       }
 
+      const node = doc.nodeOf(attribute.node);
       const { lead, name, trail } = piecesOf(attribute.lexical);
 
       return [
@@ -1307,12 +1512,10 @@ const testReferencesOf = (
 export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): ExpressionRows => {
   const doc = documentOf(tree, ids);
   const references = new Map<string, Addition<typeof VariableRef>>();
-  for (const node of doc.rows.nodes) {
-    for (const attribute of doc.attributes.get(node.id)?.values() ?? []) {
-      const reference = referenceOf(doc, node, attribute);
-      if (reference !== undefined) {
-        references.set(pairKey(node.id, attribute.name), reference);
-      }
+  for (const attribute of doc.rows.attributes) {
+    const reference = referenceOf(doc, doc.nodeOf(attribute.node), attribute);
+    if (reference !== undefined) {
+      references.set(pairKey(attribute.node, attribute.name), reference);
     }
   }
 
@@ -1416,19 +1619,16 @@ export interface AssembledExpressionRows {
 }
 
 /**
+ * The resource type of a name that names no resource: `none`, `NameLookup`'s null object for a name
+ * that is no item ref, or an item ref whose href names no resource of the package (its
+ * `E1_derived`).
+ */
+const noResource = "none" satisfies Addition<typeof NameLookup>["resourceType"];
+
+/**
  * The setters, whose prefixed readings resolve nothing.
  */
 const setters: ReadonlySet<string> = new Set(setterKinds);
-
-/**
- * The built-in names a test's unsplit references reach.
- */
-const testBuiltInNames: ReadonlySet<string> = new Set(builtInsByRoot.get(testKind)?.keys());
-
-/**
- * The built-in names an item ref's prefix reaches: its item's.
- */
-const itemBuiltInNames: ReadonlySet<string> = new Set(builtInsByRoot.get(itemKind)?.keys());
 
 /**
  * The kinds a prefix names a `duration` of (spec reading 86 for the section ref).
@@ -1537,7 +1737,7 @@ const nameProbe = (
     node: assembly,
     placements: 0n,
     replaced: false,
-    resourceType: "none",
+    resourceType: noResource,
   };
   lookups.names.set(key, absent);
 
@@ -1625,7 +1825,7 @@ const scopeOf = (lookups: Lookups, assembly: NodeId, text: ReadingText): Scope =
         node: assembly,
         placements: 1n,
         replaced: false,
-        resourceType: "none",
+        resourceType: noResource,
       }
     : nameProbe(lookups, assembly, text.scope);
 
@@ -1638,13 +1838,13 @@ const scopeOf = (lookups: Lookups, assembly: NodeId, text: ReadingText): Scope =
  * @param itemScoped - Whether its scope is a found item ref.
  * @returns Whether it is.
  */
-const builtInOf = (text: ReadingText, scope: Scope, itemScoped: boolean): boolean => {
+const holdsBuiltIn = (text: ReadingText, scope: Scope, itemScoped: boolean): boolean => {
   if (text.form === "unsplit") {
-    return testBuiltInNames.has(text.variable);
+    return Option.isSome(builtInOf(testKind, text.variable));
   }
 
   if (itemScoped) {
-    return itemBuiltInNames.has(text.variable);
+    return Option.isSome(builtInOf(itemKind, text.variable));
   }
 
   return (
@@ -1665,7 +1865,7 @@ const builtInOf = (text: ReadingText, scope: Scope, itemScoped: boolean): boolea
  * @param declared - Its declaration lookup, where it reads one.
  * @param mapped - Its mapping lookup, where it reads one.
  * @param mappedSource - Its mapping's source declaration, where its item declares one.
- * @param builtIn - The declaration kind of the built-in of its scope it names, if any.
+ * @param builtIn - The built-in of its scope it names, where it names one.
  * @param scope - Its scope.
  * @returns The source and the codes.
  */
@@ -1673,7 +1873,7 @@ const sourceOf = (
   declared: Addition<typeof VariableLookup> | undefined,
   mapped: Addition<typeof MappingLookup> | undefined,
   mappedSource: Addition<typeof MappingSourceDeclaration> | undefined,
-  builtIn: Addition<typeof Reading>["declarationKind"] | undefined,
+  builtIn: Option.Option<BuiltIn>,
   scope: Scope,
 ): Pick<
   Addition<typeof Reading>,
@@ -1692,10 +1892,10 @@ const sourceOf = (
   if (mapped?.mapped === true) {
     return mappedSource === undefined
       ? {
-          declBaseType: "none",
-          declCardinality: "single",
+          declBaseType: undeclared.baseType,
+          declCardinality: undeclared.cardinality,
           declaration: scope.itemDocument,
-          declarationKind: "qti-outcome-declaration",
+          declarationKind: undeclared.declarationKind,
           source: "mapped",
         }
       : {
@@ -1707,13 +1907,22 @@ const sourceOf = (
         };
   }
 
-  return {
-    declBaseType: "none",
-    declCardinality: "single",
-    declaration: scope.itemDocument,
-    declarationKind: builtIn ?? "qti-outcome-declaration",
-    source: builtIn === undefined ? "none" : "builtIn",
-  };
+  return Option.match(builtIn, {
+    onNone: () => ({
+      declBaseType: undeclared.baseType,
+      declCardinality: undeclared.cardinality,
+      declaration: scope.itemDocument,
+      declarationKind: undeclared.declarationKind,
+      source: "none" as const,
+    }),
+    onSome: ({ declarationKind }) => ({
+      declBaseType: undeclared.baseType,
+      declCardinality: undeclared.cardinality,
+      declaration: scope.itemDocument,
+      declarationKind,
+      source: "builtIn" as const,
+    }),
+  });
 };
 
 /**
@@ -1761,9 +1970,9 @@ const readingOf = (
     declared,
     mapped,
     itemScoped ? lookups.mappingSources.get(lookupKey(scope.node, text.variable)) : undefined,
-    builtInOf(text, scope, itemScoped)
-      ? builtInKindsByRoot.get(builtInRootOf(text, itemScoped))?.get(text.variable)
-      : undefined,
+    holdsBuiltIn(text, scope, itemScoped)
+      ? builtInOf(builtInRootOf(text, itemScoped), text.variable)
+      : Option.none(),
     scope,
   );
   const timed = itemHeld && typed.source === "builtIn" && text.variable === "duration";
@@ -1772,13 +1981,13 @@ const readingOf = (
     ...typed,
     assembly,
     attribute: reference.attribute,
-    declared: declared?.declared ?? false,
+    declared: declared !== undefined && declared.declared,
     form: text.form,
     found: scope.found,
     identifier: reference.identifier,
     kind: reference.kind,
     lookupDocument: scope.itemDocument,
-    mapped: mapped?.mapped ?? false,
+    mapped: mapped !== undefined && mapped.mapped,
     named: scope.node,
     namedKind: scope.kind,
     node: reference.node,
@@ -1846,7 +2055,7 @@ const assembledReferenceOf = (
       document: reference.document,
       identifier: reference.identifier,
       kind: reference.kind,
-      lastDigit: segments.at(-1)?.digit ?? false,
+      lastDigit: Option.exists(Arr.last(segments), ({ digit }) => digit),
       node: reference.node,
       role: reference.role,
       rootKind: reference.rootKind,
@@ -1976,8 +2185,15 @@ const itemRefTargetsOf = (
   const itemRefDocuments = new Map<string, Addition<typeof ItemRefDocument>>();
   for (const { ids, tree } of documents) {
     for (const href of itemRefPathsOf(tree, ids)) {
-      const types = (typesAt.get(href.path) ?? []).map(({ type }) => type);
-      const type = preferred.find((wanted) => types.includes(wanted)) ?? types[0];
+      const types = Option.getOrElse(Option.fromNullishOr(typesAt.get(href.path)), Arr.empty).map(
+        ({ type }) => type,
+      );
+      const type = Option.getOrUndefined(
+        Option.orElse(
+          Arr.findFirst(preferred, (wanted) => types.includes(wanted)),
+          () => Arr.head(types),
+        ),
+      );
       if (type !== undefined) {
         itemRefTargets.set(href.node, {
           node: href.node,
@@ -2112,11 +2328,15 @@ const mappingItemRefsOf = (
  * for an item ref, what it names. An item ref of the item type whose item the package holds no
  * document of takes the test itself as its item, `NameLookup`'s null object for "no item"
  * (`representation-gaps.md` §4.3), which `ItemRefDocument` holds no row of, so "Item ref target"
- * refuses it as it refuses the item ref.
+ * refuses it as it refuses the item ref; and an item ref whose href names no resource has
+ * {@link noResource} for its type, which no `ItemRefTarget` row holds.
  *
  * @param documents - Every document of the package.
  * @param assembled - The package's assemblies.
  * @param lookups - The lookups, which this adds to.
+ * @throws {Error} When a written element has no instance that places it or no `Named` row, which
+ *   `AssembledName`, a projection of `InstanceName` over `Named`, rules out: a defect of the
+ *   assembly's rows.
  */
 const forceNames = (
   documents: readonly AssembledExpressionInput[],
@@ -2133,21 +2353,37 @@ const forceNames = (
   );
   for (const name of assembled.AssembledName.values()) {
     const key = lookupKey(name.assembly, name.identifier);
-    const placements = placed.get(keyOf([name.assembly, name.node])) ?? [];
-    const kind = kinds.get(name.node) ?? "document";
-    const resourceType = kind === itemRefKind ? (lookups.targets.get(name.node) ?? "none") : "none";
+    const unplaced = () =>
+      new Error(
+        `The written element ${name.node} of the assembly ${name.assembly} has no instance that places it or no Named row, and AssembledName projects InstanceName over Named. Build the names from the same assembly's rows.`,
+      );
+    const placements = Option.getOrThrowWith(
+      Option.fromNullishOr(placed.get(keyOf([name.assembly, name.node]))),
+      unplaced,
+    );
+    const placement = Option.getOrThrowWith(Arr.head(placements), unplaced);
+    const kind = Option.getOrThrowWith(Option.fromNullishOr(kinds.get(name.node)), unplaced);
+    const resourceType =
+      kind === itemRefKind
+        ? Option.getOrElse(Option.fromNullishOr(lookups.targets.get(name.node)), () => noResource)
+        : noResource;
     const holdsItem = kind === itemRefKind && resourceType === itemResourceType;
     if (!lookups.names.has(key)) {
       lookups.names.set(key, {
         assembly: name.assembly,
         found: true,
-        instance: placements[0]?.instance ?? name.assembly,
-        itemDocument: holdsItem ? (lookups.items.get(name.node) ?? name.assembly) : name.assembly,
+        instance: placement.instance,
+        itemDocument: holdsItem
+          ? Option.getOrElse(
+              Option.fromNullishOr(lookups.items.get(name.node)),
+              () => name.assembly,
+            )
+          : name.assembly,
         kind,
         name: name.identifier,
         node: name.node,
         placements: BigInt(placements.length),
-        replaced: placements[0]?.replaced ?? false,
+        replaced: placement.replaced,
         resourceType,
       });
     }
@@ -2199,7 +2435,10 @@ const placedRowsOf = (
         document: instance.document,
         instance: instance.id,
       });
-      for (const reference of references.get(instance.document) ?? []) {
+      for (const reference of Option.getOrElse(
+        Option.fromNullishOr(references.get(instance.document)),
+        Arr.empty,
+      )) {
         placedReferences.set(keyOf([instance.id, reference.node, reference.attribute]), {
           assembly: root.assembly,
           attribute: reference.attribute,
@@ -2329,15 +2568,22 @@ const placedResolutionOf = (
     };
   }
 
-  const builtIn = builtInKindsByRoot.get(itemKind)?.get(name);
-
-  return {
-    declBaseType: "none",
-    declCardinality: "single",
-    declaration: nilUuid,
-    declarationKind: builtIn ?? "qti-outcome-declaration",
-    resolution: builtIn === undefined ? "unresolved" : "builtIn",
-  };
+  return Option.match(builtInOf(itemKind, name), {
+    onNone: () => ({
+      declBaseType: undeclared.baseType,
+      declCardinality: undeclared.cardinality,
+      declaration: nilUuid,
+      declarationKind: undeclared.declarationKind,
+      resolution: "unresolved" as const,
+    }),
+    onSome: ({ declarationKind }) => ({
+      declBaseType: undeclared.baseType,
+      declCardinality: undeclared.cardinality,
+      declaration: nilUuid,
+      declarationKind,
+      resolution: "builtIn" as const,
+    }),
+  });
 };
 
 /**
@@ -2372,9 +2618,10 @@ export const placedVariableRowsOf = (input: {
   const lookups = new Map<string, Addition<typeof VariableLookup>>();
   for (const root of input.instances) {
     for (const instance of root.assemblyKind === itemKind ? instancesIn(root) : []) {
-      for (const reference of (referencesOf.get(instance.document) ?? []).filter(
-        ({ identifier }) => !untyped.has(keyOf([root.assembly, identifier])),
-      )) {
+      for (const reference of Option.getOrElse(
+        Option.fromNullishOr(referencesOf.get(instance.document)),
+        Arr.empty,
+      ).filter(({ identifier }) => !untyped.has(keyOf([root.assembly, identifier])))) {
         const declaration = declared.get(keyOf([root.assembly, reference.identifier]));
         placed.set(keyOf([instance.id, reference.node, reference.attribute]), {
           ...placedResolutionOf(declaration, reference.identifier),
