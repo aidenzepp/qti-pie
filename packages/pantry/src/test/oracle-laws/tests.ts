@@ -311,6 +311,9 @@ const itemRefLawsOf = (
             ? []
             : [breachAt(rows, node, "Item ref target", { path })],
       });
+      // An item ref that names an LTI link names no item: a mapping under it is accepted unchecked
+      // (reading 110), as the schema's `heldMappings` leaves out the nil document.
+      const linked = Option.exists(target, ({ type }) => Option.exists(type, isLinkType));
       const item = itemRefDocument(input, document.listed, node);
       const declared = item.pipe(Option.map((listed) => declarationsOf(listed.rows, grammar)));
       const kindsOf = (name: string): readonly string[] =>
@@ -327,9 +330,15 @@ const itemRefLawsOf = (
             collapsedOf(rows, mapping.id, "target-identifier"),
             () => "",
           );
-          const sourced = kindsOf(source).includes("qti-outcome-declaration")
-            ? []
-            : [breachAt(rows, mapping, "Variable mapping source", { itemRef: identifier, source })];
+          const sourced =
+            linked || kindsOf(source).includes("qti-outcome-declaration")
+              ? []
+              : [
+                  breachAt(rows, mapping, "Variable mapping source", {
+                    itemRef: identifier,
+                    source,
+                  }),
+                ];
           const shadowed =
             kindsOf(mapped).length > 0 && mapped !== source
               ? [
@@ -622,7 +631,7 @@ interface Read {
   readonly form: "numbered" | "split" | "unsplit";
   readonly placements: number;
   readonly resolves: boolean;
-  readonly source: "builtIn" | "declared" | "mapped" | "none";
+  readonly source: "builtIn" | "declared" | "linked" | "mapped" | "none";
   readonly text: string;
 }
 
@@ -693,6 +702,12 @@ const readingsOf = (
     const resolved = Option.match(looked, {
       onNone: () => ({ declarationKind: "none", source: "none" as const }),
       onSome: (held): Pick<Read, "declarationKind" | "source"> => {
+        if (held.kind === testKinds.itemRef && Option.exists(held.type, isLinkType)) {
+          // An LTI link has no declarations to resolve a name against: a name read through it is
+          // accepted unchecked, a recorded limit (reading 110).
+          return { declarationKind: "none", source: "linked" };
+        }
+
         if (held.kind === testKinds.itemRef) {
           const declarations = Option.match(held.item, {
             onNone: () => new Map<string, readonly string[]>(),
@@ -864,7 +879,10 @@ const referenceLawsOf = (
               attribute === "identifier" &&
               allowed.length > 0 &&
               ((setterKinds.has(node.kind) && resolving.length === 0) ||
-                resolving.some(({ declarationKind }) => !allowed.includes(declarationKind)));
+                resolving.some(
+                  ({ declarationKind, source }) =>
+                    source !== "linked" && !allowed.includes(declarationKind),
+                ));
 
             return [
               ...(prefixed ? [breachAt(rows, node, "Prefixed reference", keys)] : []),
