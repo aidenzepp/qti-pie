@@ -26,7 +26,9 @@
  * The count of parts is the family: the rows of a `cn` are counted by `MathCn.parts`, which
  * {@link CnParts} fixes for the type, and each row's `(type, part, form)` is in {@link CnForm},
  * whose `part` takes only the slots 0 to its count less one, so the rows of a `cn` are exactly its
- * type's slots, each once (the rows' key), and one part of a `rational` is refused.
+ * type's slots, each once (the rows' key), and one part of a `rational` is refused. A part beyond
+ * the type's places is written at the place no type lists and refused, so three parts of a
+ * `rational` are refused as one is.
  *
  * @see {@link https://www.w3.org/TR/MathML3/chapter4.html#contm.cn | MathML 3 §4.2.1, Numbers}
  */
@@ -145,7 +147,7 @@ export const MathCn = relation(
 /**
  * One part of a judged `m:cn`'s content, keyed by its node and its place among the parts `m:sep`
  * separates: the `type` and `base` of its `cn`, the part's collapsed `text` and the `form` of its
- * place.
+ * place. A part beyond its type's places sits at the place no type lists, so it is refused.
  */
 export const CnPartText = relation(
   "CnPartText",
