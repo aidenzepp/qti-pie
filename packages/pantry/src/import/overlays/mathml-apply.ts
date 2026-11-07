@@ -23,7 +23,8 @@ import {
   mathHeadQualifiers,
   mathQualifiers,
 } from "#pantry/grammar/expression.ts";
-import { nearestOf, nonElements } from "#pantry/import/overlays/mathml-tree.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { nonElements } from "#pantry/import/overlays/mathml-tree.ts";
 import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -58,17 +59,14 @@ export const rowsOf = (
   ids: Pick<NodeIds, "idOf"> & Partial<Pick<NodeIds, "context">>,
 ): MathmlApplyRows => {
   const { document, nodes } = flatten(tree, ids.idOf);
-  const nearest = nearestOf(nodes, ids.context?.nearest);
-  // Each element's rank among its parent's element children, 1 for the first (`Node.elements`),
-  // and each parent's element children in order (`Node.elementChildren` is their count).
-  const rankOf = new Map<NodeId, bigint>();
+  const folds = foldOf(nodes, ids.context ?? ownContext(document.node));
+  // Each parent's element children in order; their count and each one's rank are the fold's.
   const elementsOf = new Map<NodeId, NodeRow<Composed>[]>();
   for (const node of nodes) {
     if (node.parent !== node.id && !nonElements.has(node.kind)) {
       const siblings = elementsOf.get(node.parent) ?? [];
       siblings.push(node);
       elementsOf.set(node.parent, siblings);
-      rankOf.set(node.id, BigInt(siblings.length));
     }
   }
 
@@ -77,7 +75,7 @@ export const rowsOf = (
   const qualifiers = new Map<string, Addition<typeof MathQualifier>>();
   const placed = (node: NodeRow<Composed>) => ({
     document: document.node,
-    nearest: nearest.get(node.id) ?? document.node,
+    nearest: folds.get(node.id)?.nearest ?? document.node,
     node: node.id,
     parent: node.parent,
     start: node.start,
@@ -94,8 +92,8 @@ export const rowsOf = (
     const head = first.kind;
     applications.set(application.id, {
       ...placed(application),
-      elementChildren: BigInt(children.length),
-      elements: rankOf.get(application.id) ?? 1n,
+      elementChildren: folds.get(application.id)?.elementChildren ?? 0n,
+      elements: folds.get(application.id)?.elements ?? 1n,
       kind: application.kind,
       operator: head,
     });

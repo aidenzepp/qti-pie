@@ -27,7 +27,7 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
-import { nearestOf } from "#pantry/import/overlays/mathml-tree.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -205,8 +205,8 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: IdentityIds): MathmlSha
   }
 
   const ranks = ranksOf(members, childrenOf, targetOf);
-  const nearest = nearestOf(flat.nodes, ids.context?.nearest);
   const document = flat.document.node;
+  const folds = foldOf(flat.nodes, ids.context ?? ownContext(document));
   const rankOf = (node: NodeId): bigint => ranks.get(node) ?? 0n;
 
   return {
@@ -216,7 +216,7 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: IdentityIds): MathmlSha
         {
           document,
           kind: node.kind,
-          nearest: nearest.get(node.id) ?? document,
+          nearest: folds.get(node.id)?.nearest ?? document,
           node: node.id,
           parent: node.parent,
           parentRank: rankOf(node.parent),

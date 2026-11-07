@@ -10,13 +10,9 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { booleanTrue } from "#pantry/grammar/domains.ts";
-import {
-  attributeRows,
-  GoverningOf,
-  interactionKinds,
-  ValueIdentity,
-} from "#pantry/grammar/install.ts";
+import { attributeRows, GoverningOf, ValueIdentity } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -45,11 +41,6 @@ export interface CatalogRows {
   readonly CatalogRef: ReadonlyMap<string, Addition<typeof CatalogRef>>;
   readonly DefaultEntry: ReadonlyMap<string, Addition<typeof DefaultEntry>>;
 }
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
  * The attribute the catalog reference law reads.
@@ -113,39 +104,6 @@ const holdsReference = (element: NodeRow<Composed>, lexical: string): boolean =>
 const designating: ReadonlySet<string> = new Set(booleanTrue);
 
 /**
- * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
- * its context's; a child of an interaction's is that interaction; every other node's is its
- * parent's.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param rootNearest - The document node's own, its context's; itself where none is given.
- * @returns Each node's nearest interaction, by its id.
- */
-const nearestOf = (
-  nodes: readonly NodeRow<Composed>[],
-  rootNearest: NodeId | undefined,
-): ReadonlyMap<NodeId, NodeId> => {
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-      continue;
-    }
-
-    nearest.set(
-      node.id,
-      interactions.has(kinds.get(node.parent) ?? "")
-        ? node.parent
-        : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
-
-  return nearest;
-};
-
-/**
  * Build the catalog overlays' rows of one document: a `CardSupport` for each `qti-card` that writes
  * a `support`, and a `DefaultEntry` for each `qti-card-entry` whose `default` collapses to `true`
  * or `1`, and a `CatalogRef` for each `data-catalog-idref` that holds an IDREF token (an empty or
@@ -158,7 +116,7 @@ const nearestOf = (
 export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows => {
   const rows = flatten(doc, ids.idOf);
   const document = rows.document.node;
-  const nearest = nearestOf(rows.nodes, ids.context?.nearest);
+  const folds = foldOf(rows.nodes, ids.context ?? ownContext(document));
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const supports = new Map<string, Addition<typeof CardSupport>>();
   const defaults = new Map<string, Addition<typeof DefaultEntry>>();
@@ -184,7 +142,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
       document,
       kind: node.kind,
       lexical,
-      nearest: nearest.get(id) ?? document,
+      nearest: folds.get(id)?.nearest ?? document,
       node: id,
       start: node.start,
       version: node.version,

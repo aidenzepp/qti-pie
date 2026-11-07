@@ -40,7 +40,9 @@
  * costs time linear in its nodes (decision 357).
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { interactions, nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import type { Folded } from "#pantry/import/fold.ts";
+import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -222,10 +224,6 @@ interface Reading {
    */
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
   /**
-   * The count of each node's element children.
-   */
-  readonly counts: ReadonlyMap<NodeId, bigint>;
-  /**
    * The document node, which every row copies as its document.
    */
   readonly document: NodeId;
@@ -234,62 +232,19 @@ interface Reading {
    */
   readonly kinds: ReadonlyMap<NodeId, NodeRow<Composed>["kind"]>;
   /**
-   * Each node's nearest interaction (N8).
+   * Each node's fold (`#pantry/import/fold.ts`): its nearest interaction (N8), its element rank
+   * among its parent's element children, from 1, and its element children's count.
    */
-  readonly nearest: ReadonlyMap<NodeId, NodeId>;
+  readonly folds: ReadonlyMap<NodeId, Folded>;
   /**
    * The direction each element holds, the document node's `ltr` above them.
    */
   readonly owns: Map<NodeId, Direction>;
   /**
-   * Each element's rank among its parent's element children, from 1.
-   */
-  readonly ranks: ReadonlyMap<NodeId, bigint>;
-  /**
    * What each row built so far passes on, by its node.
    */
   readonly standing: Map<NodeId, Scope>;
 }
-
-/**
- * Compute what the tree's folds give each node, as `Node`'s laws hold it: its nearest interaction
- * (N8), its element rank among its siblings and its element count.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param rootNearest - The document node's nearest interaction, its context's; itself where none is
- *   given.
- * @returns The kinds, nearest interactions, ranks and counts, by node id.
- */
-const foldsOf = (
-  nodes: readonly NodeRow<Composed>[],
-  rootNearest: NodeId | undefined,
-): Pick<Reading, "counts" | "kinds" | "nearest" | "ranks"> => {
-  const kinds = new Map<NodeId, NodeRow<Composed>["kind"]>();
-  const nearest = new Map<NodeId, NodeId>();
-  const ranks = new Map<NodeId, bigint>();
-  const counts = new Map<NodeId, bigint>();
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-      continue;
-    }
-
-    nearest.set(
-      node.id,
-      interactions.has(kinds.get(node.parent) ?? "")
-        ? node.parent
-        : (nearest.get(node.parent) ?? node.parent),
-    );
-    if (!nonElements.has(node.kind)) {
-      const rank = (counts.get(node.parent) ?? 0n) + 1n;
-      counts.set(node.parent, rank);
-      ranks.set(node.id, rank);
-    }
-  }
-
-  return { counts, kinds, nearest, ranks };
-};
 
 /**
  * The selection an element passes to its children: an `m:maction`'s, 0 for any other element.
@@ -310,7 +265,7 @@ const selectionHeld = (kind: string, values: ReadonlyMap<string, string> | undef
  */
 const placed = (reading: Reading, node: NodeRow<Composed>) => ({
   document: reading.document,
-  nearest: reading.nearest.get(node.id) ?? reading.document,
+  nearest: reading.folds.get(node.id)?.nearest ?? reading.document,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -328,8 +283,8 @@ const actionOf = (reading: Reading, node: NodeRow<Composed>): Addition<typeof Ma
   const lexical = reading.attributes.get(node.id)?.get("selection");
 
   return {
-    elementChildren: reading.counts.get(node.id) ?? 0n,
-    elements: reading.ranks.get(node.id) ?? 1n,
+    elementChildren: reading.folds.get(node.id)?.elementChildren ?? 0n,
+    elements: reading.folds.get(node.id)?.elements ?? 1n,
     node: node.id,
     selection: selectionOf(lexical),
     selectionLexical: lexical ?? "",
@@ -361,7 +316,7 @@ const scopeOf = (
   const own = reading.owns.get(node.id) ?? inherited;
   const parentKind = reading.kinds.get(node.parent) ?? node.kind;
   const underAction = parentKind === "m:maction";
-  const elements = reading.ranks.get(node.id) ?? 1n;
+  const elements = reading.folds.get(node.id)?.elements ?? 1n;
   const chosen = underAction ? (above?.selection ?? 0n) : 0n;
   const received: State = above?.passes ?? "open";
   const state = isCell ? "open" : stateOf(received, underAction, elements, chosen);
@@ -374,7 +329,7 @@ const scopeOf = (
       cell,
       chosen,
       dirLexical: dirLexicalOf(values?.get("dir")),
-      elementChildren: reading.counts.get(node.id) ?? 0n,
+      elementChildren: reading.folds.get(node.id)?.elementChildren ?? 0n,
       elements,
       inherited,
       kind: node.kind,
@@ -458,9 +413,10 @@ export const rowsOf = (
   const reading: Reading = {
     attributes: writtenOf(flat.attributes, readAttributes),
     document: flat.document.node,
+    folds: foldOf(flat.nodes, ids.context ?? ownContext(flat.document.node)),
+    kinds: new Map(flat.nodes.map((node) => [node.id, node.kind] as const)),
     owns: new Map<NodeId, Direction>([[flat.document.node, "ltr"]]),
     standing: new Map<NodeId, Scope>(),
-    ...foldsOf(flat.nodes, ids.context?.nearest),
   };
   const actions = new Map<string, Addition<typeof MathAction>>();
   const cells = new Map<string, MathCellRow>();
