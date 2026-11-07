@@ -16,7 +16,8 @@
  * it.
  * Every float reaches decimal digits through {@link shortestDecimal}, the one approximated
  * step, and is rounded or truncated as that decimal, never as the double's binary expansion, so a
- * page and Node print the same text.
+ * page and Node print the same text. A duration prints as a float does, its seconds, `format`
+ * applying (G-R3, pending).
  *
  * @module
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Derived_PrintedVariable
@@ -51,6 +52,26 @@ export interface PrintOptions {
   readonly delimiter?: string;
   readonly mappingIndicator?: string;
 }
+
+/**
+ * The base types `format` applies to: QTI's numerical values, integers and floats, and a
+ * duration, whose seconds print as a float's do (G-R3, pending).
+ */
+const formattedBaseTypes: ReadonlySet<ModelledBaseType> = new Set(["integer", "float", "duration"]);
+
+/**
+ * A value `format` applies to: an integer, a float or a duration.
+ */
+type Formatted = Extract<Single, { readonly baseType: "integer" | "float" | "duration" }>;
+
+/**
+ * Report whether `format` applies to a value.
+ *
+ * @param single The value.
+ * @returns Whether its base type is one of {@link formattedBaseTypes}.
+ */
+const isFormatted = (single: Single): single is Formatted =>
+  formattedBaseTypes.has(single.baseType);
 
 /**
  * The conversion letters `format` admits (QTI 2.3.4). C's `d` and `u` are not among them.
@@ -457,18 +478,14 @@ const truncated = (x: number): bigint => {
  * decimal; a float under an integer conversion is truncated toward zero first, as C converts a
  * double to an integer type, but from its shortest decimal ({@link truncated}; G-R2, pending), so
  * `%i` and `%.0f` of `1e23` print the same digits. QTI says floats "should only" take the floating
- * conversions, and states neither case.
+ * conversions, and states neither case. A duration converts as a float of its seconds.
  *
- * @param single The integer or float.
+ * @param single The integer, float or duration.
  * @param conversion The conversion.
  * @param base The radix of `i`.
  * @returns The field.
  */
-const fieldOf = (
-  single: Extract<Single, { readonly baseType: "integer" | "float" }>,
-  conversion: Conversion,
-  base: bigint,
-): Field => {
+const fieldOf = (single: Formatted, conversion: Conversion, base: bigint): Field => {
   const isInteger = "ioXx".includes(conversion.code);
 
   if (single.baseType === "integer") {
@@ -580,16 +597,17 @@ const layoutOf = (format: string): Layout => {
 
 /**
  * Write a value in its default form, with no `format` (G-R2, pending): an integer as its decimal
- * digits; a float as reading 54 writes it, its shortest decimal (`1.5`, `1e+21`), with `-0`, `INF`,
- * `-INF` and `NaN` by name; every other base type as the value model writes it.
+ * digits; a float, and a duration's seconds, as reading 54 writes a float, its shortest decimal
+ * (`1.5`, `1e+21`), with `-0`, `INF`, `-INF` and `NaN` by name; every other base type as the value
+ * model writes it.
  *
  * @param single The value.
- * @param powerForm Whether a float's exponent `e+n` is written `x 10 to the power n`, as the
- *   information model words `power-form`.
+ * @param powerForm Whether a float's or a duration's exponent `e+n` is written `x 10 to the power
+ *   n`, as the information model words `power-form`.
  * @returns The text.
  */
 const defaultForm = (single: Single, powerForm: boolean): string => {
-  if (single.baseType !== "float") {
+  if (single.baseType !== "float" && single.baseType !== "duration") {
     return lexicalForm(single);
   }
 
@@ -612,9 +630,10 @@ const defaultForm = (single: Single, powerForm: boolean): string => {
 };
 
 /**
- * Build the printer of one member of a value: the default form for a value that is neither an
- * integer nor a float, or with no `format`; the `format`'s layout for a number. QTI applies
- * `format` to "numerical values" only.
+ * Build the printer of one member of a value: the default form for a value that is not an
+ * integer, a float or a duration, or with no `format`; the `format`'s layout for one of those.
+ * QTI applies `format` to "numerical values" only; a duration takes it as a float of its seconds
+ * (G-R3, pending).
  *
  * @param baseType The value's base type.
  * @param options The printed variable's options.
@@ -626,7 +645,7 @@ const printerOf = (
   options: PrintOptions,
 ): Option.Option<(single: Single) => string> => {
   const powerForm = options.powerForm ?? false;
-  if (options.format === undefined || (baseType !== "integer" && baseType !== "float")) {
+  if (options.format === undefined || !formattedBaseTypes.has(baseType)) {
     return Option.some((single) => defaultForm(single, powerForm));
   }
 
@@ -642,7 +661,7 @@ const printerOf = (
   const base = options.base ?? 10n;
 
   return Option.some((single) =>
-    single.baseType === "integer" || single.baseType === "float"
+    isFormatted(single)
       ? `${layout.before}${fitted(fieldOf(single, layout.conversion, base), layout.conversion)}${layout.after}`
       : defaultForm(single, powerForm),
   );
@@ -698,12 +717,12 @@ const joinedWithin = (
 
 /**
  * Write the text a `qti-printed-variable` shows for a value: each member printed, through `format`
- * when the value is numeric and a format is given, and joined by `delimiter`. NULL prints nothing,
- * whatever the format. It never throws and never builds a text past an engine's longest string: a
- * value under a conversion wider than {@link fieldBound}, or whose whole text would pass
- * {@link textBound}, both 1,000,000 characters, is not printed, and it gives none, so the caller
- * can tell that from NULL's empty text and fail rather than show a blank slot (`render` fails
- * `OutputTooLarge`, naming the bound and the printed variable).
+ * when the value is an integer, a float or a duration and a format is given, and joined by
+ * `delimiter`. NULL prints nothing, whatever the format. It never throws and never builds a text
+ * past an engine's longest string: a value under a conversion wider than {@link fieldBound}, or
+ * whose whole text would pass {@link textBound}, both 1,000,000 characters, is not printed, and it
+ * gives none, so the caller can tell that from NULL's empty text and fail rather than show a blank
+ * slot (`render` fails `OutputTooLarge`, naming the bound and the printed variable).
  *
  * A caller that holds the text to fewer characters passes `bound`: the text is then held to the
  * smaller of `bound` and {@link textBound}, the members are printed one by one only while the text

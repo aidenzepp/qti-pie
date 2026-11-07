@@ -55,11 +55,31 @@ const identifiers = (cardinality: Value["cardinality"], ...names: readonly strin
 });
 
 describe("resultValue", () => {
-  it("writes a duration as its seconds, never an ISO 8601 duration", () => {
+  it("[I-9a] writes a duration as its seconds, never an ISO 8601 duration, INF and NaN as a float's", () => {
     assert.strictEqual(resultValue({ baseType: "duration", value: 90.5 }), "90.5");
     assert.notStrictEqual(resultValue({ baseType: "duration", value: 90.5 }), "PT1M30.5S");
     assert.strictEqual(resultValue({ baseType: "duration", value: 0 }), "0");
     assert.strictEqual(resultValue({ baseType: "duration", value: 3600 }), "3600");
+    assert.strictEqual(
+      resultValue({ baseType: "duration", value: Number.POSITIVE_INFINITY }),
+      resultValue({ baseType: "float", value: Number.POSITIVE_INFINITY }),
+    );
+    assert.strictEqual(
+      resultValue({ baseType: "duration", value: Number.POSITIVE_INFINITY }),
+      "INF",
+    );
+    assert.strictEqual(resultValue({ baseType: "duration", value: Number.NaN }), "NaN");
+    assert.deepStrictEqual(
+      resultValues({
+        baseType: "duration",
+        cardinality: "ordered",
+        values: [
+          { baseType: "duration", value: 90.5 },
+          { baseType: "duration", value: Number.NEGATIVE_INFINITY },
+        ],
+      }),
+      ["90.5", "-INF"],
+    );
   });
 
   it.effect("writes an integer's exact digits at any size, which parseLexical reads back", () =>

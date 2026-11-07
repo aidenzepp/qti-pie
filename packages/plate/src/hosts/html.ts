@@ -168,7 +168,8 @@ const floatOf = (stored: number | "-0" | "-INF" | "INF" | "NaN"): number => {
 };
 
 /**
- * Write the score a stored record holds, as the candidate reads it in the locale.
+ * Write the score a stored record holds, as the candidate reads it in the locale. A duration is
+ * written as its seconds, as a float is.
  *
  * @param accepted The accepted item.
  * @param stored The record `score` returned.
@@ -187,6 +188,7 @@ const scoreText = (
   }
 
   switch (single.baseType) {
+    case "duration":
     case "float": {
       return new Intl.NumberFormat(locale).format(floatOf(single.value));
     }

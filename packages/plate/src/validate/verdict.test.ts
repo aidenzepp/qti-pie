@@ -927,28 +927,101 @@ describe("check, the URL pass", () => {
   });
 });
 
-describe("check, processing the model does not hold", () => {
-  it("accepts a duration response's match_correct with a variable mark, not a refusal", () => {
-    const accepted = acceptedOf(
-      verdictOf(
-        item([
-          response("duration", "single", [correct("PT1M")]),
-          score(),
-          body([el("p", [], [text("Click the city.")])]),
-          el("qti-response-processing", [
-            attr("template", "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"),
-          ]),
-        ]),
-      ),
-      "accepted-with-unsupported",
+/**
+ * Construct an item whose duration `RESPONSE` has the correct response written, scored by
+ * `match_correct`.
+ *
+ * @param written The correct response's text.
+ * @returns The document.
+ */
+const matchedDuration = (written: string): SourceDocument =>
+  item([
+    response("duration", "single", [correct(written)]),
+    score(),
+    body([el("p", [], [text("How long did it take?")])]),
+    el("qti-response-processing", [
+      attr("template", "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"),
+    ]),
+  ]);
+
+describe("check, a duration value (G-R1, pending: a duration is not numerical)", () => {
+  it("[I-9a] holds a duration response's correct response written as seconds, and runs its match_correct, whose qti-match compares the two durations (a template's content is P13's, deferred)", () => {
+    const accepted = acceptedOf(verdictOf(matchedDuration("60")), "accepted");
+    const declared = accepted.item.responses.get("RESPONSE");
+
+    assert.deepStrictEqual(accepted.unsupported, []);
+    assert.deepStrictEqual(
+      declared?.correct,
+      Option.some({
+        baseType: "duration",
+        cardinality: "single",
+        values: [{ baseType: "duration", value: 60 }],
+      }),
     );
 
-    assert.deepInclude(accepted.unsupported, {
-      feature: "variable:RESPONSE",
-      path: `${root}/qti-response-processing`,
-      shown: "mark",
-    });
-    assert.isTrue(Option.isNone(accepted.item.processing));
+    const conditions = accepted.item.processing.pipe(
+      Option.map((rules) =>
+        rules.map((rule) =>
+          rule.kind === "condition"
+            ? rule.branches.map((branch) => [
+                branch.when.kind,
+                branch.when.operands.map((operand) => operand.kind),
+              ])
+            : rule.kind,
+        ),
+      ),
+    );
+
+    assert.deepStrictEqual(conditions, Option.some([[["match", ["variable", "correct"]]]]));
+  });
+
+  it("[I-9a] refuses a duration response's correct response written as an ISO 8601 duration, as value-type", () => {
+    assert.deepStrictEqual(refusalsOf(verdictOf(matchedDuration("PT1M"))), [
+      {
+        location: {
+          kind: "path",
+          path: `${root}/qti-response-declaration/qti-correct-response/qti-value`,
+        },
+        rule: "value-type",
+      },
+    ]);
+  });
+
+  it("[I-9a] refuses a qti-sum over a duration outcome as expression-type (pantry P23)", () => {
+    const refusals = refusalsOf(
+      verdictOf(
+        item([
+          el("qti-outcome-declaration", [
+            attr("base-type", "duration"),
+            attr("cardinality", "single"),
+            attr("identifier", "TIME"),
+          ]),
+          score(),
+          body([el("p", [], [text("How long?")])]),
+          el(
+            "qti-response-processing",
+            [],
+            [
+              el(
+                "qti-set-outcome-value",
+                [attr("identifier", "SCORE")],
+                [el("qti-sum", [], [el("qti-variable", [attr("identifier", "TIME")])])],
+              ),
+            ],
+          ),
+        ]),
+      ),
+    );
+
+    assert.deepStrictEqual(refusals, [
+      {
+        location: {
+          kind: "path",
+          path: `${root}/qti-response-processing/qti-set-outcome-value/qti-sum`,
+        },
+        rule: "expression-type",
+      },
+    ]);
   });
 });
 

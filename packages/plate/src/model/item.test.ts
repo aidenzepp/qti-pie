@@ -457,8 +457,8 @@ const templatingItem = (
  * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each with
  * its declarations, its one rule, the name it marks and the declarations' own marks: a read of
  * `QTI_CONTEXT`; a read of a context variable through `qti-variable`, then through `qti-default`;
- * a read of a template variable of cardinality `record`; a set of one of base type `duration`; a
- * `qti-set-correct-response` of a `duration` response; and a `qti-set-default-value` of a `file`
+ * a read of a template variable of cardinality `record`; a set of one of base type `file`; a
+ * `qti-set-correct-response` of a `file` response; and a `qti-set-default-value` of a `file`
  * outcome.
  */
 const unheldTemplating: readonly {
@@ -508,19 +508,19 @@ const unheldTemplating: readonly {
     unheld: "R",
   },
   {
-    declarations: [scoreDeclaration, templateDeclaration("D", "single", "duration")],
-    marks: [{ feature: 'base-type="duration"', path: `${root}/qti-template-declaration` }],
-    rule: templateSetting("qti-set-template-value", "D", el("qti-null")),
-    unheld: "D",
+    declarations: [scoreDeclaration, templateDeclaration("F", "single", "file")],
+    marks: [{ feature: 'base-type="file"', path: `${root}/qti-template-declaration` }],
+    rule: templateSetting("qti-set-template-value", "F", el("qti-null")),
+    unheld: "F",
   },
   {
     declarations: [
-      declaration("qti-response-declaration", "RD", "duration", "single"),
+      declaration("qti-response-declaration", "RF", "file", "single"),
       scoreDeclaration,
     ],
-    marks: [{ feature: 'base-type="duration"', path: `${root}/qti-response-declaration` }],
-    rule: templateSetting("qti-set-correct-response", "RD", el("qti-null")),
-    unheld: "RD",
+    marks: [{ feature: 'base-type="file"', path: `${root}/qti-response-declaration` }],
+    rule: templateSetting("qti-set-correct-response", "RF", el("qti-null")),
+    unheld: "RF",
   },
   {
     declarations: [
@@ -1096,8 +1096,8 @@ const fewerDeclarations = 1000;
 const growthTimeoutMs = 60_000;
 
 /**
- * An item with `count` template declarations of base type `duration` and an empty body. The model
- * does not hold a `duration` declaration, so each is one unsupported feature at its own path.
+ * An item with `count` template declarations of base type `file` and an empty body. The model does
+ * not hold a `file` declaration, so each is one unsupported feature at its own path.
  *
  * @param count How many declarations the item holds.
  * @returns The document at `items/test.xml`.
@@ -1107,7 +1107,7 @@ const templated = (count: number): SourceDocument =>
     body: [],
     declarations: Array.from({ length: count }, (_, index) =>
       el("qti-template-declaration", [
-        attr("base-type", "duration"),
+        attr("base-type", "file"),
         attr("cardinality", "single"),
         attr("identifier", `T${index}`),
       ]),
@@ -3060,6 +3060,76 @@ describe("buildItem", () => {
   );
 
   it.effect(
+    "[I-9a] reads a duration qti-value as seconds in a double, INF, NaN and a negative included, marks a file outcome, and refuses PT1M30.5S as value-type",
+    () =>
+      Effect.gen(function* readsDurations() {
+        const cases: readonly (readonly [string, number])[] = [
+          ["90.5", 90.5],
+          ["89.95", 89.95],
+          [" INF ", Number.POSITIVE_INFINITY],
+          ["-INF", Number.NEGATIVE_INFINITY],
+          ["NaN", Number.NaN],
+          ["-1.5", -1.5],
+        ];
+        for (const [written, seconds] of cases) {
+          const built = yield* buildItem(
+            item({
+              body: [],
+              declarations: [
+                declaration("qti-outcome-declaration", "TIME", "duration", "single", [
+                  values("qti-default-value", written),
+                ]),
+                declaration("qti-outcome-declaration", "UPLOAD", "file", "single"),
+              ],
+            }),
+          );
+
+          assert.deepStrictEqual([...built.outcomes.keys()], ["TIME"], written);
+          assert.deepStrictEqual(
+            built.outcomes.get("TIME")?.defaultValue,
+            Option.some({
+              baseType: "duration",
+              cardinality: "single",
+              values: [{ baseType: "duration", value: seconds }],
+            }),
+            written,
+          );
+          assert.deepStrictEqual(
+            built.unsupported,
+            [
+              {
+                feature: 'base-type="file"',
+                path: `${root}/qti-outcome-declaration[2]`,
+                shown: "mark",
+              },
+            ],
+            written,
+          );
+        }
+
+        const refusal = yield* Effect.flip(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                declaration("qti-outcome-declaration", "TIME", "duration", "single", [
+                  values("qti-default-value", "PT1M30.5S"),
+                ]),
+              ],
+            }),
+          ),
+        );
+
+        assert.strictEqual(refusal.rule, "value-type");
+        assert.deepStrictEqual(refusal.location, {
+          kind: "path",
+          path: `${root}/qti-outcome-declaration/qti-default-value/qti-value`,
+        });
+        assert.deepStrictEqual(refusal.detail, { baseType: "duration", lexical: "PT1M30.5S" });
+      }),
+  );
+
+  it.effect(
     "[I-3] holds each template declaration of a modelled type with its default, param-variable and math-variable, and marks only the others, by their type",
     () =>
       Effect.gen(function* holdsTemplates() {
@@ -3130,6 +3200,14 @@ describe("buildItem", () => {
             paramVariable: false,
           },
           {
+            baseType: "duration",
+            cardinality: "single",
+            defaultValue: Option.none(),
+            identifier: "D",
+            mathVariable: false,
+            paramVariable: false,
+          },
+          {
             baseType: "float",
             cardinality: "single",
             defaultValue: Option.none(),
@@ -3139,15 +3217,10 @@ describe("buildItem", () => {
           },
         ];
 
-        assert.deepStrictEqual([...built.templates.keys()], ["T", "NAMES", "P"]);
+        assert.deepStrictEqual([...built.templates.keys()], ["T", "NAMES", "D", "P"]);
         assert.deepStrictEqual([...built.templates.values()], expected);
         assert.deepStrictEqual(built.templateProcessing, Option.none());
         assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: 'base-type="duration"',
-            path: `${root}/qti-template-declaration[3]`,
-            shown: "mark",
-          },
           {
             feature: 'cardinality="record"',
             path: `${root}/qti-template-declaration[4]`,
@@ -4069,7 +4142,7 @@ describe("buildItem", () => {
               declarations: [
                 declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
                 el("qti-template-declaration", [
-                  attr("base-type", "duration"),
+                  attr("base-type", "file"),
                   attr("cardinality", "single"),
                   attr("identifier", "completionStatus"),
                 ]),
@@ -4080,7 +4153,7 @@ describe("buildItem", () => {
           assert.deepStrictEqual(built.processing, Option.none(), `rule ${String(index)}`);
           assert.deepStrictEqual(
             built.unsupported.map((entry) => entry.feature),
-            ['base-type="duration"', "variable:completionStatus"],
+            ['base-type="file"', "variable:completionStatus"],
             `rule ${String(index)}`,
           );
         }

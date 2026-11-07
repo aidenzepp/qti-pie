@@ -150,6 +150,45 @@ describe("ValueSchema", () => {
   );
 
   it.effect(
+    "[I-9a] stores a duration as its seconds, as a float, INF and NaN by name, and reads it back through JSON text",
+    () =>
+      Effect.gen(function* durationThroughJson() {
+        const original = value(
+          "duration",
+          "multiple",
+          [90.5, -1.5, Number.POSITIVE_INFINITY, Number.NaN].map((seconds) => ({
+            baseType: "duration",
+            value: seconds,
+          })),
+        );
+        const encoded = yield* Schema.encodeEffect(ValueSchema)(original);
+
+        assert.deepStrictEqual(encoded, {
+          baseType: "duration",
+          cardinality: "multiple",
+          values: [
+            { baseType: "duration", value: 90.5 },
+            { baseType: "duration", value: -1.5 },
+            { baseType: "duration", value: "INF" },
+            { baseType: "duration", value: "NaN" },
+          ],
+        });
+
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the duration survives JSON text, the form a host stores.
+        const handedBack: unknown = JSON.parse(JSON.stringify(encoded));
+        const decoded = yield* Schema.decodeUnknownEffect(ValueSchema)(handedBack);
+        assert.deepStrictEqual(decoded, original);
+        assert.isTrue(
+          Result.isFailure(
+            Schema.decodeUnknownResult(ValueSchema)(
+              singleInput("duration", [{ baseType: "duration", value: "PT1M30.5S" }]),
+            ),
+          ),
+        );
+      }),
+  );
+
+  it.effect(
     'writes the infinities, NaN and negative zero as "INF", "-INF", "NaN" and "-0", and every other float as a number',
     () =>
       Effect.gen(function* floatEncodedForms() {
@@ -203,7 +242,10 @@ describe("ValueSchema", () => {
     assert.isTrue(valid(singleInput("point", [{ baseType: "point", value: [102n, 113n] }])));
     assert.isFalse(valid(singleInput("point", [{ baseType: "point", value: [1n, 2n, 3n] }])));
     assert.isFalse(valid(singleInput("point", [{ baseType: "point", value: [102, 113] }])));
-    assert.isFalse(valid(singleInput("duration", [])));
+    assert.isTrue(valid(singleInput("duration", [])));
+    assert.isTrue(valid(singleInput("duration", [{ baseType: "duration", value: 90.5 }])));
+    assert.isFalse(valid(singleInput("duration", [{ baseType: "duration", value: "PT1M" }])));
+    assert.isFalse(valid(singleInput("file", [])));
     assert.isFalse(valid({ baseType: "identifier", cardinality: "record", values: [] }));
   });
 

@@ -140,16 +140,43 @@ describe("the references family's reader specs", () => {
   );
 
   it.effect(
-    'mark a qti-base-value of base-type="duration" at its path, as before the registry',
+    "[I-9a] read a qti-base-value of base-type duration as its seconds, and refuse an ISO 8601 duration as value-type",
     () =>
-      Effect.gen(function* marksDuration() {
-        const built = yield* buildItem(outItem(baseValueElement("duration", "PT1S")));
+      Effect.gen(function* readsDuration() {
+        const read = yield* readOut(baseValueElement("duration", " 90.5 "));
+        const refusal = yield* Effect.flip(
+          buildItem(outItem(baseValueElement("duration", "PT1M30.5S"))),
+        );
 
-        assert.deepStrictEqual(built.processing, Option.none());
-        assert.deepStrictEqual(built.unsupported, [
-          { feature: 'base-type="duration"', path: `${setOut}/qti-base-value`, shown: "mark" },
-        ]);
+        assert.deepStrictEqual(
+          read,
+          Option.some<Expression>({
+            kind: "base-value",
+            operands: [],
+            value: {
+              baseType: "duration",
+              cardinality: "single",
+              values: [{ baseType: "duration", value: 90.5 }],
+            },
+          }),
+        );
+        assert.strictEqual(refusal.rule, "value-type");
+        assert.deepStrictEqual(refusal.location, {
+          kind: "path",
+          path: `${setOut}/qti-base-value`,
+        });
       }),
+  );
+
+  it.effect('mark a qti-base-value of base-type="file" at its path', () =>
+    Effect.gen(function* marksFile() {
+      const built = yield* buildItem(outItem(baseValueElement("file", "upload.txt")));
+
+      assert.deepStrictEqual(built.processing, Option.none());
+      assert.deepStrictEqual(built.unsupported, [
+        { feature: 'base-type="file"', path: `${setOut}/qti-base-value`, shown: "mark" },
+      ]);
+    }),
   );
 
   it.effect("refuse a qti-base-value outside its lexical space as value-type at its path", () =>
@@ -179,7 +206,7 @@ describe("the references family's reader specs", () => {
             [],
             [
               expressionElement(stub, [], [baseValueElement("integer", "1")]),
-              baseValueElement("duration", "PT1S"),
+              baseValueElement("file", "upload.txt"),
             ],
           ),
         ),

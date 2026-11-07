@@ -245,7 +245,6 @@ describe("the closed value sets", () => {
         [
           "string-identifier",
           'adaptive="true"',
-          'base-type="duration"',
           'base-type="file"',
           'cardinality="record"',
           'base-type=""',
