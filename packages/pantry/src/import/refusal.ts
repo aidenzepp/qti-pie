@@ -2499,7 +2499,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     containedIn(sideOf("Attribute", "node", "lexical"), sideOf("MapKey", "node", "key")),
     "Mapping overlay",
   ],
-  [keyOver(sideOf("MapKey", "mapping", "key")), "Map key"],
+  ...mirrored(sideOf("Attribute", "node", "lexical"), sideOf("MapKey", "node", "caseText")).map(
+    (law) => [law, "Mapping overlay"] as const,
+  ),
+  [keyOver(sideOf("MapKey", "mapping", "folded", "matched")), "Map key"],
   ...(["MapKeyInteger", "MapKeyFloat"] as const).flatMap((typed) => [
     ...mirrored(
       sideOf("MapKey", "node", "mapping", "key"),
