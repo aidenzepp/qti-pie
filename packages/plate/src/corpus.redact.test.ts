@@ -6,6 +6,7 @@ import { configure, encodeRedacted, open, redact } from "#plate/index.ts";
 import type { Accepted, Configuration, RedactedJson } from "#plate/index.ts";
 import type {
   BodyNode,
+  BodyText,
   ChoiceInteraction,
   Expression,
   ExtendedTextInteraction,
@@ -81,10 +82,17 @@ const hiddenVisibilityFields = [
 ] as const satisfies readonly (keyof SimpleChoice | keyof TemplateVisibility)[];
 
 /**
+ * The field that names where a body node sits in its source document, which could tell the page
+ * that hidden template content exists and where (review P2-6): the JSON form holds no path.
+ */
+const hiddenNodeFields = ["path"] as const satisfies readonly (keyof Exclude<BodyNode, BodyText>)[];
+
+/**
  * The keys no redacted item's JSON holds at any depth, whatever the field sits under.
  */
 const hiddenKeys: ReadonlySet<string> = new Set([
   ...hiddenItemFields,
+  ...hiddenNodeFields,
   ...hiddenRecordFields,
   ...hiddenResponseFields,
   ...hiddenVisibilityFields,
@@ -834,8 +842,70 @@ const fieldsFit = (
 };
 
 /**
- * Check a templated item's redaction against the exclusion set (P7§4.9): its redacted fields, and
- * its JSON as decoded, each {@link fieldsFit} the item.
+ * Give body nodes with every path `""`, at any depth: an element's children, a Prompt, a Label, a
+ * choice's content and a template block's or inline's content included, as the redacted JSON
+ * decodes them, since it holds no path (review P2-6).
+ *
+ * @param nodes The body nodes, with their paths.
+ * @returns The same nodes, each path `""`.
+ */
+const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
+  nodes.map((node): BodyNode => {
+    switch (node.kind) {
+      case "element": {
+        return { ...node, children: withoutPaths(node.children), path: "" };
+      }
+      case "choice": {
+        return {
+          ...node,
+          choices: node.choices.map((simple) => ({
+            ...simple,
+            content: withoutPaths(simple.content),
+          })),
+          path: "",
+          prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
+        };
+      }
+      case "inline-choice": {
+        return {
+          ...node,
+          choices: node.choices.map((simple) => ({
+            ...simple,
+            content: withoutPaths(simple.content),
+          })),
+          label: node.label.pipe(Option.map((label) => withoutPaths(label))),
+          path: "",
+        };
+      }
+      case "extended-text": {
+        return {
+          ...node,
+          path: "",
+          prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
+        };
+      }
+      case "template-block":
+      case "template-inline": {
+        return { ...node, content: withoutPaths(node.content), path: "" };
+      }
+      case "printed-variable":
+      case "text-entry":
+      case "unsupported": {
+        return { ...node, path: "" };
+      }
+      case "text": {
+        return node;
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  });
+
+/**
+ * Check a templated item's redaction against the exclusion set (P7§4.9): its redacted fields
+ * {@link fieldsFit} the item, and its JSON as decoded, which holds no path, fits the item with
+ * every path `""`.
  *
  * @param subject The item, its redaction and its JSON.
  * @returns Each problem, naming the item and its record state; empty when both fit. A JSON that
@@ -850,7 +920,7 @@ const templateProblems = (subject: Subject): readonly string[] => [
   ...Result.match(decodeStrictly(subject.json), {
     onFailure: () => [],
     onSuccess: (fields) =>
-      fieldsFit(subject.item, fields, subject.record)
+      fieldsFit({ ...subject.item, body: withoutPaths(subject.item.body) }, fields, subject.record)
         ? []
         : [
             `${subject.location}: the JSON holds more than the item's body shows, or not as it writes it`,
