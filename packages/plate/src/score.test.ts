@@ -13,12 +13,14 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
+import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { render } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
-import { score, tierA } from "#plate/score.ts";
-import { float } from "#plate/test/fixtures.ts";
-import { acceptForTest } from "#plate/validate/verdict.ts";
+import { fitting, score, tierA } from "#plate/score.ts";
+import { float, integer } from "#plate/test/fixtures.ts";
+import { open } from "#plate/validate/open.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * Construct a value of identifiers.
@@ -116,6 +118,7 @@ const item: Item = {
         identifier: "SCORE",
         interpretation: Option.none(),
         longInterpretation: Option.none(),
+        lookupTable: Option.none(),
         masteryValue: Option.none(),
         normalMaximum: Option.none(),
         normalMinimum: Option.none(),
@@ -130,7 +133,7 @@ const item: Item = {
           // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, the name the item model fixes; it is an array, never a function.
           then: [
             {
-              expression: { kind: "base-value", value: float(1) },
+              expression: { kind: "base-value", operands: [], value: float(1) },
               identifier: "SCORE",
               kind: "set-outcome",
             },
@@ -138,8 +141,13 @@ const item: Item = {
           when: {
             kind: "match",
             operands: [
-              { identifier: "RESPONSE", kind: "variable" },
-              { identifier: "RESPONSE", kind: "correct" },
+              {
+                identifier: "RESPONSE",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              { identifier: "RESPONSE", kind: "correct", operands: [] },
             ],
           },
         },
@@ -147,7 +155,7 @@ const item: Item = {
       kind: "condition",
       otherwise: Option.some([
         {
-          expression: { kind: "base-value", value: float(0) },
+          expression: { kind: "base-value", operands: [], value: float(0) },
           identifier: "SCORE",
           kind: "set-outcome",
         },
@@ -286,6 +294,29 @@ const outcomeOf = (stored: StoredRecord, identifier: string): readonly unknown[]
   stored.outcomes[identifier]?.values.map((single) => single.value) ?? [];
 
 /**
+ * A hand-built item document whose response processing sets the boolean `STATUS_NULL` to whether
+ * the `qti-default` of the built-in `completionStatus` is NULL, and `ATTEMPTS_NULL` to whether the
+ * `qti-default` of the built-in `numAttempts` is. Neither built-in has a declaration, so each
+ * default is NULL of the built-in's type and both outcomes are true.
+ */
+const builtInDefaults = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="built-in-defaults" title="Built-in defaults" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>
+  <qti-outcome-declaration identifier="STATUS_NULL" cardinality="single" base-type="boolean"/>
+  <qti-outcome-declaration identifier="ATTEMPTS_NULL" cardinality="single" base-type="boolean"/>
+  <qti-item-body><p>Built-in defaults</p></qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="STATUS_NULL">
+      <qti-is-null><qti-default identifier="completionStatus"/></qti-is-null>
+    </qti-set-outcome-value>
+    <qti-set-outcome-value identifier="ATTEMPTS_NULL">
+      <qti-is-null><qti-default identifier="numAttempts"/></qti-is-null>
+    </qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
+
+/**
  * Hand `score` and `checkResponses` a hand-built item, which their types refuse: the type tests
  * are the `@ts-expect-error`s below, which `tsc` fails on if a call ever type-checks. No test calls
  * it.
@@ -404,6 +435,49 @@ describe("score", () => {
     );
   });
 
+  it("[I-9a] carries a stored completionStatus into the attempt, and fails InvalidRecord at decode, naming it, when it is not a single identifier", () => {
+    const stored = Result.getOrThrow(encodeRecord(fresh(item, "")));
+    const completed: StoredRecord = {
+      ...stored,
+      attempt: "submitted",
+      numAttempts: 1,
+      outcomes: {
+        ...stored.outcomes,
+        completionStatus: {
+          baseType: "identifier",
+          cardinality: "single",
+          values: [{ baseType: "identifier", value: "completed" }],
+        },
+      },
+    };
+    const counted: StoredRecord = {
+      ...stored,
+      outcomes: {
+        ...stored.outcomes,
+        completionStatus: {
+          baseType: "integer",
+          cardinality: "single",
+          values: [{ baseType: "integer", value: "1" }],
+        },
+      },
+    };
+
+    assert.deepStrictEqual(
+      Option.map(Result.getSuccess(score(accepted, {}, completed)), (after) =>
+        outcomeOf(after, "completionStatus"),
+      ),
+      Option.some(["completed"]),
+    );
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, {}, counted)), (failure) =>
+        failure._tag === "InvalidRecord"
+          ? [failure._tag, failure.stage, failure.issue.includes('"completionStatus"')]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidRecord", "decode", true]),
+    );
+  });
+
   it("fails RecordMismatch when the record belongs to another item", () => {
     const stored = Result.getOrThrow(encodeRecord(fresh(other.item, "")));
 
@@ -498,6 +572,54 @@ describe("score", () => {
     );
   });
 
+  it.effect(
+    "[I-9a] scores a record stored without completionStatus, as one written before it was held, and holds it after",
+    () =>
+      Effect.gen(function* scoresWithoutCompletion() {
+        const stored = yield* Effect.fromResult(encodeRecord(fresh(item, "")));
+        const lacking: StoredRecord = {
+          ...stored,
+          outcomes: Object.fromEntries(
+            Object.entries(stored.outcomes).filter(
+              ([identifier]) => identifier !== "completionStatus",
+            ),
+          ),
+        };
+
+        const after = yield* Effect.fromResult(
+          score(accepted, { RESPONSE: identifiers("single", "A") }, lacking),
+        );
+
+        assert.isTrue(Object.hasOwn(stored.outcomes, "completionStatus"));
+        assert.isFalse(Object.hasOwn(lacking.outcomes, "completionStatus"));
+        assert.deepStrictEqual(outcomeOf(after, "SCORE"), [1]);
+        assert.deepStrictEqual(outcomeOf(after, "completionStatus"), ["unknown"]);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] opens and scores an item whose processing reads qti-default of the built-in completionStatus through qti-is-null, beside numAttempts",
+    () =>
+      Effect.gen(function* scoresBuiltInDefaults() {
+        const verdict = yield* open(
+          "items/built-in-defaults.xml",
+          new TextEncoder().encode(builtInDefaults),
+        );
+        const opened = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+        );
+
+        assert.strictEqual(verdict.verdict, "accepted");
+        assert.deepStrictEqual(opened.item.unsupported, []);
+        assert.isTrue(Option.isSome(opened.item.processing), "the processing runs");
+
+        const stored = yield* Effect.fromResult(score(opened, {}));
+
+        assert.deepStrictEqual(outcomeOf(stored, "STATUS_NULL"), [true]);
+        assert.deepStrictEqual(outcomeOf(stored, "ATTEMPTS_NULL"), [true]);
+      }),
+  );
+
   it("refuses a hand-built item in its type", () => {
     assert.isFunction(scoreUnchecked);
   });
@@ -506,6 +628,33 @@ describe("score", () => {
     assert.deepStrictEqual(
       tierA,
       Schema.decodeSync(Configuration)({ locale: "en", validateResponses: false }),
+    );
+  });
+});
+
+describe("fitting", () => {
+  it("[I-9a] accepts a record that holds the built-in completionStatus and one that lacks it, and refuses one of another type", () => {
+    const record = fresh(item, "");
+    const lacking: ItemRecord = {
+      ...record,
+      outcomes: Object.fromEntries(
+        Object.entries(record.outcomes).filter(([identifier]) => identifier !== "completionStatus"),
+      ),
+    };
+    const counted: ItemRecord = {
+      ...record,
+      outcomes: { ...record.outcomes, completionStatus: integer(1n) },
+    };
+
+    assert.isTrue(Object.hasOwn(record.outcomes, "completionStatus"));
+    assert.deepStrictEqual(Result.getSuccess(fitting(item, record)), Option.some(record));
+    assert.deepStrictEqual(Result.getSuccess(fitting(item, lacking)), Option.some(lacking));
+    assert.deepStrictEqual(
+      Option.map(Result.getFailure(fitting(item, counted)), (failure) => [
+        failure._tag,
+        failure.stage,
+      ]),
+      Option.some(["InvalidRecord", "decode"]),
     );
   });
 });

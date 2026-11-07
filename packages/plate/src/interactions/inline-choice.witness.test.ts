@@ -58,9 +58,7 @@ const quoteItem = "QTI3_BPIG_Examples/items/QTI3-inline-choice.xml";
 /**
  * A Choice, an Inline Choice, a Text Entry and a Gap Match, which shows as a notice. Its Inline
  * Choice, bound to `RESPONSE2`, is shuffled: its first choice, `P2`, is fixed, and the correct one
- * is Marion, `A2`, last in the document. Its response processing reads `qti-multiple`, `qti-or`,
- * `qti-substring` and `qti-sum`, which the engine does not run, so the item has none and `score`
- * records the responses without scoring them.
+ * is Marion, `A2`, last in the document.
  */
 const legendItem = "qtiv3-examples/packaging/items/multi-input.xml";
 
@@ -495,10 +493,6 @@ describe("the Inline Choice witness: open, redact, render, keys, postings, decod
         const record = yield* scored(opened, answered);
 
         assert.deepStrictEqual(valuesOf(record.responses, "RESPONSE2"), ["A2"]);
-        assert.isTrue(
-          Option.isNone(opened.accepted.item.processing),
-          "no processing runs, so the record holds the response and scores nothing",
-        );
       }),
     { tags: ["corpus"], timeout: corpusTimeoutMs },
   );

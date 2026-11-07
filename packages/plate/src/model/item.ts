@@ -9,20 +9,55 @@
  *
  * @module
  */
-import { Array as Arr, Data, Effect, Option, Result, pipe } from "effect";
-import { greatestCount, leastCount } from "#plate/count-range.ts";
-import { attributePath, qtiNamespace, walk, xmlNamespace } from "#plate/document/source.ts";
+import { Array as Arr, Effect, Option, Result, pipe } from "effect";
+import { attributePath, walk, xincludeNamespace } from "#plate/document/source.ts";
+import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
+import {
+  attributeName,
+  attributeOf,
+  childrenNamed,
+  coordsOf,
+  countAttribute,
+  doubleAttribute,
+  elementsOf,
+  enumerated,
+  floatAttribute,
+  floatOf,
+  greatestInt,
+  identifierAttribute,
+  identifierOf,
+  integerOf,
+  isQti,
+  leastInt,
+  listed,
+  nameOf,
+  pathOf,
+  refusal,
+  requiredAttribute,
+  requiredValue,
+  textOf,
+  typed,
+  valueOf,
+  xsBoolean,
+  xsBooleanOf,
+  xsInt,
+} from "#plate/model/attributes.ts";
+import type { AttributeRefusal, ModelWalk } from "#plate/model/attributes.ts";
 import type {
-  SourceAttribute,
-  SourceChild,
-  SourceDocument,
-  SourceElement,
-} from "#plate/document/source.ts";
+  Branch,
+  DeclarationFacet,
+  Expression,
+  ExpressionType,
+  KindRule,
+  ResultAttributes,
+  Rule,
+} from "#plate/model/expression.ts";
+import { kindRules, landedKinds, readExpression } from "#plate/model/expressions/read.ts";
+import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { translate } from "#plate/model/regex.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
-import type { InvalidValue, ModelledBaseType, Single, Value } from "#plate/model/values.ts";
-import { Refusal } from "#plate/validate/refusal.ts";
-import type { RefusalRule } from "#plate/validate/refusal.ts";
+import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import type { Refusal } from "#plate/validate/refusal.ts";
 import {
   // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
   areaShapes,
@@ -42,6 +77,8 @@ import type {
   OutcomeView,
   TemplateName,
 } from "#plate/vocabulary.ts";
+
+export type { Branch, Expression, Rule } from "#plate/model/expression.ts";
 
 /**
  * A feature the item holds and plate does not render, where it is, and how it is shown: a
@@ -141,6 +178,72 @@ export interface ResponseDeclaration {
 }
 
 /**
+ * One `qti-match-table-entry`: the integer a lookup matches and the value it then gives.
+ */
+export interface MatchTableEntry {
+  /**
+   * `source-value`, an `xs:int`, held exact as every integer is (reading 45).
+   */
+  readonly sourceValue: bigint;
+  /**
+   * `target-value`, a value of the outcome's base type (reading 8), read exactly as written
+   * (reading 7).
+   */
+  readonly targetValue: Single;
+}
+
+/**
+ * An outcome's `qti-match-table`, its entries in document order.
+ */
+export interface MatchTable {
+  /**
+   * `default-value`, a value of the outcome's base type read exactly as written (reading 7), when
+   * the table has one.
+   */
+  readonly defaultValue: Option.Option<Single>;
+  readonly entries: readonly MatchTableEntry[];
+  readonly kind: "match";
+}
+
+/**
+ * One `qti-interpolation-table-entry`: the least number a lookup maps to its value.
+ */
+export interface InterpolationTableEntry {
+  /**
+   * `include-boundary`, an `xs:boolean` that is true when absent: whether a number equal to
+   * `sourceValue` maps to this entry.
+   */
+  readonly includeBoundary: boolean;
+  /**
+   * `source-value`, a float read exactly as written (reading 7).
+   */
+  readonly sourceValue: number;
+  /**
+   * `target-value`, a value of the outcome's base type read exactly as written (reading 7).
+   */
+  readonly targetValue: Single;
+}
+
+/**
+ * An outcome's `qti-interpolation-table`, its entries in document order.
+ */
+export interface InterpolationTable {
+  /**
+   * `default-value`, a value of the outcome's base type read exactly as written (reading 7), when
+   * the table has one.
+   */
+  readonly defaultValue: Option.Option<Single>;
+  readonly entries: readonly InterpolationTableEntry[];
+  readonly kind: "interpolation";
+}
+
+/**
+ * The table a `qti-lookup-outcome-value` maps its value through: the outcome's match table or its
+ * interpolation table.
+ */
+export type LookupTable = InterpolationTable | MatchTable;
+
+/**
  * A `qti-outcome-declaration` of a modelled base type and cardinality (I-2).
  *
  * Its last six fields are the attributes Results Reporting mirrors on an `outcomeVariable`, each
@@ -164,6 +267,10 @@ export interface OutcomeDeclaration {
    * into a result, never rendered or fetched, so it does not pass through `#plate/model/url.ts`.
    */
   readonly longInterpretation: Option.Option<string>;
+  /**
+   * The `qti-match-table` or `qti-interpolation-table`, when the declaration has one.
+   */
+  readonly lookupTable: Option.Option<LookupTable>;
   /**
    * `mastery-value`, an `xs:double`.
    */
@@ -195,20 +302,6 @@ export type OutcomeReporting = Pick<
   | "normalMinimum"
   | "view"
 >;
-
-/**
- * Construct the refusal of an attribute of the document being read, at that attribute's path.
- *
- * @param attribute The attribute at fault.
- * @param rule The rule it breaks.
- * @param detail The facts the verdict's wording names.
- * @returns The refusal, located at the attribute in the document its reader walks.
- */
-type AttributeRefusal = (
-  attribute: SourceAttribute,
-  rule: RefusalRule,
-  detail: Readonly<Record<string, string>>,
-) => Refusal;
 
 /**
  * An attribute of a body element as written, `xml:lang` under the name `xml:lang`.
@@ -462,42 +555,6 @@ export type BodyNode =
   | Unsupported;
 
 /**
- * An expression of the engine subset, tagged by `kind`: `qti-match`, `qti-variable`, `qti-correct`,
- * `qti-base-value`, `qti-is-null`, `qti-map-response`, `qti-map-response-point` and `qti-equal`. An
- * `equal` is a `qti-equal` in its default `exact` tolerance mode, the one mode the engine runs; one
- * in `absolute` or `relative` mode is never built.
- */
-export type Expression =
-  | { readonly kind: "match"; readonly operands: readonly [Expression, Expression] }
-  | { readonly kind: "equal"; readonly operands: readonly [Expression, Expression] }
-  | { readonly identifier: string; readonly kind: "variable" }
-  | { readonly identifier: string; readonly kind: "correct" }
-  | { readonly kind: "base-value"; readonly value: Value }
-  | { readonly kind: "is-null"; readonly operand: Expression }
-  | { readonly identifier: string; readonly kind: "map-response" }
-  | { readonly identifier: string; readonly kind: "map-response-point" };
-
-/**
- * One `qti-response-if` or `qti-response-else-if`: its condition and the rules it runs.
- */
-export interface Branch {
-  readonly then: readonly Rule[];
-  readonly when: Expression;
-}
-
-/**
- * A response rule of phase 1's engine subset: a `qti-response-condition` with its branches in
- * order and its `qti-response-else`, or a `qti-set-outcome-value`.
- */
-export type Rule =
-  | {
-      readonly branches: readonly Branch[];
-      readonly kind: "condition";
-      readonly otherwise: Option.Option<readonly Rule[]>;
-    }
-  | { readonly expression: Expression; readonly identifier: string; readonly kind: "set-outcome" };
-
-/**
  * A valid `qti-assessment-item` as plate models it.
  *
  * `responses` and `outcomes` hold the declarations of modelled base types and cardinalities, in
@@ -526,26 +583,8 @@ export interface Item {
 }
 
 /**
- * What a model build reads a document through: the builder, the document, and every element's
- * path. The item and the test model each build one, so the readers below serve both and a refusal
- * names the document and path it was found in.
- */
-export interface ModelWalk {
-  /**
-   * The function that builds the model, which a {@link BuildDefect} names.
-   */
-  readonly builder: "buildItem" | "buildTest";
-  readonly document: SourceDocument;
-  /**
-   * Each element's path, keyed by the element itself. A reader builds a fresh object per element,
-   * so no element sits at two places in one document.
-   */
-  readonly paths: ReadonlyMap<SourceElement, string>;
-}
-
-/**
- * What one item build reads and collects: the walk, the response declarations, and the unsupported
- * features found so far, in document order.
+ * What one item build reads and collects: the walk, the response declarations, the names of the
+ * variables the item holds, and the unsupported features found so far, in document order.
  */
 interface Build extends ModelWalk {
   /**
@@ -555,6 +594,12 @@ interface Build extends ModelWalk {
    */
   readonly declarations: ReadonlyMap<string, SourceElement>;
   /**
+   * The names of the variables the item holds: every declaration's identifier and the built-in
+   * variables ({@link declaredNames}). A reader splits a string attribute's literal from a
+   * reference against them, and the walks judge an unchecked reference by them.
+   */
+  readonly names: ReadonlySet<string>;
+  /**
    * The paths each feature in `unsupported` was recorded at, keyed by the feature, so
    * {@link record} finds a repeat without scanning the features recorded so far.
    */
@@ -563,20 +608,13 @@ interface Build extends ModelWalk {
 }
 
 /**
- * The `qti-*` elements the model reads or renders.
+ * The `qti-*` elements the model reads or renders: those `renders` lists, the engine's response
+ * rules among them, and the element of each expression kind the registry has landed.
  */
-const readElements: ReadonlySet<string> = new Set(renders.elements);
-
-/**
- * The response-processing elements the engine runs.
- */
-const engineElements: ReadonlySet<string> = new Set(renders.engine);
-
-/**
- * The values of a `qti-equal`'s `tolerance-mode`, whose XSD type restricts `xs:string`, so a value
- * is compared as written. The default is `exact`, the one mode the engine runs.
- */
-const toleranceModes = ["absolute", "exact", "relative"] as const;
+const readElements: ReadonlySet<string> = new Set([
+  ...renders.elements,
+  ...landedKinds.map((kind) => `qti-${kind}`),
+]);
 
 /**
  * The features marked on the verdict.
@@ -604,134 +642,6 @@ const markedAttributes: ReadonlySet<string> = new Set(
 );
 
 /**
- * Name an element as a feature or a path step does: its local name in the QTI namespace,
- * `{<namespace>}<local>` in any other.
- *
- * @param element The element to name.
- * @returns The element's name.
- */
-export const nameOf = (element: SourceElement): string =>
-  element.namespace === qtiNamespace ? element.local : `{${element.namespace}}${element.local}`;
-
-/**
- * Name an attribute as `renders` conditions and body elements spell it.
- *
- * @param attribute The attribute to name.
- * @returns Its local name in no namespace, `xml:<local>` in the XML namespace, and none for a
- *   namespace declaration or an attribute of any other namespace.
- */
-const attributeName = (attribute: SourceAttribute): Option.Option<string> => {
-  if (attribute.namespace === "") {
-    return Option.some(attribute.local);
-  }
-
-  return attribute.namespace === xmlNamespace
-    ? Option.some(`xml:${attribute.local}`)
-    : Option.none();
-};
-
-/**
- * Find an attribute of an element by name.
- *
- * @param element The element.
- * @param name The attribute's name, `xml:` prefixed in the XML namespace.
- * @returns The attribute, or none when the element does not carry it.
- */
-export const attributeOf = (element: SourceElement, name: string): Option.Option<SourceAttribute> =>
-  Arr.findFirst(element.attributes, (attribute) =>
-    Option.exists(attributeName(attribute), (candidate) => candidate === name),
-  );
-
-/**
- * Read an attribute's value as written.
- *
- * @param element The element.
- * @param name The attribute's name.
- * @returns The value, or none when the element does not carry the attribute.
- */
-export const valueOf = (element: SourceElement, name: string): Option.Option<string> =>
-  Option.map(attributeOf(element, name), (attribute) => attribute.value);
-
-/**
- * Report whether an element is in the QTI namespace, optionally with one local name.
- *
- * @param element The element.
- * @param local The local name it must have, any when absent.
- * @returns Whether `element` is that element.
- */
-export const isQti = (element: SourceElement, local?: string): boolean =>
-  element.namespace === qtiNamespace && (local === undefined || element.local === local);
-
-/**
- * Keep an element's element children.
- *
- * @param element The element.
- * @returns Its element children, in document order.
- */
-const elementsOf = (element: SourceElement): readonly SourceElement[] =>
-  element.children.filter((child): child is SourceElement => child.kind === "element");
-
-/**
- * Keep an element's QTI children of one name.
- *
- * @param element The element.
- * @param local The children's local name.
- * @returns Those children, in document order.
- */
-export const childrenNamed = (element: SourceElement, local: string): readonly SourceElement[] =>
-  elementsOf(element).filter((child) => isQti(child, local));
-
-/**
- * Join an element's text children, the content of a `qti-value` or a `qti-base-value`.
- *
- * @param element The element.
- * @returns Its text, as written.
- */
-export const textOf = (element: SourceElement): string =>
-  element.children.flatMap((child) => (child.kind === "text" ? [child.text] : [])).join("");
-
-/**
- * A broken invariant of a model build's own walk or parse, a defect of this module that no input
- * can cause.
- *
- * It cannot occur: every element a build reads is in its walk, and a value {@link parseLexical}
- * gave for `float` or `integer` holds that base type. It is thrown, never returned, so the error
- * channels of {@link buildItem} and `buildTest` hold only content refusals.
- */
-export class BuildDefect extends Data.TaggedError("BuildDefect")<{
-  readonly builder: ModelWalk["builder"];
-  readonly detail: string;
-}> {
-  /**
-   * The broken invariant, and what to do with it.
-   */
-  override get message(): string {
-    const document = this.builder === "buildItem" ? "item" : "test";
-
-    return `${this.detail} This is a defect in ${this.builder}; report it with the ${document} that caused it.`;
-  }
-}
-
-/**
- * Give an element's path from the build's walk.
- *
- * @param build The build.
- * @param element An element of the build's document.
- * @returns The element's path.
- */
-export const pathOf = (build: ModelWalk, element: SourceElement): string => {
-  const path = build.paths.get(element);
-  if (path === undefined) {
-    throw new BuildDefect({
-      builder: build.builder,
-      detail: `The element ${nameOf(element)} is not part of the document being built.`,
-    });
-  }
-
-  return path;
-};
-
-/**
  * Record an unsupported feature, once per feature and path, in constant time.
  *
  * @param build The build that collects it.
@@ -745,400 +655,6 @@ const record = (build: Build, entry: UnsupportedFeature): void => {
     build.unsupported.push(entry);
   }
 };
-
-/**
- * Construct a content refusal at an element or attribute path.
- *
- * @param build The build of the refused document.
- * @param rule The rule broken.
- * @param path Where.
- * @param detail The facts the verdict's wording names.
- * @returns The refusal.
- */
-export const refusal = (
-  build: ModelWalk,
-  rule: RefusalRule,
-  path: string,
-  detail: Readonly<Record<string, string>>,
-): Refusal =>
-  new Refusal({
-    detail,
-    document: build.document.location,
-    location: { kind: "path", path },
-    readerRule: Option.none(),
-    rule,
-    suggestion: Option.none(),
-  });
-
-/**
- * Turn a failed value parse into the refusal `value-type` at a path.
- *
- * @param build The build.
- * @param path The path of the element or attribute that holds the value.
- * @param parsed The parse.
- * @returns The parse, failing with the refusal.
- */
-const typed = <A>(
-  build: ModelWalk,
-  path: string,
-  parsed: Result.Result<A, InvalidValue>,
-): Effect.Effect<A, Refusal> =>
-  Effect.mapError(Effect.fromResult(parsed), (invalid) =>
-    refusal(build, "value-type", path, { baseType: invalid.baseType, lexical: invalid.lexical }),
-  );
-
-/**
- * Read the number a float value holds.
- *
- * @param single A value that {@link parseLexical} gave for `float`.
- * @returns Its number.
- */
-const floatOf = (single: Single): number => {
-  if (single.baseType === "float") {
-    return single.value;
-  }
-
-  throw new BuildDefect({
-    builder: "buildItem",
-    detail: `A ${single.baseType} value holds no float.`,
-  });
-};
-
-/**
- * Read the exact integer an integer value holds.
- *
- * @param single A value that {@link parseLexical} gave for `integer`.
- * @returns Its integer.
- */
-const integerOf = (single: Single): bigint => {
-  if (single.baseType === "integer") {
-    return single.value;
-  }
-
-  throw new BuildDefect({
-    builder: "buildItem",
-    detail: `A ${single.baseType} value holds no integer.`,
-  });
-};
-
-/**
- * Read an attribute the element must carry.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @returns The attribute, or the refusal `missing-attribute` at the element.
- */
-export const requiredAttribute = (
-  build: ModelWalk,
-  element: SourceElement,
-  name: string,
-): Effect.Effect<SourceAttribute, Refusal> =>
-  Option.match(attributeOf(element, name), {
-    onNone: () =>
-      Effect.fail(
-        refusal(build, "missing-attribute", pathOf(build, element), {
-          attribute: name,
-          element: nameOf(element),
-        }),
-      ),
-    onSome: (attribute) => Effect.succeed(attribute),
-  });
-
-/**
- * Read the value of an attribute the element must carry.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @returns The value as written, or the refusal `missing-attribute`.
- */
-export const requiredValue = (
-  build: ModelWalk,
-  element: SourceElement,
-  name: string,
-): Effect.Effect<string, Refusal> =>
-  Effect.map(requiredAttribute(build, element, name), (attribute) => attribute.value);
-
-/**
- * Read an identifier as its XSD type reads it.
- *
- * Every identifier the item reads is an `xs:NCName`, or an `xs:ID` or `xs:IDREF` derived from it:
- * the root's, a declaration's and a choice's `identifier`, an interaction's `response-identifier`,
- * and the `identifier` of `qti-variable`, `qti-correct`, `qti-map-response` and
- * `qti-set-outcome-value`. Their whitespace facet is `collapse`, and an NCName holds no inner
- * whitespace, so collapsing is removing the outer XML whitespace. Reading 7 keeps an attribute's
- * outer whitespace only for the base-typed attributes the XSD types as strings, which no
- * identifier is, so `" RESPONSE "` names `RESPONSE`, and refusing it would refuse valid content
- * (reading 1). The validators read these attributes the same way (`identifierOf` in
- * `src/validate/rules.ts`).
- *
- * @param written The attribute's value as written.
- * @returns The identifier it names.
- */
-const identifierOf = (written: string): string => trimXmlSpace(written);
-
-/**
- * Read an identifier attribute the element must carry, as `identifierOf` reads it.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @returns The identifier, or the refusal `missing-attribute`.
- */
-export const identifierAttribute = (
-  build: ModelWalk,
-  element: SourceElement,
-  name: string,
-): Effect.Effect<string, Refusal> =>
-  Effect.map(requiredAttribute(build, element, name), (attribute) => identifierOf(attribute.value));
-
-/**
- * Read an attribute the element carries whose value is one of a closed list.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @param attribute The attribute.
- * @param allowed The values it may take.
- * @returns The value, or the refusal `attribute-type` when it is outside `allowed`.
- */
-export const listed = <const T extends string>(
-  build: ModelWalk,
-  element: SourceElement,
-  name: string,
-  attribute: SourceAttribute,
-  allowed: readonly T[],
-): Effect.Effect<T, Refusal> =>
-  Option.match(
-    Arr.findFirst(allowed, (value) => value === attribute.value),
-    {
-      onNone: () =>
-        Effect.fail(
-          refusal(build, "attribute-type", attributePath(pathOf(build, element), attribute), {
-            attribute: name,
-            value: attribute.value,
-          }),
-        ),
-      onSome: (value) => Effect.succeed(value),
-    },
-  );
-
-/**
- * Read an attribute whose value is one of a closed list, such as `cardinality`.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @param allowed The values it may take.
- * @returns The value, none when absent, or the refusal `attribute-type` when it is outside
- *   `allowed`.
- */
-const enumerated = <const T extends string>(
-  build: ModelWalk,
-  element: SourceElement,
-  name: string,
-  allowed: readonly T[],
-): Effect.Effect<Option.Option<T>, Refusal> =>
-  Effect.transposeOption(
-    Option.map(attributeOf(element, name), (attribute) =>
-      listed(build, element, name, attribute, allowed),
-    ),
-  );
-
-/**
- * The check an integer attribute's type makes of a value: none when the type accepts it, or the
- * rule and the detail of the refusal.
- *
- * @param value The integer, exact.
- * @param lexical The attribute's value with its outer whitespace gone, as the refusal names it.
- * @returns None when the type accepts `value`, or the refusal's rule and detail.
- */
-type IntegerCheck = (
-  value: bigint,
-  lexical: string,
-) => Option.Option<readonly [RefusalRule, Readonly<Record<string, string>>]>;
-
-/**
- * Read an attribute of an XSD integer type exactly: its outer whitespace goes, then it reads as a
- * QTI integer, which `refuse` checks against the type.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @param refuse The type's check of the integer.
- * @returns The integer, none when absent, the refusal `value-type` at the attribute when the value
- *   is not an integer, or the refusal `refuse` names, at the attribute.
- */
-const xsIntegerOf = (
-  build: Build,
-  element: SourceElement,
-  name: string,
-  refuse: IntegerCheck,
-): Effect.Effect<Option.Option<bigint>, Refusal> =>
-  Effect.transposeOption(
-    Option.map(attributeOf(element, name), (attribute) => {
-      const path = attributePath(pathOf(build, element), attribute);
-      const lexical = trimXmlSpace(attribute.value);
-
-      return typed(build, path, parseLexical("integer", lexical)).pipe(
-        Effect.map(integerOf),
-        Effect.flatMap((value) =>
-          Option.match(refuse(value, lexical), {
-            onNone: () => Effect.succeed(value),
-            onSome: ([rule, detail]) => Effect.fail(refusal(build, rule, path, detail)),
-          }),
-        ),
-      );
-    }),
-  );
-
-/**
- * The least `xs:int`, -2^31.
- */
-export const leastInt = -2_147_483_648n;
-
-/**
- * The greatest `xs:int`, 2^31-1.
- */
-export const greatestInt = 2_147_483_647n;
-
-/**
- * The count attributes plate reads that reading 46 holds to the signed 64-bit range.
- * `expected-length` and `expected-lines` are counts it does not name, so they have no upper bound.
- */
-const rangedCounts: ReadonlySet<string> = new Set(["max-choices", "min-choices"]);
-
-/**
- * Read an `xs:int` attribute, such as `base`, through {@link xsIntegerOf}.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @returns The number, none when absent, or the refusal `value-type` when the value is outside
- *   -2^31 to 2^31-1.
- */
-const xsInt = (
-  build: Build,
-  element: SourceElement,
-  name: string,
-): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.map(
-    xsIntegerOf(build, element, name, (value, lexical) =>
-      value >= leastInt && value <= greatestInt
-        ? Option.none()
-        : Option.some(["value-type", { baseType: "xs:int", lexical }]),
-    ),
-    Option.map(Number),
-  );
-
-/**
- * Read a count attribute, an `xs:nonNegativeInteger` such as `max-choices`, exactly through
- * {@link xsIntegerOf}. `max-choices` and `min-choices` are reading 46's counts, which hold a signed
- * 64-bit value, so one above 2^63-1 is refused (operator ruling D, 2026-11-04). `expected-length`
- * and `expected-lines` are held at any size.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @returns The count, none when absent, the refusal `value-type` when the value is below 0, or the
- *   refusal `count-range` when a reading-46 count is above 2^63-1.
- */
-const countAttribute = (
-  build: Build,
-  element: SourceElement,
-  name: string,
-): Effect.Effect<Option.Option<bigint>, Refusal> =>
-  xsIntegerOf(build, element, name, (value, lexical) => {
-    if (value < 0n) {
-      return Option.some(["value-type", { baseType: "xs:nonNegativeInteger", lexical }]);
-    }
-
-    if (rangedCounts.has(name) && value > greatestCount) {
-      return Option.some([
-        "count-range",
-        {
-          attribute: name,
-          greatest: String(greatestCount),
-          least: String(leastCount),
-          lexical,
-          reading: "46",
-        },
-      ]);
-    }
-
-    return Option.none();
-  });
-
-/**
- * Read an `xs:boolean` attribute value as XSD does (reading Q8): its outer whitespace goes, then
- * `true` or `1` is true and `false` or `0` is false.
- *
- * @param written The value as written.
- * @returns The boolean, or none when the value is outside `xs:boolean`'s lexical space.
- */
-export const xsBooleanOf = (written: string): Option.Option<boolean> => {
-  const lexical = trimXmlSpace(written);
-  if (lexical === "true" || lexical === "1") {
-    return Option.some(true);
-  }
-
-  return lexical === "false" || lexical === "0" ? Option.some(false) : Option.none();
-};
-
-/**
- * Read an `xs:boolean` attribute, such as `shuffle`, through {@link xsBooleanOf}.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @param absent The value when the element does not carry it, the XSD's default.
- * @returns The boolean, or the refusal `value-type`.
- */
-export const xsBoolean = (
-  build: ModelWalk,
-  element: SourceElement,
-  name: string,
-  absent: boolean,
-): Effect.Effect<boolean, Refusal> =>
-  Option.match(attributeOf(element, name), {
-    onNone: () => Effect.succeed(absent),
-    onSome: (attribute) =>
-      Option.match(xsBooleanOf(attribute.value), {
-        onNone: () =>
-          Effect.fail(
-            refusal(build, "value-type", attributePath(pathOf(build, element), attribute), {
-              baseType: "boolean",
-              lexical: attribute.value,
-            }),
-          ),
-        onSome: (value) => Effect.succeed(value),
-      }),
-  });
-
-/**
- * Read a float attribute exactly as written, as reading 7 reads `mapped-value` and the mapping's
- * bounds.
- *
- * @param build The build.
- * @param element The element.
- * @param name The attribute's name.
- * @returns The number, none when absent, or the refusal `value-type`.
- */
-const floatAttribute = (
-  build: Build,
-  element: SourceElement,
-  name: string,
-): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.transposeOption(
-    Option.map(attributeOf(element, name), (attribute) =>
-      typed(
-        build,
-        attributePath(pathOf(build, element), attribute),
-        parseLexical("float", attribute.value),
-      ).pipe(Effect.map(floatOf)),
-    ),
-  );
 
 /**
  * Find the response declaration an element binds through `response-identifier`; the last one when
@@ -1408,41 +924,6 @@ const mappingOf = (
     };
   });
 
-/**
- * One coordinate as `CoordsDType` writes it: decimal digits, then `%` or nothing.
- */
-const coordinate = /^(?<digits>[0-9]+)%?$/u;
-
-/**
- * Read a `qti-area-map-entry`'s `coords`, each coordinate's digits as `xs:double` reads them. How
- * many coordinates a value holds is the structure check's, which admits only `CoordsDType`.
- *
- * @param build The build.
- * @param entry The entry.
- * @returns Each coordinate's number and whether it is written with `%`, in written order, or the
- *   refusal `attribute-type` when a coordinate is outside `CoordsDType`.
- */
-const coordsOf = (
-  build: Build,
-  entry: SourceElement,
-): Effect.Effect<readonly (readonly [number, boolean])[], Refusal> =>
-  Effect.flatMap(requiredAttribute(build, entry, "coords"), (attribute) => {
-    const path = attributePath(pathOf(build, entry), attribute);
-
-    return Effect.forEach(attribute.value.split(","), (written) => {
-      const digits = coordinate.exec(written)?.groups?.["digits"];
-
-      return digits === undefined
-        ? Effect.fail(
-            refusal(build, "attribute-type", path, { attribute: "coords", value: attribute.value }),
-          )
-        : Effect.map(
-            typed(build, path, parseLexical("float", digits)),
-            (single) => [floatOf(single), written.endsWith("%")] as const,
-          );
-    });
-  });
-
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
 /**
  * Read a `qti-area-map-entry`.
@@ -1541,32 +1022,6 @@ const responseDeclaration = (
 export const xmlWhitespaceRun = /[\t\n\r ]+/gu;
 
 /**
- * Read an `xs:double` attribute as the XSD reads it (readings 7 and 56): outer whitespace goes,
- * then the literal reads in the double's lexical space, one beyond the largest finite double naming
- * that double.
- *
- * @param element The element.
- * @param name The attribute's name.
- * @param refuse The reader's refusal of an attribute.
- * @returns The number, none when absent, or the refusal `value-type` at the attribute.
- */
-const doubleAttribute = (
-  element: SourceElement,
-  name: string,
-  refuse: AttributeRefusal,
-): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.transposeOption(
-    Option.map(attributeOf(element, name), (attribute) => {
-      const lexical = trimXmlSpace(attribute.value);
-
-      return Effect.fromResult(parseLexical("float", lexical)).pipe(
-        Effect.mapError(() => refuse(attribute, "value-type", { baseType: "xs:double", lexical })),
-        Effect.map(floatOf),
-      );
-    }),
-  );
-
-/**
  * Read an outcome declaration's `view`, an XSD list of {@link outcomeViews}: its tokens are the
  * runs between XML whitespace.
  *
@@ -1633,6 +1088,159 @@ const outcomeReporting = (
   });
 
 /**
+ * Read a lookup table's optional `default-value` exactly as written (reading 7).
+ *
+ * @param build The build.
+ * @param table The `qti-match-table` or `qti-interpolation-table`.
+ * @param baseType The outcome's base type, which the value is read in.
+ * @returns The value, none when absent, or the refusal `value-type` at the attribute.
+ */
+const tableDefault = (
+  build: ModelWalk,
+  table: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<Option.Option<Single>, Refusal> =>
+  Effect.transposeOption(
+    Option.map(attributeOf(table, "default-value"), (attribute) =>
+      typed(
+        build,
+        attributePath(pathOf(build, table), attribute),
+        parseLexical(baseType, attribute.value),
+      ),
+    ),
+  );
+
+/**
+ * Read a lookup table entry's `target-value` in its outcome's base type (reading 8), exactly as
+ * written (reading 7).
+ *
+ * @param build The build.
+ * @param entry The entry.
+ * @param baseType The outcome's base type.
+ * @returns The value, or the refusal `missing-attribute` or `value-type`.
+ */
+const targetValue = (
+  build: ModelWalk,
+  entry: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<Single, Refusal> =>
+  Effect.flatMap(requiredAttribute(build, entry, "target-value"), (attribute) =>
+    typed(
+      build,
+      attributePath(pathOf(build, entry), attribute),
+      parseLexical(baseType, attribute.value),
+    ),
+  );
+
+/**
+ * Read a `qti-match-table-entry`. Its `source-value`, an `xs:int`, is read as the XSD reads it:
+ * outer whitespace goes, then the integer is held exactly and refused outside -2^31 to 2^31-1.
+ *
+ * @param build The build.
+ * @param entry The entry.
+ * @param baseType The outcome's base type.
+ * @returns The entry, or the refusal `missing-attribute` or `value-type`.
+ */
+const matchEntryOf = (
+  build: ModelWalk,
+  entry: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<MatchTableEntry, Refusal> =>
+  Effect.gen(function* readMatchEntry() {
+    const source = yield* requiredAttribute(build, entry, "source-value");
+    const path = attributePath(pathOf(build, entry), source);
+    const lexical = trimXmlSpace(source.value);
+    const sourceValue = integerOf(yield* typed(build, path, parseLexical("integer", lexical)));
+    if (sourceValue < leastInt || sourceValue > greatestInt) {
+      return yield* Effect.fail(
+        refusal(build, "value-type", path, { baseType: "xs:int", lexical }),
+      );
+    }
+
+    return { sourceValue, targetValue: yield* targetValue(build, entry, baseType) };
+  });
+
+/**
+ * Read a `qti-interpolation-table-entry`. Its `source-value` is a float read exactly as written
+ * (reading 7), and its `include-boundary` is true when absent, the XSD's default.
+ *
+ * @param build The build.
+ * @param entry The entry.
+ * @param baseType The outcome's base type.
+ * @returns The entry, or the refusal `missing-attribute` or `value-type`.
+ */
+const interpolationEntryOf = (
+  build: ModelWalk,
+  entry: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<InterpolationTableEntry, Refusal> =>
+  Effect.gen(function* readInterpolationEntry() {
+    const source = yield* requiredAttribute(build, entry, "source-value");
+    const sourceValue = floatOf(
+      yield* typed(
+        build,
+        attributePath(pathOf(build, entry), source),
+        parseLexical("float", source.value),
+      ),
+    );
+
+    return {
+      includeBoundary: yield* xsBoolean(build, entry, "include-boundary", true),
+      sourceValue,
+      targetValue: yield* targetValue(build, entry, baseType),
+    };
+  });
+
+/**
+ * Read an outcome declaration's lookup table, its `qti-match-table` or its
+ * `qti-interpolation-table` (the XSD admits at most one of the two), in the outcome's base type.
+ *
+ * @param build The build.
+ * @param declaration The declaration.
+ * @param baseType The outcome's base type.
+ * @returns The table, none when the declaration has none, or the refusal at its first attribute
+ *   outside its type.
+ */
+const lookupTableOf = (
+  build: ModelWalk,
+  declaration: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<Option.Option<LookupTable>, Refusal> =>
+  Effect.transposeOption(
+    Option.orElse(
+      Option.map(
+        Arr.head(childrenNamed(declaration, "qti-match-table")),
+        (table): Effect.Effect<LookupTable, Refusal> =>
+          Effect.gen(function* readMatchTable() {
+            return {
+              defaultValue: yield* tableDefault(build, table, baseType),
+              entries: yield* Effect.forEach(
+                childrenNamed(table, "qti-match-table-entry"),
+                (entry) => matchEntryOf(build, entry, baseType),
+              ),
+              kind: "match" as const,
+            };
+          }),
+      ),
+      () =>
+        Option.map(
+          Arr.head(childrenNamed(declaration, "qti-interpolation-table")),
+          (table): Effect.Effect<LookupTable, Refusal> =>
+            Effect.gen(function* readInterpolationTable() {
+              return {
+                defaultValue: yield* tableDefault(build, table, baseType),
+                entries: yield* Effect.forEach(
+                  childrenNamed(table, "qti-interpolation-table-entry"),
+                  (entry) => interpolationEntryOf(build, entry, baseType),
+                ),
+                kind: "interpolation" as const,
+              };
+            }),
+        ),
+    ),
+  );
+
+/**
  * Read a `qti-outcome-declaration`, an item's or a test's: the item and the test model both read
  * one through this, so the two read them alike.
  *
@@ -1656,8 +1264,9 @@ export const outcomeDeclaration = (
       refusal(build, rule, attributePath(pathOf(build, declaration), attribute), detail),
     );
     const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
+    const lookupTable = yield* lookupTableOf(build, declaration, read.value.baseType);
 
-    return Option.some({ ...read.value, ...reporting, defaultValue });
+    return Option.some({ ...read.value, ...reporting, defaultValue, lookupTable });
   });
 
 /**
@@ -2072,145 +1681,40 @@ const unread = (
   });
 
 /**
- * Read a `qti-equal`: its two operands, in its default `exact` tolerance mode.
- *
- * A `qti-equal` in its `absolute` or `relative` mode is the mark `tolerance-mode="<mode>"` at its
- * path, and its operands are read after it, so every element in them the engine does not run is
- * marked too. Its `tolerance`, `include-lower-bound` and `include-upper-bound` mean nothing in
- * `exact` mode, so they are not read.
+ * Give the generic expression reader its context for a build: the walk, the names the item holds,
+ * and the build's two ways to record a mark, so `record` and the build stay here.
  *
  * @param build The build.
- * @param element The `qti-equal` element.
- * @returns The `equal` expression; none when it is in another tolerance mode or holds an element
- *   the engine does not run; or the refusal an operand gives, or `attribute-type` for a
- *   `tolerance-mode` outside its three values, which the validator refuses first.
+ * @returns The reading context.
  */
-const equalExpression = (
-  build: Build,
-  element: SourceElement,
-): Effect.Effect<Option.Option<Expression>, Refusal> =>
-  Effect.gen(function* readEqual() {
-    const [left, right, ...extra] = elementsOf(element);
-    if (left === undefined || right === undefined || extra.length > 0) {
-      return yield* unread(build, element);
-    }
-
-    const mode = Option.getOrElse(
-      yield* enumerated(build, element, "tolerance-mode", toleranceModes),
-      () => "exact" as const,
-    );
-    if (mode !== "exact") {
-      yield* unread(build, element, `tolerance-mode="${mode}"`);
-    }
-
-    const read = Option.all([
-      // oxlint-disable-next-line eslint/no-use-before-define -- `equalExpression` and `expression` are mutually recursive, as operands nest; the call runs only after both are defined.
-      yield* expression(build, left),
-      // oxlint-disable-next-line eslint/no-use-before-define -- as above.
-      yield* expression(build, right),
-    ]);
-    const equal = read.pipe(Option.map((pair): Expression => ({ kind: "equal", operands: pair })));
-
-    return mode === "exact" ? equal : Option.none();
-  });
+const readingOf = (build: Build): ExpressionReading => ({
+  declared: build.names,
+  mark: (element, feature) =>
+    Effect.sync(() => {
+      record(build, { feature, path: pathOf(build, element), shown: "mark" });
+    }),
+  unread: (element, feature) => unread(build, element, feature),
+  walk: build,
+});
 
 /**
- * Read an expression of the engine subset.
+ * Read an expression through the registry's generic reader (`readExpression` in
+ * `#plate/model/expressions/read.ts`), each kind by its family's reader spec.
  *
  * Every operand is read, so every element the engine does not run is marked, not only the first. A
- * `qti-equal` in its `absolute` or `relative` tolerance mode is the mark `tolerance-mode="<mode>"`
- * at its path, its operands read after it; only the default `exact` mode runs.
+ * kind whose family has not landed is marked `qti-<kind>` at its path. A `qti-variable`'s optional
+ * `weight-identifier` is read and held; an item's processing never evaluates it.
  *
  * @param build The build.
  * @param element The expression element.
- * @returns The expression, none when it holds an element or a tolerance mode the engine does not
- *   run, or the refusal `value-type` for a `qti-base-value` outside its lexical space. A document
- *   the validator would refuse can also fail with `attribute-type` for a `tolerance-mode` outside
- *   its three values.
+ * @returns The expression, none when it holds anything the engine does not run, or the refusal
+ *   an attribute gives: `value-type` for a `qti-base-value` outside its lexical space, and, in a
+ *   document the validator refuses first, the refusal of any attribute outside its type.
  */
 const expression = (
   build: Build,
   element: SourceElement,
-): Effect.Effect<Option.Option<Expression>, Refusal> =>
-  Effect.gen(function* readExpression() {
-    const operands = elementsOf(element);
-    if (!isQti(element) || !engineElements.has(element.local)) {
-      return yield* unread(build, element);
-    }
-
-    switch (element.local) {
-      case "qti-variable":
-      case "qti-correct":
-      case "qti-map-response":
-      case "qti-map-response-point": {
-        const identifier = yield* identifierAttribute(build, element, "identifier");
-        const kinds = {
-          "qti-correct": "correct",
-          "qti-map-response": "map-response",
-          "qti-map-response-point": "map-response-point",
-          "qti-variable": "variable",
-        } as const;
-
-        return Option.some({ identifier, kind: kinds[element.local] });
-      }
-      case "qti-base-value": {
-        const baseType = yield* enumerated(build, element, "base-type", baseTypes);
-        if (Option.isNone(baseType)) {
-          return yield* Effect.fail(
-            refusal(build, "missing-attribute", pathOf(build, element), {
-              attribute: "base-type",
-              element: element.local,
-            }),
-          );
-        }
-
-        if (!isModelled(baseType.value)) {
-          return yield* unread(build, element, `base-type="${baseType.value}"`);
-        }
-
-        const single = yield* typed(
-          build,
-          pathOf(build, element),
-          parseElementText(baseType.value, textOf(element)),
-        );
-
-        return Option.some({
-          kind: "base-value",
-          value: {
-            baseType: baseType.value,
-            cardinality: "single",
-            values: Option.toArray(single),
-          },
-        });
-      }
-      case "qti-is-null": {
-        const [operand, ...extra] = operands;
-        if (operand === undefined || extra.length > 0) {
-          return yield* unread(build, element);
-        }
-
-        const read = yield* expression(build, operand);
-
-        return read.pipe(Option.map((test) => ({ kind: "is-null", operand: test })));
-      }
-      case "qti-match": {
-        const [left, right, ...extra] = operands;
-        if (left === undefined || right === undefined || extra.length > 0) {
-          return yield* unread(build, element);
-        }
-
-        const read = Option.all([yield* expression(build, left), yield* expression(build, right)]);
-
-        return read.pipe(Option.map((pair) => ({ kind: "match", operands: pair })));
-      }
-      case "qti-equal": {
-        return yield* equalExpression(build, element);
-      }
-      default: {
-        return yield* unread(build, element);
-      }
-    }
-  });
+): Effect.Effect<Option.Option<Expression>, Refusal> => readExpression(readingOf(build), element);
 
 /**
  * Construct a branch.
@@ -2223,7 +1727,8 @@ const expression = (
 const branchOf = (when: Expression, then: readonly Rule[]): Branch => ({ then, when });
 
 /**
- * Read a sequence of response rules.
+ * Read a sequence of response rules. A `qti-response-processing-fragment`'s rules take its place,
+ * so the sequence holds no fragment.
  *
  * @param build The build.
  * @param elements The rule elements, in order.
@@ -2235,9 +1740,9 @@ const rules = (
 ): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
   pipe(
     elements,
-    // oxlint-disable-next-line eslint/no-use-before-define -- `rules` and `rule` are mutually recursive, as conditions nest; the call runs only after both are defined.
+    // oxlint-disable-next-line eslint/no-use-before-define -- `rules` and `rule` are mutually recursive, as conditions and fragments nest; the call runs only after both are defined.
     Effect.forEach((element) => rule(build, element)),
-    Effect.map(Option.all),
+    Effect.map((read) => Option.map(Option.all(read), (each) => each.flat())),
   );
 
 /**
@@ -2265,33 +1770,78 @@ const branch = (
   });
 
 /**
- * Read one response rule: a `qti-response-condition` or a `qti-set-outcome-value`.
+ * The mark of an XInclude `include` in response processing, which is never fetched (S-6), as the
+ * test model marks one.
+ */
+const includeMark = "xi:include";
+
+/**
+ * Read the rule that holds one expression and names an outcome: a `qti-set-outcome-value` or a
+ * `qti-lookup-outcome-value`.
  *
  * @param build The build.
  * @param element The rule element.
- * @returns The rule, none when it holds an element the engine does not run, or a refusal.
+ * @param kind The rule's kind.
+ * @returns The rule, none when it does not hold exactly one expression or its expression holds an
+ *   element the engine does not run, or a refusal.
  */
-const rule = (build: Build, element: SourceElement): Effect.Effect<Option.Option<Rule>, Refusal> =>
+const outcomeRule = (
+  build: Build,
+  element: SourceElement,
+  kind: "lookup-outcome" | "set-outcome",
+): Effect.Effect<Option.Option<Rule>, Refusal> =>
+  Effect.gen(function* readOutcomeRule() {
+    const identifier = yield* identifierAttribute(build, element, "identifier");
+    const [operand, ...extra] = elementsOf(element);
+    if (operand === undefined || extra.length > 0) {
+      return yield* unread(build, element);
+    }
+
+    const read = yield* expression(build, operand);
+
+    return read.pipe(Option.map((value): Rule => ({ expression: value, identifier, kind })));
+  });
+
+/**
+ * Read one response rule element into the rules it runs: a `qti-response-condition`, a
+ * `qti-set-outcome-value`, a `qti-lookup-outcome-value` and a `qti-exit-response` are one rule
+ * each, and a `qti-response-processing-fragment` is its own rules, read in place, nested fragments
+ * included. An XInclude `include` is never fetched (S-6): it is marked `xi:include` at its path, so
+ * the processing that holds it runs none.
+ *
+ * @param build The build.
+ * @param element The rule element.
+ * @returns The rules, none when it holds an element the engine does not run, or a refusal.
+ */
+const rule = (
+  build: Build,
+  element: SourceElement,
+): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
   Effect.gen(function* readRule() {
-    const parts = elementsOf(element);
-    if (isQti(element, "qti-set-outcome-value")) {
-      const identifier = yield* identifierAttribute(build, element, "identifier");
-      const [operand, ...extra] = parts;
-      if (operand === undefined || extra.length > 0) {
-        return yield* unread(build, element);
-      }
+    if (element.namespace === xincludeNamespace && element.local === "include") {
+      return yield* unread(build, element, includeMark);
+    }
 
-      const read = yield* expression(build, operand);
+    if (isQti(element, "qti-response-processing-fragment")) {
+      return yield* rules(build, elementsOf(element));
+    }
 
-      return read.pipe(
-        Option.map((value) => ({ expression: value, identifier, kind: "set-outcome" })),
-      );
+    if (isQti(element, "qti-exit-response")) {
+      return Option.some<readonly Rule[]>([{ kind: "exit" }]);
+    }
+
+    if (isQti(element, "qti-set-outcome-value") || isQti(element, "qti-lookup-outcome-value")) {
+      const kind = isQti(element, "qti-set-outcome-value") ? "set-outcome" : "lookup-outcome";
+      const read = yield* outcomeRule(build, element, kind);
+
+      return read.pipe(Option.map((each) => [each]));
     }
 
     if (!isQti(element, "qti-response-condition")) {
       return yield* unread(build, element);
     }
 
+    const parts = elementsOf(element);
     const branches = yield* Effect.forEach(
       parts.filter((part) => isQti(part, "qti-response-if") || isQti(part, "qti-response-else-if")),
       (part) => branch(build, part),
@@ -2315,7 +1865,9 @@ const rule = (build: Build, element: SourceElement): Effect.Effect<Option.Option
 
     return Option.map(
       Option.all({ branches: Option.all(branches), otherwise, strays: Option.all(strays) }),
-      (read) => ({ branches: read.branches, kind: "condition", otherwise: read.otherwise }),
+      (read): readonly Rule[] => [
+        { branches: read.branches, kind: "condition", otherwise: read.otherwise },
+      ],
     );
   });
 
@@ -2339,6 +1891,7 @@ const setScore = (operand: Expression): Rule => ({
  */
 const floatValue = (value: number): Expression => ({
   kind: "base-value",
+  operands: [],
   value: { baseType: "float", cardinality: "single", values: [{ baseType: "float", value }] },
 });
 
@@ -2348,7 +1901,12 @@ const floatValue = (value: number): Expression => ({
  * @param identifier The variable's identifier.
  * @returns The `variable` expression of `identifier`.
  */
-const variableOf = (identifier: string): Expression => ({ identifier, kind: "variable" });
+const variableOf = (identifier: string): Expression => ({
+  identifier,
+  kind: "variable",
+  operands: [],
+  weightIdentifier: Option.none(),
+});
 
 /**
  * Construct the rule that sets an outcome to a single identifier base value.
@@ -2360,6 +1918,7 @@ const variableOf = (identifier: string): Expression => ({ identifier, kind: "var
 const setIdentifier = (outcome: string, value: string): Rule => ({
   expression: {
     kind: "base-value",
+    operands: [],
     value: {
       baseType: "identifier",
       cardinality: "single",
@@ -2380,7 +1939,10 @@ const matchCorrect: readonly Rule[] = [
       branchOf(
         {
           kind: "match",
-          operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+          operands: [
+            variableOf("RESPONSE"),
+            { identifier: "RESPONSE", kind: "correct", operands: [] },
+          ],
         },
         [setScore(floatValue(1))],
       ),
@@ -2407,16 +1969,28 @@ const templates = {
   CC2_map_response: [
     {
       branches: [
-        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
+        branchOf({ kind: "is-null", operands: [variableOf("RESPONSE")] }, [
+          setScore(floatValue(0)),
+        ]),
       ],
       kind: "condition",
-      otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response" })]),
+      otherwise: Option.some([
+        setScore({ identifier: "RESPONSE", kind: "map-response", operands: [] }),
+      ]),
     },
     {
       branches: [
-        branchOf({ kind: "equal", operands: [variableOf("MAXSCORE"), variableOf("SCORE")] }, [
-          setIdentifier("FEEDBACK", "correct"),
-        ]),
+        branchOf(
+          {
+            includeLowerBound: true,
+            includeUpperBound: true,
+            kind: "equal",
+            operands: [variableOf("MAXSCORE"), variableOf("SCORE")],
+            tolerance: [],
+            toleranceMode: "exact",
+          },
+          [setIdentifier("FEEDBACK", "correct")],
+        ),
       ],
       kind: "condition",
       otherwise: Option.some([setIdentifier("FEEDBACK", "incorrect")]),
@@ -2429,7 +2003,10 @@ const templates = {
         branchOf(
           {
             kind: "match",
-            operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+            operands: [
+              variableOf("RESPONSE"),
+              { identifier: "RESPONSE", kind: "correct", operands: [] },
+            ],
           },
           [setScore(variableOf("MAXSCORE")), setIdentifier("FEEDBACKBASIC", "correct")],
         ),
@@ -2441,19 +2018,27 @@ const templates = {
   map_response: [
     {
       branches: [
-        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
+        branchOf({ kind: "is-null", operands: [variableOf("RESPONSE")] }, [
+          setScore(floatValue(0)),
+        ]),
       ],
       kind: "condition",
-      otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response" })]),
+      otherwise: Option.some([
+        setScore({ identifier: "RESPONSE", kind: "map-response", operands: [] }),
+      ]),
     },
   ],
   map_response_point: [
     {
       branches: [
-        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
+        branchOf({ kind: "is-null", operands: [variableOf("RESPONSE")] }, [
+          setScore(floatValue(0)),
+        ]),
       ],
       kind: "condition",
-      otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response-point" })]),
+      otherwise: Option.some([
+        setScore({ identifier: "RESPONSE", kind: "map-response-point", operands: [] }),
+      ]),
     },
   ],
   match_correct: matchCorrect,
@@ -2519,18 +2104,14 @@ const declarationElements: readonly string[] = [
 ];
 
 /**
- * Give the built-in variables the engine holds a value of for an item: `numAttempts`, the attempt
- * count `runAttempt` in `#plate/engine/attempt.ts` passes, unless a declaration of the item names
- * a variable `numAttempts`. A declared variable wins over a built-in of the same name, as the prose
- * rules read a reference (`variableType` in `#plate/validate/rules.ts`), so such a rule reads the
- * declared variable: the engine reads it when the model holds it, and otherwise the rule is
- * marked. `duration` and `completionStatus` are never held.
+ * Give the identifier of each variable an item's declarations declare: its response, outcome,
+ * template and context declarations.
  *
  * @param root The item's root.
- * @returns The built-in variables' identifiers the engine holds.
+ * @returns The declared identifiers.
  */
-const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
-  const named = new Set(
+const declaredIdentifiers = (root: SourceElement): ReadonlySet<string> =>
+  new Set(
     elementsOf(root)
       .filter((child) => declarationElements.some((local) => isQti(child, local)))
       .flatMap((declaration) =>
@@ -2541,7 +2122,114 @@ const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
       ),
   );
 
-  return new Set(["numAttempts"].filter((identifier) => !named.has(identifier)));
+/**
+ * The built-in variables the engine can hold a value of, each with its type: `numAttempts`, the
+ * attempt count `runAttempt` in `#plate/engine/attempt.ts` passes, a single integer; and the
+ * built-in outcome `completionStatus`, which the session record holds among its outcomes
+ * (`outcomeDefaults` in `#plate/model/record.ts`), a single identifier.
+ */
+const builtInTypes: ReadonlyMap<string, ValueType> = new Map<string, ValueType>([
+  ["completionStatus", { baseType: "identifier", cardinality: "single" }],
+  ["numAttempts", { baseType: "integer", cardinality: "single" }],
+]);
+
+/**
+ * The built-in variables a rule may set as it sets an outcome: `completionStatus`, as the prose
+ * rules let `qti-set-outcome-value` and `qti-lookup-outcome-value` name it (`builtInsNamed` in
+ * `#plate/validate/rules.ts`).
+ */
+const settableBuiltIns: ReadonlySet<string> = new Set(["completionStatus"]);
+
+/**
+ * Give the built-in variables the engine holds a value of for an item: each of
+ * {@link builtInTypes}, `numAttempts` and `completionStatus`, unless a declaration of the item
+ * names a variable by that name. A declared variable wins over a built-in of the same name, as the
+ * prose rules read a reference (`variableType` in `#plate/validate/rules.ts`), so such a rule reads
+ * the declared variable: the engine reads it when the model holds it, and otherwise the rule is
+ * marked. `duration` is never held.
+ *
+ * @param root The item's root.
+ * @returns The built-in variables' identifiers the engine holds.
+ */
+const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
+  const named = declaredIdentifiers(root);
+
+  return new Set([...builtInTypes.keys()].filter((identifier) => !named.has(identifier)));
+};
+
+/**
+ * The built-in variables an item's rules may name, whatever the engine holds of them:
+ * `numAttempts`, `duration`, `completionStatus` and the context variable `QTI_CONTEXT`.
+ */
+const builtInVariables: readonly string[] = [
+  "completionStatus",
+  "duration",
+  "numAttempts",
+  "QTI_CONTEXT",
+];
+
+/**
+ * Give the names of the variables an item holds: every identifier its declarations declare and
+ * every built-in variable. `qti-pattern-match`'s `pattern` is a reference only when it braces one
+ * of them (ruling R1), and an unchecked reference, such as a `qti-equal`'s `tolerance` token, is
+ * judged only when it names one of them (9.11).
+ *
+ * @param root The item's root.
+ * @returns The names.
+ */
+const declaredNames = (root: SourceElement): ReadonlySet<string> =>
+  new Set([...declaredIdentifiers(root), ...builtInVariables]);
+
+/**
+ * A variable one of an expression's attributes names, by its kind's reference facet: its identifier
+ * and whether a reference there is checked.
+ */
+interface NamedReference {
+  readonly checked: boolean;
+  readonly identifier: string;
+}
+
+/**
+ * Report whether a value a variant's field holds is a reference to a variable, the `ref` member of
+ * `LiteralOrRef` in `#plate/model/expression.ts`.
+ *
+ * @param held The field's value, or one value of a list field.
+ * @returns Whether it is a reference.
+ */
+const isReference = (
+  held: unknown,
+): held is { readonly _tag: "ref"; readonly identifier: string } =>
+  typeof held === "object" &&
+  held !== null &&
+  "_tag" in held &&
+  held._tag === "ref" &&
+  "identifier" in held &&
+  typeof held.identifier === "string";
+
+/**
+ * Give each variable an expression's attributes name, through its kind's reference facet: in the
+ * facet's order and, within a list attribute such as `tolerance`, in written order. A literal names
+ * nothing.
+ *
+ * The facet names each attribute's field in the variant, so the walk looks the field up by that
+ * name among the variant's fields and finds the references generically, in place of a case per
+ * kind.
+ *
+ * @param operand The expression.
+ * @param kindRule Its kind's rule.
+ * @returns The variables its attributes name.
+ */
+const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedReference[] => {
+  const fields = new Map<string, unknown>(Object.entries(operand));
+
+  return kindRule.references.flatMap((entry) => {
+    const held = fields.get(entry.field);
+    const values: readonly unknown[] = entry.list && Array.isArray(held) ? held : [held];
+
+    return values
+      .filter((value) => isReference(value))
+      .map((reference) => ({ checked: entry.checked, identifier: reference.identifier }));
+  });
 };
 
 /**
@@ -2549,25 +2237,39 @@ const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
  * first names it.
  *
  * The evaluator holds only the item's modelled responses and outcomes and the built-in
- * `numAttempts` (`Variables` in `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError`
- * for any other identifier a rule names, so `buildItem` runs no tree this walk finds a name in, and
- * that failure stays unreachable. A `qti-variable` reads a response, an outcome or a built-in
- * variable, `qti-correct`, `qti-map-response` and `qti-map-response-point` read a response,
- * `qti-match`, `qti-equal` and `qti-is-null` read what their operands read, and
- * `qti-set-outcome-value` sets an outcome. The names it finds are valid content, never refused
- * (reading 1): a response the model does not hold (base type `duration` or `file`, cardinality
- * `record`, or no base type), a template variable, an outcome the model does not hold, and the
- * built-in variables `duration` and `completionStatus`, read or set, which the engine holds no
- * value for. Reading 29 makes an item's `duration` a single float, so it is a valid name in an
- * item's rules. An identifier nothing declares is refused before the model is built when
- * inline rules name it; the walk finds it too. One a built-in template names, such as `MAXSCORE`
- * or `FEEDBACK` in a `CC2_*` template, is not in the document, so nothing refuses it: the walk
- * finds it, and the processing is marked.
+ * `numAttempts` and `completionStatus` ({@link heldBuiltIns}; `Variables` in
+ * `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError` for any other identifier a rule
+ * names, so `buildItem` runs no tree this walk finds a name in, and that failure stays
+ * unreachable. The walk reads each expression through its kind's rule in the
+ * registry (`kindRules` in `#plate/model/expressions/read.ts`), in place of a case per kind:
+ *
+ * - The declaration facet: the `identifier` of a kind that expects a response, such as `qti-correct`,
+ *   `qti-map-response` and `qti-map-response-point`, names one the engine holds only among the
+ *   responses; that of a kind that expects any variable, such as `qti-variable`, among the
+ *   responses, the outcomes and the built-in variables.
+ * - The reference facet: each variable an attribute names (`referencesOf`), before the operands, in
+ *   the facet's order. A checked reference names one the engine holds as `qti-variable` does. An
+ *   unchecked one, a `qti-equal`'s `tolerance` token, is judged only when a declaration or a
+ *   built-in names it: one that names nothing is never marked, and gives NULL at run time (9.11).
+ * - The operands, which every kind holds in `operands`, so the walk recurses without a case per
+ *   operator.
+ *
+ * `qti-set-outcome-value` and `qti-lookup-outcome-value` set an outcome, or the built-in
+ * `completionStatus` where the engine holds it ({@link settableBuiltIns}). The names it finds are
+ * valid content, never refused (reading 1): a response the model does not hold (base type
+ * `duration` or `file`, cardinality `record`, or no base type), a template variable, an outcome the
+ * model does not hold, the built-in variable `duration`, read or set, which the engine holds no
+ * value for, and the built-in `completionStatus` where a declaration names it. Reading 29 makes an
+ * item's `duration` a single float, so it is a valid name in an item's rules. An identifier nothing
+ * declares is refused before the model is built when inline rules name it; the walk finds it too.
+ * One a built-in template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is not in
+ * the document, so nothing refuses it: the walk finds it, and the processing is marked.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
  * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
+ * @param names The names of the variables the item holds ({@link declaredNames}).
  * @returns The identifiers the engine does not hold, empty when it can run the tree.
  */
 const unheldIdentifiers = (
@@ -2575,71 +2277,69 @@ const unheldIdentifiers = (
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
   builtIns: ReadonlySet<string>,
+  names: ReadonlySet<string>,
 ): readonly string[] => {
   const unheld = new Set<string>();
 
   /**
-   * Add each identifier an expression and its operands read that the engine does not hold.
+   * Report whether the engine holds a variable of a name, as `qti-variable` reads it.
+   *
+   * @param identifier The name.
+   * @returns Whether a response, an outcome or a built-in variable the engine holds has it.
+   */
+  const isHeld = (identifier: string): boolean =>
+    responses.has(identifier) || outcomes.has(identifier) || builtIns.has(identifier);
+
+  /**
+   * Add each identifier an expression and its operands read that the engine does not hold: the
+   * declaration its kind's declaration facet names, then each variable its attributes name, then
+   * those of its operands.
    *
    * @param operand The expression.
    */
   const read = (operand: Expression): void => {
-    switch (operand.kind) {
-      case "variable": {
-        if (
-          !responses.has(operand.identifier) &&
-          !outcomes.has(operand.identifier) &&
-          !builtIns.has(operand.identifier)
-        ) {
-          unheld.add(operand.identifier);
-        }
+    const kindRule: KindRule = kindRules[operand.kind];
+    if (kindRule.declaration !== undefined && "identifier" in operand) {
+      const held =
+        kindRule.declaration.expected === "response"
+          ? responses.has(operand.identifier)
+          : isHeld(operand.identifier);
+      if (!held) {
+        unheld.add(operand.identifier);
+      }
+    }
 
-        break;
+    for (const { checked, identifier } of referencesOf(operand, kindRule)) {
+      if ((checked || names.has(identifier)) && !isHeld(identifier)) {
+        unheld.add(identifier);
       }
-      case "correct":
-      case "map-response":
-      case "map-response-point": {
-        if (!responses.has(operand.identifier)) {
-          unheld.add(operand.identifier);
-        }
+    }
 
-        break;
-      }
-      case "is-null": {
-        read(operand.operand);
-        break;
-      }
-      case "match":
-      case "equal": {
-        for (const each of operand.operands) {
-          read(each);
-        }
-        break;
-      }
-      case "base-value": {
-        break;
-      }
-      default: {
-        operand satisfies never;
-      }
+    for (const each of operand.operands) {
+      read(each);
     }
   };
 
   /**
+   * Report whether the engine holds a variable a rule may set by a name: a modelled outcome, or a
+   * built-in it holds that a rule may set ({@link settableBuiltIns}).
+   *
+   * @param identifier The name.
+   * @returns Whether a set or a lookup of it runs.
+   */
+  const isSettable = (identifier: string): boolean =>
+    outcomes.has(identifier) || (builtIns.has(identifier) && settableBuiltIns.has(identifier));
+
+  /**
    * Add each identifier a rule sequence names, nested branches included, that the engine does not
-   * hold: each outcome it sets, and each identifier its expressions read.
+   * hold: each outcome it sets or looks up, and each identifier its expressions read. An exit
+   * names none.
    *
    * @param sequence The rules, in order.
    */
   const run = (sequence: readonly Rule[]): void => {
     for (const each of sequence) {
-      if (each.kind === "set-outcome") {
-        if (!outcomes.has(each.identifier)) {
-          unheld.add(each.identifier);
-        }
-
-        read(each.expression);
-      } else {
+      if (each.kind === "condition") {
         for (const { then, when } of each.branches) {
           read(when);
           run(then);
@@ -2647,6 +2347,12 @@ const unheldIdentifiers = (
         if (Option.isSome(each.otherwise)) {
           run(each.otherwise.value);
         }
+      } else if (each.kind !== "exit") {
+        if (!isSettable(each.identifier)) {
+          unheld.add(each.identifier);
+        }
+
+        read(each.expression);
       }
     }
   };
@@ -2672,25 +2378,20 @@ const expressionsOf = (tree: readonly Rule[]): readonly Expression[] => {
    */
   const add = (operand: Expression): void => {
     found.push(operand);
-    if (operand.kind === "is-null") {
-      add(operand.operand);
-    } else if (operand.kind === "match" || operand.kind === "equal") {
-      for (const each of operand.operands) {
-        add(each);
-      }
+    for (const each of operand.operands) {
+      add(each);
     }
   };
 
   /**
-   * Add the expressions of a rule sequence.
+   * Add the expressions of a rule sequence: a set's and a lookup's expression, and each branch's
+   * condition and rules. An exit holds none.
    *
    * @param sequence The rules, in order.
    */
   const run = (sequence: readonly Rule[]): void => {
     for (const each of sequence) {
-      if (each.kind === "set-outcome") {
-        add(each.expression);
-      } else {
+      if (each.kind === "condition") {
         for (const { then, when } of each.branches) {
           add(when);
           run(then);
@@ -2698,6 +2399,8 @@ const expressionsOf = (tree: readonly Rule[]): readonly Expression[] => {
         if (Option.isSome(each.otherwise)) {
           run(each.otherwise.value);
         }
+      } else if (each.kind !== "exit") {
+        add(each.expression);
       }
     }
   };
@@ -2738,37 +2441,102 @@ const readsPercentArea = (
 type ValueType = Pick<Value, "baseType" | "cardinality">;
 
 /**
- * Construct the `single` type of a base type.
+ * Give the value type of a type the kind rules give, none when the value model holds no value of
+ * it: a base type of `any`, `unknown`, `duration` or `file`, or a cardinality of `record` or
+ * `unknown`. Such a type is not judged.
  *
- * @param baseType The base type.
- * @returns The type.
+ * @param type The type.
+ * @returns Its value type, or none.
  */
-const singleType = (baseType: ModelledBaseType): ValueType => ({ baseType, cardinality: "single" });
+const valueTypeOf = (type: ExpressionType): Option.Option<ValueType> => {
+  const { baseType, cardinality } = type;
+
+  return isModelled(baseType) && cardinality !== "record" && cardinality !== "unknown"
+    ? Option.some({ baseType, cardinality })
+    : Option.none();
+};
 
 /**
- * Give the type of every value an expression gives, as the evaluator gives it
- * (`evaluateExpression` in `#plate/engine/evaluate.ts`). Each case names the code it mirrors in
- * that file, so a change to either is seen in the other:
+ * Give the type of the declaration an expression's declaration facet names, as the engine reads
+ * its value: among the responses for a kind that expects a response; among the responses, the
+ * outcomes and the built-in variables the engine holds for one that expects any variable. The
+ * built-ins the engine holds ({@link heldBuiltIns}) have the types {@link builtInTypes} gives:
+ * `numAttempts` a single integer, `completionStatus` a single identifier.
  *
- * - `variable`: the type of the response or the outcome it names, whose value the record holds
- *   (`evaluateExpression`'s `variable` case, through `variableValue`), else of the built-in it
- *   names: the one built-in the engine holds, `numAttempts` ({@link heldBuiltIns}), is a single
- *   integer (`builtInValue`).
- * - `correct`: its response's declared type, of the correct response or of the NULL in its place
- *   (`evaluateExpression`'s `correct` case).
- * - `base-value`: its own (`evaluateExpression`'s `base-value` case).
- * - `is-null`, `match` and `equal`: a single boolean (`evaluateExpression`'s `is-null`, `match` and
- *   `equal` cases, through `booleanOf` and `nullOf`).
- * - `map-response` and `map-response-point`: a single float (`mapResponse` and `mapResponsePoint`).
+ * @param identifier The identifier the expression names.
+ * @param expected The kind of variable the facet expects.
+ * @param responses The responses the model holds.
+ * @param outcomes The outcomes the model holds.
+ * @param builtIns The built-in variables the engine holds for this item.
+ * @returns The declaration's type, none when the engine holds no variable of that name.
+ */
+const declarationType = (
+  identifier: string,
+  expected: DeclarationFacet["expected"],
+  responses: ReadonlyMap<string, ResponseDeclaration>,
+  outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  builtIns: ReadonlySet<string>,
+): Option.Option<ValueType> => {
+  const response: ValueType | undefined = responses.get(identifier);
+  if (expected === "response") {
+    return Option.fromUndefinedOr(response);
+  }
+
+  return Option.fromUndefinedOr(response ?? outcomes.get(identifier)).pipe(
+    Option.orElse(() =>
+      builtIns.has(identifier)
+        ? Option.fromUndefinedOr(builtInTypes.get(identifier))
+        : Option.none(),
+    ),
+  );
+};
+
+/**
+ * Give the attributes an expression's result type depends on that it holds itself:
+ * `qti-base-value`'s and `qti-test-variables`' base type and the operator name of
+ * `qti-math-operator` and `qti-stats-operator`. Every other kind holds none.
  *
- * A NULL keeps the type of the expression that gave it, and the session record holds each variable
- * at its declared type, so the type holds for every value the expression gives.
+ * @param operand The expression.
+ * @returns Its own result attributes.
+ */
+const ownAttributes = (operand: Expression): ResultAttributes => {
+  if (operand.kind === "base-value") {
+    return { baseType: operand.value.baseType };
+  }
+
+  if (operand.kind === "math-operator" || operand.kind === "stats-operator") {
+    return { name: operand.name };
+  }
+
+  if (operand.kind === "test-variables") {
+    return Option.match(operand.baseType, {
+      onNone: () => ({}),
+      onSome: (baseType) => ({ baseType }),
+    });
+  }
+
+  return {};
+};
+
+/**
+ * Give the type of every value an expression gives, through its kind's rule in the registry
+ * (`kindRules` in `#plate/model/expressions/read.ts`): the rule's `resultType` over the types of
+ * its operands, typed the same way, and its result attributes. For a kind with a declaration facet
+ * the attributes carry the type of the declaration it names ({@link declarationType}), and none
+ * when the engine holds no variable of that name, so a kind that takes the declaration's type is
+ * then unknown; the kind's own attributes, such as `qti-base-value`'s base type, come from the
+ * expression ({@link ownAttributes}). A type the value model holds no value of is none
+ * ({@link valueTypeOf}): not judged.
+ *
+ * Each family's tests hold its evaluators to its rules (the type invariant in
+ * `#plate/test/processing.ts`), and a NULL keeps the type of the expression that gave it, so the
+ * type holds for every value the engine gives the expression.
  *
  * @param operand The expression.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
  * @param builtIns The built-in variables the engine holds for this item.
- * @returns Its type, none when it names an identifier the engine does not hold.
+ * @returns Its type, none when the rule gives a type the value model does not hold.
  */
 const typeOf = (
   operand: Expression,
@@ -2776,38 +2544,33 @@ const typeOf = (
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
   builtIns: ReadonlySet<string>,
 ): Option.Option<ValueType> => {
-  switch (operand.kind) {
-    case "variable": {
-      const ofDeclaration: ValueType | undefined =
-        responses.get(operand.identifier) ?? outcomes.get(operand.identifier);
+  /**
+   * Give the type an expression's kind rule gives it.
+   *
+   * @param each The expression.
+   * @returns Its type, unknown where the rule cannot say.
+   */
+  const expressionTypeOf = (each: Expression): ExpressionType => {
+    const kindRule: KindRule = kindRules[each.kind];
+    const declaration =
+      kindRule.declaration === undefined || !("identifier" in each)
+        ? Option.none()
+        : declarationType(
+            each.identifier,
+            kindRule.declaration.expected,
+            responses,
+            outcomes,
+            builtIns,
+          );
+    const operands: readonly Expression[] = each.operands;
 
-      return Option.fromUndefinedOr(ofDeclaration).pipe(
-        Option.orElse(() =>
-          builtIns.has(operand.identifier) ? Option.some(singleType("integer")) : Option.none(),
-        ),
-      );
-    }
-    case "correct": {
-      const ofDeclaration: ValueType | undefined = responses.get(operand.identifier);
+    return kindRule.resultType(operands.map(expressionTypeOf), {
+      ...ownAttributes(each),
+      ...Option.getOrElse(declaration, () => ({})),
+    });
+  };
 
-      return Option.fromUndefinedOr(ofDeclaration);
-    }
-    case "base-value": {
-      return Option.some(operand.value);
-    }
-    case "match":
-    case "equal":
-    case "is-null": {
-      return Option.some(singleType("boolean"));
-    }
-    case "map-response":
-    case "map-response-point": {
-      return Option.some(singleType("float"));
-    }
-    default: {
-      return operand satisfies never;
-    }
-  }
+  return valueTypeOf(expressionTypeOf(operand));
 };
 
 /**
@@ -2817,39 +2580,52 @@ const typeOf = (
  * The evaluator returns `UnmappedResponseError` for a `qti-map-response` of a response with no
  * `qti-mapping` and for a `qti-map-response-point` of one with no `qti-area-mapping`, which only a
  * `point` declaration holds, and `OutcomeMismatchError` for a `qti-set-outcome-value` whose
- * expression's type ({@link typeOf}) is not the outcome's (`#plate/engine/evaluate.ts`). The prose
- * rules refuse inline rules that need these (`expression-type` and `template-requirements` in
- * `#plate/validate/rules.ts`). Of a built-in template they judge less: `template-requirements`
- * judges what a canonical template needs of `RESPONSE` and the base type of `SCORE`, not its
- * cardinality, and leaves the `CC2_*` templates alone (Q6). So {@link runnable} runs no built-in
- * template's tree this walk finds a need in, and those failures stay unreachable from one.
- * The marks name what is missing: `mapping:<identifier>` and `area-mapping:<identifier>` for the
- * response's mapping and area mapping, and `outcome-type:<identifier>` for an outcome a rule sets
- * to a value of another base type or cardinality. An identifier the engine does not hold is
- * {@link unheldIdentifiers}'s mark, and no need is judged of it.
+ * expression's type ({@link typeOf}) is not the outcome's, or a `qti-lookup-outcome-value` of an
+ * outcome that is not single (`#plate/engine/evaluate.ts`). The prose rules refuse inline rules
+ * that map a response with no mapping or set an outcome to another type (`expression-type` and
+ * `template-requirements` in `#plate/validate/rules.ts`), but no prose rule judges a lookup's
+ * outcome cardinality, and pantry's checker accepts a lookup of any outcome with a lookup table.
+ * Of a built-in template they judge less: `template-requirements` judges what a canonical template
+ * needs of `RESPONSE` and the base type of `SCORE`, not its cardinality, and leaves the `CC2_*`
+ * templates alone (Q6). So this walk judges every need of a built-in template's tree and, of inline
+ * rules, only each lookup's outcome cardinality, and {@link runnable} runs no tree it finds a need
+ * in, so those failures stay unreachable from a checked item. The marks name what is missing:
+ * `mapping:<identifier>` and `area-mapping:<identifier>` for the response's mapping and area
+ * mapping, and `outcome-type:<identifier>` for an outcome a rule sets to a value of another base
+ * type or cardinality. An identifier the engine does not hold is {@link unheldIdentifiers}'s mark,
+ * and no need is judged of it; a `record` outcome is one.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
  * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
+ * @param written `template` for a built-in template's tree, whose every need is judged, or
+ *   `inline` for inline rules, of which only a lookup's outcome cardinality is.
  * @returns The marks, empty when every need is met.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_SetValue
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_LookupOutcomeValue
  */
 const unmetNeeds = (
   tree: readonly Rule[],
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
   builtIns: ReadonlySet<string>,
+  written: "inline" | "template",
 ): readonly string[] => {
   const unmet = new Set<string>();
 
   /**
-   * Add the mark of each mapping an expression and its operands read that their response lacks.
+   * Add the mark of each mapping an expression and its operands read that their response lacks,
+   * of a template's tree only: the prose rules refuse an inline one.
    *
    * @param operand The expression.
    */
   const read = (operand: Expression): void => {
+    if (written === "inline") {
+      return;
+    }
+
     if (operand.kind === "map-response" || operand.kind === "map-response-point") {
       const response = responses.get(operand.identifier);
       const point = operand.kind === "map-response-point";
@@ -2859,45 +2635,49 @@ const unmetNeeds = (
       if (lacking) {
         unmet.add(`${point ? "area-mapping" : "mapping"}:${operand.identifier}`);
       }
-    } else if (operand.kind === "is-null") {
-      read(operand.operand);
-    } else if (operand.kind === "match" || operand.kind === "equal") {
-      for (const each of operand.operands) {
-        read(each);
-      }
+    }
+
+    for (const each of operand.operands) {
+      read(each);
     }
   };
 
   /**
    * Add the marks of a rule sequence, nested branches included: each mapping its expressions read
-   * that their response lacks, and each outcome it sets to a value of another type.
+   * that their response lacks, and each outcome it sets to a value of another type, a set's of a
+   * template's tree only. A lookup gives a single value of its outcome's base type (reading 8), so
+   * it needs an outcome of cardinality `single`, inline or not; an exit needs nothing.
    *
    * @param sequence The rules, in order.
    */
   const run = (sequence: readonly Rule[]): void => {
     for (const each of sequence) {
-      if (each.kind === "set-outcome") {
-        read(each.expression);
-
-        const outcome = outcomes.get(each.identifier);
-        const given = typeOf(each.expression, responses, outcomes, builtIns);
-        if (
-          outcome !== undefined &&
-          Option.exists(
-            given,
-            (type) =>
-              type.baseType !== outcome.baseType || type.cardinality !== outcome.cardinality,
-          )
-        ) {
-          unmet.add(`outcome-type:${each.identifier}`);
-        }
-      } else {
+      if (each.kind === "condition") {
         for (const { then, when } of each.branches) {
           read(when);
           run(then);
         }
         if (Option.isSome(each.otherwise)) {
           run(each.otherwise.value);
+        }
+      } else if (each.kind !== "exit") {
+        read(each.expression);
+
+        const outcome = outcomes.get(each.identifier);
+        if (outcome !== undefined && (written === "template" || each.kind === "lookup-outcome")) {
+          const given =
+            each.kind === "set-outcome"
+              ? typeOf(each.expression, responses, outcomes, builtIns)
+              : Option.some<ValueType>({ baseType: outcome.baseType, cardinality: "single" });
+          if (
+            Option.exists(
+              given,
+              (type) =>
+                type.baseType !== outcome.baseType || type.cardinality !== outcome.cardinality,
+            )
+          ) {
+            unmet.add(`outcome-type:${each.identifier}`);
+          }
         }
       }
     }
@@ -2924,14 +2704,16 @@ interface ReadProcessing extends ProcessingTree {
 
 /**
  * Keep a rule tree the engine can run. Each identifier {@link unheldIdentifiers} finds is the mark
- * `variable:<identifier>` at the processing element's path, each need {@link unmetNeeds} finds in a
- * built-in template's tree is its mark there (`mapping:<identifier>`, `area-mapping:<identifier>`
- * or `outcome-type:<identifier>`), and a tree that maps a point through an area mapping with a `%`
+ * `variable:<identifier>` at the processing element's path, each need {@link unmetNeeds} finds is
+ * its mark there (`mapping:<identifier>`, `area-mapping:<identifier>` or
+ * `outcome-type:<identifier>`), and a tree that maps a point through an area mapping with a `%`
  * coordinate ({@link readsPercentArea}) is the mark `area-coords-percent` there. The marks are
  * placed among the others in document order, and the tree is then none. So a built-in template the
  * item does not provide for, a `CC2_*` one (Q6) or a canonical one whose `SCORE` has the base type
  * `template-requirements` asks for and another cardinality, is marked and does not run, and is
- * never refused. Inline rules are not walked for needs: the prose rules refuse those that have one.
+ * never refused. Inline rules are walked only for a lookup of an outcome that is not single, which
+ * is marked `outcome-type:<identifier>` and never refused, as pantry accepts it; the prose rules
+ * refuse the inline rules that have any other need.
  *
  * @param build The build.
  * @param read The processing as read.
@@ -2949,10 +2731,16 @@ const runnable = (
 ): Option.Option<readonly Rule[]> => {
   const builtIns = heldBuiltIns(build.document.root);
   const features = [
-    ...unheldIdentifiers(read.tree, responses, outcomes, builtIns).map(
+    ...unheldIdentifiers(read.tree, responses, outcomes, builtIns, build.names).map(
       (identifier) => `variable:${identifier}`,
     ),
-    ...(Option.isSome(read.template) ? unmetNeeds(read.tree, responses, outcomes, builtIns) : []),
+    ...unmetNeeds(
+      read.tree,
+      responses,
+      outcomes,
+      builtIns,
+      Option.isSome(read.template) ? "template" : "inline",
+    ),
   ];
   if (readsPercentArea(read.tree, responses)) {
     features.push("area-coords-percent");
@@ -3002,18 +2790,18 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * The body keeps text and HTML elements as written. Choice, Text Entry and Extended Text become
  * their models when their binding is one `renders` lists and they carry no notice feature; any
  * other `qti-*` element in the body becomes a notice, its subtree dropped. Each `renders` mark adds
- * an unsupported feature, and so does each `qti-*` element outside the body that the model does
- * not read. Response processing is a rule tree: a built-in template resolves to the tree its text
+ * an unsupported feature, and so does each `qti-*` element outside the body that the model does not
+ * read. Response processing is a rule tree: a built-in template resolves to the tree its text
  * gives, and inline rules become their tree when every element is in the engine. The tree is kept
  * only when the engine holds every identifier it names, the item provides every declaration a
- * built-in template's tree needs, and it maps no point through an area mapping with a `%`
- * coordinate; each identifier it does not hold is the mark `variable:<identifier>` at the
- * processing element's path, each such need unmet its mark there (`mapping:<identifier>`,
- * `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a point mapping the mark
- * `area-coords-percent` there, and the processing is then none. An item whose root has a
- * `qti-template-processing` child keeps that element's mark and has no processing, whatever the
- * tree: template processing may set a template variable, a default value or a correct response,
- * and phase 1 runs none of it, so a score computed without it could be wrong.
+ * built-in template's tree needs, every outcome a lookup sets is single, and it maps no point
+ * through an area mapping with a `%` coordinate; each identifier it does not hold is the mark
+ * `variable:<identifier>` at the processing element's path, each such need unmet its mark there
+ * (`mapping:<identifier>`, `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a
+ * point mapping the mark `area-coords-percent` there, and the processing is then none. An item
+ * whose root has a `qti-template-processing` child keeps that element's mark and has no processing,
+ * whatever the tree: template processing may set a template variable, a default value or a correct
+ * response, and the engine runs none of it, so a score computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -3026,6 +2814,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       builder: "buildItem",
       declarations: declarationsOf(source),
       document: source,
+      names: declaredNames(source.root),
       paths: pathsOf(source),
       recorded: new Map(),
       unsupported: [],

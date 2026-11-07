@@ -1,39 +1,67 @@
 /**
- * The evaluator: the engine subset (spec §4.12) run over an item's rule tree, as pure functions of
- * the item and the variables of one attempt.
+ * The evaluator: the response rules and the registry's landed expression kinds run over an item's
+ * rule tree, as pure functions of the item and the variables of one attempt.
  *
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
- * value for every modelled declaration, as the session record does, and the attempt count the
- * built-in `numAttempts` reads. A rule that names an identifier outside them, sets an outcome to a
- * value of another type, or maps a response that has no mapping is a failure of what the caller
- * passed, and the caller can cause each one: the variables come from a record the host hands back.
- * An identifier the variables hold no value of is the record's gap, and one the item declares
- * nothing of is the item's; the failure says which. So the functions stay plain and synchronous and
- * return each failure, an {@link EngineFailure}, in a `Result`; the first failure ends the run.
+ * value for every modelled declaration and the built-in `completionStatus`, as the session record
+ * does, and the attempt count the built-in `numAttempts` reads. A rule that names an identifier
+ * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
+ * is a failure of what the caller passed, and the caller can cause each one: the variables come
+ * from a record the host hands back. An identifier the variables hold no value of is the record's
+ * gap, and one the item declares nothing of is the item's; the failure says which. So the functions
+ * stay plain and synchronous and return each failure, an {@link EngineFailure}, in a `Result`; the
+ * first failure ends the run.
+ *
+ * Each expression kind's evaluator lives in its family's table under `#plate/engine/expressions/`,
+ * and this module dispatches through the one table the ten make ({@link evaluators}). A family
+ * reads {@link Scope} and the evaluator's types from here as types only, so the value imports point
+ * one way: from here to the families.
  *
  * @module
  */
-import { Array as Arr, Data, Option, Result } from "effect";
-import type {
-  AreaMapEntry,
-  AreaMapping,
-  Expression,
-  Item,
-  MapEntry,
-  Mapping,
-  ResponseDeclaration,
-  Rule,
-} from "#plate/model/item.ts";
-import { format, isNull, match, nullOf } from "#plate/model/values.ts";
+import { Data, Option, Result } from "effect";
+import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/failures.ts";
+import type { EngineFailure } from "#plate/engine/failures.ts";
+import { arithmeticEvaluators } from "#plate/engine/expressions/arithmetic.ts";
+import { comparisonEvaluators } from "#plate/engine/expressions/comparison.ts";
+import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
+import { functionsEvaluators } from "#plate/engine/expressions/functions.ts";
+import { integersEvaluators } from "#plate/engine/expressions/integers.ts";
+import { logicEvaluators } from "#plate/engine/expressions/logic.ts";
+import { referencesEvaluators } from "#plate/engine/expressions/references.ts";
+import { roundingEvaluators } from "#plate/engine/expressions/rounding.ts";
+import { testEvaluators } from "#plate/engine/expressions/test.ts";
+import { textEvaluators } from "#plate/engine/expressions/text.ts";
+import { numberOf, sameNumber } from "#plate/engine/numbers.ts";
+import type { NumberSingle } from "#plate/engine/numbers.ts";
+import type { ExpressionKind } from "#plate/model/expression.ts";
+import type { Expression, Item, LookupTable, OutcomeDeclaration, Rule } from "#plate/model/item.ts";
+import {
+  completionStatus,
+  completionStatusType,
+  holdsCompletionStatus,
+} from "#plate/model/record.ts";
+import { isNull, nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
+
+export {
+  OutcomeMismatchError,
+  UnknownIdentifierError,
+  UnmappedResponseError,
+} from "#plate/engine/failures.ts";
+
+export type { EngineFailure } from "#plate/engine/failures.ts";
 
 /**
  * The variables of one attempt: each response and each outcome by identifier, and the attempt
  * count.
  *
  * Responses and outcomes share one identifier space, because declaration identifiers are unique
- * together, so a `qti-variable` names at most one of them.
+ * together, so a `qti-variable` names at most one of them. The outcomes hold the built-in outcome
+ * `completionStatus` beside the declared ones where the item holds it (`holdsCompletionStatus` in
+ * `#plate/model/record.ts`), since it is "declared implicitly" (`info.txt:8488`): no response or
+ * outcome then shares its name.
  */
 export interface Variables {
   /**
@@ -51,658 +79,137 @@ export interface Variables {
 }
 
 /**
- * The failure of a rule tree that names an identifier the item or the variables do not hold in the
- * role the rule reads it in: a variable or a mapped response with no value, a `qti-correct`, a
- * `qti-map-response` or a `qti-map-response-point` of no declared response, or a
- * `qti-set-outcome-value` of no declared outcome.
+ * The evaluator's context: the item whose declarations give the correct responses, the mappings
+ * and the area mappings, and the variables of the attempt.
  *
- * In a valid item every identifier a rule names is declared, but the variables come from the record
- * the host hands back, which may lack a value, so the evaluator returns it. Its `holder` says which
- * of the two lacks the identifier, and the message names the one to fix.
+ * Every evaluator takes it whole, so a field the engine adds reaches every family with no change
+ * to an evaluator's signature. The family tests build it only through `scopeOf` in
+ * `#plate/test/processing.ts`.
  */
-export class UnknownIdentifierError extends Data.TaggedError("UnknownIdentifierError")<{
-  /**
-   * What lacks the identifier: `"record"` when the variables, which come from the session record,
-   * hold no value of it, and `"item"` when the item declares no modelled response or outcome by
-   * that name.
-   */
-  readonly holder: "item" | "record";
+export interface Scope {
+  readonly item: Item;
+  readonly variables: Variables;
+}
 
-  /**
-   * The identifier the rule names.
-   */
-  readonly identifier: string;
+/**
+ * The variant of each expression kind: the member of {@link Expression} whose `kind` it is, `never`
+ * for a kind the union does not hold.
+ */
+type Variants = { readonly [K in ExpressionKind]: Extract<Expression, { readonly kind: K }> };
 
-  /**
-   * What the rule reads the identifier as.
-   */
-  readonly role: "outcome" | "response" | "variable";
+/**
+ * The evaluator an evaluator calls for its operands: it gives the value of any expression in a
+ * scope.
+ *
+ * @param expression The expression, an operand of the caller.
+ * @param scope The item and the variables of the attempt.
+ * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
+ */
+export type Evaluate = (
+  expression: Expression,
+  scope: Scope,
+) => Result.Result<Value, EngineFailure>;
+
+/**
+ * The evaluator of one expression kind: it takes the kind's own variant, so it destructures the
+ * variant's `operands` tuple and reads its attributes with no check of the kind.
+ *
+ * @param expression The expression, of kind `K`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator of its operands.
+ * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
+ */
+export type Evaluator<K extends ExpressionKind> = (
+  expression: Variants[K],
+  scope: Scope,
+  evaluate: Evaluate,
+) => Result.Result<Value, EngineFailure>;
+
+/**
+ * The stub marker: the entry of a kind its family has not landed (ruling R2). A test tells it from
+ * a landed entry, which is a function. The dispatcher never reaches it on a checked item, because
+ * the reader marks an unlanded kind, so its processing never runs.
+ */
+export type Unlanded = "unlanded";
+
+/**
+ * A family's table: one entry per kind of the family, its evaluator or the stub marker.
+ */
+export type FamilyTable<K extends ExpressionKind> = {
+  readonly [P in K]: Evaluator<P> | Unlanded;
+};
+
+/**
+ * Every kind's entry: the ten families' tables in one, keyed by {@link ExpressionKind}. Its type
+ * requires an entry for each of the 64 kinds, so a kind no family holds fails the type check.
+ */
+export const evaluators: FamilyTable<ExpressionKind> = {
+  ...arithmeticEvaluators,
+  ...comparisonEvaluators,
+  ...containersEvaluators,
+  ...functionsEvaluators,
+  ...integersEvaluators,
+  ...logicEvaluators,
+  ...referencesEvaluators,
+  ...roundingEvaluators,
+  ...testEvaluators,
+  ...textEvaluators,
+};
+
+/**
+ * The dispatcher reached a kind whose family holds the stub marker, a defect of the engine that no
+ * checked item can cause.
+ *
+ * It cannot occur: the item model's reader marks every kind its family has not landed, so a
+ * processing that holds one is none and never runs, and the validator holds such a kind untyped
+ * (rulings R2 and R3). It is thrown, never returned, so {@link EngineFailure} holds only failures a
+ * caller can cause, and it is not exported.
+ */
+class UnlandedKindDefect extends Data.TaggedError("UnlandedKindDefect")<{
+  readonly kind: ExpressionKind;
 }> {
   /**
-   * The identifier, the role it is read in, what lacks it, and what to pass instead, in one line.
+   * The kind reached, and what to do with it.
    */
   override get message(): string {
-    const identifier = JSON.stringify(this.identifier);
-
-    return this.holder === "record"
-      ? `The session record holds no value for ${identifier}, which the rules read as a ${this.role}: pass back, unchanged, the record score returned for this item, or none to start it afresh.`
-      : `The rules read ${identifier} as a ${this.role}, and the item holds no ${this.role} by that name: run rules built from this item, with the variables its record holds.`;
+    return `The engine reached qti-${this.kind}, whose evaluator has not landed, though the item model marks such a kind. This is a defect in the engine; report it with the item that caused it.`;
   }
 }
 
 /**
- * The failure of a `qti-set-outcome-value` whose expression's base type or cardinality differs
- * from the outcome's declaration, which the evaluator returns.
+ * Give the value of an expression through its kind's entry in {@link evaluators}.
  *
- * QTI assigns without conversion: "floating point values can not be assigned to integer variables
- * and vice-versa", and the expression's type must match the target's. A NULL keeps the type of the
- * expression that gave it, so it is checked the same way. The engine stores no value of another
- * type, so the record always holds each outcome at its declared type.
+ * The kind and the variant are passed apart so the entry the kind indexes takes that variant.
  *
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_SetValue
+ * @param kind The expression's kind.
+ * @param expression The expression.
+ * @param scope The item and the variables of the attempt.
+ * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
+ * @throws {UnlandedKindDefect} When the kind's entry is the stub marker, which no checked item
+ *   reaches.
  */
-export class OutcomeMismatchError extends Data.TaggedError("OutcomeMismatchError")<{
-  /**
-   * The base type and cardinality the expression gave.
-   */
-  readonly actual: string;
-
-  /**
-   * The base type and cardinality the outcome is declared with.
-   */
-  readonly expected: string;
-
-  /**
-   * The outcome's identifier.
-   */
-  readonly identifier: string;
-}> {
-  /**
-   * The outcome, both types, and the expression to give it, in one line.
-   */
-  override get message(): string {
-    return `The rules set ${JSON.stringify(this.identifier)}, declared ${this.expected}, to a ${this.actual} value: give its qti-set-outcome-value an expression of base type and cardinality ${this.expected}.`;
-  }
-}
-
-/**
- * The failure of a `qti-map-response` whose response is declared without a `qti-mapping`, or of a
- * `qti-map-response-point` whose response is declared without a `qti-area-mapping`.
- *
- * QTI maps a response "using the associated mapping, which must have been declared", and a point
- * response through its "associated areaMapping"; the evaluator returns it.
- *
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
- */
-export class UnmappedResponseError extends Data.TaggedError("UnmappedResponseError")<{
-  /**
-   * The response's identifier.
-   */
-  readonly identifier: string;
-
-  /**
-   * The mapping the expression reads and the declaration lacks: `qti-mapping` for
-   * `qti-map-response`, `qti-area-mapping` for `qti-map-response-point`.
-   */
-  readonly mapping: "qti-area-mapping" | "qti-mapping";
-}> {
-  /**
-   * The response, the mapping it lacks and the two ways to score it, in one line.
-   */
-  override get message(): string {
-    const expression =
-      this.mapping === "qti-mapping" ? "qti-map-response" : "qti-map-response-point";
-
-    return `The rules map the response ${JSON.stringify(this.identifier)}, and its declaration has no ${this.mapping}: give the declaration a ${this.mapping}, or score it without ${expression}.`;
-  }
-}
-
-/**
- * A failure the engine returns: the rules name an identifier the item or the variables do not hold,
- * set an outcome to a value of another type, or map a response that has no mapping.
- */
-export type EngineFailure = OutcomeMismatchError | UnknownIdentifierError | UnmappedResponseError;
-
-/**
- * Look up a variable by identifier among the record's own keys.
- *
- * The variables come from plain objects, which inherit `Object.prototype`, and `constructor` or
- * `toString` is a valid identifier; reading only own keys keeps an inherited member from being
- * read as a value.
- *
- * @param values The responses or the outcomes.
- * @param identifier The identifier.
- * @returns The value, or none when the record holds no value by that name.
- */
-const own = (values: Readonly<Record<string, Value>>, identifier: string): Option.Option<Value> =>
-  Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
-
-/**
- * Give the value of the built-in variable an identifier names, when the variables carry it: for
- * `numAttempts`, the attempt count as a single integer.
- *
- * @param variables The variables of the attempt.
- * @param identifier The variable's identifier.
- * @returns The value, or none for any other identifier and when the variables carry no count.
- */
-const builtInValue = (variables: Variables, identifier: string): Option.Option<Value> =>
-  identifier === "numAttempts"
-    ? Option.map(Option.fromUndefinedOr(variables.numAttempts), (count): Value => ({
-        baseType: "integer",
-        cardinality: "single",
-        values: [{ baseType: "integer", value: count }],
-      }))
-    : Option.none();
-
-/**
- * Give the value of a `qti-variable`: the response or the outcome of that identifier, else the
- * built-in variable of that name.
- *
- * A declared variable wins over a built-in of the same name, as the prose rules read a reference
- * (`variableType` in `#plate/validate/rules.ts`).
- *
- * @param variables The variables of the attempt.
- * @param identifier The variable's identifier.
- * @returns Its current value, or an {@link UnknownIdentifierError} when neither the responses, the
- *   outcomes nor the built-in variables hold it.
- */
-const variableValue = (
-  variables: Variables,
-  identifier: string,
-): Result.Result<Value, UnknownIdentifierError> =>
-  Result.fromOption(
-    Option.orElse(own(variables.responses, identifier), () =>
-      Option.orElse(own(variables.outcomes, identifier), () => builtInValue(variables, identifier)),
-    ),
-    () => new UnknownIdentifierError({ holder: "record", identifier, role: "variable" }),
-  );
-
-/**
- * Find the response declaration a `qti-correct`, a `qti-map-response` or a
- * `qti-map-response-point` names.
- *
- * @param item The item.
- * @param identifier The response's identifier.
- * @returns The declaration, or an {@link UnknownIdentifierError} when the item declares no
- *   modelled response by that name.
- */
-const responseOf = (
-  item: Item,
-  identifier: string,
-): Result.Result<ResponseDeclaration, UnknownIdentifierError> =>
-  Result.fromOption(
-    Option.fromUndefinedOr(item.responses.get(identifier)),
-    () => new UnknownIdentifierError({ holder: "item", identifier, role: "response" }),
-  );
-
-/**
- * Construct a single boolean value.
- *
- * @param value The boolean.
- * @returns The value.
- */
-const booleanOf = (value: boolean): Value => ({
-  baseType: "boolean",
-  cardinality: "single",
-  values: [{ baseType: "boolean", value }],
-});
-
-/**
- * Report whether two singles are equal, as `match` compares single values: the same base type,
- * numbers by value, strings and identifiers by code point, and a `pair` in either order.
- *
- * @param left One single.
- * @param right The other.
- * @returns Whether they are equal.
- */
-const equal = (left: Single, right: Single): boolean =>
-  match(
-    { baseType: left.baseType, cardinality: "single", values: [left] },
-    { baseType: right.baseType, cardinality: "single", values: [right] },
-  );
-
-/**
- * Give the key {@link distinct} tells a value apart by: its base type and its value as `format`
- * writes it, so two values share a key exactly when {@link equal} finds them equal, however each
- * was written (`+5` and `05` are one integer, `1.0` and `1e0` one float).
- *
- * Where `equal` and `format` part, the key follows `equal`: a `pair`'s identifiers are written in
- * code-unit order, as `equal` matches a pair in either order, and a float's `-0` is written as `0`,
- * as `equal` compares floats with `===`. That `===` makes a NaN equal to no value, itself included,
- * so a NaN has no key. A base type holds no space, and neither does an identifier or a coordinate,
- * so one space between the parts keeps two keys apart.
- *
- * @param single The value.
- * @returns Its key; none for a NaN.
- */
-const distinctKey = (single: Single): Option.Option<string> => {
-  if (single.baseType === "float") {
-    const value = Object.is(single.value, -0) ? 0 : single.value;
-
-    return Number.isNaN(value)
-      ? Option.none()
-      : Option.some(`float ${format({ baseType: "float", value })}`);
+const dispatch = <K extends ExpressionKind>(
+  kind: K,
+  expression: Variants[K],
+  scope: Scope,
+): Result.Result<Value, EngineFailure> => {
+  const entry: Evaluator<K> | Unlanded = evaluators[kind];
+  if (entry === "unlanded") {
+    throw new UnlandedKindDefect({ kind });
   }
 
-  if (single.baseType === "pair") {
-    const [first, second] = single.value;
-    const value: readonly [string, string] = first <= second ? [first, second] : [second, first];
-
-    return Option.some(`pair ${format({ baseType: "pair", value })}`);
-  }
-
-  return Option.some(`${single.baseType} ${format(single)}`);
+  // oxlint-disable-next-line eslint/no-use-before-define -- `dispatch` and `evaluate` are mutually recursive, as operands nest; the call runs only after both are defined.
+  return entry(expression, scope, evaluate);
 };
 
 /**
- * Drop a response's repeated values: each value is kept at its first occurrence, in order, and a
- * later value {@link equal} finds equal to it is dropped.
+ * Give the value of an expression in a scope, as every evaluator's `evaluate` does.
  *
- * A `Set` of each value's {@link distinctKey} finds the repeats, so the time is linear in the
- * number of values: a candidate's post of many members costs what its length costs, where comparing
- * every pair would cost its square. A NaN has no key and is always kept, as `equal` finds it equal
- * to nothing.
- *
- * @param values The response's values.
- * @returns The values no earlier value equals, in order.
+ * @param expression The expression.
+ * @param scope The item and the variables of the attempt.
+ * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
  */
-const distinct = (values: readonly Single[]): readonly Single[] => {
-  const seen = new Set<string>();
-  const kept: Single[] = [];
-  for (const single of values) {
-    const key = distinctKey(single);
-    if (Option.isNone(key)) {
-      kept.push(single);
-    } else if (!seen.has(key.value)) {
-      seen.add(key.value);
-      kept.push(single);
-    }
-  }
-
-  return kept;
-};
-
-/**
- * Fold a string's case for a case-insensitive map entry: upper case then lower case, by Unicode's
- * default mappings and independent of locale, so `YORK` and `york`, or `SS` and `ß`, compare
- * equal.
- *
- * @param text The string.
- * @returns Its folded form.
- */
-const foldCase = (text: string): string => text.toUpperCase().toLowerCase();
-
-/**
- * Report whether a map entry compares its key exactly: a string key when it is `case-sensitive`,
- * and a key of every other base type always, identifiers included.
- *
- * @param entry The map entry.
- * @returns Whether its key compares exactly.
- */
-const comparesExactly = (entry: MapEntry): boolean =>
-  entry.caseSensitive || entry.key.baseType !== "string";
-
-/**
- * Report whether a map entry's key matches a response value: exactly when the entry compares
- * exactly, else as strings with case folded.
- *
- * @param entry The map entry.
- * @param single The response value.
- * @returns Whether the entry maps it.
- */
-const keyMatches = (entry: MapEntry, single: Single): boolean =>
-  !comparesExactly(entry) && entry.key.baseType === "string" && single.baseType === "string"
-    ? foldCase(entry.key.value) === foldCase(single.value)
-    : equal(entry.key, single);
-
-/**
- * Give the value a mapping maps one response value to: the value of the first entry in document
- * order that matches it, else the mapping's default.
- *
- * Overlapping entries are valid, so a value two or more entries match takes the first of them in
- * document order. That rule is a placeholder while spec §12 Q5 is open: the operator's answer
- * changes this one expression and its test. BG010 lists its case-sensitive `York` before its
- * `york`, so its `York` maps by the first and `YORK` by the second.
- *
- * @param mapping The response's mapping.
- * @param single The response value.
- * @returns The mapped value.
- */
-const mappedValue = (mapping: Mapping, single: Single): number =>
-  Option.match(
-    Arr.findFirst(mapping.entries, (entry) => keyMatches(entry, single)),
-    { onNone: () => mapping.defaultValue, onSome: (entry) => entry.value },
-  );
-
-/**
- * Give the value of a `qti-map-response`: a single float.
- *
- * A value is the sum of the mapped values of the response's distinct values, as {@link distinct}
- * finds them in time linear in their number, keyed by {@link distinctKey}: so a `single` value maps
- * to its one value's, `{B,B,C}` counts `B` once, and a NULL response maps to 0. The mapping's
- * `lower-bound` and `upper-bound` then clamp the sum, a single value's and a NULL's included
- * (reading 9.13).
- *
- * @param item The item, whose declaration gives the mapping.
- * @param variables The variables of the attempt.
- * @param identifier The response's identifier.
- * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
- *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
- *   mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it, checked
- *   in that order.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
- */
-const mapResponse = (
-  item: Item,
-  variables: Variables,
-  identifier: string,
-): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
-  Result.gen(function* mapOneResponse() {
-    const declaration = yield* responseOf(item, identifier);
-    const mapping = yield* Result.fromOption(
-      declaration.mapping,
-      () => new UnmappedResponseError({ identifier, mapping: "qti-mapping" }),
-    );
-    const response = yield* Result.fromOption(
-      own(variables.responses, identifier),
-      () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
-    );
-    let sum = 0;
-    for (const single of distinct(response.values)) {
-      sum += mappedValue(mapping, single);
-    }
-
-    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
-    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
-    const mapped: Value = {
-      baseType: "float",
-      cardinality: "single",
-      values: [{ baseType: "float", value: Math.min(upper, Math.max(lower, sum)) }],
-    };
-
-    return mapped;
-  });
-
-/**
- * Convert an exact integer to a float: the nearest double, ties to even. It is the one conversion
- * from an integer to a float (integer plan `10f98260` part C).
- *
- * Beyond 2^53 a double cannot hold every integer, so `2^53 + 1` becomes `2^53`. That loss is the
- * float QTI specifies wherever an integer is compared as one, so it is not reported.
- *
- * @param integer The integer.
- * @returns The nearest double.
- */
-// oxlint-disable-next-line unicorn/prefer-native-coercion-functions -- `toFloat` names the one integer-to-float conversion the integer plan fixes, so its precision loss is documented and found in one place.
-const toFloat = (integer: bigint): number => Number(integer);
-
-/**
- * Report whether a point lies on the segment between two vertices, its ends included.
- *
- * @param x The point's x coordinate.
- * @param y The point's y coordinate.
- * @param from One end, as `[x, y]`.
- * @param to The other end.
- * @returns Whether the point is on the segment.
- */
-const onSegment = (
-  x: number,
-  y: number,
-  from: readonly [number, number],
-  to: readonly [number, number],
-): boolean => {
-  const [x1, y1] = from;
-  const [x2, y2] = to;
-
-  return (
-    (x2 - x1) * (y - y1) === (y2 - y1) * (x - x1) &&
-    Math.min(x1, x2) <= x &&
-    x <= Math.max(x1, x2) &&
-    Math.min(y1, y2) <= y &&
-    y <= Math.max(y1, y2)
-  );
-};
-
-/**
- * Report whether a polygon holds a point: on an edge, or inside by the even-odd rule, as HTML's
- * polygon area is. The last vertex joins the first, so a polygon that is not closed is closed.
- *
- * @param vertices The polygon's vertices, in order.
- * @param x The point's x coordinate.
- * @param y The point's y coordinate.
- * @returns Whether the polygon holds the point.
- * @see https://html.spec.whatwg.org/multipage/image-maps.html#attr-area-shape-poly
- */
-const polygonHolds = (
-  vertices: readonly (readonly [number, number])[],
-  x: number,
-  y: number,
-): boolean => {
-  let inside = false;
-  for (const [index, to] of vertices.entries()) {
-    const from = vertices.at(index - 1) ?? to;
-    if (onSegment(x, y, from, to)) {
-      return true;
-    }
-
-    const [x1, y1] = from;
-    const [x2, y2] = to;
-    if (y1 > y !== y2 > y && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1) {
-      inside = !inside;
-    }
-  }
-
-  return inside;
-};
-
-/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
-/**
- * Report whether an area of each shape holds a point, its boundary included (9.15's default,
- * reading 52), from the area's coordinates and the point's, as floats.
- *
- * The coordinates are QTI's, which are HTML's: `rect` is left-x, top-y, right-x, bottom-y;
- * `circle` is center-x, center-y, radius; `ellipse` is center-x, center-y, h-radius, v-radius;
- * `poly` is x1, y1, …, xN, yN; `default` holds every point. Where QTI says nothing, HTML's
- * image-map rules decide: an area with fewer coordinates than its shape needs holds no point,
- * coordinates beyond them are ignored (a `poly`'s odd last one too), a `rect`'s corners may come
- * in either order, and a radius of zero or less holds no point.
- *
- * @see https://html.spec.whatwg.org/multipage/image-maps.html#image-map-processing-model
- */
-const areaHolds: Readonly<
-  Record<AreaMapEntry["shape"], (coords: readonly number[], x: number, y: number) => boolean>
-> = {
-  circle: ([centerX, centerY, radius], x, y) =>
-    centerX !== undefined &&
-    centerY !== undefined &&
-    radius !== undefined &&
-    radius > 0 &&
-    (x - centerX) ** 2 + (y - centerY) ** 2 <= radius ** 2,
-  default: () => true,
-  ellipse: ([centerX, centerY, across, down], x, y) =>
-    centerX !== undefined &&
-    centerY !== undefined &&
-    across !== undefined &&
-    down !== undefined &&
-    across > 0 &&
-    down > 0 &&
-    ((x - centerX) / across) ** 2 + ((y - centerY) / down) ** 2 <= 1,
-  poly: (coords, x, y) => {
-    const vertices = Arr.chunksOf(coords, 2).flatMap(([vertexX, vertexY]) =>
-      vertexY === undefined ? [] : [[vertexX, vertexY] as const],
-    );
-
-    return vertices.length >= 3 && polygonHolds(vertices, x, y);
-  },
-  rect: ([left, top, right, bottom], x, y) =>
-    left !== undefined &&
-    top !== undefined &&
-    right !== undefined &&
-    bottom !== undefined &&
-    Math.min(left, right) <= x &&
-    x <= Math.max(left, right) &&
-    Math.min(top, bottom) <= y &&
-    y <= Math.max(top, bottom),
-};
-
-/**
- * Find the first area, in document order, that holds a point.
- *
- * @param mapping The area mapping.
- * @param x The point's x coordinate, as a float.
- * @param y The point's y coordinate, as a float.
- * @returns The area's index among the mapping's entries, or -1 when no area holds the point.
- */
-const firstArea = (mapping: AreaMapping, x: number, y: number): number =>
-  mapping.entries.findIndex((entry) => areaHolds[entry.shape](entry.coords, x, y));
-/* oxlint-enable anti-slop/no-shape-in-symbol-names */
-
-/**
- * Sum what an area mapping maps a response's points to, before the bounds.
- *
- * QTI tests the points "against each area in turn, with those listed first taking priority in the
- * case where areas overlap", and "each area can be mapped once only". The rest is open (9.15), and
- * these defaults (reading 52) hold until a ruling changes this function and its tests:
- *
- * - A point on a shape's boundary is inside (`rect`, `circle`, `ellipse` and `poly`, edges included;
- *   `default` holds every point), as {@link areaHolds} reads it.
- * - Areas are tried in document order and the first that holds a point maps it; each area is mapped
- *   at most once.
- * - Each distinct point that falls in no area adds `default-value` once, as `map_response` treats an
- *   unmapped value. Points are told apart as {@link distinct} tells values apart, by their two
- *   exact coordinates, in time linear in their number.
- *
- * A coordinate is compared after the one conversion, {@link toFloat}.
- *
- * @param mapping The response's area mapping.
- * @param points The response's values, a point each.
- * @returns The sum.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
- */
-const areaSum = (mapping: AreaMapping, points: readonly Single[]): number => {
-  const mapped = new Set<number>();
-  let sum = 0;
-  for (const single of distinct(points)) {
-    const area =
-      single.baseType === "point"
-        ? firstArea(mapping, toFloat(single.value[0]), toFloat(single.value[1]))
-        : -1;
-    const entry = mapping.entries[area];
-    if (entry === undefined) {
-      sum += mapping.defaultValue;
-    } else if (!mapped.has(area)) {
-      mapped.add(area);
-      sum += entry.mappedValue;
-    }
-  }
-
-  return sum;
-};
-
-/**
- * Give the value of a `qti-map-response-point`: a single float.
- *
- * The value is {@link areaSum} of the response's points, so a NULL response maps to 0. The sum is
- * clamped to the area mapping's `lower-bound` and `upper-bound`, a NULL's 0 included (9.13's rule,
- * as `qti-map-response` applies it).
- *
- * @param item The item, whose declaration gives the area mapping.
- * @param variables The variables of the attempt.
- * @param identifier The response's identifier.
- * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
- *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
- *   area mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it,
- *   checked in that order.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
- */
-const mapResponsePoint = (
-  item: Item,
-  variables: Variables,
-  identifier: string,
-): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
-  Result.gen(function* mapOnePointResponse() {
-    const declaration = yield* responseOf(item, identifier);
-    const mapping = yield* Result.fromOption(
-      declaration.areaMapping,
-      () => new UnmappedResponseError({ identifier, mapping: "qti-area-mapping" }),
-    );
-    const response = yield* Result.fromOption(
-      own(variables.responses, identifier),
-      () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
-    );
-    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
-    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
-    const mapped: Value = {
-      baseType: "float",
-      cardinality: "single",
-      values: [
-        {
-          baseType: "float",
-          value: Math.min(upper, Math.max(lower, areaSum(mapping, response.values))),
-        },
-      ],
-    };
-
-    return mapped;
-  });
-
-/**
- * A single integer or float.
- */
-type NumberSingle = Extract<Single, { readonly baseType: "float" | "integer" }>;
-
-/**
- * Give the one number a single integer or float value holds.
- *
- * @param value The value, not NULL.
- * @returns The single integer or float, or none when the value is not a single of a numeric base
- *   type.
- */
-const numberOf = (value: Value): Option.Option<NumberSingle> => {
-  const [single, ...rest] = value.values;
-  if (value.cardinality !== "single" || single === undefined || rest.length > 0) {
-    return Option.none();
-  }
-
-  return single.baseType === "integer" || single.baseType === "float"
-    ? Option.some(single)
-    : Option.none();
-};
-
-/**
- * Report whether an integer and a float are the same number, exactly: the float is integral and
- * converts to that integer. A float that is integral and finite converts to a `bigint` exactly, so
- * the comparison loses nothing, as `bigint == number` would not (integer plan `10f98260` part C);
- * no integer is converted to a float.
- *
- * @param integer The integer.
- * @param float The float.
- * @returns Whether they are equal.
- */
-const integerIsFloat = (integer: bigint, float: number): boolean =>
-  Number.isInteger(float) && BigInt(float) === integer;
-
-/**
- * Report whether two numbers are equal exactly: two integers or two floats by value, and an integer
- * and a float as {@link integerIsFloat} compares them, so `1` and `1.0` are equal and `1` and
- * `1.0000000000000002` are not.
- *
- * @param left One number.
- * @param right The other.
- * @returns Whether they are equal.
- */
-const sameNumber = (left: NumberSingle, right: NumberSingle): boolean => {
-  if (left.baseType === "integer") {
-    return right.baseType === "integer"
-      ? left.value === right.value
-      : integerIsFloat(left.value, right.value);
-  }
-
-  return right.baseType === "integer"
-    ? integerIsFloat(right.value, left.value)
-    : left.value === right.value;
-};
+const evaluate: Evaluate = (expression, scope) => dispatch(expression.kind, expression, scope);
 
 /**
  * Report whether a condition's value is true.
@@ -721,119 +228,67 @@ const isTrue = (value: Value): boolean => {
 };
 
 /**
- * Give the value of an expression of the engine subset.
+ * Give the value of an expression of a landed kind.
  *
- * - `variable`: the response's or the outcome's current value, else the built-in variable's
- *   ({@link builtInValue}).
- * - `correct`: the response's correct response, else NULL of its declared type.
- * - `base-value`: the value as the item model parsed it.
- * - `is-null`: a single boolean, whether the operand is NULL.
- * - `match`: a single boolean, whether the operands match by `match` of the value model; NULL when
- *   either is NULL.
- * - `equal`: a single boolean, whether the operands are the same number in `exact` mode
- *   ({@link sameNumber}); NULL when either is NULL. QTI types both operands as single numbers; an
- *   operand that is not one is not numerically equal to anything, so the value is false, as `match`
- *   gives false for values of different types.
- * - `map-response`: a single float, the response's value through its declaration's mapping.
- * - `map-response-point`: a single float, the response's points through its declaration's area
- *   mapping.
+ * Each kind's evaluator in its family's table gives the value, and its doc says what that value
+ * is. Operands are evaluated left to right, and the first failure is the result.
  *
- * Operands are evaluated left to right, and the first failure is the result.
- *
- * `typeOf` in `#plate/model/item.ts` gives each case's base type and cardinality without
- * evaluating it, so the item model marks a tree whose `qti-set-outcome-value` this function would
- * fail; it names the case or the function here that each of its cases mirrors, so a change to a
- * case's type changes it too.
+ * `typeOf` in `#plate/model/item.ts` gives each kind's base type and cardinality without evaluating
+ * it, through the kind's rule (`kindRules` in `#plate/model/expressions/read.ts`), so the item
+ * model marks a tree whose `qti-set-outcome-value` this function would fail. Each family's tests
+ * hold its evaluators to its rules (the type invariant in `#plate/test/processing.ts`), so the two
+ * cannot drift apart.
  *
  * @param expression The expression.
  * @param item The item, whose declarations give the correct responses, the mappings and the area
  *   mappings.
  * @param variables The variables of the attempt.
- * @returns The expression's value; or an {@link UnknownIdentifierError} when it names a variable
- *   or response that is not held, or an {@link UnmappedResponseError} when a `map-response` names a
- *   response with no mapping or a `map-response-point` one with no area mapping.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMatch
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpEqual
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIsNull
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
+ * @returns The expression's value; or an {@link EngineFailure}: an {@link UnknownIdentifierError}
+ *   when it names a variable or response that is not held, or an {@link UnmappedResponseError} when
+ *   a `map-response` names a response with no mapping or a `map-response-point` one with no area
+ *   mapping.
  */
 export const evaluateExpression = (
   expression: Expression,
   item: Item,
   variables: Variables,
-): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> => {
-  switch (expression.kind) {
-    case "variable": {
-      return variableValue(variables, expression.identifier);
-    }
-    case "correct": {
-      return Result.map(responseOf(item, expression.identifier), (declaration) =>
-        Option.getOrElse(declaration.correct, () =>
-          nullOf(declaration.baseType, declaration.cardinality),
-        ),
-      );
-    }
-    case "base-value": {
-      return Result.succeed(expression.value);
-    }
-    case "is-null": {
-      return Result.map(evaluateExpression(expression.operand, item, variables), (value) =>
-        booleanOf(isNull(value)),
-      );
-    }
-    case "match": {
-      const [left, right] = expression.operands;
-
-      return Result.gen(function* matchOperands() {
-        const leftValue = yield* evaluateExpression(left, item, variables);
-        const rightValue = yield* evaluateExpression(right, item, variables);
-
-        return isNull(leftValue) || isNull(rightValue)
-          ? nullOf("boolean", "single")
-          : booleanOf(match(leftValue, rightValue));
-      });
-    }
-    case "equal": {
-      const [left, right] = expression.operands;
-
-      return Result.gen(function* equalOperands() {
-        const leftValue = yield* evaluateExpression(left, item, variables);
-        const rightValue = yield* evaluateExpression(right, item, variables);
-        if (isNull(leftValue) || isNull(rightValue)) {
-          return nullOf("boolean", "single");
-        }
-
-        return booleanOf(
-          Option.exists(Option.all([numberOf(leftValue), numberOf(rightValue)]), ([one, other]) =>
-            sameNumber(one, other),
-          ),
-        );
-      });
-    }
-    case "map-response": {
-      return mapResponse(item, variables, expression.identifier);
-    }
-    case "map-response-point": {
-      return mapResponsePoint(item, variables, expression.identifier);
-    }
-    default: {
-      return expression satisfies never;
-    }
-  }
-};
+): Result.Result<Value, EngineFailure> => evaluate(expression, { item, variables });
 
 /**
- * Set an outcome, as `qti-set-outcome-value` does.
+ * Give the type of an outcome a rule sets: its modelled declaration's, else the built-in
+ * `completionStatus`'s, a single identifier, where the item holds the built-in.
+ *
+ * @param item The item.
+ * @param identifier The outcome's identifier.
+ * @returns The outcome's base type and cardinality, none when the item holds no outcome by that
+ *   name.
+ */
+const outcomeType = (
+  item: Item,
+  identifier: string,
+): Option.Option<Pick<OutcomeDeclaration, "baseType" | "cardinality">> =>
+  Option.orElse(Option.fromUndefinedOr(item.outcomes.get(identifier)), () =>
+    identifier === completionStatus && holdsCompletionStatus(item)
+      ? Option.some(completionStatusType)
+      : Option.none(),
+  );
+
+/**
+ * Set an outcome, as `qti-set-outcome-value` and `qti-lookup-outcome-value` do: a modelled
+ * outcome, or the built-in `completionStatus`, which a rule sets as an identifier.
+ *
+ * A NULL is stored as the outcome's own NULL, of its base type and cardinality, whatever type the
+ * NULL came with (spec §4.5): NULL is the absence of a value, so it has no type to differ from the
+ * outcome's.
  *
  * @param item The item, whose declaration gives the outcome's type.
  * @param variables The variables before the rule.
  * @param identifier The outcome's identifier.
- * @param value The expression's value.
+ * @param value The value to set.
  * @returns The variables with the outcome set and everything else as it was; or an
- *   {@link UnknownIdentifierError} when the item declares no modelled outcome by that name, or an
- *   {@link OutcomeMismatchError} when the value's base type or cardinality differs from the
- *   outcome's.
+ *   {@link UnknownIdentifierError} when the item declares no modelled outcome by that name and it
+ *   is not the built-in `completionStatus` the item holds, or an {@link OutcomeMismatchError} when
+ *   the value is not NULL and its base type or cardinality differs from the outcome's.
  */
 const setOutcome = (
   item: Item,
@@ -843,9 +298,15 @@ const setOutcome = (
 ): Result.Result<Variables, OutcomeMismatchError | UnknownIdentifierError> =>
   Result.gen(function* setOneOutcome() {
     const declaration = yield* Result.fromOption(
-      Option.fromUndefinedOr(item.outcomes.get(identifier)),
+      outcomeType(item, identifier),
       () => new UnknownIdentifierError({ holder: "item", identifier, role: "outcome" }),
     );
+    if (isNull(value)) {
+      const typed = nullOf(declaration.baseType, declaration.cardinality);
+
+      return { ...variables, outcomes: { ...variables.outcomes, [identifier]: typed } };
+    }
+
     if (value.baseType !== declaration.baseType || value.cardinality !== declaration.cardinality) {
       return yield* Result.fail(
         new OutcomeMismatchError({
@@ -887,47 +348,163 @@ const chosenRules = (
   });
 
 /**
+ * Report whether a number is at or above an interpolation entry's `source-value`, the equal case
+ * counting only when the entry includes its boundary. An integer and a float compare exactly: `>`
+ * between a `bigint` and a `number` loses nothing, and equality is {@link sameNumber}'s.
+ *
+ * @param number The looked-up number.
+ * @param bound The entry's `source-value`.
+ * @param includeBoundary The entry's `include-boundary`.
+ * @returns Whether the entry maps the number.
+ */
+const reaches = (number: NumberSingle, bound: number, includeBoundary: boolean): boolean =>
+  number.value > bound ||
+  (includeBoundary && sameNumber(number, { baseType: "float", value: bound }));
+
+/**
+ * Map a value through a lookup table, as `qti-lookup-outcome-value` does: a match table by the
+ * first entry whose `source-value` is the value exactly, an interpolation table by the first entry
+ * whose `source-value` the value is at or above ({@link reaches}).
+ *
+ * A NULL, or a value no entry maps, gives the table's `default-value`, else nothing; the outcome's
+ * own `qti-default-value` is not used (9.12). The validator holds a match table's value to a single
+ * integer and an interpolation table's to a single integer or float (reading 28), so a value of
+ * another type maps through no entry.
+ *
+ * @param table The outcome's lookup table.
+ * @param value The expression's value.
+ * @returns The entry's or the table's value, or none.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_LookupOutcomeValue
+ */
+const lookUp = (table: LookupTable, value: Value): Option.Option<Single> => {
+  const mapped = Option.flatMap(numberOf(value), (source): Option.Option<Single> => {
+    const entry =
+      table.kind === "match"
+        ? table.entries.find(
+            (each) => source.baseType === "integer" && each.sourceValue === source.value,
+          )
+        : table.entries.find((each) => reaches(source, each.sourceValue, each.includeBoundary));
+
+    return Option.map(Option.fromUndefinedOr(entry), (found) => found.targetValue);
+  });
+
+  return Option.orElse(mapped, () => table.defaultValue);
+};
+
+/**
+ * Give the value a `qti-lookup-outcome-value` sets its outcome to: the single its outcome's lookup
+ * table maps the value to ({@link lookUp}), else NULL.
+ *
+ * An outcome with no lookup table maps every value to NULL; the validator refuses a lookup of one
+ * (`template-requirements`), so no checked item reaches it. An outcome the item does not declare
+ * maps to NULL too, and {@link setOutcome} then fails it, unless it is the built-in
+ * `completionStatus`, whose NULL it stores; the validator refuses a lookup of the built-in
+ * (`undeclared-variable`'s `built-in-target` check).
+ *
+ * @param item The item, whose outcome declaration holds the table.
+ * @param identifier The outcome's identifier.
+ * @param value The expression's value.
+ * @returns The value to set.
+ */
+const lookedUp = (item: Item, identifier: string, value: Value): Value => {
+  const target = Option.fromUndefinedOr(item.outcomes.get(identifier)).pipe(
+    Option.flatMap((declared) => declared.lookupTable),
+    Option.flatMap((table) => lookUp(table, value)),
+  );
+
+  return Option.match(target, {
+    onNone: () => nullOf(value.baseType, value.cardinality),
+    onSome: (single): Value => ({
+      baseType: single.baseType,
+      cardinality: "single",
+      values: [single],
+    }),
+  });
+};
+
+/**
+ * The variables after a run of rules, and whether a `qti-exit-response` ended it.
+ */
+interface Run {
+  readonly exited: boolean;
+  readonly variables: Variables;
+}
+
+/**
  * Run one response rule.
  *
  * A condition runs the rules of its first branch whose condition is true, else its `otherwise`,
- * else nothing; the conditions after the chosen branch are not evaluated.
+ * else nothing; the conditions after the chosen branch are not evaluated. A set gives its
+ * outcome the expression's value, a lookup the value its outcome's table maps the expression's
+ * value to ({@link lookedUp}), and an exit ends the run, at any depth.
  *
  * @param rule The rule.
  * @param item The item.
  * @param variables The variables before the rule.
- * @returns The variables after it, or the first failure of the rule.
+ * @returns The variables after it with whether it exited, or the first failure of the rule.
  */
-const runRule = (
-  rule: Rule,
-  item: Item,
-  variables: Variables,
-): Result.Result<Variables, EngineFailure> =>
+const runRule = (rule: Rule, item: Item, variables: Variables): Result.Result<Run, EngineFailure> =>
   Result.gen(function* runOneRule() {
-    if (rule.kind === "set-outcome") {
-      const value = yield* evaluateExpression(rule.expression, item, variables);
-
-      return yield* setOutcome(item, variables, rule.identifier, value);
+    if (rule.kind === "exit") {
+      return { exited: true, variables };
     }
 
-    const then = yield* chosenRules(rule, item, variables);
+    if (rule.kind === "condition") {
+      const then = yield* chosenRules(rule, item, variables);
 
-    // oxlint-disable-next-line eslint/no-use-before-define -- `runRule` and `runRules` are mutually recursive, as conditions nest; the call runs only after both are defined.
-    return yield* runRules(then, item, variables);
+      // oxlint-disable-next-line eslint/no-use-before-define -- `runRule` and `runSequence` are mutually recursive, as conditions nest; the call runs only after both are defined.
+      return yield* runSequence(then, item, variables);
+    }
+
+    const value = yield* evaluateExpression(rule.expression, item, variables);
+    const set = rule.kind === "set-outcome" ? value : lookedUp(item, rule.identifier, value);
+
+    return { exited: false, variables: yield* setOutcome(item, variables, rule.identifier, set) };
   });
 
 /**
- * Run response rules in order, each seeing the variables the rules before it left.
+ * Run response rules in order until one exits, each seeing the variables the rules before it left.
+ *
+ * @param rules The rules.
+ * @param item The item.
+ * @param variables The variables before the rules run.
+ * @returns The variables after the last rule run with whether an exit ended the run, or the first
+ *   failure.
+ */
+const runSequence = (
+  rules: readonly Rule[],
+  item: Item,
+  variables: Variables,
+): Result.Result<Run, EngineFailure> =>
+  Result.gen(function* runInOrder() {
+    let current = variables;
+    for (const rule of rules) {
+      const run = yield* runRule(rule, item, current);
+      if (run.exited) {
+        return run;
+      }
+
+      current = run.variables;
+    }
+
+    return { exited: false, variables: current };
+  });
+
+/**
+ * Run response rules in order, each seeing the variables the rules before it left. A
+ * `qti-exit-response` ends the run, nested or not: the rules after it do not run, and what the
+ * rules before it set stays.
  *
  * Only outcomes change; the responses are returned as given.
  *
  * @param rules The rules, as the item model built them.
  * @param item The item they belong to.
  * @param variables The variables before the rules run.
- * @returns The variables after the last rule; or the first failure, after which no rule runs: an
- *   {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do not
- *   hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
- *   outcome to a value of another type, or an {@link UnmappedResponseError} when a rule maps a
- *   response that has no mapping.
+ * @returns The variables after the last rule run; or the first failure, after which no rule runs:
+ *   an {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do
+ *   not hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
+ *   outcome to a value of another type that is not NULL, or an {@link UnmappedResponseError} when
+ *   a rule maps a response that has no mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_ResponseProcessing
  */
 export const runRules = (
@@ -935,11 +512,4 @@ export const runRules = (
   item: Item,
   variables: Variables,
 ): Result.Result<Variables, EngineFailure> =>
-  Result.gen(function* runInOrder() {
-    let current = variables;
-    for (const rule of rules) {
-      current = yield* runRule(rule, item, current);
-    }
-
-    return current;
-  });
+  Result.map(runSequence(rules, item, variables), (run) => run.variables);

@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { landedKinds } from "#plate/model/expressions/read.ts";
 import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import {
@@ -169,14 +170,9 @@ describe("the closed value sets", () => {
           "qti-response-else-if",
           "qti-response-else",
           "qti-set-outcome-value",
-          "qti-match",
-          "qti-variable",
-          "qti-correct",
-          "qti-base-value",
-          "qti-is-null",
-          "qti-map-response",
-          "qti-map-response-point",
-          "qti-equal",
+          "qti-lookup-outcome-value",
+          "qti-exit-response",
+          "qti-response-processing-fragment",
         ],
       ],
       [
@@ -193,6 +189,10 @@ describe("the closed value sets", () => {
           "qti-map-entry",
           "qti-area-mapping",
           "qti-area-map-entry",
+          "qti-match-table",
+          "qti-match-table-entry",
+          "qti-interpolation-table",
+          "qti-interpolation-table-entry",
           "qti-item-body",
           "qti-response-processing",
           "qti-choice-interaction",
@@ -368,6 +368,23 @@ describe("the closed value sets", () => {
 
   it("has every engine name in elements", () => {
     assert.includeMembers([...renders.elements], [...renders.engine]);
+  });
+
+  it("reads, with the registry's landed kinds, every response-processing element the engine read before the registry", () => {
+    assert.includeMembers(
+      [...renders.elements, ...landedKinds.map((kind) => `qti-${kind}`)],
+      [
+        ...renders.engine,
+        "qti-match",
+        "qti-variable",
+        "qti-correct",
+        "qti-base-value",
+        "qti-is-null",
+        "qti-map-response",
+        "qti-map-response-point",
+        "qti-equal",
+      ],
+    );
   });
 });
 
