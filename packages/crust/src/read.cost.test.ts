@@ -73,7 +73,7 @@ describe("the reader's cost", () => {
     "stays flat per element over chains of 10,000, 50,000 and 100,000 namespaced elements with references and an ATTLIST default",
     () =>
       Effect.gen(function* flatCost() {
-        const costs = yield* Effect.forEach(SIZES, (size) => perElement(size));
+        const costs = yield* Effect.all(SIZES.map((size) => perElement(size)));
         const [smallest, ...larger] = costs;
         const shown = SIZES.map(
           ({ depth }, at) => `${depth}: ${(costs[at] ?? 0).toFixed(1)} µs per element`,
