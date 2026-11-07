@@ -2,10 +2,11 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { runAttempt } from "#plate/engine/attempt.ts";
-import { UnknownIdentifierError } from "#plate/engine/evaluate.ts";
-import { drawBelow, drawStream, responseKey } from "#plate/engine/random.ts";
+import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
+import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/evaluate.ts";
+import { drawBelow, drawStream, responseKey, templateKey } from "#plate/engine/random.ts";
 import { buildItem } from "#plate/model/item.ts";
+import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
@@ -74,14 +75,15 @@ const integerValue = (value: bigint): Value => ({
 /**
  * Construct a declaration with its three attributes.
  *
- * @param local `qti-response-declaration` or `qti-outcome-declaration`.
+ * @param local `qti-response-declaration`, `qti-outcome-declaration` or
+ *   `qti-template-declaration`.
  * @param identifier The declared identifier.
  * @param baseType The `base-type` value.
  * @param children The declaration's children, none by default.
  * @returns A single-cardinality declaration.
  */
 const declaration = (
-  local: "qti-outcome-declaration" | "qti-response-declaration",
+  local: "qti-outcome-declaration" | "qti-response-declaration" | "qti-template-declaration",
   identifier: string,
   baseType: string,
   children: readonly SourceChild[] = [],
@@ -433,16 +435,155 @@ const customThenDraws = itemDocument(
 );
 
 /**
+ * Construct a `qti-variable`.
+ *
+ * @param identifier The variable it reads.
+ * @returns The element.
+ */
+const variableOf = (identifier: string): SourceElement =>
+  el("qti-variable", [attr("identifier", identifier)]);
+
+/**
+ * Construct a template rule that sets a variable.
+ *
+ * @param local The rule's name.
+ * @param identifier The variable it sets.
+ * @param expression The expression whose value it sets.
+ * @returns The rule.
+ */
+const templateSetting = (
+  local: "qti-set-correct-response" | "qti-set-default-value" | "qti-set-template-value",
+  identifier: string,
+  expression: SourceElement,
+): SourceElement => el(local, [attr("identifier", identifier)], [expression]);
+
+/**
+ * An item whose template processing draws the integer `N` from a {@link randomInteger}, then sets
+ * `RESPONSE`'s correct response and default to it and `SCORE`'s default to 0.5. `RESPONSE`
+ * declares the default 7 and `OTHER` the default `x`; `BARE`, `SCORE` and the integer `TALLY`
+ * declare none.
+ */
+const drawsTemplate = itemDocument(
+  declaration("qti-response-declaration", "RESPONSE", "integer", [
+    holding("qti-default-value", "7"),
+  ]),
+  declaration("qti-response-declaration", "OTHER", "identifier", [
+    holding("qti-default-value", "x"),
+  ]),
+  declaration("qti-response-declaration", "BARE", "string"),
+  declaration("qti-outcome-declaration", "SCORE", "float"),
+  declaration("qti-outcome-declaration", "TALLY", "integer"),
+  declaration("qti-template-declaration", "N", "integer"),
+  el(
+    "qti-template-processing",
+    [],
+    [
+      templateSetting("qti-set-template-value", "N", randomInteger()),
+      templateSetting("qti-set-correct-response", "RESPONSE", variableOf("N")),
+      templateSetting("qti-set-default-value", "RESPONSE", variableOf("N")),
+      templateSetting("qti-set-default-value", "SCORE", baseValue("float", "0.5")),
+    ],
+  ),
+);
+
+/**
+ * The template variable `T`, an integer declared with the default 3.
+ */
+const threeByDefault = declaration("qti-template-declaration", "T", "integer", [
+  holding("qti-default-value", "3"),
+]);
+
+/**
+ * An item that declares the template variables {@link threeByDefault} and `U`, an integer with no
+ * default, and has no template processing.
+ */
+const declaresTemplates = itemDocument(
+  trueFalse,
+  threeByDefault,
+  declaration("qti-template-declaration", "U", "integer"),
+);
+
+/**
+ * An item that declares {@link threeByDefault} under a template processing the engine does not
+ * run: it sets `T` from a `qti-duration-lt`, a kind the engine has not landed, which the item model
+ * marks.
+ */
+const marksTemplates = itemDocument(
+  trueFalse,
+  threeByDefault,
+  el(
+    "qti-template-processing",
+    [],
+    [
+      templateSetting(
+        "qti-set-template-value",
+        "T",
+        el("qti-duration-lt", [], [el("qti-null"), el("qti-null")]),
+      ),
+    ],
+  ),
+);
+
+/**
+ * An item whose template processing sets the integer `N` to a string, as no checked item does.
+ */
+const mistypesTemplate = itemDocument(
+  trueFalse,
+  declaration("qti-template-declaration", "N", "integer"),
+  el(
+    "qti-template-processing",
+    [],
+    [templateSetting("qti-set-template-value", "N", baseValue("string", "seven"))],
+  ),
+);
+
+/**
+ * An item whose rules set `MATCHED` from matching `RESPONSE` against its correct response and `WAS`
+ * from `SCORE`'s default, `SCORE` declaring the default 1.
+ */
+const readsOverrides = itemDocument(
+  trueFalse,
+  scoreOfOne,
+  declaration("qti-outcome-declaration", "MATCHED", "boolean"),
+  declaration("qti-outcome-declaration", "WAS", "float"),
+  el(
+    "qti-response-processing",
+    [],
+    [
+      setting(
+        "MATCHED",
+        el(
+          "qti-match",
+          [],
+          [variableOf("RESPONSE"), el("qti-correct", [attr("identifier", "RESPONSE")])],
+        ),
+      ),
+      setting("WAS", el("qti-default", [attr("identifier", "SCORE")])),
+    ],
+  ),
+);
+
+/**
+ * Give the value {@link drawsTemplate}'s {@link randomInteger} draws under a seed: the first
+ * `drawBelow` over the stream of the item's template key.
+ *
+ * @param seed The record's seed.
+ * @returns The integer.
+ */
+const templateDraw = (seed: string): bigint =>
+  drawBelow(drawStream(templateKey(seed, instance, "attempt")), drawnCount);
+
+/**
  * Give the value the nth {@link randomInteger} an attempt's response processing evaluates draws,
- * counting from 1, with no seed: the nth `drawBelow` over the one stream of the attempt's response
- * key.
+ * counting from 1: the nth `drawBelow` over the one stream of the attempt's response key.
  *
  * @param numAttempts The attempt's count, this attempt included.
  * @param nth Which draw, from 1.
+ * @param seed The record's seed, the empty string by default.
  * @returns The integer.
  */
-const responseDraw = (numAttempts: number, nth: number): bigint => {
-  const draw = drawStream(responseKey("", instance, numAttempts));
+const responseDraw = (numAttempts: number, nth: number, seed = ""): bigint => {
+  const draw = drawStream(responseKey(seed, instance, numAttempts));
   let drawn = drawBelow(draw, drawnCount);
   for (let call = 1; call < nth; call += 1) {
     drawn = drawBelow(draw, drawnCount);
@@ -774,5 +915,235 @@ describe("runAttempt", () => {
         assert.deepStrictEqual(after.outcomes["FIRST"], nullOf("integer", "single"));
         assert.deepStrictEqual(after.outcomes["SECOND"], integerValue(responseDraw(1, 1)));
       }),
+  );
+
+  it.effect(
+    "[I-5] reads the record's correct responses in qti-correct and its defaults in qti-default before the declarations'",
+    () =>
+      Effect.gen(function* readsRecordOverrides() {
+        const item = yield* buildItem(readsOverrides);
+        const record: ItemRecord = {
+          ...fresh(item, instance),
+          correct: { RESPONSE: identifierValue("false") },
+          defaults: { SCORE: floatValue(0.25) },
+        };
+
+        const after = yield* Effect.fromResult(
+          runAttempt(item, record, { RESPONSE: identifierValue("false") }),
+        );
+
+        // With the declarations alone, MATCHED would be false and WAS 1.
+        assert.isTrue(Option.isSome(item.processing));
+        assert.deepStrictEqual(after.outcomes["MATCHED"], booleanValue(true));
+        assert.deepStrictEqual(after.outcomes["WAS"], floatValue(0.25));
+      }),
+  );
+
+  it.effect(
+    "[I-5] resets each outcome to the record's template-set default before each attempt, never to a response's",
+    () =>
+      Effect.gen(function* resetsToSetDefault() {
+        const item = yield* buildItem(correctOnly);
+        const record: ItemRecord = {
+          ...fresh(item, instance),
+          defaults: { RESPONSE: identifierValue("true"), SCORE: floatValue(0.5) },
+        };
+
+        const first = yield* Effect.fromResult(
+          runAttempt(item, record, { RESPONSE: identifierValue("true") }),
+        );
+        const second = yield* Effect.fromResult(
+          runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+        );
+
+        // With the declared default alone, the reset would bring SCORE back to 0.
+        assert.deepStrictEqual(score(first), floatValue(1));
+        assert.deepStrictEqual(second.outcomes, {
+          SCORE: floatValue(0.5),
+          completionStatus: identifierValue("unknown"),
+        });
+      }),
+  );
+
+  it.effect("[I-5] reads the record's template values in response processing", () =>
+    Effect.gen(function* readsRecordTemplates() {
+      // The rules are written by hand, so the case does not depend on which reads of a template
+      // variable the item model keeps in response processing.
+      const built = yield* buildItem(
+        itemDocument(
+          trueFalse,
+          declaration("qti-outcome-declaration", "COPIED", "integer"),
+          declaration("qti-template-declaration", "T", "integer"),
+        ),
+      );
+      const item: Item = {
+        ...built,
+        processing: Option.some([
+          {
+            expression: {
+              identifier: "T",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.none(),
+            },
+            identifier: "COPIED",
+            kind: "set-outcome",
+          },
+        ]),
+      };
+      const record: ItemRecord = { ...fresh(item, instance), templates: { T: integerValue(41n) } };
+
+      const after = yield* Effect.fromResult(
+        runAttempt(item, record, { RESPONSE: identifierValue("true") }),
+      );
+
+      assert.deepStrictEqual(after.outcomes["COPIED"], integerValue(41n));
+    }),
+  );
+
+  it.effect("[I-5] draws response processing under the record's seed: two seeds, two values", () =>
+    Effect.gen(function* drawsUnderRecordSeed() {
+      const item = yield* buildItem(drawsOnce);
+      const seeded = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "1" }));
+      const reseeded = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "2" }));
+
+      const first = yield* Effect.fromResult(
+        runAttempt(item, seeded, { RESPONSE: identifierValue("true") }),
+      );
+      const second = yield* Effect.fromResult(
+        runAttempt(item, reseeded, { RESPONSE: identifierValue("true") }),
+      );
+
+      assert.strictEqual(
+        new Set([responseDraw(1, 1, "1"), responseDraw(1, 1, "2"), responseDraw(1, 1)]).size,
+        3,
+      );
+      assert.deepStrictEqual(first.outcomes["DRAWN"], integerValue(responseDraw(1, 1, "1")));
+      assert.deepStrictEqual(second.outcomes["DRAWN"], integerValue(responseDraw(1, 1, "2")));
+    }),
+  );
+
+  it.effect("[I-5] copies the record's seed, template values and overrides unchanged", () =>
+    Effect.gen(function* copiesRecordFields() {
+      const item = yield* buildItem(bg007);
+      const record: ItemRecord = {
+        ...fresh(item, instance),
+        correct: { RESPONSE: identifierValue("false") },
+        defaults: { SCORE: floatValue(0.5) },
+        seed: "9",
+        templates: { T: integerValue(3n) },
+      };
+
+      const after = yield* Effect.fromResult(
+        runAttempt(item, record, { RESPONSE: identifierValue("true") }),
+      );
+
+      assert.deepStrictEqual(
+        [after.seed, after.templates, after.correct, after.defaults],
+        [record.seed, record.templates, record.correct, record.defaults],
+      );
+    }),
+  );
+});
+
+describe("firstAttempt", () => {
+  it.effect(
+    "[I-5] runs template processing under the template key and writes each default, the template-set one winning",
+    () =>
+      Effect.gen(function* startsTemplated() {
+        const item = yield* buildItem(drawsTemplate);
+        const drawn = integerValue(templateDraw("42"));
+
+        const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "42" }));
+
+        // The seeded key and the unseeded one give different values, and neither is the declared 7.
+        assert.isTrue(Option.isSome(item.templateProcessing));
+        assert.strictEqual(new Set([templateDraw("42"), templateDraw(""), 7n]).size, 3);
+        assert.deepStrictEqual(record, {
+          ...fresh(item, instance),
+          correct: { RESPONSE: drawn },
+          defaults: { RESPONSE: drawn, SCORE: floatValue(0.5) },
+          outcomes: {
+            SCORE: floatValue(0.5),
+            TALLY: integerValue(0n),
+            completionStatus: identifierValue("not_attempted"),
+          },
+          responses: {
+            BARE: nullOf("string", "single"),
+            OTHER: identifierValue("x"),
+            RESPONSE: drawn,
+          },
+          seed: "42",
+          templates: { N: drawn },
+        });
+      }),
+  );
+
+  it.effect(
+    "[I-5] starts an item with no template declaration as fresh does, with three empty maps and the seed it was given",
+    () =>
+      Effect.gen(function* startsUntemplated() {
+        const item = yield* buildItem(bg007);
+
+        const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "7" }));
+
+        assert.deepStrictEqual(record, { ...fresh(item, instance), seed: "7" });
+        assert.deepStrictEqual([record.templates, record.correct, record.defaults], [{}, {}, {}]);
+      }),
+  );
+
+  it.effect(
+    "[I-3] [I-5] holds each template variable at its declared default, else NULL, when the item has no template processing",
+    () =>
+      Effect.gen(function* holdsDeclaredTemplates() {
+        const item = yield* buildItem(declaresTemplates);
+
+        const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "7" }));
+
+        assert.deepStrictEqual(record.templates, {
+          T: integerValue(3n),
+          U: nullOf("integer", "single"),
+        });
+        assert.deepStrictEqual([record.correct, record.defaults], [{}, {}]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] holds no template value when the item's template processing does not run, since nothing computed them",
+    () =>
+      Effect.gen(function* holdsNoMarkedTemplates() {
+        const item = yield* buildItem(marksTemplates);
+
+        const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "7" }));
+
+        assert.isTrue(Option.isNone(item.templateProcessing));
+        assert.isTrue(item.templates.has("T"));
+        assert.deepStrictEqual([record.templates, record.correct, record.defaults], [{}, {}, {}]);
+      }),
+  );
+
+  it.effect("[I-5] returns template processing's failure", () =>
+    Effect.gen(function* returnsTemplateFailure() {
+      const item = yield* buildItem(mistypesTemplate);
+
+      const failure = failureOf(firstAttempt(item, { instance, seed: "7" }));
+
+      assert.isTrue(Option.isSome(item.templateProcessing));
+      assert.instanceOf(failure, OutcomeMismatchError);
+      assert.deepStrictEqual(
+        {
+          _tag: failure._tag,
+          actual: failure.actual,
+          expected: failure.expected,
+          identifier: failure.identifier,
+        },
+        {
+          _tag: "OutcomeMismatchError",
+          actual: "string single",
+          expected: "integer single",
+          identifier: "N",
+        },
+      );
+    }),
   );
 });
