@@ -171,6 +171,7 @@ interface WalkedSet {
  */
 interface Met {
   readonly child: XdmElement<Composed>;
+  readonly parentKind: string;
   readonly rank: bigint;
   readonly tuple: {
     readonly document: NodeId;
@@ -225,7 +226,7 @@ const minimumByDefault: ReadonlyMap<string, string> = new Map([["3.0.1", "0.0"]]
  */
 const walkDeclaration = (
   expected: Expected,
-  { tuple, valueOf }: Met,
+  { parentKind, tuple, valueOf }: Met,
 ): Option.Option<WalkedDeclaration> => {
   const identifierLexical = valueOf("identifier");
   const baseTypeLexical = valueOf("base-type");
@@ -256,6 +257,7 @@ const walkDeclaration = (
     identifierLead: lead,
     identifierLexical,
     identifierTrail: trail,
+    parentKind,
   };
   expected.Declaration.set(tuple.node, row);
   if (baseTypeLexical !== undefined && spelled !== undefined) {
@@ -462,6 +464,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     const nearest = interactions.has(parent.kind) ? parent.id : parent.nearest;
     const met: Met = {
       child,
+      parentKind: parent.kind,
       rank,
       tuple: { document, kind, nearest, node: id, parent: parent.id, start, version: doc.version },
       valueOf: (name) =>
