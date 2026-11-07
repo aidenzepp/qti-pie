@@ -103,7 +103,7 @@ describe("ChildBarredBy", () => {
     // fact it states (fin.md §17, provenance), here the barring the vocabulary's facet states.
     Effect.gen(function* provenance() {
       const { barredBy } = yield* grammar;
-      const stated = [...vocabularyFacets.values()].flatMap(({ children }) =>
+      const stated = Object.values(vocabularyFacets).flatMap(({ children }) =>
         children.barrings.flatMap(({ parents, source, versions }) =>
           versions.flatMap((version) => parents.map((parent) => ({ parent, source, version }))),
         ),

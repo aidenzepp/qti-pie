@@ -16,7 +16,7 @@
  * reads through `Compute.matches(text, R.at(field, key…))`. Each pattern matches its finite set of
  * texts and nothing else: its alternatives are literals, anchored at both ends.
  */
-import { Order } from "effect";
+import { Array as Arr, Option, Order } from "effect";
 import type { Result } from "effect";
 import { closed, idField, valueField } from "#pantry/grammar/closed.ts";
 import type {
@@ -97,7 +97,7 @@ export const expandedNamesPattern = (
 ): string => {
   const byNamespace = new Map<string, Set<string>>();
   for (const { local, namespace } of names) {
-    byNamespace.set(namespace, (byNamespace.get(namespace) ?? new Set()).add(local));
+    byNamespace.getOrInsertComputed(namespace, () => new Set()).add(local);
   }
 
   if (byNamespace.size === 0) {
@@ -146,22 +146,20 @@ export const namesUnder = (input: {
   readonly kinds: Roster<string>;
   readonly nameOf: (
     kind: string,
-  ) => { readonly local: string; readonly namespace: string } | undefined;
+  ) => Option.Option<{ readonly local: string; readonly namespace: string }>;
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<NamesUnder, ClosedRelationError> => {
-  const families = Map.groupBy(input.admitted, ({ parent, version }) => `${version} ${parent}`);
-  const rows = [...families.values()].flatMap((admitted) => {
-    const [first] = admitted;
+  const families = Object.values(
+    Arr.groupBy(input.admitted, ({ parent, version }) => `${version} ${parent}`),
+  );
+  const rows = families.flatMap(([first, ...rest]) => {
+    const admitted = [first, ...rest];
 
-    return first !== undefined && admitted.some(({ child }) => isForeignKind(child))
+    return admitted.some(({ child }) => isForeignKind(child))
       ? [
           {
             names: expandedNamesPattern(
-              admitted.flatMap(({ child }) => {
-                const name = input.nameOf(child);
-
-                return name === undefined ? [] : [name];
-              }),
+              admitted.flatMap(({ child }) => Option.toArray(input.nameOf(child))),
             ),
             parent: first.parent,
             version: first.version,
@@ -303,15 +301,12 @@ export const heldRootsUnder = (input: {
   }[];
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<HeldRootsUnder, ClosedRelationError> => {
-  const families = Map.groupBy(input.held, ({ parent, version }) => `${version} ${parent}`);
-  const rows = [...families.values()].flatMap((held) => {
-    const [first] = held;
-    if (first === undefined) {
-      return [];
-    }
-
+  const families = Object.values(
+    Arr.groupBy(input.held, ({ parent, version }) => `${version} ${parent}`),
+  );
+  const rows = families.flatMap(([first, ...rest]) => {
     const own = input.namespaceOf(first.parent);
-    const classes = new Set(held.map(({ child }) => child));
+    const classes = new Set([first, ...rest].map(({ child }) => child));
 
     return [
       {

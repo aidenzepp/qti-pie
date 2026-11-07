@@ -1335,14 +1335,30 @@ const kindNames: ReadonlyMap<string, { readonly local: string; readonly name: st
 );
 
 /**
+ * Read a kind's names from the vocabularies' rosters.
+ *
+ * @param kind - The kind.
+ * @returns Its expanded name and its local name.
+ * @throws {Error} When no roster declares the kind, which every include alternative's is.
+ */
+const kindNameOf = (kind: string): { readonly local: string; readonly name: string } =>
+  Option.getOrThrowWith(
+    Option.fromNullishOr(kindNames.get(kind)),
+    () =>
+      new Error(
+        `${kind} is an include alternative no vocabulary roster declares, and a fragment's root is read by its name. Declare ${kind} in its vocabulary's roster.`,
+      ),
+  );
+
+/**
  * The kinds an included fragment's document may have as its root (spec readings 85, 114 and
  * 116): every kind an include stands for somewhere, but a context-split kind, under the fragment
  * resource type of the implementation guide's §6.2.
  */
 export const fragmentRoots: readonly RootOf[] = fragmentRootsOf(
   includeAlternativesOf(contentModels),
-  (kind) => kindNames.get(kind)?.name ?? kind,
-  (kind) => kindNames.get(kind)?.local ?? kind,
+  (kind) => kindNameOf(kind).name,
+  (kind) => kindNameOf(kind).local,
 ).map((root) => ({ root, type: fragmentType }));
 
 /**
@@ -1421,18 +1437,22 @@ export const xi: Facets = {
 };
 
 /**
- * The facets of each vocabulary `src/vocab/inventory/vocabularies.ts` declares, by its name. A
- * vocabulary not named here states none.
+ * The facets of each vocabulary `src/vocab/inventory/vocabularies.ts` declares, by its name, every
+ * one of them: a vocabulary whose facets state nothing has {@link noFacets}.
  */
-export const vocabularyFacets = new Map([
-  ["asi", asi],
-  ["cp", cp],
-  ["lom", lom],
-  ["mathml", mathml],
-  ["ssml", ssml],
-  ["ud", ud],
-  ["xi", xi],
-]);
+export const vocabularyFacets = {
+  asi,
+  cp,
+  cpx: noFacets,
+  csmd: noFacets,
+  drd: noFacets,
+  lom,
+  mathml,
+  qmd: noFacets,
+  ssml,
+  ud,
+  xi,
+} as const satisfies { readonly [Name in (typeof rosters)[number]["name"]]: Facets };
 
 /**
  * The root element kind of a package's manifest, which no resource type lists.
