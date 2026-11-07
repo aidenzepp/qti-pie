@@ -10,6 +10,7 @@
  * them (`declarationLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
+import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import {
   BaseType,
@@ -179,6 +180,40 @@ export const cardinalityOf = (lexical: string): CardinalityHandle =>
   spelledCardinalities.get(lexical) ?? "single";
 
 /**
+ * The fields a declaring element gives every row that copies its declaration, and its kind's
+ * `DeclarationKind`, none for an element that declares nothing.
+ */
+export interface DeclaredFields {
+  readonly baseType: BaseTypeHandle;
+  readonly cardinality: CardinalityHandle;
+  readonly declarationKind: Option.Option<DeclarationKindHandle>;
+  readonly identifier: string;
+}
+
+/**
+ * Read the fields a declaring element gives every row that copies its declaration
+ * (`declarationRef`), as {@link Declaration}'s builder writes them: its identifier without its
+ * outer whitespace ({@link piecesOf}), the base type its `base-type` spells or `none`
+ * ({@link baseTypeOf}), the cardinality its `cardinality` spells or `single`
+ * ({@link cardinalityOf}), and its kind's `DeclarationKind`. Every overlay that resolves against a
+ * declaration or copies one reads them here, so the database's `declarationRef` containments hold
+ * by construction.
+ *
+ * @param kind - The element's kind.
+ * @param attribute - Reads one of its attributes' lexical form, none where it is unwritten.
+ * @returns The fields; the kind none for an element that declares nothing.
+ */
+export const declaredFieldsOf = (
+  kind: string,
+  attribute: (name: string) => string | undefined,
+): DeclaredFields => ({
+  baseType: baseTypeOf(attribute("base-type")),
+  cardinality: cardinalityOf(attribute("cardinality") ?? ""),
+  declarationKind: Option.fromUndefinedOr(declarationKinds.get(kind)),
+  identifier: piecesOf(attribute("identifier") ?? "").name,
+});
+
+/**
  * Index a document's attribute rows by their element and name.
  *
  * @param rows - The document's flat rows.
@@ -325,17 +360,18 @@ const addDeclaration = (
   declarationKind: DeclarationKindHandle,
 ): void => {
   const identifierLexical = valueOf(reading, node, "identifier") ?? "";
-  const { lead, name, trail } = piecesOf(identifierLexical);
-  const baseTypeLexical = valueOf(reading, node, "base-type");
-  const cardinalityLexical = valueOf(reading, node, "cardinality") ?? "";
+  const { lead, trail } = piecesOf(identifierLexical);
+  const { baseType, cardinality, identifier } = declaredFieldsOf(node.kind, (name) =>
+    valueOf(reading, node, name),
+  );
   reading.rows.Declaration.set(node.id, {
     ...tupleOf(reading, node),
-    baseType: baseTypeOf(baseTypeLexical),
-    baseTypeLexical: baseTypeLexical ?? "",
-    cardinality: cardinalityOf(cardinalityLexical),
-    cardinalityLexical,
+    baseType,
+    baseTypeLexical: valueOf(reading, node, "base-type") ?? "",
+    cardinality,
+    cardinalityLexical: valueOf(reading, node, "cardinality") ?? "",
     declarationKind,
-    identifier: name,
+    identifier,
     identifierLead: lead,
     identifierLexical,
     identifierTrail: trail,

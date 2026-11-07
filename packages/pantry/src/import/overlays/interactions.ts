@@ -13,8 +13,6 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import {
-  BaseType,
-  Cardinality,
   ChoiceBound,
   ContentReference,
   interactionKinds,
@@ -23,11 +21,11 @@ import {
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import { ownContext } from "#pantry/import/context.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
+import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import type { Declaration } from "#pantry/qti/declarations.ts";
-import { declarationKinds } from "#pantry/qti/declarations.ts";
 import { itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import {
@@ -168,20 +166,6 @@ const interactions: ReadonlySet<string> = new Set(interactionKinds);
  * The kinds that are no element, which the elements fold steps over.
  */
 const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
-
-/**
- * The `BaseType` handles a lexical form spells, every one but the null object `none`.
- */
-const baseTypes: ReadonlyMap<string, ReferenceRow["baseType"]> = new Map(
-  BaseType.handles.flatMap((handle) => (handle === "none" ? [] : [[handle, handle] as const])),
-);
-
-/**
- * The `Cardinality` handles, each spelled as its lexical form.
- */
-const cardinalities: ReadonlyMap<string, ReferenceRow["cardinality"]> = new Map(
-  Cardinality.handles.map((handle) => [handle, handle] as const),
-);
 
 /**
  * XML whitespace at the start of a text.
@@ -374,36 +358,31 @@ const tupleOf = (context: Context, node: NodeRow<Composed>) => ({
 });
 
 /**
- * Read a document's declarations: each declaring element with an `identifier`, its kind, its
- * identifier collapsed, and the codes its `base-type` and `cardinality` spell (`none` where no
- * base type is written).
+ * Read a declaring element's fields as `Declaration`'s builder writes them
+ * (`#pantry/import/overlays/declarations.ts` `declaredFieldsOf`).
+ *
+ * @param context - The document.
+ * @param node - The element.
+ * @returns Its fields; the kind none for an element that declares nothing.
+ */
+const declaredFieldsAt = (context: Pick<Context, "attributes">, node: NodeRow<Composed>) =>
+  declaredFieldsOf(node.kind, (name) => Option.getOrUndefined(lexicalOf(context, node.id, name)));
+
+/**
+ * Read a document's declarations, each declaring element that writes an `identifier`, as
+ * {@link declaredFieldsAt} reads them; one that writes none names nothing a reference resolves to.
  *
  * @param context - The document, its declarations not yet read.
  * @returns The declarations.
  */
 const declaredOf = (context: Omit<Context, "adaptive" | "declared">): Context["declared"] =>
   context.rows.nodes.flatMap((node) => {
-    const declarationKind = declarationKinds.find((kind) => kind === node.kind);
+    const { declarationKind, ...fields } = declaredFieldsAt(context, node);
 
-    return declarationKind === undefined
-      ? []
-      : Option.toArray(valueOf(context, node.id, "identifier")).map((identifier) => ({
-          baseType: Option.getOrElse(
-            Option.flatMap(lexicalOf(context, node.id, "base-type"), (lexical) =>
-              Option.fromNullishOr(baseTypes.get(lexical)),
-            ),
-            () => "none" as const,
-          ),
-          cardinality: Option.getOrElse(
-            Option.flatMap(lexicalOf(context, node.id, "cardinality"), (lexical) =>
-              Option.fromNullishOr(cardinalities.get(lexical)),
-            ),
-            () => "single" as const,
-          ),
-          declarationKind,
-          identifier,
-          node: node.id,
-        }));
+    return Option.isSome(declarationKind) &&
+      Option.isSome(lexicalOf(context, node.id, "identifier"))
+      ? [{ ...fields, declarationKind: declarationKind.value, node: node.id }]
+      : [];
   });
 
 /**
@@ -718,9 +697,11 @@ const choiceNamesOf = (
     [
       ...[...choices.values()].map(({ identifier }) => identifier),
       ...[...hottexts.values()].map(({ identifier }) => identifier),
-      ...context.rows.nodes
-        .filter(({ kind }) => declarationKinds.some((declared) => declared === kind))
-        .map(({ id }) => Option.getOrElse(valueOf(context, id, "identifier"), () => "")),
+      ...context.rows.nodes.flatMap((node) => {
+        const { declarationKind, identifier } = declaredFieldsAt(context, node);
+
+        return Option.isSome(declarationKind) ? [identifier] : [];
+      }),
     ].map(
       (identifier) =>
         [
