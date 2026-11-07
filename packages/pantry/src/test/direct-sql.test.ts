@@ -24,6 +24,7 @@ import {
   ReferenceDocument,
   TestReference,
 } from "#pantry/qti/expressions.ts";
+import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { LomResource } from "#pantry/qti/metadata.ts";
 import { DocumentId, IdBinding } from "#pantry/qti/identity.ts";
@@ -222,6 +223,36 @@ describe("the direct writer's order and slots", () => {
             },
           ]),
       );
+    }
+  });
+
+  it("copies an unwritten owner's count as the members stated under it, unless a case states the count", () => {
+    // Oracle: the hand copies attributes.db and identity.db wrote for members whose owner the case
+    // does not write: one attribute alone of its element at a copy of 1, three of one element at
+    // 3, and the stated count where the case says the element holds more than it writes.
+    // Bound: up to three attributes of one element, in every order, beside one of another
+    // element, and each with the count stated as 2.
+    const copy = "the owner's count of the family Node.attributes";
+    for (const size of [1, 2, 3]) {
+      const facts = [
+        ...Array.from({ length: size }, (_, at): Stated => ({
+          fact: { at: BigInt(at), id: `a${String(at)}`, node: "N" },
+          relation: Attribute,
+        })),
+        { fact: { at: 0n, id: "b", node: "M" }, relation: Attribute },
+      ];
+      for (const order of permutations(facts)) {
+        assert.deepStrictEqual(
+          statedInserts(order).map(({ hidden, row }) => [row["id"], hidden?.[copy]]),
+          order.map(({ fact }) => [fact["id"], fact["node"] === "N" ? size : 1]),
+        );
+        assert.deepStrictEqual(
+          statedInserts(order.map((stated) => ({ ...stated, hidden: { [copy]: 2 } }))).map(
+            ({ hidden }) => hidden?.[copy],
+          ),
+          order.map(() => 2),
+        );
+      }
     }
   });
 });
