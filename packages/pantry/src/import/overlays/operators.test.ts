@@ -151,25 +151,49 @@ describe("import/overlays/operators.ts, tolerancePiecesOf", () => {
   );
 });
 
+/**
+ * The first 18 digits of both ends of the signed 64-bit range, `9223372036854775807` and
+ * `-9223372036854775808`: a piece of the figures box, so that a stem followed by 7, 8 or 9 writes
+ * the greatest integer, one past it, and with a sign the least and one past it.
+ */
+const int64Stem = "922337203685477580";
+
+/**
+ * A situation the figures box must reach: an integer, a form that is none, and each end of the
+ * range, which the box reaches with the forms one past it beside.
+ */
+type FiguresSituation = "integer" | "no integer" | "the greatest integer" | "the least integer";
+
+/**
+ * The ends of the signed 64-bit range.
+ */
+const int64Range = { max: 2n ** 63n - 1n, min: -(2n ** 63n) } as const;
+
 describe("import/overlays/operators.ts, figuresOf", { timeout: searchTimeout }, () => {
   it.effect(
-    "reads every figures of at most 4 characters over the box as reading 119 does: collapsed, an integer exactly where the specification reads one, at its value",
+    "reads every figures of at most 4 pieces over the box as reading 119 does: collapsed, an integer exactly where the specification reads one, at its value",
     (ctx) =>
       // Oracle: the specification as a checker, the union's xs:integer member read collapsed
       // within reading 46's signed 64-bit range, `#pantry/test/operator-spec.ts` figuresIntegerOf.
-      // Bound: every figures of at most 4 characters over 0, 1, 9, +, -, space, tab and F, 4,681.
+      // Bound: every figures of at most 4 pieces over 0, 1, 7, 8, 9, +, -, space, tab, F and
+      // {@link int64Stem}, 16,105, which reach both ends of the range and one past each.
       searched(
         ctx,
         exhaust(
           {
-            box: "every figures of at most 4 characters over 0 1 9 + - space tab F",
+            box: "every figures of at most 4 pieces over 0 1 7 8 9 + - space tab F and the 64-bit bounds' first 18 digits",
             caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<"integer" | "no integer">(["integer", "no integer"]),
-            generator: string(element(["0", "1", "9", "+", "-", " ", "\t", "F"] as const), {
-              max: 4,
-              min: 0,
-            }),
-            limit: 5000,
+            coverage: requiredInSpace<FiguresSituation>([
+              "integer",
+              "no integer",
+              "the greatest integer",
+              "the least integer",
+            ]),
+            generator: string(
+              element(["0", "1", "7", "8", "9", "+", "-", " ", "\t", "F", int64Stem] as const),
+              { max: 4, min: 0 },
+            ),
+            limit: 16_105,
             literal: (value) => JSON.stringify(value),
             oracle: {
               kind: "specification",
@@ -181,6 +205,13 @@ describe("import/overlays/operators.ts, figuresOf", { timeout: searchTimeout }, 
             Effect.sync(() => {
               const spec = figuresIntegerOf(lexical);
               c.note(spec === undefined ? "no integer" : "integer");
+              if (spec === int64Range.max) {
+                c.note("the greatest integer");
+              }
+
+              if (spec === int64Range.min) {
+                c.note("the least integer");
+              }
 
               assert.deepStrictEqual(
                 figuresOf(lexical),
