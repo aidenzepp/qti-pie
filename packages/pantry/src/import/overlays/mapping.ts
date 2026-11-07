@@ -13,6 +13,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { BaseType, Cardinality, Declares, interactionKinds } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
+import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import {
@@ -180,24 +181,6 @@ type IntegerParts = Pick<
  * @returns It without its leading and trailing spaces, tabs and line ends.
  */
 const trimmed = (text: string): string => text.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "");
-
-/**
- * Collapse XML whitespace as `xs:boolean`'s whiteSpace facet does: runs to one space, none at
- * either end.
- *
- * @param text - The text.
- * @returns The collapsed text.
- */
-const collapsedOf = (text: string): string => trimmed(text).replaceAll(/[\t\n\r ]+/gu, " ");
-
-/**
- * Fold ASCII case, as `Compute.lowerAscii` does.
- *
- * @param text - The text.
- * @returns The text with `A` to `Z` lowercased.
- */
-const lowerAscii = (text: string): string =>
-  text.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase());
 
 /**
  * Whether a text is a run of zeros, the language of `MapKeyInteger.zeros`.
@@ -606,7 +589,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     const { baseType } = declarationOf(mapping);
     const caseText = valueOf(node.id, "case-sensitive") ?? "";
     const folded =
-      baseType === "string" && !caseSensitiveTrue.some((form) => form === collapsedOf(caseText));
+      baseType === "string" && !caseSensitiveTrue.some((form) => form === collapse(caseText));
     mapKeys.set(node.id, {
       ...tupleOf(node),
       baseType,

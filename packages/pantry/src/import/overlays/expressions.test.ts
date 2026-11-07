@@ -76,6 +76,7 @@ import {
   ValueBaseOf,
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
+import { nilUuid } from "#pantry/qti/tests.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 
 /**
@@ -2165,7 +2166,6 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
     const rows = packageRowsOf(test === undefined ? [] : [test], [
       { path: "a.xml", type: "imslti_xmlv1p1" },
     ]);
-    const nil = "00000000-0000-0000-0000-000000000000";
 
     assert.deepStrictEqual(
       [...rows.together.ItemRefTarget.values()].map(({ type }) => type),
@@ -2177,14 +2177,14 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
         declaration,
         itemDocument,
       ]),
-      [[nil, nil]],
+      [[nilUuid, nilUuid]],
     );
     assert.deepStrictEqual(
       [...rows.together.TemplateDefault.values()].map(({ declaration, itemDocument }) => [
         declaration,
         itemDocument,
       ]),
-      [[nil, nil]],
+      [[nilUuid, nilUuid]],
     );
   });
 
@@ -2207,11 +2207,10 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
             const { together } = rows;
             const [templateDefault] = [...together.TemplateDefault.values()];
             const [mapping] = [...together.MappingSource.values()];
-            const nil = "00000000-0000-0000-0000-000000000000";
             const where = JSON.stringify(c);
 
             assert.strictEqual(
-              templateDefault?.declaration !== nil &&
+              templateDefault?.declaration !== nilUuid &&
                 templateDefault?.declarationKind === "qti-template-declaration",
               template === "T",
               where,
@@ -2224,7 +2223,7 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
               where,
             );
             assert.strictEqual(
-              mapping?.declaration !== nil &&
+              mapping?.declaration !== nilUuid &&
                 mapping?.declarationKind === "qti-outcome-declaration",
               source === "SCORE",
               where,

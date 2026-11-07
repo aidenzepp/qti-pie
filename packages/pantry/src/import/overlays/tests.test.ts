@@ -41,6 +41,11 @@ import type { BranchResolution } from "#pantry/qti/tests.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 
 /**
+ * An element's attributes, as (name, lexical) pairs in order.
+ */
+type Attributes = readonly (readonly [ClosedName<Composed>, string])[];
+
+/**
  * An element of a kind, with its attributes as (name, lexical) pairs and its children.
  *
  * @param kind - The kind.
@@ -50,7 +55,7 @@ import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
  */
 const el = (
   kind: ElementKind<Composed>,
-  attributes: readonly (readonly [ClosedName<Composed>, string])[] = [],
+  attributes: Attributes = [],
   children: readonly XdmChild<Composed>[] = [],
 ): XdmClosedElement<Composed> => ({
   _tag: "element",
@@ -349,9 +354,7 @@ type PartsFeature = "selection" | "required" | "include" | "nested";
  * @param attributes - The include's attributes.
  * @returns The item.
  */
-const itemWithInclude = (
-  attributes: readonly (readonly [ClosedName<Composed>, string])[],
-): XdmDocument<Composed> =>
+const itemWithInclude = (attributes: Attributes): XdmDocument<Composed> =>
   documentOf(
     el(
       "qti-assessment-item",
@@ -394,11 +397,7 @@ describe("import/overlays/tests.ts, includes", () => {
   it("marks an include whose href stays in the package not external: a listed document is its target, and a missing entry and an absent href leave it none, which Include target refuses", () => {
     // Oracle: reading 115: an in-package include names a document the manifest lists, or the
     // package is refused under "Include target"; an include with no href names none.
-    const cases: readonly (readonly [
-      string,
-      readonly (readonly [ClosedName<Composed>, string])[],
-      number,
-    ])[] = [
+    const cases: readonly (readonly [string, Attributes, number])[] = [
       ["listed document", [["href", "s.xml"]], 1],
       ["missing entry", [["href", "gone/s.xml"]], 0],
       ["absent href", [], 0],

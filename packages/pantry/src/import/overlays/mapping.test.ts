@@ -111,6 +111,11 @@ const mappingCases: Gen<MappingCase> = (source) => ({
 });
 
 /**
+ * An element's attributes, as (name, lexical) pairs in order.
+ */
+type Attributes = readonly (readonly [ClosedName<Composed>, string])[];
+
+/**
  * An element with closed attributes.
  *
  * @param kind - Its kind.
@@ -120,7 +125,7 @@ const mappingCases: Gen<MappingCase> = (source) => ({
  */
 const elementOf = (
   kind: XdmClosedElement<Composed>["kind"],
-  attributes: readonly (readonly [ClosedName<Composed>, string])[],
+  attributes: Attributes,
   children: readonly XdmChild<Composed>[],
 ): XdmClosedElement<Composed> => ({
   _tag: "element",
@@ -155,10 +160,7 @@ const treeOf = (input: MappingCase): XdmDocument<Composed> => {
         ["mapped-value", value],
         ...(caseSensitive === undefined
           ? []
-          : ([["case-sensitive", caseSensitive]] as const satisfies readonly (readonly [
-              ClosedName<Composed>,
-              string,
-            ])[])),
+          : ([["case-sensitive", caseSensitive]] as const satisfies Attributes)),
       ],
       [],
     ),

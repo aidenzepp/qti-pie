@@ -78,7 +78,7 @@ import {
 import { AreaMapping, InterpolationTable, Mapping, MatchTable } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
+import { itemRefKind, linkResourceTypes, nilUuid } from "#pantry/qti/tests.ts";
 
 /**
  * The rule each of this module's check names keeps, the oracle laws `#pantry/test/oracle.ts` names
@@ -674,7 +674,6 @@ describe("qti/expressions.ts, a test's braced reference that names no variable (
 
 describe("qti/expressions.ts, an LTI item ref", () => {
   const [lti] = linkResourceTypes;
-  const nilDocument = "00000000-0000-0000-0000-000000000000";
   const reading = {
     form: "split",
     found: true,
@@ -749,7 +748,7 @@ describe("qti/expressions.ts, an LTI item ref", () => {
     for (const side of [document?.left, source?.left]) {
       assert.isDefined(side);
       if (side !== undefined) {
-        assert.isFalse(selects(side, { itemDocument: nilDocument }), "an LTI link's mapping");
+        assert.isFalse(selects(side, { itemDocument: nilUuid }), "an LTI link's mapping");
         assert.isTrue(
           selects(side, { itemDocument: "11111111-1111-4111-8111-111111111111" }),
           "an item's mapping",
@@ -767,7 +766,7 @@ describe("qti/expressions.ts, an LTI item ref", () => {
     assert.isDefined(held, "the template default's item");
     assert.deepStrictEqual(more, []);
     if (held !== undefined) {
-      assert.isTrue(selects(held.left, { itemDocument: nilDocument }));
+      assert.isTrue(selects(held.left, { itemDocument: nilUuid }));
     }
   });
 });

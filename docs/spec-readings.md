@@ -1783,11 +1783,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
      standing ruling of 2026-11-05 that the spec wins.)
 105. **A usage statistic's value is typed by the base type it names, and untyped where it names none.** The usage data
      binding (QTI 3.0 Usage Data Information Model and XSD Binding 1.0, section 2.6.5, the Value class,
-     https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html; line 1392 of the text in
-     `~/.cache/gr8des/pm-ud/ud-bind.txt`) describes `ud:value` as "A class that can represent a single value of any
+     https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html; line 2620 of the page in
+     `~/.cache/gr8des/qti3/ud-bind.html`) describes `ud:value` as "A class that can represent a single value of any
      baseType", an `xs:normalizedString` with an optional `baseType` of BaseTypeEnum (section 2.7.1), whose terms give
      each base type the values the information model gives it (section 8.13). Its `baseType` row adds "This attribute is
-     only used for specifying the base-type of a value that forms part of a record" (line 1426), and its
+     only used for specifying the base-type of a value that forms part of a record" (line 2694), and its
      `fieldIdentifier` row says the same of the field identifier, "only used for specifying the field identifier for a
      value that forms part of a record" (section 2.6.5.1). A value forms part of a record where it writes a
      `fieldIdentifier`. A `baseType` outside a record has no base type to state and is not read as one: a `ud:value`
