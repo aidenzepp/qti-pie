@@ -51,6 +51,7 @@ import {
   lawTable,
   limitRules,
   owedRules,
+  patternLawsOf,
   precedence,
   refusalOfLaws,
   ruleOfError,
@@ -1435,6 +1436,50 @@ const unownedGenerated = (relations: AnySchema["relations"]): readonly string[] 
 const composedQti = Effect.promise(() => import("#pantry/qti/schema.ts")).pipe(
   Effect.map(({ Qti }) => Qti),
 );
+
+/**
+ * Write each pattern law {@link patternLawsOf} builds as its identity and its name.
+ *
+ * @param rows - The text types and the law each states.
+ * @returns The laws, written; or the conflict.
+ */
+const patternNames = (rows: Parameters<typeof patternLawsOf>[0]) =>
+  Result.map(patternLawsOf(rows), (laws) =>
+    laws.map(([law, name]) => `${lawIdentity(law)}: ${name}`),
+  );
+
+describe("the pattern laws, one per pattern", () => {
+  it("names a pattern two types share by one law, and refuses two rows that name it twice", () => {
+    // Oracle: grizzle's report of a domain's CHECK, its pattern's source and flags alone
+    // (docs/grizzle-findings.md, the pattern law's refusal), so a pattern is one law whatever types
+    // carry it. Live: two types of one pattern under one name, and two patterns. Wild: two types of
+    // one pattern under two names, either order, as `Chars` beside the foreign namespace name was.
+    const chars = str.regex("^[a]*$");
+    const sameChars = str.regex("^[a]*$");
+    const bounded = str.regex("^[a]*$", "su");
+
+    assert.deepStrictEqual(
+      patternNames([
+        [chars, "Key text bound"],
+        [sameChars, "Key text bound"],
+        [bounded, "XML production"],
+      ]),
+      Result.succeed(["pattern /^[a]*$/u: Key text bound", "pattern /^[a]*$/su: XML production"]),
+    );
+    for (const [first, second] of [
+      ["Key text bound", "XML production"],
+      ["XML production", "Key text bound"],
+    ] as const) {
+      assert.deepStrictEqual(
+        patternLawsOf([
+          [chars, first],
+          [sameChars, second],
+        ]),
+        Result.fail({ first, identity: "pattern /^[a]*$/u", second }),
+      );
+    }
+  });
+});
 
 describe("the census of the composed Qti schema", () => {
   it.effect(
