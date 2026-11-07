@@ -505,7 +505,7 @@ const declaresTemplates = itemDocument(
 
 /**
  * An item that declares {@link threeByDefault} under a template processing the engine does not
- * run: it sets `T` from a `qti-duration-lt`, a kind the engine has not landed, which the item model
+ * run: it sets `T` from a `qti-field-value`, a kind the engine has not landed, which the item model
  * marks.
  */
 const marksTemplates = itemDocument(
@@ -518,7 +518,7 @@ const marksTemplates = itemDocument(
       templateSetting(
         "qti-set-template-value",
         "T",
-        el("qti-duration-lt", [], [el("qti-null"), el("qti-null")]),
+        el("qti-field-value", [attr("field-identifier", "f")], [el("qti-null")]),
       ),
     ],
   ),

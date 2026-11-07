@@ -195,8 +195,8 @@ const byAttribute = (entries: readonly ReferenceEntry[]): readonly ReferenceEntr
 
 /**
  * The kinds a later stage of this plan owns, by the unit that lands each (M3.b-2's P7T-01 has
- * landed its three random kinds with template processing): the two duration comparisons M3.b-3's
- * P7O-02 lands with duration values, the eight outcome-only kinds M3.b-3's P7O-04 lands for a
+ * landed its three random kinds with template processing, and M3.b-3's P7O-02 the two duration
+ * comparisons with duration values): the eight outcome-only kinds M3.b-3's P7O-04 lands for a
  * test's outcome processing (reading 23 refuses them in an item's processing, as
  * `expression-placement`), and `field-value`, which M3.b-4's P7R-03 lands with record values. Each
  * stays unlanded in all three tables, so an item that holds one is marked and its processing runs
@@ -204,7 +204,6 @@ const byAttribute = (entries: readonly ReferenceEntry[]): readonly ReferenceEntr
  * here.
  */
 const laterKinds = {
-  "P7O-02": ["duration-gte", "duration-lt"],
   "P7O-04": [
     "number-correct",
     "number-incorrect",

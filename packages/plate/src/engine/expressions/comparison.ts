@@ -1,12 +1,13 @@
 /**
  * The comparison family of the engine: the evaluators of `qti-match`, `qti-equal` in its three
- * tolerance modes, `qti-gt`, `qti-gte`, `qti-lt` and `qti-lte`, and the stub markers of
- * `qti-duration-lt` and `qti-duration-gte`, which M3.b-3 lands.
+ * tolerance modes, `qti-gt`, `qti-gte`, `qti-lt`, `qti-lte`, `qti-duration-lt` and
+ * `qti-duration-gte`.
  *
  * Integers are exact and floats are doubles. An integer and a float compare exactly, never through
  * a lossy conversion ({@link orderOf}), and `qti-equal`'s tolerance modes decide their range
  * exactly too, every finite operand and tolerance as the exact fraction it is ({@link
- * withinTolerance}).
+ * withinTolerance}). A duration is its seconds in a double, and the two duration kinds compare
+ * those doubles as they are ({@link comparingDurations}).
  *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
  * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
@@ -22,6 +23,7 @@ import type { NumberSingle } from "#plate/engine/numbers.ts";
 import { referenceValue } from "#plate/engine/refs.ts";
 import type { Expression, FloatOrRef } from "#plate/model/expression.ts";
 import { isNull, match } from "#plate/model/values.ts";
+import type { Value } from "#plate/model/values.ts";
 
 /**
  * Give the value of a `qti-match`: a single boolean, whether the operands match by `match` of the
@@ -206,6 +208,78 @@ const evaluateLt: Evaluator<"lt"> = comparing((order) => order < 0);
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpLTE
  */
 const evaluateLte: Evaluator<"lte"> = comparing((order) => order <= 0);
+
+/**
+ * Give the seconds a single duration value holds.
+ *
+ * @param value The value, not NULL.
+ * @returns The seconds, or none when the value is not a single duration.
+ */
+const secondsOf = (value: Value): Option.Option<number> => {
+  const [single, ...rest] = value.values;
+  if (value.cardinality !== "single" || single?.baseType !== "duration" || rest.length > 0) {
+    return Option.none();
+  }
+
+  return Option.some(single.value);
+};
+
+/**
+ * Construct the evaluator of a duration comparison: a single boolean, whether `holds` holds of its
+ * first operand's seconds and its second's; NULL when either operand is NULL.
+ *
+ * The seconds are compared exactly as the doubles they are, with nothing truncated, so 89.95 is
+ * shorter than 90. The truncation the information model describes (`info.txt:9492`) is the
+ * measuring system's, which reports a duration to its own resolution; the comparison of two
+ * reported values is exact (G-R3, pending: a duration comparison reads its seconds as IEEE
+ * doubles). So a NaN is neither shorter nor as long as anything, and `INF` and `-INF` compare as
+ * the infinities they are. QTI types both operands as single durations; an operand that is not one
+ * compares as false, as an order comparison's does. Operands are evaluated left to right, and the
+ * first failure is the result.
+ *
+ * @param holds Whether the comparison is true of the first operand's seconds and the second's.
+ * @returns The evaluator.
+ */
+const comparingDurations =
+  <K extends "duration-gte" | "duration-lt">(
+    holds: (left: number, right: number) => boolean,
+  ): Evaluator<K> =>
+  (expression, scope, evaluate) => {
+    const [left, right] = expression.operands;
+
+    return Result.gen(function* durationOperands() {
+      const leftValue = yield* evaluate(left, scope);
+      const rightValue = yield* evaluate(right, scope);
+      if (isNull(leftValue) || isNull(rightValue)) {
+        return booleanNull;
+      }
+
+      return booleanOf(
+        Option.exists(Option.all([secondsOf(leftValue), secondsOf(rightValue)]), ([one, other]) =>
+          holds(one, other),
+        ),
+      );
+    });
+  };
+
+/**
+ * Give the value of a `qti-duration-lt`: whether the first duration is shorter than the second.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpDurationLT
+ */
+const evaluateDurationLt: Evaluator<"duration-lt"> = comparingDurations(
+  (left, right) => left < right,
+);
+
+/**
+ * Give the value of a `qti-duration-gte`: whether the first duration is as long as the second or
+ * longer.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpDurationGTE
+ */
+const evaluateDurationGte: Evaluator<"duration-gte"> = comparingDurations(
+  (left, right) => left >= right,
+);
 
 /**
  * Give the number one `tolerance` token stands for: its literal, or the value of the float or
@@ -518,14 +592,13 @@ const evaluateEqual: Evaluator<"equal"> = (expression, scope, evaluate) => {
 };
 
 /**
- * The comparison family's evaluators by kind, and the stub marker for the two duration kinds
- * (ruling R2), which the dispatcher in `#plate/engine/evaluate.ts` never reaches on a checked item.
+ * The comparison family's evaluators by kind.
  */
 export const comparisonEvaluators: FamilyTable<
   "duration-gte" | "duration-lt" | "equal" | "gt" | "gte" | "lt" | "lte" | "match"
 > = {
-  "duration-gte": "unlanded",
-  "duration-lt": "unlanded",
+  "duration-gte": evaluateDurationGte,
+  "duration-lt": evaluateDurationLt,
   equal: evaluateEqual,
   gt: evaluateGt,
   gte: evaluateGte,
