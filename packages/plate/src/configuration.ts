@@ -16,7 +16,11 @@ import { locales } from "#plate/messages.ts";
  * `qti-item-session-control` settings; `maxAttempts` 0 means unlimited. `headingLevel` is the level
  * the item's shallowest heading takes, every other heading keeping its distance from it, capped at
  * `h6`; it starts at 2 because the host owns `h1`. `assetBase` `""` resolves asset URLs relative to
- * the package. `seed` is a string, used as given: it keys a shuffled Choice's order with the
+ * the package. `outputBudget` bounds the characters of HTML one `render` returns, counted as a
+ * string's `length` counts them (UTF-16 code units), and is 16,777,216 (16 MiB of ASCII) by
+ * default; past it `render` fails. Its maximum, 536,870,888, is V8's longest string, the smallest
+ * of the engines' limits, so no budget asks an engine for a string it cannot build. `seed` is a
+ * string, used as given: it keys a shuffled Choice's order with the
  * instance and the response, and `startTest` keeps it as the session's seed, under which each
  * item's template processing draws. With no seed, `startTest` draws one (128 random bits), while
  * `render` alone keys an absent seed as the empty string, so the order then follows the instance
@@ -36,6 +40,9 @@ export const Configuration = Schema.Struct({
   locale: Schema.Literals(locales).pipe(Schema.withDecodingDefaultKey(Effect.succeed("en"))),
   maxAttempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(1)),
+  ),
+  outputBudget: Schema.Int.check(Schema.isBetween({ maximum: 536_870_888, minimum: 1 })).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(16_777_216)),
   ),
   seed: Schema.optionalKey(Schema.String),
   showFeedback: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
@@ -64,6 +71,8 @@ const allowedValues: Readonly<Record<Field, string>> = {
   headingLevel: "an integer from 2 to 6",
   locale: `a supported locale: ${locales.map((locale) => `"${locale}"`).join(", ")}`,
   maxAttempts: "an integer of at least 0, where 0 means unlimited",
+  outputBudget:
+    "an integer from 1 to 536,870,888, the most characters of HTML one render may write",
   seed: 'a string, such as "7"',
   showFeedback: "true or false",
   showSolution: "true or false",
