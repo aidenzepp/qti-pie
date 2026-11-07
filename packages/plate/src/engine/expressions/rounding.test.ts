@@ -212,6 +212,19 @@ describe("the rounding family's evaluators", () => {
     );
   });
 
+  it("[I-9a] qti-round-to of the largest finite float to 1 significant figure gives that float, of its sign, not an infinity (readings 45 and 56)", () => {
+    const one = literal(1n);
+
+    assert.deepStrictEqual(
+      evaluated(roundToOf("significantFigures", one, float(Number.MAX_VALUE))),
+      float(Number.MAX_VALUE),
+    );
+    assert.deepStrictEqual(
+      evaluated(roundToOf("significantFigures", one, float(-Number.MAX_VALUE))),
+      float(-Number.MAX_VALUE),
+    );
+  });
+
   it("[I-9a] qti-round gives 7 for 6.5 and 6.8, -6 for -6.5, 6 for 6.49, and an integer operand itself", () => {
     assert.deepStrictEqual(evaluated(roundOf(float(6.5))), integer(7n));
     assert.deepStrictEqual(evaluated(roundOf(float(6.8))), integer(7n));

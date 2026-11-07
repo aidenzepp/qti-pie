@@ -6,6 +6,8 @@ import type { SourceElement } from "#plate/document/source.ts";
 import type { Expression, Rule } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
+import { checkStructure } from "#plate/validate/structure.ts";
+import { tables } from "#plate/validate/tables.ts";
 import {
   assertKindType,
   baseValueElement,
@@ -442,6 +444,50 @@ describe("the text family's reader specs and kind rules", () => {
         for (const passed of [held, edge, outside]) {
           assertKindType(passed, "inside", [{ baseType: "point", cardinality: "single" }]);
         }
+      }),
+  );
+
+  it.effect(
+    "[I-9a] accept and build a qti-inside whose coords, as the XSD admits them, do not fit its shape, and run it as HTML's image maps read them: too few hold no point, those beyond are ignored (reading 59)",
+    () =>
+      Effect.gen(function* runsUnfittedInside() {
+        const declarations = [responseDeclaration("RESPONSE", "point")];
+        const tooFew = insideElement(
+          { coords: "184,78,244", shape: "rect" },
+          variableElement("RESPONSE"),
+        );
+        const tooMany = insideElement(
+          { coords: "50,50,10,90,1,2", shape: "circle" },
+          variableElement("RESPONSE"),
+        );
+
+        for (const [expression, coords] of [
+          [tooFew, [184, 78, 244]],
+          [tooMany, [50, 50, 10, 90, 1, 2]],
+        ] as const) {
+          const document = passedItem(expression, declarations);
+          const built = yield* buildItem(document);
+          const [rule] = Option.getOrElse(built.processing, () => []);
+          const read = rule?.kind === "set-outcome" ? rule.expression : undefined;
+
+          assert.deepStrictEqual(checkStructure(document, tables), []);
+          assert.deepStrictEqual(refusalsOf(document), []);
+          assert.deepStrictEqual(built.unsupported, []);
+          assert.deepStrictEqual(read?.kind === "inside" ? read.coords : undefined, coords);
+        }
+
+        assert.deepStrictEqual(
+          yield* passedAfter(tooFew, declarations, { RESPONSE: at(216n, 90n) }),
+          truth(false),
+        );
+        assert.deepStrictEqual(
+          yield* passedAfter(tooMany, declarations, { RESPONSE: at(55n, 55n) }),
+          truth(true),
+        );
+        assert.deepStrictEqual(
+          yield* passedAfter(tooMany, declarations, { RESPONSE: at(61n, 50n) }),
+          truth(false),
+        );
       }),
   );
 
