@@ -502,13 +502,17 @@ const open = (a: AttributeRow) => a.in(a.name, openClasses);
 
 /**
  * State that an attribute's domain is an `xs:IDREF` or `xs:IDREFS` one, whose tokens are `Idref`
- * rows.
+ * rows: its domain has a `ValueIdentity` row naming one of them. A domain of no identity has no
+ * row, so the statement is false of it.
  *
  * @param a - The row.
  * @returns The predicate.
  */
 const carriesIdrefs = (a: AttributeRow) =>
-  a.in(ValueIdentity.at("identity", domainOf(a)), ["IDREF", "IDREFS"]);
+  a.and(
+    ValueIdentity.has(domainOf(a)),
+    a.in(ValueIdentity.at("identity", domainOf(a)), ["IDREF", "IDREFS"]),
+  );
 
 /**
  * The closed `AttributeName` handles whose names are in a namespace with a handle prefix
@@ -558,7 +562,9 @@ type NodeRow = RowScalars<typeof Node>;
 const nodeGovernorOf = (n: NodeRow) => GoverningOf.at("governor", n.version, n.kind, n.governs);
 
 /**
- * Read the domain an element's governor reads its text in (`TextDomain`, total).
+ * Read the domain an element's governor reads its text in (`TextDomain`), absent for a governor
+ * with no simple content, whose text no law reads in a domain ({@link holdsCheckedText} is false of
+ * it).
  *
  * @param n - The row.
  * @returns The closed read.

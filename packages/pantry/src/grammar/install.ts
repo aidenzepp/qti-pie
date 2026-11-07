@@ -24,17 +24,20 @@
  * - A generator's dependent `fin` coordinate is a slot, `slot(closedId(Position), fin(O, n))`, over a
  *   count relation O over the model ({@link ModelPositions}, {@link SharedPositions}), so each
  *   model's block holds its own positions and no other's (README, "Closed relations").
- * - A lexical form's code is a `<Roster>Lexical` payload, and a one-position law a total function
- *   over (version, parent) ({@link CountedOf}, {@link BarredOf}). A singleton set is no relation's
- *   row: a schema module writes `Compute.singleton(id)`, and a handle's membership in a set is
+ * - A lexical form's code is a `<Roster>Lexical` payload, and a one-position law a function over
+ *   (version, parent) ({@link CountedOf}, {@link BarredOf}). A singleton set is no relation's row:
+ *   a schema module writes `Compute.singleton(id)`, and a handle's membership in a set is
  *   `Compute.subset(Compute.singleton(id), set)` (README, "Tables and types").
+ * - A function holds a row only where its value is: a law says what holds where a key has none with
+ *   `C.has`, `or(not(C.has(k)), φ(C.at(f, k)))`, never through a row that stands for the absence
+ *   (README, "Closed relations"). {@link CountedOf}, {@link BarredOf}, {@link SharedModelOf},
+ *   {@link ValueIdentity} and {@link TextDomain} are read so.
  * - An element's attributes and text are read under its governor ({@link GoverningOf}): its kind, or
  *   the type an `xsi:type` makes govern it (spec readings 60 and 84).
  */
 import { closed, closedId, fin, natural, pg, slot, str } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Result } from "effect";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
-import { openDomain } from "#pantry/grammar/attributes.ts";
 import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
 import { int8Max, rowsAt } from "#pantry/grammar/closed.ts";
 import { composed, recordCardinality } from "#pantry/grammar/compose.ts";
@@ -317,12 +320,12 @@ export const BoundFacet = closed(
 );
 
 /**
- * The `Identity` roster: `xs:ID`, `xs:IDREF` and `xs:IDREFS`, the identity types a domain may have,
- * then `none`, a domain's of no identity, so {@link ValueIdentity} is total.
+ * The `Identity` roster: `xs:ID`, `xs:IDREF` and `xs:IDREFS`, the identity types a domain may have.
+ * A domain of none has no {@link ValueIdentity} row.
  */
 export const Identity = closed(
   "Identity",
-  nonEmpty("Identity", [...grammar.attributes.identity.payload[0].roster.handles, none]),
+  nonEmpty("Identity", grammar.attributes.identity.payload[0].roster.handles),
 );
 
 /**
@@ -394,8 +397,8 @@ export const ContentModel = closed(
 );
 
 /**
- * The `SharedModel` roster: `none`, then each content model in which a kind names several positions
- * (C4), named by its parent kind.
+ * The `SharedModel` roster: each content model in which a kind names several positions (C4), named
+ * by its parent kind.
  */
 export const SharedModel = closed(
   "SharedModel",
@@ -436,7 +439,7 @@ export const ModelPositions = closed.relation(
 
 /**
  * `SharedPositions`: model → positions, the number of content positions of each shared model, its
- * start 0 included. `none` has no row, so `Symbol` gives it no block.
+ * start 0 included.
  */
 export const SharedPositions = closed.relation(
   "SharedPositions",
@@ -505,8 +508,8 @@ export const Last = closed.relation(
 );
 
 /**
- * `SharedModelOf`: (version, parent) → model, total, `none` for a family no kind names at several
- * positions.
+ * `SharedModelOf`: (version, parent) → model, the shared model of each family a kind names at
+ * several positions. A family no kind names so has no row (`SharedModelOf.has`).
  */
 export const SharedModelOf = closed.relation(
   "SharedModelOf",
@@ -539,7 +542,7 @@ export const Symbol = closed.relation(
  * Index a generator's rows by (version, parent), refusing a family with two of them: the law over
  * the rows names one position per family (N7).
  *
- * @param name - The relation the rows are made total as, for the defect's message.
+ * @param name - The relation the rows are stated as, for the defect's message.
  * @param rows - The generator's rows.
  * @returns Each family's row, by `<version> <parent>`.
  * @throws {Error} When two rows name one family, which no vocabulary states today.
@@ -596,20 +599,6 @@ const barredByFamily = onePerFamily("BarredOf", grammar.barredBy.rows);
 const naturalOf = (bound: number): bigint => (Number.isFinite(bound) ? BigInt(bound) : int8Max);
 
 /**
- * `CountedOf`'s row of a family whose count is no law beside its automaton: position 0, bounded by
- * nothing, min 0 and max `int8Max` (C25). A law reads the relation at every family, and grizzle
- * refuses a row a read finds no row for (README, "Closed relations": `at` is "absent where no row
- * holds the key, so a row check over it refuses that row"), so the relation is total.
- */
-const uncounted = { max: int8Max, min: 0n, position: "0" } as const;
-
-/**
- * `BarredOf`'s row of a family nothing bars: slot 0 and position 0 (C25), total for the reason
- * {@link uncounted} is.
- */
-const unbarred = { position: "0", slot: "0" } as const;
-
-/**
  * Read the attribute slot a barring's attribute takes under its parent's own governor.
  *
  * @param barring - The barring's family and attribute.
@@ -641,9 +630,10 @@ const barringSlot = (barring: {
   );
 
 /**
- * `CountedOf`: (version, parent) → (position, min, max), total: the one position of the family
- * whose count is a law beside its automaton, with its bounds, or position 0, min 0 and max
- * `int8Max` where none is (C25: `qti-simple-match-set` under `qti-match-interaction`).
+ * `CountedOf`: (version, parent) → (position, min, max), the one position of a family whose count
+ * is a law beside its automaton, with its bounds (C25: `qti-simple-match-set` under
+ * `qti-match-interaction`). A family whose count is no such law has no row, and N7 Counted holds of
+ * it through `CountedOf.has` (README, "Closed relations").
  */
 export const CountedOf = closed.relation(
   "CountedOf",
@@ -655,26 +645,13 @@ export const CountedOf = closed.relation(
     version: closedId(SchemaVersion),
   },
   ["version", "parent"],
-  grammar.kinds.versions.handles.flatMap((version) =>
-    grammar.kinds.nodeKind.handles.map((parent) =>
-      Option.match(Option.fromNullishOr(countedByFamily.get(`${version} ${parent}`)), {
-        onNone: () => ({
-          max: uncounted.max,
-          min: uncounted.min,
-          parent,
-          position: uncounted.position,
-          version,
-        }),
-        onSome: (counted) => ({
-          max: naturalOf(counted.max),
-          min: naturalOf(counted.min),
-          parent,
-          position: counted.position,
-          version,
-        }),
-      }),
-    ),
-  ),
+  [...countedByFamily.values()].map(({ max, min, parent, position, version }) => ({
+    max: naturalOf(max),
+    min: naturalOf(min),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
+    position,
+    version,
+  })),
 );
 
 /**
@@ -702,9 +679,10 @@ export const Capped = closed.relation(
 );
 
 /**
- * `BarredOf`: (version, parent) → (slot, position), total: the attribute slot whose presence bars a
- * family's children at the position, or slot 0 and position 0 where nothing is barred (C25:
- * `colgroup`'s `span`). The slot is the barring attribute's position in `AttributeGrammar`.
+ * `BarredOf`: (version, parent) → (slot, position), the attribute slot whose presence bars a
+ * family's children at the position (C25: `colgroup`'s `span`). The slot is the barring attribute's
+ * position in `AttributeGrammar`. A family nothing bars has no row, and N7 barred by holds of it
+ * through `BarredOf.has` (README, "Closed relations").
  *
  * The slot is read under the parent kind's own governor, never under the type an `xsi:type` makes
  * govern it, and that is exact: an `xsi:type` may name only the declared type or one validly
@@ -723,19 +701,12 @@ export const BarredOf = closed.relation(
     version: closedId(SchemaVersion),
   },
   ["version", "parent"],
-  grammar.kinds.versions.handles.flatMap((version) =>
-    grammar.kinds.nodeKind.handles.map((parent) =>
-      Option.match(Option.fromNullishOr(barredByFamily.get(`${version} ${parent}`)), {
-        onNone: () => ({ parent, position: unbarred.position, slot: unbarred.slot, version }),
-        onSome: ({ name, position }) => ({
-          parent,
-          position,
-          slot: barringSlot({ name, parent, version }),
-          version,
-        }),
-      }),
-    ),
-  ),
+  [...barredByFamily.values()].map(({ name, parent, position, version }) => ({
+    parent: memberOf(grammar.kinds.nodeKind, parent),
+    position,
+    slot: barringSlot({ name, parent, version }),
+    version,
+  })),
 );
 
 /**
@@ -1146,36 +1117,19 @@ export const boundedDomains: readonly (typeof ValueDomain.handles)[number][] =
   grammar.attributes.doubleBound.rows.map(({ domain }) => asValueDomain(domain));
 
 /**
- * The identity of each domain that has one.
- */
-const identityOf: ReadonlyMap<string, string> = new Map(
-  grammar.attributes.identity.rows.map(({ domain, identity }) => [domain, identity] as const),
-);
-
-/**
- * `ValueIdentity`: domain → identity, total, the identity type of each domain, `none` for one of no
- * identity, so an overlay selects the attributes whose domain is an `xs:ID` or carries `xs:IDREF`
- * tokens.
+ * `ValueIdentity`: domain → identity, the identity type of each domain that has one, so an overlay
+ * selects the attributes whose domain is an `xs:ID` or carries `xs:IDREF` tokens. A domain of no
+ * identity has no row, which a law reads through `ValueIdentity.has`.
  */
 export const ValueIdentity = closed.relation(
   "ValueIdentity",
   { domain: closedId(ValueDomain), identity: closedId(Identity) },
   ["domain"],
-  ValueDomain.handles.map((domain) => ({
-    domain,
-    // A domain of no identity takes the roster's null object.
-    identity: Option.match(Option.fromNullishOr(identityOf.get(domain)), {
-      onNone: (): string => none,
-      onSome: (identity) => identity,
-    }),
+  grammar.attributes.identity.rows.map(({ domain, identity }) => ({
+    domain: asValueDomain(domain),
+    identity,
   })),
 );
-
-/**
- * The domain a governor reads a text in where it has no simple content: `xs:anySimpleType`, every
- * value (`attributes.ts`).
- */
-const anyTextDomain = memberOf(grammar.attributes.valueDomain.key[0].roster, openDomain.handle);
 
 /**
  * The simple-content domain of each (version, governor) the grammar states one for: a kind's text
@@ -1193,24 +1147,21 @@ const textDomainAt: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * `TextDomain`: (version, governor) → domain, total, the value domain an element under the governor
- * holds its text in: its kind's simple content for a kind, the governing type's for a (kind, type),
- * and `xs:anySimpleType` where the governor has no simple content.
+ * `TextDomain`: (version, governor) → domain, the value domain an element under the governor holds
+ * its text in: its kind's simple content for a kind, the governing type's for a (kind, type). A
+ * governor with no simple content has no row, and no law reads its text in a domain
+ * (`TextDomain.has`).
  */
 export const TextDomain = closed.relation(
   "TextDomain",
   { domain: closedId(ValueDomain), governor: closedId(Governor), version: closedId(SchemaVersion) },
   ["version", "governor"],
   grammar.kinds.versions.handles.flatMap((version) =>
-    Governor.handles.map((governor) => ({
-      // A governor with no simple content reads its text as `xs:anySimpleType`.
-      domain: Option.match(Option.fromNullishOr(textDomainAt.get(`${version} ${governor}`)), {
-        onNone: () => anyTextDomain,
-        onSome: (domain) => domain,
-      }),
-      governor,
-      version,
-    })),
+    Governor.handles.flatMap((governor) =>
+      Option.toArray(Option.fromNullishOr(textDomainAt.get(`${version} ${governor}`))).map(
+        (domain) => ({ domain: asValueDomain(domain), governor, version }),
+      ),
+    ),
   ),
 );
 

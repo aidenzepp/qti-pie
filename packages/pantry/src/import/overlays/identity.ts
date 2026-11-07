@@ -177,53 +177,36 @@ const governorAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * The installed `ValueIdentity`, keyed by domain: the identity type of each value domain, `none`
- * for a domain of no identity.
+ * The installed `ValueIdentity`, keyed by domain: the identity type of each value domain that has
+ * one. A domain of no identity has no row.
  */
 const identityAt: ReadonlyMap<string, string> = new Map(
   ValueIdentity.rows.map(({ domain, identity }) => [domain, identity]),
 );
 
 /**
- * Read the identity type of a value domain from `ValueIdentity`, which is total over the domains
- * (`#pantry/grammar/install.ts`).
- *
- * @param domain - A domain the grammar installs.
- * @returns `ID`, `IDREF`, `IDREFS` or `none`.
- * @throws {Error} When `ValueIdentity` holds no row of the domain, which its totality rules out: a
- *   defect of the grammar, never of a document.
- */
-const identityIn = (domain: string): string => {
-  const identity = identityAt.get(domain);
-  if (identity === undefined) {
-    throw new Error(
-      `Value domain ${domain} has no ValueIdentity row, but ValueIdentity holds one for every domain the grammar installs. Install the grammar's ValueIdentity over every ValueDomain handle.`,
-    );
-  }
-
-  return identity;
-};
-
-/**
  * The identity type of each attribute's value domain under the attribute grammar
- * `AttributeGrammar` installs, keyed `version governor name`.
+ * `AttributeGrammar` installs, keyed `version governor name`, for each attribute whose domain has
+ * one.
  */
 const attributeIdentityAt: ReadonlyMap<string, string> = new Map(
-  attributeRows.map(({ domain, governor, name, version }) => [
-    `${version} ${governor} ${name}`,
-    identityIn(domain),
-  ]),
+  attributeRows.flatMap(({ domain, governor, name, version }) =>
+    Option.toArray(Option.fromUndefinedOr(identityAt.get(domain))).map(
+      (identity) => [`${version} ${governor} ${name}`, identity] as const,
+    ),
+  ),
 );
 
 /**
  * The identity type of the domain each governor reads its text in, under the installed
- * `TextDomain`, keyed `version governor`.
+ * `TextDomain`, keyed `version governor`, for each governor whose text domain has one.
  */
 const textIdentityAt: ReadonlyMap<string, string> = new Map(
-  TextDomain.rows.map(({ domain, governor, version }) => [
-    `${version} ${governor}`,
-    identityIn(domain),
-  ]),
+  TextDomain.rows.flatMap(({ domain, governor, version }) =>
+    Option.toArray(Option.fromUndefinedOr(identityAt.get(domain))).map(
+      (identity) => [`${version} ${governor}`, identity] as const,
+    ),
+  ),
 );
 
 /**
@@ -285,8 +268,8 @@ const governorOf = (element: NodeRow<Composed>): string | undefined =>
  *
  * @param attribute - The attribute row.
  * @param element - Its element's node row.
- * @returns `ID`, `IDREF`, `IDREFS` or `none`; none where `GoverningOf` gives the element no
- *   governor, or the governor reads the attribute under no domain.
+ * @returns `ID`, `IDREF` or `IDREFS`; none where `GoverningOf` gives the element no governor, the
+ *   governor reads the attribute under no domain, or its domain has no identity.
  */
 const attributeIdentityOf = (
   attribute: AttributeRow<Composed>,
@@ -341,7 +324,6 @@ const textIdentityOf = (element: NodeRow<Composed>): Option.Option<string> =>
     Option.flatMap((governor) =>
       Option.fromUndefinedOr(textIdentityAt.get(`${element.version} ${governor}`)),
     ),
-    Option.filter((identity) => identity !== "none"),
   );
 
 /**

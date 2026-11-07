@@ -213,21 +213,21 @@ export interface ContentGrammar {
    */
   readonly positions: Roster<string>;
   /**
-   * `SharedModelOf`: (version, parent) → shared model, total, {@link noSharedModel} for a family
-   * whose kinds each name one position.
+   * `SharedModelOf`: (version, parent) → shared model, for each family a kind names at several
+   * positions; a family whose kinds each name one position has no row.
    */
   readonly sharedModelOf: Closed<FamilyKey, readonly [IdField<"model", string>]>;
   /**
    * `SharedPositions`: shared model → positions, each shared model's position count, its start 0
-   * included, `Symbol`'s dependent size; {@link noSharedModel} has none, so no block.
+   * included, `Symbol`'s dependent size.
    */
   readonly sharedModelPositions: Closed<
     readonly [IdField<"model", string>],
     readonly [ValueField<"positions", number>]
   >;
   /**
-   * The `SharedModel` roster: {@link noSharedModel}, then every distinct shared model in the code
-   * order of its first family, each named as {@link ContentGrammar.models} names a model.
+   * The `SharedModel` roster: every distinct shared model in the code order of its first family,
+   * each named as {@link ContentGrammar.models} names a model.
    */
   readonly sharedModels: Roster<string>;
   /**
@@ -812,12 +812,6 @@ export type AdmittedRow = AdmittedChild & {
 };
 
 /**
- * The handle of the shared model no shared kind is in: `SharedModelOf`'s value for a family whose
- * kinds each name one position.
- */
-export const noSharedModel = "none";
-
-/**
  * A (version, parent) family.
  */
 interface Family {
@@ -1238,17 +1232,8 @@ export const contentOf = (input: {
         }),
       ),
     );
-    const sharedModelAt = new Map(
-      sharedModels.families.map(({ model, parent: held, version: in_ }) => [
-        `${in_} ${held}`,
-        model,
-      ]),
-    );
     const model = idField("model", yield* roster("ContentModel", contentModels.handles));
-    const sharedModel = idField(
-      "model",
-      yield* roster("SharedModel", [noSharedModel, ...sharedModels.handles]),
-    );
+    const sharedModel = idField("model", yield* roster("SharedModel", sharedModels.handles));
     const modelSizes = new Map(
       contentModels.models.map(({ handle, value }) => [handle, value.next.length]),
     );
@@ -1316,12 +1301,9 @@ export const contentOf = (input: {
       key: [
         sharedModel,
         idField("kind", input.kinds),
-        dependentField("position", positions, (prefix) => {
-          const shared = prefixHandle(prefix, "model");
-
-          // `none` has no block: no kind of its families names several positions.
-          return shared === noSharedModel ? 0 : countOf(sharedSizes, shared, "SharedPositions");
-        }),
+        dependentField("position", positions, (prefix) =>
+          countOf(sharedSizes, prefixHandle(prefix, "model"), "SharedPositions"),
+        ),
       ],
       name: "Symbol",
       payload: [],
@@ -1335,13 +1317,7 @@ export const contentOf = (input: {
       key: [version, parent],
       name: "SharedModelOf",
       payload: [sharedModel],
-      rows: familiesOf(input).map((held) => ({
-        ...held,
-        model: Option.match(
-          Option.fromNullishOr(sharedModelAt.get(`${held.version} ${held.parent}`)),
-          { onNone: () => noSharedModel, onSome: (shared) => shared },
-        ),
-      })),
+      rows: sharedModels.families,
     });
     // `Symbol`'s positions by shared model and kind, for the host's step.
     const sharedAt = Map.groupBy(symbol.rows, (row) => `${row.model} ${row.kind}`);

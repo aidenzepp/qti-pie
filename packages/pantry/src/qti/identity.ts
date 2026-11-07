@@ -125,6 +125,7 @@ import {
   AttributeName,
   AttributeSlotOf,
   GoverningOf,
+  Identity,
   NodeKind,
   ResourceType,
   SchemaVersion,
@@ -628,23 +629,29 @@ export const identityRelations = {
 type AttributeRow = RowScalars<typeof Attribute>;
 
 /**
- * Read an attribute's identity type: its value domain's under its element's governor, absent for a
- * name the governor does not admit, which AL1 refuses.
+ * An `Identity` handle: `ID`, `IDREF` or `IDREFS`.
+ */
+type IdentityHandle = (typeof Identity.handles)[number];
+
+/**
+ * State that an attribute's identity type is one of `identities`: its value domain under its
+ * element's governor has a `ValueIdentity` row, and that row names one of them. A domain of no
+ * identity has no row, so the statement is false of it; a name the governor does not admit has no
+ * domain, so the statement is absent there, and AL1 refuses the attribute.
  *
  * @param a - The row.
- * @returns The closed read.
+ * @param identities - The identity types.
+ * @returns The predicate.
  */
-const identityOf = (a: AttributeRow) => {
+const identityIn = (a: AttributeRow, identities: readonly IdentityHandle[]) => {
   const model = AttributeModelOf.at(
     "model",
     a.version,
     GoverningOf.at("governor", a.version, a.kind, a.governs),
   );
+  const domain = AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name));
 
-  return ValueIdentity.at(
-    "identity",
-    AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name)),
-  );
+  return a.and(ValueIdentity.has(domain), a.in(ValueIdentity.at("identity", domain), identities));
 };
 
 /**
@@ -654,18 +661,30 @@ const identityOf = (a: AttributeRow) => {
 type GovernedRow = RowScalars<typeof Node> | RowScalars<typeof IdentityText>;
 
 /**
- * Read the identity type of an element's text: its text domain's under its governor, `none` where
- * the governor reads its text in a domain of no identity (`TextDomain` and `ValueIdentity` are
- * total).
+ * State that an element's text is of one of `identities`: its governor has a `TextDomain`, and that
+ * domain has a `ValueIdentity` row naming one of them. A governor with no simple content has no
+ * `TextDomain` row and a domain of no identity no `ValueIdentity` row, so the statement is false of
+ * either.
  *
  * @param n - The row.
- * @returns The closed read.
+ * @param identities - The identity types.
+ * @returns The predicate.
  */
-const textIdentityOf = (n: GovernedRow) =>
-  ValueIdentity.at(
-    "identity",
-    TextDomain.at("domain", n.version, GoverningOf.at("governor", n.version, n.kind, n.governs)),
+const textIdentityIn = (n: GovernedRow, identities: readonly IdentityHandle[]) => {
+  const governor = GoverningOf.at("governor", n.version, n.kind, n.governs);
+  const domain = TextDomain.at("domain", n.version, governor);
+
+  return n.and(
+    TextDomain.has(n.version, governor),
+    ValueIdentity.has(domain),
+    n.in(ValueIdentity.at("identity", domain), identities),
   );
+};
+
+/**
+ * Every identity type: `ID`, `IDREF` and `IDREFS`.
+ */
+const identities: readonly IdentityHandle[] = Identity.handles;
 
 /**
  * State that an attribute is ID-typed: its domain is an `xs:ID` one, or it is a context
@@ -676,7 +695,7 @@ const textIdentityOf = (n: GovernedRow) =>
  */
 const idTyped = (a: AttributeRow) =>
   a.or(
-    a.eq(identityOf(a), "ID"),
+    identityIn(a, ["ID"]),
     a.and(a.eq(a.kind, "qti-context-declaration"), a.eq(a.name, "identifier")),
   );
 
@@ -699,14 +718,14 @@ const namingIdAttributes = select(Attribute, (a) =>
 /**
  * The elements whose text is of an identity type, the source of {@link IdentityText}.
  */
-const identityNodes = select(Node, (n) => n.ne(textIdentityOf(n), "none"));
+const identityNodes = select(Node, (n) => textIdentityIn(n, identities));
 
 /**
  * The elements whose text is an ID, each the source of a {@link DocumentId}: those whose text is
  * of an `xs:ID` domain and names something once collapsed ({@link namingPattern}).
  */
 const idTexts = select(IdentityText, (t) =>
-  t.and(t.eq(textIdentityOf(t), "ID"), Compute.matches(t.lexical, namingPattern)),
+  t.and(textIdentityIn(t, ["ID"]), Compute.matches(t.lexical, namingPattern)),
 );
 
 /**
@@ -1031,8 +1050,8 @@ export const identityLawsByName = {
     ),
     check("E1_derived", IdentityText, (t) =>
       t.or(
-        t.and(t.eq(textIdentityOf(t), "ID"), t.eq(t.idrefs, 0n)),
-        t.and(t.in(textIdentityOf(t), ["IDREF", "IDREFS"]), t.eq(t.lexical, t.idrefText)),
+        t.and(textIdentityIn(t, ["ID"]), t.eq(t.idrefs, 0n)),
+        t.and(textIdentityIn(t, ["IDREF", "IDREFS"]), t.eq(t.lexical, t.idrefText)),
       ),
     ),
     check("E1_derived", TextIdref, (i) =>

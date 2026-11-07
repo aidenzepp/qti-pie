@@ -72,12 +72,7 @@ import {
 } from "#pantry/grammar/attributes.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import {
-  contentEnds,
-  contentFollows,
-  contentModelOf,
-  noSharedModel,
-} from "#pantry/grammar/content.ts";
+import { contentEnds, contentFollows, contentModelOf } from "#pantry/grammar/content.ts";
 import { mathArities, mathQualifiers } from "#pantry/grammar/expression.ts";
 import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
 import type { DoubleBound } from "#pantry/grammar/domains.ts";
@@ -5829,11 +5824,9 @@ const kindsAt = (
     ...Option.match(grammar.content.sharedModelOf.lookup({ parent, version }), {
       onNone: () => [],
       onSome: ({ model }) =>
-        model === noSharedModel
-          ? []
-          : grammar.content.symbol.rows
-              .filter((row) => row.model === model && row.position === position)
-              .map(({ kind }) => kind),
+        grammar.content.symbol.rows
+          .filter((row) => row.model === model && row.position === position)
+          .map(({ kind }) => kind),
     }),
   ]),
 ];

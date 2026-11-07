@@ -360,7 +360,7 @@ const follow: ReadonlySet<string> = new Set(
 );
 
 /**
- * `SharedModelOf`'s rows as installed: each family's shared model, `none` for most.
+ * `SharedModelOf`'s rows as installed: each shared family's model. Most families have none.
  */
 const sharedModelOf: ReadonlyMap<string, string> = new Map(
   install.SharedModelOf.rows.map(({ model, parent, version }) => [
@@ -422,7 +422,10 @@ const lawfulStates = (
     return [was];
   }
 
-  return (symbol.get(`${sharedModelOf.get(family) ?? "none"} ${key.kind}`) ?? []).filter(follows);
+  return Option.match(Option.fromUndefinedOr(sharedModelOf.get(family)), {
+    onNone: () => [],
+    onSome: (shared) => (symbol.get(`${shared} ${key.kind}`) ?? []).filter(follows),
+  });
 };
 
 /**
@@ -525,7 +528,7 @@ describe("N5, content order", { timeout: searchTimeout }, () => {
             Effect.sync(() => {
               const family = familyKey(version, parent);
               const positions = modelPositions.get(contentModelOf.get(family) ?? "") ?? 1;
-              if (sharedModelOf.get(family) !== "none") {
+              if (sharedModelOf.has(family)) {
                 c.note("shared family");
               }
 
@@ -1009,7 +1012,7 @@ const familyWith = (holds: (family: Family, kind: string, position: string) => b
  */
 const sharedFamily = familyWith(
   ({ parent, version }, _, position) =>
-    position === "0" && sharedModelOf.get(familyKey(version, parent)) !== "none",
+    position === "0" && sharedModelOf.has(familyKey(version, parent)),
 );
 
 /**

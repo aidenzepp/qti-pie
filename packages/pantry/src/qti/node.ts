@@ -281,10 +281,10 @@ export const universalDomains: readonly (typeof ValueDomain.handles)[number][] =
 })();
 
 /**
- * State that an element under its governor holds checked text: its `TextDomain` under
- * `GoverningOf`'s governor of (version, kind, governs) is none of {@link universalDomains}. Simple
- * content holds only character data, and a complex type's governor reads `xs:anySimpleType`
- * (`TextDomain` is total), so this is the element whose string value TextDomain judges.
+ * State that an element under its governor holds checked text: `GoverningOf`'s governor of
+ * (version, kind, governs) has a `TextDomain`, and it is none of {@link universalDomains}. Simple
+ * content holds only character data, and a governor with no simple content has no `TextDomain`
+ * row, so this is the element whose string value TextDomain judges.
  *
  * Q5.05's TextDomain check reads it over an element's own kind and type ({@link holdsCheckedText}),
  * and the string value's fold over a member's parent's (`parentKind`, `parentGoverns`), so the two
@@ -299,13 +299,14 @@ export const checkedText = (
   n: NodeRow,
   kind: NodeRow["kind"] | NodeRow["parentKind"],
   governs: NodeRow["governs"] | NodeRow["parentGoverns"],
-) =>
-  n.not(
-    n.in(
-      TextDomain.at("domain", n.version, GoverningOf.at("governor", n.version, kind, governs)),
-      universalDomains,
-    ),
+) => {
+  const governor = GoverningOf.at("governor", n.version, kind, governs);
+
+  return n.and(
+    TextDomain.has(n.version, governor),
+    n.not(n.in(TextDomain.at("domain", n.version, governor), universalDomains)),
   );
+};
 
 /**
  * State that a row is an element whose text TextDomain checks: {@link checkedText} of its own kind
@@ -493,7 +494,8 @@ const elementsFold = fold(
 
 /**
  * The counted position's fold (N7, C15): the element children at the one position of their parent's
- * model whose count `CountedOf` bounds beside the automaton.
+ * model whose count `CountedOf` bounds beside the automaton, none in a family `CountedOf` has no
+ * row of.
  */
 const countedFold = fold(
   nodeTree,
@@ -503,6 +505,7 @@ const countedFold = fold(
       n.and(
         member(n),
         element(n),
+        CountedOf.has(n.version, n.parentKind),
         n.eq(n.state, CountedOf.at("position", n.version, n.parentKind)),
       ),
     ),
@@ -527,14 +530,19 @@ const cappedChildren = select(Node, (n) =>
 
 /**
  * The barred position's fold (N7, C15): the element children at the position `BarredOf` bars when
- * its parent carries the barring attribute.
+ * its parent carries the barring attribute, none in a family `BarredOf` has no row of.
  */
 const barredFold = fold(
   nodeTree,
   Monoid.count,
   on(
     select(Node, (n) =>
-      n.and(member(n), element(n), n.eq(n.state, BarredOf.at("position", n.version, n.parentKind))),
+      n.and(
+        member(n),
+        element(n),
+        BarredOf.has(n.version, n.parentKind),
+        n.eq(n.state, BarredOf.at("position", n.version, n.parentKind)),
+      ),
     ),
     "parent",
   ),
@@ -678,6 +686,7 @@ export const nodeLawsByName = {
         n.and(
           n.eq(positionOf(n), "0"),
           element(n),
+          SharedModelOf.has(n.version, n.parentKind),
           n.eq(
             Compute.subset(
               Compute.singleton(n.state),
@@ -706,7 +715,7 @@ export const nodeLawsByName = {
     check("N7_Counted", Node, (n) =>
       n.or(
         n.not(modeled(n)),
-        n.eq(CountedOf.at("position", n.version, n.kind), "0"),
+        n.not(CountedOf.has(n.version, n.kind)),
         n.between(
           n.countedChildren,
           CountedOf.at("min", n.version, n.kind),
@@ -735,7 +744,7 @@ export const nodeLawsByName = {
     check("N7_barred_by", Node, (n) =>
       n.or(
         n.not(modeled(n)),
-        n.eq(BarredOf.at("position", n.version, n.kind), "0"),
+        n.not(BarredOf.has(n.version, n.kind)),
         n.eq(
           Compute.disjoint(Compute.singleton(BarredOf.at("slot", n.version, n.kind)), n.attrs),
           true,
