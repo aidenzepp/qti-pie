@@ -868,12 +868,12 @@ export const lawTable = {
   "Operand fit": {
     rule: "P23",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 (§2.11.3, each operator's sub-expression base types and cardinalities; Member's and Delete's first single and second a container), a type no declaration says aside (reading 4) (expression.ts expressionTypings, OperandBase, LeadCardinality and TailCardinality; the old checker's P23)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-member (§6.9, ExpressionGroup, normative: each operator's sub-expression base types and cardinalities, as §6.9.33 qti-member and §6.9.20 qti-delete say: 'The first sub-expression must have single cardinality and the second must be a multiple or ordered container'), a type no declaration says aside (reading 4) (expression.ts expressionTypings, OperandBase, LeadCardinality and TailCardinality; the old checker's P23)",
   },
   "Outcome only": {
     rule: "P25",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#ExprTestNumberCorrect (§2.11.4, the test operators NumberCorrect, NumberIncorrect, NumberPresented, NumberResponded, NumberSelected, OutcomeMaximum, OutcomeMinimum and TestVariables: 'can only be used in outcomes processing') (expressions.ts Outcome_only, its language Processing's; the old checker's P25)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-number-correct (§6.9.58 to §6.9.64 and §6.9.41, normative: qti-number-correct, qti-number-incorrect, qti-number-presented, qti-number-responded, qti-number-selected, qti-outcome-minimum, qti-outcome-maximum and qti-test-variables, each 'which can only be used in outcomes processing') (expressions.ts Outcome_only, its language Processing's; the old checker's P25)",
   },
   "Package key": {
     rule: "reachability",
@@ -923,7 +923,7 @@ export const lawTable = {
   "Reserved type": {
     rule: "reserved-type",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Outcome (§2.2.2.3, Outcomes Variable: 'SCORE MUST be a float', 'MAXSCORE MUST be a float', 'PASSED MUST be a boolean'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#IV_Context (§2.2.2.1: 'There is one built-in context variable: 'QTI_CONTEXT', which has record cardinality'), which the implementation guide declares explicitly (§3.7.11, 'an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 74)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration, normative: 'SCORE needs to be a float', 'MAXSCORE needs to be a float', 'PASSED needs to be a boolean'; the non-normative overview, §2.2.2.3, says 'MUST'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_AssessmentItem_qti-context-declaration (§4.1.10, and §4.4.7 of a test, normative: 'An implementation MUST support the global variable 'QTI_CONTEXT' with record cardinality'), which the implementation guide declares explicitly (§3.7.11, 'an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 74)",
   },
   ResourceTypeOf: {
     rule: "resource-type",
@@ -977,7 +977,7 @@ export const lawTable = {
   "Set type": {
     rule: "P20",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_SetOutcomeValue (§2.5.1.3: 'The expression must have an effective value type which is compatible with the variable's base-type and cardinality'), and the template, default and correct setters (§2.8.1) (expressions.ts Set_type; the old checker's P20)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_SetValue (§5.130, SetValue, normative, the class of every setter, outcome, response and template rules alike: 'floating point values can not be assigned to integer variables and vice-versa. The truncate, round or integerToFloat operators must be used to achieve numeric type conversion'; §5.130.2, its expression: 'The expression which must have an effective base-type and cardinality that matches the base-type and cardinality of the outcome variable being set') (expressions.ts Set_type; the old checker's P20)",
   },
   "Slider bounds": {
     rule: "slider-bounds",
@@ -1096,7 +1096,7 @@ export const lawTable = {
   "Variable declared": {
     rule: "P8",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables'; §2.11.1.2, a variable expression names 'an item variable that has been declared … or is one of the built-in variables') (references.ts); readings 4, 29 and 48",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-variable (§6.9.40, qti-variable, normative: 'This expression looks up the value of an itemVariable that has been declared in a corresponding variableDeclaration or is one of the built-in variables'), https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Variable.Attr_identifier (§7.47.1, Variable's identifier: 'The identifier of the item variable that has been declared in a corresponding variable declaration or of the built-in variables') and https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SetValue.Attr_identifier (§5.130.1, a setter's: 'The identifier of the variable to be set') (references.ts); readings 4, 29 and 48",
   },
   "Variable kind": {
     rule: "variable-kind",
