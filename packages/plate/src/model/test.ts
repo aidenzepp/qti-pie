@@ -21,18 +21,17 @@ import {
   isQti,
   leastInt,
   listed,
-  outcomeDeclaration,
   pathOf,
-  pathsOf,
   refusal,
   requiredAttribute,
   requiredValue,
   valueOf,
-  xmlWhitespaceRun,
   xsBoolean,
   xsBooleanOf,
-} from "#plate/model/item.ts";
-import type { ModelWalk, OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
+} from "#plate/model/attributes.ts";
+import type { ModelWalk } from "#plate/model/attributes.ts";
+import { outcomeDeclaration, pathsOf, xmlWhitespaceRun } from "#plate/model/item.ts";
+import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
 import { integerLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import { navigationModes, renders, submissionModes, testMarks } from "#plate/vocabulary.ts";
@@ -190,10 +189,11 @@ const declarationMarks: readonly FeatureRule[] = renders.marks.filter(
 );
 
 /**
- * The `qti-*` elements below an outcome declaration that the model reads. Any other is a mark keyed
- * by its name, as the item model marks it.
+ * The `qti-*` elements below an outcome declaration that the model reads: the item model's, which
+ * `renders` lists, so the two cannot drift. Any other is a mark keyed by its name, as the item
+ * model marks it.
  */
-const declarationContent: ReadonlySet<string> = new Set(["qti-default-value", "qti-value"]);
+const declarationContent: ReadonlySet<string> = new Set(renders.elements);
 
 /**
  * Read an integer written in an attribute, its outer whitespace gone, exactly.

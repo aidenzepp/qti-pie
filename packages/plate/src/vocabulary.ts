@@ -116,12 +116,16 @@ const textSafeElements = [
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
 /**
- * The response-processing elements of the engine: the ten elements it evaluates and the three
- * branches of `qti-response-condition`. `qti-equal` runs in its default `exact` tolerance mode
- * only; one in `absolute` or `relative` mode is a mark keyed `tolerance-mode="<mode>"`.
+ * The response rules of the engine: `qti-response-condition` with its three branches,
+ * `qti-set-outcome-value`, `qti-lookup-outcome-value`, `qti-exit-response`, and
+ * `qti-response-processing-fragment`, whose rules run in its place. The expression kinds the engine
+ * runs are not listed here: they are the registry's landed kinds (`landedKinds` in
+ * `#plate/model/expressions/read.ts`), which the item model reads, so a family lands a kind with no
+ * edit here.
  *
- * An inline `qti-response-processing` that uses only these becomes a rule tree; one that uses any
- * other element is a mark keyed by that element's name.
+ * An inline `qti-response-processing` that uses only these rules and landed expression kinds
+ * becomes a rule tree; one that uses any other element is a mark keyed by that element's name, and
+ * one that holds an XInclude `include` is the mark `xi:include`, since it is never fetched.
  */
 const engine = [
   "qti-response-condition",
@@ -129,14 +133,9 @@ const engine = [
   "qti-response-else-if",
   "qti-response-else",
   "qti-set-outcome-value",
-  "qti-match",
-  "qti-variable",
-  "qti-correct",
-  "qti-base-value",
-  "qti-is-null",
-  "qti-map-response",
-  "qti-map-response-point",
-  "qti-equal",
+  "qti-lookup-outcome-value",
+  "qti-exit-response",
+  "qti-response-processing-fragment",
 ] as const;
 
 /**
@@ -224,12 +223,15 @@ export interface Renders {
    */
   readonly controlNotices: readonly FeatureRule[];
   /**
-   * The `qti-*` elements plate renders or reads, the engine's included. Every element in the QTI
-   * namespace without the `qti-` prefix is HTML and renders as itself.
+   * The `qti-*` elements plate renders or reads, the engine's response rules included. The item
+   * model also reads the element of each expression kind the registry has landed (`landedKinds` in
+   * `#plate/model/expressions/read.ts`). Every element in the QTI namespace without the `qti-`
+   * prefix is HTML and renders as itself.
    */
   readonly elements: readonly string[];
   /**
-   * The response-processing elements the engine evaluates.
+   * The response rules the engine runs. The expression kinds it runs are the registry's landed
+   * kinds, which the item model reads.
    */
   readonly engine: readonly string[];
   /**
@@ -238,8 +240,10 @@ export interface Renders {
    * `cardinality="record"`. Beyond these, a `qti-*` element outside the item body and outside
    * `elements` is a mark keyed by its own name, response processing by a template URI outside the
    * built-ins is a mark keyed `template="<uri>"`, inline response processing with an element
-   * outside `engine` is a mark keyed by that element's name, and a `qti-equal` outside its `exact`
-   * tolerance mode is a mark keyed `tolerance-mode="<mode>"`.
+   * outside `engine` and the registry's landed expression kinds is a mark keyed by that element's
+   * name (an XInclude `include` there is keyed `xi:include`), and the text family's reader marks a
+   * `qti-pattern-match` literal it cannot compile `pattern`, a `qti-inside` coordinate written with
+   * `%` `area-coords-percent`, and every `qti-custom-operator` by its own name.
    */
   readonly marks: readonly FeatureRule[];
   /**
@@ -288,6 +292,10 @@ export const renders = {
     "qti-map-entry",
     "qti-area-mapping",
     "qti-area-map-entry",
+    "qti-match-table",
+    "qti-match-table-entry",
+    "qti-interpolation-table",
+    "qti-interpolation-table-entry",
     "qti-item-body",
     "qti-response-processing",
     ...interactionNames,

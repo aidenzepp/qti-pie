@@ -1,11 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Array as Arr, Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
+import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
   OutcomeMismatchError,
   UnknownIdentifierError,
   UnmappedResponseError,
   evaluateExpression,
+  evaluators,
   runRules,
 } from "#plate/engine/evaluate.ts";
 import type { Variables } from "#plate/engine/evaluate.ts";
@@ -23,6 +25,7 @@ import type {
 import { buildItem } from "#plate/model/item.ts";
 import { match, nullOf, parseLexical } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import { expressionKinds } from "#plate/model/expression.ts";
 
 /**
  * Construct a single identifier value.
@@ -337,6 +340,7 @@ const score: OutcomeDeclaration = {
   identifier: "SCORE",
   interpretation: Option.none(),
   longInterpretation: Option.none(),
+  lookupTable: Option.none(),
   masteryValue: Option.none(),
   normalMaximum: Option.none(),
   normalMinimum: Option.none(),
@@ -401,7 +405,12 @@ const variablesOf = (answer: Value, scored: Value = floatValue(0)): Variables =>
  * @param identifier The variable's identifier.
  * @returns The expression.
  */
-const variable = (identifier: string): Expression => ({ identifier, kind: "variable" });
+const variable = (identifier: string): Expression => ({
+  identifier,
+  kind: "variable",
+  operands: [],
+  weightIdentifier: Option.none(),
+});
 
 /**
  * Construct a `qti-base-value`.
@@ -409,7 +418,7 @@ const variable = (identifier: string): Expression => ({ identifier, kind: "varia
  * @param value The value.
  * @returns The expression.
  */
-const base = (value: Value): Expression => ({ kind: "base-value", value });
+const base = (value: Value): Expression => ({ kind: "base-value", operands: [], value });
 
 /**
  * Construct a response value of the base type and cardinality its declaration in {@link item} has.
@@ -434,7 +443,7 @@ const answerOf = (identifier: string, values: readonly Single[]): Value => {
  */
 const mapped = (identifier: string, values: readonly Single[]): Value =>
   Result.getOrThrow(
-    evaluateExpression({ identifier, kind: "map-response" }, item, {
+    evaluateExpression({ identifier, kind: "map-response", operands: [] }, item, {
       ...variablesOf(identifierValue("A")),
       responses: { [identifier]: answerOf(identifier, values) },
     }),
@@ -484,7 +493,7 @@ const pointOf = (x: bigint, y: bigint): Single => ({ baseType: "point", value: [
  */
 const pointMapped = (identifier: string, points: readonly Single[]): Value =>
   Result.getOrThrow(
-    evaluateExpression({ identifier, kind: "map-response-point" }, item, {
+    evaluateExpression({ identifier, kind: "map-response-point", operands: [] }, item, {
       ...variablesOf(identifierValue("A")),
       responses: { [identifier]: answerOf(identifier, points) },
     }),
@@ -512,7 +521,7 @@ const holds = (entry: Omit<AreaMapEntry, "mappedValue">, x: bigint, y: bigint): 
   );
   const value = Result.getOrThrow(
     evaluateExpression(
-      { identifier: "AREA", kind: "map-response-point" },
+      { identifier: "AREA", kind: "map-response-point", operands: [] },
       { ...item, responses: new Map([["AREA", area]]) },
       {
         outcomes: {},
@@ -588,7 +597,10 @@ const matchCorrect: readonly Rule[] = [
       branchOf(
         {
           kind: "match",
-          operands: [variable("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+          operands: [
+            variable("RESPONSE"),
+            { identifier: "RESPONSE", kind: "correct", operands: [] },
+          ],
         },
         [setOutcome("SCORE", base(floatValue(1)))],
       ),
@@ -658,7 +670,7 @@ describe("runRules", () => {
 
   it("a rule reads the outcome an earlier rule set", () => {
     const rules = [
-      setOutcome("EMPTY", { kind: "is-null", operand: variable("RESPONSE") }),
+      setOutcome("EMPTY", { kind: "is-null", operands: [variable("RESPONSE")] }),
       condition([branchOf(variable("EMPTY"), [setOutcome("SCORE", base(floatValue(0.5)))])]),
     ];
     const after = Result.getOrThrow(
@@ -754,11 +766,402 @@ describe("runRules", () => {
   });
 });
 
+/**
+ * `GRADE`'s match table: 1 maps to `A`, 2 to `B`, and every other integer to `F`.
+ */
+const grade: OutcomeDeclaration = {
+  ...score,
+  baseType: "identifier",
+  identifier: "GRADE",
+  lookupTable: Option.some({
+    defaultValue: Option.some(identifierOf("F")),
+    entries: [
+      { sourceValue: 1n, targetValue: identifierOf("A") },
+      { sourceValue: 2n, targetValue: identifierOf("B") },
+    ],
+    kind: "match",
+  }),
+};
+
+/**
+ * `LEVEL`'s match table, with no `default-value`: 1 maps to `A`.
+ */
+const level: OutcomeDeclaration = {
+  ...grade,
+  identifier: "LEVEL",
+  lookupTable: Option.some({
+    defaultValue: Option.none(),
+    entries: [{ sourceValue: 1n, targetValue: identifierOf("A") }],
+    kind: "match",
+  }),
+};
+
+/**
+ * `BAND`'s interpolation table, in document order: at or above 7.5 is `HIGH`; above 2, the
+ * boundary excluded, `MID`; at or above 0 `LOW`; anything else `NONE`.
+ */
+const band: OutcomeDeclaration = {
+  ...grade,
+  identifier: "BAND",
+  lookupTable: Option.some({
+    defaultValue: Option.some(identifierOf("NONE")),
+    entries: [
+      { includeBoundary: true, sourceValue: 7.5, targetValue: identifierOf("HIGH") },
+      { includeBoundary: false, sourceValue: 2, targetValue: identifierOf("MID") },
+      { includeBoundary: true, sourceValue: 0, targetValue: identifierOf("LOW") },
+    ],
+    kind: "interpolation",
+  }),
+};
+
+/**
+ * A single integer outcome, `COUNT`, the source of a NULL integer.
+ */
+const count: OutcomeDeclaration = { ...score, baseType: "integer", identifier: "COUNT" };
+
+/**
+ * The item of the response-rule cases: {@link item} with the lookup outcomes and `COUNT`.
+ */
+const lookupItem: Item = {
+  ...item,
+  outcomes: new Map([
+    ...item.outcomes,
+    ["GRADE", grade],
+    ["LEVEL", level],
+    ["BAND", band],
+    ["COUNT", count],
+  ]),
+};
+
+/**
+ * The variables of the response-rule cases: `SCORE` 0, and `COUNT`, `GRADE`, `LEVEL` and `BAND`
+ * NULL.
+ */
+const lookupVariables: Variables = {
+  outcomes: {
+    BAND: nullOf("identifier", "single"),
+    COUNT: nullOf("integer", "single"),
+    GRADE: nullOf("identifier", "single"),
+    LEVEL: nullOf("identifier", "single"),
+    SCORE: floatValue(0),
+  },
+  responses: {},
+};
+
+/**
+ * Construct a `qti-lookup-outcome-value`.
+ *
+ * @param identifier The outcome whose table maps the value.
+ * @param expression The value looked up.
+ * @returns The rule.
+ */
+const lookupOutcome = (identifier: string, expression: Expression): Rule => ({
+  expression,
+  identifier,
+  kind: "lookup-outcome",
+});
+
+/**
+ * Run one lookup against {@link lookupItem} and give the outcome it set.
+ *
+ * @param identifier The outcome looked up.
+ * @param expression The value looked up.
+ * @returns The outcome's value after the lookup.
+ */
+const lookedUp = (identifier: string, expression: Expression): Value | undefined =>
+  Result.getOrThrow(runRules([lookupOutcome(identifier, expression)], lookupItem, lookupVariables))
+    .outcomes[identifier];
+
+/**
+ * Construct a `qti-set-outcome-value` element of `SCORE` to a float base value.
+ *
+ * @param value The base value's text.
+ * @returns The rule element.
+ */
+const scoreElement = (value: string): SourceElement =>
+  el(
+    "qti-set-outcome-value",
+    [attr("identifier", "SCORE")],
+    [el("qti-base-value", [attr("base-type", "float")], [text(value)])],
+  );
+
+/**
+ * Construct an item whose inline response processing looks its float response up in `BAND`'s
+ * interpolation table, {@link band}'s as written: at or above 7.5 is `HIGH`; above 2, the
+ * boundary excluded, `MID`; at or above 0 `LOW`; anything else `NONE`.
+ *
+ * @param cardinality `BAND`'s cardinality.
+ * @returns The item's document.
+ */
+const bandItem = (cardinality: "multiple" | "ordered" | "single"): SourceDocument =>
+  doc(
+    "items/band.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "band"), attr("title", "Band")],
+      [
+        el("qti-response-declaration", [
+          attr("base-type", "float"),
+          attr("cardinality", "single"),
+          attr("identifier", "RESPONSE"),
+        ]),
+        el(
+          "qti-outcome-declaration",
+          [
+            attr("base-type", "identifier"),
+            attr("cardinality", cardinality),
+            attr("identifier", "BAND"),
+          ],
+          [
+            el(
+              "qti-interpolation-table",
+              [attr("default-value", "NONE")],
+              [
+                el("qti-interpolation-table-entry", [
+                  attr("source-value", "7.5"),
+                  attr("target-value", "HIGH"),
+                ]),
+                el("qti-interpolation-table-entry", [
+                  attr("include-boundary", "false"),
+                  attr("source-value", "2"),
+                  attr("target-value", "MID"),
+                ]),
+                el("qti-interpolation-table-entry", [
+                  attr("source-value", "0"),
+                  attr("target-value", "LOW"),
+                ]),
+              ],
+            ),
+          ],
+        ),
+        el("qti-item-body"),
+        el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-lookup-outcome-value",
+              [attr("identifier", "BAND")],
+              [el("qti-variable", [attr("identifier", "RESPONSE")])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+describe("response rules: lookup, exit and a typed NULL", () => {
+  it("[I-9a] a lookup maps a value through its outcome's match table by exact integer", () => {
+    assert.deepStrictEqual(lookedUp("GRADE", base(integerValue(2n))), identifierValue("B"));
+  });
+
+  it("[I-9a] a lookup no match table entry maps gives the table's default-value, else a NULL of the outcome's type", () => {
+    assert.deepStrictEqual(lookedUp("GRADE", base(integerValue(3n))), identifierValue("F"));
+    assert.deepStrictEqual(
+      lookedUp("LEVEL", base(integerValue(3n))),
+      nullOf("identifier", "single"),
+    );
+  });
+
+  it("[I-9a] a lookup of a NULL gives the table's default-value, else NULL, never the outcome's own default (9.12)", () => {
+    const defaulted: Item = {
+      ...lookupItem,
+      outcomes: new Map([
+        ...lookupItem.outcomes,
+        ["LEVEL", { ...level, defaultValue: Option.some(identifierValue("Z")) }],
+      ]),
+    };
+    const after = Result.getOrThrow(
+      runRules(
+        [lookupOutcome("GRADE", variable("COUNT")), lookupOutcome("LEVEL", variable("COUNT"))],
+        defaulted,
+        lookupVariables,
+      ),
+    );
+
+    assert.deepStrictEqual(after.outcomes["GRADE"], identifierValue("F"));
+    assert.deepStrictEqual(after.outcomes["LEVEL"], nullOf("identifier", "single"));
+  });
+
+  it("[I-9a] a lookup maps a number through an interpolation table by the first entry whose source-value it reaches, include-boundary deciding the equal case", () => {
+    const bands = [
+      [floatValue(7.5), "HIGH"],
+      [floatValue(9), "HIGH"],
+      [floatValue(2.5), "MID"],
+      [floatValue(2), "LOW"],
+      [integerValue(2n), "LOW"],
+      [integerValue(3n), "MID"],
+      [floatValue(0), "LOW"],
+      [floatValue(-1), "NONE"],
+    ] as const;
+
+    for (const [index, [source, expected]] of bands.entries()) {
+      assert.deepStrictEqual(
+        lookedUp("BAND", base(source)),
+        identifierValue(expected),
+        `case ${index}`,
+      );
+    }
+  });
+
+  it.effect(
+    "[I-9a] an inline lookup through an interpolation table runs into a single outcome, and into a multiple or an ordered one is marked with processing none, as a match table's (repair7-1)",
+    () =>
+      Effect.gen(function* looksUpInline() {
+        const single = yield* buildItem(bandItem("single"));
+        const rules = yield* Option.match(single.processing, {
+          onNone: () => Effect.die("the single outcome's lookup does not run"),
+          onSome: Effect.succeed,
+        });
+        const bands = [
+          [7.5, "HIGH"],
+          [2.5, "MID"],
+          [2, "LOW"],
+          [-1, "NONE"],
+        ] as const;
+
+        assert.deepStrictEqual(single.unsupported, []);
+        for (const [index, [answer, expected]] of bands.entries()) {
+          const after = Result.getOrThrow(
+            runRules(rules, single, {
+              outcomes: { BAND: nullOf("identifier", "single") },
+              responses: { RESPONSE: floatValue(answer) },
+            }),
+          );
+
+          assert.deepStrictEqual(
+            after.outcomes["BAND"],
+            identifierValue(expected),
+            `case ${index}`,
+          );
+        }
+
+        for (const cardinality of ["multiple", "ordered"] as const) {
+          const marked = yield* buildItem(bandItem(cardinality));
+
+          assert.deepStrictEqual(marked.processing, Option.none(), cardinality);
+          assert.deepStrictEqual(
+            marked.unsupported,
+            [
+              {
+                feature: "outcome-type:BAND",
+                path: "qti-assessment-item/qti-response-processing",
+                shown: "mark",
+              },
+            ],
+            cardinality,
+          );
+        }
+      }),
+  );
+
+  it("[I-9a] an exit ends the run, at any depth, keeping what earlier rules set and skipping later ones", () => {
+    const flat = Result.getOrThrow(
+      runRules(
+        [
+          setOutcome("SCORE", base(floatValue(1))),
+          { kind: "exit" },
+          setOutcome("SCORE", base(floatValue(2))),
+        ],
+        lookupItem,
+        lookupVariables,
+      ),
+    );
+    const nested = Result.getOrThrow(
+      runRules(
+        [
+          condition([
+            branchOf(base(booleanValue(true)), [
+              setOutcome("SCORE", base(floatValue(1))),
+              { kind: "exit" },
+              setOutcome("SCORE", base(floatValue(3))),
+            ]),
+          ]),
+          setOutcome("SCORE", base(floatValue(2))),
+        ],
+        lookupItem,
+        lookupVariables,
+      ),
+    );
+
+    assert.deepStrictEqual(flat.outcomes["SCORE"], floatValue(1));
+    assert.deepStrictEqual(nested.outcomes["SCORE"], floatValue(1));
+  });
+
+  it.effect("[I-9a] a nested fragment's rules run in its place", () =>
+    Effect.gen(function* runsFragment() {
+      const built = yield* buildItem(
+        doc(
+          "items/fragment.xml",
+          el(
+            "qti-assessment-item",
+            [attr("identifier", "fragment"), attr("title", "Fragment")],
+            [
+              el("qti-outcome-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "SCORE"),
+              ]),
+              el("qti-item-body"),
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  scoreElement("1"),
+                  el(
+                    "qti-response-processing-fragment",
+                    [],
+                    [
+                      scoreElement("2"),
+                      el("qti-response-processing-fragment", [], [el("qti-exit-response")]),
+                      scoreElement("3"),
+                    ],
+                  ),
+                  scoreElement("4"),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+      const rules = yield* Option.match(built.processing, {
+        onNone: () => Effect.die("the fragments' processing does not run"),
+        onSome: Effect.succeed,
+      });
+      const after = Result.getOrThrow(
+        runRules(rules, built, { outcomes: { SCORE: floatValue(0) }, responses: {} }),
+      );
+
+      assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(2));
+    }),
+  );
+
+  it("[I-9a] a NULL of another type is stored as the outcome's typed NULL (spec §4.5)", () => {
+    const after = Result.getOrThrow(
+      runRules([setOutcome("SCORE", variable("COUNT"))], lookupItem, lookupVariables),
+    );
+
+    assert.deepStrictEqual(after.outcomes["SCORE"], nullOf("float", "single"));
+  });
+
+  it("[I-9a] a value of another type that is not NULL still fails OutcomeMismatchError at the evaluator", () => {
+    const failure = failureOf(
+      runRules([setOutcome("SCORE", base(integerValue(1n)))], lookupItem, lookupVariables),
+    );
+
+    assert.instanceOf(failure, OutcomeMismatchError);
+    assert.deepStrictEqual(
+      { _tag: failure._tag, actual: failure.actual, expected: failure.expected },
+      { _tag: "OutcomeMismatchError", actual: "integer single", expected: "float single" },
+    );
+  });
+});
+
 describe("evaluateExpression", () => {
   it("is-null on NULL is true", () => {
     const value = Result.getOrThrow(
       evaluateExpression(
-        { kind: "is-null", operand: variable("RESPONSE") },
+        { kind: "is-null", operands: [variable("RESPONSE")] },
         item,
         variablesOf(nullOf("identifier", "single")),
       ),
@@ -807,7 +1210,10 @@ describe("evaluateExpression", () => {
           evaluateExpression(
             {
               kind: "match",
-              operands: [variable("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+              operands: [
+                variable("RESPONSE"),
+                { identifier: "RESPONSE", kind: "correct", operands: [] },
+              ],
             },
             built,
             {
@@ -833,13 +1239,17 @@ describe("evaluateExpression", () => {
 
     assert.deepStrictEqual(
       Result.getOrThrow(
-        evaluateExpression({ identifier: "RESPONSE", kind: "correct" }, item, variables),
+        evaluateExpression(
+          { identifier: "RESPONSE", kind: "correct", operands: [] },
+          item,
+          variables,
+        ),
       ),
       identifierValue("true"),
     );
     assert.deepStrictEqual(
       Result.getOrThrow(
-        evaluateExpression({ identifier: "OPEN", kind: "correct" }, item, variables),
+        evaluateExpression({ identifier: "OPEN", kind: "correct", operands: [] }, item, variables),
       ),
       nullOf("identifier", "single"),
     );
@@ -935,7 +1345,14 @@ describe("evaluateExpression", () => {
 const equalOf = (left: Value, right: Value): Value =>
   Result.getOrThrow(
     evaluateExpression(
-      { kind: "equal", operands: [base(left), base(right)] },
+      {
+        includeLowerBound: true,
+        includeUpperBound: true,
+        kind: "equal",
+        operands: [base(left), base(right)],
+        tolerance: [],
+        toleranceMode: "exact",
+      },
       item,
       variablesOf(identifierValue("A")),
     ),
@@ -1066,7 +1483,7 @@ describe("map-response", () => {
   it("refuses to map a response with no mapping", () => {
     const failure = failureOf(
       evaluateExpression(
-        { identifier: "OPEN", kind: "map-response" },
+        { identifier: "OPEN", kind: "map-response", operands: [] },
         item,
         variablesOf(identifierValue("A")),
       ),
@@ -1191,7 +1608,7 @@ describe("map-response-point", () => {
   it("refuses to map a point response with no area mapping, naming qti-area-mapping", () => {
     const failure = failureOf(
       evaluateExpression(
-        { identifier: "UNMAPPED", kind: "map-response-point" },
+        { identifier: "UNMAPPED", kind: "map-response-point", operands: [] },
         item,
         variablesOf(identifierValue("A")),
       ),
@@ -1202,5 +1619,18 @@ describe("map-response-point", () => {
       { _tag: failure._tag, identifier: failure.identifier, mapping: failure.mapping },
       { _tag: "UnmappedResponseError", identifier: "UNMAPPED", mapping: "qti-area-mapping" },
     );
+  });
+});
+
+describe("evaluators", () => {
+  it("holds one entry for each of the 64 kinds, each an evaluator or the stub marker", () => {
+    const entries = Object.entries(evaluators);
+    for (const [kind, entry] of entries) {
+      if (entry !== "unlanded") {
+        assert.isFunction(entry, kind);
+      }
+    }
+
+    assert.deepStrictEqual(entries.map(([kind]) => kind).toSorted(), expressionKinds.toSorted());
   });
 });

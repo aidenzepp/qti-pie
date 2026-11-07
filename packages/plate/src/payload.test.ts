@@ -209,6 +209,7 @@ const item: Item = {
         identifier: "SCORE",
         interpretation: Option.none(),
         longInterpretation: Option.none(),
+        lookupTable: Option.none(),
         masteryValue: Option.none(),
         normalMaximum: Option.none(),
         normalMinimum: Option.none(),
@@ -224,6 +225,7 @@ const item: Item = {
         identifier: "FEEDBACK",
         interpretation: Option.none(),
         longInterpretation: Option.none(),
+        lookupTable: Option.none(),
         masteryValue: Option.none(),
         normalMaximum: Option.none(),
         normalMinimum: Option.none(),
@@ -238,7 +240,11 @@ const item: Item = {
           // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, the name the item model fixes; it is an array, never a function.
           then: [
             {
-              expression: { kind: "base-value", value: one({ baseType: "float", value: 1 }) },
+              expression: {
+                kind: "base-value",
+                operands: [],
+                value: one({ baseType: "float", value: 1 }),
+              },
               identifier: "SCORE",
               kind: "set-outcome",
             },
@@ -246,8 +252,13 @@ const item: Item = {
           when: {
             kind: "match",
             operands: [
-              { identifier: "CAPITAL", kind: "variable" },
-              { identifier: "CAPITAL", kind: "correct" },
+              {
+                identifier: "CAPITAL",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              { identifier: "CAPITAL", kind: "correct", operands: [] },
             ],
           },
         },
@@ -257,6 +268,7 @@ const item: Item = {
         {
           expression: {
             kind: "base-value",
+            operands: [],
             value: one({ baseType: "identifier", value: "MarkerRuleValue" }),
           },
           identifier: "FEEDBACK",

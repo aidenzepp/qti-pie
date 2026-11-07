@@ -1,9 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
-import { Config, ConfigProvider, Data, Duration, Effect, Option } from "effect";
+import { Config, ConfigProvider, Data, Duration, Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { readSource } from "#plate/document/read.ts";
-import { attr, doc, el, entity, text, xmlNamespace } from "#plate/document/source.ts";
+import {
+  attr,
+  doc,
+  el,
+  entity,
+  text,
+  xincludeNamespace,
+  xmlNamespace,
+} from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceChild,
@@ -28,10 +36,12 @@ import type {
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
+import { score as scoreItem } from "#plate/score.ts";
 import { rptemplatesDirectory } from "#plate/test/caches.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { checkRules } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
+import { acceptedItem, check } from "#plate/validate/verdict.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
@@ -204,6 +214,20 @@ const item = (parts: {
   );
 
 /**
+ * Construct an item document whose response processing is one rule, beside the identifier outcome
+ * `STATUS`.
+ *
+ * @param rule The rule.
+ * @returns The document at `items/test.xml`.
+ */
+const statusItem = (rule: SourceElement): SourceDocument =>
+  item({
+    after: [el("qti-response-processing", [], [rule])],
+    body: [],
+    declarations: [declaration("qti-outcome-declaration", "STATUS", "identifier", "single")],
+  });
+
+/**
  * A BG007-shaped item: an identifier `RESPONSE` whose correct response is `true`, a float `SCORE`
  * with default 1, and a two-choice interaction with `max-choices="1"`.
  *
@@ -287,7 +311,7 @@ const setsCorrectResponse: SourceElement = el(
  * @returns The rule.
  */
 const scoreRule = (value: number): Rule => ({
-  expression: { kind: "base-value", value: float(value) },
+  expression: { kind: "base-value", operands: [], value: float(value) },
   identifier: "SCORE",
   kind: "set-outcome",
 });
@@ -313,8 +337,13 @@ const matchCorrect: readonly Rule[] = [
         {
           kind: "match",
           operands: [
-            { identifier: "RESPONSE", kind: "variable" },
-            { identifier: "RESPONSE", kind: "correct" },
+            {
+              identifier: "RESPONSE",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.none(),
+            },
+            { identifier: "RESPONSE", kind: "correct", operands: [] },
           ],
         },
         [scoreRule(1)],
@@ -332,14 +361,25 @@ const matchCorrect: readonly Rule[] = [
 const mapResponsePoint: readonly Rule[] = [
   {
     branches: [
-      branch({ kind: "is-null", operand: { identifier: "RESPONSE", kind: "variable" } }, [
-        scoreRule(0),
-      ]),
+      branch(
+        {
+          kind: "is-null",
+          operands: [
+            {
+              identifier: "RESPONSE",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.none(),
+            },
+          ],
+        },
+        [scoreRule(0)],
+      ),
     ],
     kind: "condition",
     otherwise: Option.some([
       {
-        expression: { identifier: "RESPONSE", kind: "map-response-point" },
+        expression: { identifier: "RESPONSE", kind: "map-response-point", operands: [] },
         identifier: "SCORE",
         kind: "set-outcome",
       },
@@ -353,7 +393,12 @@ const mapResponsePoint: readonly Rule[] = [
  * @param identifier The variable's identifier.
  * @returns The expression.
  */
-const variableOf = (identifier: string): Expression => ({ identifier, kind: "variable" });
+const variableOf = (identifier: string): Expression => ({
+  identifier,
+  kind: "variable",
+  operands: [],
+  weightIdentifier: Option.none(),
+});
 
 /**
  * Construct a single identifier value.
@@ -402,17 +447,28 @@ const cc2MatchBasic: readonly Rule[] = [
       branch(
         {
           kind: "match",
-          operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+          operands: [
+            variableOf("RESPONSE"),
+            { identifier: "RESPONSE", kind: "correct", operands: [] },
+          ],
         },
         [
           setRule("SCORE", variableOf("MAXSCORE")),
-          setRule("FEEDBACKBASIC", { kind: "base-value", value: identifierValue("correct") }),
+          setRule("FEEDBACKBASIC", {
+            kind: "base-value",
+            operands: [],
+            value: identifierValue("correct"),
+          }),
         ],
       ),
     ],
     kind: "condition",
     otherwise: Option.some([
-      setRule("FEEDBACKBASIC", { kind: "base-value", value: identifierValue("incorrect") }),
+      setRule("FEEDBACKBASIC", {
+        kind: "base-value",
+        operands: [],
+        value: identifierValue("incorrect"),
+      }),
     ]),
   },
 ];
@@ -423,19 +479,39 @@ const cc2MatchBasic: readonly Rule[] = [
  */
 const cc2MapResponse: readonly Rule[] = [
   {
-    branches: [branch({ kind: "is-null", operand: variableOf("RESPONSE") }, [scoreRule(0)])],
+    branches: [branch({ kind: "is-null", operands: [variableOf("RESPONSE")] }, [scoreRule(0)])],
     kind: "condition",
-    otherwise: Option.some([setRule("SCORE", { identifier: "RESPONSE", kind: "map-response" })]),
+    otherwise: Option.some([
+      setRule("SCORE", { identifier: "RESPONSE", kind: "map-response", operands: [] }),
+    ]),
   },
   {
     branches: [
-      branch({ kind: "equal", operands: [variableOf("MAXSCORE"), variableOf("SCORE")] }, [
-        setRule("FEEDBACK", { kind: "base-value", value: identifierValue("correct") }),
-      ]),
+      branch(
+        {
+          includeLowerBound: true,
+          includeUpperBound: true,
+          kind: "equal",
+          operands: [variableOf("MAXSCORE"), variableOf("SCORE")],
+          tolerance: [],
+          toleranceMode: "exact",
+        },
+        [
+          setRule("FEEDBACK", {
+            kind: "base-value",
+            operands: [],
+            value: identifierValue("correct"),
+          }),
+        ],
+      ),
     ],
     kind: "condition",
     otherwise: Option.some([
-      setRule("FEEDBACK", { kind: "base-value", value: identifierValue("incorrect") }),
+      setRule("FEEDBACK", {
+        kind: "base-value",
+        operands: [],
+        value: identifierValue("incorrect"),
+      }),
     ]),
   },
 ];
@@ -847,6 +923,44 @@ const bindQuadratically = (source: SourceDocument): readonly (SourceElement | un
       ),
     );
 
+/**
+ * An item whose inline response processing holds the given rules, with an integer `RESPONSE`, a
+ * float `SCORE`, and an identifier `GRADE` with a match table.
+ *
+ * @param rules The rule elements of its `qti-response-processing`.
+ * @returns The document.
+ */
+const rulesItem = (rules: readonly SourceElement[]): SourceDocument =>
+  item({
+    after: [el("qti-response-processing", [], rules)],
+    body: [],
+    declarations: [
+      declaration("qti-response-declaration", "RESPONSE", "integer", "single"),
+      declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+      declaration("qti-outcome-declaration", "GRADE", "identifier", "single", [
+        el(
+          "qti-match-table",
+          [attr("default-value", "F")],
+          [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "A")])],
+        ),
+      ]),
+    ],
+  });
+
+/**
+ * A `qti-lookup-outcome-value` of an outcome to a `qti-variable`.
+ *
+ * @param identifier The outcome it looks up.
+ * @param source The variable whose value it looks up.
+ * @returns The rule element.
+ */
+const lookupElement = (identifier: string, source: string): SourceElement =>
+  el(
+    "qti-lookup-outcome-value",
+    [attr("identifier", identifier)],
+    [el("qti-variable", [attr("identifier", source)])],
+  );
+
 describe("buildItem", () => {
   it.effect(
     "[I-0] [I-1] [I-2] [I-7] [Q-2] builds BG007's Choice, and its template's rule tree is the inline block's",
@@ -921,14 +1035,25 @@ describe("buildItem", () => {
         Option.some<readonly Rule[]>([
           {
             branches: [
-              branch({ kind: "is-null", operand: { identifier: "RESPONSE", kind: "variable" } }, [
-                scoreRule(0),
-              ]),
+              branch(
+                {
+                  kind: "is-null",
+                  operands: [
+                    {
+                      identifier: "RESPONSE",
+                      kind: "variable",
+                      operands: [],
+                      weightIdentifier: Option.none(),
+                    },
+                  ],
+                },
+                [scoreRule(0)],
+              ),
             ],
             kind: "condition",
             otherwise: Option.some([
               {
-                expression: { identifier: "RESPONSE", kind: "map-response" },
+                expression: { identifier: "RESPONSE", kind: "map-response", operands: [] },
                 identifier: "SCORE",
                 kind: "set-outcome",
               },
@@ -1312,11 +1437,15 @@ describe("buildItem", () => {
       Effect.gen(function* readsEqual() {
         const expected: readonly Rule[] = [
           setRule("SAME", {
+            includeLowerBound: true,
+            includeUpperBound: true,
             kind: "equal",
             operands: [
-              { kind: "base-value", value: integer(1n) },
-              { kind: "base-value", value: float(1) },
+              { kind: "base-value", operands: [], value: integer(1n) },
+              { kind: "base-value", operands: [], value: float(1) },
             ],
+            tolerance: [],
+            toleranceMode: "exact",
           }),
         ];
 
@@ -1336,33 +1465,47 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    'marks an inline qti-equal with tolerance-mode="relative" or "absolute" at its path and runs none',
+    "reads a qti-equal's tolerance token by token and its bounds, in exact mode, with no mark",
     () =>
-      Effect.gen(function* marksToleranceMode() {
-        for (const mode of ["relative", "absolute"]) {
-          const built = yield* buildItem(
-            item({
-              after: [
-                equalBlock([attr("tolerance-mode", mode), attr("tolerance", "0.1")], "1", "1.0"),
-              ],
-              body: [],
-              declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
-            }),
-          );
-
-          assert.deepStrictEqual(built.processing, Option.none(), mode);
-          assert.deepStrictEqual(
-            built.unsupported,
-            [
-              {
-                feature: `tolerance-mode="${mode}"`,
-                path: `${root}/qti-response-processing/qti-set-outcome-value/qti-equal`,
-                shown: "mark",
-              },
+      Effect.gen(function* readsTolerance() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              equalBlock(
+                [
+                  attr("tolerance", " 0.5\tSAME "),
+                  attr("include-lower-bound", "false"),
+                  attr("tolerance-mode", "exact"),
+                ],
+                "1",
+                "1.0",
+              ),
             ],
-            mode,
-          );
-        }
+            body: [],
+            declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some([
+            setRule("SAME", {
+              includeLowerBound: false,
+              includeUpperBound: true,
+              kind: "equal",
+              operands: [
+                { kind: "base-value", operands: [], value: integer(1n) },
+                { kind: "base-value", operands: [], value: float(1) },
+              ],
+              tolerance: [
+                { _tag: "literal", value: 0.5 },
+                { _tag: "ref", identifier: "SAME" },
+              ],
+              toleranceMode: "exact",
+            }),
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -2243,12 +2386,18 @@ describe("buildItem", () => {
                 el(
                   "qti-set-outcome-value",
                   [attr("identifier", "SCORE")],
-                  [el("qti-sum", [], [el("qti-variable", [attr("identifier", "RESPONSE")])])],
+                  [
+                    el(
+                      "qti-field-value",
+                      [attr("field-identifier", "field")],
+                      [el("qti-variable", [attr("identifier", "RESPONSE")])],
+                    ),
+                  ],
                 ),
               ],
             ),
-            feature: "qti-sum",
-            path: `${processing}/qti-set-outcome-value/qti-sum`,
+            feature: "qti-field-value",
+            path: `${processing}/qti-set-outcome-value/qti-field-value`,
           },
         ];
 
@@ -2395,6 +2544,402 @@ describe("buildItem", () => {
       assert.deepStrictEqual(refusal.detail, { attribute: "view", value: "candidate learner" });
     }),
   );
+
+  it.effect(
+    "[I-9a] reads a match table's entries and default-value into its outcome's declaration (readings 7 and 8)",
+    () =>
+      Effect.gen(function* readsMatchTable() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-outcome-declaration", "GRADE", "float", "single", [
+                el(
+                  "qti-match-table",
+                  [attr("default-value", "0")],
+                  [
+                    el("qti-match-table-entry", [
+                      attr("source-value", "1"),
+                      attr("target-value", "0.5"),
+                    ]),
+                    el("qti-match-table-entry", [
+                      attr("source-value", " -2 "),
+                      attr("target-value", "1e1"),
+                    ]),
+                  ],
+                ),
+              ]),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.outcomes.get("GRADE")?.lookupTable,
+          Option.some({
+            defaultValue: Option.some({ baseType: "float", value: 0 }),
+            entries: [
+              { sourceValue: 1n, targetValue: { baseType: "float", value: 0.5 } },
+              { sourceValue: -2n, targetValue: { baseType: "float", value: 10 } },
+            ],
+            kind: "match",
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-9a] reads an interpolation table's include-boundary, true when absent, and no default-value as none",
+    () =>
+      Effect.gen(function* readsInterpolationTable() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-outcome-declaration", "BAND", "identifier", "single", [
+                el(
+                  "qti-interpolation-table",
+                  [],
+                  [
+                    el("qti-interpolation-table-entry", [
+                      attr("source-value", "7.5"),
+                      attr("target-value", "HIGH"),
+                    ]),
+                    el("qti-interpolation-table-entry", [
+                      attr("include-boundary", "false"),
+                      attr("source-value", "2"),
+                      attr("target-value", "MID"),
+                    ]),
+                    el("qti-interpolation-table-entry", [
+                      attr("include-boundary", "true"),
+                      attr("source-value", "0"),
+                      attr("target-value", "LOW"),
+                    ]),
+                  ],
+                ),
+              ]),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.outcomes.get("BAND")?.lookupTable,
+          Option.some({
+            defaultValue: Option.none(),
+            entries: [
+              {
+                includeBoundary: true,
+                sourceValue: 7.5,
+                targetValue: { baseType: "identifier", value: "HIGH" },
+              },
+              {
+                includeBoundary: false,
+                sourceValue: 2,
+                targetValue: { baseType: "identifier", value: "MID" },
+              },
+              {
+                includeBoundary: true,
+                sourceValue: 0,
+                targetValue: { baseType: "identifier", value: "LOW" },
+              },
+            ],
+            kind: "interpolation",
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-9a] refuses a match table's target-value outside its outcome's base type, or padded, as value-type at the attribute (readings 7 and 8)",
+    () =>
+      Effect.gen(function* refusesTargetValue() {
+        for (const written of ["A", " 1"]) {
+          const refusal = yield* Effect.flip(
+            buildItem(
+              item({
+                body: [],
+                declarations: [
+                  declaration("qti-outcome-declaration", "LEVEL", "integer", "single", [
+                    el(
+                      "qti-match-table",
+                      [],
+                      [
+                        el("qti-match-table-entry", [
+                          attr("source-value", "1"),
+                          attr("target-value", written),
+                        ]),
+                      ],
+                    ),
+                  ]),
+                ],
+              }),
+            ),
+          );
+
+          assert.strictEqual(refusal.rule, "value-type", written);
+          assert.deepStrictEqual(refusal.location, {
+            kind: "path",
+            path: `${root}/qti-outcome-declaration/qti-match-table/qti-match-table-entry/@target-value`,
+          });
+          assert.deepStrictEqual(refusal.detail, { baseType: "integer", lexical: written });
+        }
+      }),
+  );
+
+  it.effect("[I-9a] marks nothing for an outcome declaration's lookup table, now read", () =>
+    Effect.gen(function* marksNoTable() {
+      const built = yield* buildItem(
+        item({
+          body: [],
+          declarations: [
+            declaration("qti-outcome-declaration", "GRADE", "identifier", "single", [
+              values("qti-default-value", "F"),
+              el(
+                "qti-match-table",
+                [attr("default-value", "F")],
+                [
+                  el("qti-match-table-entry", [
+                    attr("source-value", "1"),
+                    attr("target-value", "A"),
+                  ]),
+                ],
+              ),
+            ]),
+            declaration("qti-outcome-declaration", "BAND", "float", "single", [
+              el(
+                "qti-interpolation-table",
+                [attr("default-value", "0")],
+                [
+                  el("qti-interpolation-table-entry", [
+                    attr("source-value", "1"),
+                    attr("target-value", "1"),
+                  ]),
+                ],
+              ),
+            ]),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual(built.unsupported, []);
+      assert.deepStrictEqual(
+        [...built.outcomes.values()].map((outcome) =>
+          outcome.lookupTable.pipe(Option.map((table) => table.kind)),
+        ),
+        [Option.some("match"), Option.some("interpolation")],
+      );
+    }),
+  );
+
+  it.effect(
+    "[I-9a] reads a qti-lookup-outcome-value into a lookup rule and a qti-exit-response into an exit, with no mark",
+    () =>
+      Effect.gen(function* readsLookupAndExit() {
+        const built = yield* buildItem(
+          rulesItem([lookupElement("GRADE", "RESPONSE"), el("qti-exit-response"), setScore("1")]),
+        );
+
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some([
+            {
+              expression: {
+                identifier: "RESPONSE",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              identifier: "GRADE",
+              kind: "lookup-outcome",
+            },
+            { kind: "exit" },
+            scoreRule(1),
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] reads a qti-response-processing-fragment's rules in its place, nested fragments and a branch's included",
+    () =>
+      Effect.gen(function* readsFragments() {
+        const built = yield* buildItem(
+          rulesItem([
+            el(
+              "qti-response-processing-fragment",
+              [],
+              [
+                setScore("1"),
+                el("qti-response-processing-fragment", [], [el("qti-exit-response")]),
+              ],
+            ),
+            el(
+              "qti-response-condition",
+              [],
+              [
+                el(
+                  "qti-response-if",
+                  [],
+                  [
+                    el("qti-base-value", [attr("base-type", "boolean")], [text("true")]),
+                    el("qti-response-processing-fragment", [], [setScore("2")]),
+                  ],
+                ),
+              ],
+            ),
+            setScore("0"),
+          ]),
+        );
+
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some([
+            scoreRule(1),
+            { kind: "exit" },
+            {
+              branches: [
+                branch(
+                  {
+                    kind: "base-value",
+                    operands: [],
+                    value: {
+                      baseType: "boolean",
+                      cardinality: "single",
+                      values: [{ baseType: "boolean", value: true }],
+                    },
+                  },
+                  [scoreRule(2)],
+                ),
+              ],
+              kind: "condition",
+              otherwise: Option.none(),
+            },
+            scoreRule(0),
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] marks each xi:include in response processing xi:include at its path and runs none, as it is never fetched (S-6)",
+    () =>
+      Effect.gen(function* marksInclude() {
+        const built = yield* buildItem(
+          rulesItem([
+            setScore("1"),
+            el("include", [attr("href", "rules.xml")], [], xincludeNamespace),
+            el(
+              "qti-response-processing-fragment",
+              [],
+              [el("include", [attr("href", "more.xml")], [], xincludeNamespace)],
+            ),
+          ]),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: "xi:include",
+            path: `${root}/qti-response-processing/{${xincludeNamespace}}include`,
+            shown: "mark",
+          },
+          {
+            feature: "xi:include",
+            path: `${root}/qti-response-processing/qti-response-processing-fragment/{${xincludeNamespace}}include`,
+            shown: "mark",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] marks a lookup whose outcome or expression names a variable the engine does not hold, as a set's",
+    () =>
+      Effect.gen(function* marksUnheldLookup() {
+        const built = yield* buildItem(
+          rulesItem([lookupElement("MISSING", "GRADE"), lookupElement("GRADE", "UNDECLARED")]),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "variable:MISSING", path: `${root}/qti-response-processing`, shown: "mark" },
+          {
+            feature: "variable:UNDECLARED",
+            path: `${root}/qti-response-processing`,
+            shown: "mark",
+          },
+        ]);
+      }),
+  );
+
+  it("[I-9a] marks a lookup into an outcome that is not single, so open accepts it with processing none and score does not fail: outcome-type for a multiple or an ordered outcome, as a template's, and variable for a record one, which the model does not hold", () => {
+    const processing = `${root}/qti-response-processing`;
+    const table = el(
+      "qti-match-table",
+      [attr("default-value", "F")],
+      [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "A")])],
+    );
+    const cases = [
+      {
+        marks: [{ feature: "outcome-type:TARGET", path: processing }],
+        outcome: declaration("qti-outcome-declaration", "TARGET", "identifier", "multiple", [
+          table,
+        ]),
+      },
+      {
+        marks: [{ feature: "outcome-type:TARGET", path: processing }],
+        outcome: declaration("qti-outcome-declaration", "TARGET", "identifier", "ordered", [table]),
+      },
+      {
+        // The control: the model holds no record outcome, so its lookup is an unheld variable's mark.
+        marks: [
+          { feature: 'cardinality="record"', path: `${root}/qti-outcome-declaration` },
+          { feature: "variable:TARGET", path: processing },
+        ],
+        outcome: el(
+          "qti-outcome-declaration",
+          [attr("cardinality", "record"), attr("identifier", "TARGET")],
+          [table],
+        ),
+      },
+    ] as const;
+
+    for (const [index, { marks, outcome }] of cases.entries()) {
+      const label = `case ${index + 1}`;
+      const verdict = check(
+        item({
+          after: [el("qti-response-processing", [], [lookupElement("TARGET", "RESPONSE")])],
+          attributes: [attr("time-dependent", "false")],
+          body: [],
+          declarations: [
+            declaration("qti-response-declaration", "RESPONSE", "integer", "single"),
+            outcome,
+          ],
+        }),
+        tables,
+      );
+      const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+        assert.fail(`${label}: the item is ${verdict.verdict}, not accepted.`),
+      );
+
+      assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
+      assert.deepStrictEqual(
+        accepted.unsupported,
+        marks.map((mark) => ({ ...mark, shown: "mark" })),
+        label,
+      );
+      assert.deepStrictEqual(accepted.item.processing, Option.none(), label);
+      assert.strictEqual(
+        Result.match(scoreItem(accepted, { RESPONSE: integer(1n) }), {
+          onFailure: (failure) => failure._tag,
+          onSuccess: () => "scored",
+        }),
+        "scored",
+        label,
+      );
+    }
+  });
 
   it.effect('[Q-2] refuses max-choices="-1" as value-type, outside xs:nonNegativeInteger', () =>
     Effect.gen(function* refusesNegativeCount() {
@@ -2617,7 +3162,58 @@ describe("buildItem", () => {
         built.processing,
         Option.some([
           {
-            expression: { identifier: "numAttempts", kind: "variable" },
+            expression: {
+              identifier: "numAttempts",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.none(),
+            },
+            identifier: "ATTEMPTS",
+            kind: "set-outcome",
+          },
+        ]),
+      );
+      assert.deepStrictEqual(built.unsupported, []);
+    }),
+  );
+
+  it.effect("reads a qti-variable's weight-identifier and holds it, with no mark", () =>
+    Effect.gen(function* readsWeightIdentifier() {
+      const built = yield* buildItem(
+        item({
+          after: [
+            el(
+              "qti-response-processing",
+              [],
+              [
+                el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", "ATTEMPTS")],
+                  [
+                    el("qti-variable", [
+                      attr("identifier", "numAttempts"),
+                      attr("weight-identifier", " W "),
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+          ],
+          body: [],
+          declarations: [declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single")],
+        }),
+      );
+
+      assert.deepStrictEqual(
+        built.processing,
+        Option.some([
+          {
+            expression: {
+              identifier: "numAttempts",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.some("W"),
+            },
             identifier: "ATTEMPTS",
             kind: "set-outcome",
           },
@@ -2628,49 +3224,111 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "marks inline rules that read or set the built-in duration or completionStatus, which stay unheld",
+    "[I-9a] runs inline rules that read or set the built-in completionStatus, and marks one that sets the built-in duration, which stays unheld",
     () =>
-      Effect.gen(function* marksUnheldBuiltIns() {
-        const cases = [
-          { identifier: "completionStatus", rule: "read" },
-          { identifier: "completionStatus", rule: "set" },
-          { identifier: "duration", rule: "set" },
-        ] as const;
+      Effect.gen(function* holdsCompletionStatus() {
+        const completed = el(
+          "qti-base-value",
+          [attr("base-type", "identifier")],
+          [text("completed")],
+        );
+        const reading = yield* buildItem(
+          statusItem(
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "STATUS")],
+              [el("qti-variable", [attr("identifier", "completionStatus")])],
+            ),
+          ),
+        );
+        const setting = yield* buildItem(
+          statusItem(
+            el("qti-set-outcome-value", [attr("identifier", "completionStatus")], [completed]),
+          ),
+        );
+        const timing = yield* buildItem(
+          statusItem(el("qti-set-outcome-value", [attr("identifier", "duration")], [completed])),
+        );
 
-        for (const { identifier, rule } of cases) {
-          const ruleElement =
-            rule === "read"
-              ? el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", "STATUS")],
-                  [el("qti-variable", [attr("identifier", identifier)])],
-                )
-              : el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", identifier)],
-                  [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
-                );
+        assert.deepStrictEqual(
+          reading.processing,
+          Option.some([
+            {
+              expression: {
+                identifier: "completionStatus",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              identifier: "STATUS",
+              kind: "set-outcome",
+            },
+          ]),
+        );
+        assert.deepStrictEqual(
+          setting.processing,
+          Option.some([
+            {
+              expression: {
+                kind: "base-value",
+                operands: [],
+                value: {
+                  baseType: "identifier",
+                  cardinality: "single",
+                  values: [{ baseType: "identifier", value: "completed" }],
+                },
+              },
+              identifier: "completionStatus",
+              kind: "set-outcome",
+            },
+          ]),
+        );
+        assert.deepStrictEqual([reading.unsupported, setting.unsupported], [[], []]);
+        assert.deepStrictEqual(timing.processing, Option.none());
+        assert.deepStrictEqual(timing.unsupported, [
+          { feature: "variable:duration", path: `${root}/qti-response-processing`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] marks inline rules that read or set completionStatus where the item declares a variable by that name the model does not hold",
+    () =>
+      Effect.gen(function* marksDeclaredCompletionStatus() {
+        const rules = [
+          el(
+            "qti-set-outcome-value",
+            [attr("identifier", "STATUS")],
+            [el("qti-variable", [attr("identifier", "completionStatus")])],
+          ),
+          el(
+            "qti-set-outcome-value",
+            [attr("identifier", "completionStatus")],
+            [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
+          ),
+        ];
+
+        for (const [index, rule] of rules.entries()) {
           const built = yield* buildItem(
             item({
-              after: [el("qti-response-processing", [], [ruleElement])],
+              after: [el("qti-response-processing", [], [rule])],
               body: [],
               declarations: [
                 declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
+                el("qti-template-declaration", [
+                  attr("base-type", "identifier"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "completionStatus"),
+                ]),
               ],
             }),
           );
 
-          assert.deepStrictEqual(built.processing, Option.none(), `${rule} ${identifier}`);
+          assert.deepStrictEqual(built.processing, Option.none(), `rule ${String(index)}`);
           assert.deepStrictEqual(
-            built.unsupported,
-            [
-              {
-                feature: `variable:${identifier}`,
-                path: `${root}/qti-response-processing`,
-                shown: "mark",
-              },
-            ],
-            `${rule} ${identifier}`,
+            built.unsupported.map((entry) => entry.feature),
+            ["qti-template-declaration", "variable:completionStatus"],
+            `rule ${String(index)}`,
           );
         }
       }),
@@ -2969,7 +3627,12 @@ describe("buildItem", () => {
           built.processing,
           Option.some<readonly Rule[]>([
             {
-              expression: { identifier: "RESPONSE", kind: "variable" },
+              expression: {
+                identifier: "RESPONSE",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
               identifier: "SCORE",
               kind: "set-outcome",
             },
