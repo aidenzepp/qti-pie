@@ -1035,6 +1035,29 @@ const textValueType = (
   });
 
 /**
+ * Apply `value-type` to a `qti-base-value` that lies in a processing ({@link processings}), as
+ * {@link textValueType} judges it: its text parses under its own `base-type`. The qti package
+ * refuses the same as P7 in every processing a document holds, a test's and a section's included
+ * (the `Literal` value context in `packages/pantry/src/schema/value-contexts.ts`). A declaration's
+ * values are left to the test model's builder, which refuses them first.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The parents the walk has met.
+ * @returns The refusal at the expression's path when its text is outside its base type; none for
+ *   any other element and for one outside processing.
+ */
+const literalValueType = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] =>
+  isQti(visit.element, (local) => local === "qti-base-value") &&
+  inProcessing(context, visit.element)
+    ? textValueType(source, visit, context)
+    : [];
+
+/**
  * The built-in variables an item's response processing may read, with their types.
  *
  * `numAttempts`, `duration` and `completionStatus` are the item's (reading 29: in an item
@@ -2103,6 +2126,39 @@ const weightType = (source: SourceDocument, visit: Visit, context: Context): rea
 };
 
 /**
+ * Apply reading 23's `expression-placement` to a `qti-variable` of an item that carries
+ * `weight-identifier`. Weights are "defined only in the test context (and hence only in outcomes
+ * processing)", so a weighted variable follows the outcome-only expressions (T-O10, pick A), and an
+ * item, which holds no outcome processing, holds none: in its response processing, its template
+ * processing or anywhere else. The qti package refuses the same as P12 (`VariableWeightInTest` in
+ * `packages/pantry/src/schema/expression-attributes.ts`, whose check holds the attribute to a test
+ * root). A test's and a section's are judged by `expressionPlacement` in
+ * `#plate/validate/test-rules.ts`, with the same facts.
+ *
+ * @param source The item.
+ * @param visit The element's visit.
+ * @returns The refusal at the `weight-identifier`'s path, with the attribute, the element and the
+ *   reading; none for any other element.
+ */
+const weightPlacement = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+  const { element } = visit;
+  if (!isQti(element, (local) => local === "qti-variable")) {
+    return [];
+  }
+
+  return Option.match(attributeOf(element, "weight-identifier"), {
+    onNone: () => [],
+    onSome: (attribute) => [
+      refusal(source, "expression-placement", attributePath(visit.path, attribute), {
+        attribute: attribute.local,
+        element: element.local,
+        reading: "23",
+      }),
+    ],
+  });
+};
+
+/**
  * Apply `expression-type` to the operands of an expression that lies in a processing
  * ({@link processings}): each operand its kind's rule does not accept (`operandsAccept` in the
  * registry, `kindRules` in `#plate/model/expressions/read.ts`), so the engine never meets an
@@ -2854,7 +2910,9 @@ const setCorrectResponses = (
 /**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
  * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
- * and reading 19's `max-strings` on an Extended Text bound to a container. `template-requirements`
+ * reading 19's `max-strings` on an Extended Text bound to a container, and reading 23's
+ * `expression-placement` on a `qti-variable` that carries `weight-identifier`, which only a test's
+ * outcome processing may hold ({@link weightPlacement}, pantry's P12). `template-requirements`
  * judges the declarations a standard template, an inline `qti-map-response` or
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry, and
@@ -2937,6 +2995,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...templateTarget(source, visit, context),
       ...templateReads(source, visit, context),
       ...attributeReferences(source, visit, context),
+      ...weightPlacement(source, visit),
       ...printedVariableReferences(source, visit, context),
       ...templateIdentifierReference(source, visit, context),
       ...setType(source, visit, context),
@@ -3020,13 +3079,17 @@ const processingScope = (
  * - `undeclared-variable` (P8, {@link undeclaredVariable}), and the operand and reference-attribute
  *   types of `expression-type` (P23, {@link operandTypes}; P24, {@link attributeReferences}), in a
  *   `qti-outcome-processing`, a `qti-pre-condition`, a `qti-branch-rule` and a
- *   `qti-template-default`.
+ *   `qti-template-default`. A test declares no response, so an unprefixed `qti-map-response` or
+ *   `qti-map-response-point` names none and is refused `undeclared-variable`, where the qti package
+ *   reports P27 (`checkMapping`); a prefixed one is a package's to judge.
  * - What a `qti-set-outcome-value` sets (P20, {@link setType}) and a `qti-lookup-outcome-value`'s
  *   table and operand (P22, {@link lookupTableRequirements}, {@link lookupOperandType}) in outcome
  *   processing.
  * - The condition of a `qti-outcome-if` or a `qti-outcome-else-if` (P21, {@link conditionType}),
  *   never of a pre-condition or a branch rule.
  * - A weighted `qti-test-variables` whose base type is not `float` (P29, {@link weightType}).
+ * - The text of a `qti-base-value` in any of the four, against its `base-type` (`value-type`, P7,
+ *   {@link literalValueType}).
  *
  * The rules are the item's own, so the two runs cannot drift. Names resolve against the processing
  * scope ({@link processingScope}): a test's declarations and built-ins, where a name with a `.`
@@ -3075,6 +3138,7 @@ export const processingRefusals = (
     }
 
     refusals.push(
+      ...literalValueType(source, visit, context),
       ...undeclaredVariable(source, visit, context),
       ...attributeReferences(source, visit, context),
       ...setType(source, visit, context),
