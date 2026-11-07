@@ -153,10 +153,18 @@ export interface ListedDocument {
 }
 
 /**
- * The ids of one package: its own, and each listed document's, in the listing's order.
+ * One listed document under the ids its rows are written under.
+ */
+export interface PlacedDocument {
+  readonly ids: NodeIds;
+  readonly listed: ListedDocument;
+}
+
+/**
+ * The ids of one package: its own, and each listed document under its ids, in the listing's order.
  */
 export interface PackageIds {
-  readonly documents: readonly NodeIds[];
+  readonly documents: readonly PlacedDocument[];
   readonly package: Uuid;
 }
 
@@ -197,7 +205,7 @@ const drawnBy = (mint: () => NodeId): ((index: number) => NodeId) => {
  * @param documents - The package's documents, in the listing's order.
  * @param entries - The paths of the package's entries.
  * @param mint - Draws a fresh uuid. Defaults to `crypto.randomUUID`.
- * @returns The package's id and each document's ids, in the order given.
+ * @returns The package's id and each document under its ids, in the order given.
  */
 export const nodeIdsOf = (
   documents: readonly ListedDocument[],
@@ -238,17 +246,20 @@ export const nodeIdsOf = (
     }));
 
   return {
-    documents: listed.map(({ document: { path, resourceType }, idOf }) => ({
-      assembled: assembled.has(idOf(0)),
-      context: contextAt(contexts, idOf(0)),
-      documentAt,
-      documentType: resourceType,
-      entryAt,
-      idOf,
-      package: packageId,
-      path,
-      targetAt,
-      targeted: targeted.has(idOf(0)),
+    documents: listed.map(({ document, idOf }) => ({
+      ids: {
+        assembled: assembled.has(idOf(0)),
+        context: contextAt(contexts, idOf(0)),
+        documentAt,
+        documentType: document.resourceType,
+        entryAt,
+        idOf,
+        package: packageId,
+        path: document.path,
+        targetAt,
+        targeted: targeted.has(idOf(0)),
+      },
+      listed: document,
     })),
     package: packageId,
   };

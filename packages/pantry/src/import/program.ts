@@ -33,10 +33,10 @@ import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts
 import type {
   DocumentLayerRows,
   ListedDocument,
-  NodeIds,
   NodeMember,
   NodeRoot,
   PackageInputs,
+  PlacedDocument,
 } from "#pantry/import/write.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
@@ -49,10 +49,7 @@ import { cpNamespace } from "#pantry/vocab/namespaces.ts";
 /**
  * One document of the package as the import writes it: as listed, and under its ids.
  */
-export interface ProgramDocument {
-  readonly ids: NodeIds;
-  readonly listed: ListedDocument;
-}
+export type ProgramDocument = PlacedDocument;
 
 /**
  * Everything one import writes, before the database: the package's entries as read, its documents
@@ -173,13 +170,13 @@ const isReadRefusal = <E extends { readonly _tag: string }>(
  * `OverlayConflict` that names it.
  *
  * @param dir - The package directory or `.zip` file.
- * @param mint - Draws each fresh uuid, for tests. Defaults to `crypto.randomUUID`.
+ * @param mint - Draws each fresh uuid. Defaults to `crypto.randomUUID`; a test passes its own.
  * @returns The program. Fails with `ImportRefused` naming the rule the reader, the container or the
  *   codec refused the package under, and with the platform's error when the package cannot be read.
  */
 export const readProgram = Effect.fn("import.readProgram")(function* readProgram(
   dir: string,
-  mint?: () => NodeId,
+  mint: () => NodeId = () => crypto.randomUUID(),
 ): Effect.fn.Return<
   ImportProgram,
   ImportRefused | PlatformError.PlatformError,
@@ -188,18 +185,13 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
   const { documents, files } = yield* listDocuments(dir).pipe(
     Effect.catchIf(isReadRefusal, (refusal) => Effect.fail(ruleOfError(refusal))),
   );
-  const draw = mint ?? ((): NodeId => crypto.randomUUID());
   const ids = nodeIdsOf(
     documents,
     files.map(({ path }) => path),
-    draw,
+    mint,
   );
-  const placed = documents.flatMap((listed, at) => {
-    const held = ids.documents[at];
-
-    return held === undefined ? [] : [{ ids: held, listed }];
-  });
-  const overlays = yield* Effect.orDie(Effect.fromResult(overlayRowsOf(placed, draw)));
+  const placed = ids.documents;
+  const overlays = yield* Effect.orDie(Effect.fromResult(overlayRowsOf(placed, mint)));
   const layers = placed.map(({ ids: held, listed }) => documentRowsOf(listed, held));
   const layer = yield* Effect.orDie(
     Effect.fromResult(unionsOf<DocumentLayerRows>(documentLayerNames, layers)),
@@ -238,9 +230,9 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
  * @returns Each relation's number of rows, zero for a relation whose keyed set is empty.
  */
 export const rowCountsOf = (program: ImportProgram): ReadonlyMap<string, number> => {
-  const counts = new Map<string, number>();
+  const counted: (readonly [relation: string, n: number])[] = [];
   const add = (relation: string, n: number): void => {
-    counts.set(relation, (counts.get(relation) ?? 0) + n);
+    counted.push([relation, n]);
   };
   const { Instance, Node, Package, ...flat } = program.inputs;
 
@@ -291,5 +283,9 @@ export const rowCountsOf = (program: ImportProgram): ReadonlyMap<string, number>
     stack.push(...node.children);
   }
 
-  return counts;
+  return new Map(
+    [...Map.groupBy(counted, ([relation]) => relation)].map(
+      ([relation, ns]) => [relation, ns.reduce((sum, [, n]) => sum + n, 0)] as const,
+    ),
+  );
 };
