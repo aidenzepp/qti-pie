@@ -178,6 +178,7 @@ describe("the test helpers", () => {
       "test/attribute-order.oracle.test.ts: #pantry/test/oracle.ts",
       "test/gen/xdm.ts: #pantry/test/oracle.ts",
       "test/locate.ts: #pantry/test/oracle.ts",
+      "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
       "test/oracle.complete.test.ts: #pantry/test/oracle.ts",
       "test/oracle.keys.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-g.test.ts: #pantry/test/oracle.ts",

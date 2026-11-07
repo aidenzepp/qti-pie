@@ -845,6 +845,39 @@ const generatedRecorded: readonly Recorded[] = [
     },
     rule: "attribute-lexical",
   },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ResponseIf (§2.5.1.2, ResponseIf and ResponseElseIf: 'An expression which must have an effective value of boolean'; §2.8.1.6, TemplateConstraint)",
+      why: "a condition's expression is boolean and single; the XSD types no expression, so a dropped or swapped child leaves a condition of another type it accepts",
+    },
+    rule: "P21",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 (§2.11.3, each operator's sub-expressions' base types and cardinalities)",
+      why: "each operator takes the operand types §2.11.3 states; the XSD admits any expression as any operand",
+    },
+    rule: "P23",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#ExprTestNumberCorrect (§2.11.4, the test operators: 'can only be used in outcomes processing')",
+      why: "the test operators stand only in outcome processing; the XSD admits them in any expression, response processing's included",
+    },
+    rule: "P25",
+  },
 ];
 
 /**

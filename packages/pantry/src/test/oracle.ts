@@ -45,12 +45,16 @@
  *   (`P36`, reading 121); O5 `mapping-base-type`; O6 `lom-identifier`, a usage value's base type
  *   (reading 105) and `lom-learning-resource-type` (reading 122); O7 a selection's bound.
  *
- * The overlays' other laws have no statement yet beyond the rule each replaces, and the oracle
- * leaves them to their W5 slices: `lang-set-copy`, the reserved declarations, `mastery-range`, the
- * typed default and correct values, `max-strings-required`, `string-identifier-distinct`,
- * `aria-value-range`, `varref-copy`, adaptive feedback, coords by shape, the gap
- * and hottext owners beyond N8, `P20` to `P27`, `P29`, `template-derivation`, `calendar`, the usage
- * and CSM laws, and the typed values a domain derives beyond its regex (G5).
+ * The laws R87 found the oracle declared and never raised, and the laws the schema states that it
+ * had not declared, are stated by `#pantry/test/oracle-laws.ts` (lane OL): the declarations (O2),
+ * the expressions (O4), the LOM title (O6), the tests and sections (O7), `Adaptive feedback`, `Max
+ * strings required`, `Calendar date`, `Dependency target` and `XML production`. The oracle calls
+ * its document laws after its own over each document it judges and its package laws after its
+ * own, and `src/test/oracle.complete.test.ts` holds every law the oracle declares to a package
+ * drawn to break it. The overlays' other laws have no statement yet beyond the rule each replaces:
+ * `lang-set-copy`, `string-identifier-distinct`, coords by shape, the gap and hottext owners
+ * beyond N8, `template-derivation`, the CSM laws, and the typed values a domain derives beyond its
+ * regex (G5).
  */
 import { Effect, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -607,7 +611,7 @@ export const lawSources = {
   LomObjectIdentifier:
     "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.1, Identifier: 'One of the values given for the identifier must have an entry that matches the identifier of the associated item, test or object bank', normative by its §1.2), over the general category's identifiers alone; info §4.1.1 and §4.4.1 ('MUST be the same'); reading 62 as UP's audit merges it (docs/research/up.md §2.2), the entry compared collapsed",
   LomObjectTitle:
-    "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.2, Title: 'The title must have a value that matches the value of the title attribute of the associated item, test or object bank. The language used to interpret the title is taken from the language attribute of the associated item, test or object bank', normative by its §1.2); info §4.1.2 and §4.4.2; reading 62 as UP's audit merges it (docs/research/up.md §2.2). Titles compare in xs:normalizedString's value space and language tags without regard to case (RFC 5646 §2.1.1; metadata.ts); this oracle states no evaluator of it",
+    "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.2, Title: 'The title must have a value that matches the value of the title attribute of the associated item, test or object bank. The language used to interpret the title is taken from the language attribute of the associated item, test or object bank', normative by its §1.2); info §4.1.2 and §4.4.2; reading 62 as UP's audit merges it (docs/research/up.md §2.2). Titles compare in xs:normalizedString's value space and language tags without regard to case (RFC 5646 §2.1.1; metadata.ts)",
   "Lookup table cardinality":
     "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_OutcomeDeclaration_lookupTable (§4.5.13: a lookup table maps 'a numeric source value to a single outcome value in the declared value set'): a qti-match-table's or qti-interpolation-table's outcome declaration is of single cardinality (mapping.ts Lookup_table_cardinality)",
   "Lookup type":
@@ -4079,7 +4083,15 @@ const overlayLaws: readonly ((
       return [{ keys: { identifier }, law: "Binding declared" }];
     }
 
-    const cardinality = Option.getOrElse(collapsedOf(overlay, response, "cardinality"), () => "");
+    // A response that writes no cardinality has no Declaration row for a binding to copy, so AL3
+    // ("required-attribute") is its one refusal: an absent attribute is no empty one (the
+    // orchestrator's ruling of 2026-11-06).
+    const written = collapsedOf(overlay, response, "cardinality");
+    if (Option.isNone(written)) {
+      return [];
+    }
+
+    const cardinality = written.value;
     const baseType = Option.getOrElse(collapsedOf(overlay, response, "base-type"), () => "");
     if (cardinality === "record") {
       return record ? [] : [{ keys: { identifier }, law: "RecordBindingFit" }];
@@ -4405,8 +4417,15 @@ const overlayLaws: readonly ((
       return [];
     }
 
+    // An outcome that writes no cardinality has no Declaration row for the law to read, so AL3
+    // ("required-attribute") is its one refusal (the orchestrator's ruling of 2026-11-06).
+    const written = collapsedOf(overlay, outcome, "cardinality");
+    if (Option.isNone(written)) {
+      return [];
+    }
+
     const baseType = Option.getOrElse(collapsedOf(overlay, outcome, "base-type"), () => "");
-    const cardinality = Option.getOrElse(collapsedOf(overlay, outcome, "cardinality"), () => "");
+    const cardinality = written.value;
 
     return baseType === "identifier" && (cardinality === "single" || cardinality === "multiple")
       ? []

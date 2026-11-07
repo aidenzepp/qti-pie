@@ -38,6 +38,7 @@ import {
   testDocumentsOf,
   testKinds,
 } from "#pantry/test/oracle-laws/assembly.ts";
+import { declarationKindsOf } from "#pantry/test/oracle-laws/expressions.ts";
 import type {
   Instance,
   Name,
@@ -78,6 +79,7 @@ export const testLaws = [
   "Variable mapping source",
   "Prefixed reference",
   "Variable declared",
+  "Variable kind",
 ] as const;
 
 /**
@@ -616,6 +618,11 @@ const lookUp = (input: PackageRows, assembled: Assembled, name: string): Option.
  * scope it reads, the variable, and how it resolves.
  */
 interface Read {
+  /**
+   * The declaration kind its variable is, or stands as for a built-in or a mapped variable; `none`
+   * where it names none.
+   */
+  readonly declarationKind: string;
   readonly form: "numbered" | "split" | "unsplit";
   readonly placements: number;
   readonly resolves: boolean;
@@ -657,7 +664,7 @@ const sourceOf = (declared: boolean, builtIn: boolean): Read["source"] => {
 const readingsOf = (
   context: {
     readonly assembled: Assembled;
-    readonly builtIns: ReadonlyMap<string, ReadonlySet<string>>;
+    readonly builtIns: ReadonlyMap<string, ReadonlyMap<string, string>>;
     readonly grammar: ComposedGrammar;
     readonly input: PackageRows;
     readonly testDeclared: ReadonlyMap<string, readonly string[]>;
@@ -668,10 +675,12 @@ const readingsOf = (
   const { assembled, builtIns, grammar, input, testDeclared } = context;
   const setter = setterKinds.has(kind);
   const pieces = identifier.split(".");
-  const testBuiltIns = builtIns.get(testKinds.test) ?? new Set<string>();
-  const itemBuiltIns = builtIns.get(testKinds.item) ?? new Set<string>();
+  const testBuiltIns = builtIns.get(testKinds.test) ?? new Map<string, string>();
+  const itemBuiltIns = builtIns.get(testKinds.item) ?? new Map<string, string>();
+  const sectionBuiltIns = builtIns.get(testKinds.section) ?? new Map<string, string>();
   const unsplitSource = sourceOf(testDeclared.has(identifier), testBuiltIns.has(identifier));
   const unsplit: Read = {
+    declarationKind: testDeclared.get(identifier)?.[0] ?? testBuiltIns.get(identifier) ?? "none",
     form: "unsplit",
     placements: 1,
     resolves: unsplitSource !== "none",
@@ -685,39 +694,58 @@ const readingsOf = (
     number: string,
   ): Read => {
     const looked = lookUp(input, assembled, scope);
-    const source = Option.match(looked, {
-      onNone: () => "none" as const,
-      onSome: (held): Read["source"] => {
+    const resolved = Option.match(looked, {
+      onNone: () => ({ declarationKind: "none", source: "none" as const }),
+      onSome: (held): Pick<Read, "declarationKind" | "source"> => {
         if (held.kind === testKinds.itemRef) {
-          const declared =
-            Option.contains(held.type, itemResourceType) &&
-            Option.exists(held.item, (item) => declarationsOf(item.rows, grammar).has(variable));
-          const mapped = elementsOf(held.referrer.rows, held.node.id).some(
+          const declarations = Option.match(held.item, {
+            onNone: () => new Map<string, readonly string[]>(),
+            onSome: (item) => declarationsOf(item.rows, grammar),
+          });
+          const declared = Option.contains(held.type, itemResourceType)
+            ? declarations.get(variable)?.[0]
+            : undefined;
+          const mapping = elementsOf(held.referrer.rows, held.node.id).find(
             ({ id, kind: child }) =>
               child === "qti-variable-mapping" &&
               Option.contains(collapsedOf(held.referrer.rows, id, "target-identifier"), variable),
           );
-          if (declared) {
-            return "declared";
+          if (declared !== undefined) {
+            return { declarationKind: declared, source: "declared" };
           }
 
-          if (mapped) {
-            return "mapped";
+          if (mapping !== undefined) {
+            // A mapped name stands as its source's declaration, an outcome where it names one.
+            const source = Option.getOrElse(
+              collapsedOf(held.referrer.rows, mapping.id, "source-identifier"),
+              () => "",
+            );
+
+            return {
+              declarationKind: declarations.get(source)?.[0] ?? "qti-outcome-declaration",
+              source: "mapped",
+            };
           }
 
-          return itemBuiltIns.has(variable) ? "builtIn" : "none";
+          const builtIn = itemBuiltIns.get(variable);
+
+          return builtIn === undefined
+            ? { declarationKind: "none", source: "none" }
+            : { declarationKind: builtIn, source: "builtIn" };
         }
 
         return form === "split" && durationScopes.has(held.kind) && variable === "duration"
-          ? "builtIn"
-          : "none";
+          ? { declarationKind: sectionBuiltIns.get(variable) ?? "none", source: "builtIn" }
+          : { declarationKind: "none", source: "none" };
       },
     });
+    const { source } = resolved;
     const numbered =
       form !== "numbered" ||
       (Option.exists(looked, ({ replaced }) => replaced) && positiveNumber.test(number));
 
     return {
+      declarationKind: resolved.declarationKind,
       form,
       placements: Option.match(looked, { onNone: () => 0, onSome: ({ placements }) => placements }),
       resolves: source !== "none" && !setter && numbered,
@@ -764,9 +792,9 @@ const referenceLawsOf = (
   assembled: Assembled,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
-  const builtIns = new Map<string, Set<string>>();
-  for (const { root, variable } of grammar.references.builtIn.rows) {
-    builtIns.set(root, new Set([...(builtIns.get(root) ?? []), variable]));
+  const builtIns = new Map<string, Map<string, string>>();
+  for (const { declaration, root, variable } of grammar.references.builtIn.rows) {
+    builtIns.set(root, new Map([...(builtIns.get(root) ?? []), [variable, declaration]]));
   }
 
   const context = {
@@ -826,10 +854,29 @@ const referenceLawsOf = (
             const undeclared =
               !identifier.includes(".") &&
               readings.some(({ form, source }) => form === "unsplit" && source === "none");
+            // Variable kind over the readings: a setter's name resolves, and every resolving
+            // reading by `identifier` names a declaration kind its element reads or sets.
+            const allowed = declarationKindsOf(node.kind);
+            const misnamed =
+              attribute === "identifier" &&
+              allowed.length > 0 &&
+              ((setterKinds.has(node.kind) && resolving.length === 0) ||
+                resolving.some(({ declarationKind }) => !allowed.includes(declarationKind)));
 
             return [
               ...(prefixed ? [breachAt(rows, node, "Prefixed reference", keys)] : []),
               ...(undeclared ? [breachAt(rows, node, "Variable declared", { identifier })] : []),
+              ...(misnamed
+                ? [
+                    breachAt(rows, node, "Variable kind", {
+                      allowed: allowed.join(" "),
+                      declarationKind: resolving
+                        .map(({ declarationKind }) => declarationKind)
+                        .join(" "),
+                      identifier,
+                    }),
+                  ]
+                : []),
             ];
           }),
         );

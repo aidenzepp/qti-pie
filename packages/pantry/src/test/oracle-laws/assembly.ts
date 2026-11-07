@@ -225,15 +225,22 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
   const partKinds = new Set(grammar.references.sectionPart.rows.map(({ kind }) => kind));
   const includeParents = new Set(grammar.include.includeParentKind.rows.map(({ kind }) => kind));
   const sections = new Map<NodeId, Section>();
+  // A section met again while its own scope is still being read stands on a cycle of parent
+  // links, which the tree laws refuse; it reads no section above it, so the walk ends.
+  const opening = new Set<NodeId>();
   const sectionOf = (node: Row): Section => {
     const known = sections.get(node.id);
     if (known !== undefined) {
       return known;
     }
 
+    opening.add(node.id);
+
     const parent = rows.byId.get(node.parent);
     const above =
-      parent?.kind === testKinds.section && parent.start > 0n ? sectionOf(parent) : undefined;
+      parent?.kind === testKinds.section && parent.start > 0n && !opening.has(parent.id)
+        ? sectionOf(parent)
+        : undefined;
     const children = elementsOf(rows, node.id);
     const selection = Option.fromNullishOr(
       children.find(({ kind }) => kind === testKinds.selection),
@@ -272,6 +279,7 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
       selection,
     };
     sections.set(node.id, section);
+    opening.delete(node.id);
 
     return section;
   };
