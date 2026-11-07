@@ -11,12 +11,13 @@
  *
  * A package is judged as the importer will read it: its entries once, the manifest's schema
  * version, then each document through shred, the codec, which refuses `unmodeled-vocabulary`,
- * `attribute-admission` (an attribute its kind admits under no name) and `not-qti3` and nothing
- * else ({@link CodecRefusal}). The documents that shred are folded. A fold that meets a child or an
- * attribute with no cell has no rows, and its refusal is the one breach of its document; every law
- * is evaluated over the rows of the documents that fold, each breach reported with the law, the
- * rule the law keeps from the guard or schema rule it replaces, and where it broke
- * ({@link Breach}).
+ * `attribute-admission` (an attribute its kind admits under no name) and `not-qti3`, and then
+ * through the importer's one other check before any row exists, a closed `data-ssml` value
+ * Data-SSML does not admit (`attribute-lexical`), and nothing else ({@link CodecRefusal}). The
+ * documents that shred are folded. A fold that meets a child or an attribute with no cell has no
+ * rows, and its refusal is the one breach of its document; every law is evaluated over the rows of
+ * the documents that fold, each breach reported with the law, the rule the law keeps from the guard
+ * or schema rule it replaces, and where it broke ({@link Breach}).
  *
  * The laws, in the plan's order:
  *
@@ -120,6 +121,7 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
+import { dataSsmlFaultIn } from "#pantry/import/data-ssml.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
@@ -290,11 +292,14 @@ export interface Breach {
 /**
  * The rules the codec and the reader refuse a package under, before any row exists: an attribute
  * shred reads under no name or open class its kind admits is `attribute-admission`, the rule of
- * AL1, and every other name shred cannot represent is `unmodeled-vocabulary`.
+ * AL1, and every other name shred cannot represent is `unmodeled-vocabulary`. A closed `data-ssml`
+ * value Data-SSML does not admit is `attribute-lexical`, which the importer checks and the database
+ * does not (spec reading R7-a).
  */
 export type CodecRule = Extract<
   OracleRule,
   | "attribute-admission"
+  | "attribute-lexical"
   | "href-path"
   | "manifest-root"
   | "not-qti3"
@@ -6392,8 +6397,9 @@ const inPlaceBreaches = (
  * Judge a package as the importer will read it, and every law over its rows.
  *
  * The manifest is read and its schema version decoded, then the manifest and each document it
- * lists are read and shredded in manifest order: the first refusal of the reader or the codec is
- * the judgment, since no row of the package is written. Otherwise every document is folded, and
+ * lists are read and shredded in manifest order: the first refusal of the reader, the codec or the
+ * importer's `data-ssml` check (documents only, never the manifest) is the judgment, since no row
+ * of the package is written. Otherwise every document is folded, and
  * the judgment is every breach: the package laws first, as the package's own rows are written
  * first, then each document's in manifest order. A document whose fold meets a missing cell has no
  * rows, so its breaches are that refusal alone; a manifest that does not fold lists nothing, and
@@ -6455,6 +6461,16 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
       } else {
         const xml = yield* readDocument(path, file.bytes);
         const tree = yield* shredDocument(path, xml, version, shredGrammar);
+        const fault = dataSsmlFaultIn(tree);
+        if (fault !== undefined) {
+          return yield* Effect.fail<CodecRefusal>({
+            _tag: "CodecRefusal",
+            detail: `${path} at ${fault.path}: ${fault.detail}`,
+            document: path,
+            rule: "attribute-lexical",
+          });
+        }
+
         documents.push({
           folded: foldedOf(path, tree, idsFor(index + 1), foldGrammar),
           identifier: rootIdentifierOf(tree),

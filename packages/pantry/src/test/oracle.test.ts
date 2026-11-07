@@ -1828,7 +1828,7 @@ const unownedValid: readonly {
     ],
   ].map(([what, body]) => ({
     files: withItem(`<p id="intro">Pick one.</p>`, body ?? ""),
-    name: `R7-a: data-ssml holding ${what}, which the oracle reads as text (the importer's check judges its form)`,
+    name: `R7-a: data-ssml holding ${what}, which Data-SSML admits`,
   })),
   {
     files: withMath(
@@ -2277,6 +2277,28 @@ const unownedCodec: readonly {
   ]),
 ];
 
+/**
+ * R7-a's refused values: a closed `data-ssml` that Data-SSML 1.0 does not admit (an unknown name, a
+ * value of the wrong type, a value outside an enumeration, text that is not JSON). The importer
+ * refuses them under `attribute-lexical` and the oracle must agree, since both run the importer's
+ * own checker; `src/import/data-ssml.test.ts` pins the same values.
+ */
+const unownedDataSsml: readonly {
+  readonly files: Readonly<Record<string, string>>;
+  readonly name: string;
+}[] = [
+  ["an unknown name", `{"brk":{}}`],
+  ["a value of the wrong type", `{"break":{"time":2}}`],
+  ["a value outside an enumeration", `{"break":{"strength":"loud"}}`],
+  ["text that is not JSON", `not json`],
+].map(([what, value]) => ({
+  files: withItem(
+    `<p id="intro">Pick one.</p>`,
+    `<p id="intro" data-ssml='${value ?? ""}'>Pick one.</p>`,
+  ),
+  name: `R7-a: data-ssml holding ${what}`,
+}));
+
 describe("the unowned readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a", () => {
   for (const { files, name } of unownedValid) {
     it.effect(`no law refuses ${name}`, () =>
@@ -2293,6 +2315,20 @@ describe("the unowned readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a", () => 
       Effect.gen(function* codec() {
         assert.deepStrictEqual(verdictOf(yield* judged(files)), {
           rule: "unmodeled-vocabulary",
+          verdict: "refused",
+        });
+      }),
+    );
+  }
+
+  for (const { files, name } of unownedDataSsml) {
+    it.effect(`the codec refuses ${name} under attribute-lexical`, () =>
+      Effect.gen(function* dataSsml() {
+        const judgment = yield* judged(files);
+
+        assert.strictEqual(judgment._tag, "CodecRefusal");
+        assert.deepStrictEqual(verdictOf(judgment), {
+          rule: "attribute-lexical",
           verdict: "refused",
         });
       }),
