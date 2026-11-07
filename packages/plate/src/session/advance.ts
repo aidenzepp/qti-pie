@@ -167,12 +167,14 @@ export class StepResponseMisfit extends Data.TaggedError("StepResponseMisfit")<{
  * `submit-item`, or a `next` that submits first, processes on the current item; `InvalidResponses`
  * is `score` refusing a response an item held before the step that does not fit its declaration,
  * which only a session the host changed holds; and `EngineFailure` is an item's processing
- * failing. The rest pass through from the moves and the submissions for what a host passes that
- * does not fit: `InvalidTime` for an invalid `now`, `ItemNotInSession` and `UnknownItemRef` for a
- * session that is not the test's, `TestNotDeliverable` for items that lack the one an intent
- * reaches or hold another document's, and `InvalidRecord` and `RecordMismatch` for an item record
- * `score` cannot take. `RecordRequired` is `score`'s, which a session never meets, since it always
- * passes the item's record.
+ * failing, or a run of the test's outcome processing, which follows each submission and the test's
+ * close, failing over a stored item record that lacks a value it reads. The rest pass through from
+ * the moves and the submissions for what a host passes that does not fit: `InvalidTime` for an
+ * invalid `now`, `ItemNotInSession` and `UnknownItemRef` for a session that is not the test's,
+ * `TestNotDeliverable` for items that lack the one an intent reaches or hold another document's,
+ * and `InvalidRecord` and `RecordMismatch` for an item record `score` cannot take.
+ * `RecordRequired` is `score`'s, which a session never meets, since it always passes the item's
+ * record.
  */
 export type AdvanceFailure =
   | EngineFailure
@@ -249,7 +251,7 @@ const closedRefusal = (intent: Intent): IntentRefused =>
 
 /**
  * Turn a submission's refusal into an {@link IntentRefused} for the intent posted, leaving its other
- * failures as they are.
+ * failures as they are, the `EngineFailure` of a run of the test's outcome processing among them.
  *
  * @param intent The intent posted.
  * @param result What the submission returned.

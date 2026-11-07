@@ -3,6 +3,8 @@ import { Effect, Option, Result } from "effect";
 import { encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import { UnknownIdentifierError } from "#plate/engine/failures.ts";
+import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
 import { encodeIntent } from "#plate/form/intent.ts";
 import type { Value } from "#plate/model/values.ts";
 import { IntentRefused, advance } from "#plate/session/advance.ts";
@@ -137,14 +139,24 @@ const combinations: readonly Modes[] = [
 ];
 
 /**
+ * What a hand-built test declares of its own outcomes, as text: its outcome declarations, and the
+ * rules of its `qti-outcome-processing`, which it holds only when they are not empty.
+ */
+interface TestOutcomes {
+  readonly declarations: string;
+  readonly rules: string;
+}
+
+/**
  * Write the text of a hand-built test of two parts in the same modes: `P1` holding the items `i1`,
  * `i2` and `i3`, and `P2` holding `i4`, each ref naming `<ref>.xml` beside the test.
  *
  * @param modes The parts' modes.
  * @param control The attributes of each part's item session control; none when empty.
+ * @param outcomes The test's outcome declarations and outcome processing; none when absent.
  * @returns The test's text.
  */
-const testXml = (modes: Modes, control: string): string => {
+const testXml = (modes: Modes, control: string, outcomes?: TestOutcomes): string => {
   const part = (identifier: string, refs: readonly string[]): string =>
     [
       `<qti-test-part identifier="${identifier}" navigation-mode="${modes.navigation}" submission-mode="${modes.submission}">`,
@@ -156,8 +168,12 @@ const testXml = (modes: Modes, control: string): string => {
 
   return [
     '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="T" title="T">',
+    outcomes?.declarations ?? "",
     part("P1", ["i1", "i2", "i3"]),
     part("P2", ["i4"]),
+    outcomes === undefined || outcomes.rules === ""
+      ? ""
+      : `<qti-outcome-processing>${outcomes.rules}</qti-outcome-processing>`,
     "</qti-assessment-test>",
   ].join("");
 };
@@ -179,14 +195,18 @@ interface Delivery {
  * @param options.control The attributes of each part's item session control.
  * @param options.minChoices Each Choice's `min-choices`, when it sets one.
  * @param options.multiple Whether each item's `RESPONSE` is a multiple identifier.
+ * @param options.outcomes The test's outcome declarations and outcome processing, when it has any.
  * @returns The test and its items.
  */
 const delivery = Effect.fnUntraced(function* delivery(
   modes: Modes,
-  options: ChoiceOptions & { readonly control?: string } = {},
+  options: ChoiceOptions & { readonly control?: string; readonly outcomes?: TestOutcomes } = {},
 ) {
   const encoder = new TextEncoder();
-  const verdict = yield* open("tests/T.xml", encoder.encode(testXml(modes, options.control ?? "")));
+  const verdict = yield* open(
+    "tests/T.xml",
+    encoder.encode(testXml(modes, options.control ?? "", options.outcomes)),
+  );
   const test =
     (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") &&
     verdict.kind === "test"
@@ -766,5 +786,150 @@ describe("advance", () => {
         "TestNotDeliverable",
       );
     }),
+  );
+});
+
+/**
+ * The processing seed every outcome run case starts its session with, so the runs' draws are fixed.
+ */
+const processingSeed = "advance-outcome-seed";
+
+/**
+ * The outcomes of a test whose outcome processing draws `DRAW` from 1 to 1,000,000, sums every
+ * item's `SCORE` into `TOTAL`, and reads the test's own `duration` into `TIME`, in that order.
+ */
+const summingOutcomes: TestOutcomes = {
+  declarations: [
+    '<qti-outcome-declaration identifier="DRAW" cardinality="single" base-type="integer"/>',
+    '<qti-outcome-declaration identifier="TIME" cardinality="single" base-type="duration"/>',
+    '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/>',
+  ].join(""),
+  rules: [
+    '<qti-set-outcome-value identifier="DRAW"><qti-random-integer min="1" max="1000000"/></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="TOTAL"><qti-sum><qti-test-variables variable-identifier="SCORE"/></qti-sum></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="TIME"><qti-variable identifier="duration"/></qti-set-outcome-value>',
+  ].join(""),
+};
+
+/**
+ * Give the outcomes run `run` of {@link summingOutcomes} leaves, from what it reads.
+ *
+ * @param run The run's number, counted from 1.
+ * @param seconds The test's `duration`.
+ * @param total The sum of every item's `SCORE`.
+ * @returns The outcomes, by identifier.
+ */
+const summed = (run: number, seconds: number, total: number) =>
+  ({
+    DRAW: {
+      baseType: "integer",
+      cardinality: "single",
+      values: [
+        {
+          baseType: "integer",
+          value:
+            1n + drawBelow(drawStream(processingSeed, outcomeLabel(instance, run)), 1_000_000n),
+        },
+      ],
+    },
+    TIME: {
+      baseType: "duration",
+      cardinality: "single",
+      values: [{ baseType: "duration", value: seconds }],
+    },
+    TOTAL: {
+      baseType: "float",
+      cardinality: "single",
+      values: [{ baseType: "float", value: total }],
+    },
+  }) satisfies Readonly<Record<string, Value>>;
+
+/**
+ * Start a session of a delivery under {@link processingSeed}, failing the test when `startTest`
+ * refuses.
+ *
+ * @param given The test and its items.
+ * @param configuration The host's configuration.
+ * @returns The session.
+ */
+const seeded = (given: Delivery, configuration: Configuration): TestSession =>
+  Result.getOrElse(
+    startTest(given.test, given.items, configuration, {
+      instance,
+      now: startedAt,
+      seed: processingSeed,
+    }),
+    (failure) => assert.fail(`startTest refused: ${failure.message}`),
+  );
+
+describe("advance and the test's outcome processing", () => {
+  it.effect(
+    "[T-9] a next on the last item of a linear, individual test submits it and closes the test in one transition: two outcome runs at one now",
+    () =>
+      Effect.gen(function* nextCloses() {
+        const given = yield* delivery(
+          { navigation: "linear", submission: "individual" },
+          { outcomes: summingOutcomes },
+        );
+        const configuration = yield* configure({});
+        const next: Step = { intent: { kind: "next" }, responses: answer };
+        const step = (session: TestSession, seconds: number): TestSession =>
+          accepted(
+            advance(given.test, given.items, session, next, configuration, { now: after(seconds) }),
+          );
+        const onLast = step(step(step(seeded(given, configuration), 1), 2), 3);
+        assert.strictEqual(onLast.status, "interacting");
+        assert.strictEqual(onLast.position, 3);
+        assert.strictEqual(onLast.outcomeRuns, 3);
+        assert.deepStrictEqual(onLast.outcomes, summed(3, 3, 3));
+
+        const closed = step(onLast, 4.5);
+        assert.strictEqual(closed.status, "closed");
+        assert.strictEqual(closed.outcomeRuns, 5);
+        assert.deepStrictEqual(closed.outcomes, summed(5, 4.5, 4));
+        assert.notDeepEqual(summed(4, 4.5, 4), summed(5, 4.5, 4));
+      }),
+  );
+
+  it.effect(
+    "[T-9] passes an outcome run's EngineFailure through advance when an end-part closes the test over a record lacking an outcome the run reads",
+    () =>
+      Effect.gen(function* failingClose() {
+        const given = yield* delivery(
+          { navigation: "nonlinear", submission: "individual" },
+          { outcomes: summingOutcomes },
+        );
+        const configuration = yield* configure({});
+        const endPart: Step = { intent: { kind: "end-part" } };
+        const inLast = accepted(
+          advance(given.test, given.items, seeded(given, configuration), endPart, configuration, {
+            now: after(1),
+          }),
+        );
+        assert.strictEqual(inLast.status, "interacting");
+        assert.strictEqual(inLast.outcomeRuns, 0);
+
+        const lacking: TestSession = {
+          ...inLast,
+          items: inLast.items.map((item) =>
+            item.ref === "i1" ? { ...item, record: { ...item.record, outcomes: {} } } : item,
+          ),
+        };
+
+        const failure = Option.getOrElse(
+          Result.getFailure(
+            advance(given.test, given.items, lacking, endPart, configuration, { now: after(2) }),
+          ),
+          () => assert.fail("expected the closing outcome run to fail, and advance accepted"),
+        );
+
+        assert.instanceOf(failure, UnknownIdentifierError);
+        assert.deepStrictEqual(
+          failure instanceof UnknownIdentifierError
+            ? [failure.holder, failure.identifier, failure.role]
+            : [],
+          ["record", "SCORE", "outcome"],
+        );
+      }),
   );
 });
