@@ -1088,8 +1088,11 @@ export const judgeDocument = Effect.fn("test.judgeDocument")(function* judgeDocu
           case "namespace-entity": {
             return "other";
           }
+          case "prefix-unbound":
           case "type-unknown":
           case "type-unresolved": {
+            // A QName value no binding in scope resolves, or that names no type, is a value its
+            // attribute's declaration refuses, which xmllint reports on the attribute.
             return "attribute-value";
           }
           case "strict-undeclared": {

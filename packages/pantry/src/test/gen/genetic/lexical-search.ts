@@ -603,6 +603,16 @@ export const searchSitesOf = (sites: Sites): readonly Site[] => {
 };
 
 /**
+ * The cases a run always starts from, each a disagreement the search once found, so it never
+ * regresses unseen: SSML `token`'s `role`, a list of `xs:QName`, holding `a:b` with no binding of
+ * `a`, which the codec once accepted (XML Schema 1.0 Part 2, §3.2.18; GEN-B, 2026-11-07). Each is
+ * judged in both versions.
+ */
+const keptSeeds: readonly { readonly key: string; readonly value: string }[] = [
+  { key: "ssml:token role", value: "a:b" },
+];
+
+/**
  * How many seeds each site starts with.
  */
 const seedsPerSite = 6;
@@ -611,13 +621,13 @@ const seedsPerSite = 6;
  * The seed population: per site, values of its dictionary (the enumeration, the pattern's samples,
  * then the families' boundary forms) of {@link seedsPerSite} different forms, those its domain
  * accepts first, so every arm of a domain's grammar its samples met is seeded, and a value the
- * grammar refuses stands beside the valid ones.
+ * grammar refuses stands beside the valid ones; then the {@link keptSeeds}.
  *
  * @param sites - The search's sites.
  * @returns The seeds.
  */
-export const seedsOf = (sites: readonly Site[]): readonly LexicalGenome[] =>
-  sites.flatMap((site, index) => {
+export const seedsOf = (sites: readonly Site[]): readonly LexicalGenome[] => [
+  ...sites.flatMap((site, index) => {
     const domains = [...site.at.values()].map(({ domain }) => domain);
     const usable = site.dictionary.filter((value) => value !== "" && value.length <= longest);
     const accepted = usable.filter((value) => domains.some((domain) => accepts(domain, value)));
@@ -629,7 +639,13 @@ export const seedsOf = (sites: readonly Site[]): readonly LexicalGenome[] =>
     }
 
     return [...forms.values()].map((value) => ({ site: index, value }));
-  });
+  }),
+  ...keptSeeds.flatMap(({ key, value }) => {
+    const site = sites.findIndex((held) => held.key === key);
+
+    return site === -1 ? [] : [{ site, value }];
+  }),
+];
 
 /**
  * Rebuild a value from its code points with one stretch replaced.

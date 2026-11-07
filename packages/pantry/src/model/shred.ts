@@ -32,6 +32,8 @@
 import { Effect, Option, Order, Result, Schema } from "effect";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { qNamePartsOf, unboundPrefixesOf } from "#pantry/grammar/domains.ts";
+import type { Qualified } from "#pantry/grammar/domains.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import type { ForeignKind } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes, none } from "#pantry/model/xdm.ts";
@@ -105,6 +107,24 @@ export interface ShredGrammar<V extends XdmVocabulary> {
     name: ClosedName<V> | OpenClass,
   ) => boolean;
   /**
+   * How a value of an element names namespaces: the `qualified` of its domain. An attribute's is
+   * the one its governor's `GovernedAttribute` or its kind's `AttributeAdmission` gives it, as
+   * {@link ShredGrammar.admitted} reads them; the element's text's is its governor's `TypeText` or
+   * its kind's `TextDomain`.
+   *
+   * @param version - The version of the element's document.
+   * @param kind - The element's kind, a foreign kind for a foreign element.
+   * @param governs - The element's governing type, its `TypeName` handle.
+   * @param site - The value: an attribute, by its closed handle, or the element's text.
+   * @returns How, or none for a value that is no QName or that the element holds no domain for.
+   */
+  readonly qualified: (
+    version: V["version"],
+    kind: ElementKind<V> | ForeignKind,
+    governs: string,
+    site: ValueSite<V>,
+  ) => Option.Option<Qualified>;
+  /**
    * Find the closed handle that spells an attribute's qualified name: the `AttributeName` roster.
    *
    * @param spelling - The local name for an attribute in no namespace, and `xml:`, `xsi:` or
@@ -177,6 +197,13 @@ export interface ShredGrammar<V extends XdmVocabulary> {
 }
 
 /**
+ * Where a value of an element stands: one of its attributes, by its closed handle, or its text.
+ */
+export type ValueSite<V extends XdmVocabulary> =
+  | { readonly _tag: "attribute"; readonly name: ClosedName<V> }
+  | { readonly _tag: "text" };
+
+/**
  * Why a name has no representation:
  *
  * - `unnamed`: an element no kind names under its parent, where the parent admits no foreign element
@@ -193,6 +220,10 @@ export interface ShredGrammar<V extends XdmVocabulary> {
  *   of a kind or a foreign one alike, since XML Schema assesses the attribute against its own
  *   declaration where no element declaration is found (XML Schema 1.0 Part 1, §3.3.4 clause 4.1,
  *   §3.2.4 clause 1.2, §3.15.3; spec reading 83);
+ * - `prefix-unbound`: a value of a QName type (`Qualified`), an attribute's other than `xsi:type` or
+ *   an element's text, one of whose QNames has a prefix no declaration in scope binds, so it has no
+ *   value (XML Schema 1.0 Part 2, §3.2.18; spec reading 74): the codec reads it with the bindings
+ *   in scope, as it reads `xsi:type`'s, since no row holds them ({@link resolvesIn});
  * - `type-unknown`: an `xsi:type` on an element of a kind whose QName names no type of the pinned
  *   schemas (clause 4.2); on a foreign element such a name leaves it to lax assessment, or under
  *   `strict` is `strict-undeclared` (spec reading 60);
@@ -213,6 +244,7 @@ export const unmodeledReasons = [
   "unadmitted",
   ...openClassRefusals,
   "namespace-entity",
+  "prefix-unbound",
   "type-unresolved",
   "type-unknown",
   "strict-undeclared",
@@ -253,6 +285,8 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
       "mathml-foreign":
         "is in the MathML namespace, and its parent admits no MathML element of that name, while MathML content stands only inside an m:math element (MathML 3, 2.2), so it is no foreign element either",
       "namespace-entity": "declares a namespace through an entity reference, which is never read",
+      "prefix-unbound":
+        "is of a QName type, and a QName of its value has a prefix no declaration in scope binds, so the value has none (XML Schema 1.0 Part 2, 3.2.18)",
       "strict-undeclared":
         "is held by a strict wildcard, and neither a global declaration of its document's schemas names it nor an xsi:type names one of their types or a built-in, so XML Schema cannot assess it (XML Schema 1.0 Part 1, 3.10.4 and 3.3.4)",
       "type-unknown":
@@ -505,12 +539,6 @@ const scopeOf = (outer: Scope, declarations: readonly XdmNamespace[]): Scope =>
     : new Map([...outer, ...declarations.map(({ prefix, uri }) => [prefix, uri] as const)]);
 
 /**
- * An `xsi:type` value after XML Schema's `collapse` whitespace (Part 2, §4.3.6), as a prefix and a
- * local name: a QName, at most one colon, neither part empty or holding whitespace.
- */
-const qNameParts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u;
-
-/**
  * Read an `xsi:type` value as the expanded name it is: a QName resolved against the bindings in
  * scope, an unprefixed name taking the default namespace (XML Schema 1.0 Part 1, §3.15.3; spec
  * reading 83).
@@ -526,13 +554,40 @@ const qNameOf = (
   element: Element,
   scope: Scope,
 ): Result.Result<ExpandedName, UnmodeledVocabulary> => {
-  const parts = qNameParts.exec(typed.value.replaceAll(/[\t\n\r ]+/gu, " ").trim())?.groups;
-  const namespace = scope.get(parts?.["prefix"] ?? "");
+  const parts = qNamePartsOf(typed.value.replaceAll(/[\t\n\r ]+/gu, " ").trim());
+  const namespace = parts.pipe(
+    Option.flatMap(({ prefix }) => Option.fromNullishOr(scope.get(prefix))),
+  );
 
-  return parts === undefined || typed.references.length > 0 || namespace === undefined
+  return Option.isNone(parts) || typed.references.length > 0 || Option.isNone(namespace)
     ? Result.fail(unmodeledAttribute(typed, element, "type-unresolved"))
-    : Result.succeed({ local: parts["local"] ?? "", namespace });
+    : Result.succeed({ local: parts.value.local, namespace: namespace.value });
 };
+
+/**
+ * Whether a value of a QName type has a value where it stands: every QName it holds has its prefix
+ * bound in scope, or has none (XML Schema 1.0 Part 2, §3.2.18). The one check the codec reads an
+ * attribute's value and an element's text with; a value that holds an unexpanded entity reference
+ * is left to its domain's pattern, which refuses the reference, and a value of no QName type always
+ * resolves.
+ *
+ * @param qualified - How the value's domain names namespaces, none for a domain of no QNames.
+ * @param value - The value as written.
+ * @param references - How many unexpanded entity references it holds.
+ * @param scope - The namespace bindings in scope where it stands.
+ * @returns Whether it resolves.
+ */
+const resolvesIn = (
+  qualified: Option.Option<Qualified>,
+  value: string,
+  references: number,
+  scope: Scope,
+): boolean =>
+  Option.match(qualified, {
+    onNone: () => true,
+    onSome: (held) =>
+      references > 0 || unboundPrefixesOf(held, value, (prefix) => scope.has(prefix)).length === 0,
+  });
 
 /**
  * Read an element's governing type, its `TypeName` handle (XML Schema 1.0 Part 1, §3.3.4).
@@ -723,11 +778,16 @@ const spellingOf = ({ local, namespace }: Attribute): Option.Option<string> =>
 /**
  * Read one attribute of an element: under its closed handle where the element admits it, else
  * under its open class where the element admits that, each under the element's governor where one
- * governs it ({@link ShredGrammar.admitted}).
+ * governs it ({@link ShredGrammar.admitted}). An attribute of a QName type is read with the
+ * bindings in scope, and refused as `prefix-unbound` where a QName of its value has a prefix none
+ * binds (XML Schema 1.0 Part 2, §3.2.18); a value that holds an unexpanded entity reference is left
+ * to its domain's pattern, which refuses the reference. `xsi:type` is read so by
+ * {@link governsOf} before any attribute, as `type-unresolved`.
  *
  * @param attribute - The attribute, never a namespace declaration.
  * @param reading - How the element that carries it is read.
  * @param governs - The element's governing type.
+ * @param scope - The namespace bindings in scope at the element.
  * @param version - The version of its document.
  * @param grammar - The grammar.
  * @returns The attribute with its lexical form and entity references as read, or its refusal.
@@ -736,6 +796,7 @@ const attributeOf = <V extends XdmVocabulary>(
   attribute: Attribute,
   reading: Reading<V>,
   governs: string,
+  scope: Scope,
   version: V["version"],
   grammar: ShredGrammar<V>,
 ): Result.Result<XdmAttribute<V>, UnmodeledVocabulary> => {
@@ -750,7 +811,14 @@ const attributeOf = <V extends XdmVocabulary>(
     Option.filter((handle) => grammar.admitted(version, kind, governs, handle)),
   );
   if (Option.isSome(closed)) {
-    return Result.succeed(read({ _tag: "closed", handle: closed.value, prefix: attribute.prefix }));
+    const qualified = grammar.qualified(version, kind, governs, {
+      _tag: "attribute",
+      name: closed.value,
+    });
+
+    return resolvesIn(qualified, attribute.value, attribute.references.length, scope)
+      ? Result.succeed(read({ _tag: "closed", handle: closed.value, prefix: attribute.prefix }))
+      : Result.fail(unmodeledAttribute(attribute, reading.element, "prefix-unbound"));
   }
 
   const { local, namespace } = reading.element;
@@ -784,6 +852,7 @@ const refusalOrder = Order.mapInput(
  *
  * @param reading - How the element is read.
  * @param governs - The element's governing type.
+ * @param scope - The namespace bindings in scope at the element.
  * @param version - The version of its document.
  * @param grammar - The grammar.
  * @returns The attributes in source order, or the refusal of the first in {@link refusalOrder}
@@ -792,6 +861,7 @@ const refusalOrder = Order.mapInput(
 const attributesOf = <V extends XdmVocabulary>(
   reading: Reading<V>,
   governs: string,
+  scope: Scope,
   version: V["version"],
   grammar: ShredGrammar<V>,
 ): Result.Result<readonly XdmAttribute<V>[], UnmodeledVocabulary> => {
@@ -800,7 +870,7 @@ const attributesOf = <V extends XdmVocabulary>(
   );
   const read = written.map((attribute) => ({
     attribute,
-    outcome: attributeOf(attribute, reading, governs, version, grammar),
+    outcome: attributeOf(attribute, reading, governs, scope, version, grammar),
   }));
   const [refused] = read
     .flatMap(({ attribute, outcome }) =>
@@ -894,18 +964,23 @@ interface Opened<V extends XdmVocabulary> {
 /**
  * Read what every element holds but its children: its namespace declarations, then its governing
  * type, then its attributes, once its kind is known, the order in which each binds or names the
- * next. The namespace declarations bind the `xsi:type` QName, and the governing type decides which
- * attributes the element admits (spec reading 84), so an attribute its declared type does not
- * declare but its governing type does is read, and one its governing type does not declare is not.
+ * next; then its text, as one value, where its governing type or its kind gives the text a QName
+ * domain, which {@link resolvesIn} reads with the same bindings as the attributes. The namespace
+ * declarations bind the `xsi:type` QName, and the governing type decides which attributes the
+ * element admits (spec reading 84), so an attribute its declared type does not declare but its
+ * governing type does is read, and one its governing type does not declare is not.
  *
  * @param reading - How the element is read.
+ * @param parent - The element it sits in, none for the root, which a refusal of its text names.
+ * @param outer - The namespace bindings in scope at its parent.
  * @param version - The version of its document.
  * @param grammar - The grammar.
  * @returns The declarations, the attributes and the prefix, or the refusal of the first of its
- *   names that has no representation.
+ *   names that has no representation, or of its text.
  */
 const contentOf = <V extends XdmVocabulary>(
   reading: Reading<V>,
+  parent: Option.Option<Element>,
   outer: Scope,
   version: V["version"],
   grammar: ShredGrammar<V>,
@@ -919,7 +994,21 @@ const contentOf = <V extends XdmVocabulary>(
     const namespaces = yield* namespacesOf(reading.element);
     const scope = scopeOf(outer, namespaces);
     const governs = yield* governsOf(reading, scope, version, grammar);
-    const attributes = yield* attributesOf(reading, governs, version, grammar);
+    const attributes = yield* attributesOf(reading, governs, scope, version, grammar);
+    const { children } = reading.element;
+    const text = children.flatMap((child) => (child.kind === "text" ? [child.value] : [])).join("");
+    const references = children.filter((child) => child.kind === "entityRef").length;
+    const qualified = grammar.qualified(version, reading.kind, governs, { _tag: "text" });
+    if (!resolvesIn(qualified, text, references, scope)) {
+      return yield* Result.fail(
+        new UnmodeledVocabulary({
+          kind: "element",
+          name: reading.element.qname,
+          parent: parent.pipe(Option.map(({ qname }) => qname)),
+          reason: "prefix-unbound",
+        }),
+      );
+    }
 
     return { attributes, governs, namespaces, prefix: reading.element.prefix, scope };
   });
@@ -928,6 +1017,7 @@ const contentOf = <V extends XdmVocabulary>(
  * Read an element without its children: of its kind, or foreign under its exact name.
  *
  * @param reading - How it is read.
+ * @param parent - The element it sits in, none for the root.
  * @param outer - The namespace bindings in scope at its parent.
  * @param version - The version of its document.
  * @param grammar - The grammar.
@@ -935,11 +1025,12 @@ const contentOf = <V extends XdmVocabulary>(
  */
 const open = <V extends XdmVocabulary>(
   reading: Reading<V>,
+  parent: Option.Option<Element>,
   outer: Scope,
   version: V["version"],
   grammar: ShredGrammar<V>,
 ): Result.Result<Opened<V>, UnmodeledVocabulary> =>
-  Result.map(contentOf(reading, outer, version, grammar), (content) => {
+  Result.map(contentOf(reading, parent, outer, version, grammar), (content) => {
     const children: XdmChild<V>[] = [];
     const { local, namespace } = reading.element;
     const { attributes, governs, namespaces, prefix, scope } = content;
@@ -1020,6 +1111,7 @@ const openInto = <V extends XdmVocabulary>(
   Result.gen(function* openChild() {
     const opened = yield* open(
       yield* childReadingOf(element, into.reading, version, grammar),
+      Option.some(into.reading.element),
       into.scope,
       version,
       grammar,
@@ -1053,6 +1145,7 @@ const rootOf = <V extends XdmVocabulary>(
     const children: XdmChild<V>[] = [];
     const { attributes, governs, namespaces, prefix, scope } = yield* contentOf(
       reading,
+      Option.none(),
       builtinScope,
       version,
       grammar,

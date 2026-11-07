@@ -1712,9 +1712,72 @@ export type Identity = "ID" | "IDREF" | "IDREFS";
 export const identities = ["ID", "IDREF", "IDREFS"] as const satisfies readonly Identity[];
 
 /**
+ * How a domain's values name namespaces: one `xs:QName`, or a list of them (XML Schema 1.0 Part 2,
+ * 3.2.18). "The mapping between literals in the lexical space and values in the value space of
+ * QName requires a namespace declaration to be in scope for the context in which QName is used",
+ * so a prefixed QName whose prefix no binding in scope declares has no value. That is a fact of
+ * the element's bindings, which no pattern over the value alone states: the codec reads it with
+ * the bindings in scope ({@link unboundPrefixesOf}).
+ */
+export type Qualified = "QName" | "QNames";
+
+/**
+ * A QName's two parts once its whitespace is collapsed: its prefix, empty for an unprefixed name,
+ * and its local name, each with no colon and no whitespace (Namespaces in XML 1.0, section 4).
+ */
+const qNameParts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u;
+
+/**
+ * Read a QName's prefix and local name.
+ *
+ * @param text - The QName, its whitespace already collapsed.
+ * @returns Its parts, the prefix empty for an unprefixed name; none for text that is no QName.
+ */
+export const qNamePartsOf = (
+  text: string,
+): Option.Option<{ readonly local: string; readonly prefix: string }> =>
+  Option.map(Option.fromNullishOr(qNameParts.exec(text)?.groups), (groups) => ({
+    local: groups["local"] ?? "",
+    prefix: groups["prefix"] ?? "",
+  }));
+
+/**
+ * The prefixes a value of a QName domain names that no binding in scope declares: of each QName
+ * the value holds, once its whitespace is collapsed (a list's items split at its spaces), the
+ * prefix where it has one and `bound` refuses it. A token that is no QName names none: the
+ * domain's pattern refuses it. An unprefixed QName always has a value, in the default namespace or
+ * in none.
+ *
+ * @param qualified - How the domain's values name namespaces.
+ * @param value - The value as written.
+ * @param bound - Whether a prefix is bound in scope where the value stands.
+ * @returns The unbound prefixes, each once, in order; none for a value every QName of which has
+ *   one.
+ */
+export const unboundPrefixesOf = (
+  qualified: Qualified,
+  value: string,
+  bound: (prefix: string) => boolean,
+): readonly string[] => {
+  const collapsed = value.replaceAll(/[\t\n\r ]+/gu, " ").trim();
+  const names = qualified === "QName" ? [collapsed] : collapsed.split(" ");
+
+  return [
+    ...new Set(
+      names.flatMap((name) =>
+        Option.match(qNamePartsOf(name), {
+          onNone: () => [],
+          onSome: ({ prefix }) => (prefix === "" || bound(prefix) ? [] : [prefix]),
+        }),
+      ),
+    ),
+  ];
+};
+
+/**
  * A compiled value domain: the pattern its lexical forms match as written, the primitive its typed
- * value is derived in, the facets a typed-value law reads, the identity type it is, if any, and the
- * values its enumeration keeps.
+ * value is derived in, the facets a typed-value law reads, the identity type it is, if any, the
+ * values its enumeration keeps, and whether its values are QNames read with their bindings.
  */
 export interface CompiledDomain {
   /**
@@ -1727,6 +1790,10 @@ export interface CompiledDomain {
   readonly identity: Option.Option<Identity>;
   readonly pattern: string;
   readonly primitive: DomainPrimitive;
+  /**
+   * How the domain's values name namespaces, none for a domain whose values are no QNames.
+   */
+  readonly qualified: Option.Option<Qualified>;
 }
 
 /**
@@ -3618,6 +3685,35 @@ const identityOf = (domain: Domain): Option.Option<Identity> => {
 };
 
 /**
+ * How a definition's values name namespaces: an atomic `xs:QName`, or a list of them.
+ *
+ * @param domain - The definition.
+ * @returns How, or none for a definition whose values are no QNames.
+ */
+const qualifiedOf = (domain: Domain): Option.Option<Qualified> => {
+  if (domain._tag === "atomic") {
+    return domain.primitive === "QName" ? Option.some("QName") : Option.none();
+  }
+
+  return domain._tag === "list" &&
+    domain.item._tag === "atomic" &&
+    domain.item.primitive === "QName"
+    ? Option.some("QNames")
+    : Option.none();
+};
+
+/**
+ * Whether a definition holds a QName anywhere but at its top or as a list's item, where the codec
+ * would not read its bindings.
+ *
+ * @param domain - The definition.
+ * @returns Whether a QName hides in a union.
+ */
+const hidesQualified = (domain: Domain): boolean =>
+  domain._tag === "union" &&
+  domain.members.some((member) => Option.isSome(qualifiedOf(member)) || hidesQualified(member));
+
+/**
  * Whether a definition holds an identity type anywhere but at its top or as a list's item, where no
  * reference law reads it.
  *
@@ -3675,6 +3771,10 @@ export const compile = (
       return yield* refuse("an ID or IDREF member of a union");
     }
 
+    if (hidesQualified(domain)) {
+      return yield* refuse("a QName member of a union");
+    }
+
     const { facets, tree } = yield* compileIn(domain, {
       _tag: "value",
       exact: reading === "exact",
@@ -3695,6 +3795,7 @@ export const compile = (
       identity: identityOf(domain),
       pattern,
       primitive: domain._tag === "atomic" ? domain.primitive : domain._tag,
+      qualified: qualifiedOf(domain),
     };
   });
 
@@ -3708,6 +3809,7 @@ export const openCompiled: CompiledDomain = {
   identity: Option.none(),
   pattern: emitWhole(anything),
   primitive: "anySimpleType",
+  qualified: Option.none(),
 };
 
 /**

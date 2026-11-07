@@ -1102,6 +1102,7 @@ const bounded = (facet: "maxExclusive" | "maxInclusive" | "minExclusive" | "minI
   identity: Option.none(),
   pattern: "^.*$",
   primitive: "double" as const,
+  qualified: Option.none(),
 });
 
 /**
