@@ -956,7 +956,7 @@ const cnPartsOf = (
  * `rtl`, `ltr` once the walk passes an `m:math` that writes neither. MathML 3 §2.2.1 says "the dir
  * attribute defaults to "ltr" on the math element (but inherits on all other elements which accept
  * the dir attribute)", and §3.1.5.1 sets a formula's direction by its `math` element, so an HTML
- * ancestor's `dir` above it is not read (reading 149).
+ * ancestor's `dir` above it is not read (reading 150).
  *
  * @param view - The document.
  * @param node - The element.
@@ -980,7 +980,7 @@ const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string =>
 /**
  * Tell whether an element writes a `dir` other than the one it inherits, so `mrow dir="ltr"` in a
  * left-to-right formula changes none (operator decision 321). A `dir` that spells neither `ltr` nor
- * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 149).
+ * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 150).
  *
  * @param view - The document.
  * @param node - The element.
@@ -3396,7 +3396,7 @@ const mapKeyValueOf = (baseType: string, key: string): string => {
 };
 
 /**
- * Read a map key as the identity its mapping holds it under (Map key, readings 98 and 150): a
+ * Read a map key as the identity its mapping holds it under (Map key, readings 98 and 151): a
  * string key whose own entry's `case-sensitive` is not true is `folded`, a response meeting it
  * without regard to case, and is the key as written, so `York` and `york` are two keys and a
  * `york` written twice is one; a key matched by code points is never the same key as a folded one;

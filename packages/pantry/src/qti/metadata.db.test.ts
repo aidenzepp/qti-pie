@@ -40,7 +40,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { ownContext } from "#pantry/import/fold.ts";
-import { objectRowsOfPackage, rowsOf } from "#pantry/import/overlays/metadata.ts";
+import { namedDocumentOf, objectRowsOfPackage, rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataIds, NamedDocument } from "#pantry/import/overlays/metadata.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
@@ -158,10 +158,7 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
     if (Option.isSome(tree) && Option.isSome(listed)) {
       const ids = idsFor(at + 1, listed.value.type);
       const rows = rowsOf(tree.value, ids);
-      documents.set(file.path, {
-        document: ids.idOf(0),
-        object: rows.AssessmentObject.values().next().value,
-      });
+      documents.set(file.path, namedDocumentOf(ids.idOf(0), rows));
       dates.push(...rows.StatisticDate.values());
       values.push(...rows.UsageValue.values());
     }

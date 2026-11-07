@@ -56,18 +56,21 @@
  *   either directly or indirectly").
  * - The content references: {@link FeedbackRef}, {@link TemplateRef}, {@link PrintedVariableRef} (a
  *   printed variable's name, and its `base` or `index` where that names a variable) and
- *   {@link ContextRef}, each naming a declaration of a kind `ContentReference` allows, through
- *   `declarationRef`, or a built-in variable that stands as one (reading 77), in an item's or a
- *   test's own declarations (the port audit's A43 and A44).
+ *   {@link ContextRef}, each naming a declaration of a kind `ContentReference` allows, its row of
+ *   its own ({@link FeedbackRefDeclaration} and the others), through `declarationRef`, or a
+ *   built-in variable that stands as one (reading 77), in an item's or a test's own declarations
+ *   (the port audit's A43 and A44). A reference that names neither has no declaration row, and its
+ *   law refuses it (lane NIL's NS2: never the nil uuid).
  * - A section document's feedback and printed variables ({@link SectionFeedbackName},
  *   {@link SectionPrintedName}) resolve once per test that places it ({@link SectionFeedbackRef},
- *   {@link SectionPrintedRef}, A45), every one of them under each placement ({@link SectionScope},
- *   whose counts of resolutions are its document's counts of references,
- *   {@link ReferringDocument}). An included fragment's feedback, printed variables, template
- *   variables ({@link SectionTemplateName}) and context variables ({@link SectionContextName})
- *   resolve so once per placement in each item or test that places it, a test placing it where the
- *   test or a section document splices it (spec reading 117), the same relations holding them: a
- *   fragment declares nothing, as a section does.
+ *   {@link SectionPrintedRef}, A45, each with its declaration row where it names a declaration, as
+ *   an own reference has), every one of them under each placement ({@link SectionScope}, whose
+ *   counts of resolutions are its document's counts of references, {@link ReferringDocument}). An
+ *   included fragment's feedback, printed variables, template variables
+ *   ({@link SectionTemplateName}) and context variables ({@link SectionContextName}) resolve so
+ *   once per placement in each item or test that places it, a test placing it where the test or a
+ *   section document splices it (spec reading 117), the same relations holding them: a fragment
+ *   declares nothing, as a section does.
  *
  * A row a builder gets wrong is refused, never accepted: each overlay's node is its node's, through
  * `nodeRef`, and of its kinds, and each value that relaxes a law (a count written, an item
@@ -173,12 +176,6 @@ export const atomicValuePattern = "^[^\\t\\n\\r ]*$";
  * as a POSIX pattern and the overlay's builder as a JavaScript one; the two agree on it.
  */
 export const integerStartPattern = "^[+\\-0-9]";
-
-/**
- * The nil uuid: the declaration a reference to a built-in variable names, since no declaration of
- * a built-in exists.
- */
-export const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * The root kinds of the documents whose content references resolve in their own declarations: an
@@ -436,28 +433,26 @@ const builtInBase = {
 } as const satisfies Readonly<Record<string, Pick<BuiltInType, "baseType" | "cardinality">>>;
 
 /**
- * Read a built-in variable's base type and cardinality.
+ * Read a built-in variable's base type and cardinality. Every variable `BuiltInVariable` holds has
+ * one in {@link builtInBase} (`interactions.oracle.test.ts` holds the two to name the same
+ * variables), so a name it does not hold is a defect of the two tables, thrown when
+ * {@link builtIns} is built.
  *
  * @param variable - The variable's name.
- * @returns Its type, or none for a name {@link builtInBase} does not hold.
+ * @returns Its type.
  */
-const builtInBaseOf = (
-  variable: string,
-): Pick<BuiltInType, "baseType" | "cardinality"> | undefined =>
-  Object.entries(builtInBase).find(([name]) => name === variable)?.[1];
+const builtInBaseOf = (variable: string): Pick<BuiltInType, "baseType" | "cardinality"> =>
+  Option.getOrThrowWith(
+    Rec.get<string, Pick<BuiltInType, "baseType" | "cardinality">>(builtInBase, variable),
+    () => new Error(`BuiltInVariable holds ${variable}, which builtInBase gives no type.`),
+  );
 
 /**
  * Each built-in variable `BuiltInVariable` holds, with its type: its declaration kind from the
  * closed relation, its base type and cardinality from {@link builtInBase}.
- * `interactions.oracle.test.ts` holds the two to name the same variables.
  */
-export const builtIns: readonly BuiltInType[] = BuiltInVariable.rows.flatMap(
-  ({ declaration, variable }) =>
-    Option.toArray(Option.fromNullishOr(builtInBaseOf(variable))).map((type) => ({
-      ...type,
-      declaration,
-      variable,
-    })),
+export const builtIns: readonly BuiltInType[] = BuiltInVariable.rows.map(
+  ({ declaration, variable }) => ({ ...builtInBaseOf(variable), declaration, variable }),
 );
 
 /**
@@ -472,11 +467,10 @@ export const builtInNames: readonly string[] = builtIns.map(({ variable }) => va
 export const readAttributes: ReadonlyMap<Name, readonly Kind[]> = (() => {
   const read = new Map<Name, Set<Kind>>();
   const add = (name: Name, kinds: readonly Kind[]) => {
-    const held = read.get(name) ?? new Set<Kind>();
+    const held = read.getOrInsertComputed(name, () => new Set());
     for (const kind of kinds) {
       held.add(kind);
     }
-    read.set(name, held);
   };
   add("response-identifier", interactionKinds);
   add("string-identifier", stringBindingKinds);
@@ -1146,11 +1140,26 @@ export const ItemMode = relation("ItemMode", { adaptive: pg.boolean, document: u
 ]);
 
 /**
- * The fields of a content reference: the referring element's node, kind and document, the
- * attribute it refers by, the name it refers to, collapsed, and the variable that name resolves to
- * as `declarationRef` holds it (a built-in's under the nil declaration).
+ * The fields of a content reference: the referring element's node, kind and document, the attribute
+ * it refers by, and the name it refers to, collapsed. What the name resolves to is a row of its
+ * own, where it names a declaration (`referenceDeclarationFields`), and none where it names a
+ * built-in variable, whose type the installed `BuiltInVariable` holds, or nothing, which its law
+ * refuses (lane NIL's NS2: a missing value is a row of its own relation, never the nil uuid).
  */
 const referenceFields = {
+  attribute: closedId(AttributeName),
+  document: uuid,
+  identifier: keyText,
+  kind: closedId(NodeKind),
+  node: uuid,
+};
+
+/**
+ * The fields of the declaration a content reference names, keyed as its reference is: the
+ * reference's fields, and the declaration as `declarationRef` holds it, of a kind
+ * `ContentReference` lets the reference name.
+ */
+const referenceDeclarationFields = {
   attribute: closedId(AttributeName),
   baseType: closedId(BaseType),
   cardinality: closedId(Cardinality),
@@ -1191,6 +1200,45 @@ export const PrintedVariableRef = relation("PrintedVariableRef", referenceFields
  * (reading 92: "the context variables are the declared ones and the built-in QTI_CONTEXT").
  */
 export const ContextRef = relation("ContextRef", referenceFields, ["node", "attribute"]);
+
+/**
+ * The outcome declaration a {@link FeedbackRef} names, keyed as it is, where its document declares
+ * one of its name.
+ */
+export const FeedbackRefDeclaration = relation(
+  "FeedbackRefDeclaration",
+  referenceDeclarationFields,
+  ["node", "attribute"],
+);
+
+/**
+ * The template declaration a {@link TemplateRef} names, keyed as it is, where its document declares
+ * one of its name.
+ */
+export const TemplateRefDeclaration = relation(
+  "TemplateRefDeclaration",
+  referenceDeclarationFields,
+  ["node", "attribute"],
+);
+
+/**
+ * The outcome or template declaration a {@link PrintedVariableRef} names, keyed as it is, where its
+ * document declares one of its name.
+ */
+export const PrintedVariableRefDeclaration = relation(
+  "PrintedVariableRefDeclaration",
+  referenceDeclarationFields,
+  ["node", "attribute"],
+);
+
+/**
+ * The context declaration a {@link ContextRef} names, keyed as it is, where its document declares
+ * one of its name.
+ */
+export const ContextRefDeclaration = relation("ContextRefDeclaration", referenceDeclarationFields, [
+  "node",
+  "attribute",
+]);
 
 /**
  * The fields of a reference a section document makes: its element's node, kind and document, the
@@ -1313,12 +1361,27 @@ export const SectionScope = relation(
 );
 
 /**
- * The fields of a section document's reference resolved under one test that places it: the
- * placement's instance and assembly, the reference's fields, and the variable its name resolves to
- * among the test's declarations, as `declarationRef` holds it (a built-in's under the nil
- * declaration).
+ * The fields of a section document's or a fragment's reference placed under one assembly that
+ * places it: the placement's instance and assembly, and the reference's fields. What its name
+ * resolves to among the assembly's declarations is a row of its own, where it names a declaration
+ * (`sectionReferenceDeclarationFields`), and none where it names a built-in or nothing, as an own
+ * reference's is.
  */
 const sectionReferenceFields = {
+  assembly: uuid,
+  attribute: closedId(AttributeName),
+  document: uuid,
+  identifier: keyText,
+  instance: uuid,
+  kind: closedId(NodeKind),
+  node: uuid,
+};
+
+/**
+ * The fields of the declaration a placed reference names among its assembly's declarations, keyed
+ * as its placed reference is: its fields, and the declaration as `declarationRef` holds it.
+ */
+const sectionReferenceDeclarationFields = {
   assembly: uuid,
   attribute: closedId(AttributeName),
   baseType: closedId(BaseType),
@@ -1375,6 +1438,46 @@ export const SectionContextRef = relation("SectionContextRef", sectionReferenceF
 ]);
 
 /**
+ * The outcome declaration a {@link SectionFeedbackRef} names among its assembly's declarations,
+ * keyed as it is, where the assembly declares one of its name.
+ */
+export const SectionFeedbackRefDeclaration = relation(
+  "SectionFeedbackRefDeclaration",
+  sectionReferenceDeclarationFields,
+  ["instance", "node", "attribute"],
+);
+
+/**
+ * The outcome or template declaration a {@link SectionPrintedRef} names among its assembly's
+ * declarations, keyed as it is, where the assembly declares one of its name.
+ */
+export const SectionPrintedRefDeclaration = relation(
+  "SectionPrintedRefDeclaration",
+  sectionReferenceDeclarationFields,
+  ["instance", "node", "attribute"],
+);
+
+/**
+ * The template declaration a {@link SectionTemplateRef} names among its assembly's declarations,
+ * keyed as it is, where the assembly declares one of its name.
+ */
+export const SectionTemplateRefDeclaration = relation(
+  "SectionTemplateRefDeclaration",
+  sectionReferenceDeclarationFields,
+  ["instance", "node", "attribute"],
+);
+
+/**
+ * The context declaration a {@link SectionContextRef} names among its assembly's declarations,
+ * keyed as it is, where the assembly declares one of its name.
+ */
+export const SectionContextRefDeclaration = relation(
+  "SectionContextRefDeclaration",
+  sectionReferenceDeclarationFields,
+  ["instance", "node", "attribute"],
+);
+
+/**
  * Each placement's resolved feedback references, counted by `SectionScope.feedbacks`, which equals
  * its document's count, so each placement resolves every one.
  */
@@ -1422,9 +1525,11 @@ export const interactionRelations = {
   ChoiceInteraction,
   ChoiceVariableName,
   ContextRef,
+  ContextRefDeclaration,
   CountBound,
   CountRange,
   FeedbackRef,
+  FeedbackRefDeclaration,
   Hotspot,
   Hottext,
   Interaction,
@@ -1438,18 +1543,24 @@ export const interactionRelations = {
   PlacedChoice,
   PlacedHottext,
   PrintedVariableRef,
+  PrintedVariableRefDeclaration,
   ReferringDocument,
   SectionContextName,
   SectionContextRef,
+  SectionContextRefDeclaration,
   SectionFeedbackName,
   SectionFeedbackRef,
+  SectionFeedbackRefDeclaration,
   SectionPrintedName,
   SectionPrintedRef,
+  SectionPrintedRefDeclaration,
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefDeclaration,
   Slider,
   TemplateRef,
+  TemplateRefDeclaration,
 };
 
 /**
@@ -1912,25 +2023,33 @@ const contentReferences = {
     check: "Context_variable_reference",
     names: SectionContextName,
     own: ContextRef,
+    ownDeclared: ContextRefDeclaration,
     placed: SectionContextRef,
+    placedDeclared: SectionContextRefDeclaration,
   },
   "Feedback reference": {
     check: "Feedback_reference",
     names: SectionFeedbackName,
     own: FeedbackRef,
+    ownDeclared: FeedbackRefDeclaration,
     placed: SectionFeedbackRef,
+    placedDeclared: SectionFeedbackRefDeclaration,
   },
   "Printed variable reference": {
     check: "Printed_variable_reference",
     names: SectionPrintedName,
     own: PrintedVariableRef,
+    ownDeclared: PrintedVariableRefDeclaration,
     placed: SectionPrintedRef,
+    placedDeclared: SectionPrintedRefDeclaration,
   },
   "Template reference": {
     check: "Template_reference",
     names: SectionTemplateName,
     own: TemplateRef,
+    ownDeclared: TemplateRefDeclaration,
     placed: SectionTemplateRef,
+    placedDeclared: SectionTemplateRefDeclaration,
   },
 } as const;
 
@@ -1959,41 +2078,79 @@ type ReferenceRow = RowScalars<{ readonly heading: typeof referenceFields; reado
 const namesNoBuiltIn = (r: ReferenceRow) => r.not(r.in(r.identifier, builtInNames));
 
 /**
- * Whether a reference resolves as a built-in stands, if it names one: under the nil declaration,
- * as the built-in's declaration kind, base type and cardinality.
+ * Each built-in variable with the references that may name it, one entry per attribute: the kinds
+ * whose references by the attribute `ContentReference` lets name the declaration kind the variable
+ * stands as (`BuiltInVariable`), each (variable, declaration kind) once.
+ */
+const builtInReferrers = builtIns
+  .filter(
+    (builtIn, at) =>
+      builtIns.findIndex(
+        ({ declaration, variable }) =>
+          variable === builtIn.variable && declaration === builtIn.declaration,
+      ) === at,
+  )
+  .flatMap(({ declaration, variable }) =>
+    [
+      ...Map.groupBy(
+        ContentReference.rows.filter((row) => row.declaration === declaration),
+        ({ attribute }) => attribute,
+      ),
+    ].map(([attribute, rows]) => ({ attribute, kinds: rows.map(({ kind }) => kind), variable })),
+  );
+
+/**
+ * Whether a reference that names a built-in variable is one that may name it: its kind and
+ * attribute are a pair `ContentReference` lets name the declaration kind the variable stands as.
+ * A reference that names a built-in names no declaration, so this is its whole resolution.
  *
  * @param r - The reference's row.
  * @returns The predicate.
  */
-const resolvesBuiltIn = (r: ReferenceRow) =>
+const namesAllowedBuiltIn = (r: ReferenceRow) =>
   r.or(
     namesNoBuiltIn(r),
-    ...builtIns.map((builtIn) =>
-      r.and(
-        r.eq(r.identifier, builtIn.variable),
-        r.eq(r.declaration, nilUuid),
-        r.eq(r.declarationKind, builtIn.declaration),
-        r.eq(r.baseType, builtIn.baseType),
-        r.eq(r.cardinality, builtIn.cardinality),
-      ),
+    ...builtInReferrers.map(({ attribute, kinds, variable }) =>
+      r.and(r.eq(r.identifier, variable), r.eq(r.attribute, attribute), r.in(r.kind, kinds)),
     ),
   );
 
 /**
- * State one content reference's law over both its relations: an own reference's declaration kind
- * is one `ContentReference` allows, a name that is no built-in's is a declaration's of its
- * document, through `declarationRef`, and a built-in's resolves to the built-in; and a placed
- * reference is one of its document's names, resolved the same way among its assembly's
- * declarations.
+ * State one content reference's law over its relations (lane NIL's NS2: a reference that names no
+ * declaration has no declaration row, never the nil uuid):
+ *
+ * - An own reference that names no built-in variable has its declaration row, which is its own
+ *   reference's, of a kind `ContentReference` allows, a declaration of its document through
+ *   `declarationRef`, and names no built-in; one that names a built-in names one it may;
+ * - A placed reference is one of its document's names, and under its placement resolves the same way
+ *   among its assembly's declarations.
+ *
+ * A name no declaration of an allowed kind holds has no declaration row, and the first containment
+ * of each half refuses it under the law.
  *
  * @param reference - The content reference.
  * @returns The law's statements.
  */
-const contentReferenceLaws = ({ check: rule, names, own, placed }: ContentReferenceOf) => [
-  contained(on(own, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
+const contentReferenceLaws = ({
+  check: rule,
+  names,
+  own,
+  ownDeclared,
+  placed,
+  placedDeclared,
+}: ContentReferenceOf) => [
+  contained(
+    on(select(own, namesNoBuiltIn), "node", "attribute"),
+    on(ownDeclared, "node", "attribute"),
+  ),
+  contained(
+    on(ownDeclared, "node", "attribute", "kind", "document", "identifier"),
+    on(own, "node", "attribute", "kind", "document", "identifier"),
+  ),
+  contained(on(ownDeclared, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
   contained(
     on(
-      select(own, namesNoBuiltIn),
+      ownDeclared,
       "declaration",
       "document",
       "identifier",
@@ -2003,15 +2160,33 @@ const contentReferenceLaws = ({ check: rule, names, own, placed }: ContentRefere
     ),
     declarationRef,
   ),
-  check(rule, own, resolvesBuiltIn),
+  check(rule, ownDeclared, namesNoBuiltIn),
+  check(rule, own, namesAllowedBuiltIn),
   contained(
     on(placed, "node", "attribute", "kind", "document", "identifier"),
     on(names, "node", "attribute", "kind", "document", "identifier"),
   ),
-  contained(on(placed, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
+  contained(
+    on(select(placed, namesNoBuiltIn), "instance", "node", "attribute"),
+    on(placedDeclared, "instance", "node", "attribute"),
+  ),
   contained(
     on(
-      select(placed, namesNoBuiltIn),
+      placedDeclared,
+      "instance",
+      "node",
+      "attribute",
+      "assembly",
+      "kind",
+      "document",
+      "identifier",
+    ),
+    on(placed, "instance", "node", "attribute", "assembly", "kind", "document", "identifier"),
+  ),
+  contained(on(placedDeclared, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
+  contained(
+    on(
+      placedDeclared,
       "declaration",
       "assembly",
       "identifier",
@@ -2021,7 +2196,8 @@ const contentReferenceLaws = ({ check: rule, names, own, placed }: ContentRefere
     ),
     declarationRef,
   ),
-  check(rule, placed, resolvesBuiltIn),
+  check(rule, placedDeclared, namesNoBuiltIn),
+  check(rule, placed, namesAllowedBuiltIn),
 ];
 
 /**
@@ -2077,14 +2253,16 @@ const contentReferenceLaws = ({ check: rule, names, own, placed }: ContentRefere
  *   resolved in the assembly's declarations or to a built-in, under "Feedback reference" and
  *   "Feedback outcome type", "Printed variable reference", "Template reference" and "Template
  *   variable type" or "Context variable reference".
- * - **content references:** each relation's rows are its source's; the declaration kind each name
- *   resolves to is one `ContentReference` allows for its kind and attribute; a name that is no
- *   built-in's is a declaration's, through `declarationRef`; and a built-in's resolves to the
- *   built-in, under its reference's law ("Feedback reference", "Template reference", "Printed
- *   variable reference", "Context variable reference"); "Feedback outcome type" (reading 77: an
- *   outcome of base type identifier, single or multiple); and "Template variable type" (reading
- *   R15-l: a template element's or a choice's template variable of base type identifier, single or
- *   multiple, a portable custom interaction's free).
+ * - **content references:** each relation's rows are its source's; a name that is no built-in's has
+ *   its declaration row, the reference's, of a declaration kind `ContentReference` allows for its
+ *   kind and attribute, a declaration through `declarationRef`; and a built-in's is one its kind
+ *   and attribute may name, under its reference's law ("Feedback reference", "Template reference",
+ *   "Printed variable reference", "Context variable reference"); "Feedback outcome type" over
+ *   the declaration rows (reading 77: an outcome of base type identifier, single or multiple; the
+ *   one built-in a feedback may name, `completionStatus`, is a single identifier, §2.2.2.3); and
+ *   "Template variable type" over the declaration rows (reading R15-l: a template element's or a
+ *   choice's template variable of base type identifier, single or multiple, a portable custom
+ *   interaction's free).
  */
 export const interactionLawsByName = {
   ...pipe(contentReferences, Rec.map(contentReferenceLaws)),
@@ -2712,10 +2890,10 @@ export const interactionLawsByName = {
     ),
   ],
   "Feedback outcome type": [
-    check("Feedback_outcome_type", FeedbackRef, (r) =>
+    check("Feedback_outcome_type", FeedbackRefDeclaration, (r) =>
       r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
     ),
-    check("Feedback_outcome_type", SectionFeedbackRef, (r) =>
+    check("Feedback_outcome_type", SectionFeedbackRefDeclaration, (r) =>
       r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
     ),
   ],

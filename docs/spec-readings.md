@@ -2868,8 +2868,26 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      (`testDocumentOf`'s empty default, `src/test/oracle-laws/assembly.ts`), under which two such elements of one
      document broke "Structure identifier". This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07
      by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-TESTS.)
+148. **An assessment item or test that writes no `identifier` or no `title` has none for its LOM record to match: no
+     entry or title string names it, the empty one included, and AL3 refuses the root while `lom-identifier` or
+     `lom-title` refuses a record that lists an entry or a title.** The ASI XSD requires both, with no default:
+     `<xs:attribute name="identifier" use="required" type="IdentifierDType" />` and `<xs:attribute name="title"
+     use="required" type="xs:normalizedString" />` in `AssessmentItemDType` and `AssessmentTestDType`
+     (`imsqti_asiv3p0_v1p0.xsd`). QTI 3.0 Metadata §2.7.1.1 asks that "One of the values given for the identifier must
+     have an entry that matches the identifier of the associated item, test or object bank", and §2.7.1.2 that "The
+     title must have a value that matches the value of the title attribute of the associated item, test or object
+     bank". A root that writes no `identifier` or `title` has no value to match, not the empty one, so an empty
+     `lom:entry` or `lom:string` matches nothing (reading 62). The importer holds each attribute as a row of its own
+     (`ObjectIdentifier`, `ObjectTitle`, `src/qti/metadata.ts`) beside the root's `AssessmentObject`, which every item
+     and test root has, and a record none of whose entries or strings names its document writes no witness row, so
+     the law's existence refuses it under its own name. This sets aside the reading of an unwritten identifier or title
+     as the empty one: the importer's, under which a root missing either had no `AssessmentObject`, so "E1 derived"
+     broke beside AL3 and an empty entry matched an unwritten identifier; and the law oracle's (`lomTitleLawsOf`'s
+     empty default, `src/test/oracle-laws/documents.ts`), under which an empty title string matched an unwritten
+     title. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-META.)
 
-148. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+149. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
      should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
@@ -2885,7 +2903,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
 
-149. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+150. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
@@ -2902,7 +2920,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
-150. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+151. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
      nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or

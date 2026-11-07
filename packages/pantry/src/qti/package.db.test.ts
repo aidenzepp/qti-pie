@@ -31,14 +31,15 @@ import { Document } from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
   Dependency,
+  DependencyTarget,
   File,
   FileHref,
+  ManifestIdSpace,
   manifestPath,
   NamedHref,
   Package,
   Reference,
   ReferencePath,
-  Resource,
   ResourceFile,
   ResourceHref,
   ResourceTyped,
@@ -109,27 +110,18 @@ const containedIn =
     law.kind === "contained" && law.from.relation === from && law.to.relation === to;
 
 /**
- * A resource row, its node and package stray, every field of it set by `fields`: its own CHECKs
- * are judged as it is inserted, before any of its foreign keys.
+ * Pick a key by its relation and its fields, in order.
  *
- * @param fields - The fields the case sets.
- * @returns The row.
+ * @param relation - The key's relation.
+ * @param fields - Its fields.
+ * @returns The predicate.
  */
-const resourceRow = (
-  fields: Pick<
-    Fact<typeof Resource>,
-    "identifier" | "manifestIdentifier" | "typeLexical" | "version"
-  >,
-): Fact<typeof Resource> => ({
-  document: stray,
-  kind: "cp:resource",
-  nearest: stray,
-  node: stray,
-  package: stray,
-  parent: stray,
-  start: 3n,
-  ...fields,
-});
+const keyOn =
+  (relation: string, ...fields: readonly string[]) =>
+  (law: Law): boolean =>
+    law.kind === "key" &&
+    law.side.relation === relation &&
+    law.side.terms.map((term) => term.field).join(" ") === fields.join(" ");
 
 /**
  * A document row, its node and package stray, as a direct writer fills its table: every written
@@ -299,11 +291,12 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a resource's row by its own laws: its code and its manifest's identifier",
         () =>
-          // Oracle: PostgreSQL, the resource rows' CHECKs, judged as they are inserted: C17's "E1
-          // derived" on its type (a code its lexical form does not spell), and P4 "Manifest id
-          // space" on the resource. Which types a version admits is the `type` attribute's value
+          // Oracle: PostgreSQL, judged as the rows are inserted: C17's "E1 derived", a CHECK on a
+          // resource's type (a code its lexical form does not spell), and P4 "Manifest id space",
+          // the key over the package's identifier space that a resource of the manifest's
+          // identifier breaks. Which types a version admits is the `type` attribute's value
           // domain's (spec reading 67), a law of `Attribute`, so no law of the row reads it.
-          // Bound: one row per law, every other law of the row kept.
+          // Bound: one case per law, every other law of its rows kept.
           Effect.gen(function* resourceChecks() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const cases = [
@@ -320,15 +313,11 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 name: "E1 derived",
               },
               {
-                changes: ChangeSet.empty(Author).insert(Resource, [
-                  resourceRow({
-                    identifier: "m",
-                    manifestIdentifier: "m",
-                    typeLexical: "webcontent",
-                    version: "3.0.1",
-                  }),
+                changes: ChangeSet.empty(Author).insert(ManifestIdSpace, [
+                  { identifier: "m", kind: "cp:manifest", package: stray },
+                  { identifier: "m", kind: "cp:resource", package: stray },
                 ]),
-                law: checkNamed("Resource", "Manifest_id_space"),
+                law: keyOn("ManifestIdSpace", "package", "identifier"),
                 name: "manifest-id-space",
               },
             ];
@@ -406,7 +395,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           // - Href_form, the stated limit: a resource href, a file and a reference the importer
           //   reads no name from, and a srcset of two candidates even where external;
           // - Document_entry: a document-typed resource href outside the package;
-          // - Self_dependency: a dependency whose identifierref is its own resource's identifier
+          // - Self_dependency: a dependency whose identifierref names its own resource, its target
           //   (CP 1.2 §6.11.5 B ii).
           // Bound: one row per case.
           Effect.gen(function* rowChecks() {
@@ -498,17 +487,11 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 outcome: db.apply(fileOf("./a.xml", "entry"), {}),
               },
               {
-                law: checkNamed("Dependency", "Self_dependency"),
+                law: checkNamed("DependencyTarget", "Self_dependency"),
                 name: "dependency on its own resource",
                 outcome: db.apply(
-                  ChangeSet.empty(Author).insert(Dependency, [
-                    {
-                      ...tuple,
-                      kind: "cp:dependency",
-                      ref: "r1",
-                      resource: stray,
-                      resourceIdentifier: "r1",
-                    },
+                  ChangeSet.empty(Author).insert(DependencyTarget, [
+                    { node: stray, package: stray, ref: "r1", resource: stray, target: stray },
                   ]),
                   {},
                 ),
@@ -671,7 +654,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 table: "document",
               },
               {
-                comment: "foreign key Dependency(package, ref) to Resource(package, identifier)",
+                comment: "foreign key Dependency(node) to DependencyTarget(node)",
                 inserts: [
                   {
                     fact: {
@@ -682,7 +665,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       package: stray,
                       ref: "nowhere",
                       resource: stray,
-                      resource_identifier: "r",
                       start: 4,
                       version: codeOf(SchemaVersion.handles, "3.0.1"),
                     },

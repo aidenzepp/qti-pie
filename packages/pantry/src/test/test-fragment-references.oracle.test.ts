@@ -13,7 +13,7 @@
  * (`#pantry/test/oracle-laws/tests.ts`, which reads each document a test places with the fragments
  * it splices) and by the schema's own laws over the import's rows (`#pantry/test/host-judge.ts`:
  * `SectionScope`'s placements, `TestReference` over every document that is no item), and the laws
- * each side breaks must be one set, but for the class {@link recorded} names.
+ * each side breaks must be one set.
  */
 import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -69,32 +69,6 @@ const fragmentCases: Gen<FragmentCase> = (source) => ({
   placed: source.draw(element([1, 2] as const)),
   resolves: source.draw(element([true, false])),
 });
-
-/**
- * A disagreement class the box shows, its owner and the fix it waits on, and the cases it shows
- * in: no other case may show it, and each must.
- */
-interface Recorded {
-  readonly fix: string;
-  readonly owner: string;
-  readonly shows: (drawn: FragmentCase) => boolean;
-}
-
-/**
- * The disagreement the box shows today, keyed by its signature, the law a side breaks alone: a
- * feedback outcome that names no variable. The import resolves such a name to the nil declaration
- * of base type `none` (`#pantry/import/overlays/interactions.ts` `resolveIn`), so the row breaks
- * "Feedback outcome type" beside "Feedback reference", while the oracle types only an outcome the
- * name resolves to. It shows in an item as in a test, so it is no part of this box's fix.
- */
-const recorded = {
-  "import-only-law: Feedback outcome type": {
-    fix: "NS2: a content reference that names no variable resolves to no declaration, never the nil one, so Feedback outcome type judges only a resolved outcome",
-    owner: "NIL",
-    shows: (drawn) =>
-      drawn.host !== "test processing" && drawn.kind === "feedback" && !drawn.resolves,
-  },
-} satisfies Readonly<Record<string, Recorded>>;
 
 /**
  * The QTI 3.0 namespace.
@@ -192,8 +166,8 @@ const packageOf = (drawn: FragmentCase): PackageEntries => {
       replaced(
         entries,
         "items/item3.xml",
-        "<qti-item-body><p>Scored by its included rule.</p></qti-item-body>",
-        `<qti-item-body><p>Scored by its included rule.</p>${includes.replaceAll(fragmentPath, `../${fragmentPath}`)}</qti-item-body>`,
+        "<p>Scored by its included rule.</p>",
+        `<p>Scored by its included rule.</p>${includes.replaceAll(fragmentPath, `../${fragmentPath}`)}`,
       ),
     "section document": (entries) =>
       replaced(
@@ -347,14 +321,13 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     `${Formatter.format(drawn)}: the oracle breaks ${[...oracle].toSorted().join(", ") || "no law"}`,
                   );
 
-                  const expected = Object.entries(recorded)
-                    .filter(([, { shows }]) => shows(drawn))
-                    .map(([signature]) => signature)
-                    .toSorted();
+                  // An unresolved feedback outcome once broke "Feedback outcome type" on the import's
+                  // rows alone, resolved to the nil declaration of base type none; it has no
+                  // declaration row now, so that law judges only a resolved outcome (lane NIL's NS2).
                   assert.deepStrictEqual(
                     shown,
-                    expected,
-                    `${Formatter.format(drawn)}: ${shown.join("; ") || "no disagreement"}, where ${expected.join("; ") || "none"} is recorded; the oracle breaks ${[...oracle].toSorted().join(", ") || "no law"}; the import's rows break ${[...broken].toSorted().join(", ") || "no law"}`,
+                    [],
+                    `${Formatter.format(drawn)}: ${shown.join("; ")}; the oracle breaks ${[...oracle].toSorted().join(", ") || "no law"}; the import's rows break ${[...broken].toSorted().join(", ") || "no law"}`,
                   );
                 }),
               ),

@@ -122,6 +122,7 @@ import {
   NormalMaximum,
   NormalMinimum,
   RecordField,
+  RecordFieldName,
   Value,
   ValueBaseType,
   ValueSet,
@@ -186,11 +187,13 @@ import { mathmlLaws, mathmlRelations } from "#pantry/qti/mathml.ts";
 import { operatorLaws, operatorRelations } from "#pantry/qti/operators.ts";
 import {
   Dependency,
+  DependencyTarget,
   Entry,
   File,
   FileHref,
   HrefScope,
   ManifestId,
+  ManifestIdSpace,
   NamedHref,
   Package,
   packageLaws,
@@ -199,6 +202,7 @@ import {
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceId,
   ResourceTyped,
   TextReference,
   TextReferencePath,
@@ -342,11 +346,13 @@ const attributeRelations = {
  */
 const packageRelations = {
   Dependency,
+  DependencyTarget,
   Entry,
   File,
   FileHref,
   HrefScope,
   ManifestId,
+  ManifestIdSpace,
   NamedHref,
   Package,
   Reference,
@@ -354,6 +360,7 @@ const packageRelations = {
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceId,
   ResourceTyped,
   TextReference,
   TextReferencePath,
@@ -362,8 +369,8 @@ const packageRelations = {
 
 /**
  * `declarations.ts`'s relations: each variable's declaration and its base type, its value sets and
- * values, a value's own base type, a record's fields, and an outcome's mastery value and normal
- * range, each end and each pair of them.
+ * values, a value's own base type, a record's fields and their names, and an outcome's mastery
+ * value and normal range, each end and each pair of them.
  */
 const declarationRelations = {
   Declaration,
@@ -374,6 +381,7 @@ const declarationRelations = {
   NormalMaximum,
   NormalMinimum,
   RecordField,
+  RecordFieldName,
   Value,
   ValueBaseType,
   ValueSet,

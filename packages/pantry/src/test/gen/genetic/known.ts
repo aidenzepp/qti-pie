@@ -113,76 +113,6 @@ export const known = {
     fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "dangling-uuid: SectionTemplateRef.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <metadata>
-        
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata>
-    
-    <resources>
-        
-        <resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml">
-            
-        </resource>
-        
-        
-        <resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml">
-            
-        </resource>
-    </resources>
-</manifest>`,
-      ],
-      [
-        "rtest01/rtest01-fragment.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <p><qti-template-inline template-identifier="NONE">t</qti-template-inline></p>
-</div>`,
-      ],
-      [
-        "rtest01/rtest01-set01.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xi="http://www.w3.org/2001/XInclude" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="RTEST-01-SET-01" title="Set Item" adaptive="false" time-dependent="false">
-    
-    
-    <qti-item-body>
-        
-        <xi:include href="rtest01-fragment.xml" parse="xml"/>
-    </qti-item-body>
-    
-</qti-assessment-item>`,
-      ],
-    ],
-    fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
-  "dangling-uuid: TemplateRef.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
-      ],
-    ],
-    fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
   "dangling-uuid: VariableRef.declaration": {
     files: [
       [
@@ -201,44 +131,6 @@ export const known = {
     fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, identifierLexical)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
-        ],
-        [
-          "item.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item"/>`,
-        ],
-      ],
-      fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-      owner: "NIL",
-    },
-  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, title)":
-    {
-      files: [
-        [
-          "choice.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" title="s44"/>`,
-        ],
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
-        ],
-      ],
-      fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-      owner: "NIL",
-    },
   "import-only-law: E1 derived, contained Declaration(document, identifier, node, declarationKind, baseType, cardinality) in VariableLookup(document, name, declaration, declarationKind, baseType, cardinality)":
     {
       files: [
@@ -279,50 +171,30 @@ export const known = {
       fix: "two declarations of one identifier: the oracle raises the VariableLookup containment that breaks beside Declaration key, so precedence sees it",
       owner: "OL",
     },
-  "import-only-law: E1 derived, contained LomObjectIdentifier(document, identifier) in AssessmentObject(document, identifier)":
-    {
-      files: [
-        [
-          "choice.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>`,
-        ],
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources>
-        <resource type="imsqti_item_xmlv3p0" href="choice.xml">
-            <metadata>
-                
-                <imsmd:lom>
-                    <imsmd:general>
-                        <imsmd:identifier>
-                            <imsmd:entry>choice</imsmd:entry>
-                        </imsmd:identifier>
-                        
-                        
-                    </imsmd:general>
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                </imsmd:lom>
-            </metadata>
-            
-            
-        </resource>
-    </resources></manifest>`,
-        ],
+  "import-only-law: Item duration, contained Reading(lookupDocument) in ItemTiming(document)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="ABSENCE"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="test" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="item" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource></resources></manifest>`,
       ],
-      fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-      owner: "NIL",
-    },
+      [
+        "items/a.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="a" title="A" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body></qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="TEST" title="TEST"><qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="a" href="items/a.xml"/></qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="OUT"><qti-variable identifier="a.duration"/></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
+      ],
+    ],
+    fix: "A1: the oracle states no Item duration through an item ref, and A1 deletes Item duration whole, with ItemTiming and the readings that read it",
+    owner: "OL",
+  },
   "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
     files: [
       [
@@ -398,7 +270,7 @@ export const known = {
     fix: "N8: the oracle states the choice law the schema does, every choice in a choice interaction, so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
     owner: "OL",
   },
-  "import-only-law: Template reference, contained TemplateRef(declaration, document, identifier, declarationKind, baseType, cardinality) in Declaration(node, document, identifier, declarationKind, baseType, cardinality)":
+  "import-only-law: Template reference, contained TemplateRef(node, attribute) in TemplateRefDeclaration(node, attribute)":
     {
       files: [
         [
@@ -414,8 +286,8 @@ export const known = {
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
         ],
       ],
-      fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
-      owner: "NIL",
+      fix: "a content reference's value names a variable only where it is an NCName, as the oracle reads a bare reference (oracle.ts referenced.bare): the import and the schema's reference sources read template-identifier=\"\" as a name no declaration holds, which its value domain refuses alone",
+      owner: "FB-INTER",
     },
   "import-only-law: Test overlay, contained Node(id) in ReferencePath(node)": {
     files: [
@@ -496,6 +368,30 @@ export const known = {
     ],
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
+  },
+  "lone-refusal: AL3 required named item-duration, witness unreported": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="ABSENCE"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="test" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="item" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "items/a.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="a" title="A" adaptive="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body></qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="TEST" title="TEST"><qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="a" href="items/a.xml"/></qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="OUT"><qti-variable identifier="a.duration"/></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
+      ],
+    ],
+    fix: "A1: the oracle states no Item duration through an item ref, and A1 deletes Item duration whole, with ItemTiming and the readings that read it",
+    owner: "OL",
   },
   "lone-refusal: AL3 required named item-ref-target, witness unreported": {
     files: [
@@ -761,6 +657,76 @@ export const fixed = {
     fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
     owner: "NIL",
   },
+  "dangling-uuid: SectionTemplateRef.declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <metadata>
+        
+        <schemaversion>3.0.0</schemaversion>
+        
+    </metadata>
+    
+    <resources>
+        
+        <resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml">
+            
+        </resource>
+        
+        
+        <resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml">
+            
+        </resource>
+    </resources>
+</manifest>`,
+      ],
+      [
+        "rtest01/rtest01-fragment.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <p><qti-template-inline template-identifier="NONE">t</qti-template-inline></p>
+</div>`,
+      ],
+      [
+        "rtest01/rtest01-set01.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xi="http://www.w3.org/2001/XInclude" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="RTEST-01-SET-01" title="Set Item" adaptive="false" time-dependent="false">
+    
+    
+    <qti-item-body>
+        
+        <xi:include href="rtest01-fragment.xml" parse="xml"/>
+    </qti-item-body>
+    
+</qti-assessment-item>`,
+      ],
+    ],
+    fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
+    owner: "NIL",
+  },
+  "dangling-uuid: TemplateRef.declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
+      ],
+      [
+        "items/item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
+    owner: "NIL",
+  },
   "import-only-law: Binding cardinality, contained BindingDeclaration(node) in CountBound(node)": {
     files: [
       [
@@ -977,6 +943,44 @@ export const fixed = {
     fix: "a RecordField row only where a value writes both a field-identifier and a base-type, so a base-type written alone is refused under Value cardinality, never an empty field identifier's E1",
     owner: "FIX-UNWRITTEN",
   },
+  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, identifierLexical)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
+        ],
+        [
+          "item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item"/>`,
+        ],
+      ],
+      fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
+      owner: "FB-META",
+    },
+  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, title)":
+    {
+      files: [
+        [
+          "choice.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" title="s44"/>`,
+        ],
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+        ],
+      ],
+      fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
+      owner: "FB-META",
+    },
   "import-only-law: E1 derived, contained Expression(kind, baseType) in ResultBase(kind, base)": {
     files: [
       [
@@ -1046,6 +1050,50 @@ export const fixed = {
       ],
       fix: "NS6: a record names a document only where its resource's href names one (LomResource.named, by targetAt), so a record whose href names none writes no LomObject, LomObjectIdentifier, LomObjectTitle or GeneralObject, and Document entry alone refuses the href",
       owner: "FIX-GENOBJ",
+    },
+  "import-only-law: E1 derived, contained LomObjectIdentifier(document, identifier) in AssessmentObject(document, identifier)":
+    {
+      files: [
+        [
+          "choice.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>`,
+        ],
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources>
+        <resource type="imsqti_item_xmlv3p0" href="choice.xml">
+            <metadata>
+                
+                <imsmd:lom>
+                    <imsmd:general>
+                        <imsmd:identifier>
+                            <imsmd:entry>choice</imsmd:entry>
+                        </imsmd:identifier>
+                        
+                        
+                    </imsmd:general>
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                </imsmd:lom>
+            </metadata>
+            
+            
+        </resource>
+    </resources></manifest>`,
+        ],
+      ],
+      fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
+      owner: "FB-META",
     },
   "import-only-law: E1 derived, contained LomResource(node) in Resource(node)": {
     files: [

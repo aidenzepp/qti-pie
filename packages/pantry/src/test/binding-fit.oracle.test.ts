@@ -38,7 +38,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { Duration, Effect } from "effect";
 import { BindingFit, grammar, RecordBindingFit } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { anyTypeKinds, nilUuid } from "#pantry/qti/interactions.ts";
+import { anyTypeKinds } from "#pantry/qti/interactions.ts";
 import type {
   BindingDeclaration,
   BoundVariable,
@@ -181,11 +181,6 @@ const holds = (site: BindingSite, state: BindingState) =>
         declarationKind === "qti-response-declaration",
     );
     for (const row of declarations) {
-      assert.notStrictEqual(
-        row.declaration,
-        nilUuid,
-        `${label}: a declaration row names no declaration`,
-      );
       assert.strictEqual(row.declaration, declared?.node, `${label}: the row's declaration`);
       assert.strictEqual(row.cardinality, expected.held, `${label}: the row's cardinality`);
     }

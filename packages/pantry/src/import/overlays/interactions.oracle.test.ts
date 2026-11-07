@@ -26,7 +26,7 @@ import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import { ownContext } from "#pantry/import/fold.ts";
 import { pieces, rowsOf, sectionRowsOf } from "#pantry/import/overlays/interactions.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
-import type { InteractionIds } from "#pantry/import/overlays/interactions.ts";
+import type { InteractionIds, InteractionRows } from "#pantry/import/overlays/interactions.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName as closedNamed } from "#pantry/model/xdm.ts";
 import type {
@@ -37,7 +37,7 @@ import type {
   XdmDocument,
 } from "#pantry/model/xdm.ts";
 import type { Declaration } from "#pantry/qti/declarations.ts";
-import { choiceKinds, hottextInteraction, hottextKind, nilUuid } from "#pantry/qti/interactions.ts";
+import { choiceKinds, hottextInteraction, hottextKind } from "#pantry/qti/interactions.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { integerOf } from "#pantry/test/oracle-view.ts";
@@ -893,7 +893,8 @@ describe("import/overlays/interactions.ts, section references", () => {
     (ctx) =>
       // Oracle: a second implementation, the box's own list of placements and of each section
       // document's references, resolved by hand: SCORED to the test's declaration, completionStatus
-      // to the built-in, UNDECLARED to the nil declaration (port audit A45).
+      // to the built-in, which names no declaration, and UNDECLARED to none (port audit A45; lane
+      // NIL's NS2: no declaration row, never the nil uuid).
       // Bound: every test of up to 2 placements of 3 section documents, each with up to 1
       // placement inside, 1 + 3·4 + (3·4)² = 157 trees.
       searched(
@@ -966,17 +967,23 @@ describe("import/overlays/interactions.ts, section references", () => {
 
               for (const row of resolved) {
                 assert.strictEqual(row.assembly, testDocument);
-                assert.strictEqual(
-                  row.declaration,
-                  row.identifier === "SCORED" ? scored.node : nilUuid,
-                  row.identifier,
-                );
-                assert.strictEqual(
-                  row.declarationKind,
-                  row.identifier === "UNDECLARED" ? row.declarationKind : "qti-outcome-declaration",
-                  row.identifier,
-                );
               }
+
+              assert.sameMembers(
+                [
+                  ...rows.SectionFeedbackRefDeclaration.values(),
+                  ...rows.SectionPrintedRefDeclaration.values(),
+                ].map(
+                  ({ declaration, declarationKind, identifier, instance }) =>
+                    `${instance} ${identifier} ${declaration} ${declarationKind}`,
+                ),
+                resolved
+                  .filter(({ identifier }) => identifier === "SCORED")
+                  .map(
+                    ({ identifier, instance }) =>
+                      `${instance} ${identifier} ${scored.node} qti-outcome-declaration`,
+                  ),
+              );
             }),
         ),
       ),
@@ -1241,4 +1248,263 @@ describe("import/overlays/interactions.ts, PCI module forms", () => {
       }
     }
   });
+});
+
+/**
+ * The declarations the reference box may write, each by its identifier: an outcome, a template
+ * variable and a response, each of one type.
+ */
+const referencedDeclarations = [
+  { baseType: "identifier", identifier: "OUT", kind: "qti-outcome-declaration" },
+  { baseType: "integer", identifier: "TPL", kind: "qti-template-declaration" },
+  { baseType: "identifier", identifier: "RSP", kind: "qti-response-declaration" },
+] as const;
+
+/**
+ * The references the reference box makes, each by its element and attribute, with the declaration
+ * kinds the information model lets it name, written out by hand from the specification: a
+ * feedback's outcome (§5.49.1: "The identifier of an outcome variable"), a template element's
+ * template variable (§5.145.1: "The identifier of a template variable") and a printed variable's
+ * variable (§7.30.6: "The outcome variable or template variable must have been defined").
+ */
+const referenceKinds = [
+  {
+    attribute: "outcome-identifier",
+    kind: "qti-feedback-inline",
+    names: ["qti-outcome-declaration"],
+  },
+  {
+    attribute: "template-identifier",
+    kind: "qti-template-inline",
+    names: ["qti-template-declaration"],
+  },
+  {
+    attribute: "identifier",
+    kind: "qti-printed-variable",
+    names: ["qti-outcome-declaration", "qti-template-declaration"],
+  },
+] as const;
+
+/**
+ * The built-in variables of an item (information model §2.2.2), which stand as a declaration but
+ * have none: a reference to one names no declaration.
+ */
+const itemBuiltIns: ReadonlySet<string> = new Set([
+  "QTI_CONTEXT",
+  "completionStatus",
+  "duration",
+  "numAttempts",
+]);
+
+/**
+ * One case of the reference box: the declarations the item writes, the reference its body makes,
+ * and the name it makes it to.
+ */
+interface ReferenceCase {
+  readonly declared: readonly (typeof referencedDeclarations)[number][];
+  readonly name: "OUT" | "RSP" | "TPL" | "UNDECLARED" | "completionStatus" | "numAttempts";
+  readonly reference: (typeof referenceKinds)[number];
+}
+
+/**
+ * The reference box: every subset of the three declarations, each of the three references, and
+ * each of six names, a declaration's of each kind, one no declaration holds, and two built-ins.
+ */
+const referenceCases: Gen<ReferenceCase> = (source) => ({
+  declared: referencedDeclarations.filter(() => source.draw(element([false, true]))),
+  name: source.draw(
+    element(["OUT", "TPL", "RSP", "UNDECLARED", "completionStatus", "numAttempts"] as const),
+  ),
+  reference: source.draw(element(referenceKinds)),
+});
+
+/**
+ * Write a reference case as the tree shred would give: the item's declarations, each with its
+ * `identifier` first, then a body holding the one reference, its attribute first.
+ *
+ * @param input - The case.
+ * @returns The tree.
+ */
+const referenceTreeOf = (input: ReferenceCase): XdmDocument<Composed> => ({
+  _tag: "document",
+  charset: "UTF-8",
+  declaration: Option.none(),
+  doctype: Option.none(),
+  epilog: [],
+  exportCharset: "UTF-8",
+  prolog: [],
+  root: elementOf(
+    "qti-assessment-item",
+    [["identifier", "item"]],
+    [
+      ...input.declared.map(({ baseType, identifier, kind }) =>
+        elementOf(
+          kind,
+          [
+            ["identifier", identifier],
+            ["cardinality", "single"],
+            ["base-type", baseType],
+          ],
+          [],
+        ),
+      ),
+      elementOf(
+        "qti-item-body",
+        [],
+        [elementOf(input.reference.kind, [[input.reference.attribute, input.name]], [])],
+      ),
+    ],
+  ),
+  version: "3.0.1",
+});
+
+/**
+ * Read the rows of the relation a reference of the box writes, and of its declarations.
+ *
+ * @param rows - The document's rows.
+ * @param kind - The reference's element.
+ * @returns The two relations' rows.
+ */
+const referenceRelationOf = (rows: InteractionRows, kind: ReferenceCase["reference"]["kind"]) => {
+  switch (kind) {
+    case "qti-feedback-inline": {
+      return { declarations: rows.FeedbackRefDeclaration, references: rows.FeedbackRef };
+    }
+    case "qti-printed-variable": {
+      return {
+        declarations: rows.PrintedVariableRefDeclaration,
+        references: rows.PrintedVariableRef,
+      };
+    }
+    case "qti-template-inline": {
+      return { declarations: rows.TemplateRefDeclaration, references: rows.TemplateRef };
+    }
+    default: {
+      return kind satisfies never;
+    }
+  }
+};
+
+/**
+ * A situation the reference box must reach.
+ */
+type ReferenceSituation =
+  | "a built-in"
+  | "a declaration of a kind it may not name"
+  | "a declaration it may name"
+  | "a name no declaration holds";
+
+/**
+ * Name the situation of a reference case.
+ *
+ * @param input - What the case's name is.
+ * @param input.allowed - Whether a declaration the reference may name holds it.
+ * @param input.builtIn - Whether it is a built-in variable's.
+ * @param input.held - Whether any declaration holds it.
+ * @returns The situation.
+ */
+const referenceSituationOf = (input: {
+  readonly allowed: boolean;
+  readonly builtIn: boolean;
+  readonly held: boolean;
+}): ReferenceSituation => {
+  if (input.builtIn) {
+    return "a built-in";
+  }
+
+  if (input.allowed) {
+    return "a declaration it may name";
+  }
+
+  return input.held ? "a declaration of a kind it may not name" : "a name no declaration holds";
+};
+
+describe("import/overlays/interactions.ts, content reference declarations", () => {
+  it.effect(
+    "writes each content reference, and its declaration row exactly where the name is a declaration's of a kind the reference may name and no built-in's",
+    (ctx) =>
+      // Oracle: the specification as a checker, written by hand: the declaration kinds each
+      // reference may name (§5.49.1, §5.145.1, §7.30.6) and the item's built-in variables
+      // (§2.2.2), read off the box's own declarations. A reference that names no declaration it
+      // may name has no declaration row, and its law refuses it (lane NIL's NS2: a missing value
+      // is a row of its own relation, never the nil uuid).
+      // Bound: 8 subsets of 3 declarations by 3 references by 6 names, 144.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every subset of an outcome, a template and a response declaration, by a feedback's, a template inline's or a printed variable's reference to one of them, an undeclared name, completionStatus or numAttempts",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<ReferenceSituation>([
+              "a built-in",
+              "a declaration of a kind it may not name",
+              "a declaration it may name",
+              "a name no declaration holds",
+            ]),
+            generator: referenceCases,
+            limit: 200,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "the information model's content references and built-in variables, by hand",
+            },
+            suite: "pantry/import/overlays-interactions-reference-declarations",
+          },
+          (input: ReferenceCase, c) =>
+            Effect.sync(() => {
+              const doc = referenceTreeOf(input);
+              const walked = walk(doc);
+              const named = walked.find(({ kind }) => kind === input.reference.kind);
+              const holds = walked.filter(
+                ({ kind, name }) => name === input.name && kind !== input.reference.kind,
+              );
+              const allowed = holds.find(({ kind }) =>
+                input.reference.names.some((held) => held === kind),
+              );
+              const builtIn = itemBuiltIns.has(input.name);
+              const declaration = builtIn ? undefined : allowed;
+              c.note(
+                referenceSituationOf({
+                  allowed: allowed !== undefined,
+                  builtIn,
+                  held: holds.length > 0,
+                }),
+              );
+
+              const rows = rowsOf(doc, ids);
+              const key = JSON.stringify([named?.id, input.reference.attribute]);
+              const relation = referenceRelationOf(rows, input.reference.kind);
+              const reference = {
+                attribute: input.reference.attribute,
+                document: idOf(0),
+                identifier: input.name,
+                kind: input.reference.kind,
+                node: named?.id,
+              };
+
+              assert.deepStrictEqual([...relation.references], [[key, reference]]);
+              assert.deepStrictEqual(
+                [...relation.declarations],
+                declaration === undefined
+                  ? []
+                  : [
+                      [
+                        key,
+                        {
+                          ...reference,
+                          baseType: referencedDeclarations.find(
+                            ({ kind }) => kind === declaration.kind,
+                          )?.baseType,
+                          cardinality: "single",
+                          declaration: declaration.id,
+                          declarationKind: declaration.kind,
+                        },
+                      ],
+                    ],
+                Formatter.format(input),
+              );
+            }),
+        ),
+      ),
+  );
 });

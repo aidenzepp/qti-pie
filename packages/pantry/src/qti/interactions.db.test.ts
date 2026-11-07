@@ -45,15 +45,16 @@ import {
   CountBound,
   CountRange,
   FeedbackRef,
+  FeedbackRefDeclaration,
   Hotspot,
   Hottext,
   InteractionAttribute,
   LeastCount,
   MostCount,
-  nilUuid,
   ReferringDocument,
   SectionFeedbackName,
   SectionFeedbackRef,
+  SectionFeedbackRefDeclaration,
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
@@ -289,7 +290,13 @@ const hotspotOf = (fields: Partial<Fact<typeof Hotspot>> = {}) =>
   }) satisfies Fact<typeof Hotspot>;
 
 /**
- * A stray feedback block's outcome reference, resolved to a declared single identifier outcome.
+ * The nil uuid, which names no declaration: a case writes it where the import once wrote it, to
+ * show the database refuses it as a declaration.
+ */
+const nilUuid = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * A stray feedback block's outcome reference.
  *
  * @param fields - The fields the case sets.
  * @returns The row.
@@ -297,16 +304,29 @@ const hotspotOf = (fields: Partial<Fact<typeof Hotspot>> = {}) =>
 const feedbackOf = (fields: Partial<Fact<typeof FeedbackRef>> = {}) =>
   ({
     attribute: "outcome-identifier",
-    baseType: "identifier",
-    cardinality: "single",
-    declaration: stray,
-    declarationKind: "qti-outcome-declaration",
     document: stray,
     identifier: "FEEDBACK",
     kind: "qti-feedback-block",
     node: strayNode(0),
     ...fields,
   }) satisfies Fact<typeof FeedbackRef>;
+
+/**
+ * The declaration a stray feedback block's outcome reference names: a declared single identifier
+ * outcome.
+ *
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const feedbackDeclarationOf = (fields: Partial<Fact<typeof FeedbackRefDeclaration>> = {}) =>
+  ({
+    ...feedbackOf(),
+    baseType: "identifier",
+    cardinality: "single",
+    declaration: stray,
+    declarationKind: "qti-outcome-declaration",
+    ...fields,
+  }) satisfies Fact<typeof FeedbackRefDeclaration>;
 
 /**
  * A stray choice's template reference, resolved to a declared single identifier template.
@@ -418,18 +438,14 @@ const hottextOf = (at: number, fields: Partial<Fact<typeof Hottext>> = {}) =>
   }) satisfies Fact<typeof Hottext>;
 
 /**
- * A printed variable's `index` reference: a `PrintedVariableRef` fact of the given name and
- * declaration.
+ * A printed variable's `index` reference: a `PrintedVariableRef` fact of the given name, with no
+ * declaration row.
  *
  * @param identifier - The name it makes.
- * @param declaration - The declaration it resolves to.
  * @returns The fact.
  */
-const indexReference = (
-  identifier: string,
-  declaration: Fact<typeof FeedbackRef>["declaration"],
-): Stated => ({
-  fact: feedbackOf({ attribute: "index", declaration, identifier, kind: "qti-printed-variable" }),
+const indexReference = (identifier: string): Stated => ({
+  fact: feedbackOf({ attribute: "index", identifier, kind: "qti-printed-variable" }),
   relation: PrintedVariableRef,
 });
 
@@ -906,10 +922,11 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a feedback outcome of another type, in an item's or a section's placement, and a reference to a built-in its law does not allow, by Feedback outcome type and the containment into ContentReference",
+        "refuses a feedback outcome of another type, in an item's or a section's placement, and a reference to a built-in its law does not allow, by Feedback outcome type and Feedback reference",
         () =>
-          // Oracle: PostgreSQL, the `Feedback_outcome_type` check (reading 77) and the containment
-          // of (kind, attribute, declarationKind) into the closed `ContentReference`.
+          // Oracle: PostgreSQL, the `Feedback_outcome_type` check over the declaration rows (reading
+          // 77) and the `Feedback_reference` check that a built-in's name is one `ContentReference`
+          // lets the reference name.
           // Bound: a float outcome, of an item's feedback and of a section's feedback placed under
           // a test (port audit A45); a feedback naming the response built-in numAttempts. The placed
           // feedback stands on the section document's `ReferringDocument` and its
@@ -918,41 +935,41 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           Effect.gen(function* references() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const typed = yield* db.apply(
-              ChangeSet.empty(Author).insert(FeedbackRef, [feedbackOf({ baseType: "float" })]),
+              ChangeSet.empty(Author)
+                .insert(FeedbackRef, [feedbackOf()])
+                .insert(FeedbackRefDeclaration, [feedbackDeclarationOf({ baseType: "float" })]),
               {},
             );
-            assert.isTrue(rejectedBy(typed, checkNamed("FeedbackRef", "Feedback_outcome_type")));
+            assert.isTrue(
+              rejectedBy(typed, checkNamed("FeedbackRefDeclaration", "Feedback_outcome_type")),
+            );
 
             const builtIn = yield* db.apply(
               ChangeSet.empty(Author).insert(FeedbackRef, [
-                feedbackOf({
-                  baseType: "integer",
-                  declaration: nilUuid,
-                  declarationKind: "qti-response-declaration",
-                  identifier: "numAttempts",
-                }),
+                feedbackOf({ identifier: "numAttempts" }),
               ]),
               {},
             );
-            assert.isTrue(rejectedBy(builtIn, containedIn("FeedbackRef", "ContentReference")));
+            assert.isTrue(rejectedBy(builtIn, checkNamed("FeedbackRef", "Feedback_reference")));
 
             const { attribute, document, identifier, kind, node } = feedbackOf();
+            const placement = { assembly: stray, instance: strayNode(1) } as const;
             const placed = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(ReferringDocument, [{ document }])
                 .insert(SectionFeedbackName, [{ attribute, document, identifier, kind, node }])
                 .insert(SectionScope, [{ assembly: stray, document, instance: strayNode(1) }])
-                .insert(SectionFeedbackRef, [
-                  {
-                    ...feedbackOf({ baseType: "float" }),
-                    assembly: stray,
-                    instance: strayNode(1),
-                  },
+                .insert(SectionFeedbackRef, [{ ...feedbackOf(), ...placement }])
+                .insert(SectionFeedbackRefDeclaration, [
+                  { ...feedbackDeclarationOf({ baseType: "float" }), ...placement },
                 ]),
               {},
             );
             assert.isTrue(
-              rejectedBy(placed, checkNamed("SectionFeedbackRef", "Feedback_outcome_type")),
+              rejectedBy(
+                placed,
+                checkNamed("SectionFeedbackRefDeclaration", "Feedback_outcome_type"),
+              ),
             );
           }),
       );
@@ -1010,30 +1027,30 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a reference to an undeclared name, and accepts one to the built-in completionStatus, by the containment into Declaration",
+        "refuses a reference to an undeclared name, and accepts one to the built-in completionStatus, by the containment into its declaration row",
         () =>
-          // Oracle: PostgreSQL, the foreign key of a printed variable's `index` reference into
-          // `declarationRef`, selected out for a built-in's name, and the
-          // `Printed_variable_reference` check that resolves the built-in. 23503 on that key.
-          // Bound: an undeclared name, refused; completionStatus under the nil declaration,
+          // Oracle: PostgreSQL, the foreign key of a printed variable's `index` reference into its
+          // declaration row, selected out for a built-in's name (lane NIL's NS2: a reference that
+          // names no declaration has no declaration row, never the nil uuid). 23503 on that key.
+          // Bound: an undeclared name, refused; completionStatus with no declaration row,
           // accepted.
           Effect.gen(function* varRef() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeysBetween(client, "printed_variable_ref", "declaration");
+            const keys = yield* foreignKeysBetween(
+              client,
+              "printed_variable_ref",
+              "printed_variable_ref_declaration",
+            );
             assert.isNotEmpty(keys);
 
             const undeclared = Option.getOrUndefined(
-              yield* judged(client, statedInserts([indexReference("UNDECLARED", stray)]), keys),
+              yield* judged(client, statedInserts([indexReference("UNDECLARED")]), keys),
             );
             assert.strictEqual(undeclared?.code, "23503");
             assert.include(keys, undeclared?.constraint);
 
             const builtIn = Option.getOrUndefined(
-              yield* judged(
-                client,
-                statedInserts([indexReference("completionStatus", nilUuid)]),
-                keys,
-              ),
+              yield* judged(client, statedInserts([indexReference("completionStatus")]), keys),
             );
             assert.isUndefined(builtIn, builtIn?.message);
           }).pipe(Effect.scoped),

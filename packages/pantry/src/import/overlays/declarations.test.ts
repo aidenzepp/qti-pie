@@ -78,6 +78,7 @@ const relationNames = [
   "NormalMaximum",
   "NormalMinimum",
   "RecordField",
+  "RecordFieldName",
   "Value",
   "ValueBaseType",
   "ValueSet",
@@ -318,8 +319,9 @@ const textOf = (child: Met["child"]): string =>
     .join("");
 
 /**
- * Collect a value's expected row, its own base type's where it writes one that spells a code, and
- * its field's where it writes both a field identifier and a base type, whatever its set.
+ * Collect a value's expected row, its own base type's where it writes one that spells a code, its
+ * field's where it writes both a field identifier and a base type, whatever its set, and its
+ * field's name where that identifier names something once collapsed.
  *
  * @param expected - The rows so far.
  * @param met - The value's element.
@@ -348,15 +350,23 @@ const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: Wa
   }
 
   if (fieldIdentifier !== undefined && fieldBaseType !== undefined) {
-    const { lead, name, trail } = walkedPieces(fieldIdentifier);
     expected.RecordField.set(tuple.node, {
       ...tuple,
       baseTypeLexical: fieldBaseType,
-      identifier: name,
-      identifierLead: lead,
       identifierLexical: fieldIdentifier,
-      identifierTrail: trail,
     });
+
+    const { lead, name, trail } = walkedPieces(fieldIdentifier);
+    if (name !== "") {
+      expected.RecordFieldName.set(tuple.node, {
+        identifier: name,
+        identifierLead: lead,
+        identifierLexical: fieldIdentifier,
+        identifierTrail: trail,
+        node: tuple.node,
+        parent: tuple.parent,
+      });
+    }
   }
 };
 
@@ -378,6 +388,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     NormalMaximum: new Map(),
     NormalMinimum: new Map(),
     RecordField: new Map(),
+    RecordFieldName: new Map(),
     Value: new Map(),
     ValueBaseType: new Map(),
     ValueSet: new Map(),

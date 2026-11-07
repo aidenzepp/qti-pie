@@ -97,7 +97,6 @@ const checkRules = {
   Arity: "P2",
   Condition_type: "P21",
   E1_derived: "derived",
-  Item_duration: "item-duration",
   Literal_lexical: "attribute-lexical",
   Lookup_type: "P22",
   Mapped_response: "P27",

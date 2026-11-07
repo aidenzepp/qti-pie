@@ -816,7 +816,10 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [checkNamed("Resource", "Manifest_id_space"), keyOn("IdBinding", "document", "id")],
+          laws: [
+            keyOn("ManifestIdSpace", "package", "identifier"),
+            keyOn("IdBinding", "document", "id"),
+          ],
           name: "a resource sharing its manifest's identifier (manifest-id-space, Q5.06)",
         },
         {

@@ -26,7 +26,13 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
 import { ownContext } from "#pantry/import/fold.ts";
-import { objectRowsOfPackage, piecesOf, rowsOf } from "#pantry/import/overlays/metadata.ts";
+import {
+  namedDocumentOf,
+  namesNoDocument,
+  objectRowsOfPackage,
+  piecesOf,
+  rowsOf,
+} from "#pantry/import/overlays/metadata.ts";
 import type {
   MetadataIds,
   MetadataRows,
@@ -40,7 +46,13 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import type { AssessmentObject } from "#pantry/qti/metadata.ts";
+import { noLanguage } from "#pantry/qti/metadata.ts";
+import type {
+  AssessmentObject,
+  ObjectIdentifier,
+  ObjectLang,
+  ObjectTitle,
+} from "#pantry/qti/metadata.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import {
   filesOf as resourceTypeFilesOf,
@@ -186,13 +198,17 @@ const shredded = Effect.fn("test.metadata.shredded")(function* shreddedPackage(
 });
 
 /**
- * A package's metadata rows as the importer will build them: the manifest's {@link rowsOf}, each
- * document's assessment object, and the records' {@link objectRowsOfPackage}.
+ * A package's metadata rows as the importer will build them: the manifest's {@link rowsOf}; each
+ * document's assessment object, its identifier and its title, each by its document, and its
+ * `xml:lang`, by its root; and the records' {@link objectRowsOfPackage}.
  */
 interface Built {
+  readonly identifiers: ReadonlyMap<string, Addition<typeof ObjectIdentifier>>;
+  readonly langs: ReadonlyMap<string, Addition<typeof ObjectLang>>;
   readonly manifest: MetadataRows;
   readonly objects: ReadonlyMap<string, Addition<typeof AssessmentObject>>;
   readonly rows: ObjectRows;
+  readonly titles: ReadonlyMap<string, Addition<typeof ObjectTitle>>;
 }
 
 /**
@@ -204,6 +220,9 @@ interface Built {
 const builtOf = (input: Shredded): Built => {
   const documents = new Map<string, NamedDocument>();
   const objects = new Map<string, Addition<typeof AssessmentObject>>();
+  const identifiers = new Map<string, Addition<typeof ObjectIdentifier>>();
+  const titles = new Map<string, Addition<typeof ObjectTitle>>();
+  const langs = new Map<string, Addition<typeof ObjectLang>>();
 
   for (const [path, { number, tree }] of input.documents) {
     const listed = grammar.package.rootOfType.rows.find(({ root }) => root === tree.root.kind);
@@ -212,37 +231,60 @@ const builtOf = (input: Shredded): Built => {
     }
 
     const ids = idsFor(number, listed.type);
-    const object = rowsOf(tree, ids).AssessmentObject.values().next().value;
-    documents.set(path, { document: ids.idOf(0), object });
-    if (object !== undefined) {
+    const rows = rowsOf(tree, ids);
+    documents.set(path, namedDocumentOf(ids.idOf(0), rows));
+    for (const object of rows.AssessmentObject.values()) {
       objects.set(object.document, object);
+    }
+
+    for (const identifier of rows.ObjectIdentifier.values()) {
+      identifiers.set(identifier.document, identifier);
+    }
+
+    for (const title of rows.ObjectTitle.values()) {
+      titles.set(title.document, title);
+    }
+
+    for (const lang of rows.ObjectLang.values()) {
+      langs.set(lang.node, lang);
     }
   }
 
   const manifestIds = { ...idsFor(0, "none"), targetAt: targetsOf(documents) };
 
   return {
+    identifiers,
+    langs,
     manifest: rowsOf(input.manifest, manifestIds),
     objects,
     rows: objectRowsOfPackage(input.manifest, manifestIds, documents),
+    titles,
   };
 };
 
 /**
- * Judge the `lom-identifier` law over a package's rows as PostgreSQL will: a record's row holds
- * when its document is its record's object's and has its identifier, and its witness is a general
- * entry of the record whose token is that identifier.
+ * Judge the `lom-identifier` law over a package's rows as PostgreSQL will: a naming record that
+ * lists a general entry has its row, and the row holds when its document is its record's object's
+ * and has its identifier, and its witness is a general entry of the record whose token is that
+ * identifier.
  *
  * @param built - The package's rows.
- * @returns The records whose row breaks the law, by id.
+ * @returns The records that break the law, by id.
  */
 const identifierRefusals = (built: Built): ReadonlySet<string> =>
-  new Set(
-    [...built.rows.LomObjectIdentifier.values()].flatMap((row) => {
+  new Set([
+    ...[...built.manifest.LomEntry.values()].flatMap(({ holderKind, holderParent, named }) =>
+      holderKind === "lom:general" &&
+      named !== namesNoDocument &&
+      !built.rows.LomObjectIdentifier.has(holderParent)
+        ? [holderParent]
+        : [],
+    ),
+    ...[...built.rows.LomObjectIdentifier.values()].flatMap((row) => {
       const entry = built.manifest.LomEntry.get(row.entry);
       const holds =
         built.rows.LomObject.get(row.record)?.document === row.document &&
-        built.objects.get(row.document)?.identifier === row.identifier &&
+        built.identifiers.get(row.document)?.identifier === row.identifier &&
         entry?.holderKind === "lom:general" &&
         entry.holderParent === row.record &&
         entry.holder === row.general &&
@@ -250,36 +292,38 @@ const identifierRefusals = (built: Built): ReadonlySet<string> =>
 
       return holds ? [] : [row.record];
     }),
-  );
+  ]);
 
 /**
- * Judge the `lom-title` law over a package's rows as PostgreSQL will: a record's row holds when its
- * document is its record's object's and has its title's value and its `xml:lang`'s tag, its witness
- * is a title string of the record with that value and its own language tag, and the
- * `LomObjectTitle` check holds.
+ * Judge the `lom-title` law over a package's rows as PostgreSQL will: a naming record with a
+ * general title has its row, and the row holds when its document is its record's object's and has
+ * its title's value and its language, its witness is a title string of the record with that value
+ * and its own language, and the `LomObjectTitle` check holds.
  *
  * @param built - The package's rows.
- * @returns The records whose row breaks the law, by id.
+ * @returns The records that break the law, by id.
  */
 const titleRefusals = (built: Built): ReadonlySet<string> =>
-  new Set(
-    [...built.rows.LomObjectTitle.values()].flatMap((row) => {
+  new Set([
+    ...[...built.manifest.LomTitle.values()].flatMap(({ named, record }) =>
+      named !== namesNoDocument && !built.rows.LomObjectTitle.has(record) ? [record] : [],
+    ),
+    ...[...built.rows.LomObjectTitle.values()].flatMap((row) => {
       const string = built.manifest.LomTitleString.get(row.string);
-      const object = built.objects.get(row.document);
       const holds =
         built.rows.LomObject.get(row.record)?.document === row.document &&
-        object?.titleValue === row.title &&
-        object.langTag === row.objectLang &&
+        built.titles.get(row.document)?.titleValue === row.title &&
+        built.objects.get(row.document)?.langTag === row.objectLang &&
         string?.record === row.record &&
         string.textValue === row.title &&
         string.languageTag === row.stringLanguage &&
-        (row.objectLang === "" ||
-          row.stringLanguage === "" ||
+        (row.objectLang === noLanguage ||
+          row.stringLanguage === noLanguage ||
           row.stringLanguage === row.objectLang);
 
       return holds ? [] : [row.record];
     }),
-  );
+  ]);
 
 /**
  * Count the breaches of `LomObjectIdentifier` the law oracle finds in a package.
@@ -613,26 +657,36 @@ const asciiFolded = (tag: string): string => tag.replaceAll(/[A-Z]/gu, (c) => c.
 
 /**
  * Judge `E1_derived`'s compared forms over a package's rows as PostgreSQL will: each object's
- * `titleValue` is its title with its whitespace replaced and its `langTag` its `xml:lang`
- * collapsed and case-folded, and each title string's `textValue` and `languageTag` are its text
- * and its language so read.
+ * title's `titleValue` is its title with its whitespace replaced; each `xml:lang`'s `langTag` is
+ * its form collapsed and case-folded, and each object's is its `xml:lang`'s, or `noLanguage` where
+ * it writes none; and each title string's `textValue` is its text so read and its `languageTag`
+ * its string's, its `language` case-folded, or `noLanguage` where it writes none.
  *
  * @param built - The package's rows.
  * @returns The rows whose compared forms differ, by id.
  */
 const comparedFormBreaches = (built: Built): readonly string[] => [
-  ...[...built.objects.values()].flatMap((object) =>
-    object.titleValue === normalize(object.title) &&
-    object.langTag === asciiFolded(collapse(object.lang))
-      ? []
-      : [object.node],
+  ...[...built.titles.values()].flatMap((title) =>
+    title.titleValue === normalize(title.title) ? [] : [title.node],
   ),
-  ...[...built.manifest.LomTitleString.values()].flatMap((string) =>
-    string.textValue === normalize(string.text) &&
-    string.languageTag === asciiFolded(string.language)
-      ? []
-      : [string.node],
+  ...[...built.langs.values()].flatMap((lang) =>
+    lang.langTag === asciiFolded(collapse(lang.lang)) ? [] : [lang.node],
   ),
+  ...[...built.objects.values()].flatMap((object) => {
+    const lang = built.langs.get(object.node);
+
+    return object.langTag === (lang === undefined ? noLanguage : lang.langTag) ? [] : [object.node];
+  }),
+  ...[...built.manifest.LomTitleString.values()].flatMap((string) => {
+    const language = built.manifest.LomStringLanguage.get(string.node);
+    const tag = language === undefined ? noLanguage : asciiFolded(language.language);
+
+    return string.textValue === normalize(string.text) &&
+      string.languageTag === tag &&
+      built.manifest.LomString.get(string.node)?.languageTag === tag
+      ? []
+      : [string.node];
+  }),
 ];
 
 /**
@@ -899,9 +953,12 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
                 assert.deepStrictEqual(
                   stringsByStart
                     .filter((s) => s.record === record.node)
-                    .map(({ language, text }) => ({ language, text })),
+                    .map(({ languageTag, text }) => ({ languageTag, text })),
                   sketched.titles.flat().map(({ language, text }) => ({
-                    language: Option.getOrElse(language, () => ""),
+                    languageTag: Option.match(language, {
+                      onNone: () => noLanguage,
+                      onSome: asciiFolded,
+                    }),
                     text,
                   })),
                   "title strings",
@@ -1034,10 +1091,14 @@ describe("import/overlays/metadata.ts, the metaData fixture", () => {
         ] as const) {
           const built = builtOf(yield* shredded(edited));
 
-          assert.strictEqual(built.rows.LomObjectIdentifier.size, 1, `${label}: one record names`);
+          assert.strictEqual(
+            built.rows.LomObjectIdentifier.size,
+            1 - expected,
+            `${label}: a witness exactly where the record names its item`,
+          );
           assert.strictEqual(identifierRefusals(built).size, expected, label);
           assert.strictEqual(yield* oracleBreaches(edited), expected, `${label}, by the oracle`);
-          assert.strictEqual(built.rows.LomObjectTitle.size, 1, `${label}: its title`);
+          assert.strictEqual(built.rows.LomObjectTitle.size, 0, `${label}: no title names it`);
           assert.strictEqual(titleRefusals(built).size, 1, `${label}: titled otherwise`);
         }
       }).pipe(Effect.provide(NodeServices.layer)),

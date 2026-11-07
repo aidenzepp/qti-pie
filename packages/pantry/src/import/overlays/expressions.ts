@@ -64,6 +64,7 @@ import {
   valueBaseOf,
   valueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
+import { optionallyTypedKinds } from "#pantry/qti/expressions.ts";
 import type {
   AssembledReference,
   DeclarationTable,
@@ -697,7 +698,6 @@ interface Document extends Tree {
   readonly languageOf: (node: NodeId) => Language;
   readonly rootKind: NodeRow<Composed>["kind"];
   readonly rows: FlatRows<Composed>;
-  readonly timeDependent: boolean;
 }
 
 /**
@@ -890,14 +890,6 @@ const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document =
     languageOf: languagesOf(rows, indexed),
     rootKind: tree.root.kind,
     rows,
-    timeDependent: Option.exists(
-      Option.fromNullishOr(
-        rows.attributes.find(
-          ({ name, node }) => name === "time-dependent" && indexed.nodeOf(node).kind === itemKind,
-        ),
-      ),
-      ({ lexical }) => trueForm.test(lexical),
-    ),
   };
 };
 
@@ -1019,7 +1011,6 @@ const referenceOf = (
     resolution,
     rootKind: doc.rootKind,
     table: tableOf(node.kind, attribute.name, declared),
-    timeDependent: doc.timeDependent,
   };
 };
 
@@ -1099,14 +1090,21 @@ const typingAttributes: ReadonlyMap<string, readonly string[]> = new Map([
 ]);
 
 /**
- * The attribute that types each attribute-typed kind, which has a row on every element of the
- * kind, unwritten where the element omits it.
+ * The typing attribute of each kind whose element may omit it (`optionallyTypedKinds` of
+ * `#pantry/qti/expressions.ts`), which has a row on every element of the kind, unwritten where the
+ * element omits it: a test variables' `base-type`. A base value's `base-type` and a math operator's
+ * `name` are required, so an element that omits one has no row, and AL3 refuses it alone.
  */
-const typeAttributeOf: ReadonlyMap<string, "base-type" | "name"> = new Map([
-  ["qti-base-value", "base-type"],
-  ["qti-math-operator", "name"],
-  ["qti-test-variables", "base-type"],
-]);
+const unwrittenTypingOf: ReadonlyMap<string, "base-type"> = new Map(
+  optionallyTypedKinds.map((kind) => [kind, "base-type"] as const),
+);
+
+/**
+ * The lexical form of an unwritten typing attribute's row: empty, `ExpressionAttribute`'s null
+ * object, which `E1_derived` holds an unwritten row to (M2: the absence the type follows from is a
+ * keyed row of its own, which the attribute's copy refutes where it is written).
+ */
+const unwrittenLexical = "";
 
 /**
  * Add a rule's `Processing` row, and a response processing's `ProcessingTemplate` row where it
@@ -1199,12 +1197,12 @@ const expressionRowsOf = (
     }
   }
 
-  const typing = typeAttributeOf.get(node.kind);
+  const typing = unwrittenTypingOf.get(node.kind);
   if (typing !== undefined && !built.ExpressionAttribute.has(pairKey(node.id, typing))) {
     built.ExpressionAttribute.set(pairKey(node.id, typing), {
       ...own,
       attribute: typing,
-      lexical: "",
+      lexical: unwrittenLexical,
       written: false,
     });
   }
@@ -1248,7 +1246,7 @@ const itemTimingOf = (doc: Document): Map<string, Addition<typeof ItemTiming>> =
             document: doc.id,
             lexical: attribute.lexical,
             node: attribute.node,
-            timeDependent: doc.timeDependent,
+            timeDependent: trueForm.test(attribute.lexical),
           },
         ],
       ]);
@@ -1655,7 +1653,6 @@ interface Lookups {
   readonly names: Map<string, Addition<typeof NameLookup>>;
   readonly probes: Map<string, Addition<typeof VariableLookup>>;
   readonly targets: ReadonlyMap<string, Addition<typeof ItemRefTarget>["type"]>;
-  readonly timing: ReadonlyMap<string, boolean>;
 }
 
 /**
@@ -1975,7 +1972,6 @@ const readingOf = (
       : Option.none(),
     scope,
   );
-  const timed = itemHeld && typed.source === "builtIn" && text.variable === "duration";
 
   return {
     ...typed,
@@ -1998,7 +1994,6 @@ const readingOf = (
     role: reference.role,
     scope: text.scope,
     split: BigInt(text.split),
-    timeDependent: timed && (lookups.timing.get(scope.itemDocument) ?? false),
     variable: text.variable,
   };
 };
@@ -2219,8 +2214,8 @@ const itemRefTargetsOf = (
 };
 
 /**
- * Read the lookups a package's documents hold: each document's declarations and its items'
- * timing, and what each item ref names.
+ * Read the lookups a package's documents hold: each document's declarations, and what each item
+ * ref names.
  *
  * @param documents - Every document of the package.
  * @param items - What each item ref names.
@@ -2239,13 +2234,6 @@ const lookupsOf = (
   names: new Map(),
   probes: new Map(),
   targets: new Map([...items.itemRefTargets.values()].map(({ node, type }) => [node, type])),
-  timing: new Map(
-    documents.flatMap((input) =>
-      [...input.expressions.ItemTiming.values()].map(
-        ({ document, timeDependent }) => [document, timeDependent] as const,
-      ),
-    ),
-  ),
 });
 
 /**

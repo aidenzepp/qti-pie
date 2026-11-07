@@ -70,12 +70,20 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 78-case exhaust ran 12.7 s at a load average of 45 to 53 in FIX-UNWRITTEN's run of 2026-11-07, beside five other suites; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/import/overlays/manifest-identifiers.oracle.test.ts",
+    "measurement owed: its 320-case exhaust ran 20.8 s, and 16.1 s at a load average of 32 to 39, in FB-WRITE's runs of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/import/manifest-document.oracle.test.ts",
     "measurement owed: its 146-package box ran 20.0 s in FIX-MANIFEST's run of 2026-11-07, which recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/import/overlays/unwritten-identifier.oracle.test.ts",
     "measurement owed: its 64-package box ran 46.0 s at a load average of 45 to 48 in FB-TESTS's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/expressions.absence.oracle.test.ts",
+    "measurement owed: its 18-package box ran under FB-EXPR's run of 2026-11-07, whose load average was below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/test/census.migration.test.ts",

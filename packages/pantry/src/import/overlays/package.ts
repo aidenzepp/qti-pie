@@ -30,15 +30,18 @@ import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.t
 import { manifestPath } from "#pantry/qti/package.ts";
 import type {
   Dependency,
+  DependencyTarget,
   File,
   FileHref,
   ManifestId,
+  ManifestIdSpace,
   NamedHref,
   Reference,
   ReferencePath,
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceId,
   ResourceTyped,
   TextReference,
   TextReferencePath,
@@ -65,13 +68,16 @@ export interface ManifestIds {
  */
 export interface PackageRows {
   readonly Dependency: ReadonlyMap<string, Addition<typeof Dependency>>;
+  readonly DependencyTarget: ReadonlyMap<string, Addition<typeof DependencyTarget>>;
   readonly File: ReadonlyMap<string, Addition<typeof File>>;
   readonly FileHref: ReadonlyMap<string, Addition<typeof FileHref>>;
   readonly ManifestId: ReadonlyMap<string, Addition<typeof ManifestId>>;
+  readonly ManifestIdSpace: ReadonlyMap<string, Addition<typeof ManifestIdSpace>>;
   readonly NamedHref: ReadonlyMap<string, Addition<typeof NamedHref>>;
   readonly Resource: ReadonlyMap<string, Addition<typeof Resource>>;
   readonly ResourceFile: ReadonlyMap<string, Addition<typeof ResourceFile>>;
   readonly ResourceHref: ReadonlyMap<string, Addition<typeof ResourceHref>>;
+  readonly ResourceId: ReadonlyMap<string, Addition<typeof ResourceId>>;
   readonly ResourceTyped: ReadonlyMap<string, Addition<typeof ResourceTyped>>;
   readonly TypedHref: ReadonlyMap<string, Addition<typeof TypedHref>>;
 }
@@ -85,13 +91,16 @@ export interface PackageRows {
  */
 export const noPackageRows: PackageRows = {
   Dependency: new Map(),
+  DependencyTarget: new Map(),
   File: new Map(),
   FileHref: new Map(),
   ManifestId: new Map(),
+  ManifestIdSpace: new Map(),
   NamedHref: new Map(),
   Resource: new Map(),
   ResourceFile: new Map(),
   ResourceHref: new Map(),
+  ResourceId: new Map(),
   ResourceTyped: new Map(),
   TypedHref: new Map(),
 };
@@ -701,12 +710,60 @@ const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, ReadonlyMap
   );
 
 /**
+ * Name the resource each dependency names: the one whose identifier its `identifierref` is, as
+ * written, its own resource where its own resource's identifier is that one, so that "Self
+ * dependency" judges it, else the first in document order; none where no resource's is.
+ *
+ * @param dependencies - The manifest's dependencies.
+ * @param resourceIds - Its resources' identifiers, in document order.
+ * @returns Each dependency's target, keyed by its node.
+ */
+const dependencyTargetsOf = (
+  dependencies: Iterable<Addition<typeof Dependency>>,
+  resourceIds: Iterable<Addition<typeof ResourceId>>,
+): ReadonlyMap<string, Addition<typeof DependencyTarget>> => {
+  const firsts = new Map<string, NodeId>();
+  const owns = new Set<string>();
+  for (const { identifier, node } of resourceIds) {
+    if (!firsts.has(identifier)) {
+      firsts.set(identifier, node);
+    }
+
+    owns.add(headingKey([node, identifier]));
+  }
+
+  return new Map(
+    [...dependencies].flatMap(({ node, package: pkg, ref, resource }) =>
+      Option.toArray(
+        owns.has(headingKey([resource, ref]))
+          ? Option.some(resource)
+          : Option.fromUndefinedOr(firsts.get(ref)),
+      ).map((target) => [node, { node, package: pkg, ref, resource, target }] as const),
+    ),
+  );
+};
+
+/**
+ * The `type` a `cp:resource` that writes none is held under, `Resource`'s and `ResourceHref`'s
+ * `typeLexical` (`#pantry/qti/package.ts`): the empty form, which spells no handle, as an unspelled
+ * written form does, so no `ResourceTyped` or `TypedHref` row stands for it and AL3 refuses the
+ * resource alone. It is a field of both rows rather than a row of its own because a typed
+ * resource's href is required to have its `TypedHref` without a join of the two optional parts.
+ */
+const unwrittenType = "";
+
+/**
  * Build the overlay rows of a package's manifest.
  *
- * An element's required attribute that is absent leaves its field empty (a `cp:resource`'s
- * `identifier` or `type`, the `cp:manifest`'s `identifier`), or leaves out the row whose existence
- * the attribute's copy proves (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`): AL3
- * refuses the element either way. A resource's `href` is a row only where it is written.
+ * An element's identifier is a row only where it is written: a `cp:manifest`'s is its
+ * `ManifestId`, a `cp:resource`'s its `ResourceId`, each beside its row of the package's
+ * identifier space (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left
+ * out where the attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`),
+ * and a resource's `href` is a row only where it is written; AL3 refuses an absent required
+ * attribute. A resource's absent `type` is held as {@link unwrittenType}.
+ *
+ * A dependency names the resource whose identifier its `identifierref` is, its own where its own
+ * resource's is (`DependencyTarget`), and none where no resource's is.
  *
  * A resource's `href` and a file's are resolved against the manifest's path, the package root,
  * through every `xml:base` of a `cp:manifest`, `cp:resources` or `cp:resource` in scope (IMS
@@ -731,48 +788,56 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     start: node.start,
     version: node.version,
   });
-  const valueOf = (node: NodeRow<Composed>, name: string): string | undefined =>
-    attributes.get(node.id)?.get(name);
-  const manifestIdentifier =
-    rows.nodes.flatMap((node) =>
-      node.kind === "cp:manifest" ? [valueOf(node, "identifier") ?? ""] : [],
-    )[0] ?? "";
+  const valueOf = (node: NodeRow<Composed>, name: string): Option.Option<string> =>
+    Option.fromUndefinedOr(attributes.get(node.id)?.get(name));
   const dependencies = new Map<string, Addition<typeof Dependency>>();
   const files = new Map<string, Addition<typeof File>>();
   const fileHrefs = new Map<string, Addition<typeof FileHref>>();
+  const idSpace = new Map<string, Addition<typeof ManifestIdSpace>>();
   const manifests = new Map<string, Addition<typeof ManifestId>>();
   const namedHrefs = new Map<string, Addition<typeof NamedHref>>();
   const resources = new Map<string, Addition<typeof Resource>>();
   const resourceFiles = new Map<string, Addition<typeof ResourceFile>>();
   const resourceHrefs = new Map<string, Addition<typeof ResourceHref>>();
+  const resourceIds = new Map<string, Addition<typeof ResourceId>>();
   const resourceTypes = new Map<string, Addition<typeof ResourceTyped>>();
   const typedHrefs = new Map<string, Addition<typeof TypedHref>>();
-  const resourceIdentifiers = new Map<NodeId, string>();
+  const spaceOf = (identifier: string, kind: "cp:manifest" | "cp:resource"): void => {
+    idSpace.set(headingKey([ids.package, identifier, kind]), {
+      identifier,
+      kind,
+      package: ids.package,
+    });
+  };
 
   for (const node of rows.nodes) {
     if (node.kind === "cp:manifest") {
-      manifests.set(node.id, {
-        ...tupleOf(node),
-        identifier: valueOf(node, "identifier") ?? "",
-        package: ids.package,
-        parent: node.parent,
-      });
+      for (const identifier of Option.toArray(valueOf(node, "identifier"))) {
+        manifests.set(node.id, {
+          ...tupleOf(node),
+          identifier,
+          package: ids.package,
+          parent: node.parent,
+        });
+        spaceOf(identifier, "cp:manifest");
+      }
     }
 
     if (node.kind === "cp:resource") {
-      const typeLexical = valueOf(node, "type") ?? "";
+      const typeLexical = Option.getOrElse(valueOf(node, "type"), () => unwrittenType);
       const type = typeOf(typeLexical);
-      const href = valueOf(node, "href");
 
-      resourceIdentifiers.set(node.id, valueOf(node, "identifier") ?? "");
       resources.set(node.id, {
         ...tupleOf(node),
-        identifier: valueOf(node, "identifier") ?? "",
-        manifestIdentifier,
         package: ids.package,
         parent: node.parent,
         typeLexical,
       });
+      for (const identifier of Option.toArray(valueOf(node, "identifier"))) {
+        resourceIds.set(node.id, { identifier, node: node.id, package: ids.package });
+        spaceOf(identifier, "cp:resource");
+      }
+
       for (const code of Option.toArray(type)) {
         resourceTypes.set(node.id, {
           node: node.id,
@@ -782,7 +847,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
         });
       }
 
-      if (href !== undefined) {
+      for (const href of Option.toArray(valueOf(node, "href"))) {
         const resolution = resolve(node.id, href);
         const path = comparedPathOf(resolution, href);
         resourceHrefs.set(node.id, {
@@ -810,9 +875,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
       }
     }
 
-    const href = node.kind === "cp:file" ? valueOf(node, "href") : undefined;
-
-    if (href !== undefined) {
+    for (const href of node.kind === "cp:file" ? Option.toArray(valueOf(node, "href")) : []) {
       const resolution = resolve(node.id, href);
       const path = comparedPathOf(resolution, href);
       const { scope } = resolution;
@@ -832,28 +895,30 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
       });
     }
 
-    const ref = node.kind === "cp:dependency" ? valueOf(node, "identifierref") : undefined;
-
-    if (ref !== undefined) {
+    for (const ref of node.kind === "cp:dependency"
+      ? Option.toArray(valueOf(node, "identifierref"))
+      : []) {
       dependencies.set(node.id, {
         ...tupleOf(node),
         package: ids.package,
         ref,
         resource: node.parent,
-        resourceIdentifier: resourceIdentifiers.get(node.parent) ?? "",
       });
     }
   }
 
   return {
     Dependency: dependencies,
+    DependencyTarget: dependencyTargetsOf(dependencies.values(), resourceIds.values()),
     File: files,
     FileHref: fileHrefs,
     ManifestId: manifests,
+    ManifestIdSpace: idSpace,
     NamedHref: namedHrefs,
     Resource: resources,
     ResourceFile: resourceFiles,
     ResourceHref: resourceHrefs,
+    ResourceId: resourceIds,
     ResourceTyped: resourceTypes,
     TypedHref: typedHrefs,
   };
