@@ -1081,7 +1081,7 @@ export const known = {
       fix: "(3), its law half: the Manifest overlay selections read the manifest's cp:* attributes alone, as the import writes ManifestId and Resource from imsmanifest.xml alone",
       owner: "GEN-A",
     },
-  "import-only-law: Reserved type, check Reserved_type on Declaration": {
+  "import-only-law: Reserved type, contained Declaration(parent) in Node(id)": {
     files: [
       [
         "imsmanifest.xml",
