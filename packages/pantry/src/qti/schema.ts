@@ -191,6 +191,8 @@ import {
   Resource,
   ResourceFile,
   ResourceHref,
+  TextReference,
+  TextReferencePath,
 } from "#pantry/qti/package.ts";
 import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
 import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
@@ -336,6 +338,8 @@ const packageRelations = {
   Resource,
   ResourceFile,
   ResourceHref,
+  TextReference,
+  TextReferencePath,
 };
 
 /**
@@ -430,6 +434,7 @@ export const Qti = schema(
     ...mathmlRelations,
     ...catalogRelations,
   },
+  // `as const` keeps the list a tuple: the `.flat()` law lists put a bare literal on TypeScript's array path, whose subtype reduction refuses about 1,000 statement types (TS2590).
   [
     ...nodeLaws,
     ...chardataLaws,
@@ -447,5 +452,5 @@ export const Qti = schema(
     ...operatorLaws,
     ...mathmlLaws,
     ...catalogLaws,
-  ],
+  ] as const,
 );

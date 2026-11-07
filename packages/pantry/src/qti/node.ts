@@ -328,6 +328,10 @@ const inCheckedText = (n: NodeRow) => checkedText(n, n.parentKind, n.parentGover
  * - `lom:language`: Q5.07's identity overlay reads a resource's LOM language set.
  * - `qti-value`: Q5.08's declaration overlay checks its lexical form against its declaration's base
  *   type (C1, O2), not against its governing type.
+ * - `qti-resource-icon`: the text census's `TextReference` reads an icon's string value as a file
+ *   reference (spec reading R9-b); its type, `URLDType`, is an `xs:normalizedString`, so no
+ *   TextDomain check reads it. A card's file is an `xs:anyURI`, which TextDomain checks, so it is
+ *   folded already.
  * - `qti-base-value`: Q5.10's expression overlay checks a literal's lexical form against its own base
  *   type (O4).
  * - `ud:value`: Q5.12's metadata overlay checks a usage statistic's value against the base type its
@@ -339,6 +343,7 @@ export const copiedTextKinds = [
   "lom:language",
   "qti-value",
   "qti-base-value",
+  "qti-resource-icon",
   "ud:value",
 ] as const satisfies readonly (typeof NodeKind.handles)[number][];
 

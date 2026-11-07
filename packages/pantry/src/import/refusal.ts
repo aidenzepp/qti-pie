@@ -175,6 +175,8 @@ import {
   packageLawsByName,
   Reference,
   ReferencePath,
+  TextReference,
+  TextReferencePath,
 } from "#pantry/qti/package.ts";
 import { mathmlLaws } from "#pantry/qti/mathml.ts";
 import { headQualifierLaw } from "#pantry/qti/mathml-apply.ts";
@@ -632,7 +634,7 @@ export const lawTable = {
   "File exists": {
     rule: "file-exists",
     source:
-      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath)",
+      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath), and each card file and resource icon a document resolves in the package (reading R9-b, package.ts TextReferencePath)",
   },
   "File listed": {
     rule: "file-listed",
@@ -1916,7 +1918,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
-  ...[Reference, ReferencePath].map(
+  ...[Reference, ReferencePath, TextReference, TextReferencePath].map(
     ({ name, primaryKey }) =>
       [
         { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,

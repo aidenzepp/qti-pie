@@ -93,6 +93,7 @@ import {
 import { compile, patternFlags } from "#pantry/grammar/domains.ts";
 import type { ValueFacet } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { Spelling } from "#pantry/grammar/references.ts";
 import { expandedText } from "#pantry/grammar/names.ts";
@@ -4543,11 +4544,12 @@ const oneCandidate = (lexical: string): boolean => {
 
 /**
  * Evaluate R6 and the reference half of the stated limit over each listed document (readings 102
- * and 103): every attribute of the grammar's reference census is resolved with the `xml:base`
- * values in scope ({@link resolvedAt}); one the representation reads no name from, and a `srcset`
- * of more than one candidate or with a descriptor, breaks "Href form"; and each that resolves in
- * the package names an entry ("File exists", IMS Content Packaging 1.2, InterchangePackage (d)), a
- * stimulus ref's a stimulus.
+ * and 103): every attribute of the grammar's reference census, and the string value of every
+ * element of its text census (`textReferenceKinds`, spec reading R9-b), is resolved with the
+ * `xml:base` values in scope ({@link resolvedAt}); one the representation reads no name from, and a
+ * `srcset` of more than one candidate or with a descriptor, breaks "Href form"; and each that
+ * resolves in the package names an entry ("File exists", IMS Content Packaging 1.2,
+ * InterchangePackage (d)), a stimulus ref's a stimulus.
  *
  * @param documents - The documents the manifest lists, read.
  * @param entries - The package's entry paths.
@@ -4572,6 +4574,20 @@ const referenceBreaches = (
       keys: { node: "", ...keys },
       law,
     });
+    const textReferences = view.members.flatMap((member) =>
+      textReferenceKinds
+        .filter(({ kind }) => kind === member.kind)
+        .map(({ whiteSpace }) => {
+          const lexical = stringValueOf(view, member);
+
+          return {
+            form: "uri" as const,
+            lexical,
+            member,
+            resolution: resolvedAt(view, member.id, lexical, { whiteSpace }).resolution,
+          };
+        }),
+    );
     const references = view.members.flatMap((member) =>
       [...(view.valuesOf.get(member.id) ?? new Map<string, string>())].flatMap(([name, lexical]) =>
         Option.toArray(
@@ -4592,9 +4608,10 @@ const referenceBreaches = (
         })),
       ),
     );
+    const resolved = [...references, ...textReferences];
 
     return [
-      ...references
+      ...resolved
         .filter(
           ({ form, lexical, resolution }) =>
             resolution.scope === "unresolved" || (form === "srcset" && !oneCandidate(lexical)),
@@ -4606,12 +4623,12 @@ const referenceBreaches = (
             node: pathOf(view, member.id),
           }),
         ),
-      ...references.flatMap(({ member, resolution }) =>
+      ...resolved.flatMap(({ member, resolution }) =>
         resolution.scope !== "entry" || entries.has(resolution.path)
           ? []
           : [breach("File exists", { from: pathOf(view, member.id), path: resolution.path })],
       ),
-      ...references.flatMap(({ member, resolution }) =>
+      ...resolved.flatMap(({ member, resolution }) =>
         member.kind !== "qti-assessment-stimulus-ref" ||
         resolution.scope !== "entry" ||
         rootKinds.get(resolution.path) === "qti-assessment-stimulus"
@@ -6317,7 +6334,7 @@ const ownLaws = {
       `${field(keys, "path")} is named by ${field(keys, "from")} and is no entry of the package`,
     rule: "file-exists",
     source:
-      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath)",
+      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath), and each card file and resource icon a document resolves in the package (reading R9-b, package.ts TextReferencePath)",
   },
   "File listed": {
     explain: (keys) => `${field(keys, "path")} is the href of no cp:file`,
