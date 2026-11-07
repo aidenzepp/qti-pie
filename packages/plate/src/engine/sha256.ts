@@ -225,8 +225,8 @@ export const hmacKey = (key: Uint8Array): HmacKey => {
 };
 
 /**
- * Compute a message's HMAC-SHA-256 tag under a prepared key: SHA-256 of the outer padded key and
- * SHA-256 of the inner padded key and the message.
+ * Compute a message's HMAC-SHA-256 tag under a prepared key: SHA-256 of the outer padded key
+ * followed by the inner digest, which is SHA-256 of the inner padded key followed by the message.
  *
  * @param key The key's states, from {@link hmacKey}.
  * @param message The message's bytes.

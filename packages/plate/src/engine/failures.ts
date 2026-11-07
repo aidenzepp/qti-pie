@@ -15,18 +15,20 @@ import { Data } from "effect";
 /**
  * The failure of a rule tree that names an identifier the item or the variables do not hold in the
  * role the rule reads it in: a variable or a mapped response with no value, a `qti-correct`, a
- * `qti-map-response` or a `qti-map-response-point` of no declared response, or a
- * `qti-set-outcome-value` of no declared outcome.
+ * `qti-map-response` or a `qti-map-response-point` of no declared response, a `qti-default` of
+ * no declared or built-in variable, a `qti-set-outcome-value` of no declared outcome, or, in
+ * template processing, a `qti-set-template-value`, `qti-set-correct-response` or
+ * `qti-set-default-value` of no declared variable of the kind it sets.
  *
  * In a valid item every identifier a rule names is declared, but the variables come from the record
- * the host hands back, which may lack a value, so the evaluator returns it. Its `holder` says which
+ * the host hands back, which may lack a value, so the engine returns it. Its `holder` says which
  * of the two lacks the identifier, and the message names the one to fix.
  */
 export class UnknownIdentifierError extends Data.TaggedError("UnknownIdentifierError")<{
   /**
    * What lacks the identifier: `"record"` when the variables, which come from the session record,
-   * hold no value of it, and `"item"` when the item declares no modelled response or outcome by
-   * that name.
+   * hold no value of it, and `"item"` when the item declares no modelled variable of the kind the
+   * rule reads or sets by that name.
    */
   readonly holder: "item" | "record";
 

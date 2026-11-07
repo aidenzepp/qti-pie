@@ -31,7 +31,7 @@ import type { Value } from "#plate/model/values.ts";
  * @param operands The operands.
  * @param scope The item, the variables of the attempt and the stream.
  * @param evaluate The evaluator, which gives each operand's value.
- * @returns The operands' values in order, or the first operand's failure.
+ * @returns The operands' values in order, or the failure of the leftmost operand that fails.
  */
 export const operandValues = (
   operands: readonly Expression[],
