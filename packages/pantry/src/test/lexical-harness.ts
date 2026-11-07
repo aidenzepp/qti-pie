@@ -375,12 +375,12 @@ export const recorded: readonly Recorded[] = [
   {
     builtin:
       /^(?:integer|decimal|nonNegativeInteger|positiveInteger|nonPositiveInteger|negativeInteger)$/u,
+    holds: (value) => isNumeral(value) && (value.match(/[0-9]/gu) ?? []).length > 24,
     reason: {
       _tag: "libxml2",
       proof: "digits",
-      why: "libxml2 refuses an xs:integer or xs:decimal of more than 24 digits; XML Schema bounds neither, and reading 45 keeps integers unbounded",
+      why: "libxml2 refuses an xs:integer or xs:decimal of more than 24 digits, its integer and fraction parts counted together; XML Schema bounds neither, and reading 45 keeps integers unbounded",
     },
-    value: /[0-9]{25,}/u,
     xsd: "invalid",
   },
   {
@@ -1659,7 +1659,7 @@ export const proofs = {
     type: "xs:base64Binary",
   },
   digits: {
-    refused: ["9".repeat(25), "9".repeat(400)],
+    refused: ["9".repeat(25), "9".repeat(400), `${"1".repeat(15)}.${"2".repeat(10)}`],
     type: "xs:integer",
   },
   emptyLists: {
