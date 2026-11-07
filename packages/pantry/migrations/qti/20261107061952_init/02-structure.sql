@@ -1910,7 +1910,6 @@ CREATE TABLE "qti"."resource" (
   CONSTRAINT "__resource_key_node_package_identifier_bpstbr3wxu" UNIQUE NULLS DISTINCT ("node", "package", "identifier"),
   CONSTRAINT "__resource_key_node_package_2zl5k2vy4m" UNIQUE NULLS DISTINCT ("node", "package"),
   CONSTRAINT "__resource_key_node_type_fuvf47abkp" UNIQUE NULLS DISTINCT ("node", "type"),
-  CONSTRAINT "__resource_check_resource_in_resource_type_of_bsteyxhgzj" CHECK (("pg_catalog"."substring"("qti"."__constant_6z3gdm23xx"(), "version" * 22 + "type" + 1, 1)::integer = 1) IS TRUE),
   CONSTRAINT "__resource_key_node_package_type_jmxe6ltg23" UNIQUE NULLS DISTINCT ("node", "package", "type")
 );
 

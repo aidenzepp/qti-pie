@@ -350,7 +350,6 @@ const comparisons: readonly Comparison[] = [
   { expected: () => grammar.bindingFit.rows, name: "BindingFit" },
   { expected: () => grammar.recordBindingFit.rows, name: "RecordBindingFit" },
   { expected: () => grammar.mappableBaseType.rows, name: "MappableBaseType" },
-  { expected: () => grammar.package.resourceTypeOf.rows, name: "ResourceTypeOf" },
   { expected: () => grammar.package.rootOfType.rows, name: "RootOfType" },
   { expected: () => grammar.include.includeRoot.rows, name: "IncludeRoot" },
   { expected: () => grammar.include.includeParentKind.rows, name: "IncludeParentKind" },

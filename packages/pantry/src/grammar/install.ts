@@ -264,8 +264,8 @@ const asCardinality = handleLookup("Cardinality", Cardinality.handles);
 /**
  * The `ResourceType` roster: `none`, the null object of the manifest's own `Document` row, at code
  * 0, then the 21 types a `cp:resource` may name, each spelled as its lexical form (`package.ts`).
- * No `ResourceTypeOf`, `RootOfType` or `ResourceTypeLexical` row names `none`, so a resource that
- * carries it is refused.
+ * No `RootOfType` or `ResourceTypeLexical` row names `none`, and a lexical form no handle spells
+ * is outside the attribute's value domain, so a resource that carries it is refused.
  */
 export const ResourceType = closed(
   "ResourceType",
@@ -1487,16 +1487,6 @@ export const MappableBaseType = closed.relation(
 );
 
 // The package (P1, P2).
-
-/**
- * `ResourceTypeOf`: the set of (version, type) a resource may carry.
- */
-export const ResourceTypeOf = closed.relation(
-  "ResourceTypeOf",
-  { type: closedId(ResourceType), version: closedId(SchemaVersion) },
-  ["version", "type"],
-  grammar.package.resourceTypeOf.rows.map(({ type, version }) => ({ type, version })),
-);
 
 /**
  * `RootOfType`: the set of (type, root), each root element kind the documents a resource type

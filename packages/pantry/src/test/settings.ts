@@ -14,9 +14,20 @@ export const corpusRequested = Config.String("GR8DES_CORPUS").pipe(
 );
 
 /**
- * Both settings, resolved once at load through the default provider.
+ * Whether `GR8DES_GENETIC=1` asks for the genetic searches' long budget, beside the bounded one
+ * every free run spends.
  */
-export const settings = Effect.runSync(Config.all({ corpusRequested, leaseDatabase }));
+export const geneticRequested = Config.String("GR8DES_GENETIC").pipe(
+  Config.withDefault(""),
+  Config.map((value) => value === "1"),
+);
+
+/**
+ * The settings, resolved once at load through the default provider.
+ */
+export const settings = Effect.runSync(
+  Config.all({ corpusRequested, geneticRequested, leaseDatabase }),
+);
 
 /**
  * Whether this run holds a lease, so the database suites may run.

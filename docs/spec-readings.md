@@ -907,17 +907,23 @@ against it. A reading that is not an information-model-over-XSD case says which 
     Packaging 1.2, section 6.4.4, SchemaVersion). The two profiles differ: the 3.0 profile lists the resource type
     `imsbasiclti_xmlv1p3` and admits `cpx:variant`, while the 3.0.1 profile lists `imslti_xmlv1p1` and `imsltia_xmlv1p0`
     in its place and forbids `cpx:variant`. A resource's `type` is one its profile enumerates, spelled as the profile
-    spells it. The implementation guide says the schema version "MUST be set to" `3.0.0` (section 6.1.1, Manifest),
-    which the 3.0.1 profile refuses, and spells the response-processing type `imsqti_responseprocessing_xmlv3p0`
-    (section 6.2, Content), where both profiles spell it `imsqti_resprocessing_xmlv3p0`. The packaging sections of the
-    3.0 and 3.0.1 XSD bindings, which mark themselves not normative, say the schema version must be `3.0.0` and `3.0.1`
-    respectively, each for the profile it names (section 8, ASI Packaging), and the 3.0.1 binding spells the
-    response-processing type as the profiles do. 1EdTech's own LTI example packages declare `3.0.0` and give resources
-    the type `imslti_xmlv1p1`, which only the 3.0.1 profile lists, so they are refused. This follows the profile XSDs,
-    the schemas a manifest is validated against, and sets aside the implementation guide's version and spelling. This
-    binds pantry and plate alike, so the two never read the same package differently, and both implement it. (The
-    operator's ruling, accepting the renderer's default; applied in plate by its phase-4 delivery spec, section 4.3;
-    2026-11-04.)
+    spells it, and that enumeration is the rule's one statement: it is the value domain the grammar reads
+    `cp:resource`'s `type` under in that version, so a type outside it is refused under `attribute-lexical`, the
+    refusal of every value an XSD's enumeration leaves out, and the explanation lists the values the version admits.
+    No law restates it. The implementation guide says the schema version "MUST be set to" `3.0.0` (section 6.1.1,
+    Manifest), which the 3.0.1 profile refuses, and spells the response-processing type
+    `imsqti_responseprocessing_xmlv3p0` (section 6.2, Content), where both profiles spell it
+    `imsqti_resprocessing_xmlv3p0`. The packaging sections of the 3.0 and 3.0.1 XSD bindings, which mark themselves not
+    normative, say the schema version must be `3.0.0` and `3.0.1` respectively, each for the profile it names (section
+    8, ASI Packaging), and the 3.0.1 binding spells the response-processing type as the profiles do. 1EdTech's own LTI
+    example packages declare `3.0.0` and give resources the type `imslti_xmlv1p1`, which only the 3.0.1 profile lists,
+    so they are refused, under `attribute-lexical`. This follows the profile XSDs, the schemas a manifest is validated
+    against, and sets aside the implementation guide's version and spelling. This binds pantry and plate alike, so the
+    two never read the same package differently, and both implement it. (The operator's ruling, accepting the
+    renderer's default; applied in plate by its phase-4 delivery spec, section 4.3; 2026-11-04. Amended 2026-11-07 by
+    RV seat VD (`6fd1d67d`), on the corpus verdict review: the rule was stated twice, by the enumeration and by a
+    `ResourceTypeOf` relation read from it under the rule `resource-type`; the coordinator ruled the XSD's enumeration
+    its home, as reading 26's withdrawal leaves the content grammar the XSD's own, and the relation is deleted.)
 68. **A duration in a results report is a number of seconds.** Every duration a report writes, an item's built-in
     `duration` (a float) and a test's, part's or section's (base type duration, reading 29), is its seconds in
     `xs:double`'s lexical form: `90.5`, never `PT1M30.5S`. Results Reporting defines a duration value as a time period
@@ -2249,11 +2255,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
      which is also exactly the kinds whose `label` the XSD declares inside one of them (`src/grammar/labels.ts`). A
      document's version is the `schemaversion` its manifest names (reading 67), and the sentence binds an item, so no
      stimulus, section or test is asked for tools. In the corpus, `testWithLti`'s labelled `qti-digital-material`
-     asks for nothing, and the package is still refused, under `resource-type` (reading 67). This binds pantry and
-     plate alike. This is not a case of documents in conflict: each characteristic's text is read for its own
-     elements, and each version's for its own documents. (Decided 2026-11-06 by RV seat I, on the review of PR #46;
-     amended 2026-11-06 by RV seat VD (`d389fca9`) on the corpus verdict review, the ItemFileInfo and printed-variable
-     labels read by their own descriptions; both under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     asks for nothing, and the package is still refused, under `attribute-lexical` (reading 67). This binds pantry and
+     plate alike. This is not a case of documents in conflict: each characteristic's text is read for its own elements,
+     and each version's for its own documents. (Decided 2026-11-06 by RV seat I, on the review of PR #46; amended
+     2026-11-06 by RV seat VD (`d389fca9`) on the corpus verdict review, the ItemFileInfo and printed-variable labels
+     read by their own descriptions; both under the operator's standing ruling of 2026-11-05 that the spec wins.)
 
 129. **`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags, well-formed as RFC 5646 defines them.**
      XML 1.0 says of `xml:lang` "The values of the attribute are language identifiers as defined by [IETF BCP 47], Tags

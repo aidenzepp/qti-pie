@@ -790,7 +790,6 @@ const unconstructed = {
   "Reference type": "a reference's declared type, over identifiers drawn without reading",
   "Reserved type":
     "a built-in variable's declared type, over identifiers and base types drawn without reading",
-  ResourceTypeOf: "a package's law",
   RootOfType: "a package's law",
   "SSML lexicon reference": "a reference, over identifiers drawn without reading",
   "SSML trim mark": "a mark's name, a value drawn without reading",
