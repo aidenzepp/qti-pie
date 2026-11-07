@@ -7,7 +7,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Option } from "effect";
-import { lawIdentity, ruleOfLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaws } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -99,7 +99,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 const [first, ...rest] = broken.map(({ law }) => law);
 
                 return {
-                  names: broken.map(({ law }) => lawIdentity(law)).join("; ") || "no law",
+                  names: broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law",
                   rule:
                     first === undefined
                       ? "accepted"

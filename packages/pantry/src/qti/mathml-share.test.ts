@@ -8,7 +8,7 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Schema } from "effect";
+import { Formatter, Option, Schema } from "effect";
 import { lawNameOf, lawNames, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
@@ -170,11 +170,15 @@ const holds = (name: string, row: Fields): boolean => holdsOver(checkOf(name), r
 
 /**
  * The laws that are no check, among those the module's relations carry, as the census of the
- * refusal table reads them: those whose law names one of the module's stored relations.
+ * refusal table reads them: those whose law names one of the module's stored relations. A function,
+ * since the first read of `statedLaws` compiles Qti's law model.
+ *
+ * @returns The laws, with their names.
  */
-const ownLaws = statedLaws.filter(([law]) =>
-  /"(?:MathRank|PlacedMathRank|PlacedShareTarget|ShareTarget)"/u.test(JSON.stringify(law)),
-);
+const ownLaws = () =>
+  statedLaws().filter(([law]) =>
+    /"(?:MathRank|PlacedMathRank|PlacedShareTarget|ShareTarget)"/u.test(Formatter.format(law)),
+  );
 
 describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
   it("declares the rank and the share target, composed into Qti under their own names", () => {
@@ -244,10 +248,11 @@ describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
 
   it("reads every containment and key of the module as 'E1 derived'", () => {
     // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds.
-    assert.isAbove(ownLaws.length, 0);
-    assert.deepStrictEqual([...new Set(ownLaws.map(([, name]) => name))], ["E1 derived"]);
+    const own = ownLaws();
+    assert.isAbove(own.length, 0);
+    assert.deepStrictEqual([...new Set(own.map(([, name]) => name))], ["E1 derived"]);
 
-    for (const [law, name] of ownLaws) {
+    for (const [law, name] of own) {
       assert.deepStrictEqual(lawNameOf(law), Option.some(name));
     }
   });

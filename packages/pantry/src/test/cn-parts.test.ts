@@ -11,9 +11,9 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Formatter, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawIdentity, ruleOfLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaws } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
@@ -157,7 +157,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("the parts of a typed c
             ? "accepted"
             : Option.getOrElse(ruleOfLaws([first, ...rest]), () => "unnamed");
         const rules = verdict.kind === "accepted" ? new Set(["accepted"]) : verdict.rules;
-        const shown = `${name}: the import's rows give ${rule} (${broken.map(({ law }) => lawIdentity(law)).join("; ") || "no law"}), the oracle ${[...rules].join(", ")}`;
+        const shown = `${name}: the import's rows give ${rule} (${broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law"}), the oracle ${[...rules].join(", ")}`;
 
         assert.strictEqual(verdict.kind === "accepted", !refused, shown);
         assert.isTrue(rules.has(rule), shown);

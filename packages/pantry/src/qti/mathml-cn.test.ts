@@ -9,15 +9,9 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Formatter, Option } from "effect";
 import { CnBase, CnForm, CnPart, CnParts, CnType } from "#pantry/grammar/install.ts";
-import {
-  lawIdentity,
-  lawNameOf,
-  lawNames,
-  lawOfCheck,
-  statedLaws,
-} from "#pantry/import/refusal.ts";
+import { lawNameOf, lawNames, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import {
   baseSpellings,
@@ -28,6 +22,7 @@ import {
   typeSpellings,
 } from "#pantry/qti/mathml-cn.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
+import { identityOf } from "#pantry/test/key-copies.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -44,11 +39,15 @@ const declared = ["CnAttribute", "CnCount", "CnPartText", "CnSlot", "MathCn"] as
 
 /**
  * The laws that are no check, among those the module's relations carry, as the census of the
- * refusal table reads them: those whose law names one of the relations.
+ * refusal table reads them: those whose law names one of the relations. A function, since the
+ * first read of `statedLaws` compiles Qti's law model.
+ *
+ * @returns The laws, with their names.
  */
-const ownLaws = statedLaws.filter(([law]) =>
-  /"(?:CnAttribute|CnPartText|CnCount|CnSlot|MathCn)"/u.test(JSON.stringify(law)),
-);
+const ownLaws = () =>
+  statedLaws().filter(([law]) =>
+    /"(?:CnAttribute|CnPartText|CnCount|CnSlot|MathCn)"/u.test(Formatter.format(law)),
+  );
 
 describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
   it("declares the judged cn and its parts, composed into Qti under their own names", () => {
@@ -99,13 +98,14 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
   it("reads the count containments as 'MathML cn form' and every other containment and the family as 'E1 derived', the form check being named by its own name", () => {
     // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds. A
     // part count and a part's place are judged by the oracle's cn form law, as an attribute's form.
-    assert.isAbove(ownLaws.length, 0);
-    assert.deepStrictEqual([...new Set(ownLaws.map(([, name]) => name))].toSorted(), [
+    const own = ownLaws();
+    assert.isAbove(own.length, 0);
+    assert.deepStrictEqual([...new Set(own.map(([, name]) => name))].toSorted(), [
       "E1 derived",
       "MathML cn form",
     ]);
     assert.deepStrictEqual(
-      ownLaws.filter(([, name]) => name === "MathML cn form").map(([law]) => lawIdentity(law)),
+      own.filter(([, name]) => name === "MathML cn form").map(([law]) => identityOf(law)),
       [
         "contained MathCn(type, parts) in CnParts(type, parts)",
         "contained CnPartText(type, part, form) in CnForm(type, part, form)",
@@ -114,11 +114,11 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
       ],
     );
     assert.strictEqual(
-      ownLaws.filter(([law]) => lawIdentity(law).startsWith("counted family")).length,
+      own.filter(([law]) => law.kind === "family" && law.order === "counted").length,
       2,
     );
 
-    for (const [law, name] of ownLaws) {
+    for (const [law, name] of own) {
       assert.deepStrictEqual(lawNameOf(law), Option.some(name));
     }
   });

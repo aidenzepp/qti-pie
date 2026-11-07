@@ -9,18 +9,13 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
-import {
-  lawIdentity,
-  lawNameOf,
-  lawNames,
-  lawOfCheck,
-  statedLaws,
-} from "#pantry/import/refusal.ts";
+import { Formatter, Option } from "effect";
+import { lawNameOf, lawNames, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { applyLaws, applyRelations } from "#pantry/qti/mathml-apply.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { identityOf } from "#pantry/test/key-copies.ts";
 
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned
@@ -80,8 +75,8 @@ describe("qti/mathml-apply.ts, declared", { timeout: buildTimeout }, () => {
   });
 
   it("names the qualifier's containment into HeadQualifier 'MathML head qualifier' and every other statement 'E1 derived'", () => {
-    const own = statedLaws.filter(([law]) =>
-      /"(?:MathApply|MathArgument|MathQualifier)"/u.test(JSON.stringify(law)),
+    const own = statedLaws().filter(([law]) =>
+      /"(?:MathApply|MathArgument|MathQualifier)"/u.test(Formatter.format(law)),
     );
     const qualifier = own.filter(([, name]) => name === "MathML head qualifier");
 
@@ -92,7 +87,7 @@ describe("qti/mathml-apply.ts, declared", { timeout: buildTimeout }, () => {
     assert.lengthOf(qualifier, 1);
     for (const [law] of qualifier) {
       assert.strictEqual(
-        lawIdentity(law),
+        identityOf(law),
         "contained MathQualifier(head, kind) in HeadQualifier(head, qualifier)",
       );
     }
