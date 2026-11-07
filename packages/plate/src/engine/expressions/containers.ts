@@ -16,12 +16,14 @@
  *
  * A container `qti-multiple`, `qti-ordered` or `qti-repeat` builds is held to `containerSizeBound`
  * (`#plate/engine/numbers.ts`, the principle of the operator's ruling `afb7e648`): one of more than
- * 1,000,000 values is the NULL of its base type and cardinality, found before it is built, so a
- * `number-repeats` of 2147483647 cannot hang scoring. The other kinds build no container larger
- * than an operand, and no container as written or stored is held to the bound.
+ * 1,000,000 values is the NULL of its base type and cardinality, found before it is built, or, for
+ * a `qti-repeat` that draws, before each pass's values are added, so a `number-repeats` of
+ * 2147483647 cannot hang scoring. The other kinds build no container larger than an operand, and no
+ * container as written or stored is held to the bound.
  *
  * `qti-random` draws from the scope's stream (`drawBelow`, `#plate/engine/random.ts`), once its
- * operand is evaluated and found not NULL, so a NULL operand draws nothing.
+ * operand is evaluated and found not NULL, so a NULL operand draws nothing. A `qti-repeat` whose
+ * operands hold a random kind evaluates them once per pass, so each pass draws anew.
  *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
  * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
@@ -34,6 +36,7 @@ import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/eval
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { booleanOf, integerValue, withinContainerBound } from "#plate/engine/numbers.ts";
 import { drawBelow } from "#plate/engine/random.ts";
+import type { Draw } from "#plate/engine/random.ts";
 import { referenceInteger } from "#plate/engine/refs.ts";
 import type { Expression, ExpressionKind } from "#plate/model/expression.ts";
 import { isNull, match, nullOf } from "#plate/model/values.ts";
@@ -259,38 +262,92 @@ const evaluateOrdered: Evaluator<"ordered"> = (expression, scope, evaluate) =>
   );
 
 /**
- * Give the value of a `qti-repeat`: an ordered container filled by evaluating each operand in turn
- * and adding its values, a NULL one ignored, `number-repeats` times in all; NULL when every operand
- * is NULL, when an operand is {@link untyped}, when `number-repeats` is below 1 or names a variable
- * that holds NULL, and when the container would hold more than 1,000,000 values.
+ * The kinds that draw from the scope's stream.
+ */
+const drawingKinds: ReadonlySet<ExpressionKind> = new Set([
+  "random",
+  "random-float",
+  "random-integer",
+]);
+
+/**
+ * Report whether an expression's subtree holds a kind that draws from the scope's stream
+ * ({@link drawingKinds}), at any depth among its operands.
+ *
+ * @param expression The expression.
+ * @returns Whether it or an operand at any depth is a `qti-random`, `qti-random-integer` or
+ *   `qti-random-float`.
+ */
+const drawsFrom = (expression: Expression): boolean => {
+  const operands: readonly Expression[] = expression.operands;
+
+  return drawingKinds.has(expression.kind) || operands.some((operand) => drawsFrom(operand));
+};
+
+/**
+ * The stream a drawing `qti-repeat`'s operands are typed against ({@link staticBaseOf}): every draw
+ * is 0, so it holds no state and takes nothing from the scope's stream. `drawBelow` accepts its
+ * first candidate, 0, and `drawFloat` gives 0, so every draw against it ends.
+ *
+ * @returns 0.
+ */
+const typingDraw: Draw = () => 0;
+
+/**
+ * Give the base type of the NULL a drawing `qti-repeat` gives before any pass: the model's static
+ * type of the `qti-repeat`, its kind's rule over its operands' types (`typeOf` in
+ * `#plate/model/item.ts`), else `string`, {@link baseOf}'s fallback, where that type is unknown.
+ *
+ * An {@link untyped} operand makes it unknown. Otherwise the operands are evaluated once against
+ * {@link typingDraw}, not the scope's stream, and the base type of their values is read: each
+ * family's evaluators are held to their kinds' rules and a NULL keeps the type of the expression
+ * that gave it, so the base type is the rule's whatever the draws. The values are discarded, the
+ * scope's stream is left where it was, and a failure gives the fallback, so the evaluation is
+ * seen only in the NULL's base type. The engine reads no rule itself: the registry
+ * (`#plate/model/expressions/read.ts`) value-imports `effect`'s `Effect`, which no browser module
+ * may.
+ *
+ * @param operands The `qti-repeat`'s operands.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The base type.
+ */
+const staticBaseOf = (
+  operands: readonly Expression[],
+  scope: Scope,
+  evaluate: Evaluate,
+): ModelledBaseType =>
+  operands.some((operand) => untyped(operand))
+    ? "string"
+    : Result.match(valuesOf(operands, { ...scope, draw: typingDraw }, evaluate), {
+        onFailure: (): ModelledBaseType => "string",
+        onSuccess: baseOf,
+      });
+
+/**
+ * Give the value of a `qti-repeat` none of whose operands holds a random kind: its operands
+ * evaluated once, and that pass's values added `number-repeats` times.
+ *
+ * This is exact: an operand's value depends only on the scope, which a pass does not change, so
+ * every pass would give the first pass's values. One evaluation keeps a costly operand, such as a
+ * product of two 500,000-bit integers, from being computed a million times.
  *
  * `number-repeats` is resolved first, then the operands are evaluated once, left to right; the
  * first failure is the result. That pass runs even when `number-repeats` is below 1, so the NULL
  * keeps the operands' base type. Its values are then added `number-repeats` times, one at a time.
  *
- * Evaluating once is exact only while no operand kind is random: an operand's value depends only on
- * the scope, which a pass does not change, so every pass would give the first pass's values.
- * `qti-random`, `qti-random-integer` and `qti-random-float` have landed, so an operand that holds
- * one draws once here, not once per pass. M3.b-2 (P7T-01), which lands them, must evaluate the
- * operands once per pass again, under a budget on the passes, for the information model fills the
- * container pass by pass. Until then one evaluation is what keeps a costly operand, such as a
- * product of two 500,000-bit integers, from being computed a million times, though the container
- * stays within the bound.
- *
  * The bound is checked before any value is added: the pass's size times `number-repeats` past the
  * bound gives NULL, and a pass that gives no value gives NULL at once, however many passes
  * `number-repeats` asks for, which keeps a nested `qti-repeat` of nothing from running a million
- * passes a million times. The running size is checked again before each pass is added. That
- * cannot fail while one pass's values are repeated; it is the check per-pass evaluation needs, for
- * a pass whose size is known only once it has run.
+ * passes a million times. The running size is checked again before each pass is added, which
+ * cannot fail while one pass's values are repeated.
  *
  * @param expression The `qti-repeat`.
  * @param scope The item and the variables of the attempt.
  * @param evaluate The evaluator, which gives each operand's value.
  * @returns The container, or the first failure of `number-repeats` or an operand.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpRepeat
  */
-const evaluateRepeat: Evaluator<"repeat"> = (expression, scope, evaluate) =>
+const repeatOnce: Evaluator<"repeat"> = (expression, scope, evaluate) =>
   Result.gen(function* repeatOperands() {
     const repeats = yield* referenceInteger(scope.variables, expression.numberRepeats);
     const pass = yield* valuesOf(expression.operands, scope, evaluate);
@@ -317,6 +374,86 @@ const evaluateRepeat: Evaluator<"repeat"> = (expression, scope, evaluate) =>
 
     return { baseType: baseOf(pass), cardinality: "ordered", values: held };
   });
+
+/**
+ * Give the value of a `qti-repeat` an operand of which holds a random kind ({@link drawsFrom}): its
+ * operands evaluated once per pass, left to right, `number-repeats` passes in all, each pass's
+ * values added before the next pass runs, so each pass draws anew from the scope's stream.
+ *
+ * `number-repeats` is resolved first; then the first failure of a pass is the result. Three rules
+ * bound what a seed's draws give and how many passes run:
+ *
+ * - The pass budget: a `number-repeats` above 1,000,000 (`containerSizeBound`) gives NULL before any
+ *   pass, and the running size is checked before each pass's values are added, so a pass whose size
+ *   is known only once it has run never grows the container past 1,000,000 values.
+ * - A pass that gives no value gives NULL at once and runs no later pass, so it draws nothing more.
+ * - A `number-repeats` below 1, or naming a variable that holds NULL, or an {@link untyped} operand
+ *   gives NULL with no pass at all, so it draws nothing. That NULL, and the budget's, is of the
+ *   model's static base type of the `qti-repeat` ({@link staticBaseOf}).
+ *
+ * The container is of the first pass's base type ({@link baseOf}), and so is the NULL of a pass
+ * that gives no value or would pass the bound.
+ *
+ * The size of the container is bounded and the number of passes with it; the time the passes take,
+ * a nested drawing `qti-repeat`'s included, is the host's (the operator's ruling `afb7e648`).
+ *
+ * @param expression The `qti-repeat`.
+ * @param scope The item, the variables of the attempt and the stream its operands draw from.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The container, or the first failure of `number-repeats` or a pass.
+ */
+const repeatPerPass: Evaluator<"repeat"> = (expression, scope, evaluate) =>
+  Result.gen(function* repeatPasses() {
+    const repeats = yield* referenceInteger(scope.variables, expression.numberRepeats);
+    const count = Option.getOrElse(repeats, () => 0n);
+    if (
+      count < 1n ||
+      !withinContainerBound(count) ||
+      expression.operands.some((operand) => untyped(operand))
+    ) {
+      return nullOf(staticBaseOf(expression.operands, scope, evaluate), "ordered");
+    }
+
+    const held: Single[] = [];
+    let baseType = baseOf([]);
+    for (let passed = 0n; passed < count; passed += 1n) {
+      const pass = yield* valuesOf(expression.operands, scope, evaluate);
+      const passSize = sizeOf(pass);
+      if (passSize === 0 || !withinContainerBound(BigInt(held.length + passSize))) {
+        return nullOf(baseOf(pass), "ordered");
+      }
+
+      if (passed === 0n) {
+        baseType = baseOf(pass);
+      }
+
+      appendTo(held, pass);
+    }
+
+    return { baseType, cardinality: "ordered", values: held };
+  });
+
+/**
+ * Give the value of a `qti-repeat`: an ordered container filled by evaluating each operand in turn
+ * and adding its values, a NULL one ignored, `number-repeats` times in all; NULL when every operand
+ * is NULL, when an operand is {@link untyped}, when `number-repeats` is below 1 or names a variable
+ * that holds NULL, and when the container would hold more than 1,000,000 values.
+ *
+ * The information model fills the container pass by pass. When no operand's subtree holds a random
+ * kind ({@link drawsFrom}), the operands are evaluated once, as every pass would give the first
+ * pass's values ({@link repeatOnce}). When one does, they are evaluated once per pass, left to
+ * right, so each pass draws anew, under a budget on the passes ({@link repeatPerPass}).
+ *
+ * @param expression The `qti-repeat`.
+ * @param scope The item, the variables of the attempt and the stream its operands draw from.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The container, or the first failure of `number-repeats` or an operand.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpRepeat
+ */
+const evaluateRepeat: Evaluator<"repeat"> = (expression, scope, evaluate) =>
+  expression.operands.some((operand) => drawsFrom(operand))
+    ? repeatPerPass(expression, scope, evaluate)
+    : repeatOnce(expression, scope, evaluate);
 
 /**
  * Give the value of a `qti-container-size`: a single integer, the number of values its operand
