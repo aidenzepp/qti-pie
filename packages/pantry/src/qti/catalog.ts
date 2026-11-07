@@ -18,11 +18,13 @@
  * - **Catalog reference** (rule `idref-target`; info §5.28.1, §5.15.9): a `data-catalog-idref` names
  *   a `qti-catalog` of its document, not any ID of it. The attribute is typed `xs:IDREF`, so "Idref
  *   target" (`#pantry/qti/identity.ts`) alone refuses a token that names no ID, and accepts one
- *   that names an HTML `id` or a declaration. {@link CatalogRef} is one row per such attribute,
- *   keyed by its node, its token the lexical form collapsed (`xs:IDREF`'s whiteSpace `collapse`);
- *   {@link CatalogId} is one row per `qti-catalog` that writes an `id`, copied from the attribute
- *   as a `TableHeader` is, its `id` the value its {@link DocumentId} holds. The law is the
- *   containment of every reference's `(document, token)` in the catalogs' `(document, id)`.
+ *   that names an HTML `id` or a declaration. {@link CatalogRef} is one row per such attribute that
+ *   holds a token, as "Idref target" reads only an attribute the schema checks as IDREF and only
+ *   its tokens (an unchecked one, or an empty or blank one, names nothing), keyed by its node, its
+ *   token the lexical form collapsed (`xs:IDREF`'s whiteSpace `collapse`); {@link CatalogId} is one
+ *   row per `qti-catalog` that writes an `id`, copied from the attribute as a `TableHeader` is, its
+ *   `id` the value its {@link DocumentId} holds. The law is the containment of every reference's
+ *   `(document, token)` in the catalogs' `(document, id)`.
  *
  * The card overlays copy their node through {@link nodeRef}, so `catalog` and `card`, each the
  * node's parent, are the parent the tree holds, and both copy their attribute as `identity.ts`
@@ -47,7 +49,16 @@ import {
   select,
   uuid,
 } from "@bjornpagen/grizzle";
-import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
+import type { RowScalars } from "@bjornpagen/grizzle";
+import {
+  AttributeGrammar,
+  AttributeModelOf,
+  AttributeSlotOf,
+  GoverningOf,
+  NodeKind,
+  SchemaVersion,
+  ValueIdentity,
+} from "#pantry/grammar/install.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { DocumentId } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
@@ -149,9 +160,43 @@ const designatingDefaults = select(Attribute, (a) =>
 );
 
 /**
- * Every `data-catalog-idref`, the source of {@link CatalogRef}.
+ * An `Attribute` row as a selection reads it.
  */
-const referenceAttributes = select(Attribute, (a) => a.eq(a.name, "data-catalog-idref"));
+type AttributeRow = RowScalars<typeof Attribute>;
+
+/**
+ * Read an attribute's identity type, as `identity.ts` reads it: its value domain's under its
+ * element's governor, absent for a name the governor does not admit.
+ *
+ * @param a - The row.
+ * @returns The closed read.
+ */
+const identityOf = (a: AttributeRow) => {
+  const model = AttributeModelOf.at(
+    "model",
+    a.version,
+    GoverningOf.at("governor", a.version, a.kind, a.governs),
+  );
+
+  return ValueIdentity.at(
+    "identity",
+    AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name)),
+  );
+};
+
+/**
+ * Every `data-catalog-idref` that holds an IDREF token, the source of {@link CatalogRef}: the
+ * attributes "Idref target" reads, those the schema checks as an IDREF whose collapsed value is
+ * not empty. One the schema does not check has no `Idref` piece, and neither has an empty or blank
+ * one, which names nothing.
+ */
+const referenceAttributes = select(Attribute, (a) =>
+  a.and(
+    a.eq(a.name, "data-catalog-idref"),
+    a.in(identityOf(a), ["IDREF", "IDREFS"]),
+    a.ne(Compute.collapse(a.lexical), ""),
+  ),
+);
 
 /**
  * Every catalog's `id`, the source of {@link CatalogId}.
@@ -167,7 +212,8 @@ const catalogIdAttributes = select(Attribute, (a) =>
  *   `(catalog, support)`;
  * - **Card default entry:** a card holds at most one designated entry, the key on
  *   {@link DefaultEntry}'s `card`;
- * - **Catalog reference:** each reference's token is the `id` of a catalog of its document;
+ * - **Catalog reference:** each reference's token is the `id` of a catalog of its document, a
+ *   reference being a `data-catalog-idref` that holds an IDREF token, as "Idref target" reads one;
  * - **DocumentId key:** one `support` per card, one designating `default` per entry, one
  *   `data-catalog-idref` and one catalog `id` per element, the keys over the attribute selections
  *   the copies read, and {@link CatalogId}'s `(document, id)`, which an ID held twice in a document

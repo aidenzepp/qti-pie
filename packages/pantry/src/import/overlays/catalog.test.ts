@@ -223,6 +223,25 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
       }),
   );
 
+  it.effect(
+    "gives an empty or blank data-catalog-idref no CatalogRef, as it holds no IDREF token",
+    () =>
+      Effect.gen(function* noToken() {
+        const rows = rowsOf(
+          yield* itemOf(
+            `<qti-catalog id="A"/>`,
+            `<p data-catalog-idref="">a</p><p data-catalog-idref=" \t ">b</p><p data-catalog-idref="A">c</p>`,
+          ),
+          { idOf },
+        );
+
+        assert.deepStrictEqual(
+          [...rows.CatalogRef.values()].map(({ token }) => token),
+          ["A"],
+        );
+      }),
+  );
+
   it.effect("writes each reference under its document", () =>
     Effect.gen(function* tuple() {
       const tree = yield* itemOf(`<qti-catalog id="A"/>`, `<p data-catalog-idref="A">a</p>`);

@@ -4109,16 +4109,23 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
     ({ parent }) => parent,
   );
   // Reading R9-a: a `data-catalog-idref` names a `qti-catalog` of its document (§5.28.1, §5.15.9),
-  // the token compared collapsed, as an IDREF is; an ID of any other element does not serve.
+  // the token compared collapsed, as an IDREF is; an ID of any other element does not serve. Only
+  // an attribute with an IDREF token is read, as "Idref target" reads it: one the schema does not
+  // check, or an empty one, names nothing.
   const catalogIds = new Set(
     [...ids].flatMap(([id, held]) =>
       held.some(({ node }) => view.byId.get(node)?.kind === "qti-catalog") ? [id] : [],
     ),
   );
   const catalogRefs = view.members.flatMap((node) =>
-    Option.toArray(collapsedOf(overlay, node, "data-catalog-idref")).flatMap((token) =>
-      catalogIds.has(token) ? [] : [{ node, token }],
-    ),
+    (view.attributesOf.get(node.id) ?? [])
+      .filter(
+        (attribute) =>
+          attribute.name === "data-catalog-idref" &&
+          referencesOf(attribute, compiledOf(laws, attribute)).length > 0,
+      )
+      .map((attribute) => ({ node, token: collapsed(attribute.lexical) }))
+      .filter(({ token }) => !catalogIds.has(token)),
   );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
   // so in an item no two of the interactions Binding declared reads name one response.

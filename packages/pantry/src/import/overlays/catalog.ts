@@ -9,7 +9,12 @@
  * (`catalogLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { interactionKinds } from "#pantry/grammar/install.ts";
+import {
+  attributeRows,
+  GoverningOf,
+  interactionKinds,
+  ValueIdentity,
+} from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -45,6 +50,62 @@ export interface CatalogRows {
  * The interaction kinds, whose children take them as their nearest interaction (N8).
  */
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
+
+/**
+ * The attribute the catalog reference law reads.
+ */
+const referenceName = "data-catalog-idref";
+
+/**
+ * The domains whose identity is `xs:IDREF` or `xs:IDREFS`, as the installed `ValueIdentity` holds
+ * them: those whose tokens are `Idref` rows.
+ */
+const idrefDomains: ReadonlySet<string> = new Set(
+  ValueIdentity.rows.flatMap(({ domain, identity }) =>
+    identity === "IDREF" || identity === "IDREFS" ? [domain] : [],
+  ),
+);
+
+/**
+ * The governors, keyed `version governor`, under which `data-catalog-idref` has an IDREF domain:
+ * the ones under which the schema checks it as an IDREF, as `#pantry/import/overlays/identity.ts`
+ * reads an attribute's domain.
+ */
+const referencing: ReadonlySet<string> = new Set(
+  attributeRows.flatMap(({ domain, governor, name, version }) =>
+    name === referenceName && idrefDomains.has(domain) ? [`${version} ${governor}`] : [],
+  ),
+);
+
+/**
+ * The installed `GoverningOf`, keyed `version kind governs`: the governor that reads an element's
+ * attributes.
+ */
+const governorAt: ReadonlyMap<string, string> = new Map(
+  GoverningOf.rows.map(({ governor, governs, kind, version }) => [
+    `${version} ${kind} ${governs}`,
+    governor,
+  ]),
+);
+
+/**
+ * Decide whether an element's `data-catalog-idref` holds an IDREF token, so "Idref target" reads
+ * it: the schema checks it as an IDREF under its element's governor, and its value is not empty or
+ * blank, which holds no token.
+ *
+ * @param element - The attribute's element's node row.
+ * @param lexical - The attribute as written.
+ * @returns Whether it is a reference.
+ */
+const holdsReference = (element: NodeRow<Composed>, lexical: string): boolean => {
+  const governor = governorAt.get(`${element.version} ${element.kind} ${element.governs}`);
+
+  return (
+    governor !== undefined &&
+    referencing.has(`${element.version} ${governor}`) &&
+    collapse(lexical) !== ""
+  );
+};
 
 /**
  * The values that designate an entry, collapsed.
@@ -87,7 +148,8 @@ const nearestOf = (
 /**
  * Build the catalog overlays' rows of one document: a `CardSupport` for each `qti-card` that writes
  * a `support`, and a `DefaultEntry` for each `qti-card-entry` whose `default` collapses to `true`
- * or `1`. A document with no such element gives no row.
+ * or `1`, and a `CatalogRef` for each `data-catalog-idref` that holds an IDREF token (an empty or
+ * blank one holds none). A document with no such element gives no row.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under, and its context.
@@ -110,8 +172,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
     }
 
     const value = collapse(lexical);
-    if (name === "data-catalog-idref") {
-      references.set(id, { document, lexical, node: id, token: value });
+    if (name === referenceName) {
+      if (holdsReference(node, lexical)) {
+        references.set(id, { document, lexical, node: id, token: value });
+      }
     } else if (node.kind === "qti-catalog" && name === "id") {
       catalogIds.set(id, { document, id: value, node: id, owner: id });
     }

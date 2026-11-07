@@ -48,13 +48,19 @@ const breachesOfLaw = (law: "Card default entry" | "Card support", catalogs: str
  *
  * @param token - The attribute's value, as written.
  * @param catalogs - The catalog info's `qti-catalog` children.
+ * @param placed - The body markup that writes the token, a paragraph that carries it where none is
+ *   given.
  * @returns The `node` keys of the breaches of "Catalog reference" and of "Idref target", each
  *   sorted.
  */
-const referenceBreaches = (token: string, catalogs: string) =>
+const referenceBreaches = (
+  token: string,
+  catalogs: string,
+  placed = (value: string) => `<p data-catalog-idref="${value}">b</p>`,
+) =>
   Effect.gen(function* judgedReference() {
     const text = edit(
-      edit(item, "</qti-item-body>", `<p data-catalog-idref="${token}">b</p></qti-item-body>`),
+      edit(item, "</qti-item-body>", `${placed(token)}</qti-item-body>`),
       "</qti-item-body>",
       `</qti-item-body>${catalogInfo(catalogs)}`,
     );
@@ -251,6 +257,17 @@ describe("test/oracle.ts, Card default entry", () => {
   );
 });
 
+/**
+ * The body markup of a `footer` carrying the given `data-catalog-idref` inside SSML's `token`,
+ * which takes any content: the shape the bred document had, whose attribute no assessment of the
+ * XSD reaches.
+ *
+ * @param value - The attribute's value, as written.
+ * @returns The paragraph.
+ */
+const inSpeech = (value: string) =>
+  `<p><ssml:speak xmlns:ssml="http://www.w3.org/2001/10/synthesis" version="1.1" xml:lang="en"><ssml:token><footer data-catalog-idref="${value}"/></ssml:token></ssml:speak></p>`;
+
 describe("test/oracle.ts, Catalog reference", () => {
   // Oracle: the specification as a checker, a `data-catalog-idref` naming a `qti-catalog` (spec
   // reading R9-a; information model §5.28.1 and §5.15.9), and "Idref target" for the IDREF it is.
@@ -312,6 +329,39 @@ describe("test/oracle.ts, Catalog reference", () => {
       const { catalog, shown: all } = yield* referenceBreaches("C", "");
 
       assert.strictEqual(catalog.length, 1, all);
+    }),
+  );
+
+  // An attribute holds a reference only where it holds an IDREF token, as "Idref target" judges
+  // only the tokens an IDREF attribute has: an empty or blank `data-catalog-idref` names no
+  // catalog, and the schema's value domain, not this law, refuses it.
+  it.effect("breaks nothing for an empty or blank idref, which holds no token", () =>
+    Effect.gen(function* noToken() {
+      for (const token of ["", " \t "]) {
+        for (const placed of [undefined, inSpeech]) {
+          const {
+            catalog,
+            idref,
+            shown: all,
+          } = yield* referenceBreaches(token, catalogOf("C", "spoken"), placed);
+
+          assert.deepStrictEqual([catalog, idref], [[], []], all);
+        }
+      }
+    }),
+  );
+
+  it.effect("breaks once for an idref that holds a token naming nothing, wherever it is", () =>
+    Effect.gen(function* namesNowhere() {
+      for (const placed of [undefined, inSpeech]) {
+        const { catalog, shown: all } = yield* referenceBreaches(
+          "nowhere",
+          catalogOf("C", "spoken"),
+          placed,
+        );
+
+        assert.strictEqual(catalog.length, 1, all);
+      }
     }),
   );
 });
