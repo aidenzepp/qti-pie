@@ -29,7 +29,7 @@ import { booleanOf } from "#pantry/grammar/domains.ts";
 import { Flag, grammar } from "#pantry/grammar/install.ts";
 import { isSiteKind } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
-import type { Folded } from "#pantry/import/fold.ts";
+import type { Folds } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -278,7 +278,7 @@ interface View {
    * Each node's fold under the document's context: its ancestry and nearest interaction among
    * them.
    */
-  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly folds: Folds;
   readonly ids: TestIds;
   readonly rows: FlatRows<Composed>;
 }
