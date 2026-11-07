@@ -9,6 +9,8 @@ const refused = [
   { field: "headingLevel", input: { headingLevel: 1 } },
   { field: "locale", input: { locale: "fr" } },
   { field: "maxAttempts", input: { maxAttempts: -1 } },
+  { field: "outputBudget", input: { outputBudget: 0 } },
+  { field: "outputBudget", input: { outputBudget: 536_870_889 } },
 ] as const;
 
 describe("configure", () => {
@@ -22,6 +24,7 @@ describe("configure", () => {
         headingLevel: 2,
         locale: "en",
         maxAttempts: 1,
+        outputBudget: 16_777_216,
         showFeedback: false,
         showSolution: false,
         validateResponses: false,
@@ -71,11 +74,25 @@ describe("configure", () => {
     }),
   );
 
+  it.effect("decodes outputBudget 536,870,888, the longest string V8 builds", () =>
+    Effect.gen(function* longestBudget() {
+      assert.strictEqual(
+        (yield* configure({ outputBudget: 536_870_888 })).outputBudget,
+        536_870_888,
+      );
+    }),
+  );
+
   it.effect("decodes the same settings written as environment strings", () =>
     Effect.gen(function* environmentStrings() {
-      const configuration = yield* configure({ headingLevel: "3", showFeedback: "true" });
+      const configuration = yield* configure({
+        headingLevel: "3",
+        outputBudget: "1000",
+        showFeedback: "true",
+      });
 
       assert.strictEqual(configuration.headingLevel, 3);
+      assert.strictEqual(configuration.outputBudget, 1000);
       assert.strictEqual(configuration.showFeedback, true);
     }),
   );

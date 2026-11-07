@@ -176,6 +176,7 @@ const judging: Configuration = {
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,
+  outputBudget: 16_777_216,
   showFeedback: false,
   showSolution: false,
   validateResponses: true,
