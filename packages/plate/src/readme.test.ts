@@ -482,7 +482,7 @@ describe("README.md", () => {
     );
   });
 
-  it('says configure reads a seed of "" as no seed', () => {
+  it('says configure reads a seed of "" as no seed, so a startTest session\'s shuffles follow the instance alone', () => {
     const paragraphs = markdownLines(readme())
       .filter(({ code }) => !code)
       .map(({ line }) => line)
@@ -494,9 +494,10 @@ describe("README.md", () => {
       paragraphs.some(
         (paragraph) =>
           /`configure` reads a `seed` of `""` as no seed/u.test(paragraph) &&
-          paragraph.includes("`startTest`"),
+          paragraph.includes("`startTest`") &&
+          paragraph.includes("follow the instance alone"),
       ),
-      'a paragraph says configure reads a seed of "" as no seed, so startTest draws one',
+      'a paragraph says configure reads a seed of "" as no seed, so a startTest session\'s shuffles follow the instance alone',
     );
   });
 

@@ -241,7 +241,8 @@ interface Bench {
 }
 
 /**
- * Construct a bench with an empty store over a package cache, configured with a seed.
+ * Construct a bench with an empty store over a package cache, configured with a shuffle seed and
+ * with no processing seed, so `startTest` draws one for each session.
  *
  * @param packages The packages.
  * @param sitting The sitting it starts.
@@ -250,7 +251,7 @@ interface Bench {
  */
 const benchOf = (packages: PackageCache, sitting: Sitting, root?: string) =>
   Effect.map(configure({ seed: "7" }), (configuration): Bench => ({
-    playground: { configuration, packages, sessions: sessionStore() },
+    playground: { configuration, packages, seed: Option.none(), sessions: sessionStore() },
     provide: (effect) =>
       root === undefined
         ? effect

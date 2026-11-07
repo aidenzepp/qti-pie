@@ -118,16 +118,20 @@ export type Handler = (request: Request) => Promise<Response>;
  *
  * `configuration` is the input `configure` decodes, every default when absent; `seed` is the seed
  * every sitting's record begins under, given to `begin` as it is, and when absent `begin` draws one
- * for each sitting (a fixed seed is guessable, so it is for tests); `newInstance` draws the
- * instance token of each item the playground opens, a random UUID when absent, and must give a new
- * token each call, since the playground holds each open item under its token (a test gives a fixed
- * one so a sitting's values follow from its seed alone); `provider` is where `readCorpusFile` reads
- * `PLATE_CORPUS_DIR` and `HOME` and the ledger page reads `PLATE_LEDGER_DIR`, the process
- * environment when absent; `verdicts` is the cache that opens and keeps the corpus's members, a new
- * one over `openMember` when absent; `packages` is the cache that opens and keeps the packages, a
- * new one over `openDirectory` when absent. Handlers given one cache share its opens, and a test
- * counts them through the cache's opener; a cache reads the corpus root of the first handler that
- * asks, so share one only between handlers over the same root.
+ * for each sitting (a fixed seed is guessable, so it is for tests); it also keys a test session's
+ * processing, given to `startTest` as the context's `seed`, and when absent `startTest` draws one
+ * for each session, while the configuration's `seed` orders shuffles only; `tests` is the store
+ * that keeps the test sessions, a new one when absent, which a test passes to read a stored
+ * session; `newInstance` draws the instance token of each item the playground opens, a random UUID
+ * when absent, and must give a new token each call, since the playground holds each open item under
+ * its token (a test gives a fixed one so a sitting's values follow from its seed alone); `provider`
+ * is where `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME` and the ledger page reads
+ * `PLATE_LEDGER_DIR`, the process environment when absent; `verdicts` is the cache that opens and
+ * keeps the corpus's members, a new one over `openMember` when absent; `packages` is the cache that
+ * opens and keeps the packages, a new one over `openDirectory` when absent. Handlers given one
+ * cache share its opens, and a test counts them through the cache's opener; a cache reads the
+ * corpus root of the first handler that asks, so share one only between handlers over the same
+ * root.
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
@@ -135,6 +139,7 @@ export interface PlaygroundSettings {
   readonly packages?: PackageCache;
   readonly provider?: ConfigProvider.ConfigProvider;
   readonly seed?: string;
+  readonly tests?: SessionStore;
   readonly verdicts?: VerdictCache;
 }
 
@@ -260,8 +265,9 @@ type HostFailure = Config.ConfigError | CorpusFileUnreadable | CorpusMissing | I
 /**
  * A playground's state and settings: its theme box's appearance, its open items' sittings, oldest
  * first, its configuration input, how it draws an opened item's instance token, the seed its
- * sittings begin under (none for one `begin` draws), the verdicts of the corpus's members, its
- * packages, its test sessions, and the plain-HTML host, built the first time it is asked for.
+ * sittings begin under and its test sessions process under (none for one `begin` or `startTest`
+ * draws), the verdicts of the corpus's members, its packages, its test sessions, and the plain-HTML
+ * host, built the first time it is asked for.
  */
 interface Playground {
   readonly appearance: Ref.Ref<Appearance>;
@@ -1421,6 +1427,7 @@ const routeTests = (
     (configuration): ReviewPlayground & SessionPlayground => ({
       configuration,
       packages: playground.packages,
+      seed: playground.seed,
       sessions: playground.tests,
     }),
   );
@@ -1628,7 +1635,7 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
     packages: settings.packages ?? Effect.runSync(packageCache()),
     seed: Option.fromUndefinedOr(settings.seed),
     sessions: boundedStore(),
-    tests: sessionStore(),
+    tests: settings.tests ?? sessionStore(),
     verdicts: settings.verdicts ?? Effect.runSync(verdictCache()),
   };
   /**

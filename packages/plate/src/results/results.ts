@@ -761,20 +761,20 @@ const secondsBetween = (from: string, to: string): number =>
  * Choice not shuffled keeps document order, and a Text Entry or an Extended Text has no choices.
  *
  * @param interaction The interaction as the page showed it, holding only the choices shown.
- * @param seed The session's seed.
+ * @param seed The seed its shuffle was keyed by, none when it had none.
  * @param instance The item instance it was rendered under.
  * @returns The choice identifiers, space-separated, or none.
  */
 const choiceSequence = (
   interaction: Interaction,
-  seed: string,
+  seed: Option.Option<string>,
   instance: string,
 ): Option.Option<string> => {
   switch (interaction.kind) {
     case "choice":
     case "inline-choice": {
       return interaction.shuffle
-        ? Option.some(choiceOrder(interaction, Option.some(seed), instance).join(" "))
+        ? Option.some(choiceOrder(interaction, seed, instance).join(" "))
         : Option.none();
     }
     case "extended-text":
@@ -800,14 +800,16 @@ const choiceSequence = (
  *
  * @param item The item.
  * @param templates The template values of the record the page was shown under.
- * @param seed The session's seed.
+ * @param seed The session's shuffle seed, which keyed the page's shuffles as `itemView`'s
+ *   configuration does: none when it has none, so the order followed the instance alone. Never the
+ *   session's processing seed.
  * @param instance The item instance it was rendered under.
  * @returns The choice identifiers, space-separated, by the interaction's response identifier.
  */
 const choiceSequences = (
   item: Item,
   templates: ItemRecord["templates"],
-  seed: string,
+  seed: Option.Option<string>,
   instance: string,
 ): ReadonlyMap<string, string> =>
   new Map(
@@ -880,9 +882,9 @@ const deliveredItem = (
  * is 0, since a delivery engine that does not limit attempts reports only the first outcomes of a
  * non-adaptive item, and the record's otherwise: the last processed, or the starting values before
  * any. A presented shuffled Choice or Inline Choice carries the order it was presented in, under
- * the session's seed and the item's instance `<session instance>.<sequenceIndex>`, listing only the
- * choices the record's template values showed. Its template values, and the defaults its answered
- * status reads, are its record's.
+ * the session's shuffle seed (none when it has none) and the item's instance
+ * `<session instance>.<sequenceIndex>`, listing only the choices the record's template values
+ * showed. Its template values, and the defaults its answered status reads, are its record's.
  *
  * @param test The test.
  * @param controls The session control of each of the test's item refs, by identifier, as
@@ -944,7 +946,7 @@ const sessionItemReport = (
         ? choiceSequences(
             document.item,
             entry.record.templates,
-            session.seed,
+            session.shuffleSeed,
             `${session.instance}.${String(entry.sequenceIndex)}`,
           )
         : new Map(),

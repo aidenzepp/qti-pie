@@ -65,9 +65,16 @@ const context: ResultContext = {
 const instance = "sit-1";
 
 /**
- * The hand-built sessions' seed, which keys a shuffled Choice's order.
+ * The hand-built sessions' shuffle seed, which keys a shuffled Choice's order, and the seed their
+ * items' records start under.
  */
 const seed = "7";
+
+/**
+ * The hand-built sessions' processing seed, apart from their shuffle seed, so a `choiceSequence`
+ * keyed by it would show another order.
+ */
+const processingSeed = "processing-7";
 
 /**
  * When the hand-built sessions started and last changed: 123.45 seconds apart.
@@ -520,11 +527,12 @@ const processedRecord = (item: SessionItem, processed: number): ItemRecord => ({
 
 /**
  * Write a test session in the form the host stores, its test's outcomes at their starting values,
- * with no outcome processing run and no shuffle seed.
+ * with no outcome processing run, under the processing seed {@link processingSeed}.
  *
  * @param test The test it is a session of.
  * @param items Its items.
  * @param parts Its parts, each ended by default.
+ * @param shuffleSeed Its shuffle seed, {@link seed} by default.
  * @returns The stored session, closed.
  */
 const storedSession = (
@@ -534,6 +542,7 @@ const storedSession = (
     identifier,
     status: "ended",
   })),
+  shuffleSeed: Option.Option<string> = Option.some(seed),
 ): StoredTestSession =>
   Result.getOrElse(
     encodeSession({
@@ -550,8 +559,8 @@ const storedSession = (
       ),
       parts,
       position: 0,
-      seed,
-      shuffleSeed: Option.none(),
+      seed: processingSeed,
+      shuffleSeed,
       started,
       status: "closed",
       test: test.test.identifier,
@@ -722,6 +731,7 @@ const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
  * @param response The Choice's response.
  * @param token The instance it is rendered under.
  * @param record The record the item is redacted under, none for none.
+ * @param shuffleSeed The configuration's seed it is rendered under, {@link seed} by default.
  * @returns Each Control's value, in emitted order.
  */
 const renderedOrder = Effect.fnUntraced(function* renderedOrder(
@@ -729,9 +739,13 @@ const renderedOrder = Effect.fnUntraced(function* renderedOrder(
   response: string,
   token: string,
   record?: RedactRecord,
+  shuffleSeed: Option.Option<string> = Option.some(seed),
 ) {
+  const configuration = yield* configure(
+    Option.match(shuffleSeed, { onNone: () => ({}), onSome: (shuffle) => ({ seed: shuffle }) }),
+  );
   const rendered = yield* Effect.fromResult(
-    render(redact(accepted, record), yield* configure({ seed }), { instance: token }),
+    render(redact(accepted, record), configuration, { instance: token }),
   );
 
   return elementsOf(parseHtml(rendered.html))
@@ -1018,6 +1032,53 @@ describe("results", () => {
         assert.isUndefined(
           itemOf(report, "one").responses["RESPONSE"]?.attributes["choiceSequence"],
         );
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "writes a session's choiceSequence keyed by its shuffle seed, never its processing seed, and with no shuffle seed in the order the instance alone gives",
+    () =>
+      Effect.gen(function* shuffleSeedSequence() {
+        const shuffled = yield* fixtureItem("p1-multiple-choice.xml");
+        const test = yield* acceptTest("shuffled", [
+          part("P1", individual, [ref("two", "p1-multiple-choice.xml")]),
+        ]);
+        const items: readonly SessionItem[] = [
+          sessionItem(shuffled, "two", 1, { duration: 4, presented: true }),
+        ];
+        const token = `${instance}.1`;
+        const sequenceUnder = Effect.fnUntraced(function* sequenceUnder(
+          shuffleSeed: Option.Option<string>,
+        ) {
+          const { report, xml } = yield* reported({
+            context,
+            items: new Map([["two", shuffled]]),
+            kind: "test",
+            session: storedSession(test, items, undefined, shuffleSeed),
+            test,
+          });
+          yield* assertValid(xml);
+
+          return itemOf(report, "two").responses["RESPONSE"]?.attributes["choiceSequence"];
+        });
+        const seeded = yield* sequenceUnder(Option.some(seed));
+        const unseeded = yield* sequenceUnder(Option.none());
+        const underProcessingSeed = (yield* renderedOrder(
+          shuffled,
+          "RESPONSE",
+          token,
+          undefined,
+          Option.some(processingSeed),
+        )).join(" ");
+
+        assert.strictEqual(seeded, (yield* renderedOrder(shuffled, "RESPONSE", token)).join(" "));
+        assert.strictEqual(
+          unseeded,
+          (yield* renderedOrder(shuffled, "RESPONSE", token, undefined, Option.none())).join(" "),
+        );
+        assert.notStrictEqual(seeded, underProcessingSeed);
+        assert.notStrictEqual(unseeded, underProcessingSeed);
       }),
     { tags: ["qti-xsd"] },
   );

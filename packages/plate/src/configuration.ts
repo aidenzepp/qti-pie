@@ -21,15 +21,16 @@ import { defaultOutputBudget, maximumOutputBudget } from "#plate/output-budget.t
  * string's `length` counts them (UTF-16 code units), and is 16,777,216 (16 MiB of ASCII) by
  * default; past it `render` fails. `redact` takes the same budget as its last argument and stops
  * printing an item's printed variables once their text passes it, so `render` fails then too. Its
- * maximum, 536,870,888, is V8's longest string, the smallest
- * of the engines' limits, so no budget asks an engine for a string it cannot build. `seed` is a
- * string, used as given: it keys a shuffled Choice's order with the
- * instance and the response, and `startTest` keeps it as the session's seed, under which each
- * item's template processing draws. With no seed, `startTest` draws one (128 random bits), while
- * `render` alone keys an absent seed as the empty string, so the order then follows the instance
- * alone. `begin` never reads the configuration: it draws a seed when its own `start.seed` is
- * absent. So a single item has two seeds: the configuration's keys its shuffle, and its record's
- * keys its processing. {@link configure} reads an empty `seed` as no seed.
+ * maximum, 536,870,888, is V8's longest string, the smallest of the engines' limits, so no budget
+ * asks an engine for a string it cannot build. `seed` is a string, used as given: it keys a
+ * shuffled Choice's order with the instance and the response, and nothing else. `startTest` keeps
+ * it as the session's shuffle seed, which keys only the session's shuffles; with none, a session's
+ * shuffle, like `render`'s, keys an absent seed as the empty string, so the order then follows the
+ * instance alone. Processing never reads it: `begin` draws a record's seed when its own
+ * `start.seed` is absent, and `startTest` draws a session's processing seed when its context's
+ * `seed` is absent. So an item and a test session each have two seeds: the configuration's keys the
+ * shuffle, and the record's or the session's keys the processing. {@link configure} reads an empty
+ * `seed` as no seed.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Configuration` is the Schema and the type of a configuration under one name, the interface the phase's slice list fixes, so a decoder and a signature read as one thing.
 export const Configuration = Schema.Struct({
