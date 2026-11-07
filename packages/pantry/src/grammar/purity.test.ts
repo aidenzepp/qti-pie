@@ -10,7 +10,9 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
 
 /**
  * The pure layers, relative to `src`: vocabulary data, the generators and the XDM model. Each is a
- * function of its inputs, so none reaches grizzle or the modules that talk to the database.
+ * function of its inputs, so none reaches grizzle or the modules that talk to the database. The one
+ * exception is a stage-wide shared file: `install.ts` reads the committed snapshot's codes through
+ * `db/codes.ts` and `db/snapshot.ts`, so its rosters are declared in the order grizzle accepts.
  */
 const pureLayers = "{vocab,grammar,model}/**/*.ts";
 
@@ -19,6 +21,13 @@ const pureLayers = "{vocab,grammar,model}/**/*.ts";
  * it.
  */
 const install = "grammar/install.ts";
+
+/**
+ * The modules under `db/` that `install.ts` alone may import: the reader of the committed
+ * snapshot's roster codes and the snapshot's path and error it names. Neither reaches the login or
+ * the connection.
+ */
+const committedCodes: readonly string[] = ["#pantry/db/codes.ts", "#pantry/db/snapshot.ts"];
 
 /**
  * The modules outside `src/test/` that import its helpers today: none since the processing
@@ -129,6 +138,16 @@ describe("the pure layers", () => {
     const forbidden = ["#pantry/qti/", "#pantry/import/", "#pantry/export/"];
 
     assert.deepStrictEqual(offences(modules(pureLayers), forbidden), []);
+  });
+
+  it("import nothing under db/, but install.ts's read of the committed snapshot's codes", () => {
+    const files = modules(pureLayers).filter((file) => file !== install);
+    const installOffences = offences([install], ["#pantry/db/"]).filter(
+      (offence) => !committedCodes.some((specifier) => offence.endsWith(`: ${specifier}`)),
+    );
+
+    assert.deepStrictEqual(offences(files, ["#pantry/db/"]), []);
+    assert.deepStrictEqual(installOffences, []);
   });
 });
 

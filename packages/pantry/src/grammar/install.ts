@@ -33,6 +33,7 @@
  */
 import { closed, closedId, fin, natural, slot, str } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Result } from "effect";
+import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
@@ -64,16 +65,19 @@ import { typeDerivations } from "#pantry/vocab/inventory/models.ts";
 export const grammar: ComposedGrammar = Result.getOrThrowWith(composed(), (refusal) => refusal);
 
 /**
- * Take a generated roster's handles as a nonempty list, the form a grizzle roster declares.
+ * Take a generated roster's handles as a nonempty list, the form a grizzle roster declares, in the
+ * order grizzle accepts: the handles the committed snapshot holds for the roster, in their code
+ * order, then the handles new since the snapshot, in the generator's order (`inCommittedOrder`).
  *
- * @param name - The roster's name, for the defect's message.
- * @param handles - The handles in code order.
- * @returns The same handles, typed nonempty.
+ * @param name - The roster's name: its declared name, which keys the snapshot's codes, and the
+ *   defect's message.
+ * @param handles - The handles in the generator's order.
+ * @returns The same handles, typed nonempty and ordered by the committed codes.
  * @throws {Error} When the generator gave the roster no handle, which no vocabulary list does.
  */
 const nonEmpty = <H extends string>(name: string, handles: readonly H[]): readonly [H, ...H[]] => {
   if (Arr.isReadonlyArrayNonEmpty(handles)) {
-    return handles;
+    return inCommittedOrder(committedRosters.get(name) ?? [], handles);
   }
 
   throw new Error(
@@ -336,12 +340,17 @@ export const Identity = closed(
  * handle first, in code order, a kind governing its own elements by its declared type; then each
  * (kind, type) where the type governs an element of the kind in place of its declared type, or a
  * simple type governs a foreign element's text (spec readings 60 and 84), spelled `<kind> <type>`
- * (`attributes.ts`). A kind's handle holds no space, so no two spellings meet.
+ * (`attributes.ts`). A kind's handle holds no space, so no two spellings meet. The list is ordered
+ * as the `Governor` roster, by the committed snapshot's codes with new handles last, so a kind's
+ * handle keeps its place only while the snapshot says so.
  */
-export const Governor = closed("Governor", [
-  ...nonEmpty("NodeKind", grammar.kinds.nodeKind.handles),
-  ...grammar.attributes.governor.payload[0].roster.handles,
-]);
+export const Governor = closed(
+  "Governor",
+  nonEmpty("Governor", [
+    ...nonEmpty("NodeKind", grammar.kinds.nodeKind.handles),
+    ...grammar.attributes.governor.payload[0].roster.handles,
+  ]),
+);
 
 /**
  * A generated value as a `Governor` handle ({@link handleLookup}).

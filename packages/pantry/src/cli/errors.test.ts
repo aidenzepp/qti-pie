@@ -19,7 +19,7 @@ import {
   RoundtripDiffers,
 } from "#pantry/cli/errors.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
-import { SnapshotLoadError } from "#pantry/db/layer.ts";
+import { SnapshotLoadError } from "#pantry/db/snapshot.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
 import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
 import { RootMissing } from "#pantry/model/assemble.ts";
