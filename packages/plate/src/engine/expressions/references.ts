@@ -1,8 +1,8 @@
 /**
  * The references family of the engine: the evaluators of the expressions that read a variable, a
  * declaration or a literal, `qti-variable`, `qti-correct`, `qti-base-value`, `qti-map-response`,
- * `qti-map-response-point`, `qti-default` and `qti-null`, and the stub markers of the two kinds the
- * family has not landed (`qti-random-integer` and `qti-random-float`).
+ * `qti-map-response-point`, `qti-default` and `qti-null`, and of the two that draw from the scope's
+ * stream, `qti-random-integer` and `qti-random-float`.
  *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option`, `Array`
  * and `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
@@ -15,8 +15,24 @@ import type { Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.t
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
-import { floatValue, toFloat } from "#plate/engine/numbers.ts";
-import { builtInType, own, variableValue } from "#plate/engine/refs.ts";
+import {
+  bitLengthOf,
+  floatValue,
+  integerBitBound,
+  integerValue,
+  numberOf,
+  toFloat,
+} from "#plate/engine/numbers.ts";
+import { drawBelow, drawFloat } from "#plate/engine/random.ts";
+import type { Draw } from "#plate/engine/random.ts";
+import {
+  builtInType,
+  own,
+  referenceInteger,
+  referenceValue,
+  variableValue,
+} from "#plate/engine/refs.ts";
+import type { FloatOrRef } from "#plate/model/expression.ts";
 import type {
   AreaMapping,
   Item,
@@ -431,9 +447,141 @@ const evaluateDefault: Evaluator<"default"> = (expression, scope) => {
 const evaluateNull: Evaluator<"null"> = () => Result.succeed(nullOf("string", "single"));
 
 /**
- * The references family's evaluators by kind: M1's five, `qti-default` and `qti-null` landed, and
- * the stub marker for each kind the family has not landed (ruling R2), which the dispatcher in
- * `#plate/engine/evaluate.ts` never reaches on a checked item.
+ * Draw a `qti-random-integer`'s value from its resolved attributes: `min + step × j`, with `j`
+ * drawn by `drawBelow` among the `⌊(max − min) / step⌋ + 1` values the range holds, so with `min`
+ * 2, `max` 11 and `step` 3 the values 2, 5, 8 and 11 are equally likely.
+ *
+ * Every NULL is settled before the first draw, so a NULL draws nothing and leaves the stream where
+ * it was for every later draw:
+ *
+ * - `max` below `min`, or a `step` of 0 or below: "the range holds no value and the result is NULL"
+ *   (G-R1 draft 148).
+ * - `min` or `max` of more than {@link integerBitBound} bits (1,000,000): the drawn integer is a
+ *   computed result, held to that bound by the operator's ruling `afb7e648`, and within the bound
+ *   every value the range holds is too, so the draw is never past it (G-R2, pending).
+ *
+ * A range of one value, `step` beyond `max − min` among them, draws nothing and gives `min`.
+ *
+ * @param draw The scope's stream.
+ * @param min The least value.
+ * @param max The greatest value.
+ * @param step The step between values.
+ * @returns The single integer, or NULL of a single integer.
+ */
+const integerDraw = (draw: Draw, min: bigint, max: bigint, step: bigint): Value => {
+  if (
+    max < min ||
+    step <= 0n ||
+    bitLengthOf(min) > integerBitBound ||
+    bitLengthOf(max) > integerBitBound
+  ) {
+    return nullOf("integer", "single");
+  }
+
+  return integerValue(min + step * drawBelow(draw, (max - min) / step + 1n));
+};
+
+/**
+ * Give the value of a `qti-random-integer`: a single integer drawn from its range
+ * ({@link integerDraw}).
+ *
+ * Its `min`, `max` and `step` are resolved first, in that order, each its literal or the value of
+ * the variable it names ({@link referenceInteger}); a NULL there gives NULL, before any draw.
+ *
+ * @param expression The `qti-random-integer`.
+ * @param scope The variables of the attempt and the stream it draws from.
+ * @returns The single integer or its NULL, or an {@link UnknownIdentifierError} when an attribute
+ *   names a variable the variables hold no value of, which a checked item never reaches.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-random-integer
+ */
+const evaluateRandomInteger: Evaluator<"random-integer"> = (expression, scope) =>
+  Result.gen(function* drawRandomInteger() {
+    const min = yield* referenceInteger(scope.variables, expression.min);
+    const max = yield* referenceInteger(scope.variables, expression.max);
+    const step = yield* referenceInteger(scope.variables, expression.step);
+
+    return Option.match(Option.all([min, max, step]), {
+      onNone: () => nullOf("integer", "single"),
+      onSome: ([least, greatest, by]) => integerDraw(scope.draw, least, greatest, by),
+    });
+  });
+
+/**
+ * Give the float a `qti-random-float`'s `min` or `max` stands for: its literal, or the value of the
+ * float variable it names, through `referenceValue` with the kind's checked float facet.
+ *
+ * @param variables The variables of the attempt.
+ * @param reference The attribute's value.
+ * @returns The float; none when the named variable holds NULL or a value that is not a single
+ *   float, which the validator refuses (P24) on a checked item; or an
+ *   {@link UnknownIdentifierError} when it names a variable the variables hold no value of.
+ */
+const referenceFloat = (
+  variables: Variables,
+  reference: FloatOrRef,
+): Result.Result<Option.Option<number>, UnknownIdentifierError> =>
+  Result.map(referenceValue(variables, { baseType: "float", checked: true, reference }), (value) =>
+    Option.flatMap(numberOf(value), (single) =>
+      single.baseType === "float" ? Option.some(single.value) : Option.none(),
+    ),
+  );
+
+/**
+ * Draw a `qti-random-float`'s value from its resolved bounds, with `u` the stream's next float in
+ * [0, 1) (`drawFloat`, two draws): `min + u × (max − min)`, or `min × (1 − u) + max × u` when
+ * `max − min` is not finite, so a range across the whole double line gives a finite float; the
+ * result is then clamped to `[min, max]`, which a rounding of either form can step past.
+ *
+ * A bound that is NaN or infinite, or a `max` below `min`, gives NULL before the draw, so it draws
+ * nothing (G-R2, pending). Each operation is one IEEE 754 addition, subtraction or multiplication,
+ * correctly rounded, so every engine gives the same float for the same draws.
+ *
+ * @param draw The scope's stream.
+ * @param min The least value.
+ * @param max The greatest value.
+ * @returns The single float, or NULL of a single float.
+ */
+const floatDraw = (draw: Draw, min: number, max: number): Value => {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) {
+    return nullOf("float", "single");
+  }
+
+  const u = drawFloat(draw);
+  const span = max - min;
+  const drawn = Number.isFinite(span) ? min + u * span : min * (1 - u) + max * u;
+  if (drawn < min) {
+    return floatValue(min);
+  }
+
+  return floatValue(drawn > max ? max : drawn);
+};
+
+/**
+ * Give the value of a `qti-random-float`: a single float drawn from `[min, max]`
+ * ({@link floatDraw}).
+ *
+ * Its `min` and `max` are resolved first, in that order, each its literal or the value of the
+ * variable it names ({@link referenceFloat}); a NULL there gives NULL, before any draw.
+ *
+ * @param expression The `qti-random-float`.
+ * @param scope The variables of the attempt and the stream it draws from.
+ * @returns The single float or its NULL, or an {@link UnknownIdentifierError} when a bound names a
+ *   variable the variables hold no value of, which a checked item never reaches.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-random-float
+ */
+const evaluateRandomFloat: Evaluator<"random-float"> = (expression, scope) =>
+  Result.gen(function* drawRandomFloat() {
+    const min = yield* referenceFloat(scope.variables, expression.min);
+    const max = yield* referenceFloat(scope.variables, expression.max);
+
+    return Option.match(Option.all([min, max]), {
+      onNone: () => nullOf("float", "single"),
+      onSome: ([least, greatest]) => floatDraw(scope.draw, least, greatest),
+    });
+  });
+
+/**
+ * The references family's evaluators by kind.
  */
 export const referencesEvaluators: FamilyTable<
   | "base-value"
@@ -452,7 +600,7 @@ export const referencesEvaluators: FamilyTable<
   "map-response": evaluateMapResponse,
   "map-response-point": evaluateMapResponsePoint,
   null: evaluateNull,
-  "random-float": "unlanded",
-  "random-integer": "unlanded",
+  "random-float": evaluateRandomFloat,
+  "random-integer": evaluateRandomInteger,
   variable: evaluateVariable,
 };
