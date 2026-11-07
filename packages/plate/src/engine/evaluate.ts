@@ -271,10 +271,11 @@ const isTrue = (value: Value): boolean => {
  *   mappings.
  * @param variables The variables of the attempt.
  * @param draw The stream the expression's random kinds draw from. Without one, the call builds the
- *   default stream, `drawStream("")`, afresh, which stands for "no draws expected": it serves tests
- *   and isolated evaluation. Every processing entry passes the stream of its own key instead
- *   (`runAttempt` its response key, `firstAttempt` its template key), because an entry left on the
- *   default would draw the same numbers for every session and attempt, and no test would fail.
+ *   default stream, `drawStream("", "")`, afresh, which stands for "no draws expected": it serves
+ *   tests and isolated evaluation. Every processing entry passes its own stream instead, keyed by
+ *   the record's seed under its own label (`runAttempt` its response label, `firstAttempt` its
+ *   template label), because an entry left on the default would draw the same numbers for every
+ *   session and attempt, and no test would fail.
  * @returns The expression's value; or an {@link EngineFailure}: an {@link UnknownIdentifierError}
  *   when it names a variable or response that is not held, or an {@link UnmappedResponseError} when
  *   a `map-response` names a response with no mapping or a `map-response-point` one with no area
@@ -284,7 +285,7 @@ export const evaluateExpression = (
   expression: Expression,
   item: Item,
   variables: Variables,
-  draw: Draw = drawStream(""),
+  draw: Draw = drawStream("", ""),
 ): Result.Result<Value, EngineFailure> => evaluate(expression, { draw, item, variables });
 
 /**
@@ -544,11 +545,12 @@ const runSequence = (
  * @param item The item they belong to.
  * @param variables The variables before the rules run.
  * @param draw The one stream every rule's expressions draw from, in the order the rules run them.
- *   Without one, the call builds the default stream, `drawStream("")`, afresh, which stands for "no
- *   draws expected": it serves tests and isolated evaluation. Every processing entry passes the
- *   stream of its own key instead (`runAttempt` its response key, `firstAttempt` its template key;
- *   outcome processing brings its own), because an entry left on the default would draw the same
- *   numbers for every session and attempt, and no test would fail.
+ *   Without one, the call builds the default stream, `drawStream("", "")`, afresh, which stands for
+ *   "no draws expected": it serves tests and isolated evaluation. Every processing entry passes its
+ *   own stream instead, keyed by the record's seed under its own label (`runAttempt` its response
+ *   label, `firstAttempt` its template label; outcome processing brings its own), because an entry
+ *   left on the default would draw the same numbers for every session and attempt, and no test
+ *   would fail.
  * @returns The variables after the last rule run; or the first failure, after which no rule runs:
  *   an {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do
  *   not hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
@@ -560,6 +562,6 @@ export const runRules = (
   rules: readonly Rule[],
   item: Item,
   variables: Variables,
-  draw: Draw = drawStream(""),
+  draw: Draw = drawStream("", ""),
 ): Result.Result<Variables, EngineFailure> =>
   Result.map(runSequence(rules, item, variables, draw), (run) => run.variables);

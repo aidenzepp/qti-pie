@@ -44,12 +44,12 @@ export const processingLocation = "items/processing.xml";
  *
  * @param item The item, whose declarations the evaluators read.
  * @param variables The variables of the attempt.
- * @param draw The stream its random kinds draw from; `drawStream("test")`, fresh, when none is
+ * @param draw The stream its random kinds draw from; `drawStream("", "test")`, fresh, when none is
  *   given.
  * @returns The scope.
  */
 export const scopeOf = (item: Item, variables: Variables, draw?: Draw): Scope => ({
-  draw: draw ?? drawStream("test"),
+  draw: draw ?? drawStream("", "test"),
   item,
   variables,
 });

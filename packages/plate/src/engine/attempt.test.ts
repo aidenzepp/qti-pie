@@ -4,7 +4,7 @@ import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/evaluate.ts";
-import { drawBelow, drawStream, responseKey, templateKey } from "#plate/engine/random.ts";
+import { drawBelow, drawStream, responseLabel, templateLabel } from "#plate/engine/random.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
@@ -565,17 +565,18 @@ const readsOverrides = itemDocument(
 
 /**
  * Give the value {@link drawsTemplate}'s {@link randomInteger} draws under a seed: the first
- * `drawBelow` over the stream of the item's template key.
+ * `drawBelow` over the stream keyed by the seed under the item's template label.
  *
  * @param seed The record's seed.
  * @returns The integer.
  */
 const templateDraw = (seed: string): bigint =>
-  drawBelow(drawStream(templateKey(seed, instance, "attempt")), drawnCount);
+  drawBelow(drawStream(seed, templateLabel(instance, "attempt")), drawnCount);
 
 /**
  * Give the value the nth {@link randomInteger} an attempt's response processing evaluates draws,
- * counting from 1: the nth `drawBelow` over the one stream of the attempt's response key.
+ * counting from 1: the nth `drawBelow` over the one stream keyed by the seed under the attempt's
+ * response label.
  *
  * @param numAttempts The attempt's count, this attempt included.
  * @param nth Which draw, from 1.
@@ -583,7 +584,7 @@ const templateDraw = (seed: string): bigint =>
  * @returns The integer.
  */
 const responseDraw = (numAttempts: number, nth: number, seed = ""): bigint => {
-  const draw = drawStream(responseKey(seed, instance, numAttempts));
+  const draw = drawStream(seed, responseLabel(instance, numAttempts));
   let drawn = drawBelow(draw, drawnCount);
   for (let call = 1; call < nth; call += 1) {
     drawn = drawBelow(draw, drawnCount);
@@ -863,9 +864,9 @@ describe("runAttempt", () => {
   );
 
   it.effect(
-    "[I-9a] draws attempt 1's response processing under the response key …␟response␟1, and attempt 2's under …␟2",
+    "[I-9a] draws attempt 1's response processing under the response label …␟response␟1, and attempt 2's under …␟2",
     () =>
-      Effect.gen(function* drawsUnderResponseKey() {
+      Effect.gen(function* drawsUnderResponseLabel() {
         const item = yield* buildItem(drawsOnce);
         const first = yield* Effect.fromResult(
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
@@ -874,10 +875,14 @@ describe("runAttempt", () => {
           runAttempt(item, first, { RESPONSE: identifierValue("true") }),
         );
 
-        // The two response keys and the empty key give three values, so the case tells them apart.
+        // The two response labels and the default stream give three values, so the case tells them
+        // apart.
         assert.strictEqual(
-          new Set([responseDraw(1, 1), responseDraw(2, 1), drawBelow(drawStream(""), drawnCount)])
-            .size,
+          new Set([
+            responseDraw(1, 1),
+            responseDraw(2, 1),
+            drawBelow(drawStream("", ""), drawnCount),
+          ]).size,
           3,
         );
         assert.deepStrictEqual(first.outcomes["DRAWN"], integerValue(responseDraw(1, 1)));
@@ -886,7 +891,7 @@ describe("runAttempt", () => {
   );
 
   it.effect(
-    "[I-9a] evaluates every operand of qti-and, left to right, so the rule after it draws the response key's second value",
+    "[I-9a] evaluates every operand of qti-and, left to right, so the rule after it draws the response stream's second value",
     () =>
       Effect.gen(function* evaluatesEveryOperand() {
         const item = yield* buildItem(andThenDraws);
@@ -894,7 +899,7 @@ describe("runAttempt", () => {
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
 
-        // A qti-and that stopped at its false operand would leave SECOND the key's first value.
+        // A qti-and that stopped at its false operand would leave SECOND the stream's first value.
         assert.notStrictEqual(responseDraw(1, 1), responseDraw(1, 2));
         assert.deepStrictEqual(after.outcomes["FIRST"], booleanValue(false));
         assert.deepStrictEqual(after.outcomes["SECOND"], integerValue(responseDraw(1, 2)));
@@ -902,7 +907,7 @@ describe("runAttempt", () => {
   );
 
   it.effect(
-    "[I-9a] evaluates no operand of qti-custom-operator, so the random kind inside it never draws and the rule after it draws the response key's first value",
+    "[I-9a] evaluates no operand of qti-custom-operator, so the random kind inside it never draws and the rule after it draws the response stream's first value",
     () =>
       Effect.gen(function* evaluatesNoCustomOperand() {
         const item = yield* buildItem(customThenDraws);
@@ -910,7 +915,7 @@ describe("runAttempt", () => {
           runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
         );
 
-        // An operator that evaluated its operand would leave SECOND the key's second value.
+        // An operator that evaluated its operand would leave SECOND the stream's second value.
         assert.notStrictEqual(responseDraw(1, 1), responseDraw(1, 2));
         assert.deepStrictEqual(after.outcomes["FIRST"], nullOf("integer", "single"));
         assert.deepStrictEqual(after.outcomes["SECOND"], integerValue(responseDraw(1, 1)));
@@ -1048,7 +1053,7 @@ describe("runAttempt", () => {
 
 describe("firstAttempt", () => {
   it.effect(
-    "[I-5] runs template processing under the template key and writes each default, the template-set one winning",
+    "[I-5] runs template processing under the seed and the template label and writes each default, the template-set one winning",
     () =>
       Effect.gen(function* startsTemplated() {
         const item = yield* buildItem(drawsTemplate);
@@ -1056,7 +1061,7 @@ describe("firstAttempt", () => {
 
         const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "42" }));
 
-        // The seeded key and the unseeded one give different values, and neither is the declared 7.
+        // The seed "42" and the seed "" give different values, and neither is the declared 7.
         assert.isTrue(Option.isSome(item.templateProcessing));
         assert.strictEqual(new Set([templateDraw("42"), templateDraw(""), 7n]).size, 3);
         assert.deepStrictEqual(record, {

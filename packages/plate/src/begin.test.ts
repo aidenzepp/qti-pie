@@ -5,7 +5,7 @@ import { decodeRecord } from "#plate/codec/record.ts";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceElement } from "#plate/document/source.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
-import { drawBelow, drawStream, templateKey } from "#plate/engine/random.ts";
+import { drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { restore } from "#plate/restore.ts";
@@ -146,13 +146,13 @@ const untemplated = accepted(
 
 /**
  * Give the value {@link templated}'s template processing draws for `N` under a seed: the first
- * `drawBelow` over the stream of the item's template key.
+ * `drawBelow` over the stream keyed by the seed under the item's template label.
  *
  * @param seed The record's seed, the host's seed written with `String`, `""` when it gave none.
  * @returns The integer.
  */
 const drawnUnder = (seed: string): bigint =>
-  drawBelow(drawStream(templateKey(seed, instance, "templated")), drawnCount);
+  drawBelow(drawStream(seed, templateLabel(instance, "templated")), drawnCount);
 
 /**
  * Begin an item and decode the record, which must succeed.
@@ -171,7 +171,7 @@ const begun = Effect.fnUntraced(function* begun(document: Accepted, seed?: numbe
 
 describe("begin", () => {
   it.effect(
-    "[I-5] stores the record of the first attempt: the seed, the template values drawn under the template key and each response at its default",
+    "[I-5] stores the record of the first attempt: the seed, the template values drawn under the template label and each response at its default",
     () =>
       Effect.gen(function* storesFirstAttempt() {
         const { record } = yield* begun(templated, 42);
