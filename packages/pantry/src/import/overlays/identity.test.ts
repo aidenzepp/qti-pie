@@ -1448,13 +1448,14 @@ describe("import/overlays/identity.ts, a catalog's scope rows (R9-c)", () => {
  * Write the rows of an item whose body holds one `m:share` of each `src`.
  *
  * @param srcs - Each share's `src`.
+ * @param assembled - Whether the document is in an assembly.
  * @returns The document's identity rows.
  */
-const sharedRows = (srcs: readonly string[]) => {
+const sharedRows = (srcs: readonly string[], assembled?: boolean) => {
   const shares = srcs.map((src) => elementOf("m:share", [attribute("src", src)], []));
   const root = elementOf("qti-assessment-item", [], shares);
 
-  return rowsOf(documentOf(root), ids);
+  return rowsOf(documentOf(root), assembled === undefined ? ids : { ...ids, assembled });
 };
 
 describe("import/overlays/identity.ts, a share's same-document fragment (P7)", () => {
@@ -1465,12 +1466,27 @@ describe("import/overlays/identity.ts, a share's same-document fragment (P7)", (
 
     assert.deepStrictEqual(
       [...rows.ShareFragment.values()],
-      [{ document: documentNode, id: "a", node: idOf(2), src: "#a" }],
+      [{ assembled: false, document: documentNode, id: "a", node: idOf(2), src: "#a" }],
     );
     assert.deepStrictEqual(
       [...rows.IdrefTarget.values()].map(({ assembled, id }) => [assembled, id]),
       [[false, "a"]],
     );
+  });
+
+  it("gives a share the assembled of its document, none read as no", () => {
+    for (const assembled of [true, false, undefined]) {
+      const rows = sharedRows(["#a"], assembled);
+
+      assert.deepStrictEqual(
+        [...rows.ShareFragment.values()].map((row) => row.assembled),
+        [assembled ?? false],
+      );
+      assert.deepStrictEqual(
+        [...rows.IdrefTarget.values()].map((row) => row.assembled),
+        [assembled ?? false],
+      );
+    }
   });
 
   it("gives a share whose src names another document, or only a #, no row", () => {

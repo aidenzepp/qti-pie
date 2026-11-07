@@ -5,6 +5,10 @@
  * each element a share or its target stands on, up to the nearest `m:math`, and a `ShareTarget` row
  * for each `m:share` whose fragment names an element of its document.
  *
+ * `placedShareRowsOf` places the shares of a document in an assembly under each instance of it
+ * (spec reading 117), over documents built by construction and instances written by hand; its
+ * oracle is the placed law as the module states it, read by `placedBreachesOf` from the rows alone.
+ *
  * Each case is built by construction. The oracle is the law as the module states it, read by
  * `breachesOf` below from the rows alone: each row's rank is below its parent's (but an
  * `m:math`'s), each row copies its parent's rank, and each share's rank is above its target's, with
@@ -14,10 +18,16 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { GoverningOf } from "#pantry/grammar/install.ts";
-import { rowsOf } from "#pantry/import/overlays/mathml-share.ts";
-import type { MathmlShareRows } from "#pantry/import/overlays/mathml-share.ts";
+import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
+import { placedShareRowsOf, rowsOf } from "#pantry/import/overlays/mathml-share.ts";
+import type {
+  IncludeSite,
+  MathmlShareRows,
+  PlacedShareRows,
+  PlacementRoot,
+} from "#pantry/import/overlays/mathml-share.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { closedName } from "#pantry/model/xdm.ts";
+import { closedName, flatten } from "#pantry/model/xdm.ts";
 import type {
   XdmAttribute,
   XdmChild,
@@ -25,6 +35,7 @@ import type {
   XdmDocument,
   NodeId,
 } from "#pantry/model/xdm.ts";
+import { splicingParents } from "#pantry/qti/tests.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 
 /**
@@ -49,6 +60,8 @@ type CaseKind =
   | "m:ci"
   | "m:cn"
   | "m:math"
+  | "m:mi"
+  | "m:mrow"
   | "m:plus"
   | "m:semantics"
   | "m:share"
@@ -466,4 +479,295 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
     },
     testTimeoutMs,
   );
+});
+
+/**
+ * A document of the placed cases: its tree, and the ids its nodes are written under, numbered from
+ * `base` so no two documents of a case share an id.
+ */
+interface Written {
+  readonly base: number;
+  readonly tree: XdmDocument<Composed>;
+}
+
+/**
+ * The ids of a written document.
+ *
+ * @param written - The document.
+ * @returns Its ids, `base` and the node's number in document order, in an assembly.
+ */
+const assembledIds = ({ base }: Written) => ({
+  assembled: true,
+  documentAt: () => Option.none<NodeId>(),
+  idOf: (index: number) => idOf(base + index),
+});
+
+/**
+ * Place the shares of some written documents, as the package's pass reads them.
+ *
+ * @param documents - Every document of the package.
+ * @param instances - Every assembly's root instance.
+ * @param sites - The includes' sites.
+ * @returns The placed rows.
+ */
+const placedOf = (
+  documents: readonly Written[],
+  instances: readonly PlacementRoot[],
+  sites: readonly IncludeSite[] = [],
+): PlacedShareRows => {
+  const rows = documents.map((written) => identityRowsOf(written.tree, assembledIds(written)));
+
+  return placedShareRowsOf({
+    ids: rows.flatMap(({ DocumentId }) => [...DocumentId.values()]),
+    instances,
+    nodesOf: (document) => {
+      const written = documents.find(({ base }) => idOf(base) === document);
+
+      return written === undefined ? [] : flatten(written.tree, assembledIds(written).idOf).nodes;
+    },
+    shares: rows.flatMap(({ ShareFragment }) => [...ShareFragment.values()]),
+    sites,
+  });
+};
+
+/**
+ * An item of the placed cases whose math is the given markup, followed by a division the include
+ * stands at: nodes 0 the document, 1 the item, and the math, then the division, last.
+ *
+ * @param math - The `m:math` the item holds.
+ * @returns The item at base 0.
+ */
+const itemWith = (math: XdmClosedElement<Composed>): Written => ({
+  base: 0,
+  tree: documentOf(elementOf("qti-assessment-item", [], [math, elementOf("div")])),
+});
+
+/**
+ * A fragment of the placed cases: a root `m:math` holding the given elements, at base 100.
+ *
+ * @param children - The math's children.
+ * @returns The fragment.
+ */
+const fragmentWith = (...children: readonly XdmChild<Composed>[]): Written => ({
+  base: 100,
+  tree: documentOf(elementOf("m:math", [], children)),
+});
+
+/**
+ * An assembly of an item and the fragment it includes, an instance of each.
+ *
+ * @param item - The item's base.
+ * @param include - The node of the include, the division that ends the item.
+ * @param instance - The fragment's instance's id.
+ * @returns The assembly's root.
+ */
+const assemblyOf = (item: number, include: number, instance: NodeId): PlacementRoot => ({
+  assembly: idOf(item),
+  assemblyKind: "qti-assessment-item",
+  children: [{ children: [], document: idOf(100), id: instance, site: idOf(item + include) }],
+  document: idOf(item),
+  id: idOf(item),
+  site: idOf(item),
+});
+
+/**
+ * The include's site: the item's root holds it, a parent whose include splices.
+ *
+ * @param item - The item's base.
+ * @param include - The node of the include.
+ * @returns The site.
+ */
+const siteOf = (item: number, include: number): IncludeSite => ({
+  node: idOf(item + include),
+  parent: idOf(item + 1),
+  parentKind: splicingParents[0] ?? assert.fail("some parent's include splices"),
+});
+
+/**
+ * Judge the placed rows by the placed law, from the rows alone.
+ *
+ * @param rows - A package's placed rows.
+ * @returns The breaches, each a sentence; none when the database would accept the rows.
+ */
+const placedBreachesOf = (rows: PlacedShareRows): readonly string[] => {
+  const rankAt = (instance: NodeId, node: NodeId) =>
+    rows.PlacedMathRank.get(JSON.stringify([instance, node]));
+
+  return [
+    ...[...rows.PlacedMathRank.values()].flatMap((row) => {
+      if (row.kind === "m:math" || row.node === row.parent) {
+        return [];
+      }
+
+      const parent = rankAt(row.instance, row.parent);
+
+      return parent === undefined
+        ? [`the row of ${row.node} has no row for its parent`]
+        : [
+            ...(parent.rank === row.parentRank ? [] : [`${row.node} copies a wrong parentRank`]),
+            ...(row.rank < row.parentRank ? [] : [`${row.node} is not below its parent`]),
+          ];
+    }),
+    ...[...rows.PlacedShareTarget.values()].flatMap((row) => {
+      const share = rankAt(row.instance, row.node);
+      const target = rankAt(row.targetInstance, row.target);
+
+      return [
+        ...(share?.rank === row.shareRank ? [] : [`${row.node} copies a wrong shareRank`]),
+        ...(target?.rank === row.targetRank ? [] : [`${row.node} copies a wrong targetRank`]),
+        ...(row.shareRank > row.targetRank ? [] : [`${row.node} is not above its target`]),
+      ];
+    }),
+  ];
+};
+
+describe("import/overlays/mathml-share.ts, the shares of an assembled document (spec reading 117)", () => {
+  // Nodes of the item: 0 document, 1 item, 2 math, 3 mi id=x, 4 division (the include).
+  // Nodes of the fragment: 100 document, 101 math, 102 share.
+  it("writes no MathRank or ShareTarget row for a document in an assembly", () => {
+    const rows = rowsOf(
+      documentOf(
+        elementOf(
+          "m:math",
+          [],
+          [plusOf(undefined, [elementOf("m:ci", [attribute("id", "a")]), shareOf("#a")])],
+        ),
+      ),
+      { ...ids, assembled: true },
+    );
+
+    assert.strictEqual(rows.MathRank.size, 0);
+    assert.strictEqual(rows.ShareTarget.size, 0);
+  });
+
+  it("places a fragment's share naming its item's element once, in the item's instance", () => {
+    const rows = placedOf(
+      [
+        itemWith(elementOf("m:math", [], [elementOf("m:mi", [attribute("id", "x")])])),
+        fragmentWith(shareOf("#x")),
+      ],
+      [assemblyOf(0, 4, idOf(900))],
+      [siteOf(0, 4)],
+    );
+    const placed = [...rows.PlacedShareTarget.values()];
+
+    assert.deepStrictEqual(placed.length, 1);
+    assert.deepStrictEqual(placed[0], {
+      assembly: idOf(0),
+      assemblyKind: "qti-assessment-item",
+      document: idOf(100),
+      id: "x",
+      instance: idOf(900),
+      node: idOf(102),
+      shareRank: 1n,
+      target: idOf(3),
+      targetCopy: idOf(0),
+      targetDocument: idOf(0),
+      targetInstance: idOf(0),
+      targetRank: 0n,
+    });
+    assert.deepStrictEqual(placedBreachesOf(rows), []);
+  });
+
+  it("places an item's share naming its fragment's element, below the item's math", () => {
+    const rows = placedOf(
+      [
+        itemWith(elementOf("m:math", [], [shareOf("#y")])),
+        fragmentWith(elementOf("m:mi", [attribute("id", "y")])),
+      ],
+      [assemblyOf(0, 4, idOf(900))],
+      [siteOf(0, 4)],
+    );
+    const [placed] = [...rows.PlacedShareTarget.values()];
+
+    assert.strictEqual(placed?.instance, idOf(0));
+    assert.strictEqual(placed?.targetInstance, idOf(900));
+    assert.strictEqual(placed?.targetCopy, idOf(900));
+    assert.isTrue((placed?.shareRank ?? 0n) > (placed?.targetRank ?? 0n));
+    assert.deepStrictEqual(placedBreachesOf(rows), []);
+  });
+
+  it("places a fragment included by two items, and ranks it, once per instance", () => {
+    // The fragment's `m:share` names `x`, an `m:mrow` holding a `cn` in the first item and an `m:mi`
+    // in the second, so the share ranks above the first's target and apart from the second's.
+    const first = itemWith(
+      elementOf("m:math", [], [elementOf("m:mrow", [attribute("id", "x")], [elementOf("m:cn")])]),
+    );
+    const second: Written = {
+      base: 200,
+      tree: documentOf(
+        elementOf(
+          "qti-assessment-item",
+          [],
+          [elementOf("m:math", [], [elementOf("m:mi", [attribute("id", "x")])]), elementOf("div")],
+        ),
+      ),
+    };
+    const rows = placedOf(
+      [first, second, fragmentWith(shareOf("#x"))],
+      [assemblyOf(0, 5, idOf(900)), assemblyOf(200, 4, idOf(901))],
+      [siteOf(0, 5), siteOf(200, 4)],
+    );
+
+    // Nodes of the first item: 0 document, 1 item, 2 math, 3 mrow, 4 cn, 5 division. Of the
+    // fragment: 100 document, 101 math, 102 share.
+    assert.deepStrictEqual(
+      [...rows.PlacedShareTarget.values()].map(({ instance, target, targetInstance }) => [
+        instance,
+        target,
+        targetInstance,
+      ]),
+      [
+        [idOf(900), idOf(3), idOf(0)],
+        [idOf(901), idOf(203), idOf(200)],
+      ],
+    );
+    assert.deepStrictEqual(
+      [...rows.PlacedMathRank.values()]
+        .filter(({ node }) => node === idOf(102))
+        .map(({ instance }) => instance),
+      [idOf(900), idOf(901)],
+    );
+    assert.deepStrictEqual(placedBreachesOf(rows), []);
+  });
+
+  it("refuses a cycle across the include at exactly one share", () => {
+    const rows = placedOf(
+      [
+        itemWith(
+          elementOf("m:math", [], [elementOf("m:mrow", [attribute("id", "x")], [shareOf("#y")])]),
+        ),
+        fragmentWith(elementOf("m:mrow", [attribute("id", "y")], [shareOf("#x")])),
+      ],
+      [assemblyOf(0, 5, idOf(900))],
+      [siteOf(0, 5)],
+    );
+
+    assert.strictEqual(rows.PlacedShareTarget.size, 2);
+    assert.strictEqual(
+      [...rows.PlacedShareTarget.values()].filter(
+        ({ shareRank, targetRank }) => shareRank <= targetRank,
+      ).length,
+      1,
+    );
+    assert.isAbove(placedBreachesOf(rows).length, 0);
+  });
+
+  it("writes no PlacedShareTarget for a share whose id the assembly does not bind, and nothing for no share", () => {
+    const unbound = placedOf(
+      [itemWith(elementOf("m:math")), fragmentWith(shareOf("#nowhere"))],
+      [assemblyOf(0, 4, idOf(900))],
+      [siteOf(0, 4)],
+    );
+    const none = placedOf(
+      [itemWith(elementOf("m:math")), fragmentWith(elementOf("m:mi"))],
+      [assemblyOf(0, 4, idOf(900))],
+      [siteOf(0, 4)],
+    );
+
+    assert.strictEqual(unbound.PlacedShareTarget.size, 0);
+    assert.strictEqual(unbound.PlacedMathRank.size, 0);
+    assert.strictEqual(none.PlacedShareTarget.size, 0);
+    assert.strictEqual(none.PlacedMathRank.size, 0);
+  });
 });

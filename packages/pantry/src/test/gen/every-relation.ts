@@ -331,11 +331,12 @@ const itemOf = (members: MemberCounts): string =>
  * The second item: one choice interaction, scored by the published match-correct template, and an
  * included fragment (spec reading 117) whose text entry binds the item's `TEXT`, whose hottext
  * interaction binds its `WORD`, whose portable custom interaction binds its `WIDGET2` and reads its
- * context variable `CTX2`, and whose template inline names its template variable `SHOWN`.
+ * context variable `CTX2`, and whose template inline names its template variable `SHOWN`. It holds
+ * an `m:mi` whose id the fragment's `m:share` names (reading 117).
  */
 const templatedItem = [
   declaration,
-  `<qti-assessment-item xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item2" title="Templated" adaptive="false" time-dependent="false">`,
+  `<qti-assessment-item xmlns="${asi}" xmlns:m="http://www.w3.org/1998/Math/MathML" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item2" title="Templated" adaptive="false" time-dependent="false">`,
   '  <qti-context-declaration identifier="CTX2" cardinality="single" base-type="integer"/>',
   '  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
   "    <qti-correct-response><qti-value>ChoiceA</qti-value></qti-correct-response>",
@@ -352,6 +353,7 @@ const templatedItem = [
   '      <qti-simple-choice identifier="ChoiceA">Yes.</qti-simple-choice>',
   '      <qti-simple-choice identifier="ChoiceB">No.</qti-simple-choice>',
   "    </qti-choice-interaction>",
+  '    <m:math><m:mi id="share-target">x</m:mi></m:math>',
   '    <xi:include href="fragment.xml"/>',
   "  </qti-item-body>",
   "  <qti-catalog-info>",
@@ -370,12 +372,14 @@ const templatedItem = [
  * hottext interaction naming its `WORD`, whose hottext counts among the item's assembly's, a
  * portable custom interaction naming its `WIDGET2` and its context variable `CTX2`, and a template
  * inline naming its template variable `SHOWN`, each resolved among the item's declarations; its
- * `xml:lang`, which the item's record lists (R26 in place).
+ * `xml:lang`, which the item's record lists (R26 in place); and an `m:share` naming the item's
+ * `m:mi`, resolved in the item's assembly.
  */
 const fragment = [
   declaration,
-  `<div xmlns="${asi}" xml:lang="en">`,
+  `<div xmlns="${asi}" xmlns:m="http://www.w3.org/1998/Math/MathML" xml:lang="en">`,
   '  <p id="fragment-note" data-catalog-idref="cat2">Type the word.</p>',
+  '  <m:math><m:share src="#share-target"/></m:math>',
   '  <qti-text-entry-interaction response-identifier="TEXT"/>',
   '  <qti-hottext-interaction response-identifier="WORD" max-choices="1">',
   '    <p>Pick <qti-hottext identifier="W1">this</qti-hottext>.</p>',

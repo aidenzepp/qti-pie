@@ -449,12 +449,16 @@ const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUs
 /**
  * Build the {@link ShareFragment} of each `m:share` whose `src` is `#` and one or more characters
  * (MathML 3 §4.2.7), as `#pantry/qti/identity.ts` selects them: its `src` as written and `id`, the
- * text after the `#`.
+ * text after the `#`, and whether its document is in an assembly. Its `placements` are drawn.
  *
  * @param tree - The document's tree.
+ * @param assembled - Whether the document is in an assembly, as {@link IdrefTarget}'s is.
  * @returns The rows, each by its node.
  */
-const shareFragmentsOf = (tree: Tree): Map<string, Addition<typeof ShareFragment>> => {
+const shareFragmentsOf = (
+  tree: Tree,
+  assembled: boolean,
+): Map<string, Addition<typeof ShareFragment>> => {
   const fragments = new Map<string, Addition<typeof ShareFragment>>();
 
   for (const { lexical, name, node } of tree.rows.attributes) {
@@ -464,7 +468,13 @@ const shareFragmentsOf = (tree: Tree): Map<string, Addition<typeof ShareFragment
       lexical.startsWith("#") &&
       tree.byId.get(node)?.kind === shareKind
     ) {
-      fragments.set(node, { document: tree.document, id: lexical.slice(1), node, src: lexical });
+      fragments.set(node, {
+        assembled,
+        document: tree.document,
+        id: lexical.slice(1),
+        node,
+        src: lexical,
+      });
     }
   }
 
@@ -777,7 +787,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
   const texts = textRowsOf(tree);
   const documentIds = new Map([...texts.DocumentId, ...attributed.DocumentId]);
   const assembled = ids.assembled ?? false;
-  const shares = shareFragmentsOf(tree);
+  const shares = shareFragmentsOf(tree, assembled);
   const targets = [
     ...rows.attributes.flatMap((attribute) => {
       const element = tree.byId.get(attribute.node);
