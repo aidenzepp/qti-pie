@@ -635,8 +635,8 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           // Oracle: PostgreSQL, each containment's foreign key, set immediate alone: 23503 on it.
           // - href-listed: a resource href's (scope, path) no file of its resource lists (CP 1.2
           //   §6.6.2, reading 102);
-          // - root-type-reverse: a document-typed href that is no document of its type (reading 93);
-          // - entry-kind: a document-typed href, and a document, that is no entry of the record;
+          // - entry-kind: a document-typed href that is no document of its type (reading 93), and a
+          //   document-typed href, and a document, that is no entry of the record;
           // - a dependency whose identifierref names no resource of its package (CP 1.2 §6.11.5 B);
           // - file-exists: a file whose href resolves in the package, and a resolved reference, each
           //   naming no entry (CP 1.2 InterchangePackage (b) and (d));
