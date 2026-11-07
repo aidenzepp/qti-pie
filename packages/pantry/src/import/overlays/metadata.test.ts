@@ -1074,13 +1074,14 @@ const usageSituationOf = (baseType: string | undefined): UsageSituation => {
 
 describe("import/overlays/metadata.ts, usage values", () => {
   it.effect(
-    "writes a UsageValue row exactly for a ud:value that writes baseType and fieldIdentifier, its code the handle it spells and its text its string value",
+    "writes a UsageValue row exactly for a ud:value that writes baseType and fieldIdentifier, its code the handle it spells and its text its string value, and a UsageBaseType row for every one that writes baseType, as written",
     (ctx) =>
       // Oracle: the specification as a checker, reading 105 and C17: a row where `baseType` and
       // `fieldIdentifier` are both written, the value forming part of a record, and none elsewhere
       // (a `baseType` outside a record is no base type, so its value is untyped text), its code the
       // `BaseType` handle its lexical form spells as written (`none` for a misspelling, which
-      // `E1_derived` refuses), its text the string value of its content.
+      // `E1_derived` refuses), its text the string value of its content; and a `UsageBaseType` row
+      // for every value that writes a `baseType`, in a record or not, its lexical form as written.
       // Bound: 6 baseType spellings, none among them, by 2 field identifiers, none among them, by
       // 4 contents, 48 cases.
       searched(
@@ -1129,7 +1130,9 @@ describe("import/overlays/metadata.ts, usage values", () => {
               ].join("");
               const read = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
               const tree = yield* Effect.orDie(shred(read, "3.0.1", shredGrammar));
-              const rows = [...rowsOf(tree, idsFor(1)).UsageValue.values()];
+              const built = rowsOf(tree, idsFor(1));
+              const rows = [...built.UsageValue.values()];
+              const copies = [...built.UsageBaseType.values()];
 
               assert.deepStrictEqual(
                 rows.map(({ baseType, baseTypeLexical, text }) => ({
@@ -1146,6 +1149,14 @@ describe("import/overlays/metadata.ts, usage values", () => {
                         text: input.content.value,
                       },
                     ],
+              );
+              assert.deepStrictEqual(
+                copies.map(({ lexical }) => lexical),
+                input.baseType === undefined ? [] : [input.baseType],
+              );
+              assert.deepStrictEqual(
+                copies.map(({ node }) => node),
+                [...built.UsageBaseType.keys()],
               );
             }),
         ),

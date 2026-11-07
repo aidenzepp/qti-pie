@@ -49,6 +49,7 @@ import {
   StatisticDate,
   statisticKinds,
   trimmedPattern,
+  UsageBaseType,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
@@ -96,6 +97,7 @@ const metadataRelations = {
   ObjectLang,
   ResourceLomGeneral,
   StatisticDate,
+  UsageBaseType,
   UsageValue,
 };
 

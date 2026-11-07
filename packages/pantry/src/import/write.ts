@@ -215,6 +215,7 @@ import {
   ObjectLang,
   ResourceLomGeneral,
   StatisticDate,
+  UsageBaseType,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
 import type { Author } from "#pantry/qti/roles.ts";
@@ -1320,6 +1321,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(TestFlag, [...inputs.TestFlag.values()])
     .insert(TestToken, [...inputs.TestToken.values()])
     .insert(Tolerance, [...inputs.Tolerance.values()])
+    .insert(UsageBaseType, [...inputs.UsageBaseType.values()])
     .insert(UsageValue, domainOrdered(inputs.UsageValue.values(), patternInputs.UsageValue))
     .insert(Value, domainOrdered(inputs.Value.values(), patternInputs.Value))
     .insert(ValueSet, [...inputs.ValueSet.values()])
