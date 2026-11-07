@@ -1,10 +1,21 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Result } from "effect";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
-import { configure, redact } from "#plate/index.ts";
+import { configure } from "#plate/index.ts";
 import type { Accepted, Configuration, Element, Node, Verdict } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
-import type { BodyNode, InlineChoiceInteraction } from "#plate/model/item.ts";
+import type {
+  BodyElement,
+  BodyNode,
+  InlineChoiceInteraction,
+  Item,
+  PrintedVariable,
+  TemplateVisibility,
+} from "#plate/model/item.ts";
+import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
+import { nullOf } from "#plate/model/values.ts";
+import { templateShows } from "#plate/payload.ts";
 import { refusalRules } from "#plate/validate/refusal.ts";
 import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
@@ -115,15 +126,160 @@ const rootOf = (html: string): Option.Option<Element> => {
 };
 
 /**
- * The features of the notices `redact` puts in a body part's place when it has no value to show it
- * by: a printed variable's, a template block's and a template inline's. The model holds each as a
- * body node, so the verdict names none of them.
+ * The feature the notices name once when a choice is withheld: the attribute that gives a choice
+ * its template visibility. A withheld choice is absent from its interaction, so no body node
+ * carries this notice and the HTML shows none for it; the redaction sweep
+ * (`src/corpus.redact.test.ts`) checks that the redacted item's notices name it.
  */
-const withheldNotices: ReadonlySet<string> = new Set([
-  "qti-printed-variable",
-  "qti-template-block",
-  "qti-template-inline",
-]);
+const choiceNotice = "template-identifier";
+
+/**
+ * Give the values a redaction shows an item by, as the sweep passes them: the record state's
+ * record for an item whose template processing runs, none with no record; and, for any other
+ * item, rendered with no record, the values its first attempt starts with (H3): each template
+ * variable at its declared default, else NULL, none where its template processing does not run,
+ * and each outcome at its starting value.
+ *
+ * @param item The item.
+ * @param state The record state, for an item whose template processing runs; none for any other.
+ * @returns The values, or none for an item whose template processing runs and no record.
+ */
+const valuesOf = (item: Item, state: Option.Option<RecordState>): Option.Option<RedactRecord> =>
+  Option.match(state, {
+    onNone: () =>
+      Option.some({
+        outcomes: outcomeDefaults(item),
+        templates: unrunTemplateProcessing(item)
+          ? {}
+          : Object.fromEntries(
+              Array.from(item.templates, ([identifier, declaration]) => [
+                identifier,
+                Option.getOrElse(declaration.defaultValue, () =>
+                  nullOf(declaration.baseType, declaration.cardinality),
+                ),
+              ]),
+            ),
+      }),
+    onSome: (found) => found.record,
+  });
+
+/**
+ * Give the variables a printed variable needs a value of: the one it prints, and any its `base` or
+ * `index` names.
+ *
+ * @param node The printed variable.
+ * @returns Their identifiers.
+ */
+const printedNames = (node: PrintedVariable): readonly string[] => [
+  node.identifier,
+  ...[node.base, ...Option.toArray(node.index)].flatMap((written) =>
+    written._tag === "ref" ? [written.identifier] : [],
+  ),
+];
+
+/**
+ * Report whether a body element is a `param` that stands in for a template variable: its `value`
+ * names a template variable declared `param-variable="true"` (the information model's Param
+ * `value`, `info.txt:69978`).
+ *
+ * @param item The item, whose template declarations the `value` is looked up among.
+ * @param node The body element.
+ * @returns The template variable's identifier, or none for any other element.
+ */
+const parameterOf = (item: Item, node: BodyElement): Option.Option<string> =>
+  node.tag === "param"
+    ? Option.fromUndefinedOr(node.attributes.find((written) => written.name === "value")).pipe(
+        Option.filter(({ value }) => item.templates.get(value)?.paramVariable === true),
+        Option.map(({ value }) => value),
+      )
+    : Option.none();
+
+/**
+ * Give the notices a redaction must put in the place of the template parts on content the page
+ * sees, decided from the item and the values alone, never read from `redact`: a printed variable
+ * whose variable, or a variable its `base` or `index` names, the values hold no value of; a
+ * template block or inline, and a `param-variable` parameter, whose template variable they hold no
+ * value of; and `template-identifier` once when they hold no value of the template variable of
+ * some choice with a template visibility. With no values, every such part is withheld. A part
+ * inside content the page does not see (a block or inline the values hide or withhold, a withheld
+ * `param`, or a choice they hide or withhold) gives none, since the page shows none of it.
+ *
+ * @param item The item.
+ * @param values The values the item is shown by.
+ * @returns The withheld parts' notices, in document order.
+ */
+const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly string[] => {
+  const holdsTemplate = (identifier: string): boolean =>
+    Option.exists(values, (record) => Object.hasOwn(record.templates, identifier));
+  const holds = (identifier: string): boolean =>
+    holdsTemplate(identifier) ||
+    Option.exists(values, (record) => Object.hasOwn(record.outcomes, identifier));
+  const shown = (visibility: TemplateVisibility, identifier: string): Option.Option<boolean> =>
+    values.pipe(
+      Option.filter(() => holdsTemplate(visibility.templateIdentifier)),
+      Option.map((record) => templateShows(visibility, identifier, record.templates)),
+    );
+  let choiceWithheld = false;
+  const walk = (nodes: readonly BodyNode[]): readonly string[] =>
+    nodes.flatMap((node): readonly string[] => {
+      switch (node.kind) {
+        case "element": {
+          return Option.match(parameterOf(item, node), {
+            onNone: () => walk(node.children),
+            onSome: (identifier) => (holdsTemplate(identifier) ? walk(node.children) : ["param"]),
+          });
+        }
+        case "printed-variable": {
+          return printedNames(node).every(holds) ? [] : ["qti-printed-variable"];
+        }
+        case "template-block":
+        case "template-inline": {
+          return Option.match(shown(node.templateVisibility, node.identifier), {
+            onNone: () => [`qti-${node.kind}`],
+            onSome: (visible) => (visible ? walk(node.content) : []),
+          });
+        }
+        case "choice":
+        case "inline-choice": {
+          const lead = walk(
+            Option.getOrElse(node.kind === "choice" ? node.prompt : node.label, () => []),
+          );
+
+          return [
+            ...lead,
+            ...node.choices.flatMap((choice): readonly string[] => {
+              const visible = Option.match(choice.templateVisibility, {
+                onNone: () => Option.some(true),
+                onSome: (visibility) => shown(visibility, choice.identifier),
+              });
+              const notice = Option.isNone(visible) && !choiceWithheld ? [choiceNotice] : [];
+              if (Option.isNone(visible)) {
+                choiceWithheld = true;
+              }
+
+              return [
+                ...notice,
+                ...(Option.getOrElse(visible, () => false) ? walk(choice.content) : []),
+              ];
+            }),
+          ];
+        }
+        case "extended-text": {
+          return walk(Option.getOrElse(node.prompt, () => []));
+        }
+        case "text":
+        case "text-entry":
+        case "unsupported": {
+          return [];
+        }
+        default: {
+          return node satisfies never;
+        }
+      }
+    });
+
+  return walk(item.body);
+};
 
 /**
  * What can fail one render: `begin` starting a templated item's record or its decoding, or
@@ -150,8 +306,9 @@ interface Rendering {
    */
   readonly state: Option.Option<RecordState>;
   /**
-   * The notice of each printed variable, template block and template inline `redact` shows as a
-   * notice ({@link withheldNotices}), which the verdict names none of.
+   * The notices the redaction must give in place of the template parts the values withhold, which
+   * the verdict names none of: {@link withheldOf}, decided from the item and the state, never read
+   * from `redact`.
    */
   readonly withheld: readonly string[];
   readonly states: Result.Result<readonly RenderState[], RenderFailure>;
@@ -185,7 +342,7 @@ const renderingOf = (
     location,
     state,
     states: threeStates(accepted, configuration, record),
-    withheld: redact(accepted, record).notices.filter((feature) => withheldNotices.has(feature)),
+    withheld: withheldOf(accepted.item, valuesOf(accepted.item, state)),
   };
 };
 
@@ -269,9 +426,9 @@ const statesProblems = (
 
 /**
  * Check one state against the round trip and R1: its HTML round-trips, shows a notice for exactly
- * the verdict's notice-shown features and the printed variables, template blocks and template
- * inlines `redact` shows as notices, and shows none for the features the verdict marks, which
- * render nowhere.
+ * the verdict's notice-shown features and the template parts the state withholds
+ * ({@link withheldOf}; a withheld choice shows none, being absent), and shows none for the features
+ * the verdict marks, which render nowhere.
  *
  * @param rendering The render, with its accepted document.
  * @param where The member and state, which every problem names.
@@ -280,8 +437,9 @@ const statesProblems = (
  */
 const r1Problems = (rendering: Rendering, where: string, root: Element): readonly string[] => {
   const { unsupported } = rendering.accepted;
+  const withheld = rendering.withheld.filter((feature) => feature !== choiceNotice);
   const featureOf = new Map(
-    [...unsupported.map((entry) => entry.feature), ...rendering.withheld].map(
+    [...unsupported.map((entry) => entry.feature), ...withheld].map(
       (feature) => [message(rendering.locale, "notice", { feature }), feature] as const,
     ),
   );
@@ -295,7 +453,7 @@ const r1Problems = (rendering: Rendering, where: string, root: Element): readonl
     .toSorted();
   const noticed = [
     ...unsupported.filter((entry) => entry.shown === "notice").map((entry) => entry.feature),
-    ...rendering.withheld,
+    ...withheld,
   ].toSorted();
   const marked = unsupported
     .filter((entry) => entry.shown === "mark")
@@ -566,7 +724,7 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
           Option.exists(rendering.state, (state) => Option.isSome(state.record)) &&
           rendering.withheld.length > 0
             ? [
-                `${placeOf(rendering)}: redact shows ${JSON.stringify(rendering.withheld)} as notices`,
+                `${placeOf(rendering)}: its record withholds the parts noticed as ${JSON.stringify(rendering.withheld)}`,
               ]
             : [],
         );
