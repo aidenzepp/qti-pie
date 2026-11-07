@@ -1604,6 +1604,7 @@ const blockItem: Item = templatedOf(
       identifier: "X",
       kind: "template-block",
       path: blockPath,
+      responses: [blockColours.response],
       templateVisibility: byVisible("show"),
     } satisfies TemplateContent,
   ],

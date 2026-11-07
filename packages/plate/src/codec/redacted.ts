@@ -292,6 +292,7 @@ const NoTemplateContent = Schema.Never.pipe(
       identifier: Schema.String,
       kind: Schema.Literals(["template-block", "template-inline"]),
       path: Schema.String,
+      responses: Schema.Array(Schema.String),
       templateVisibility: Schema.Struct({
         showHide: Schema.Literals(["hide", "show"]),
         templateIdentifier: Schema.String,

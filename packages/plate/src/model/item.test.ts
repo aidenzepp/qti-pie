@@ -2611,6 +2611,7 @@ describe("buildItem", () => {
                 identifier: "plane",
                 kind: "template-inline",
                 path: `${body}/p/qti-template-inline`,
+                responses: [],
                 templateVisibility: { showHide: "show", templateIdentifier: "TRANSPORT" },
               },
             ],
@@ -2631,12 +2632,94 @@ describe("buildItem", () => {
             identifier: "SOLUTION",
             kind: "template-block",
             path: block,
+            responses: [],
             templateVisibility: { showHide: "hide", templateIdentifier: "SHOWN" },
           },
         ]);
         assert.deepStrictEqual(built.unsupported, [
           { feature: "qti-stylesheet", path: `${block}/qti-stylesheet`, shown: "mark" },
         ]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] names in a template block's or inline's responses every response its content binds, an interaction read or shown as a notice and one in nested template content, each once in document order, and none for content that binds none",
+    () =>
+      Effect.gen(function* namesTemplateResponses() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "qti-template-block",
+                [attr("identifier", "ANSWERS"), attr("template-identifier", "SHOWN")],
+                [
+                  el(
+                    "qti-content-body",
+                    [],
+                    [
+                      el(
+                        "qti-choice-interaction",
+                        [attr("response-identifier", "R1")],
+                        [el("qti-simple-choice", [attr("identifier", "A")], [text("Ant")])],
+                      ),
+                      el(
+                        "qti-order-interaction",
+                        [attr("response-identifier", " R2 ")],
+                        [
+                          el("qti-simple-choice", [attr("identifier", "X")], [text("First")]),
+                          el("qti-simple-choice", [attr("identifier", "Y")], [text("Second")]),
+                        ],
+                      ),
+                      el(
+                        "p",
+                        [],
+                        [
+                          text("Then "),
+                          el(
+                            "qti-template-inline",
+                            [attr("identifier", "ENTRY"), attr("template-identifier", "SHOWN")],
+                            [el("qti-text-entry-interaction", [attr("response-identifier", "R3")])],
+                          ),
+                        ],
+                      ),
+                      el(
+                        "qti-choice-interaction",
+                        [attr("response-identifier", "R1")],
+                        [el("qti-simple-choice", [attr("identifier", "B")], [text("Bee")])],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              el(
+                "qti-template-block",
+                [attr("identifier", "QUIET"), attr("template-identifier", "SHOWN")],
+                [el("qti-content-body", [], [el("p", [], [text("Nothing to answer")])])],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "R1", "identifier", "single"),
+              declaration("qti-response-declaration", "R2", "identifier", "ordered"),
+              declaration("qti-response-declaration", "R3", "string", "single"),
+            ],
+          }),
+        );
+        const [answers, quiet] = built.body;
+        const inline = answers?.kind === "template-block" ? answers.content[2] : undefined;
+        const [, entry] = childrenOf(inline);
+
+        assert.deepStrictEqual(
+          answers?.kind === "template-block" ? answers.responses : "not a template block",
+          ["R1", "R2", "R3"],
+        );
+        assert.deepStrictEqual(
+          entry?.kind === "template-inline" ? entry.responses : "not a template inline",
+          ["R3"],
+        );
+        assert.deepStrictEqual(
+          quiet?.kind === "template-block" ? quiet.responses : "not a template block",
+          [],
+        );
       }),
   );
 
