@@ -404,15 +404,23 @@ const writeCatalog = Effect.fnUntraced(function* writeCatalog(
 });
 
 /**
+ * A parser error xmllint reports for the document it reads on standard input, `-:<line>:`.
+ */
+const stdinParserError = /^-:\d+: parser error : /u;
+
+/**
  * Validate a document against a cached XSD with xmllint, offline.
  *
  * The xmllint child runs as `--noout --nonet --schema <xsd> -`, reading the document on standard
  * input, with `XML_CATALOG_FILES` naming a catalog written for this run and nothing else in its
  * environment. Its exit status, as xmllint documents it, is 0 when the document is valid, 3 when it
- * breaks the schema and 4 when it cannot be parsed, so those are verdicts; every other status, and
- * any `Schemas parser` line (a schema that failed to compile, or an import the catalog does not
- * reach, which xmllint skips with a warning and so judges against less than the XSD), is
- * {@link XsdUnusable}, because the oracle then speaks for less than the schema.
+ * breaks the schema and 4 when it cannot be parsed, so those are verdicts. libxml2 2.9.13's
+ * xmllint, macOS's `/usr/bin/xmllint`, exits 1 instead for a document on standard input it cannot
+ * parse, with a `parser error` line naming standard input (`-:<line>:`), so that too is the verdict
+ * that the document does not validate; every other status, and any `Schemas parser` line (a schema
+ * that failed to compile, or an import the catalog does not reach, which xmllint skips with a
+ * warning and so judges against less than the XSD), is {@link XsdUnusable}, because the oracle then
+ * speaks for less than the schema.
  *
  * @param xsdPath The XSD, absolute or relative to {@link xsdDirectory}.
  * @param xml The document's text.
@@ -446,8 +454,10 @@ export const validateAgainst = Effect.fn("validateAgainst")(function* validateAg
     xml,
   );
   const schemaTrouble = run.lines.some((line) => line.includes("Schemas parser"));
+  const unparsed =
+    run.code === 4 || (run.code === 1 && run.lines.some((line) => stdinParserError.test(line)));
 
-  if (schemaTrouble || (run.code !== 0 && run.code !== 3 && run.code !== 4)) {
+  if (schemaTrouble || (run.code !== 0 && run.code !== 3 && !unparsed)) {
     return yield* new XsdUnusable({ exit: run.exit, messages: run.lines, xsd });
   }
 
