@@ -1209,6 +1209,48 @@ describe("results", () => {
   );
 
   it.effect(
+    "[I-5] reports the record's value, not the saved one, for a response only a template block the record hides binds, as score keeps it, and a shown response's saved value",
+    () =>
+      Effect.gen(function* savedHidden() {
+        const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));
+        const test = yield* acceptTest("saved-hidden", [
+          part("P1", individual, [ref("hiding", "hiding.xml")]),
+        ]);
+        const record = yield* Effect.fromResult(
+          firstAttempt(hiding.item, { instance: `${instance}.1`, seed }),
+        );
+        const posted = { INNER: identifiers("P"), RESPONSE: identifiers("A") };
+        const kept = yield* scored(hiding, record, posted);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["hiding", hiding]]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(hiding, "hiding", 1, { ...saving(posted), record }),
+          ]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(kept.responses["INNER"], record.responses["INNER"]);
+
+        const written = itemOf(report, "hiding");
+        assert.deepStrictEqual(
+          ["INNER", "RESPONSE"].map((identifier) => {
+            const response = written.responses[identifier];
+
+            return [response?.attributes["answeredStatus"], response?.values];
+          }),
+          [
+            ["presented", []],
+            ["answered", ["A"]],
+          ],
+        );
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
     "writes no test outcome for a test with outcome processing",
     () =>
       Effect.gen(function* processedTest() {

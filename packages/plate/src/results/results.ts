@@ -41,7 +41,7 @@ import {
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
-import { choiceOrder, redactItem } from "#plate/payload.ts";
+import { choiceOrder, hiddenOnlyResponses, redactItem } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
 import type { ResultSingle } from "#plate/results/values.ts";
@@ -877,14 +877,16 @@ const deliveredItem = (
 /**
  * Report one item of a test session.
  *
- * The values reported are the responses saved and not yet processed, else the record's. Its
- * outcomes are the first processed attempt's when its effective limit is 0, since a delivery
- * engine that does not limit attempts reports only the first outcomes of a non-adaptive item, and
- * the record's otherwise: the last processed, or the starting values before any. A presented
- * shuffled Choice or Inline Choice carries the order it was presented in, under the session's seed
- * and the item's instance `<session instance>.<sequenceIndex>`, listing only the choices the
- * record's template values showed. Its template values, and the defaults its answered status reads,
- * are its record's.
+ * The values reported are the responses saved and not yet processed, else the record's; a response
+ * only content the page does not see under the record binds ({@link hiddenOnlyResponses}) reports
+ * the record's value and never the saved one, as `score` keeps it, so its answered status is judged
+ * on that value. Its outcomes are the first processed attempt's when its effective limit is 0,
+ * since a delivery engine that does not limit attempts reports only the first outcomes of a
+ * non-adaptive item, and the record's otherwise: the last processed, or the starting values before
+ * any. A presented shuffled Choice or Inline Choice carries the order it was presented in, under
+ * the session's seed and the item's instance `<session instance>.<sequenceIndex>`, listing only the
+ * choices the record's template values showed. Its template values, and the defaults its answered
+ * status reads, are its record's.
  *
  * @param test The test.
  * @param controls The session control of each of the test's item refs, by identifier, as
@@ -914,11 +916,14 @@ const sessionItemReport = (
     const document = yield* deliveredItem(items, entry);
     const limit = itemConfiguration(judging, control).maxAttempts;
     const saved = Option.getOrElse(entry.saved, () => ({}));
+    const hidden = hiddenOnlyResponses(document.item, entry.record);
     const answers = Object.fromEntries(
       [...document.item.responses.keys()].flatMap((identifier) =>
         Option.toArray(
           Option.map(
-            Option.orElse(own(saved, identifier), () => own(entry.record.responses, identifier)),
+            Option.orElse(hidden.has(identifier) ? Option.none() : own(saved, identifier), () =>
+              own(entry.record.responses, identifier),
+            ),
             (value) => [identifier, value] as const,
           ),
         ),
