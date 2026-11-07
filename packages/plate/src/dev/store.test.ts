@@ -43,7 +43,7 @@ const sessionOf = (id: string): TestSession => ({
   kind: "test",
   parts: [{ identifier: "part-1", status: "current" }],
   position: 0,
-  seed: Option.some(7),
+  seed: "7",
   started: "2026-11-05T10:00:00.000Z",
   status: "interacting",
   test: owner.test.identifier,

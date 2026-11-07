@@ -1664,7 +1664,7 @@ describe("redactItem on template blocks, inlines and choices", () => {
     const redaction = redactItem(shuffled, holding({ VISIBLE: identifierValue("P1") }));
     const remaining = planets.choices.filter((entry) => entry.identifier !== "P1");
 
-    for (const seed of [Option.some(7), Option.none<number>()]) {
+    for (const seed of [Option.some("7"), Option.none<string>()]) {
       const view: View = Option.match(seed, {
         onNone: () => answering,
         onSome: (given) => ({ ...answering, seed: given }),
@@ -1948,14 +1948,14 @@ describe("payload", () => {
       shuffleOrder(key, fixed).map((index) => identifiers[index] ?? "");
 
     assert.deepStrictEqual(
-      presentedOf(planets, { ...answering, seed: 7 }),
+      presentedOf(planets, { ...answering, seed: "7" }),
       ordered(`7\u001F${instance}\u001FPLANET`),
     );
     assert.deepStrictEqual(
       presentedOf(planets, answering),
       ordered(`\u001F${instance}\u001FPLANET`),
     );
-    assert.deepStrictEqual(presentedOf(planets, { ...answering, seed: 7 }), [
+    assert.deepStrictEqual(presentedOf(planets, { ...answering, seed: "7" }), [
       "P1",
       "P0",
       "P2",
@@ -1980,7 +1980,7 @@ describe("payload", () => {
   it("[Q-2] keeps document order when shuffle is false, whatever the seed", () => {
     const ordered = { ...planets, shuffle: false };
 
-    for (const view of [answering, { ...answering, seed: 7 }]) {
+    for (const view of [answering, { ...answering, seed: "7" }]) {
       assert.deepStrictEqual(presentedOf(ordered, view), ["P0", "P1", "P2", "P3", "P4"]);
     }
   });
@@ -2445,7 +2445,7 @@ const planetsRedacted = redact(
  * @returns Each Control's value, in emitted order.
  */
 const renderedOrder = Effect.fn(function* renderedOrder(
-  seed: Option.Option<number>,
+  seed: Option.Option<string>,
   token: string,
 ) {
   const configuration = yield* configure(
@@ -2467,7 +2467,11 @@ const renderedOrder = Effect.fn(function* renderedOrder(
 /**
  * The seeds the order is checked under: none, and two others.
  */
-const seeds: readonly Option.Option<number>[] = [Option.none(), Option.some(7), Option.some(11)];
+const seeds: readonly Option.Option<string>[] = [
+  Option.none(),
+  Option.some("7"),
+  Option.some("11"),
+];
 
 /**
  * The instances the order is checked under.

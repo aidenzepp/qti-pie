@@ -65,7 +65,7 @@ const instance = "sit-1";
 /**
  * The hand-built sessions' seed, which keys a shuffled Choice's order.
  */
-const seed = 7;
+const seed = "7";
 
 /**
  * When the hand-built sessions started and last changed: 123.45 seconds apart.
@@ -446,7 +446,7 @@ const storedSession = (
       kind: "test",
       parts,
       position: 0,
-      seed: Option.some(seed),
+      seed,
       started,
       status: "closed",
       test: test.test.identifier,

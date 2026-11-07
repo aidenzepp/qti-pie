@@ -26,12 +26,13 @@ import type { Value } from "#plate/model/values.ts";
  * attempt starts it at `unknown`. `notices` names the unsupported features the item shows as
  * notices.
  *
- * `seed` is the seed the record started under, the host's seed written with `String`, `""` when
- * it gave none. `templates` holds the template values the item's first attempt produced, and
- * `correct` and `defaults` the correct responses and the defaults its template processing set,
- * each by the identifier of the variable it belongs to. A stored value always wins over
- * recomputation: the template values are drawn once, when the record starts, and every later use
- * reads them from here rather than running template processing again.
+ * `seed` is the seed the record started under: the host's string, used as given, or the one
+ * `begin`, `startTest` or `score` drew when the host gave none. `templates` holds the template
+ * values the item's first attempt produced, and `correct` and `defaults` the correct responses and
+ * the defaults its template processing set, each by the identifier of the variable it belongs to.
+ * A stored value always wins over recomputation: the template values are drawn once, when the
+ * record starts, and every later use reads them from here rather than running template processing
+ * again.
  *
  * From stored version 2 the record is server data. Its template values and correct responses can
  * give the answers away, so keep it where only the server reads it, never in the page.

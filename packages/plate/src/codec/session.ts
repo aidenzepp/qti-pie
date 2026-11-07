@@ -36,9 +36,8 @@ const SessionItemSchema = Schema.Struct({
 });
 
 /**
- * The fields of a test session, as {@link TestSession} has them. `seed` is left out of the stored
- * form when the session has none, and is otherwise a finite JSON number, which JSON text carries
- * exactly.
+ * The fields of a test session, as {@link TestSession} has them. `seed` is a string, required: the
+ * host's seed or the one `startTest` drew, which every stored session holds.
  */
 const sessionFields = {
   document: Schema.String,
@@ -52,7 +51,7 @@ const sessionFields = {
     }),
   ),
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  seed: Schema.OptionFromOptionalKey(Schema.Finite),
+  seed: Schema.String,
   started: Schema.String,
   status: Schema.Literals(["closed", "interacting"]),
   test: Schema.String,
@@ -82,8 +81,8 @@ export const TestSessionSchema = Schema.Struct({
  * value is written as the stored item record writes it, integers as their decimal digits, so no
  * integer is rounded on the way through the host; each item's `record` is a stored item record,
  * its seed, template values, correct responses and defaults with it, so it is server data as the
- * record is; `seed`, an item's `saved` and an item's `firstOutcomes` are absent when there are
- * none.
+ * record is, and so is the session's own `seed`, which keys every value an item draws; an item's
+ * `saved` and an item's `firstOutcomes` are absent when there are none.
  */
 export type StoredTestSession = typeof TestSessionSchema.Encoded;
 

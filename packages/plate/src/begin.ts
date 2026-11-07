@@ -11,30 +11,39 @@ import { encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord, StoredRecord } from "#plate/codec/record.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import { drawSeed } from "#plate/seed.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
- * Start the stored record of an item's first attempt: run its template processing under the
- * host's seed and set every response and outcome to its default, in the form the host stores.
+ * Start the stored record of an item's first attempt: run its template processing under a seed
+ * and set every response and outcome to its default, in the form the host stores.
  *
- * The record holds the seed, written with `String` (`""` when the host gives none, as a shuffled
- * Choice's order keys an absent seed), the template values template processing drew under the
- * seed, the instance and the item, the correct responses and defaults it set, and each response
- * and outcome at its default. The same document, instance and seed give the same record every run.
- * An item that declares no template variable holds no template value, correct response or default.
+ * The seed is the host's, used as given (`""` included), or, when the host gives none, one
+ * `begin` draws: 128 random bits written as 32 lowercase hex digits. It keys every value template
+ * and response processing draw, so it is their secret: a guessable seed, such as `"7"` or `""`,
+ * lets anyone who sees the page and the item recompute them. `begin` never reads the
+ * configuration's `seed`, which keys a shuffled Choice's order.
  *
- * The record is server data: its template values and correct responses can give the answers away.
- * The host stores it where only the server reads it, renders the first page from what
- * `restore(document, record)` gives back, and passes it to `score` with the first responses.
+ * The record holds the seed, the template values template processing drew under it, the instance
+ * and the item, the correct responses and defaults it set, and each response and outcome at its
+ * default. The same document, instance and seed give the same record every run. An item that
+ * declares no template variable holds no template value, correct response or default.
+ *
+ * The record is server data: its seed keys every value it draws, and its template values and
+ * correct responses can give the answers away. The host stores it where only the server reads it,
+ * renders the first page from what `restore(document, record)` gives back, and passes it to
+ * `score` with the first responses.
  *
  * @example
- *   const stored = begin(accepted, { instance: "q1", seed: 7 });
- *   // Result.succeed(record); store it, then restore(accepted, record) to render the first page
+ *   const stored = begin(accepted, { instance: "q1" });
+ *   // Result.succeed(record) under a drawn seed; store it, then restore(accepted, record) to
+ *   // render the first page. begin(accepted, { instance: "q1", seed: "7" }) gives the same record
+ *   // every run.
  *
  * @param document The document `check` accepted.
  * @param start `instance`, the host's name for this use of the item, which scopes its ids, and
- *   `seed`, the host's seed, which keys every value template processing draws; none keys them as
- *   the empty string.
+ *   `seed`, the host's seed, which keys every value template processing draws, used as given; with
+ *   none, `begin` draws one.
  * @returns The record of the first attempt, in the form the host stores, or {@link InvalidRecord}
  *   at stage `encode`, a renderer defect, or an {@link EngineFailure} from template processing.
  *   The engine's failure cannot occur on a checked item: the validator refuses every cause on an
@@ -44,12 +53,9 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  */
 export const begin = (
   document: Accepted,
-  start: { readonly instance: string; readonly seed?: number },
+  start: { readonly instance: string; readonly seed?: string },
 ): Result.Result<StoredRecord, EngineFailure | InvalidRecord> =>
   Result.flatMap(
-    firstAttempt(document.item, {
-      instance: start.instance,
-      seed: start.seed === undefined ? "" : String(start.seed),
-    }),
+    firstAttempt(document.item, { instance: start.instance, seed: start.seed ?? drawSeed() }),
     encodeRecord,
   );

@@ -28,6 +28,7 @@ import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
+import { drawSeed } from "#plate/seed.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
@@ -501,10 +502,12 @@ const checkedResponses = (
  *
  * An item scored alone starts from its declared response defaults (D4-11, OD-P7-5 A), so for an
  * item whose template processing does not run it is the record of the item's first attempt
- * (`firstAttempt` in `#plate/engine/attempt.ts`) under the empty instance and seed: each response
- * at its declared default, else NULL, and the template values that record holds, none of them
- * drawn. An item whose template processing runs reads values drawn when its record starts, which
- * no declaration gives, so it has none to start from.
+ * (`firstAttempt` in `#plate/engine/attempt.ts`) under the empty instance and a drawn seed (32
+ * lowercase hex digits from `drawSeed`): each response at its declared default, else NULL, and the
+ * template values that record holds, none of them drawn. The seed is drawn because its response
+ * processing can draw, and a guessable seed would let the page predict those draws. An item whose
+ * template processing runs reads values drawn when its record starts, which no declaration gives,
+ * so it has none to start from.
  *
  * @param item The item.
  * @returns The record, {@link RecordRequired} for an item whose template processing runs, or the
@@ -513,7 +516,7 @@ const checkedResponses = (
 const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | RecordRequired> =>
   Option.isSome(item.templateProcessing)
     ? Result.fail(new RecordRequired({ document: item.document, item: item.identifier }))
-    : firstAttempt(item, { instance: "", seed: "" });
+    : firstAttempt(item, { instance: "", seed: drawSeed() });
 
 /**
  * Score one attempt of an item: run its response processing over the responses and return the
@@ -532,7 +535,8 @@ const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | Recor
  * With no record, an item whose template processing runs fails {@link RecordRequired}: its values
  * are drawn once, by `begin`, and `score` invents none. Any other item starts from the record its
  * first attempt starts with, each response at its declared default (D4-11), so a response the
- * attempt leaves out scores as its default.
+ * attempt leaves out scores as its default, under a seed `score` draws (32 lowercase hex digits),
+ * which the record it returns holds: pass that record back to the next `score`.
  *
  * @example
  *   const stored = score(accepted, { RESPONSE: decoded }, record);

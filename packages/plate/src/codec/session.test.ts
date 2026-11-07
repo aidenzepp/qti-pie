@@ -53,9 +53,9 @@ const unpresented: SessionItem = {
 };
 
 /**
- * A two-item session of the test {@link owner}, seed 7: item 1 presented and processed once, with
- * its first outcomes kept and responses saved since, an integer beyond 2^53 and a NULL among them;
- * item 2 never presented.
+ * A two-item session of the test {@link owner}, seed `"7"`: item 1 presented and processed once,
+ * with its first outcomes kept and responses saved since, an integer beyond 2^53 and a NULL among
+ * them; item 2 never presented.
  */
 const seeded: TestSession = {
   document: "tests/m2.xml",
@@ -87,7 +87,7 @@ const seeded: TestSession = {
     { identifier: "part-2", status: "pending" },
   ],
   position: 0,
-  seed: Option.some(7),
+  seed: "7",
   started: "2026-11-05T10:00:00.000Z",
   status: "interacting",
   test: "m2",
@@ -95,17 +95,12 @@ const seeded: TestSession = {
 };
 
 /**
- * {@link seeded} started with no seed.
- */
-const unseeded: TestSession = { ...seeded, seed: Option.none() };
-
-/**
  * The template value {@link templated}'s first item holds: an integer beyond 2^53.
  */
 const drawn = integer(2n ** 60n + 3n);
 
 /**
- * {@link seeded} with its first item's record started by template processing under the seed `7`:
+ * {@link seeded} with its first item's record started by template processing under the seed `"7"`:
  * the template variable `T` at {@link drawn}, `RESPONSE`'s correct response and `SCORE`'s default
  * set, as `firstAttempt` writes a templated item's record.
  */
@@ -174,14 +169,14 @@ describe("the plain type", () => {
 
 describe("encodeSession and decodeSession", () => {
   it.effect(
-    "[T-14] round-trip a session through JSON: saved responses, an integer beyond 2^53, a NULL, seed 7, first outcomes kept for one item and none for another",
+    '[T-14] round-trip a session through JSON: saved responses, an integer beyond 2^53, a NULL, seed "7", first outcomes kept for one item and none for another',
     () =>
       Effect.gen(function* roundTripsSeeded() {
         const stored = yield* Effect.fromResult(encodeSession(seeded));
         const [first, second] = stored.items;
 
         assert.strictEqual(stored.version, 2);
-        assert.strictEqual(stored.seed, 7);
+        assert.strictEqual(stored.seed, "7");
         assert.strictEqual(first?.saved?.["COUNT"]?.values[0]?.value, "9007199254740993");
         assert.isTrue(first !== undefined && "firstOutcomes" in first);
         assert.isFalse(second !== undefined && "firstOutcomes" in second);
@@ -190,13 +185,19 @@ describe("encodeSession and decodeSession", () => {
       }),
   );
 
-  it.effect("[T-14] round-trip a session with no seed, which the stored form leaves out", () =>
-    Effect.gen(function* roundTripsUnseeded() {
-      const stored = yield* Effect.fromResult(encodeSession(unseeded));
+  it.effect(
+    "[T-14] [I-5] refuses a stored session with no seed, which every stored session holds: InvalidSession at stage decode",
+    () =>
+      Effect.gen(function* refusesUnseeded() {
+        const { seed: _written, ...unseeded } = yield* Effect.fromResult(encodeSession(seeded));
 
-      assert.isFalse("seed" in stored);
-      assert.deepStrictEqual(yield* Effect.fromResult(throughHost(unseeded)), unseeded);
-    }),
+        assert.deepStrictEqual(
+          Option.map(failureOf(unseeded), (failure) =>
+            failure._tag === "InvalidSession" ? [failure._tag, failure.stage] : [failure._tag],
+          ),
+          Option.some(["InvalidSession", "decode"]),
+        );
+      }),
   );
 
   it.effect(
@@ -255,7 +256,7 @@ describe("decodeSession", () => {
 
   it.effect("refuses a stored session whose item record names no version: InvalidSession", () =>
     Effect.gen(function* refusesUnversionedRecord() {
-      const stored = yield* Effect.fromResult(encodeSession(unseeded));
+      const stored = yield* Effect.fromResult(encodeSession(seeded));
       const [first, second] = stored.items;
       const unversioned = second === undefined ? [] : [{ ...second, record: {} }];
 
@@ -275,7 +276,7 @@ describe("decodeSession", () => {
         for (const malformed of [
           { ...stored, status: "paused" },
           { ...stored, position: -1 },
-          { ...stored, seed: "7" },
+          { ...stored, seed: 7 },
         ]) {
           assert.deepStrictEqual(
             Option.map(failureOf(malformed), fieldsOf),

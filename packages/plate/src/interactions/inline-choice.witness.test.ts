@@ -67,7 +67,7 @@ const legendItem = "qtiv3-examples/packaging/items/multi-input.xml";
  * Choice presents `P2`, then Marion, `A2`, then `B2` and `C2`, so Marion is not where the document
  * puts it.
  */
-const seed = 1;
+const seed = "1";
 
 /**
  * What a forged post carries for the legend's Inline Choice: Marion's identifier in lower case,
