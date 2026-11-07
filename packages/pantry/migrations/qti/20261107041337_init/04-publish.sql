@@ -1487,7 +1487,7 @@ COMMENT ON CONSTRAINT "__assessment_object_key_document_lang_tag_k42ax3lghj" ON 
 
 COMMENT ON CONSTRAINT "__assessment_object_key_document_title_value_wn4bju2lh3" ON "qti"."assessment_object" IS 'key AssessmentObject(document, titleValue)';
 
-COMMENT ON CONSTRAINT "__assessment_object_key_node_langs_lang_2ejz2f26ad" ON "qti"."assessment_object" IS 'key AssessmentObject(node, langs, lang)';
+COMMENT ON CONSTRAINT "__assessment_object_key_node_langs_75gejw3sm5" ON "qti"."assessment_object" IS 'key AssessmentObject(node, langs)';
 
 COMMENT ON CONSTRAINT "__attribute_pk_7dwyp2j4rn" ON "qti"."attribute" IS 'primary key of Attribute';
 
@@ -1929,9 +1929,9 @@ COMMENT ON CONSTRAINT "__lom_resource_type_source_key_term_node_text_yez646bb7k"
 
 COMMENT ON CONSTRAINT "__lom_string_pk_j6pxaair7j" ON "qti"."lom_string" IS 'primary key of LomString';
 
-COMMENT ON CONSTRAINT "__lom_string_key_node_languages_language_wfurt3o53w" ON "qti"."lom_string" IS 'key LomString(node, languages, language)';
-
 COMMENT ON CONSTRAINT "__lom_string_key_node_language_7q3mu42lfi" ON "qti"."lom_string" IS 'key LomString(node, language)';
+
+COMMENT ON CONSTRAINT "__lom_string_key_node_languages_744lmleckw" ON "qti"."lom_string" IS 'key LomString(node, languages)';
 
 COMMENT ON CONSTRAINT "__lom_string_language_pk_467ufc6ip4" ON "qti"."lom_string_language" IS 'primary key of LomStringLanguage';
 
@@ -2546,6 +2546,10 @@ COMMENT ON COLUMN "qti"."assembled_reference"."__pred_placements_wtijf47h4h" IS 
 COMMENT ON COLUMN "qti"."assembled_reference"."__pred_readings_lijgqabw6j" IS 'pred(readings)';
 
 COMMENT ON COLUMN "qti"."assembled_reference"."__pred_segments_lgkpa2wrsx" IS 'pred(segments)';
+
+COMMENT ON COLUMN "qti"."assessment_object"."__lang_vscshxypk3" IS 'lang where {"kind":"compare","left":{"field":"langs","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
+
+COMMENT ON COLUMN "qti"."assessment_object"."__node_6wcvqzkni5" IS 'node where {"kind":"compare","left":{"field":"langs","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
 COMMENT ON COLUMN "qti"."assessment_object"."__pred_langs_yw2uicm4pt" IS 'pred(langs)';
 
@@ -3460,6 +3464,10 @@ COMMENT ON COLUMN "qti"."lom_resource_type_source"."__tag_parent_kind_lom_learni
 COMMENT ON COLUMN "qti"."lom_resource_type_source"."__node_jr3yepcmfz" IS 'node where {"arg":{"arg":{"args":[{"field":"text","kind":"field"}],"fn":"collapse","kind":"compute"},"kind":"in","values":["","LOMv1.0"]},"kind":"not"}';
 
 COMMENT ON COLUMN "qti"."lom_string"."__tag_kind_lom_string_y5pieaaf6y" IS 'tag Node.kind = lom:string';
+
+COMMENT ON COLUMN "qti"."lom_string"."__language_cbidl4nwet" IS 'language where {"kind":"compare","left":{"field":"languages","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
+
+COMMENT ON COLUMN "qti"."lom_string"."__node_najnjopqcl" IS 'node where {"kind":"compare","left":{"field":"languages","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}';
 
 COMMENT ON COLUMN "qti"."lom_string"."__pred_languages_i7e7rxcgke" IS 'pred(languages)';
 
@@ -5105,6 +5113,8 @@ COMMENT ON CONSTRAINT "__assessment_object_fk_node_document_kind_start_pknlk44zr
 
 COMMENT ON CONSTRAINT "__assessment_object_fk_node_pred_langs_ouoqrg6ecx" ON "qti"."assessment_object" IS 'foreign key AssessmentObject(node, pred(langs)) to ObjectLang(node, the index of the family AssessmentObject.langs)';
 
+COMMENT ON CONSTRAINT "__assessment_object_fk_node_lang_baxofpld5p" ON "qti"."assessment_object" IS 'foreign key AssessmentObject(node where {"kind":"compare","left":{"field":"langs","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, lang where {"kind":"compare","left":{"field":"langs","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}) to ObjectLang(node, lang)';
+
 COMMENT ON CONSTRAINT "__attribute_fk_node_id_pred_entities_rssqiasrww" ON "qti"."attribute" IS 'foreign key Attribute(node, id, pred(entities)) to AttributeEntity(node, attribute, at)';
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_id_pred_idrefs_idref_text_34746yzucj" ON "qti"."attribute" IS 'foreign key Attribute(node, id, pred(idrefs), idrefText) to Idref(node, attribute, at, piecesAfter)';
@@ -5725,7 +5735,9 @@ COMMENT ON CONSTRAINT "__lom_string_fk_node_tag_kind_lom_string_l4rlboibj6" ON "
 
 COMMENT ON CONSTRAINT "__lom_string_fk_node_pred_languages_fouwh2wpp7" ON "qti"."lom_string" IS 'foreign key LomString(node, pred(languages)) to LomStringLanguage(node, the index of the family LomString.languages)';
 
-COMMENT ON CONSTRAINT "__lom_string_language_fk_node_copy_languages_cip5whzmz2" ON "qti"."lom_string_language" IS 'foreign key LomStringLanguage(node, the owner''s count of the family LomString.languages, language) to LomString(node, languages, language)';
+COMMENT ON CONSTRAINT "__lom_string_fk_node_language_cyf36v3gna" ON "qti"."lom_string" IS 'foreign key LomString(node where {"kind":"compare","left":{"field":"languages","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}, language where {"kind":"compare","left":{"field":"languages","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}}) to LomStringLanguage(node, language)';
+
+COMMENT ON CONSTRAINT "__lom_string_language_fk_node_copy_languages_rwu7ldnfnv" ON "qti"."lom_string_language" IS 'foreign key LomStringLanguage(node, the owner''s count of the family LomString.languages) to LomString(node, languages)';
 
 COMMENT ON CONSTRAINT "__lom_string_language_fk_node_predecessor_languages_vftzduptkl" ON "qti"."lom_string_language" IS 'foreign key LomStringLanguage(node, the predecessor of the index of the family LomString.languages) to LomStringLanguage(node, the index of the family LomString.languages)';
 
@@ -5935,7 +5947,7 @@ COMMENT ON CONSTRAINT "__node_fk_id_vmybur325b" ON "qti"."node" IS 'foreign key 
 
 COMMENT ON CONSTRAINT "__node_fk_parent_pred_at_chars_was_elements_was_jditgsexpp" ON "qti"."node" IS 'foreign key Node(parent where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, pred(at), charsWas, elementsWas, start, was, the accumulator before plane 0 of the fold __node_children_count_fold_tovjzbjywn over the family Node.children, the accumulator before plane 0 of the fold __node_children_count_fold_o6hokxkmav over the family Node.children) to Node(parent where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"gt","right":{"kind":"literal","value":"~n:0"}}, at, charsAfter, elements, end, state, the accumulator after plane 0 of the fold __node_children_count_fold_tovjzbjywn over the family Node.children, the accumulator after plane 0 of the fold __node_children_count_fold_o6hokxkmav over the family Node.children)';
 
-COMMENT ON CONSTRAINT "__object_lang_fk_node_copy_langs_lang_thnqbzepbw" ON "qti"."object_lang" IS 'foreign key ObjectLang(node, the owner''s count of the family AssessmentObject.langs, lang) to AssessmentObject(node, langs, lang)';
+COMMENT ON CONSTRAINT "__object_lang_fk_node_copy_langs_c7xdvtdhmc" ON "qti"."object_lang" IS 'foreign key ObjectLang(node, the owner''s count of the family AssessmentObject.langs) to AssessmentObject(node, langs)';
 
 COMMENT ON CONSTRAINT "__object_lang_fk_node_predecessor_langs_tooego3bwr" ON "qti"."object_lang" IS 'foreign key ObjectLang(node, the predecessor of the index of the family AssessmentObject.langs) to ObjectLang(node, the index of the family AssessmentObject.langs)';
 
@@ -6509,6 +6521,8 @@ COMMENT ON INDEX "qti"."__assembled_reference_ix_assembly_dnj_4_uerdi_4_node_pod
 
 COMMENT ON INDEX "qti"."__assembled_reference_ix_node_attribute_document_izcuteb6lm" IS 'btree index AssembledReference(node, attribute, document, identifier, kind, role, rootKind)';
 
+COMMENT ON INDEX "qti"."__assessment_object_ix_node_6_wcvqzkni_5_lang_uhblgy657t" IS 'btree index AssessmentObject(__node_6wcvqzkni5, __lang_vscshxypk3)';
+
 COMMENT ON INDEX "qti"."__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt" IS 'btree index Attribute(__node_7iuvvf6ijd)';
 
 COMMENT ON INDEX "qti"."__attribute_ix_node_vakq_25_d_2_th_dq3p5mlkpj" IS 'btree index Attribute(__node_vakq25d2th)';
@@ -6726,6 +6740,8 @@ COMMENT ON INDEX "qti"."__lom_record_ix_owner_parent_v_5_upyxkd_5_f_named_2_7a6t
 COMMENT ON INDEX "qti"."__lom_record_ix_parent_document_owner_owner_start_3e5gpkmcp5" IS 'btree index LomRecord(parent, document, owner, ownerStart, nearest, version, ownerParent)';
 
 COMMENT ON INDEX "qti"."__lom_resource_type_ix_node_dzmkpyu_5_uh_xlkqyn3rx3" IS 'btree index LomResourceType(__node_dzmkpyu5uh)';
+
+COMMENT ON INDEX "qti"."__lom_string_ix_node_najnjopqcl_language_cbidl_4_e7ous4i46d" IS 'btree index LomString(__node_najnjopqcl, __language_cbidl4nwet)';
 
 COMMENT ON INDEX "qti"."__lom_title_ix_record_5_sk_7_vx_3_x_55_elnrd27dse" IS 'btree index LomTitle(__record_5sk7vx3x55)';
 

@@ -1675,7 +1675,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE TABLE \"qti\".\"assessment_object\" (\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"identifier_lead\" \"qti\".\"__text_7dfilirtp3\" NOT NULL,\n  \"identifier_lexical\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"identifier_trail\" \"qti\".\"__text_7dfilirtp3\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"lang\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"lang_tag\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"langs\" \"qti\".\"__domain_gfw43vigph\" NOT NULL,\n  \"nearest\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"parent\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"start\" \"qti\".\"__domain_gfw43vigph\" NOT NULL,\n  \"title\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"title_value\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"version\" \"qti\".\"schema_version\" NOT NULL,\n  CONSTRAINT \"__assessment_object_pk_ngthpwygxy\" PRIMARY KEY (\"node\"),\n  CONSTRAINT \"__assessment_object_key_document_mh5yzvwhvq\" UNIQUE NULLS DISTINCT (\"document\"),\n  CONSTRAINT \"e_1_derived\" CHECK ((\"kind\" IN (299::smallint, 302::smallint) AND \"identifier\" ~ '\\A[\\!-\\uFFFD\\U00010000-\\U0010FFFF]+\\Z'::\"pg_catalog\".\"text\" AND (\"lang\" = ''::\"pg_catalog\".\"text\" OR \"langs\" = 1::bigint) AND (\"pg_catalog\".\"char_length\"(\"identifier_lexical\") = \"pg_catalog\".\"char_length\"(\"identifier_lead\" || \"identifier\")::bigint + \"pg_catalog\".\"char_length\"(\"identifier_trail\")::bigint AND \"pg_catalog\".\"starts_with\"(\"identifier_lexical\", \"identifier_lead\" || \"identifier\") AND \"pg_catalog\".\"right\"(\"identifier_lexical\", \"pg_catalog\".\"char_length\"(\"identifier_trail\")) = \"identifier_trail\") AND \"pg_catalog\".\"translate\"(\"pg_catalog\".\"btrim\"(\"pg_catalog\".\"regexp_replace\"(\"lang\", '[\\u0009\\u000A\\u000D ]+'::\"pg_catalog\".\"text\", ' '::\"pg_catalog\".\"text\", 'g'::\"pg_catalog\".\"text\")), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'::\"pg_catalog\".\"text\", 'abcdefghijklmnopqrstuvwxyz'::\"pg_catalog\".\"text\") = \"lang_tag\" AND \"pg_catalog\".\"translate\"(\"title\", '\t\n\r'::\"pg_catalog\".\"text\", '   '::\"pg_catalog\".\"text\") = \"title_value\" AND \"document\" = \"parent\") IS TRUE),\n  CONSTRAINT \"__assessment_object_key_node_identifier_lexical_mnifhxn4py\" UNIQUE NULLS DISTINCT (\"node\", \"identifier_lexical\"),\n  CONSTRAINT \"__assessment_object_key_node_title_wd5ugujvd7\" UNIQUE NULLS DISTINCT (\"node\", \"title\"),\n  CONSTRAINT \"__assessment_object_key_document_identifier_skdybq7ygm\" UNIQUE NULLS DISTINCT (\"document\", \"identifier\"),\n  CONSTRAINT \"__assessment_object_key_document_lang_tag_k42ax3lghj\" UNIQUE NULLS DISTINCT (\"document\", \"lang_tag\"),\n  CONSTRAINT \"__assessment_object_key_document_title_value_wn4bju2lh3\" UNIQUE NULLS DISTINCT (\"document\", \"title_value\"),\n  CONSTRAINT \"__assessment_object_key_node_langs_lang_2ejz2f26ad\" UNIQUE NULLS DISTINCT (\"node\", \"langs\", \"lang\")\n)"
+						"statement": "CREATE TABLE \"qti\".\"assessment_object\" (\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"identifier_lead\" \"qti\".\"__text_7dfilirtp3\" NOT NULL,\n  \"identifier_lexical\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"identifier_trail\" \"qti\".\"__text_7dfilirtp3\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"lang\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"lang_tag\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"langs\" \"qti\".\"__domain_gfw43vigph\" NOT NULL,\n  \"nearest\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"parent\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"start\" \"qti\".\"__domain_gfw43vigph\" NOT NULL,\n  \"title\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"title_value\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"version\" \"qti\".\"schema_version\" NOT NULL,\n  CONSTRAINT \"__assessment_object_pk_ngthpwygxy\" PRIMARY KEY (\"node\"),\n  CONSTRAINT \"__assessment_object_key_document_mh5yzvwhvq\" UNIQUE NULLS DISTINCT (\"document\"),\n  CONSTRAINT \"e_1_derived\" CHECK ((\"kind\" IN (299::smallint, 302::smallint) AND \"identifier\" ~ '\\A[\\!-\\uFFFD\\U00010000-\\U0010FFFF]+\\Z'::\"pg_catalog\".\"text\" AND (\"lang\" = ''::\"pg_catalog\".\"text\" OR \"langs\" = 1::bigint) AND (\"pg_catalog\".\"char_length\"(\"identifier_lexical\") = \"pg_catalog\".\"char_length\"(\"identifier_lead\" || \"identifier\")::bigint + \"pg_catalog\".\"char_length\"(\"identifier_trail\")::bigint AND \"pg_catalog\".\"starts_with\"(\"identifier_lexical\", \"identifier_lead\" || \"identifier\") AND \"pg_catalog\".\"right\"(\"identifier_lexical\", \"pg_catalog\".\"char_length\"(\"identifier_trail\")) = \"identifier_trail\") AND \"pg_catalog\".\"translate\"(\"pg_catalog\".\"btrim\"(\"pg_catalog\".\"regexp_replace\"(\"lang\", '[\\u0009\\u000A\\u000D ]+'::\"pg_catalog\".\"text\", ' '::\"pg_catalog\".\"text\", 'g'::\"pg_catalog\".\"text\")), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'::\"pg_catalog\".\"text\", 'abcdefghijklmnopqrstuvwxyz'::\"pg_catalog\".\"text\") = \"lang_tag\" AND \"pg_catalog\".\"translate\"(\"title\", '\t\n\r'::\"pg_catalog\".\"text\", '   '::\"pg_catalog\".\"text\") = \"title_value\" AND \"document\" = \"parent\") IS TRUE),\n  CONSTRAINT \"__assessment_object_key_node_identifier_lexical_mnifhxn4py\" UNIQUE NULLS DISTINCT (\"node\", \"identifier_lexical\"),\n  CONSTRAINT \"__assessment_object_key_node_title_wd5ugujvd7\" UNIQUE NULLS DISTINCT (\"node\", \"title\"),\n  CONSTRAINT \"__assessment_object_key_document_identifier_skdybq7ygm\" UNIQUE NULLS DISTINCT (\"document\", \"identifier\"),\n  CONSTRAINT \"__assessment_object_key_document_lang_tag_k42ax3lghj\" UNIQUE NULLS DISTINCT (\"document\", \"lang_tag\"),\n  CONSTRAINT \"__assessment_object_key_document_title_value_wn4bju2lh3\" UNIQUE NULLS DISTINCT (\"document\", \"title_value\"),\n  CONSTRAINT \"__assessment_object_key_node_langs_75gejw3sm5\" UNIQUE NULLS DISTINCT (\"node\", \"langs\")\n)"
 					},
 					{
 						"kind": "statement",
@@ -1915,7 +1915,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE TABLE \"qti\".\"lom_string\" (\n  \"language\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"languages\" \"qti\".\"__domain_gfw43vigph\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__lom_string_pk_j6pxaair7j\" PRIMARY KEY (\"node\"),\n  CONSTRAINT \"e_1_derived\" CHECK ((\"language\" = ''::\"pg_catalog\".\"text\" OR \"languages\" = 1::bigint) IS TRUE),\n  CONSTRAINT \"__lom_string_key_node_languages_language_wfurt3o53w\" UNIQUE NULLS DISTINCT (\"node\", \"languages\", \"language\"),\n  CONSTRAINT \"__lom_string_key_node_language_7q3mu42lfi\" UNIQUE NULLS DISTINCT (\"node\", \"language\")\n)"
+						"statement": "CREATE TABLE \"qti\".\"lom_string\" (\n  \"language\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"languages\" \"qti\".\"__domain_gfw43vigph\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__lom_string_pk_j6pxaair7j\" PRIMARY KEY (\"node\"),\n  CONSTRAINT \"e_1_derived\" CHECK ((\"language\" = ''::\"pg_catalog\".\"text\" OR \"languages\" = 1::bigint) IS TRUE),\n  CONSTRAINT \"__lom_string_key_node_language_7q3mu42lfi\" UNIQUE NULLS DISTINCT (\"node\", \"language\"),\n  CONSTRAINT \"__lom_string_key_node_languages_744lmleckw\" UNIQUE NULLS DISTINCT (\"node\", \"languages\")\n)"
 					},
 					{
 						"kind": "statement",
@@ -2388,6 +2388,14 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"assembled_reference\" ADD COLUMN \"__pred_segments_lgkpa2wrsx\" bigint GENERATED ALWAYS AS (CASE WHEN \"segments\" > 0::bigint THEN \"segments\"::numeric - (1::bigint)::numeric END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"assessment_object\" ADD COLUMN \"__lang_vscshxypk3\" \"pg_catalog\".\"text\" COLLATE \"pg_catalog\".\"pg_c_utf8\" GENERATED ALWAYS AS (CASE WHEN \"langs\" = 1::bigint THEN \"lang\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"assessment_object\" ADD COLUMN \"__node_6wcvqzkni5\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"langs\" = 1::bigint THEN \"node\" END) STORED"
 					},
 					{
 						"kind": "statement",
@@ -4216,6 +4224,14 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"lom_string\" ADD COLUMN \"__tag_kind_lom_string_y5pieaaf6y\" smallint GENERATED ALWAYS AS (371::smallint) STORED NOT NULL"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"lom_string\" ADD COLUMN \"__language_cbidl4nwet\" \"pg_catalog\".\"text\" COLLATE \"pg_catalog\".\"pg_c_utf8\" GENERATED ALWAYS AS (CASE WHEN \"languages\" = 1::bigint THEN \"language\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"lom_string\" ADD COLUMN \"__node_najnjopqcl\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"languages\" = 1::bigint THEN \"node\" END) STORED"
 					},
 					{
 						"kind": "statement",
@@ -8155,6 +8171,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"assessment_object\" ADD CONSTRAINT \"__assessment_object_fk_node_lang_baxofpld5p\" FOREIGN KEY (\"__node_6wcvqzkni5\", \"__lang_vscshxypk3\") REFERENCES \"qti\".\"object_lang\" (\"node\", \"lang\") MATCH SIMPLE"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD CONSTRAINT \"__attribute_fk_node_id_pred_entities_rssqiasrww\" FOREIGN KEY (\"node\", \"id\", \"__pred_entities_nvm5iwtucq\") REFERENCES \"qti\".\"attribute_entity\" (\"node\", \"attribute\", \"at\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
@@ -9395,7 +9415,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"lom_string_language\" ADD CONSTRAINT \"__lom_string_language_fk_node_copy_languages_cip5whzmz2\" FOREIGN KEY (\"node\", \"__copy_languages_ck534uuvjr\", \"language\") REFERENCES \"qti\".\"lom_string\" (\"node\", \"languages\", \"language\") MATCH SIMPLE ON UPDATE CASCADE"
+						"statement": "ALTER TABLE \"qti\".\"lom_string\" ADD CONSTRAINT \"__lom_string_fk_node_language_cyf36v3gna\" FOREIGN KEY (\"__node_najnjopqcl\", \"__language_cbidl4nwet\") REFERENCES \"qti\".\"lom_string_language\" (\"node\", \"language\") MATCH SIMPLE"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"lom_string_language\" ADD CONSTRAINT \"__lom_string_language_fk_node_copy_languages_rwu7ldnfnv\" FOREIGN KEY (\"node\", \"__copy_languages_ck534uuvjr\") REFERENCES \"qti\".\"lom_string\" (\"node\", \"languages\") MATCH SIMPLE ON UPDATE CASCADE"
 					},
 					{
 						"kind": "statement",
@@ -9815,7 +9839,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"object_lang\" ADD CONSTRAINT \"__object_lang_fk_node_copy_langs_lang_thnqbzepbw\" FOREIGN KEY (\"node\", \"__copy_langs_75vki3mroy\", \"lang\") REFERENCES \"qti\".\"assessment_object\" (\"node\", \"langs\", \"lang\") MATCH SIMPLE ON UPDATE CASCADE"
+						"statement": "ALTER TABLE \"qti\".\"object_lang\" ADD CONSTRAINT \"__object_lang_fk_node_copy_langs_c7xdvtdhmc\" FOREIGN KEY (\"node\", \"__copy_langs_75vki3mroy\") REFERENCES \"qti\".\"assessment_object\" (\"node\", \"langs\") MATCH SIMPLE ON UPDATE CASCADE"
 					},
 					{
 						"kind": "statement",
@@ -10968,6 +10992,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "CREATE INDEX \"__assessment_object_ix_node_6_wcvqzkni_5_lang_uhblgy657t\" ON \"qti\".\"assessment_object\" USING btree (\"__node_6wcvqzkni5\", \"__lang_vscshxypk3\")"
+					},
+					{
+						"kind": "statement",
 						"statement": "CREATE INDEX \"__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt\" ON \"qti\".\"attribute\" USING btree (\"__node_7iuvvf6ijd\")"
 					},
 					{
@@ -11401,6 +11429,10 @@
 					{
 						"kind": "statement",
 						"statement": "CREATE INDEX \"__lom_resource_type_ix_node_dzmkpyu_5_uh_xlkqyn3rx3\" ON \"qti\".\"lom_resource_type\" USING btree (\"__node_dzmkpyu5uh\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__lom_string_ix_node_najnjopqcl_language_cbidl_4_e7ous4i46d\" ON \"qti\".\"lom_string\" USING btree (\"__node_najnjopqcl\", \"__language_cbidl4nwet\")"
 					},
 					{
 						"kind": "statement",
@@ -14393,7 +14425,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__assessment_object_key_node_langs_lang_2ejz2f26ad\" ON \"qti\".\"assessment_object\" IS 'key AssessmentObject(node, langs, lang)'"
+						"statement": "COMMENT ON CONSTRAINT \"__assessment_object_key_node_langs_75gejw3sm5\" ON \"qti\".\"assessment_object\" IS 'key AssessmentObject(node, langs)'"
 					},
 					{
 						"kind": "statement",
@@ -15277,11 +15309,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__lom_string_key_node_languages_language_wfurt3o53w\" ON \"qti\".\"lom_string\" IS 'key LomString(node, languages, language)'"
+						"statement": "COMMENT ON CONSTRAINT \"__lom_string_key_node_language_7q3mu42lfi\" ON \"qti\".\"lom_string\" IS 'key LomString(node, language)'"
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__lom_string_key_node_language_7q3mu42lfi\" ON \"qti\".\"lom_string\" IS 'key LomString(node, language)'"
+						"statement": "COMMENT ON CONSTRAINT \"__lom_string_key_node_languages_744lmleckw\" ON \"qti\".\"lom_string\" IS 'key LomString(node, languages)'"
 					},
 					{
 						"kind": "statement",
@@ -16510,6 +16542,14 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"assembled_reference\".\"__pred_segments_lgkpa2wrsx\" IS 'pred(segments)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"assessment_object\".\"__lang_vscshxypk3\" IS 'lang where {\"kind\":\"compare\",\"left\":{\"field\":\"langs\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"~n:1\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"assessment_object\".\"__node_6wcvqzkni5\" IS 'node where {\"kind\":\"compare\",\"left\":{\"field\":\"langs\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"~n:1\"}}'"
 					},
 					{
 						"kind": "statement",
@@ -18338,6 +18378,14 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"lom_string\".\"__tag_kind_lom_string_y5pieaaf6y\" IS 'tag Node.kind = lom:string'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"lom_string\".\"__language_cbidl4nwet\" IS 'language where {\"kind\":\"compare\",\"left\":{\"field\":\"languages\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"~n:1\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"lom_string\".\"__node_najnjopqcl\" IS 'node where {\"kind\":\"compare\",\"left\":{\"field\":\"languages\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"~n:1\"}}'"
 					},
 					{
 						"kind": "statement",
@@ -21629,6 +21677,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__assessment_object_fk_node_lang_baxofpld5p\" ON \"qti\".\"assessment_object\" IS 'foreign key AssessmentObject(node where {\"kind\":\"compare\",\"left\":{\"field\":\"langs\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"~n:1\"}}, lang where {\"kind\":\"compare\",\"left\":{\"field\":\"langs\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"~n:1\"}}) to ObjectLang(node, lang)'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__attribute_fk_node_id_pred_entities_rssqiasrww\" ON \"qti\".\"attribute\" IS 'foreign key Attribute(node, id, pred(entities)) to AttributeEntity(node, attribute, at)'"
 					},
 					{
@@ -22869,7 +22921,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__lom_string_language_fk_node_copy_languages_cip5whzmz2\" ON \"qti\".\"lom_string_language\" IS 'foreign key LomStringLanguage(node, the owner''s count of the family LomString.languages, language) to LomString(node, languages, language)'"
+						"statement": "COMMENT ON CONSTRAINT \"__lom_string_fk_node_language_cyf36v3gna\" ON \"qti\".\"lom_string\" IS 'foreign key LomString(node where {\"kind\":\"compare\",\"left\":{\"field\":\"languages\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"~n:1\"}}, language where {\"kind\":\"compare\",\"left\":{\"field\":\"languages\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"~n:1\"}}) to LomStringLanguage(node, language)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__lom_string_language_fk_node_copy_languages_rwu7ldnfnv\" ON \"qti\".\"lom_string_language\" IS 'foreign key LomStringLanguage(node, the owner''s count of the family LomString.languages) to LomString(node, languages)'"
 					},
 					{
 						"kind": "statement",
@@ -23289,7 +23345,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__object_lang_fk_node_copy_langs_lang_thnqbzepbw\" ON \"qti\".\"object_lang\" IS 'foreign key ObjectLang(node, the owner''s count of the family AssessmentObject.langs, lang) to AssessmentObject(node, langs, lang)'"
+						"statement": "COMMENT ON CONSTRAINT \"__object_lang_fk_node_copy_langs_c7xdvtdhmc\" ON \"qti\".\"object_lang\" IS 'foreign key ObjectLang(node, the owner''s count of the family AssessmentObject.langs) to AssessmentObject(node, langs)'"
 					},
 					{
 						"kind": "statement",
@@ -24437,6 +24493,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__assessment_object_ix_node_6_wcvqzkni_5_lang_uhblgy657t\" IS 'btree index AssessmentObject(__node_6wcvqzkni5, __lang_vscshxypk3)'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt\" IS 'btree index Attribute(__node_7iuvvf6ijd)'"
 					},
 					{
@@ -24870,6 +24930,10 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__lom_resource_type_ix_node_dzmkpyu_5_uh_xlkqyn3rx3\" IS 'btree index LomResourceType(__node_dzmkpyu5uh)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__lom_string_ix_node_najnjopqcl_language_cbidl_4_e7ous4i46d\" IS 'btree index LomString(__node_najnjopqcl, __language_cbidl4nwet)'"
 					},
 					{
 						"kind": "statement",
@@ -25534,7 +25598,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "cbb3cf7c4bdd8160b7fa625fcc179bc60d7a8e8f7a8e1ad95e0751fc9eeffe37"
+		"target": "b903bdfd46ab225ac8960193977bd489511b6a72d87ee025f78e313881ed5b3f"
 	},
-	"seal": "ddf020fbaaac55e72914c7a8307c1c96c493854c11748a8e321874ba361592ba"
+	"seal": "e199d874e2b25ac0f9637f26d728bc76cd28bae66abd2ea791406249acfd9870"
 }

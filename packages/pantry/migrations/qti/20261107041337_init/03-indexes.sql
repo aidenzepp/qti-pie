@@ -8,6 +8,8 @@ CREATE INDEX "__assembled_reference_ix_assembly_dnj_4_uerdi_4_node_podbscxw43" O
 
 CREATE INDEX "__assembled_reference_ix_node_attribute_document_izcuteb6lm" ON "qti"."assembled_reference" USING btree ("node", "attribute", "document", "identifier", "kind", "role", "root_kind");
 
+CREATE INDEX "__assessment_object_ix_node_6_wcvqzkni_5_lang_uhblgy657t" ON "qti"."assessment_object" USING btree ("__node_6wcvqzkni5", "__lang_vscshxypk3");
+
 CREATE INDEX "__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt" ON "qti"."attribute" USING btree ("__node_7iuvvf6ijd");
 
 CREATE INDEX "__attribute_ix_node_vakq_25_d_2_th_dq3p5mlkpj" ON "qti"."attribute" USING btree ("__node_vakq25d2th");
@@ -225,6 +227,8 @@ CREATE INDEX "__lom_record_ix_owner_parent_v_5_upyxkd_5_f_named_2_7a6t4hd2ih" ON
 CREATE INDEX "__lom_record_ix_parent_document_owner_owner_start_3e5gpkmcp5" ON "qti"."lom_record" USING btree ("parent", "document", "owner", "owner_start", "nearest", "version", "owner_parent");
 
 CREATE INDEX "__lom_resource_type_ix_node_dzmkpyu_5_uh_xlkqyn3rx3" ON "qti"."lom_resource_type" USING btree ("__node_dzmkpyu5uh");
+
+CREATE INDEX "__lom_string_ix_node_najnjopqcl_language_cbidl_4_e7ous4i46d" ON "qti"."lom_string" USING btree ("__node_najnjopqcl", "__language_cbidl4nwet");
 
 CREATE INDEX "__lom_title_ix_record_5_sk_7_vx_3_x_55_elnrd27dse" ON "qti"."lom_title" USING btree ("__record_5sk7vx3x55");
 
