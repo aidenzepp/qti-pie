@@ -524,6 +524,14 @@ export const UsageValue = relation(
 );
 
 /**
+ * One `ud:value`'s `baseType`, keyed by its node: its lexical form as written, whether or not the
+ * value forms part of a record, copied so that a law can compare it in a key. A value over
+ * `keyText`'s bound is refused under "Key text bound", a stated limit, as `MathDir` and the
+ * `InteractionAttribute` copies are (`#pantry/qti/mathml-align.ts`, `#pantry/qti/interactions.ts`).
+ */
+export const UsageBaseType = relation("UsageBaseType", { lexical: keyText, node: uuid }, ["node"]);
+
+/**
  * The LOM vocabulary's source: the `source` the loose binding writes for a vocabulary term that
  * writes none, `default="LOMv1.0"` (`imsmd_loose_v1p3p2.xsd` line 1288,
  * `LearningResourceType.Type`).
@@ -589,6 +597,7 @@ export const metadataRelations = {
   ObjectLang,
   ResourceLomGeneral,
   StatisticDate,
+  UsageBaseType,
   UsageValue,
 };
 
@@ -815,10 +824,12 @@ const usageRecordValues = select(Node, (n) =>
  * - **the date:** each statistic's `lastUpdated` is copied into its {@link StatisticDate}, and every
  *   such row has its attribute; its pieces concatenate to the lexical form, and `day`'s type is the
  *   language of the attribute's value domain ("value domain").
- * - **Usage typed value:** each usage value that writes a `baseType` and a `fieldIdentifier` has its
- *   {@link UsageValue}, and every such row is one, with its `baseType` copied; its `text` is its
- *   node's string value; its code is the one its lexical form spells ("E1 derived"); and its text
- *   is a lexical form of that base type ("Usage typed value").
+ * - **Usage typed value:** each usage value that writes a `baseType` has its {@link UsageBaseType},
+ *   and every such row is one, its lexical form the attribute's; each that also writes a
+ *   `fieldIdentifier` has its {@link UsageValue}, and every such row is one, with its `baseType`
+ *   copied from that row; its `text` is its node's string value; its code is the one its lexical
+ *   form spells ("E1 derived"); and its text is a lexical form of that base type ("Usage typed
+ *   value").
  */
 export const metadataLaws = [
   mirrors(on(LomResource, "node", "type"), on(Resource, "node", "type")),
@@ -1065,7 +1076,9 @@ export const metadataLaws = [
   ),
 
   key(on(usageBaseTypes, "node")),
-  contained(on(UsageValue, "node", "baseTypeLexical"), on(usageBaseTypes, "node", "lexical")),
+  contained(on(usageBaseTypes, "node", "lexical"), on(UsageBaseType, "node", "lexical")),
+  contained(on(UsageBaseType, "node"), on(usageBaseTypes, "node")),
+  contained(on(UsageValue, "node", "baseTypeLexical"), on(UsageBaseType, "node", "lexical")),
   contained(on(usageRecordValues, "id"), on(UsageValue, "node")),
   contained(on(UsageValue, "node"), on(usageRecordValues, "id")),
   contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),

@@ -154,6 +154,7 @@ import {
   ObjectLang,
   ResourceLomGeneral,
   StatisticDate,
+  UsageBaseType,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
 import { Chars, EndCharacter, prefixPattern } from "#pantry/qti/node.ts";
@@ -2631,6 +2632,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ObjectLang,
     ResourceLomGeneral,
     StatisticDate,
+    UsageBaseType,
     UsageValue,
   ].map(
     ({ name, primaryKey }) =>

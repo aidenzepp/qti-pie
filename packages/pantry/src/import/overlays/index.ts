@@ -832,6 +832,10 @@ const mergedOf = (
       "Tolerance",
       parts.map(({ Tolerance: rows }) => rows),
     ),
+    UsageBaseType: unionOf(
+      "UsageBaseType",
+      parts.map(({ UsageBaseType: rows }) => rows),
+    ),
     UsageValue: unionOf(
       "UsageValue",
       parts.map(({ UsageValue: rows }) => rows),

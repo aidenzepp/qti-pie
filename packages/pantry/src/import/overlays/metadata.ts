@@ -37,6 +37,7 @@ import type {
   ObjectLang,
   ResourceLomGeneral,
   StatisticDate,
+  UsageBaseType,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
 
@@ -71,6 +72,7 @@ export interface MetadataRows {
   readonly ObjectLang: ReadonlyMap<string, Addition<typeof ObjectLang>>;
   readonly ResourceLomGeneral: ReadonlyMap<string, Addition<typeof ResourceLomGeneral>>;
   readonly StatisticDate: ReadonlyMap<string, Addition<typeof StatisticDate>>;
+  readonly UsageBaseType: ReadonlyMap<string, Addition<typeof UsageBaseType>>;
   readonly UsageValue: ReadonlyMap<string, Addition<typeof UsageValue>>;
 }
 
@@ -706,6 +708,22 @@ const dateRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof StatisticDa
   );
 
 /**
+ * Build a document's {@link UsageBaseType} rows: one per usage value that writes a `baseType`,
+ * whether or not it writes a `fieldIdentifier`, its lexical form as written.
+ *
+ * @param tree - The document's tree.
+ * @returns The rows, by their node's id.
+ */
+const usageBaseTypeRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof UsageBaseType>> =>
+  new Map(
+    tree.nodes.flatMap((node) => {
+      const lexical = node.kind === usageValueKind ? tree.valueOf(node, "baseType") : undefined;
+
+      return lexical === undefined ? [] : [[node.id, { lexical, node: node.id }] as const];
+    }),
+  );
+
+/**
  * Build a document's {@link UsageValue} rows: one per usage value that forms part of a record, that
  * is, writes a `fieldIdentifier` and a `baseType` (spec reading 105), its code the handle its
  * lexical form spells (`none` where it spells none, which `E1_derived` refuses) and its text its
@@ -740,13 +758,14 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
  * Build the metadata rows of one document.
  *
  * Every `lom:lom`, `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every
- * `cp:resource` its {@link LomResource}, every general category under a resource's `cp:metadata`
- * its {@link ResourceLomGeneral}, every title's string its {@link LomTitleString}, and every
- * learning resource type its {@link LomResourceType} where it holds a value and its
- * {@link LomResourceTypeSource} where it writes a source. An item's or
- * test's root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where
- * it writes a `lastUpdated`, and a usage value its {@link UsageValue} where it writes a `baseType`
- * and a `fieldIdentifier`; an optional attribute's row exists where it is written.
+ * `cp:resource` its {@link LomResource}, every general category under a resource's `cp:metadata` its
+ * {@link ResourceLomGeneral}, every title's string its {@link LomTitleString}, and every learning
+ * resource type its {@link LomResourceType} where it holds a value and its
+ * {@link LomResourceTypeSource} where it writes a source. An item's or test's root has its
+ * {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where it writes a
+ * `lastUpdated`, and a usage value its {@link UsageBaseType} where it writes a `baseType` and its
+ * {@link UsageValue} where it also writes a `fieldIdentifier`; an optional attribute's row exists
+ * where it is written.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -780,6 +799,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
       ),
     ),
     StatisticDate: dateRowsOf(tree),
+    UsageBaseType: usageBaseTypeRowsOf(tree),
     UsageValue: usageValueRowsOf(tree),
   };
 };
