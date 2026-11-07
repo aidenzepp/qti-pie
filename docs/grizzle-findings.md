@@ -1467,6 +1467,44 @@ target's UNIQUE are both representable, and only the source's index is refused.
   - the workload guard's two free tests (`src/qti/logins.test.ts` and `src/test/gen/assembly.compile.test.ts`,
     `bbe5f4ca` and `d11c39f1`) are red, with `schema Qti is not the one snapshot.json records`.
 
+### A counted family's `Monoid.or` end is re-read through the wrong text form (defect, fix pending in grizzle)
+
+- **Triage:** lane N2, at grizzle `27c4cd2`. The five files below are byte-identical at `4b155e8` and `30af956`.
+- **Cause:**
+  - `bind.ts`'s `carried` refills the owner's fact from `recountValues` (`packages/engine/src/write/program/bind.ts:427`
+    to `484`, the call at `:452`).
+  - The recount's ends are parameter texts: `textOf` is `admittedText` (`packages/engine/src/write/family/edit.ts:135`
+    to `136`, the ends at `:916`).
+  - `recountValues` reads them back with `scalarCodec(…).convert` (`edit.ts:194` to `209`, the read at `:203`), which
+    reads `bit_out` text (`packages/engine/src/codec/scalar.ts:52`). `convertBits` collects the positions of `"1"`
+    (`packages/engine/src/scalar/values/convert.ts:60` to `68`).
+  - So the hex parameter text `"XC"`, which is {a, b}, reads back as ∅. N2's trace of the recount shows it:
+    `recount ends bases: host=Set{a,b} text="XC"`.
+  - It is a regression from `a2ff5eb`, where hex became the one form. At `f66c05b`, `codec/scalar.ts:51`'s parameter
+    text was binary, the same as `bit_out`. A count or sum end is unaffected.
+- **Reproduction:** `~/.cache/gr8des/n2/repro/fold-closed-row/` (`run-4b155e8.out`), and the same at `27c4cd2` in
+  `fold-closed-row-27c4cd2/run-27c4cd2.out`. A counted family with a `Monoid.or` end over a closed set:
+  - **case:** `invariant-rejected`, with nothing written. The server log holds `insert or update on table "owner"
+    violates foreign key constraint "__owner_fk_id_pred_members_bases_qxyoofnu37"`, with `DETAIL: Key (id,
+    __pred_members_vgfnsqbvv6, bases)=(00000000-0000-4000-8000-000000000001, 1, 0000) is not present in table
+    "member"`: the owner's end, `0000`, is the empty set;
+  - **host-bits variant:** the same fold with the bits written by the host, also `invariant-rejected`, so the closed
+    row is not the cause;
+  - **sum control:** the same family with a `Monoid.sum` end, `accepted`, its total `12` over `2` postings.
+- **Effect in qti-pie:** `Expression`'s five `Monoid.or` ends over the counted `Operand` family arrive empty, so
+  `E1_derived` refuses the every-relation package's `qti-sum`. The CLI tier's "writes only live handles … bit(112) …
+  a family's insert of Node raised 23514" is probably the same defect.
+- **Status:** relayed to the grizzle session (grizzle-c5) under the operator's order that it be fixed with a
+  search-based guard that keeps it from recurring: a round trip over every carrier, and the fold-end search over
+  monoids, carriers, family kinds and write forms, with the planted bug restored and shown caught. It is being fixed
+  before beta.1, so nothing is filed. qti-pie takes no workaround. The fixing commit is recorded here when it lands.
+
+### A CHECK's refusal drops PostgreSQL's DETAIL row (a reporting limit, asked of grizzle)
+
+When a write breaks a CHECK, grizzle's refusal says "the database names no row", though PostgreSQL's error carries a
+DETAIL naming the failing row (as the server log above shows for a foreign key). This is a reporting limit, not a
+wrong verdict. It is asked of the grizzle session as a question, so nothing is filed.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
