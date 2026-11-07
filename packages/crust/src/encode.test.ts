@@ -57,7 +57,23 @@ describe("encode runs without Node's Buffer", () => {
     }),
   );
 
-  it.effect("writes UTF-16LE with a mark and surrogate pairs little-endian", () =>
+  it.effect("writes UTF-16 with the mark FF FE and surrogate pairs little-endian", () =>
+    Effect.gen(function* encodesUtf16() {
+      const doc = yield* utf8Tree();
+      const bytes = yield* withoutBuffer(
+        Effect.gen(function* encodeUtf16() {
+          assert.isFalse("Buffer" in globalThis);
+
+          return yield* encode(doc, "UTF-16");
+        }),
+      );
+
+      assert.deepStrictEqual([...bytes.subarray(0, 4)], [0xff, 0xfe, 0x3c, 0x00]);
+      assert.isTrue(contains(bytes, [0x61, 0x00, 0x3d, 0xd8, 0x00, 0xde]));
+    }),
+  );
+
+  it.effect("writes UTF-16LE with no mark and surrogate pairs little-endian", () =>
     Effect.gen(function* encodesUtf16le() {
       const doc = yield* utf8Tree();
       const bytes = yield* withoutBuffer(
@@ -68,12 +84,12 @@ describe("encode runs without Node's Buffer", () => {
         }),
       );
 
-      assert.deepStrictEqual([...bytes.subarray(0, 4)], [0xff, 0xfe, 0x3c, 0x00]);
+      assert.deepStrictEqual([...bytes.subarray(0, 4)], [0x3c, 0x00, 0x3f, 0x00]);
       assert.isTrue(contains(bytes, [0x61, 0x00, 0x3d, 0xd8, 0x00, 0xde]));
     }),
   );
 
-  it.effect("writes UTF-16BE with a mark and surrogate pairs big-endian", () =>
+  it.effect("writes UTF-16BE with no mark and surrogate pairs big-endian", () =>
     Effect.gen(function* encodesUtf16be() {
       const doc = yield* utf8Tree();
       const bytes = yield* withoutBuffer(
@@ -84,7 +100,7 @@ describe("encode runs without Node's Buffer", () => {
         }),
       );
 
-      assert.deepStrictEqual([...bytes.subarray(0, 4)], [0xfe, 0xff, 0x00, 0x3c]);
+      assert.deepStrictEqual([...bytes.subarray(0, 4)], [0x00, 0x3c, 0x00, 0x3f]);
       assert.isTrue(contains(bytes, [0x00, 0x61, 0xd8, 0x3d, 0xde, 0x00]));
     }),
   );

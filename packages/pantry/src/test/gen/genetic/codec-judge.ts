@@ -221,48 +221,38 @@ const codePointsOf = (bytes: Uint8Array): string =>
   Array.from(bytes, (byte) => String.fromCodePoint(byte)).join("");
 
 /**
- * The encoding pseudo-attribute of a document's XML declaration, read in the encoding its first
- * bytes say over the whole document, as XML 1.0's [23] XMLDecl bounds no whitespace: its label,
- * and the number of characters from the document's start to its end.
+ * The label a document's XML declaration names, read in the encoding its first bytes say over the
+ * whole document, as XML 1.0's [23] XMLDecl bounds no whitespace.
  *
  * @param bytes - The document.
  * @param family - Its encoding by its first bytes.
- * @returns The label and where it ends, none when the declaration names none.
+ * @returns The label, none when the declaration names none.
  */
-const declarationOf = (
-  bytes: Uint8Array,
-  family: Option.Option<string>,
-): Option.Option<{ readonly end: number; readonly label: string }> => {
+const declaredLabel = (bytes: Uint8Array, family: Option.Option<string>): Option.Option<string> => {
   const text = Option.match(family, {
     onNone: () => codePointsOf(bytes),
     onSome: (held) =>
       new TextDecoder(held === "UTF-8" ? "utf-8" : held.toLowerCase()).decode(bytes),
   });
-  const found = /^\uFEFF?<\?xml\s[^?]*?encoding\s*=\s*["'](?<label>[^"']*)["']/u.exec(text);
-  const label = found?.groups?.["label"];
 
-  return found === null || label === undefined
-    ? Option.none()
-    : Option.some({ end: found[0].length, label });
+  return Option.fromUndefinedOr(
+    /^\uFEFF?<\?xml\s[^?]*?encoding\s*=\s*["'](?<label>[^"']*)["']/u.exec(text)?.groups?.["label"],
+  );
 };
 
 /**
- * The label a document's XML declaration names, read in the encoding its first bytes say.
+ * Whether a document opens with a whole byte order mark, UTF-8's `EF BB BF` or UTF-16's `FE FF` or
+ * `FF FE`.
  *
  * @param bytes - The document.
- * @param family - Its encoding by its first bytes.
- * @returns The label, none when it names none.
+ * @returns Whether it does.
  */
-const declaredLabel = (bytes: Uint8Array, family: Option.Option<string>): Option.Option<string> =>
-  Option.map(declarationOf(bytes, family), ({ label }) => label);
-
-/**
- * How many leading characters crust's reader searches for the XML declaration's encoding, as
- * crust documents it (decode.ts `declarationWindow`: 1024 bytes of an ASCII-compatible document,
- * 1024 characters of a UTF-16 one). XML 1.0 bounds no declaration, so a longer one is crust's
- * limit, recorded, never a defect of the search.
- */
-const sniffWindow = 1024;
+const markedOf = (bytes: Uint8Array): boolean =>
+  [
+    [0xef, 0xbb, 0xbf],
+    [0xfe, 0xff],
+    [0xff, 0xfe],
+  ].some((mark) => mark.every((byte, at) => bytes[at] === byte));
 
 /**
  * Whether a UTF-16 document, by its mark or its Appendix F pattern, ends on half a code unit or
@@ -290,45 +280,40 @@ const endsInsidePair = (bytes: Uint8Array): boolean => {
 };
 
 /**
- * Whether an unmarked document's declaration names its encoding past crust's sniff window.
- *
- * @param bytes - The document.
- * @returns Whether it does.
- */
-const pastSniffWindow = (bytes: Uint8Array): boolean => {
-  const family = familyOf(bytes);
-  const marked = bytes[0] === 0xef || bytes[0] === 0xfe || bytes[0] === 0xff;
-
-  return !marked && Option.exists(declarationOf(bytes, family), ({ end }) => end > sniffWindow);
-};
-
-/**
- * Whether a document's declaration names an encoding other than the one its bytes are in: a UTF-8
- * mark declaring anything but UTF-8, a UTF-16 mark or pattern declaring no UTF-16 label or the
- * other byte order, or bytes of the ASCII-compatible family declaring UTF-16. XML 1.0 section 4.3.3
- * makes each a fatal error, so every disagreement on such a document is its own class.
+ * Whether a document is in another encoding than the one its declaration names, or than UTF-8
+ * where it names none: a UTF-8 mark under any label but UTF-8; a UTF-16 mark under any label but
+ * UTF-16, since XML 1.0 section 4.3.3 says the terms "UTF-8" and "UTF-16" "do not apply to related
+ * character encodings, including but not limited to UTF-16BE, UTF-16LE", under which the mark is
+ * U+FEFF, a character (Unicode 16.0 section 3.10, D96 and D97; RFC 2781 sections 4.1 and 4.2);
+ * an Appendix F UTF-16 pattern with no mark under any label but its own order's, UTF-16 itself
+ * included, which "MUST" begin with the mark, or under no label, which makes it UTF-8; and bytes of
+ * the ASCII-compatible family under a UTF-16 label. Section 4.3.3 makes each a fatal error "for an
+ * entity including an encoding declaration to be presented to the XML processor in an encoding
+ * other than that named in the declaration, or for an entity which begins with neither a Byte
+ * Order Mark nor an encoding declaration to use an encoding other than UTF-8", so every
+ * disagreement on such a document is its own class.
  *
  * @param bytes - The document.
  * @returns The mismatch, as `bytes declare label`, or none.
  */
 export const declaredAgainstBytes = (bytes: Uint8Array): Option.Option<string> => {
   const family = familyOf(bytes);
-
-  return declaredLabel(bytes, family).pipe(
-    Option.flatMap((label) => {
-      const upper = label.toUpperCase();
-      const utf16 = upper === "UTF-16" || upper === "UTF-16LE" || upper === "UTF-16BE";
-      const agrees = Option.match(family, {
-        onNone: () => !utf16,
-        onSome: (held) =>
-          held === "UTF-8" ? upper === "UTF-8" : upper === "UTF-16" || upper === held,
-      });
-
-      return agrees
-        ? Option.none()
-        : Option.some(`${Option.getOrElse(family, () => "ASCII-family")} bytes declare ${label}`);
-    }),
+  const marked = markedOf(bytes);
+  const declared = declaredLabel(bytes, family);
+  const label = Option.getOrElse(declared, () =>
+    marked && !Option.contains(family, "UTF-8") ? "UTF-16" : "UTF-8",
   );
+  const upper = label.toUpperCase();
+  const agrees = Option.match(family, {
+    onNone: () => upper !== "UTF-16" && upper !== "UTF-16LE" && upper !== "UTF-16BE",
+    onSome: (held) => upper === (held === "UTF-8" || !marked ? held : "UTF-16"),
+  });
+
+  return agrees
+    ? Option.none()
+    : Option.some(
+        `${Option.getOrElse(family, () => "ASCII-family")}${marked ? " marked" : ""} bytes ${Option.isSome(declared) ? `declare ${label}` : "declare no encoding"}`,
+      );
 };
 
 /**
@@ -1174,21 +1159,15 @@ const relabelledText = (text: string): string => {
  *
  * @param bytes - The document.
  * @returns The text as UTF-8 bytes; `refused` when the decoder refuses the bytes; `unjudged` for a
- *   declaration naming another encoding than the bytes', a label the independent decoders do not
- *   hold, or UTF-16 with no mark and no byte order named, whose classes O1 judges.
+ *   document in another encoding than the one it names ({@link declaredAgainstBytes}), whose class
+ *   O1 judges, or for a label the independent decoders do not hold.
  */
 const independentlyRead = (bytes: Uint8Array): Independent => {
   const family = familyOf(bytes);
   const declared = declaredLabel(bytes, family);
-  const marked = bytes[0] === 0xef || bytes[0] === 0xfe || bytes[0] === 0xff;
+  const marked = markedOf(bytes);
   const label = Option.getOrElse(declared, () => "UTF-8").toUpperCase();
-  const unmarkedUtf16 = Option.exists(family, (held) => held !== "UTF-8") && !marked;
-  // An unmarked UTF-16 document that names no byte order is UTF-16 by Appendix F alone, the
-  // bare-utf16 class O1 judges.
-  if (
-    Option.isSome(declaredAgainstBytes(bytes)) ||
-    (unmarkedUtf16 && (Option.isNone(declared) || label === "UTF-16"))
-  ) {
+  if (Option.isSome(declaredAgainstBytes(bytes))) {
     return { _tag: "unjudged" };
   }
 
@@ -1338,7 +1317,6 @@ export type InputClass =
   | TreeClass
   | "UTF-16 input ends inside a surrogate pair"
   | "default names an entity declared after it"
-  | "declaration past the sniff window"
   | "encoding declared against the bytes";
 
 /**
@@ -1379,10 +1357,6 @@ const inputClassOf = (
     return "UTF-16 input ends inside a surrogate pair";
   }
 
-  if (pastSniffWindow(bytes)) {
-    return "declaration past the sniff window";
-  }
-
   if (Option.isSome(declaredAgainstBytes(bytes))) {
     return "encoding declared against the bytes";
   }
@@ -1397,7 +1371,7 @@ const inputClassOf = (
  * @returns Whether it does.
  */
 const isClassed = (held: CodecDisagreement): boolean =>
-  /^O\d (?:defaulted name in no namespace|namespace name holds a reference|encoding declared against the bytes|declaration past the sniff window|UTF-16 input ends inside a surrogate pair|default names an entity declared after it): /u.test(
+  /^O\d (?:defaulted name in no namespace|namespace name holds a reference|encoding declared against the bytes|UTF-16 input ends inside a surrogate pair|default names an entity declared after it): /u.test(
     held.signature,
   );
 

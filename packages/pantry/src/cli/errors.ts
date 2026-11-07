@@ -8,8 +8,8 @@
 import { Option, Predicate, Runtime, Schema } from "effect";
 import type { Effect } from "effect";
 import { CliError } from "effect/cli";
-import { refusalFieldsOf, refusedByDatabase } from "#pantry/cli/refused.ts";
-import type { RefusalFields } from "#pantry/cli/refused.ts";
+import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
+import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
 import type { exportPackage } from "#pantry/export/package.ts";
 import type { OverlayConflict } from "#pantry/import/overlays/index.ts";
 import type { importPackage, LocateDisagreement } from "#pantry/import/package.ts";
@@ -163,14 +163,14 @@ const importDefectHelp =
 /**
  * What to do next after a refusal the database gave, by the kind of its witness: it names the law
  * and where the law is stated, and names the failing row only when its witness holds one, a key
- * grizzle reported or a row a locator found. A refusal that carries no witness kind names no row.
+ * grizzle reported or a row a locator found.
  */
 const databaseRefusalHelp = {
   key: "Find what the law describes in the package, at the row the message names, fix it, then import the package again. Nothing was written.",
   row: "Find what the law describes in the package, at the row the message names, fix it, then import the package again. Nothing was written.",
   unreported:
     "The database names no row for this law, so find what the law describes in the package by the law's source, fix it, then import the package again. Nothing was written.",
-} as const satisfies Readonly<Record<NonNullable<RefusalFields["witness"]>, string>>;
+} as const satisfies Readonly<Record<DatabaseRefusal["witness"], string>>;
 
 /**
  * A tag {@link namedFailureOf} names: one of the export's defects or the import's.
@@ -426,9 +426,9 @@ const helpOf = (failure: unknown, kind: Kind): string => {
     return uncompiledHelp;
   }
 
-  return Option.match(Option.filter(refusalFieldsOf(failure), refusedByDatabase), {
+  return Option.match(Option.flatMap(refusalFieldsOf(failure), databaseRefusalOf), {
     onNone: () => kindHelp[kind],
-    onSome: ({ witness }) => databaseRefusalHelp[witness ?? "unreported"],
+    onSome: ({ witness }) => databaseRefusalHelp[witness],
   });
 };
 

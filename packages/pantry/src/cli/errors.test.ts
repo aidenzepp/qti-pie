@@ -8,7 +8,6 @@ import {
   TokenError,
   TransportFailure,
 } from "@bjornpagen/grizzle";
-import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Option, Result } from "effect";
 import {
@@ -19,11 +18,13 @@ import {
   RoundtripDiffers,
 } from "#pantry/cli/errors.ts";
 import type { ExportDefectTag, ImportDefectTag } from "#pantry/cli/errors.ts";
+import { refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
 import { SnapshotLoadError } from "#pantry/db/snapshot.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
 import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
 import { RootMissing, RowMissing, RowsOutsideImage } from "#pantry/model/assemble.ts";
+import { WitnessKind } from "#pantry/package/refusal-origin.ts";
 import { EncodeError } from "@qti-pie/crust/errors.ts";
 
 /**
@@ -239,38 +240,72 @@ describe("describeFailure, a program grizzle refused to compile", () => {
   });
 });
 
+/**
+ * One law a database refusal names, as the refusal carries it: AL1's admission check.
+ */
+const refusedLaw = {
+  identity: "check AL1_admission",
+  name: "AL1 admission",
+  rule: "attribute-admission",
+};
+
 describe("describeFailure, a refused import", () => {
   // A refusal is matched by its tag and fields, so it is written as them here: `refusal.ts`, which
   // defines its class, loads the composed grammar.
-
   it("a refusal the database gave says where to look by the kind of its witness", () => {
-    // Oracle: the witness kind the refusal carries, read from its field and never from its
-    // detail: a key or a located row is named in the message, an unreported witness names none,
-    // and a refusal that carries no kind names none either. Bound: the three kinds and their
-    // absence, exhausted; residual none.
-    const law: Law = { kind: "check", name: "AL1_admission", relation: "Attribute" };
-    const refused = {
-      _tag: "ImportRefused",
-      detail: "x",
-      laws: [law],
-      rule: "attribute-admission",
-    };
-
-    for (const witness of ["key", "row", "unreported", undefined] as const) {
-      const { exitCode, help, kind } = describeFailure(
-        witness === undefined ? refused : { ...refused, witness },
-      );
+    // Oracle: the witness kind the refusal's origin carries, read from its field and never from
+    // its detail: a key or a located row is named in the message, an unreported witness names
+    // none. Bound: every kind of `WitnessKind`, exhausted; residual none.
+    for (const witness of WitnessKind.literals) {
+      const { exitCode, help, kind } = describeFailure({
+        _tag: "ImportRefused",
+        detail: "x",
+        origin: { _tag: "Database", laws: [refusedLaw], sources: ["AL1"], witness },
+        rule: "attribute-admission",
+      });
       const named = witness === "key" || witness === "row";
 
       assert.deepStrictEqual({ exitCode, kind }, { exitCode: 1, kind: "import-refused" });
       assert.notStrictEqual(help, kindHelp["import-refused"]);
-      assert.strictEqual(help.includes("at the row the message names"), named, String(witness));
-      assert.strictEqual(
-        help.includes("The database names no row for this law"),
-        !named,
-        String(witness),
-      );
+      assert.strictEqual(help.includes("at the row the message names"), named, witness);
+      assert.strictEqual(help.includes("The database names no row for this law"), !named, witness);
       assert.include(help, "Nothing was written.");
+    }
+  });
+
+  it("a database origin without all of its laws, sources and witness is no refusal's", () => {
+    // Oracle: the origin's shape, one case that carries the three facts together or the reader's
+    // that carries none: an origin that lacks any of them, or holds no law or no source, is not a
+    // refusal the command line reads, and keeps the help of the import-refused kind. Bound: every
+    // subset of the three facts, exhausted, and each list empty; residual none.
+    const whole = { laws: [refusedLaw], sources: ["AL1"], witness: "key" };
+    const facts = ["laws", "sources", "witness"] as const;
+    const subsets: (readonly (typeof facts)[number][])[] = [[]];
+    for (const fact of facts) {
+      subsets.push(...subsets.map((subset) => [...subset, fact]));
+    }
+
+    const partial = subsets.map((subset) =>
+      Object.fromEntries(subset.map((fact) => [fact, whole[fact]])),
+    );
+
+    assert.strictEqual(partial.length, 2 ** facts.length);
+    for (const origin of [...partial, { ...whole, laws: [] }, { ...whole, sources: [] }]) {
+      const refused = {
+        _tag: "ImportRefused",
+        detail: "x",
+        origin: { _tag: "Database", ...origin },
+        rule: "attribute-admission",
+      };
+      const reads = Option.isSome(refusalFieldsOf(refused));
+      const carriesAll = facts.every((fact) => fact in origin && [origin[fact]].flat().length > 0);
+
+      assert.strictEqual(reads, carriesAll, JSON.stringify(origin));
+      assert.strictEqual(
+        describeFailure(refused).help === kindHelp["import-refused"],
+        !carriesAll,
+        JSON.stringify(origin),
+      );
     }
   });
 });

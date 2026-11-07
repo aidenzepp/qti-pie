@@ -24,7 +24,6 @@ import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import type { Client } from "pg";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { AttributeName, Flag, NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
@@ -48,19 +47,14 @@ import { Author } from "#pantry/qti/roles.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   codeOf,
+  constraintsDescribed,
   judged,
   loginSession,
-  rowsOf,
   sqlRowOf,
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
 
 /**
  * A uuid no stored row holds: every stray row below names it as its node, package or resource.
@@ -112,26 +106,6 @@ const containedIn =
   (from: string, to: string) =>
   (law: Law): boolean =>
     law.kind === "contained" && law.from.relation === from && law.to.relation === to;
-
-/**
- * The foreign keys on one of `Qti`'s tables whose comment, the law grizzle writes on each
- * constraint, starts with the given text: the constraint that law installs.
- *
- * @param client - The session, before `SET ROLE`.
- * @param table - The referencing table.
- * @param comment - The start of the constraint's comment, `foreign key <side> to <side>`.
- * @returns The constraint names.
- */
-const foreignKeysOf = (client: Client, table: string, comment: string) =>
-  rowsOf<{ readonly conname: string }>(
-    client,
-    `SELECT con.conname FROM pg_constraint con
-       JOIN pg_class src ON src.oid = con.conrelid
-       JOIN pg_namespace n ON n.oid = src.relnamespace
-      WHERE con.contype = 'f' AND n.nspname = $1 AND src.relname = $2
-        AND starts_with(obj_description(con.oid, 'pg_constraint'), $3)`,
-    [qtiSchema, table, comment],
-  ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
 
 /**
  * A resource row, its node and package stray, every field of it set by `fields`: its own CHECKs
@@ -783,7 +757,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               },
             ];
             for (const { comment, inserts, table } of cases) {
-              const keys = yield* foreignKeysOf(client, table, comment);
+              const keys = yield* constraintsDescribed(client, table, `${comment}%`);
               assert.isNotEmpty(keys, comment);
 
               for (const key of keys) {

@@ -177,8 +177,9 @@ const resourceOrder = (genome: Genome): Genome =>
 
 /**
  * Rename one document (the salt picks which) within its directory, to `moved<salt>-<name>`, and
- * rewrite every href of every document that names it. A genome with an `xml:base` or a
- * percent-encoded href is left as it is, since such an href resolves by more than the path
+ * rewrite every href of every document that names it, its query and fragment kept, so an href
+ * that names a fragment of the document still names the document. A genome with an `xml:base` or
+ * a percent-encoded href is left as it is, since such an href resolves by more than the path
  * segments this rewrite reads.
  *
  * @param genome - The genome.
@@ -214,10 +215,15 @@ const pathRename = (genome: Genome, salt: number): Genome => {
           ? attributeValue(element, attribute.qname)
           : undefined;
         const named = value === undefined ? undefined : resolvedPath(path, value);
+        const suffix = /[?#].*$/su.exec(value ?? "")?.[0] ?? "";
 
-        return named === undefined || value?.includes("#") === true
+        return named === undefined
           ? attribute
-          : { ...attribute, references: [], value: relativeHref(newPath(path), newPath(named)) };
+          : {
+              ...attribute,
+              references: [],
+              value: `${relativeHref(newPath(path), newPath(named))}${suffix}`,
+            };
       }),
     })),
   );

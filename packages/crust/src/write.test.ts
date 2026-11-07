@@ -315,14 +315,13 @@ const singleBytes = (text: string): Uint8Array => {
 };
 
 /**
- * Write `text` as UTF-16 in the given byte order, led by its byte order mark.
+ * Write `text` as UTF-16 code units in the given byte order.
  */
 const utf16Bytes = (text: string, littleEndian: boolean): Uint8Array => {
-  const bytes = new Uint8Array(2 + 2 * text.length);
+  const bytes = new Uint8Array(2 * text.length);
   const view = new DataView(bytes.buffer);
-  view.setUint16(0, 0xfe_ff, littleEndian);
   for (let index = 0; index < text.length; index += 1) {
-    view.setUint16(2 + 2 * index, text.charCodeAt(index), littleEndian);
+    view.setUint16(2 * index, text.charCodeAt(index), littleEndian);
   }
 
   return bytes;
@@ -331,25 +330,23 @@ const utf16Bytes = (text: string, littleEndian: boolean): Uint8Array => {
 /**
  * The writer of each encoder class, over the recursive writer.
  */
-const encoders: Record<
-  EncoderClass,
-  (doc: XmlDocument, label: string) => Effect.Effect<Uint8Array, EncodeError>
-> = {
-  ascii: (doc) => Effect.map(recursiveWriteXml(doc, { threshold: 0x7f }), singleBytes),
-  "decode-only": () => Effect.fail(new EncodeError({ codePoint: 0, threshold: 0, where: "label" })),
-  latin1: (doc) => Effect.map(recursiveWriteXml(doc, { threshold: 0xff }), singleBytes),
-  utf16: (doc, label) =>
-    Effect.map(recursiveWriteXml(doc), (text) =>
-      utf16Bytes(text, classify(label).canonical !== "UTF-16BE"),
-    ),
-  utf8: (doc) => Effect.map(recursiveWriteXml(doc), (text) => new TextEncoder().encode(text)),
-};
+const encoders: Record<EncoderClass, (doc: XmlDocument) => Effect.Effect<Uint8Array, EncodeError>> =
+  {
+    ascii: (doc) => Effect.map(recursiveWriteXml(doc, { threshold: 0x7f }), singleBytes),
+    "decode-only": () =>
+      Effect.fail(new EncodeError({ codePoint: 0, threshold: 0, where: "label" })),
+    latin1: (doc) => Effect.map(recursiveWriteXml(doc, { threshold: 0xff }), singleBytes),
+    utf16: (doc) => Effect.map(recursiveWriteXml(doc), (text) => utf16Bytes(`\uFEFF${text}`, true)),
+    utf16be: (doc) => Effect.map(recursiveWriteXml(doc), (text) => utf16Bytes(text, false)),
+    utf16le: (doc) => Effect.map(recursiveWriteXml(doc), (text) => utf16Bytes(text, true)),
+    utf8: (doc) => Effect.map(recursiveWriteXml(doc), (text) => new TextEncoder().encode(text)),
+  };
 
 /**
  * The recursive `encode`.
  */
 const recursiveEncode = (doc: XmlDocument, label: string): Effect.Effect<Uint8Array, EncodeError> =>
-  encoders[classify(label).class](doc, label);
+  encoders[classify(label).class](doc);
 
 // The tests.
 

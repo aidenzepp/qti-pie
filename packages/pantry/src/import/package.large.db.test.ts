@@ -21,19 +21,18 @@
  * @see {@link https://www.postgresql.org/docs/19/protocol-message-formats.html | PostgreSQL 19, §54.7 Message Formats}
  */
 import { Db } from "@bjornpagen/grizzle";
-import type { DbConnection } from "@bjornpagen/grizzle";
-import { NodeFileSystem, NodeServices } from "@effect/platform-node";
+import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Layer, Option, Path, Redacted } from "effect";
-import { Client } from "pg";
+import { Duration, Effect, FileSystem, Layer, Option, Path } from "effect";
+import type { Client } from "pg";
 import { describe } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
+import { authorRole, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
@@ -71,50 +70,13 @@ const bulkEntries = Math.floor(messageMaxBytes / base64Length(bulkEntryBytes)) +
 const largeTimeoutMs = 1_800_000;
 
 /**
- * The author login's PostgreSQL role, `<schema>__<login>`.
+ * A session of the author login on the lease, as the author role, which holds SELECT on every table
+ * of `Qti` it writes whole, closed with its scope: a direct reader of the tables' system columns.
  */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, which holds SELECT on every table of `Qti` it writes whole.
- */
-const authorRole = "qti__author";
-
-/**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA, as the
- * author role, closed with its scope: a direct reader of the tables' system columns.
- */
-const authorSession = Effect.gen(function* authorSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-  const opened = yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-
-  yield* Effect.tryPromise(() => opened.query(`SET ROLE ${authorRole}`));
-
-  return opened;
-}).pipe(Effect.provide(NodeFileSystem.layer), Effect.orDie);
+const authorSession = loginSession.pipe(
+  Effect.tap((client) => rowsOf(client, `SET ROLE ${authorRole}`)),
+  Effect.orDie,
+);
 
 /**
  * Read a package's record against its own row's transaction: how many entries it holds, how many

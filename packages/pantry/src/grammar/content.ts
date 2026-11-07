@@ -1492,29 +1492,6 @@ export const stepOf = (
   );
 
 /**
- * Step a family's automaton by one child whose `Admission` position a caller reads: the step of
- * {@link stepOf}, for the callers that look `Admission` up themselves.
- *
- * @param content - The content grammar.
- * @param positionOf - A child's `Admission` position.
- * @param key - The family and the child.
- * @param key.version - The version.
- * @param key.parent - The parent's kind.
- * @param key.child - The child's kind.
- * @param was - The predecessor's state, 0 for the first child.
- * @returns The child's state, or none when no position follows.
- */
-export const contentStep = (
-  content: ContentGrammar,
-  positionOf: (key: StepKey) => Option.Option<number>,
-  key: StepKey,
-  was: number,
-): Option.Option<number> =>
-  Option.flatMap(positionOf(key), (position) =>
-    placedStep(content, key, placementAt(content, key, position), was),
-  );
-
-/**
  * Whether a family may end in a state: `Last`'s cell under the family's model.
  *
  * @param content - The content grammar.

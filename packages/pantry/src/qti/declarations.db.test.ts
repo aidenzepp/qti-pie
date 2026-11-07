@@ -31,31 +31,22 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import {
-  BaseType,
-  Cardinality,
-  DeclarationKind,
-  NodeKind,
-  SchemaVersion,
-} from "#pantry/grammar/install.ts";
+import { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import {
   contextVariable,
   Declaration,
   declarationKinds,
+  OutcomeRange,
   reservedBaseTypes,
   sessionVariables,
+  Value,
+  ValueSet,
 } from "#pantry/qti/declarations.ts";
 import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import {
-  assertVerdict,
-  codeOf,
-  judged,
-  loginSession,
-  statedInserts,
-} from "#pantry/test/direct-sql.ts";
-import type { Insert, SqlRow } from "#pantry/test/direct-sql.ts";
+import { assertVerdict, judged, loginSession, statedInserts } from "#pantry/test/direct-sql.ts";
+import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -73,17 +64,17 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
 const strayDocument = strayNode(255);
 
 /**
- * A declaration row as a direct writer writes it, lawful on its own: an outcome `A` of base type
- * float and single cardinality, its lexical forms the codes' own.
+ * A declaration fact, lawful on its own: an outcome `A` of base type float and single cardinality,
+ * its lexical forms the handles' own.
  *
- * @param fields - The columns the case sets, codes by handle.
+ * @param fields - The fields the case sets.
  * @param fields.baseType - Its base type.
  * @param fields.baseTypeLexical - Its `base-type` as written.
  * @param fields.cardinality - Its cardinality.
  * @param fields.cardinalityLexical - Its `cardinality` as written.
  * @param fields.identifier - Its collapsed identifier, written bare.
  * @param fields.kind - Its kind.
- * @returns The row.
+ * @returns The fact.
  */
 const declarationRow = (fields: {
   readonly baseType?: string;
@@ -99,23 +90,23 @@ const declarationRow = (fields: {
   const identifier = fields.identifier ?? "A";
 
   return {
-    base_type: codeOf(BaseType.handles, baseType),
-    base_type_lexical: fields.baseTypeLexical ?? (baseType === "none" ? "" : baseType),
-    cardinality: codeOf(Cardinality.handles, cardinality),
-    cardinality_lexical: fields.cardinalityLexical ?? cardinality,
-    declaration_kind: codeOf(DeclarationKind.handles, kind),
+    baseType,
+    baseTypeLexical: fields.baseTypeLexical ?? (baseType === "none" ? "" : baseType),
+    cardinality,
+    cardinalityLexical: fields.cardinalityLexical ?? cardinality,
+    declarationKind: kind,
     document: strayDocument,
     identifier,
-    identifier_lead: "",
-    identifier_lexical: identifier,
-    identifier_trail: "",
-    kind: codeOf(NodeKind.handles, kind),
+    identifierLead: "",
+    identifierLexical: identifier,
+    identifierTrail: "",
+    kind,
     nearest: strayDocument,
     node: strayNode(1),
     parent: strayDocument,
-    start: 1,
-    version: codeOf(SchemaVersion.handles, "3.0.1"),
-  } satisfies SqlRow;
+    start: 1n,
+    version: "3.0.1",
+  } satisfies Stated["fact"];
 };
 
 /**
@@ -126,10 +117,10 @@ const declarationRow = (fields: {
  * family's owner axis is not deferrable, so the declaration is judged against its owner at its
  * INSERT, and the owner's own foreign keys are deferred.
  *
- * @param row - The declaration's row.
+ * @param row - The declaration's fact.
  * @returns The rows, in writing order.
  */
-const declared = (row: SqlRow): readonly Insert[] =>
+const declared = (row: Stated["fact"]) =>
   statedInserts([
     {
       fact: {
@@ -447,17 +438,17 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               {
                 label: "identifier padded but written bare",
                 refused: true,
-                row: { ...declarationRow({}), identifier_lexical: " A" },
+                row: { ...declarationRow({}), identifierLexical: " A" },
               },
               {
                 label: "identifier padded, its lead written",
                 refused: false,
-                row: { ...declarationRow({}), identifier_lead: " ", identifier_lexical: " A" },
+                row: { ...declarationRow({}), identifierLead: " ", identifierLexical: " A" },
               },
               {
                 label: "identifier holding its own whitespace",
                 refused: true,
-                row: { ...declarationRow({ identifier: " A" }), identifier_lexical: " A" },
+                row: { ...declarationRow({ identifier: " A" }), identifierLexical: " A" },
               },
             ];
             for (const { label, refused, row } of cases) {
@@ -507,30 +498,30 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                     (cardinality !== "single" || values === 1) &&
                     (record ? fields === values : fields === 0);
                   assertVerdict(
-                    yield* judged(client, [
-                      {
-                        row: {
-                          base_type: codeOf(BaseType.handles, record ? "none" : "float"),
-                          cardinality: codeOf(Cardinality.handles, cardinality),
-                          declaration_kind: codeOf(
-                            DeclarationKind.handles,
-                            "qti-outcome-declaration",
-                          ),
-                          document: strayDocument,
-                          element_children: values,
-                          elements: 1,
-                          fields,
-                          identifier: "A",
-                          kind: codeOf(NodeKind.handles, "qti-default-value"),
-                          nearest: strayDocument,
-                          node: strayNode(2),
-                          parent: strayNode(1),
-                          start: 2,
-                          version: codeOf(SchemaVersion.handles, "3.0.1"),
+                    yield* judged(
+                      client,
+                      statedInserts([
+                        {
+                          fact: {
+                            baseType: record ? "none" : "float",
+                            cardinality,
+                            declarationKind: "qti-outcome-declaration",
+                            document: strayDocument,
+                            elementChildren: BigInt(values),
+                            elements: 1n,
+                            fields: BigInt(fields),
+                            identifier: "A",
+                            kind: "qti-default-value",
+                            nearest: strayDocument,
+                            node: strayNode(2),
+                            parent: strayNode(1),
+                            start: 2n,
+                            version: "3.0.1",
+                          },
+                          relation: ValueSet,
                         },
-                        table: "value_set",
-                      },
-                    ]),
+                      ]),
+                    ),
                     "value_cardinality",
                     !lawful,
                     `${cardinality} ${String(values)} values ${String(fields)} fields`,
@@ -555,23 +546,26 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
             for (const baseType of [...judgedBaseTypes, "string"]) {
               for (const { text, values } of typedTexts) {
                 assertVerdict(
-                  yield* judged(client, [
-                    {
-                      row: {
-                        base_type: codeOf(BaseType.handles, baseType),
-                        document: strayDocument,
-                        kind: codeOf(NodeKind.handles, "qti-value"),
-                        nearest: strayDocument,
-                        node: strayNode(3),
-                        parent: strayNode(2),
-                        set_base_type: codeOf(BaseType.handles, baseType),
-                        start: 3,
-                        text,
-                        version: codeOf(SchemaVersion.handles, "3.0.1"),
+                  yield* judged(
+                    client,
+                    statedInserts([
+                      {
+                        fact: {
+                          baseType,
+                          document: strayDocument,
+                          kind: "qti-value",
+                          nearest: strayDocument,
+                          node: strayNode(3),
+                          parent: strayNode(2),
+                          setBaseType: baseType,
+                          start: 3n,
+                          text,
+                          version: "3.0.1",
+                        },
+                        relation: Value,
                       },
-                      table: "value",
-                    },
-                  ]),
+                    ]),
+                  ),
                   "typed_value",
                   baseType !== "string" && !values.includes(baseType),
                   `${baseType} ${JSON.stringify(text)}`,
@@ -596,17 +590,20 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               for (const mastery of scaleTexts) {
                 for (const maximum of scaleTexts) {
                   assertVerdict(
-                    yield* judged(client, [
-                      {
-                        row: {
-                          mastery_value: mastery,
-                          node: strayNode(1),
-                          normal_maximum: maximum,
-                          normal_minimum: minimum,
+                    yield* judged(
+                      client,
+                      statedInserts([
+                        {
+                          fact: {
+                            masteryValue: mastery,
+                            node: strayNode(1),
+                            normalMaximum: maximum,
+                            normalMinimum: minimum,
+                          },
+                          relation: OutcomeRange,
                         },
-                        table: "outcome_range",
-                      },
-                    ]),
+                      ]),
+                    ),
                     "mastery_range",
                     outOfRange(minimum, mastery, maximum),
                     JSON.stringify([minimum, mastery, maximum]),

@@ -5,7 +5,7 @@ import { Console, Duration, Effect, FileSystem, Layer, Option, Schema } from "ef
 import { describe } from "vitest";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
-import { lawFactsOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
+import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
@@ -206,10 +206,10 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
     assert.strictEqual(errors[0]?.kind, "import-refused", `${entry.name}: the CLI's kind`);
     assert.strictEqual(errors[0]?.rule, rule, `${entry.name}: the CLI names the importer's rule`);
 
-    const laws = yield* Option.match(refusalFieldsOf(refusal), {
-      onNone: () => Effect.succeed(Option.none()),
-      onSome: lawFactsOf,
-    });
+    const laws = Option.map(
+      Option.flatMap(refusalFieldsOf(refusal), databaseRefusalOf),
+      (database) => database.laws,
+    );
 
     assert.deepStrictEqual(
       identities(errors[0]?.laws ?? []),

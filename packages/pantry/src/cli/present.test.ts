@@ -15,6 +15,8 @@ import {
 } from "#pantry/cli/output.ts";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
+import type { RefusalWitness } from "#pantry/import/refusal.ts";
+import { readerOrigin, WitnessKind } from "#pantry/package/refusal-origin.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 import { captureCli, matchesCommitted, preloadEngine } from "#pantry/test/cli.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
@@ -358,6 +360,112 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
               sources: [source],
             },
             name,
+          );
+        }
+      }),
+  );
+});
+
+/**
+ * A witness of each kind a database refusal names its row by, as the importer passes it: grizzle's
+ * key witness, a located row, and none. A kind `WitnessKind` adds fails to compile here.
+ */
+const witnessesByKind = {
+  key: { kind: "key", relation: "Attribute", values: { local: "href", node: "n-1" } },
+  row: { kind: "row", relation: "Node", values: { node: "n-2" } },
+  unreported: { kind: "unreported" },
+} as const satisfies {
+  readonly [Kind in typeof WitnessKind.Type]: RefusalWitness & { readonly kind: Kind };
+};
+
+/**
+ * Where each origin's help sends the person: the reader's to the message, a named row's to that
+ * row, an unreported witness's to the law's source.
+ */
+const helpByOrigin = {
+  Reader: "Fix the package as the message says, then import it again.",
+  key: "at the row the message names",
+  row: "at the row the message names",
+  unreported: "The database names no row for this law, so find what the law describes",
+} as const satisfies Readonly<Record<"Reader" | typeof WitnessKind.Type, string>>;
+
+layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refusal", (it) => {
+  it.effect(
+    "prints the laws, their sources and the witness exactly when the database refused, and its origin's help",
+    () =>
+      // Oracle: the origin each refusal is built from, and the law table read directly by the name
+      // its one check was built from: a refusal the reader made prints no law, no source and no
+      // witness in either mode; one the database made prints its law with the table's name and rule,
+      // the table's source once, and the kind of the witness it was built under. The help is the
+      // origin's, by its own words. Bound: the reader's origin and the database's under each kind of
+      // `WitnessKind`, exhausted, each in text and JSON; residual none.
+      Effect.gen(function* everyOrigin() {
+        const { checkNameOf, ImportRefused, lawTable, refusalOfLaws } = yield* Effect.promise(
+          () => import("#pantry/import/refusal.ts"),
+        );
+        const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
+        const { rule, source } = lawTable["AL1 admission"];
+        const law: Law = { kind: "check", name: checkNameOf("AL1 admission"), relation: "Node" };
+        const reader = new ImportRefused({
+          detail: "The zip entry a.xml was refused",
+          origin: readerOrigin,
+          rule: "zip-format",
+        });
+        const origins = [
+          { expected: {}, help: helpByOrigin.Reader, printed: [], refusal: reader },
+          ...WitnessKind.literals.map((witness) => {
+            const built = refusalOfLaws([law], witnessesByKind[witness], grammar);
+
+            if (Result.isFailure(built)) {
+              return assert.fail(`${witness}: no rule owns AL1's own check`);
+            }
+
+            return {
+              expected: {
+                laws: [
+                  {
+                    identity: `check ${checkNameOf("AL1 admission")}`,
+                    name: "AL1 admission",
+                    rule,
+                  },
+                ],
+                sources: [source],
+                witness,
+              },
+              help: helpByOrigin[witness],
+              printed: [source],
+              refusal: built.success,
+            };
+          }),
+        ];
+
+        assert.strictEqual(origins.length, 1 + WitnessKind.literals.length);
+        for (const { expected, help, printed, refusal } of origins) {
+          const label = refusal.origin._tag === "Database" ? refusal.origin.witness : "Reader";
+          const command = ending("import", () => Promise.resolve(refusal), false);
+          const json = yield* captureCli(["--json"], { command });
+          const text = yield* captureCli([], { command });
+          const error = errorLine(json.stderr);
+          const { laws, sources, witness } = error;
+
+          assert.strictEqual(exitCodeOf(json.exit), 1, label);
+          assert.strictEqual(exitCodeOf(text.exit), 1, label);
+          assert.isTrue(matchesCommittedError(json.stderr), `${label}: ${json.stderr}`);
+          assert.strictEqual(error.kind, "import-refused", label);
+          assert.strictEqual(error.rule, refusal.rule, label);
+          assert.deepStrictEqual(
+            Object.fromEntries(
+              Object.entries({ laws, sources, witness }).filter(([, value]) => value !== undefined),
+            ),
+            expected,
+            label,
+          );
+          assert.include(error.help, help, label);
+          assert.include(text.stderr, `= help: ${error.help}`, label);
+          assert.deepStrictEqual(
+            text.stderr.split("\n").filter((line) => line.startsWith("  source: ")),
+            printed.map((stated) => `  source: ${stated}`),
+            label,
           );
         }
       }),

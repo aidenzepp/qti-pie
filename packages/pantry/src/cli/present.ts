@@ -6,8 +6,8 @@ import { describeFailure, kindExitCode, kindHelp, namedFailureOf } from "#pantry
 import type { FailureDescription } from "#pantry/cli/errors.ts";
 import { ErrorObject } from "#pantry/cli/output.ts";
 import type { LawFact, OutputMode } from "#pantry/cli/output.ts";
-import { lawFactsOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
-import type { RefusalFields } from "#pantry/cli/refused.ts";
+import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
+import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
 
 /**
  * Lay a failure out as supdoc does: its kind and what failed on one line, then what to do next.
@@ -142,7 +142,7 @@ interface Facts {
   readonly laws?: readonly LawFact[];
   readonly rule?: string;
   readonly sources?: readonly string[];
-  readonly witness?: NonNullable<RefusalFields["witness"]>;
+  readonly witness?: DatabaseRefusal["witness"];
 }
 
 /**
@@ -152,10 +152,10 @@ interface Facts {
  * @param failure - What a run failed or died with.
  * @returns The facts; none of them for any other failure.
  */
-const factsOf = Effect.fnUntraced(function* factsOf(
+const factsOf = (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value.
   failure: unknown,
-): Effect.fn.Return<Facts> {
+): Facts => {
   const facts: Types.Mutable<Facts> = {};
   const named = namedFailureOf(failure);
   if (Option.isSome(named)) {
@@ -168,21 +168,15 @@ const factsOf = Effect.fnUntraced(function* factsOf(
   }
 
   facts.rule = fields.value.rule;
-  if (fields.value.sources !== undefined) {
-    facts.sources = fields.value.sources;
-  }
-
-  if (fields.value.witness !== undefined) {
-    facts.witness = fields.value.witness;
-  }
-
-  const laws = yield* lawFactsOf(fields.value);
-  if (Option.isSome(laws)) {
-    facts.laws = laws.value;
+  const database = databaseRefusalOf(fields.value);
+  if (Option.isSome(database)) {
+    facts.laws = database.value.laws;
+    facts.sources = database.value.sources;
+    facts.witness = database.value.witness;
   }
 
   return facts;
-});
+};
 
 /**
  * Text mode's lines for a failure's facts: the named failure's tag, and each source of a refused
@@ -330,8 +324,8 @@ export const printFailures =
       Effect.tapError((failure) =>
         CliError.isCliError(failure)
           ? Effect.void
-          : Effect.flatMap(factsOf(failure), (facts) =>
-              Console.error(render(shown, describeFailure(failure), messageOf(failure), [], facts)),
+          : Console.error(
+              render(shown, describeFailure(failure), messageOf(failure), [], factsOf(failure)),
             ),
       ),
       Effect.tapDefect((defect) => Console.error(renderDefect(shown, defect))),

@@ -43,8 +43,7 @@ import type {
 } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { declarationKinds, valueSetKinds } from "#pantry/qti/declarations.ts";
-import { materialize, materializeCorpus } from "#pantry/test/fixtures.ts";
-import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { settings } from "#pantry/test/settings.ts";
 
@@ -737,21 +736,6 @@ describe("import/overlays/declarations.ts", () => {
 });
 
 /**
- * The fixtures whose item documents carry the declarations a law reads: the accepted package, a
- * shared stimulus, padded attributes and identifiers, two values of a single variable, an
- * undeclared response and an outcome declaration.
- */
-const fixtures = [
-  "simple",
-  "sharedMedia",
-  "padded-attributes",
-  "padded-identifier-value",
-  "two-values-single",
-  "undeclared-response",
-  "outcome",
-] as const satisfies readonly FixtureName[];
-
-/**
  * Read a manifest's schema version from its tree: the text of `metadata/schemaversion`.
  *
  * @param manifest - The manifest as crust read it.
@@ -847,25 +831,6 @@ const checkDocument = (path: string, tree: XdmDocument<Composed>): number => {
 layer(TestLayer, { excludeTestServices: true })(
   "import/overlays/declarations.ts, fixtures",
   (suite) => {
-    suite.effect(
-      "codes every base-type and cardinality a fixture writes as the handle whose Lexical row is its lexical form",
-      () =>
-        // Oracle: the closed relations, `BaseTypeLexical` and `CardinalityLexical` read by their rows
-        // (C17), and the direct walk, over the item documents of real packages.
-        // Bound: the fixtures of `fixtures`, every XML document that shreds.
-        Effect.gen(function* fixtureCodes() {
-          let declared = 0;
-          for (const name of fixtures) {
-            const dir = yield* materialize(name);
-            for (const { path, tree } of yield* documentsOf(dir)) {
-              declared += checkDocument(`${name}/${path}`, tree);
-            }
-          }
-
-          assert.isAtLeast(declared, 7);
-        }),
-    );
-
     suite.effect.skipIf(!settings.corpusRequested)(
       "codes every base-type and cardinality the corpus writes as the handle whose Lexical row is its lexical form",
       () =>

@@ -20,7 +20,7 @@ export class ReaderRefusal extends Data.TaggedError("ReaderRefusal")<{
   readonly detail: string;
   readonly rule:
     | "decode"
-    | "bare-utf16"
+    | "encoding-mismatch"
     | "nul"
     | "undeclared-entity"
     | "entity-cycle"

@@ -88,10 +88,11 @@ export const runLiteral = (sketch: RunSketch): string =>
 /**
  * One class of disagreement a run found, reduced: its signature, the disagreement as the reduced
  * package shows it, the edits that bred the first candidate that showed it, and the reduced
- * package's text.
+ * package, as a genome and as its text.
  */
 export interface Reduced {
   readonly disagreement: Disagreement;
+  readonly genome: Genome;
   readonly lineage: readonly string[];
   readonly package: string;
   readonly signature: string;
@@ -154,6 +155,8 @@ export interface HuntReport {
  * @param bench - The bench the judge reads.
  * @param budget - The run's budget.
  * @param tries - The most candidates each reduction judges.
+ * @param recorded - The signatures already recorded, whose classes are reported as first found,
+ *   unreduced.
  * @param sketch - The run.
  * @param isolating - The isolation phase's budget: after breeding, each law raised but never broken
  *   alone has a package that raised it reduced toward it alone, a cut kept only where the law
@@ -165,6 +168,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
   bench: Bench,
   budget: Budget,
   tries: number,
+  recorded: ReadonlySet<string>,
   sketch: RunSketch,
   isolating: Isolating = noIsolation,
 ) {
@@ -266,7 +270,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
               disagreements.some((disagreement) => signatureOf(disagreement) === signature),
             ),
           ),
-        tries,
+        recorded.has(signature) ? 0 : tries,
         1,
       );
       const last = yield* shown(genome);
@@ -275,6 +279,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
         disagreement:
           last?.disagreements.find((disagreement) => signatureOf(disagreement) === signature) ??
           found.disagreement,
+        genome,
         lineage: found.lineage,
         package: shownEntries(yield* Effect.orDie(entriesOf(genome))),
         signature,
@@ -318,6 +323,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
 
       return last.disagreements.map((disagreement): Reduced => ({
         disagreement,
+        genome,
         lineage: [`isolated toward ${law} alone`],
         package: "",
         signature: signatureOf(disagreement),
