@@ -3,14 +3,14 @@
  * each refused state is one the law's model refuses, named by the constraint that states the law.
  *
  * Every case is a direct SQL writer's, as the rules file's rule 8 and grizzle's README ("Direct SQL
- * access") state it: the author login, `SET ROLE` to the author role, at SERIALIZABLE, every
- * deferrable foreign key deferred, the case's rows inserted into `Qti`'s tables with every column a
- * writer fills (each closed id by its code; generated columns PostgreSQL computes), then the one
- * constraint under test set immediate, and a rollback. A role writes a table, never its own view of
- * it: it holds INSERT on each table it writes and only SELECT on its views (README, "Security
- * model"), so a read back goes through the view. The rows are the builder's
- * (`#pantry/import/overlays/metadata.ts`) over the fixture's own documents, so a case restates its
- * setup as a fixture and an edit of it:
+ * access") state it, through the one direct writer (`#pantry/test/direct-sql.ts`): the author
+ * login, `SET ROLE` to the author role, at SERIALIZABLE, every deferrable foreign key deferred, the
+ * builder's facts written into `Qti`'s tables with every column a writer fills (generated columns
+ * PostgreSQL computes), then the one constraint under test set immediate, and a rollback. A role
+ * writes a table, never its own view of it: it holds INSERT on each table it writes and only SELECT
+ * on its views (README, "Security model"), so a read back goes through the view. The rows are the
+ * builder's (`#pantry/import/overlays/metadata.ts`) over the fixture's own documents, so a case
+ * restates its setup as a fixture and an edit of it:
  *
  * - **`lom-identifier`** on `metaData`: its record's entry names `qti_v2_item_01` and its item is
  *   `choice`, so `LomObjectIdentifier`'s witness containment into the general entries refuses it
@@ -32,30 +32,37 @@
  * `lom-identifier`, `title-mismatch` refused `lom-title`, and the usage-data fixtures accepted but
  * `usage3-feb-30` (refused `attribute-lexical`, by `day`'s domain or AL1's value domain).
  */
-import type { Addition, DbConnection } from "@bjornpagen/grizzle";
-import { NodeFileSystem, NodeServices } from "@effect/platform-node";
+import { NodeServices } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
-import { Effect, Option, Redacted, Result } from "effect";
-import { Client } from "pg";
-import type { DatabaseError, QueryResultRow } from "pg";
+import { Effect, Option, Result } from "effect";
 import { describe, inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
-import { loginConnection } from "#pantry/db/connection.ts";
-import {
-  BaseType,
-  grammar,
-  NodeKind,
-  ResourceType,
-  SchemaVersion,
-} from "#pantry/grammar/install.ts";
+import { grammar } from "#pantry/grammar/install.ts";
 import { objectRowsOfPackage, rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataIds, NamedDocument } from "#pantry/import/overlays/metadata.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import type { LomEntry, LomTitleString, UsageValue } from "#pantry/qti/metadata.ts";
+import {
+  LomEntry,
+  LomObjectIdentifier,
+  LomObjectTitle,
+  LomTitleString,
+  StatisticDate,
+  UsageValue,
+} from "#pantry/qti/metadata.ts";
+import {
+  assertVerdict,
+  authorRole,
+  foreignKeysBetween,
+  judged,
+  judgedReading,
+  loginSession,
+  statedInserts,
+} from "#pantry/test/direct-sql.ts";
+import type { Stated } from "#pantry/test/direct-sql.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -66,212 +73,9 @@ import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 const fixtures = inject("fixtures");
 
 /**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, which is also the schema of its views.
- */
-const authorRole = "qti__author";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
-
-/**
  * The grammar shred reads every document through.
  */
 const shredGrammar = shredGrammarOf(grammar);
-
-/**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA, closed
- * with its scope: a direct SQL writer.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-}).pipe(Effect.provide(NodeFileSystem.layer));
-
-/**
- * Run one statement on a session and return its rows.
- *
- * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters.
- * @returns The rows, each as node-postgres decodes it.
- */
-const rowsOfQuery = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly unknown[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
- * Whether a failure is a server error of node-postgres's, which carries a SQLSTATE and the
- * constraint it names.
- *
- * @param error - The failure's cause.
- * @returns Whether it is one.
- */
-const isServerError = (error: unknown): error is DatabaseError =>
-  error instanceof Error && "code" in error && "constraint" in error;
-
-/**
- * A row a direct writer inserts into one of `Qti`'s tables: every column it fills by name, a closed
- * id by its code, a natural as its decimal text.
- */
-type SqlRow = Readonly<Record<string, string | number>>;
-
-/**
- * One row of a case, with the table it is inserted into.
- */
-interface Insert {
-  readonly row: SqlRow;
-  readonly table: string;
-}
-
-/**
- * Read the columns of one of `Qti`'s tables a direct writer fills: every live column PostgreSQL
- * does not generate, a family's hidden ones among them (README, "Direct SQL access": a family's
- * values are a direct writer's to fill).
- *
- * @param client - The session.
- * @param table - The table.
- * @returns The columns' names, none for a table the schema does not hold.
- */
-const writtenColumnsOf = (client: Client, table: string) =>
-  rowsOfQuery<{ readonly name: string }>(
-    client,
-    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
-      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
-        AND a.attgenerated = ''
-      ORDER BY a.attnum`,
-    [`${qtiSchema}.${table}`],
-  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
-
-/**
- * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
- * catalogue: the constraints a containment between the two relations installs.
- *
- * @param client - The session, before `SET ROLE`.
- * @param from - The referencing table.
- * @param to - The referenced table.
- * @returns The constraint names.
- */
-const foreignKeys = (client: Client, from: string, to: string) =>
-  rowsOfQuery<{ readonly conname: string }>(
-    client,
-    `SELECT con.conname FROM pg_constraint con
-       JOIN pg_class src ON src.oid = con.conrelid
-       JOIN pg_class dst ON dst.oid = con.confrelid
-       JOIN pg_namespace n ON n.oid = src.relnamespace
-      WHERE con.contype = 'f' AND n.nspname = $1 AND src.relname = $2 AND dst.relname = $3`,
-    [qtiSchema, from, to],
-  ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
-
-/**
- * Insert a case's rows into their tables as the author role, every foreign key deferred, then set
- * the given ones immediate, read what the case reads, and roll back. Each row fills exactly its
- * table's written columns, or the case fails before any statement runs.
- *
- * @param client - The session.
- * @param inserts - The rows, in order.
- * @param immediate - The constraints to check at once after the inserts.
- * @param read - A statement to read before the rollback, none to read nothing.
- * @returns The server's error, or none when every statement succeeded, with the read's rows.
- */
-const deferredInserts = (
-  client: Client,
-  inserts: readonly Insert[],
-  immediate: readonly string[],
-  read: Option.Option<{ readonly text: string; readonly values: readonly unknown[] }>,
-) =>
-  Effect.gen(function* insertDeferred() {
-    for (const { row, table } of inserts) {
-      assert.sameMembers(
-        Object.keys(row),
-        yield* writtenColumnsOf(client, table),
-        `${table}: the row fills every column a direct writer fills`,
-      );
-    }
-
-    yield* rowsOfQuery(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
-
-    const outcome = yield* Effect.gen(function* statements() {
-      yield* rowsOfQuery(client, `SET ROLE ${authorRole}`);
-      yield* rowsOfQuery(client, "SET CONSTRAINTS ALL DEFERRED");
-      for (const { row, table } of inserts) {
-        const columns = Object.keys(row);
-        yield* rowsOfQuery(
-          client,
-          `INSERT INTO ${qtiSchema}.${table} (${columns.join(", ")}) VALUES (${columns
-            .map((_, at) => `$${String(at + 1)}`)
-            .join(", ")})`,
-          Object.values(row),
-        );
-      }
-
-      for (const name of immediate) {
-        yield* rowsOfQuery(client, `SET CONSTRAINTS ${qtiSchema}."${name}" IMMEDIATE`);
-      }
-
-      return yield* Option.match(read, {
-        onNone: () => Effect.succeed<readonly QueryResultRow[]>([]),
-        onSome: ({ text, values }) => rowsOfQuery(client, text, values),
-      });
-    }).pipe(
-      Effect.map((rows) => ({ error: Option.none<DatabaseError>(), rows })),
-      Effect.catch((error) =>
-        isServerError(error.cause)
-          ? Effect.succeed({ error: Option.some(error.cause), rows: [] })
-          : Effect.fail(error),
-      ),
-    );
-    yield* rowsOfQuery(client, "ROLLBACK");
-
-    return outcome;
-  });
-
-/**
- * The code of a handle in its roster, the value a direct writer stores in its closed-id column.
- *
- * @param handles - The roster's handles.
- * @param handle - The handle.
- * @returns Its code.
- */
-const codeOf = (handles: readonly string[], handle: string): number => {
-  const code = handles.indexOf(handle);
-  assert.isAtLeast(code, 0, `${handle} is a handle of its roster`);
-
-  return code;
-};
 
 /**
  * Draw the ids of one document's rows, numbered by its place in the package, the manifest 0.
@@ -356,56 +160,6 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
 });
 
 /**
- * Write a `LomEntry` row as its table names its columns.
- *
- * @param row - The row.
- * @returns The table's row.
- */
-const entryRow = (row: Addition<typeof LomEntry>) =>
-  ({
-    document: row.document,
-    holder: row.holder,
-    holder_kind: codeOf(NodeKind.handles, row.holderKind),
-    holder_parent: row.holderParent,
-    holder_start: String(row.holderStart),
-    identifier_kind: codeOf(NodeKind.handles, row.identifierKind),
-    identifier_start: String(row.identifierStart),
-    kind: codeOf(NodeKind.handles, row.kind),
-    lead: row.lead,
-    named: codeOf(ResourceType.handles, row.named),
-    nearest: row.nearest,
-    node: row.node,
-    parent: row.parent,
-    start: String(row.start),
-    text: row.text,
-    token: row.token,
-    trail: row.trail,
-    version: codeOf(SchemaVersion.handles, row.version),
-  }) satisfies SqlRow;
-
-/**
- * Write a `LomTitleString` row as its table names its columns.
- *
- * @param row - The row.
- * @returns The table's row.
- */
-const titleStringRow = (row: Addition<typeof LomTitleString>) =>
-  ({
-    document: row.document,
-    kind: codeOf(NodeKind.handles, row.kind),
-    language: row.language,
-    language_tag: row.languageTag,
-    nearest: row.nearest,
-    node: row.node,
-    parent: row.parent,
-    record: row.record,
-    start: String(row.start),
-    text: row.text,
-    text_value: row.textValue,
-    version: codeOf(SchemaVersion.handles, row.version),
-  }) satisfies SqlRow;
-
-/**
  * Replace one passage of a package's manifest, failing when the manifest does not hold it.
  *
  * @param files - The package's entries.
@@ -440,20 +194,14 @@ const metaDataEntry = "<imsmd:entry>qti_v2_item_01</imsmd:entry>";
 const metaDataTitle = '<imsmd:string language="en">Metadata Example Item #1</imsmd:string>';
 
 /**
- * A `UsageValue` row as a direct writer inserts it into its table, its base type by its code.
+ * Each of the builder's facts of one relation, as a case states them.
  *
- * @param row - The row.
- * @returns The insert.
+ * @param relation - The relation.
+ * @param facts - The builder's facts of it.
+ * @returns The stated facts.
  */
-const usageRow = (row: Addition<typeof UsageValue>) => ({
-  row: {
-    base_type: codeOf(BaseType.handles, row.baseType),
-    base_type_lexical: row.baseTypeLexical,
-    node: row.node,
-    text: row.text,
-  },
-  table: "usage_value",
-});
+const statedOf = (relation: Stated["relation"], facts: Iterable<Stated["fact"]>): Stated[] =>
+  [...facts].map((fact) => ({ fact, relation }));
 
 describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
   it.effect(
@@ -465,7 +213,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
       // Bound: the fixture, and its entry edited to `choice` and to `choice` padded.
       Effect.gen(function* lomIdentifier() {
         const client = yield* loginSession;
-        const keys = yield* foreignKeys(client, "lom_object_identifier", "lom_entry");
+        const keys = yield* foreignKeysBetween(client, "lom_object_identifier", "lom_entry");
         assert.isNotEmpty(keys, "lom_object_identifier references lom_entry");
 
         const files = yield* readPackage(fixtures.metaData);
@@ -484,35 +232,24 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
           ],
         ] as const) {
           const built = yield* builtOf(edited);
-          const [named] = built.objects.LomObjectIdentifier.values();
-          assert.isDefined(named, `${label}: its record names its item`);
+          const named = statedOf(LomObjectIdentifier, built.objects.LomObjectIdentifier.values());
+          assert.isNotEmpty(named, `${label}: its record names its item`);
 
-          const outcome = yield* deferredInserts(
-            client,
-            [
-              ...[...built.manifest.LomEntry.values()].map((row) => ({
-                row: entryRow(row),
-                table: "lom_entry",
-              })),
-              {
-                row: {
-                  document: named.document,
-                  entry: named.entry,
-                  general: named.general,
-                  identifier: named.identifier,
-                  record: named.record,
-                },
-                table: "lom_object_identifier",
-              },
-            ],
-            keys,
-            Option.none(),
+          const refusal = Option.getOrUndefined(
+            yield* judged(
+              client,
+              statedInserts([
+                ...statedOf(LomEntry, built.manifest.LomEntry.values()),
+                ...named.slice(0, 1),
+              ]),
+              keys,
+            ),
           );
 
-          assert.strictEqual(Option.isSome(outcome.error), refused, label);
+          assert.strictEqual(refusal !== undefined, refused, label);
           if (refused) {
-            assert.strictEqual(Option.getOrUndefined(outcome.error)?.code, "23503", label);
-            assert.include(keys, Option.getOrUndefined(outcome.error)?.constraint, label);
+            assert.strictEqual(refusal?.code, "23503", label);
+            assert.include(keys, refusal?.constraint, label);
           }
         }
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -528,7 +265,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
       // Bound: the fixture, and its title string edited to `Unattended Luggage`.
       Effect.gen(function* lomTitle() {
         const client = yield* loginSession;
-        const keys = yield* foreignKeys(client, "lom_object_title", "lom_title_string");
+        const keys = yield* foreignKeysBetween(client, "lom_object_title", "lom_title_string");
         assert.isNotEmpty(keys, "lom_object_title references lom_title_string");
 
         const files = yield* readPackage(fixtures.metaData);
@@ -546,36 +283,24 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
           ],
         ] as const) {
           const built = yield* builtOf(edited);
-          const [named] = built.objects.LomObjectTitle.values();
-          assert.isDefined(named, `${label}: its record titles its item`);
+          const named = statedOf(LomObjectTitle, built.objects.LomObjectTitle.values());
+          assert.isNotEmpty(named, `${label}: its record titles its item`);
 
-          const outcome = yield* deferredInserts(
-            client,
-            [
-              ...[...built.manifest.LomTitleString.values()].map((row) => ({
-                row: titleStringRow(row),
-                table: "lom_title_string",
-              })),
-              {
-                row: {
-                  document: named.document,
-                  object_lang: named.objectLang,
-                  record: named.record,
-                  string: named.string,
-                  string_language: named.stringLanguage,
-                  title: named.title,
-                },
-                table: "lom_object_title",
-              },
-            ],
-            keys,
-            Option.none(),
+          const refusal = Option.getOrUndefined(
+            yield* judged(
+              client,
+              statedInserts([
+                ...statedOf(LomTitleString, built.manifest.LomTitleString.values()),
+                ...named.slice(0, 1),
+              ]),
+              keys,
+            ),
           );
 
-          assert.strictEqual(Option.isSome(outcome.error), refused, label);
+          assert.strictEqual(refusal !== undefined, refused, label);
           if (refused) {
-            assert.strictEqual(Option.getOrUndefined(outcome.error)?.code, "23503", label);
-            assert.include(keys, Option.getOrUndefined(outcome.error)?.constraint, label);
+            assert.strictEqual(refusal?.code, "23503", label);
+            assert.include(keys, refusal?.constraint, label);
           }
         }
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -612,32 +337,23 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
 
           for (const row of built.dates) {
             const refused = row.day === bad;
-            const outcome = yield* deferredInserts(
+            const { read, refused: refusal } = yield* judgedReading(
               client,
+              statedInserts([{ fact: row, relation: StatisticDate }]),
+              [],
               [
                 {
-                  row: {
-                    day: row.day,
-                    lead: row.lead,
-                    lexical: row.lexical,
-                    node: row.node,
-                    trail: row.trail,
-                  },
-                  table: "statistic_date",
+                  text: `SELECT date::text AS date FROM ${authorRole}.statistic_date WHERE node = $1`,
+                  values: [row.node],
                 },
               ],
-              [],
-              Option.some({
-                text: `SELECT date::text AS date FROM ${authorRole}.statistic_date WHERE node = $1`,
-                values: [row.node],
-              }),
             );
 
-            assert.strictEqual(Option.isSome(outcome.error), refused, `${name} ${row.lexical}`);
+            assert.strictEqual(Option.isSome(refusal), refused, `${name} ${row.lexical}`);
             if (refused) {
-              assert.strictEqual(Option.getOrUndefined(outcome.error)?.code, "23514", name);
+              assert.strictEqual(Option.getOrUndefined(refusal)?.code, "23514", name);
             } else {
-              assert.deepStrictEqual(outcome.rows, [{ date: row.day }], name);
+              assert.deepStrictEqual(read, [[{ date: row.day }]], name);
             }
           }
         }
@@ -666,33 +382,34 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
           assert.lengthOf(built.values, count, `${name} writes a baseType on ${String(count)}`);
 
           for (const row of built.values) {
-            const outcome = yield* deferredInserts(client, [usageRow(row)], [], Option.none());
-            const error = Option.getOrUndefined(outcome.error);
-            if (refused) {
-              assert.strictEqual(error?.code, "23514", `${name}: ${error?.message ?? "accepted"}`);
-              assert.strictEqual(error?.constraint, "usage_typed_value", name);
-            } else {
-              assert.isUndefined(error, `${name} ${row.text}: ${error?.message ?? ""}`);
-            }
+            assertVerdict(
+              yield* judged(client, statedInserts([{ fact: row, relation: UsageValue }])),
+              "usage_typed_value",
+              refused,
+              `${name} ${row.text}`,
+            );
           }
         }
 
-        const misspelled = yield* deferredInserts(
-          client,
-          [
-            usageRow({
-              baseType: "float",
-              baseTypeLexical: "integer",
-              node: "00000000-0000-4000-8fff-000000000001",
-              text: "1",
-            }),
-          ],
-          [],
-          Option.none(),
+        assertVerdict(
+          yield* judged(
+            client,
+            statedInserts([
+              {
+                fact: {
+                  baseType: "float",
+                  baseTypeLexical: "integer",
+                  node: "00000000-0000-4000-8fff-000000000001",
+                  text: "1",
+                },
+                relation: UsageValue,
+              },
+            ]),
+          ),
+          "e_1_derived",
+          true,
+          "a code its lexical form does not spell",
         );
-        const error = Option.getOrUndefined(misspelled.error);
-        assert.strictEqual(error?.code, "23514", error?.message ?? "accepted");
-        assert.strictEqual(error?.constraint, "e_1_derived");
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
     leaseTestTimeoutMs,
   );

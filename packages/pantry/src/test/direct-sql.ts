@@ -295,23 +295,34 @@ const statementOf = (client: Client, run: Arr.NonEmptyReadonlyArray<Insert>) =>
   });
 
 /**
+ * A statement a case reads its rows back by, through the author role's views, once they are in and
+ * before the rollback: a generated column's value, say.
+ */
+export interface Read {
+  readonly text: string;
+  readonly values: readonly unknown[];
+}
+
+/**
  * Insert a case's rows, in order, as the author role, every deferrable foreign key deferred, then
- * set the given ones immediate, and roll back: the server's verdict on the rows by their own
- * CHECKs, keys, domains and non-deferrable foreign keys, and by those foreign keys. Each run of
- * one table's rows is one statement, whose non-deferrable foreign keys PostgreSQL judges at its
- * end, so the rows of a run may come in any order among themselves (a tree's successor before its
- * predecessor among them).
+ * set the given ones immediate, read what the case reads, and roll back: the server's verdict on
+ * the rows by their own CHECKs, keys, domains and non-deferrable foreign keys, and by those foreign
+ * keys, with the rows each read returns. Each run of one table's rows is one statement, whose
+ * non-deferrable foreign keys PostgreSQL judges at its end, so the rows of a run may come in any
+ * order among themselves (a tree's successor before its predecessor among them).
  *
  * @param client - The session.
  * @param inserts - The rows, each with its table.
  * @param immediate - The deferrable foreign keys to check once the rows are in, by name.
- * @returns The server's error, or none when the rows' own laws and those keys accept them; fails
- *   with any other failure.
+ * @param reads - The statements the case reads, none for a case that reads nothing.
+ * @returns The server's error, or none when the rows' own laws and those keys accept them, and each
+ *   read's rows, none where the server refused; fails with any other failure.
  */
-export const judged = (
+export const judgedReading = (
   client: Client,
   inserts: readonly Insert[],
-  immediate: readonly string[] = [],
+  immediate: readonly string[],
+  reads: readonly Read[],
 ) =>
   Effect.gen(function* insertDeferred() {
     const runs = Arr.isReadonlyArrayNonEmpty(inserts)
@@ -330,16 +341,35 @@ export const judged = (
       for (const name of immediate) {
         yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchema}."${name}" IMMEDIATE`);
       }
+
+      return yield* Effect.all(reads.map(({ text, values }) => rowsOf(client, text, values)));
     }).pipe(
-      Effect.as(Option.none<DatabaseError>()),
+      Effect.map((read) => ({ read, refused: Option.none<DatabaseError>() })),
       Effect.catch((error) =>
-        isServerError(error.cause) ? Effect.succeed(Option.some(error.cause)) : Effect.fail(error),
+        isServerError(error.cause)
+          ? Effect.succeed({ read: [], refused: Option.some(error.cause) })
+          : Effect.fail(error),
       ),
     );
     yield* rowsOf(client, "ROLLBACK");
 
     return outcome;
   });
+
+/**
+ * The verdict of a case that reads nothing back ({@link judgedReading}).
+ *
+ * @param client - The session.
+ * @param inserts - The rows, each with its table.
+ * @param immediate - The deferrable foreign keys to check once the rows are in, by name.
+ * @returns The server's error, or none when the rows' own laws and those keys accept them; fails
+ *   with any other failure.
+ */
+export const judged = (
+  client: Client,
+  inserts: readonly Insert[],
+  immediate: readonly string[] = [],
+) => judgedReading(client, inserts, immediate, []).pipe(Effect.map(({ refused }) => refused));
 
 /**
  * Assert a direct writer's verdict: refused with the SQLSTATE and the constraint named, or
