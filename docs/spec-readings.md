@@ -2482,3 +2482,13 @@ alternative content outside the body (section 5.28: "A container of content or r
 content body node"), so the `xml:lang` of a `qti-card`, a `qti-card-entry`, a `qti-html-content` and everything they
 hold is not counted. This is decision 85's reading, restated on the new model. (A proposal for the operator; numbered
 at integration.)
+
+R10-a. **A PCI names its module by `module`, by `qti-interaction-modules`, or by both.** The information model's
+section 5.106.2 (`module`, in both versions) says "If this characteristic is provided the qti-interaction-modules child
+attribute is not required, if omitted then the modules child element is mandatory." The XSD makes both optional; this
+follows the information model. (A proposal for the operator; numbered at integration.)
+
+R10-b. **A 3.0.0 document holds no `qti-custom-interaction`; a 3.0.1 document may.** The 3.0.0 information model's
+section 5.106 says "PCIs MUST be used instead of custom interactions (the latter have been deprecated)"; the 3.0.1 text
+drops the sentence. Both XSDs declare the element; this follows the information model of each version. (A proposal for
+the operator, only if goal 3.14 stays; numbered at integration.)
