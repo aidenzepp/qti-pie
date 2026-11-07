@@ -529,6 +529,16 @@ export const UsageValue = relation(
 export const lomVocabulary = "LOMv1.0";
 
 /**
+ * The compared form of a language that states none: the empty text. An empty `xml:lang` states no
+ * language, "just as if xml:lang had not been specified" (XML 1.0 §2.12), so a root that writes no
+ * `xml:lang` and one whose `xml:lang` collapses to the empty text compare alike (`lom-title`, and
+ * R26's forms in `#pantry/qti/identity.ts`); a `lom:string`'s empty `language` is read alike.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#sec-lang-tag | XML 1.0, §2.12 Language Identification}
+ */
+export const noLanguage = "";
+
+/**
  * The sources, collapsed, under which a learning resource type is a term of the LOM vocabulary
  * (spec reading 122): `LOMv1.0`, and the empty source the binding's default fills. A source of
  * whitespace alone collapses to the empty one.
@@ -1063,8 +1073,8 @@ export const metadataLawsByName = {
     ),
     check("LomObjectTitle", LomObjectTitle, (l) =>
       l.or(
-        l.eq(l.objectLang, ""),
-        l.eq(l.stringLanguage, ""),
+        l.eq(l.objectLang, noLanguage),
+        l.eq(l.stringLanguage, noLanguage),
         l.eq(l.stringLanguage, l.objectLang),
       ),
     ),

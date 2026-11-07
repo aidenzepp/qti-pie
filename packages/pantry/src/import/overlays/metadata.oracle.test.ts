@@ -24,6 +24,7 @@ import { inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { objectRowsOfPackage, piecesOf, rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type {
   MetadataIds,
@@ -35,7 +36,7 @@ import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import type { AssessmentObject } from "#pantry/qti/metadata.ts";
@@ -90,13 +91,18 @@ const namespaces = {
  * @param documentType - The type it is listed under, `none` for the manifest.
  * @returns The ids, under the test package.
  */
-const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => ({
-  documentType,
-  idOf: (index) =>
-    `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`,
-  package: packageId,
-  targetAt: () => Option.none(),
-});
+const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => {
+  const idOf = (index: number): NodeId =>
+    `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`;
+
+  return {
+    context: ownContext(idOf(0)),
+    documentType,
+    idOf,
+    package: packageId,
+    targetAt: () => Option.none(),
+  };
+};
 
 /**
  * Read the document a resource names at each path, as the importer's `targetAt` does: the listed

@@ -18,12 +18,13 @@ import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
 import { ResourceType } from "#pantry/grammar/install.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
-import type { ListedTarget } from "#pantry/import/context.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
+import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import {
+  noLanguage,
   objectKinds,
   objectTypes,
   recordDocumentTypes,
@@ -60,6 +61,11 @@ import type {
  * the tree's rows name each node by one id.
  */
 export interface MetadataIds {
+  /**
+   * The document's context (spec reading 117), which its nodes' nearest interactions are folded
+   * under, as every overlay's are (`#pantry/import/fold.ts`).
+   */
+  readonly context: DocumentContext;
   /**
    * The document's type, the resource's that lists it, `none` for the manifest: a package's
    * records are read from a document of a type of `recordDocumentTypes` alone.
@@ -166,32 +172,79 @@ export interface Pieces {
 }
 
 /**
- * Decide whether a text is XML whitespace `S`, possibly none.
+ * One character of XML whitespace `S`: a tab, a line feed, a carriage return or a space.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
+ */
+type SpaceCharacter = "\t" | "\n" | "\r" | " ";
+
+/**
+ * Decide whether a character is XML whitespace.
+ *
+ * @param character - The character.
+ * @returns Whether it is one of {@link SpaceCharacter}'s four.
+ */
+const isSpaceCharacter = (character: string): character is SpaceCharacter =>
+  character === "\t" || character === "\n" || character === "\r" || character === " ";
+
+/**
+ * Read the XML whitespace a text starts with, built a character at a time so its type is
+ * {@link Space} by construction.
  *
  * @param text - The text.
- * @returns Whether every character is a space, a tab, a line feed or a carriage return.
+ * @returns The longest prefix of whitespace, the empty text where the text starts with none.
  */
-const isSpace = (text: string): text is Space => /^[\t\n\r ]*$/u.test(text);
+const leadOf = (text: string): Space => {
+  let lead: Space = "";
+  for (const character of text) {
+    if (!isSpaceCharacter(character)) {
+      break;
+    }
+
+    lead = `${lead}${character}`;
+  }
+
+  return lead;
+};
+
+/**
+ * Read the XML whitespace a text ends with, built a character at a time from the end so its type
+ * is {@link Space} by construction.
+ *
+ * @param text - The text.
+ * @returns The longest suffix of whitespace, the empty text where the text ends with none.
+ */
+const trailOf = (text: string): Space => {
+  let trail: Space = "";
+  for (let at = text.length - 1; at >= 0; at -= 1) {
+    const character = text.charAt(at);
+    if (!isSpaceCharacter(character)) {
+      break;
+    }
+
+    trail = `${character}${trail}`;
+  }
+
+  return trail;
+};
 
 /**
  * Split a text around its value, as the overlays' `lead ‖ token ‖ trail` holds it: the whitespace
  * `S` before the first character that is not whitespace, then up to and including the last one,
- * then the rest. An all-whitespace text is all lead.
+ * then the rest. An all-whitespace text is all lead. Every overlay that splits a text around its
+ * value splits it here (`#pantry/import/overlays/identity.ts` reads an ID's form and each IDREF
+ * token through it).
  *
  * @param text - The text.
  * @returns Its pieces, which concatenate to it.
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
 export const piecesOf = (text: string): Pieces => {
-  const lead = /^[\t\n\r ]*/u.exec(text)?.[0] ?? "";
+  const lead = leadOf(text);
   const rest = text.slice(lead.length);
-  const trail = /[\t\n\r ]*$/u.exec(rest)?.[0] ?? "";
+  const trail = trailOf(rest);
 
-  return {
-    lead: isSpace(lead) ? lead : "",
-    token: rest.slice(0, rest.length - trail.length),
-    trail: isSpace(trail) ? trail : "",
-  };
+  return { lead, token: rest.slice(0, rest.length - trail.length), trail };
 };
 
 /**
@@ -225,48 +278,43 @@ const typeOf = (lexical: string): Option.Option<ResourceTypeHandle> =>
   Option.fromUndefinedOr(spelledTypes.get(lexical));
 
 /**
- * Compute each element's string value as `Node.stringValue` folds it for the kinds an overlay
- * copies: its children's characters in order, a text's and whitespace's as they are, an entity
- * reference's as `&name;`, a comment's and an instruction's none.
+ * The string value of a node with no character child: the empty text, the concatenation of no
+ * characters (`Node.stringValue`, "the empty string when it holds none", `#pantry/model/folds.ts`;
+ * XDM 3.1 gives an element with no text descendants "the zero-length string").
+ *
+ * @see {@link https://www.w3.org/TR/xpath-datamodel-31/#dm-string-value | XDM 3.1, dm:string-value}
+ */
+const noCharacters = "";
+
+/**
+ * Compute each node's string value as `Node.stringValue` folds it for the kinds an overlay copies:
+ * its children's characters in order, a text's and whitespace's as they are, an entity reference's
+ * as `&name;`, an element's, a comment's and an instruction's none. Every overlay that copies a
+ * node's string value reads it here (`#pantry/import/overlays/identity.ts` too).
  *
  * @param rows - The document's flat rows.
- * @returns Each element's string value, by its id, for every element with a child.
+ * @returns Each node's string value, by its id: {@link noCharacters} for a node with no character
+ *   child.
  */
-const stringValuesOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, string> => {
+export const stringValuesOf = (rows: FlatRows<Composed>): ((node: NodeId) => string) => {
   const chars = new Map<NodeId, string>([
     ...rows.texts.map(({ node, value }) => [node, value] as const),
     ...rows.whitespace.map(({ node, value }) => [node, value] as const),
     ...rows.entityRefs.map(({ name, node }) => [node, `&${name};`] as const),
   ]);
-  const values = new Map<NodeId, string>();
+  const held = rows.nodes.flatMap(({ id, parent }) => {
+    const value = chars.get(id);
 
-  for (const node of rows.nodes) {
-    if (node.parent !== node.id) {
-      values.set(node.parent, `${values.get(node.parent) ?? ""}${chars.get(node.id) ?? ""}`);
-    }
-  }
+    return value === undefined ? [] : [{ parent, value }];
+  });
+  const values = new Map(
+    [...Map.groupBy(held, ({ parent }) => parent)].map(([parent, children]) => [
+      parent,
+      children.map(({ value }) => value).join(""),
+    ]),
+  );
 
-  return values;
-};
-
-/**
- * Index a document's attribute rows by their element and name.
- *
- * @param rows - The document's flat rows.
- * @returns Each element's attributes' lexical forms, by the element's id and the attribute's name.
- */
-const attributesOf = (
-  rows: FlatRows<Composed>,
-): ReadonlyMap<NodeId, ReadonlyMap<string, string>> => {
-  const byNode = new Map<NodeId, Map<string, string>>();
-
-  for (const { lexical, name, node } of rows.attributes) {
-    const named = byNode.get(node) ?? new Map<string, string>();
-    named.set(name, lexical);
-    byNode.set(node, named);
-  }
-
-  return byNode;
+  return (node) => values.get(node) ?? noCharacters;
 };
 
 /**
@@ -275,7 +323,10 @@ const attributesOf = (
  */
 interface Tree {
   readonly nodes: readonly NodeRow<Composed>[];
-  readonly nodeOf: (id: NodeId) => NodeRow<Composed> | undefined;
+  /**
+   * Read a node's parent, which `flatten` writes before it; the document node is its own.
+   */
+  readonly parentOf: (node: NodeRow<Composed>) => NodeRow<Composed>;
   readonly stringValueOf: (id: NodeId) => string;
   readonly tupleOf: (node: NodeRow<Composed>) => {
     readonly document: NodeId;
@@ -298,97 +349,116 @@ interface Tree {
  */
 const treeOf = (doc: XdmDocument<Composed>, ids: MetadataIds): Tree => {
   const rows = flatten(doc, ids.idOf);
-  const attributes = attributesOf(rows);
-  const folds = foldOf(rows.nodes, ownContext(rows.document.node));
-  const values = stringValuesOf(rows);
+  const lexicals = new Map<string, string>(
+    rows.attributes.map(({ lexical, name, node }) => [`${node} ${name}`, lexical]),
+  );
+  const folds = foldOf(rows.nodes, ids.context);
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const document = rows.document.node;
 
   return {
-    nodeOf: (id) => byId.get(id),
     nodes: rows.nodes,
-    stringValueOf: (id) => values.get(id) ?? "",
+    parentOf: (node) => {
+      const parent = byId.get(node.parent);
+      if (parent === undefined) {
+        throw new Error(
+          `Node ${node.id} names parent ${node.parent}, which the document holds no row of, but flatten writes every node's parent before it. Read the rows flatten writes as it writes them.`,
+        );
+      }
+
+      return parent;
+    },
+    stringValueOf: stringValuesOf(rows),
     tupleOf: (node) => ({
       document,
       kind: node.kind,
-      nearest: folds.get(node.id)?.nearest ?? document,
+      nearest: foldAt(folds, node.id).nearest,
       node: node.id,
       parent: node.parent,
       start: node.start,
       version: node.version,
     }),
-    valueOf: (node, name) => attributes.get(node.id)?.get(name),
+    valueOf: (node, name) => lexicals.get(`${node.id} ${name}`),
   };
 };
 
 /**
- * Build a document's {@link LomResource} rows: one per `cp:resource`, `named` the handle its `type`
- * spells where that handle is an item's or a test's, its `TypedHref`'s, and its `href` names a
- * document a resource names (`targetAt` at the path its `ResourceHref` compares it by, readings 93
- * and 102); else `none`, a resource that names no assessment object, a type spelling nothing, a
- * resource with no `href` and one whose `href` names no document among them. An item's or a test's
- * `href` that names no document is refused under "Document entry", and its records name nothing
- * for a law to read.
+ * Read the type of the document a `cp:resource` names: the handle its `type` spells where that
+ * handle is an item's or a test's, its `TypedHref`'s, and its `href` names a document a resource
+ * names (`targetAt` at the path its `ResourceHref` compares it by, readings 93 and 102); else
+ * {@link namesNoDocument}, a resource that names no assessment object, a type spelling nothing, a
+ * resource with no `href` and one whose `href` names no document among them. An item's or a
+ * test's `href` that names no document is refused under "Document entry", and its records name
+ * nothing for a law to read.
  *
  * @param tree - The document's tree.
  * @param paths - Each resource's href's path, by the resource's node (`resourcePathsOf`).
  * @param targetAt - The document a resource names at each path.
+ * @returns The type a resource names, read from its node.
+ */
+const resourceNamer =
+  (tree: Tree, paths: ReadonlyMap<NodeId, string>, targetAt: MetadataIds["targetAt"]) =>
+  (resource: NodeRow<Composed>): ResourceTypeHandle =>
+    Option.match(
+      Option.zipWith(
+        Option.fromNullishOr(tree.valueOf(resource, "type")).pipe(
+          Option.flatMap(typeOf),
+          Option.filter((type) => naming.has(type)),
+        ),
+        Option.fromNullishOr(paths.get(resource.id)).pipe(Option.flatMap(targetAt)),
+        (type) => type,
+      ),
+      { onNone: () => namesNoDocument, onSome: (type) => type },
+    );
+
+/**
+ * Build a document's {@link LomResource} rows: one per `cp:resource`, `named` the type of the
+ * document it names ({@link resourceNamer}).
+ *
+ * @param tree - The document's tree.
+ * @param namedOf - The type each resource names.
  * @returns The rows, by their node's id.
  */
 const resourceRowsOf = (
   tree: Tree,
-  paths: ReadonlyMap<NodeId, string>,
-  targetAt: MetadataIds["targetAt"],
+  namedOf: (resource: NodeRow<Composed>) => ResourceTypeHandle,
 ): ReadonlyMap<string, Addition<typeof LomResource>> =>
   new Map(
-    tree.nodes.flatMap((node) => {
-      if (node.kind !== "cp:resource") {
-        return [];
-      }
-
-      // The type of the document it names: its `type`'s handle, an item's or a test's, where a
-      // resource names a document at its `href`'s path.
-      const object = Option.zipWith(
-        Option.fromNullishOr(tree.valueOf(node, "type")).pipe(
-          Option.flatMap(typeOf),
-          Option.filter((type) => naming.has(type)),
-        ),
-        Option.fromNullishOr(paths.get(node.id)).pipe(Option.flatMap(targetAt)),
-        (type) => type,
-      );
-      const named = Option.match(object, { onNone: () => namesNoDocument, onSome: (type) => type });
-
-      return [[node.id, { named, node: node.id }] as const];
-    }),
+    tree.nodes.flatMap((node) =>
+      node.kind === "cp:resource"
+        ? [[node.id, { named: namedOf(node), node: node.id }] as const]
+        : [],
+    ),
   );
 
 /**
  * Build a document's {@link LomRecord} rows: one per `lom:lom`, with its owner's kind, start and
- * parent, and its resource's `named` where its owner is a resource's `cp:metadata`.
+ * parent, and `named`, the type its resource names where its owner is a resource's `cp:metadata`
+ * (whose parent is the `cp:resource`), else {@link namesNoDocument}.
  *
  * @param tree - The document's tree.
- * @param resources - The document's {@link LomResource} rows.
+ * @param namedOf - The type each resource names, as its {@link LomResource} row holds it.
  * @returns The rows, by their node's id.
  */
 const recordRowsOf = (
   tree: Tree,
-  resources: ReadonlyMap<string, Addition<typeof LomResource>>,
+  namedOf: (resource: NodeRow<Composed>) => ResourceTypeHandle,
 ): ReadonlyMap<string, Addition<typeof LomRecord>> =>
   new Map(
     tree.nodes.flatMap((node) => {
-      const owner = node.kind === "lom:lom" ? tree.nodeOf(node.parent) : undefined;
-      if (owner === undefined) {
+      if (node.kind !== "lom:lom") {
         return [];
       }
 
-      const resource = owner.kind === resourceMetadata ? resources.get(owner.parent) : undefined;
+      const owner = tree.parentOf(node);
 
       return [
         [
           node.id,
           {
             ...tree.tupleOf(node),
-            named: resource?.named ?? "none",
+            named:
+              owner.kind === resourceMetadata ? namedOf(tree.parentOf(owner)) : namesNoDocument,
             owner: owner.kind,
             ownerParent: owner.parent,
             ownerStart: owner.start,
@@ -427,8 +497,10 @@ const generalRowsOf = (
 
 /**
  * Build a document's {@link LomEntry} rows: one per `lom:entry`, with its identifier's and holder's
- * tuples, its record's `named` where its holder is a general category, and its string value in
- * pieces.
+ * tuples, its record's `named` where its holder is a general category, else
+ * {@link namesNoDocument}, and its string value in pieces. A general category outside any record
+ * holds an entry of no record, which has no row: no `named` is its, and `entryNodes`' copy refuses
+ * it under "E1 derived".
  *
  * @param tree - The document's tree.
  * @param records - The document's {@link LomRecord} rows.
@@ -440,15 +512,21 @@ const entryRowsOf = (
 ): ReadonlyMap<string, Addition<typeof LomEntry>> =>
   new Map(
     tree.nodes.flatMap((node) => {
-      const identifier = node.kind === "lom:entry" ? tree.nodeOf(node.parent) : undefined;
-      const holder = identifier === undefined ? undefined : tree.nodeOf(identifier.parent);
-      if (identifier === undefined || holder === undefined) {
+      if (node.kind !== "lom:entry") {
+        return [];
+      }
+
+      const identifier = tree.parentOf(node);
+      const holder = tree.parentOf(identifier);
+      const named: Option.Option<ResourceTypeHandle> =
+        holder.kind === "lom:general"
+          ? Option.map(Option.fromUndefinedOr(records.get(holder.parent)), (record) => record.named)
+          : Option.some(namesNoDocument);
+      if (Option.isNone(named)) {
         return [];
       }
 
       const text = tree.stringValueOf(node.id);
-      const named =
-        holder.kind === "lom:general" ? (records.get(holder.parent)?.named ?? "none") : "none";
 
       return [
         [
@@ -462,7 +540,7 @@ const entryRowsOf = (
             holderStart: holder.start,
             identifierKind: identifier.kind,
             identifierStart: identifier.start,
-            named,
+            named: named.value,
             text,
           },
         ] as const,
@@ -472,7 +550,8 @@ const entryRowsOf = (
 
 /**
  * Build a document's {@link LomTitle} rows: one per `lom:title`, with its general category's kind,
- * start and parent (the record), and its record's `named`.
+ * start and parent (the record), and its record's `named`. A title whose category is outside any
+ * record has no row: no `named` is its, and `titleNodes`' copy refuses it under "E1 derived".
  *
  * @param tree - The document's tree.
  * @param records - The document's {@link LomRecord} rows.
@@ -484,8 +563,13 @@ const titleRowsOf = (
 ): ReadonlyMap<string, Addition<typeof LomTitle>> =>
   new Map(
     tree.nodes.flatMap((node) => {
-      const general = node.kind === "lom:title" ? tree.nodeOf(node.parent) : undefined;
-      if (general === undefined) {
+      if (node.kind !== "lom:title") {
+        return [];
+      }
+
+      const general = tree.parentOf(node);
+      const record = records.get(general.parent);
+      if (record === undefined) {
         return [];
       }
 
@@ -496,7 +580,7 @@ const titleRowsOf = (
             ...tree.tupleOf(node),
             generalKind: general.kind,
             generalStart: general.start,
-            named: records.get(general.parent)?.named ?? "none",
+            named: record.named,
             record: general.parent,
           },
         ] as const,
@@ -603,7 +687,7 @@ const termRowsOf = (tree: Tree, kind: "lom:source" | "lom:value"): ReadonlyMap<s
   for (const node of tree.nodes) {
     if (
       node.kind === kind &&
-      tree.nodeOf(node.parent)?.kind === "lom:learningResourceType" &&
+      tree.parentOf(node).kind === "lom:learningResourceType" &&
       !rows.has(node.parent)
     ) {
       rows.set(node.parent, {
@@ -788,8 +872,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
     return { ...noRecordRows, ...everyDocument };
   }
 
-  const resources = resourceRowsOf(tree, resourcePathsOf(flatten(doc, ids.idOf)), ids.targetAt);
-  const records = recordRowsOf(tree, resources);
+  const namedOf = resourceNamer(tree, resourcePathsOf(flatten(doc, ids.idOf)), ids.targetAt);
+  const resources = resourceRowsOf(tree, namedOf);
+  const records = recordRowsOf(tree, namedOf);
   const generals = generalRowsOf(tree, records);
   const titles = titleRowsOf(tree, records);
   const strings = stringRowsOf(tree);
@@ -837,8 +922,8 @@ const inLanguage = (
   object: Addition<typeof AssessmentObject> | undefined,
 ): boolean =>
   object === undefined ||
-  object.langTag === "" ||
-  string.languageTag === "" ||
+  object.langTag === noLanguage ||
+  string.languageTag === noLanguage ||
   string.languageTag === object.langTag;
 
 /**
