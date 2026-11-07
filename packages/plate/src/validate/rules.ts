@@ -472,6 +472,12 @@ interface Context extends VariableScope {
    */
   readonly setCorrectResponses: ReadonlySet<string>;
   /**
+   * Type the template variable a `qti-template-default` sets, an item's, which only a package that
+   * holds the test's items can find: none for every default of a test checked alone, and in an
+   * item, which holds no default.
+   */
+  readonly templateDefaultType: (templateDefault: SourceElement) => Option.Option<ExpressionType>;
+  /**
    * Type a name that no declaration and no built-in answers: none for every name in an item, whose
    * reading of such a name is `undeclared-variable`; a prefixed read's type in a test; `unknown`
    * for every name in a section, which resolves its names in each test that holds it (reading 5).
@@ -773,9 +779,42 @@ const mappingNeeds = {
 type MappingExpression = keyof typeof mappingNeeds;
 
 /**
+ * Judge the response declaration a `qti-map-response` or a `qti-map-response-point` names against
+ * what {@link mappingNeeds} lists for that expression: the detail of the `template-requirements`
+ * refusal it earns when the declaration lacks it. An item's inline expression is judged so
+ * ({@link mapResponseRequirements}), and so is a test's that names a response through an item ref
+ * (`#plate/package/open.ts`).
+ *
+ * @param element The expression's local name.
+ * @param identifier The name the expression gives the response, which the detail repeats.
+ * @param declaration The response's declaration.
+ * @returns The refusal's detail; none when the declaration provides what the expression needs, or
+ *   the element is neither expression.
+ */
+export const mappingRequirement = (
+  element: string,
+  identifier: string,
+  declaration: SourceElement,
+): Option.Option<Readonly<Record<string, string>>> =>
+  Option.flatMap(
+    Arr.findFirst(
+      Object.keys(mappingNeeds),
+      (local): local is MappingExpression => local === element,
+    ),
+    (expression) => {
+      const needed: Needed = { ...mappingNeeds[expression], identifier };
+
+      return provides(declaration, needed)
+        ? Option.none()
+        : Option.some(neededDetail(expression, needed));
+    },
+  );
+
+/**
  * Apply `template-requirements` to an inline `qti-map-response` or `qti-map-response-point`: the
- * response it names is declared with what {@link mappingNeeds} lists for it. The qti package
- * refuses both as P27 (`checkMapping` in `packages/pantry/src/processing/check.ts`).
+ * response it names is declared with what {@link mappingNeeds} lists for it
+ * ({@link mappingRequirement}). The qti package refuses both as P27 (`checkMapping` in
+ * `packages/pantry/src/processing/check.ts`).
  *
  * An expression that names no response declaration is not judged here: an undeclared variable is
  * its own refusal, and this rule refuses only a declared response that lacks what it needs.
@@ -796,33 +835,24 @@ const mapResponseRequirements = (
   context: Context,
 ): readonly Refusal[] => {
   const attribute = attributeOf(visit.element, "identifier");
-  const expression = Arr.findFirst(Object.keys(mappingNeeds), (local): local is MappingExpression =>
-    isQti(visit.element, (name) => name === local),
-  );
   if (
-    Option.isNone(expression) ||
+    visit.element.namespace !== qtiNamespace ||
     Option.isNone(attribute) ||
     !liesIn(context, visit.element, "response")
   ) {
     return [];
   }
 
-  const needed: Needed = {
-    ...mappingNeeds[expression.value],
-    identifier: identifierOf(attribute.value),
-  };
-  const declaration = context.responses.get(needed.identifier);
+  const identifier = identifierOf(attribute.value);
+  const declaration = context.responses.get(identifier);
 
-  return declaration === undefined || provides(declaration, needed)
+  return declaration === undefined
     ? []
-    : [
-        refusal(
-          source,
-          "template-requirements",
-          visit.path,
-          neededDetail(visit.element.local, needed),
+    : Option.toArray(
+        Option.map(mappingRequirement(visit.element.local, identifier, declaration), (detail) =>
+          refusal(source, "template-requirements", visit.path, detail),
         ),
-      ];
+      );
 };
 
 /**
@@ -1332,7 +1362,8 @@ const vocabularyValue = <A extends string>(
   );
 
 /**
- * Give the type a declaration declares.
+ * Give the type a declaration declares, the one the rules read and a package types an item's
+ * variable by when a test reads it through an item ref (`#plate/package/open.ts`).
  *
  * A declaration whose `cardinality` is absent or outside the vocabulary, or whose `base-type` is
  * outside it, is the structural validator's refusal, so its type is not judged here. A declaration
@@ -1341,7 +1372,7 @@ const vocabularyValue = <A extends string>(
  * @param declaration The declaration.
  * @returns Its type, none when it is not judged.
  */
-const declarationType = (declaration: SourceElement): Option.Option<ExpressionType> => {
+export const declarationType = (declaration: SourceElement): Option.Option<ExpressionType> => {
   const baseType = vocabularyValue(declaration, "base-type", baseTypes);
   if (Option.isSome(attributeOf(declaration, "base-type")) && Option.isNone(baseType)) {
     return Option.none();
@@ -1795,14 +1826,17 @@ const templateTarget = (
 
 /**
  * Give the variable a setting rule sets and its type: a `qti-set-outcome-value`'s outcome, as
- * {@link variableType} finds it, or a template rule's variable among the kinds
- * {@link templateSetters} lets it set, with that kind.
+ * {@link variableType} finds it, a template rule's variable among the kinds
+ * {@link templateSetters} lets it set, with that kind, or the template variable of its item a
+ * test's `qti-template-default` sets, named by its `template-identifier` and typed by the context
+ * (`templateOf` in `packages/pantry/src/processing/check.ts`).
  *
  * @param element The rule.
  * @param context The item's declarations.
- * @returns The variable's identifier and type, and its kind for a template rule; none for an
- *   element that sets no variable, for one whose variable is undeclared or of a kind it may not
- *   set, and for a declaration whose type is not judged.
+ * @returns The variable's identifier and type, and its kind for a template rule or a template
+ *   default; none for an element that sets no variable, for one whose variable is undeclared or of
+ *   a kind it may not set, for a declaration whose type is not judged, and for a template default
+ *   the context does not type.
  */
 const setTarget = (
   element: SourceElement,
@@ -1812,6 +1846,16 @@ const setTarget = (
   readonly kind: Option.Option<TargetKind>;
   readonly type: ExpressionType;
 }> => {
+  if (isQti(element, (local) => local === "qti-template-default")) {
+    return Option.flatMap(attributeOf(element, "template-identifier"), (written) =>
+      Option.map(context.templateDefaultType(element), (type) => ({
+        identifier: identifierOf(written),
+        kind: Option.some<TargetKind>("template"),
+        type,
+      })),
+    );
+  }
+
   if (isQti(element, (local) => local === "qti-set-outcome-value")) {
     return Option.flatMap(referenceOf(element), (reference) =>
       Option.map(Option.flatten(variableType(reference, context)), (type) => ({
@@ -1837,8 +1881,10 @@ const setTarget = (
 
 /**
  * Apply `expression-type` to a rule that sets a variable to its expression: a
- * `qti-set-outcome-value` of inline response processing, and a `qti-set-template-value`, a
- * `qti-set-correct-response` or a `qti-set-default-value` of template processing.
+ * `qti-set-outcome-value` of inline response processing or of a test's outcome processing, a
+ * `qti-set-template-value`, a `qti-set-correct-response` or a `qti-set-default-value` of template
+ * processing, and a test's `qti-template-default`, which sets a template variable of its item ref's
+ * item and is itself the element that holds its expression.
  *
  * "Floating point values can not be assigned to integer variables and vice-versa"
  * (`info-compact.txt:11770`): the expression's base type and cardinality are the variable's ({@link
@@ -1849,8 +1895,9 @@ const setTarget = (
  * ({@link templateTarget} refuses that). The qti package refuses the same as P20 (`setKinds` and
  * `typeRule` in `packages/pantry/src/processing/check.ts`). The detail names the variable's type
  * `outcomeBaseType` and `outcomeCardinality` whatever its kind, and `element` names the rule; a
- * template rule's detail names the variable's kind too, `targetKind` (`template`, `response` or
- * `outcome`), so its sentence does not word a template variable or a response as an outcome.
+ * template rule's or a template default's detail names the variable's kind too, `targetKind`
+ * (`template`, `response` or `outcome`), so its sentence does not word a template variable or a
+ * response as an outcome.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1859,7 +1906,10 @@ const setTarget = (
  *   for any other element.
  */
 const setType = (source: SourceDocument, visit: Visit, context: Context): readonly Refusal[] => {
-  if (!inProcessing(context, visit.element)) {
+  if (
+    !inProcessing(context, visit.element) &&
+    !isQti(visit.element, (local) => local === "qti-template-default")
+  ) {
     return [];
   }
 
@@ -2973,6 +3023,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
     parents: new Map(),
     responses: declarationsOf(source, "qti-response-declaration"),
     setCorrectResponses: setCorrectResponses(source, visits),
+    templateDefaultType: () => Option.none(),
     typeUnanswered: itemNames.typeUnanswered,
     types: new Map(),
     variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
@@ -3084,7 +3135,8 @@ const processingScope = (
  *   reports P27 (`checkMapping`); a prefixed one is a package's to judge.
  * - What a `qti-set-outcome-value` sets (P20, {@link setType}) and a `qti-lookup-outcome-value`'s
  *   table and operand (P22, {@link lookupTableRequirements}, {@link lookupOperandType}) in outcome
- *   processing.
+ *   processing, and what a `qti-template-default` sets (P20) where `templateDefaultType` types its
+ *   target.
  * - The condition of a `qti-outcome-if` or a `qti-outcome-else-if` (P21, {@link conditionType}),
  *   never of a pre-condition or a branch rule.
  * - A weighted `qti-test-variables` whose base type is not `float` (P29, {@link weightType}).
@@ -3096,7 +3148,9 @@ const processingScope = (
  * that the test does not declare whole is a prefixed read, typed by `typePrefixed` and never
  * refused `undeclared-variable` here (reading 48 is a package's); a section's names are all typed
  * `unknown`. A template default is an expression, so the template read rule (P26) and the template
- * rules' targets do not judge it, and its own target, an item's template variable, is a package's.
+ * rules' targets do not judge it; its own target is an item's template variable, which only a
+ * package can find, so its expression is judged against that variable (P20, {@link setType}) only
+ * where `templateDefaultType` types it.
  *
  * As {@link checkRules} does, it judges exactly what the structural walk checks, and gives no
  * refusal for a document whose judged elements hold an unexpanded entity reference. Every refusal
@@ -3107,12 +3161,18 @@ const processingScope = (
  *   document by.
  * @param typePrefixed The type of each prefixed read: `unknown` for a test checked alone, which
  *   satisfies every rule; the items' types for a test a package holds.
+ * @param templateDefaultType The type of the template variable a `qti-template-default` sets, its
+ *   item ref's item's (`templateOf` in `packages/pantry/src/processing/check.ts`): none unless
+ *   given, as for a test checked alone, which judges no default against its target; a package's
+ *   for a test it holds.
  * @returns The refusals, empty when every rule holds or the document is not a test or a section.
  */
 export const processingRefusals = (
   source: SourceDocument,
   tables: Tables,
   typePrefixed: PrefixedTyper,
+  templateDefaultType: (templateDefault: SourceElement) => Option.Option<ExpressionType> = () =>
+    Option.none(),
 ): readonly Refusal[] => {
   const scope = processingScope(source, typePrefixed);
   if (Option.isNone(scope)) {
@@ -3129,6 +3189,7 @@ export const processingRefusals = (
     parents: new Map(),
     responses: new Map(),
     setCorrectResponses: new Set(),
+    templateDefaultType,
     types: new Map(),
   };
   const refusals: Refusal[] = [];

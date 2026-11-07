@@ -484,6 +484,110 @@ const openCorpusPackage = (directory: string) =>
 const unlocated = (verdict: PackageVerdict): Omit<Seen, "location">[] =>
   refusalsOf(verdict).map(({ detail, document, rule }) => ({ detail, document, rule }));
 
+/**
+ * Report whether the verdict on the test document of a package `readingPackage` builds, as `open`
+ * gives it for that document alone, accepts it: `accepted`, or `accepted-with-unsupported` while a
+ * test's processing is marked.
+ *
+ * @param verdict The package verdict.
+ * @returns Whether the test alone is accepted.
+ */
+const acceptedAlone = (verdict: PackageVerdict): boolean =>
+  Option.exists(
+    documentVerdict(resourceOf(verdict, "T")),
+    (alone) => alone === "accepted" || alone === "accepted-with-unsupported",
+  );
+
+/**
+ * The item `ITEM1` reaches: an identifier, an integer, a mapped identifier and a point response,
+ * a float, a boolean and an integer outcome, and an integer template variable `T`.
+ */
+const reachedItemXml = `<qti-assessment-item xmlns="${qti}" identifier="a" title="a" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-response-declaration identifier="COUNT" cardinality="single" base-type="integer"/><qti-response-declaration identifier="MAPPED" cardinality="single" base-type="identifier"><qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping></qti-response-declaration><qti-response-declaration identifier="POINT" cardinality="single" base-type="point"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="CORRECT" cardinality="single" base-type="boolean"/><qti-outcome-declaration identifier="FIGURES" cardinality="single" base-type="integer"/><qti-template-declaration identifier="T" cardinality="single" base-type="integer"/><qti-item-body><p>a</p></qti-item-body></qti-assessment-item>`;
+
+/**
+ * The item `ITEM2` reaches: a single string, a multiple integer and a single integer outcome.
+ */
+const otherItemXml = `<qti-assessment-item xmlns="${qti}" identifier="b" title="b" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="S" cardinality="single" base-type="string"/><qti-outcome-declaration identifier="M" cardinality="multiple" base-type="integer"/><qti-outcome-declaration identifier="N" cardinality="single" base-type="integer"/><qti-item-body><p>b</p></qti-item-body></qti-assessment-item>`;
+
+/**
+ * A package whose test, with a float outcome `TOTAL`, holds the item refs `ITEM1`, to
+ * {@link reachedItemXml}, and `ITEM2`, to {@link otherItemXml}, and the given outcome processing.
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @param firstRef What the item ref `ITEM1` holds, as written.
+ * @returns The package's files.
+ */
+const reachPackage = (processing: string, firstRef = ""): ReadonlyMap<string, Uint8Array> =>
+  readingPackage(
+    `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${itemRefXml("ITEM1", "items/a.xml", firstRef)}${itemRefXml("ITEM2", "items/b.xml")}</qti-assessment-section></qti-test-part><qti-outcome-processing>${processing}</qti-outcome-processing></qti-assessment-test>`,
+    { "items/a.xml": reachedItemXml, "items/b.xml": otherItemXml },
+  );
+
+/**
+ * Write a rule of outcome processing that sets `TOTAL` to an expression.
+ *
+ * @param expression The expression, as written.
+ * @returns The rule's text.
+ */
+const settingTotal = (expression: string): string =>
+  `<qti-set-outcome-value identifier="TOTAL">${expression}</qti-set-outcome-value>`;
+
+/**
+ * The float 1, as a `qti-base-value`.
+ */
+const oneFloat = '<qti-base-value base-type="float">1</qti-base-value>';
+
+/**
+ * The path of a child of {@link reachPackage}'s first item ref `ITEM1`, by its path step.
+ *
+ * @param step The child's path step.
+ * @returns Its path.
+ */
+const firstRefChildAt = (step: string): string =>
+  `qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[1]/${step}`;
+
+/**
+ * Write a `qti-variable` that reads a variable.
+ *
+ * @param identifier The variable's name.
+ * @returns The expression's text.
+ */
+const variableXml = (identifier: string): string => `<qti-variable identifier="${identifier}"/>`;
+
+/**
+ * Write a `qti-round-to` of `ITEM1.SCORE` to as many decimal places as a variable holds.
+ *
+ * @param figures The variable its `figures` names.
+ * @returns The expression's text.
+ */
+const roundedXml = (figures: string): string =>
+  `<qti-round-to figures="${figures}" rounding-mode="decimalPlaces">${variableXml("ITEM1.SCORE")}</qti-round-to>`;
+
+/**
+ * Open a {@link reachPackage} whose outcome processing sets `TOTAL` to an expression.
+ *
+ * @param expression The expression, as written.
+ * @returns The package's verdict.
+ */
+const openSettingTotal = (expression: string) =>
+  openPackage(location, reachPackage(settingTotal(expression)));
+
+/**
+ * Open a {@link reachPackage} whose item ref `ITEM1` holds one template default.
+ *
+ * @param target The template default's `template-identifier`.
+ * @param expression Its expression, as written.
+ * @returns The package's verdict.
+ */
+const openDefaulting = (target: string, expression: string) =>
+  openPackage(
+    location,
+    reachPackage(
+      settingTotal(oneFloat),
+      `<qti-template-default template-identifier="${target}">${expression}</qti-template-default>`,
+    ),
+  );
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -945,6 +1049,314 @@ describe("package/open.ts", () => {
             },
           ]);
           acceptedOf(yield* mappedTo("U"));
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a template default through the reach that is not its integer template variable's type, a string ITEM2.S or a multiple ITEM2.M, as expression-type, pantry's P20, and accepts ITEM2.N",
+      () =>
+        Effect.gen(function* templateDefaultType() {
+          const cases = [
+            ["ITEM2.S", "string", "single"],
+            ["ITEM2.M", "integer", "multiple"],
+          ] as const;
+
+          for (const [reference, expressionBaseType, expressionCardinality] of cases) {
+            const verdict = yield* openDefaulting("T", variableXml(reference));
+            assert.deepStrictEqual(
+              refusalsOf(verdict),
+              [
+                {
+                  detail: {
+                    element: "qti-template-default",
+                    expressionBaseType,
+                    expressionCardinality,
+                    identifier: "T",
+                    outcomeBaseType: "integer",
+                    outcomeCardinality: "single",
+                    targetKind: "template",
+                  },
+                  document: fileLocation(location, "test.xml"),
+                  location: { kind: "path", path: firstRefChildAt("qti-template-default") },
+                  rule: "expression-type",
+                },
+              ],
+              reference,
+            );
+            assert.isTrue(acceptedAlone(verdict), reference);
+          }
+          acceptedOf(yield* openDefaulting("T", variableXml("ITEM2.N")));
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a float TOTAL set from ITEM1.RESPONSE, an identifier response read through the reach, as expression-type, pantry's P20, and accepts ITEM1.SCORE and a mapping target typed as its float source",
+      () =>
+        Effect.gen(function* setThroughReach() {
+          const setFrom = (reference: string, firstRef = "") =>
+            openPackage(
+              location,
+              reachPackage(settingTotal(`<qti-variable identifier="${reference}"/>`), firstRef),
+            );
+          const verdict = yield* setFrom("ITEM1.RESPONSE");
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                element: "qti-set-outcome-value",
+                expressionBaseType: "identifier",
+                expressionCardinality: "single",
+                identifier: "TOTAL",
+                outcomeBaseType: "float",
+                outcomeCardinality: "single",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: {
+                kind: "path",
+                path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+              },
+              rule: "expression-type",
+            },
+          ]);
+          assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
+          acceptedOf(yield* setFrom("ITEM1.SCORE"));
+          acceptedOf(
+            yield* setFrom(
+              "ITEM1.RESPONSE",
+              '<qti-variable-mapping source-identifier="SCORE" target-identifier="RESPONSE"/>',
+            ),
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a qti-outcome-if over ITEM1.SCORE, a float read through the reach, as expression-type with check condition, pantry's P21, and accepts one over ITEM1.CORRECT",
+      () =>
+        Effect.gen(function* conditionThroughReach() {
+          const branching = (reference: string) =>
+            openPackage(
+              location,
+              reachPackage(
+                `<qti-outcome-condition><qti-outcome-if><qti-variable identifier="${reference}"/>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`,
+              ),
+            );
+          const verdict = yield* branching("ITEM1.SCORE");
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                check: "condition",
+                element: "qti-outcome-if",
+                expressionBaseType: "float",
+                expressionCardinality: "single",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: {
+                kind: "path",
+                path: "qti-assessment-test/qti-outcome-processing/qti-outcome-condition/qti-outcome-if",
+              },
+              rule: "expression-type",
+            },
+          ]);
+          assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
+          acceptedOf(yield* branching("ITEM1.CORRECT"));
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a qti-sum over ITEM1.RESPONSE, an identifier read through the reach, as expression-type with check operand, pantry's P23, accepts one over ITEM1.SCORE, and gives an unresolved ITEM9.RESPONSE its reading refusal alone",
+      () =>
+        Effect.gen(function* operandThroughReach() {
+          const verdict = yield* openSettingTotal(
+            `<qti-sum>${variableXml("ITEM1.RESPONSE")}</qti-sum>`,
+          );
+
+          assert.deepStrictEqual(
+            refusalsOf(verdict).map(({ detail, location: at, rule }) => [
+              rule,
+              detail["check"],
+              detail["element"],
+              detail["operand"],
+              detail["expressionBaseType"],
+              at,
+            ]),
+            [
+              [
+                "expression-type",
+                "operand",
+                "qti-sum",
+                "1",
+                "identifier",
+                { kind: "path", path: expressionAt("qti-sum") },
+              ],
+            ],
+          );
+          assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
+          acceptedOf(yield* openSettingTotal(`<qti-sum>${variableXml("ITEM1.SCORE")}</qti-sum>`));
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openSettingTotal(`<qti-sum>${variableXml("ITEM9.RESPONSE")}</qti-sum>`),
+            ).map((refusal) => [refusal.rule, refusal.detail["check"]]),
+            [["undeclared-variable", "reading"]],
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a reference attribute naming ITEM1.RESPONSE or ITEM1.COUNT, responses read through the reach, once each as expression-type with check reference, pantry's P24, and accepts ITEM1.FIGURES, an integer outcome",
+      () =>
+        Effect.gen(function* referenceThroughReach() {
+          for (const reference of ["ITEM1.RESPONSE", "ITEM1.COUNT"]) {
+            const verdict = yield* openSettingTotal(roundedXml(reference));
+
+            assert.deepStrictEqual(
+              refusalsOf(verdict),
+              [
+                {
+                  detail: {
+                    attribute: "figures",
+                    check: "reference",
+                    element: "qti-round-to",
+                    expectedBaseType: "integer",
+                    identifier: reference,
+                  },
+                  document: fileLocation(location, "test.xml"),
+                  location: { kind: "path", path: expressionAt("qti-round-to") },
+                  rule: "expression-type",
+                },
+              ],
+              reference,
+            );
+            assert.isTrue(acceptedAlone(verdict), reference);
+          }
+          acceptedOf(yield* openSettingTotal(roundedXml("ITEM1.FIGURES")));
+        }),
+    );
+
+    it.effect(
+      "[T-9] gives a test's ordinary type refusal once, from the test document's verdict, and never again from the reach (Admission A5)",
+      () =>
+        Effect.gen(function* ordinaryOnce() {
+          const verdict = yield* openPackage(
+            location,
+            reachPackage(settingTotal('<qti-base-value base-type="string">x</qti-base-value>')),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                element: "qti-set-outcome-value",
+                expressionBaseType: "string",
+                expressionCardinality: "single",
+                identifier: "TOTAL",
+                outcomeBaseType: "float",
+                outcomeCardinality: "single",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: {
+                kind: "path",
+                path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+              },
+              rule: "expression-type",
+            },
+          ]);
+          assert.deepStrictEqual(documentVerdict(resourceOf(verdict, "T")), Option.some("refused"));
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a template default naming no template variable of its item, nothing or an outcome, as undeclared-variable, pantry's template-default-target, and accepts one of its template variable's type",
+      () =>
+        Effect.gen(function* templateDefaultTarget() {
+          const three = '<qti-base-value base-type="integer">3</qti-base-value>';
+
+          for (const target of ["NOPE", "SCORE"]) {
+            assert.deepStrictEqual(
+              refusalsOf(yield* openDefaulting(target, three)),
+              [
+                {
+                  detail: {
+                    attribute: "template-identifier",
+                    element: "qti-template-default",
+                    expected: "template",
+                    identifier: target,
+                  },
+                  document: fileLocation(location, "test.xml"),
+                  location: {
+                    kind: "path",
+                    path: `${firstRefChildAt("qti-template-default")}/@template-identifier`,
+                  },
+                  rule: "undeclared-variable",
+                },
+              ],
+              target,
+            );
+          }
+          acceptedOf(yield* openDefaulting("T", three));
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a prefixed map-response that resolves to nothing as undeclared-variable, pantry's prefixed-ref, and accepts ITEM1.MAPPED, a response with a mapping (reading 48)",
+      () =>
+        Effect.gen(function* mapResponseReading() {
+          const verdict = yield* openSettingTotal(
+            '<qti-map-response identifier="ITEM9.RESPONSE"/>',
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                check: "reading",
+                element: "qti-map-response",
+                identifier: "ITEM9.RESPONSE",
+                reading: "48",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: { kind: "path", path: `${expressionAt("qti-map-response")}/@identifier` },
+              rule: "undeclared-variable",
+            },
+          ]);
+          assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
+          acceptedOf(yield* openSettingTotal('<qti-map-response identifier="ITEM1.MAPPED"/>'));
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a prefixed map-response of a response with no mapping, and a prefixed map-response-point of a point with no area mapping, as template-requirements, as an item's (info.txt:9306; G-R3, pending)",
+      () =>
+        Effect.gen(function* unmappedThroughReach() {
+          const cases = [
+            ["qti-map-response", "ITEM1.RESPONSE", { child: "qti-mapping" }],
+            [
+              "qti-map-response-point",
+              "ITEM1.POINT",
+              { baseType: "point", child: "qti-area-mapping" },
+            ],
+          ] as const;
+
+          for (const [element, reference, needs] of cases) {
+            const verdict = yield* openSettingTotal(`<${element} identifier="${reference}"/>`);
+            assert.deepStrictEqual(
+              refusalsOf(verdict),
+              [
+                {
+                  detail: {
+                    ...needs,
+                    declaration: "qti-response-declaration",
+                    element,
+                    identifier: reference,
+                  },
+                  document: fileLocation(location, "test.xml"),
+                  location: { kind: "path", path: expressionAt(element) },
+                  rule: "template-requirements",
+                },
+              ],
+              reference,
+            );
+            assert.isTrue(acceptedAlone(verdict), reference);
+          }
+          acceptedOf(yield* openSettingTotal('<qti-map-response identifier="ITEM1.MAPPED"/>'));
         }),
     );
 
