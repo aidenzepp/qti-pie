@@ -7,12 +7,12 @@
  * every field it names one by one and never spreads a model object, so a field the model gains
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
  * a response default, a processing rule, a template rule or feedback content, nor any outcome or
- * template value but the ones the body's printed variables print, as text, nor a template
- * visibility: a template block, inline or choice is settled as shown, hidden or withheld before the
- * page sees it. Neither holds a seed: the view's seed only orders a shuffled Choice's or Inline
- * Choice's choices. What the page cannot be given, it cannot leak. A `solution` render shows
- * correct responses only when the author passes them as the view's values; nothing here reads them
- * from the item.
+ * template value but the ones the body's printed variables print, as text, and the ones its
+ * `param-variable` parameters pass, as their `value`, nor a template visibility: a template block,
+ * inline or choice is settled as shown, hidden or withheld before the page sees it. Neither holds a
+ * seed: the view's seed only orders a shuffled Choice's or Inline Choice's choices. What the page
+ * cannot be given, it cannot leak. A `solution` render shows correct responses only when the author
+ * passes them as the view's values; nothing here reads them from the item.
  *
  * @module
  * @see {@link Item} for the model it reads.
@@ -34,6 +34,7 @@ import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
+  BodyElement,
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
@@ -43,6 +44,7 @@ import type {
   PrintedVariable,
   SimpleChoice,
   TemplateContent,
+  TemplateDeclaration,
   TemplateVisibility,
   TextEntryInteraction,
   UnsupportedFeature,
@@ -1081,6 +1083,11 @@ const templateNotice: Readonly<Record<TemplateContent["kind"], string>> = {
 const choiceNotice = "template-identifier";
 
 /**
+ * The feature a withheld `param`'s notice names: its element's name, as for a printed variable.
+ */
+const parameterNotice = "param";
+
+/**
  * Copy one body node into its payload node.
  *
  * A printed variable becomes its notice. {@link redactItem} leaves none in a redacted body, so the
@@ -1321,6 +1328,64 @@ const shownBy = (
   );
 
 /**
+ * Give the template variable a body element stands in for as a parameter: the declaration a
+ * `param`'s `value` names, when it is declared `param-variable="true"` (the information model's
+ * Param `value`, `info.txt:69978`, and TemplateDeclaration's `param-variable`, `info.txt:45899`).
+ *
+ * @param item The item, whose template declarations the `value` is looked up among.
+ * @param node The body element.
+ * @returns The declaration; none for an element other than `param`, and for a `param` whose
+ *   `value` names no template variable or one not declared `param-variable`.
+ */
+const parameterOf = (item: Item, node: BodyElement): Option.Option<TemplateDeclaration> =>
+  node.tag === "param"
+    ? Arr.findFirst(node.attributes, (attribute) => attribute.name === "value").pipe(
+        Option.flatMap(({ value }) => Option.fromUndefinedOr(item.templates.get(value))),
+        Option.filter((declaration) => declaration.paramVariable),
+      )
+    : Option.none();
+
+/**
+ * Write a template value as the `value` a parameter passes, converted as the information model's
+ * Param `value` says (`info.txt:69978`): an integer by `%i` and a float by `%G`, both through
+ * `formatPrinted`; a boolean as `true` or `false`; a point as its two coordinates, horizontal
+ * first, and a pair or a directed pair as its two identifiers, each two separated by one space; an
+ * identifier, a string and a URI as they are. A `file` value cannot be expanded, and the value
+ * model holds none. The standard gives no form for a container or for NULL, so they take the
+ * printed variable's default (G-R2, pending): a container's members joined by `;`, and NULL as the
+ * empty string.
+ *
+ * @param value The template variable's value.
+ * @returns The text the parameter passes.
+ */
+const parameterText = (value: Value): string =>
+  formatPrinted(value, { format: value.baseType === "float" ? "%G" : "%i" });
+
+/**
+ * Decide what the page sees of a body element's `value` as a parameter: the text of the value the
+ * values hold for the `param-variable` template variable it names ({@link parameterOf},
+ * {@link parameterText}), or none when they cannot give it, because there are no values or they
+ * hold no value of that variable, so the `param` is withheld.
+ *
+ * @param item The item.
+ * @param printing The values the redaction reads, none when it has none.
+ * @param node The body element.
+ * @returns None for an element that stands in for no template variable, which is copied as written;
+ *   some text for a parameter the values expand; some none for one they withhold.
+ */
+const expandedParameter = (
+  item: Item,
+  printing: Option.Option<RedactRecord>,
+  node: BodyElement,
+): Option.Option<Option.Option<string>> =>
+  Option.map(parameterOf(item, node), (declaration) =>
+    printing.pipe(
+      Option.flatMap((record) => own(record.templates, declaration.identifier)),
+      Option.map(parameterText),
+    ),
+  );
+
+/**
  * Show an item's body from the values given, and list the features it shows as notices: the
  * item's notice-shown features in their order, with each notice the walk puts in a withheld part's
  * place where the item would list it were the notice one of its unsupported features.
@@ -1339,6 +1404,12 @@ const shownBy = (
  * no values, is absent too, and the notices name `template-identifier` once for them all, where the
  * walk meets the first.
  *
+ * A `param` whose `value` names a `param-variable` template variable the values hold passes that
+ * value, written as {@link parameterText} writes it, in place of the name; its other attributes
+ * stay as written. One whose variable the values do not hold, and every one when there are no
+ * values, is withheld behind its notice, `param` at its path. A `param` naming anything else keeps
+ * its `value` as written.
+ *
  * The item lists its notices in the order of the elements they sit at: in document order once
  * `check` has accepted it, and in the order the model read the body when the item was built by
  * hand. The walk goes through the body in document order and passes each listed notice when it
@@ -1352,9 +1423,11 @@ const shownBy = (
  *
  * @param item The item.
  * @param printing The values the body is shown by, none to withhold every printed variable, every
- *   template block and inline, and every choice with a template visibility.
- * @returns The body, every printed variable its text or its notice and every template block and
- *   inline its content, nothing or its notice, and the features shown as notices.
+ *   template block and inline, every choice with a template visibility and every `param-variable`
+ *   parameter.
+ * @returns The body, every printed variable its text or its notice, every template block and
+ *   inline its content, nothing or its notice, and every `param-variable` parameter its value or
+ *   its notice; and the features shown as notices.
  */
 const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
@@ -1376,14 +1449,31 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
     nodes.flatMap((node): readonly BodyNode[] => {
       switch (node.kind) {
         case "element": {
+          const parameter = expandedParameter(item, printing, node);
+          const withheld = Option.exists(parameter, Option.isNone);
           const held = new Set(
             node.children.flatMap((child) =>
               child.kind === "unsupported" && child.path === node.path ? [child.feature] : [],
             ),
           );
-          pass((entry) => entry.path === node.path && !held.has(entry.feature), seen);
+          pass((entry) => entry.path === node.path && !held.has(entry.feature), seen && !withheld);
 
-          return [{ ...node, children: nodesOf(node.children, seen) }];
+          const children = nodesOf(node.children, seen && !withheld);
+          if (withheld) {
+            note(parameterNotice, seen);
+
+            return [{ feature: parameterNotice, kind: "unsupported", path: node.path }];
+          }
+
+          const attributes = Option.match(Option.flatten(parameter), {
+            onNone: () => node.attributes,
+            onSome: (passed) =>
+              node.attributes.map((attribute) =>
+                attribute.name === "value" ? { name: attribute.name, value: passed } : attribute,
+              ),
+          });
+
+          return [{ ...node, attributes, children }];
         }
         case "unsupported": {
           pass((entry) => entry.feature === node.feature && entry.path === node.path, seen);
@@ -1505,22 +1595,30 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
  * `qti-template-block` or `qti-template-inline`, and a choice is absent, `notices` naming
  * `template-identifier` once for all such choices. Content the page does not see adds no notice.
  *
+ * Each `param` whose `value` names a template variable declared `param-variable="true"` passes the
+ * value the record holds for it in place of the name, converted as the information model's Param
+ * `value` says: an integer by `%i` and a float by `%G` through `formatPrinted`, a boolean as `true`
+ * or `false`, a point as its coordinates and a pair or a directed pair as its identifiers, each
+ * two separated by one space. One whose variable the record does not hold stays its notice,
+ * `param`, which `notices` names in document order. Any other `param` keeps its `value` as written.
+ *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with: each template variable at its declared default, else NULL (none where the
  * item has a `qti-template-processing` the engine does not run, since nothing computed them), and
  * each outcome at its starting value. An item whose template processing runs has no values
- * without its record, so each of its printed variables, template blocks and inlines stays its
- * notice and each of its choices with a template visibility is absent (H3).
+ * without its record, so each of its printed variables, template blocks, template inlines and
+ * `param-variable` parameters stays its notice and each of its choices with a template visibility
+ * is absent (H3).
  *
  * It never copies an outcome declaration, a correct response, a mapping, a response default, a
- * processing rule, a template rule, a template value or an outcome value it does not print, a
- * block's, inline's or choice's template visibility, the seed or an override template processing
- * set (the record's part it reads holds neither), or a field it does not name.
+ * processing rule, a template rule, a template value or an outcome value it does not print or pass
+ * to a parameter, a block's, inline's or choice's template visibility, the seed or an override
+ * template processing set (the record's part it reads holds neither), or a field it does not name.
  *
  * @param item The item.
  * @param record The template values and outcome values of the attempt shown, which its printed
- *   variables print and which show or hide its template blocks, inlines and choices; none to show
- *   the item as it reads with no record.
+ *   variables print, its `param-variable` parameters pass, and which show or hide its template
+ *   blocks, inlines and choices; none to show the item as it reads with no record.
  * @returns The redacted item.
  */
 export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
