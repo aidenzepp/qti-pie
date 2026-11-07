@@ -196,6 +196,7 @@ describe("the test helpers", () => {
       "test/oracle.test.ts: #pantry/test/oracle.ts",
       "test/prewitness.corpus.test.ts: #pantry/test/oracle.ts",
       "test/probe.ts: #pantry/test/oracle.ts",
+      "test/restored.oracle.test.ts: #pantry/test/oracle.ts",
       "test/xsd.corpus.test.ts: #pantry/test/oracle.ts",
     ]);
   });
