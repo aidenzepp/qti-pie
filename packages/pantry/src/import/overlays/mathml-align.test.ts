@@ -35,6 +35,7 @@ const version = "3.0.1";
  * The kinds the cases' elements are of.
  */
 type CaseKind =
+  | "div"
   | "m:maction"
   | "m:maligngroup"
   | "m:math"
@@ -608,6 +609,34 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
       state: "open",
     });
     assert.deepStrictEqual(keysOf(rows.MathAlignGroup), [idOf(6)]);
+  });
+
+  it("takes ltr at m:math whatever an HTML ancestor's dir (spec reading 144)", () => {
+    // Nodes: 0 document, 1 div (dir rtl), 2 math, 3 mtd, 4 mrow (dir ltr), 5 maligngroup.
+    const doc = documentOf(
+      elementOf(
+        "div",
+        [
+          elementOf("m:math", [
+            elementOf("m:mtd", [
+              elementOf("m:mrow", [elementOf("m:maligngroup")], [attributeOf("dir", "ltr")]),
+            ]),
+          ]),
+        ],
+        [attributeOf("dir", "rtl")],
+      ),
+    );
+    const rows = rowsOf(doc, ids);
+
+    assert.strictEqual(rows.MathAlignScope.get(idOf(3))?.inherited, "ltr");
+    assert.deepStrictEqual(standing(rows, 4), {
+      inherited: "ltr",
+      own: "ltr",
+      passes: "open",
+      received: "open",
+      state: "open",
+    });
+    assert.strictEqual(rows.MathAlignScope.get(idOf(5))?.state, "open");
   });
 
   it("passes a group through mphantom and an maction but not through any other kind", () => {

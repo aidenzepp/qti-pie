@@ -2748,3 +2748,21 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`.)
+
+144. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+     HTML around it says.** MathML 3 section 2.2.1, Attributes
+     (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
+     "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
+     backward compatibility with MathML 2.0 which had no notion of directionality.", and section 3.1.5.1 says "The
+     overall directionality for a formula, basically the direction of the Layout Schemata, is specified by the dir
+     attribute on the containing math element (see Section 2.2 The Top-Level <math> Element). The default is ltr." So
+     the direction an element of a formula inherits is the `dir` of its nearest ancestor that writes `ltr` or `rtl`, up
+     to and including its `m:math`, and `ltr` where none does; an HTML ancestor's `dir`, `rtl` or `auto`, is not read.
+     The alignment laws read that direction (section 3.5.5.2: an `mrow` or `mstyle` lets a group through only where it
+     changes no direction), so `<div dir="rtl"><m:math>…<m:mrow dir="ltr"><m:maligngroup/>…` keeps its group in its cell
+     and is accepted. By the same rule `<div dir="rtl"><m:math>…<m:mrow dir="rtl"><m:maligngroup/>…` is refused: the
+     formula starts at `ltr`, so the `mrow`'s `rtl` changes direction and the group cannot pass it; a formula meant to
+     run right to left writes `dir="rtl"` on its `m:math`. A `dir` that spells neither `ltr` nor `rtl` changes no direction (MathML 3 lists only those two;
+     the value domain refuses another on a MathML element). This binds pantry and plate alike. This is not a case of
+     documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on audit e8db90e1's F6, under the operator's
+     standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)

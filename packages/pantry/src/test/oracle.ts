@@ -950,8 +950,11 @@ const cnPartsOf = (
 };
 
 /**
- * The direction in effect around an element: the `dir` of its nearest ancestor that writes one
- * (`m:math`'s among them), `ltr` where none does (MathML 3 §3.1.5.1).
+ * The direction in effect around an element: the `dir` of its nearest ancestor that writes `ltr` or
+ * `rtl`, `ltr` once the walk passes an `m:math` that writes neither. MathML 3 §2.2.1 says "the dir
+ * attribute defaults to "ltr" on the math element (but inherits on all other elements which accept
+ * the dir attribute)", and §3.1.5.1 sets a formula's direction by its `math` element, so an HTML
+ * ancestor's `dir` above it is not read (reading 144).
  *
  * @param view - The document.
  * @param node - The element.
@@ -960,8 +963,12 @@ const cnPartsOf = (
 const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string => {
   for (const above of ancestorsOf(view, node)) {
     const written = collapsedValueOf(view, above.id, "dir");
-    if (Option.isSome(written)) {
+    if (Option.isSome(written) && (written.value === "ltr" || written.value === "rtl")) {
       return written.value;
+    }
+
+    if (above.kind === "m:math") {
+      return "ltr";
     }
   }
 
@@ -970,16 +977,18 @@ const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string =>
 
 /**
  * Tell whether an element writes a `dir` other than the one it inherits, so `mrow dir="ltr"` in a
- * left-to-right formula changes none (operator decision 321).
+ * left-to-right formula changes none (operator decision 321). A `dir` that spells neither `ltr` nor
+ * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 144).
  *
  * @param view - The document.
  * @param node - The element.
- * @returns True when its `dir` differs from {@link inheritedDirectionOf}.
+ * @returns True when its `dir` is `ltr` or `rtl` and differs from {@link inheritedDirectionOf}.
  */
 const changesDirection = (view: View, node: FoldedNode<Composed>): boolean =>
   Option.exists(
     collapsedValueOf(view, node.id, "dir"),
-    (written) => written !== inheritedDirectionOf(view, node),
+    (written) =>
+      (written === "ltr" || written === "rtl") && written !== inheritedDirectionOf(view, node),
   );
 
 /**
