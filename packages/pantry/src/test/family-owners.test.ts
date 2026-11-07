@@ -16,7 +16,7 @@ import { drawn, explore } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { orphansOf } from "#pantry/test/family-owners.ts";
@@ -61,9 +61,18 @@ const packageMutationsByLaw: readonly (readonly [string, Mutation])[] = Object.e
  */
 const ownersHold = (entries: PackageEntries, label: string) =>
   Effect.gen(function* familyOwnersHold() {
-    const { inputs } = yield* readProgram(yield* scopedPackage(entries));
+    // A package the reader or the codec refuses writes no row at all, so no member of its rows can
+    // name an absent owner: a mutation whose law moved to the reader (crust daed3e96's URI
+    // reference, for Namespace name) holds here by having no rows.
+    const program = yield* readProgram(yield* scopedPackage(entries)).pipe(
+      Effect.map(Option.some),
+      Effect.catchTag("ImportRefused", () => Effect.succeed(Option.none())),
+    );
+    if (Option.isNone(program)) {
+      return;
+    }
 
-    const orphans = orphansOf(inputs);
+    const orphans = orphansOf(program.value.inputs);
     assert.deepStrictEqual(
       orphans,
       [],
