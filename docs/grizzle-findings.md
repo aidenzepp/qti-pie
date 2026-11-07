@@ -1580,7 +1580,7 @@ DETAIL naming the failing row (as the server log above shows for a foreign key).
 wrong verdict. Asked as a question, grizzle accepted it: a refused CHECK will carry the failing row's key from
 PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". Nothing is filed.
 
-### A law's key that closes a cycle with a family's owner axis is installed immediate, and no write can order it (grizzle defect, confirmed; lane DBT)
+### A law's key that closes a cycle with a family's owner axis is installed immediate, and no write can order it (grizzle defect, fixed in `e9227af`; lane DBT)
 
 - **Checked at:** grizzle `27c4cd2` and trunk `4ec7574`; both files are unchanged between them.
 - **Cause:**
@@ -1619,6 +1619,10 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
     graph…", is the stated reason owner axes are left out.
 - **Status:** handed to grizzle-c5, whose lane F takes it as a defect, with a generated-search guard and this case
   kept. Nothing is filed. The workaround, `a6d23fcc`, comes out when F's fix is pinned.
+- **Fixed in `e9227af`** (`e9227afd2fa183bba52d74829b38aa52e973cef0`), by grizzle's report: a cycle through an owner
+  axis is now deferred or refused, and this case is kept in grizzle's `test/pg/write/deferral/owner-cycle.test.ts`.
+  Lane N2's re-run of the reproduction there is recorded here when it lands. qti-pie's repin to `e9227af` is held on
+  the `UnorderableStratum` entry below, so `a6d23fcc` stays until then.
 
 ### A closed `C.row` read whose key is an absent `C.at` casts NULL to a bits domain, whose CHECK raises 23514 (grizzle defect, confirmed; lane DBT)
 
