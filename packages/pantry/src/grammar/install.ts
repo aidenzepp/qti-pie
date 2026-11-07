@@ -1324,13 +1324,16 @@ const asCnPartForm = handleLookup("CnPartForm", CnPartForm.handles);
 
 /**
  * The `CnPart` roster: a part's place among the parts of a `cn`'s content, the numerals 0 to the
- * most any type holds less one ({@link cnForms}).
+ * most any type holds ({@link cnForms}). The last place is one no type lists: a `cn` with more
+ * parts than its type writes a row there, which `CnForm` lists for no type, and its drawn count
+ * passes `CnParts`' for no type, so the database refuses it. It is appended, so `"0"` and `"1"`
+ * keep their codes.
  */
 export const CnPart = closed(
   "CnPart",
   nonEmpty(
     "CnPart",
-    Arr.range(0, Math.max(...[...cnForms.values()].map((forms) => forms.length)) - 1).map(String),
+    Arr.range(0, Math.max(...[...cnForms.values()].map((forms) => forms.length))).map(String),
   ),
 );
 

@@ -10,7 +10,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
-import { CnBase, CnForm, CnParts, CnType } from "#pantry/grammar/install.ts";
+import { CnBase, CnForm, CnPart, CnParts, CnType } from "#pantry/grammar/install.ts";
 import {
   lawIdentity,
   lawNameOf,
@@ -136,5 +136,18 @@ describe("qti/mathml-cn.ts, spellings", () => {
     for (const { parts, type } of CnParts.rows) {
       assert.strictEqual(CnForm.rows.filter((row) => row.type === type).length, Number(parts));
     }
+  });
+
+  it("names one place beyond the most parts any type holds, which no CnForm row lists", () => {
+    // Oracle: the counts of `CnParts`, the most parts any type holds.
+    const most = Math.max(...CnParts.rows.map((row) => Number(row.parts)));
+    const beyond = CnPart.handles.at(-1);
+
+    assert.strictEqual(CnPart.handles.length, most + 1);
+    assert.deepStrictEqual(
+      [...CnPart.handles],
+      Array.from({ length: most + 1 }, (_, place) => String(place)),
+    );
+    assert.isFalse(CnForm.rows.some((row) => row.part === beyond));
   });
 });
