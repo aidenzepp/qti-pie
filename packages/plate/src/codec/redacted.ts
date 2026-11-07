@@ -240,14 +240,15 @@ const IntegerOrRef = Schema.Union([
  * Why the JSON form holds no printed variable, the message of the refusal on either side.
  */
 const noPrintedVariable =
-  "a redacted body holds no printed variable; redact puts its notice in its place (OD-P8-14)";
+  "a redacted body holds no printed variable; redact puts the text it prints in its place, or its notice when the record holds no value for it (OD-P8-14)";
 
 /**
- * A printed variable, which the JSON form never holds (OD-P8-14): `redact` puts each one's notice
- * in its place before the item leaves the server. Its encoded side is `Never`, so decoding refuses
- * a body node of its kind and encoding refuses a body that holds one, as a second line behind
- * `redact`, as the emitter is one behind `url.ts`. Its type side holds every field of the model's
- * printed variable, so the codec's body-node union stays the model's `BodyNode`.
+ * A printed variable, which the JSON form never holds (OD-P8-14): `redact` puts the text each one
+ * prints in its place before the item leaves the server, and its notice only where the record
+ * holds no value for it. Its encoded side is `Never`, so decoding refuses a body node of its kind
+ * and encoding refuses a body that holds one, as a second line behind `redact`, as the emitter is
+ * one behind `url.ts`. Its type side holds every field of the model's printed variable, so the
+ * codec's body-node union stays the model's `BodyNode`.
  */
 const NoPrintedVariable = Schema.Never.pipe(
   Schema.decodeTo(
@@ -271,6 +272,39 @@ const NoPrintedVariable = Schema.Never.pipe(
 );
 
 /**
+ * Why the JSON form holds no template block or inline, the message of the refusal on either side.
+ */
+const noTemplateContent =
+  "a redacted body holds no template block or inline; redact puts its content in its place when its template value shows it, nothing when it hides it, or its notice when the record holds no value for it (OD-P8-14)";
+
+/**
+ * A template block or inline, which the JSON form never holds (OD-P8-14): `redact` settles each
+ * one's visibility before the item leaves the server, as it prints each printed variable
+ * ({@link NoPrintedVariable}), so the template variable that decides it never reaches the page.
+ * Its encoded side is `Never`, so decoding refuses a body node of either kind and encoding refuses
+ * a body that holds one. Its type side holds every field of the model's template block, so the
+ * codec's body-node union stays the model's `BodyNode`.
+ */
+const NoTemplateContent = Schema.Never.pipe(
+  Schema.decodeTo(
+    Schema.Struct({
+      content: BodyNodes,
+      identifier: Schema.String,
+      kind: Schema.Literals(["template-block", "template-inline"]),
+      path: Schema.String,
+      templateVisibility: Schema.Struct({
+        showHide: Schema.Literals(["hide", "show"]),
+        templateIdentifier: Schema.String,
+      }),
+    }),
+    {
+      decode: SchemaGetter.forbidden(() => noTemplateContent),
+      encode: SchemaGetter.forbidden(() => noTemplateContent),
+    },
+  ),
+);
+
+/**
  * The fields a Text Entry and an Extended Text share, as `TextEntryInteraction` declares them.
  */
 const textControlFields = {
@@ -288,9 +322,9 @@ const textControlFields = {
 };
 
 /**
- * The Schema of one body node, a union over the eight kinds of `BodyNode`, every field included;
- * its type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no printed
- * variable ({@link NoPrintedVariable}).
+ * The Schema of one body node, a union over the ten kinds of `BodyNode`, every field included; its
+ * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no printed
+ * variable ({@link NoPrintedVariable}) and no template block or inline ({@link NoTemplateContent}).
  */
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
@@ -349,6 +383,7 @@ const BodyNodeSchema = Schema.Union([
     path: Schema.String,
   }),
   NoPrintedVariable,
+  NoTemplateContent,
 ]);
 
 /**
@@ -585,6 +620,12 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
         enqueue(node.children, within);
         break;
       }
+      case "template-block":
+      case "template-inline": {
+        // The Schema refuses either kind first; a body that held one would hold its content here.
+        enqueue(node.content, within);
+        break;
+      }
       case "printed-variable":
       case "text":
       case "unsupported": {
@@ -648,7 +689,8 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  * throws, whatever it is handed.
  *
  * It checks the JSON's shape, every field against {@link RedactedSchema}, which admits no printed
- * variable, since `redact` leaves none, and one rule of the body's content: no interaction stands,
+ * variable and no template block or inline, since `redact` leaves none, and one rule of the body's
+ * content: no interaction stands,
  * at any depth, inside a Choice's Prompt or a choice's content, inside an Extended Text's Prompt,
  * or inside an Inline Choice's Label or a choice's content, where QTI's schema admits none and
  * `render` cannot emit one, so `render` never meets such an interaction in a `Redacted` it

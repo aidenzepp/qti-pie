@@ -362,19 +362,20 @@ export interface BodyText {
 }
 
 /**
- * How a template variable controls a choice's visibility: a choice's `template-identifier` and its
- * `show-hide` (the information model's SimpleChoice, `info.txt:42441-42494`, and InlineChoice,
- * `info.txt:31948-32001`).
+ * How a template variable controls the visibility of a choice, a template block or a template
+ * inline: its `template-identifier` and its `show-hide` (the information model's SimpleChoice,
+ * `info.txt:42441-42494`, InlineChoice, `info.txt:31948-32001`, TemplateBlock, `info.txt:44963`,
+ * and TemplateInline, `info.txt:46250`).
  */
 export interface TemplateVisibility {
   /**
-   * `show-hide`, `show` when absent. `show` hides the choice unless the template variable matches,
-   * or contains, the choice's identifier; `hide` shows it unless the variable does.
+   * `show-hide`, `show` when absent. `show` hides the part unless the template variable matches,
+   * or contains, the part's identifier; `hide` shows it unless the variable does.
    */
   readonly showHide: "hide" | "show";
   /**
    * `template-identifier`: the template variable, of base type identifier and single or multiple
-   * cardinality, whose value controls the choice's visibility.
+   * cardinality, whose value controls the part's visibility.
    */
   readonly templateIdentifier: string;
 }
@@ -626,6 +627,32 @@ export interface PrintedVariable {
 }
 
 /**
+ * A `qti-template-block` (`kind` `template-block`) or a `qti-template-inline` (`template-inline`),
+ * the information model's TemplateBlock and TemplateInline (`info.txt:44963`, `:46250`): content
+ * shown or hidden by a template value, as a choice with a template visibility is.
+ *
+ * The model holds it whatever the variable's value, which comes from an attempt's record, so
+ * `redactItem` in `#plate/payload.ts` decides what the page sees in its place: its content where
+ * the value shows it, nothing where it hides it. A redacted body holds none.
+ */
+export interface TemplateContent {
+  /**
+   * The content, read as any body content is.
+   */
+  readonly content: readonly BodyNode[];
+  /**
+   * `identifier`: the identifier the template variable's value is matched against.
+   */
+  readonly identifier: string;
+  readonly kind: "template-block" | "template-inline";
+  readonly path: string;
+  /**
+   * Its `template-identifier` and `show-hide`.
+   */
+  readonly templateVisibility: TemplateVisibility;
+}
+
+/**
  * A body part plate does not render, shown as a notice in its place; its subtree is dropped.
  */
 export interface Unsupported {
@@ -649,7 +676,7 @@ export type Interaction =
 
 /**
  * A node of the item body: an element, a text, one of the four interactions, a printed variable,
- * or a notice.
+ * a template block or inline, or a notice.
  */
 export type BodyNode =
   | BodyElement
@@ -659,6 +686,7 @@ export type BodyNode =
   | TextEntryInteraction
   | ExtendedTextInteraction
   | PrintedVariable
+  | TemplateContent
   | Unsupported;
 
 /**
@@ -1545,8 +1573,35 @@ const textFields = (
   });
 
 /**
+ * The values of `show-hide`, whose XSD type is a string enumeration, so a value is read as written.
+ */
+const showHides = ["hide", "show"] as const;
+
+/**
+ * Read an element's `show-hide`, `show` when absent, beside the template variable that controls
+ * it.
+ *
+ * @param build The build.
+ * @param element A choice, a `qti-template-block` or a `qti-template-inline`.
+ * @param templateIdentifier Its `template-identifier`, read as an identifier.
+ * @returns Its template visibility, or the refusal `attribute-type` when `show-hide` is neither
+ *   `show` nor `hide`, which the validator refuses first.
+ */
+const templateVisibilityOf = (
+  build: Build,
+  element: SourceElement,
+  templateIdentifier: string,
+): Effect.Effect<TemplateVisibility, Refusal> =>
+  Effect.map(enumerated(build, element, "show-hide", showHides), (showHide) => ({
+    showHide: Option.getOrElse(showHide, () => "show" as const),
+    templateIdentifier,
+  }));
+
+/**
  * Read a choice of a Choice or an Inline Choice, a `qti-simple-choice` or a `qti-inline-choice`:
- * its identifier, its `fixed`, an `xs:boolean` false when absent, and its content.
+ * its identifier, its `fixed`, an `xs:boolean` false when absent, its content, and its
+ * `template-identifier` with its `show-hide`, `show` when absent. A choice with no
+ * `template-identifier` has no template visibility, whatever its `show-hide`.
  *
  * @param build The build.
  * @param choice The choice.
@@ -1561,12 +1616,17 @@ const simpleChoiceOf = (
 
     const identifier = yield* identifierAttribute(build, choice, "identifier");
     const fixed = yield* xsBoolean(build, choice, "fixed", false);
+    const templateVisibility = yield* Effect.transposeOption(
+      Option.map(valueOf(choice, "template-identifier"), (written) =>
+        templateVisibilityOf(build, choice, identifierOf(written)),
+      ),
+    );
 
     return {
       content: yield* bodyNodes(build, choice),
       fixed,
       identifier,
-      templateVisibility: Option.none(),
+      templateVisibility,
     };
   });
 
@@ -1619,8 +1679,8 @@ const choiceInteraction = (
  * identifier.
  *
  * `min-choices`, `required`, `shuffle` and each choice's `fixed` are read as their XSD types read
- * them, their outer whitespace gone (reading 7): `required=" true "` is true. `template-identifier`
- * and `show-hide` are not read.
+ * them, their outer whitespace gone (reading 7): `required=" true "` is true. Each choice's
+ * `template-identifier` and `show-hide` are read as a Choice's are.
  *
  * @param build The build.
  * @param interaction The interaction.
@@ -1817,13 +1877,71 @@ const printedVariable = (
   });
 
 /**
+ * Read a `qti-template-block`'s content: the content of its `qti-content-body`, read as any body
+ * content is. Its `qti-stylesheet`s and its `qti-catalog-info` (`TemplateBlockDType`), which the
+ * page does not show, are each a mark keyed by its name, as an item's own are.
+ *
+ * @param build The build.
+ * @param block The template block.
+ * @returns Its content, or a refusal.
+ */
+const templateBlockContent = (
+  build: Build,
+  block: SourceElement,
+): Effect.Effect<readonly BodyNode[], Refusal> =>
+  Effect.map(
+    Effect.forEach(elementsOf(block), (part) => {
+      if (isQti(part, "qti-content-body")) {
+        return bodyNodes(build, part);
+      }
+
+      record(build, { feature: nameOf(part), path: pathOf(build, part), shown: "mark" });
+
+      return Effect.succeed([]);
+    }),
+    (parts) => parts.flat(),
+  );
+
+/**
+ * Read a `qti-template-block` or a `qti-template-inline` into its body node: its `identifier` and
+ * `template-identifier`, each read as an identifier, its `show-hide`, `show` when absent, and its
+ * content: a block's `qti-content-body`'s ({@link templateBlockContent}), an inline's own, each
+ * read as any body content is.
+ *
+ * @param build The build.
+ * @param element The template block or inline.
+ * @param kind Which of the two it is.
+ * @returns Its body node, or the refusal `missing-attribute` when it has no `identifier` or no
+ *   `template-identifier`, or `attribute-type` when `show-hide` is neither `show` nor `hide`; the
+ *   validator refuses each first.
+ */
+const templateContent = (
+  build: Build,
+  element: SourceElement,
+  kind: TemplateContent["kind"],
+): Effect.Effect<TemplateContent, Refusal> =>
+  Effect.gen(function* readTemplateContent() {
+    markElement(build, element, true);
+
+    const identifier = yield* identifierAttribute(build, element, "identifier");
+    const templateIdentifier = yield* identifierAttribute(build, element, "template-identifier");
+    const templateVisibility = yield* templateVisibilityOf(build, element, templateIdentifier);
+    const content = yield* kind === "template-block"
+      ? templateBlockContent(build, element)
+      : bodyNodes(build, element);
+
+    return { content, identifier, kind, path: pathOf(build, element), templateVisibility };
+  });
+
+/**
  * Read one child of a body element.
  *
  * @param build The build.
  * @param parent The element that holds it.
  * @param child The child.
  * @returns Its body node: text as itself, an HTML element with its subtree, an interaction's model,
- *   a printed variable's, or a notice for anything else, its subtree dropped; or a refusal.
+ *   a printed variable's, a template block's or inline's with its content, or a notice for
+ *   anything else, its subtree dropped; or a refusal.
  */
 const bodyNode = (
   build: Build,
@@ -1845,6 +1963,14 @@ const bodyNode = (
 
   if (isQti(child, "qti-printed-variable")) {
     return printedVariable(build, child);
+  }
+
+  if (isQti(child, "qti-template-block")) {
+    return templateContent(build, child, "template-block");
+  }
+
+  if (isQti(child, "qti-template-inline")) {
+    return templateContent(build, child, "template-inline");
   }
 
   if (!isQti(child) || child.local.startsWith("qti-")) {

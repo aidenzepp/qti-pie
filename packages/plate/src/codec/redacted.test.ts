@@ -17,6 +17,7 @@ import type {
   Item,
   PrintedVariable,
   ResponseDeclaration,
+  TemplateContent,
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
@@ -804,21 +805,42 @@ interface PrintedVariableJson {
 }
 
 /**
- * A paragraph in the JSON form whose children may hold a printed variable.
+ * A template block or inline as the JSON form would write one if it held any; it holds none.
+ */
+interface TemplateContentJson {
+  readonly content: readonly BodyNodeJson[];
+  readonly identifier: string;
+  readonly kind: "template-block" | "template-inline";
+  readonly path: string;
+  readonly templateVisibility: {
+    readonly showHide: "hide" | "show";
+    readonly templateIdentifier: string;
+  };
+}
+
+/**
+ * A body node the JSON form never holds, which decoding must refuse.
+ */
+type UnredactedJson = PrintedVariableJson | TemplateContentJson;
+
+/**
+ * A paragraph in the JSON form whose children may hold a printed variable or a template block or
+ * inline.
  */
 interface HoldingJson {
   readonly attributes: Extract<BodyNodeJson, { readonly kind: "element" }>["attributes"];
-  readonly children: readonly (BodyNodeJson | PrintedVariableJson)[];
+  readonly children: readonly (BodyNodeJson | UnredactedJson)[];
   readonly kind: "element";
   readonly path: string;
   readonly tag: string;
 }
 
 /**
- * The JSON form with a body that may hold a printed variable, at the top or in a paragraph.
+ * The JSON form with a body that may hold a printed variable or a template block or inline, at the
+ * top or in a paragraph.
  */
 type PrintingJson = Omit<RedactedJson, "body"> & {
-  readonly body: readonly (BodyNodeJson | HoldingJson | PrintedVariableJson)[];
+  readonly body: readonly (BodyNodeJson | HoldingJson | UnredactedJson)[];
 };
 
 /**
@@ -841,7 +863,7 @@ const printedJson: PrintedVariableJson = {
  * @param nested Whether a paragraph holds it.
  * @returns The JSON form, the node added.
  */
-const withNode = (node: BodyNodeJson | PrintedVariableJson, nested: boolean): PrintingJson => {
+const withNode = (node: BodyNodeJson | UnredactedJson, nested: boolean): PrintingJson => {
   const json = Result.getOrThrow(encodeRedacted(redact(acceptForTest(choiceItem))));
 
   return {
@@ -907,6 +929,70 @@ describe("the codec on a printed variable (OD-P8-14)", () => {
         assert.strictEqual(error.stage, "encode");
       }),
   );
+});
+
+/**
+ * The path every template block or inline in the template cases sits at.
+ */
+const templatePath = (kind: TemplateContent["kind"]): string =>
+  `qti-assessment-item/qti-item-body/p/qti-${kind}`;
+
+describe("the codec on a template block or inline (OD-P8-14)", () => {
+  for (const kind of ["template-block", "template-inline"] as const) {
+    for (const nested of [false, true]) {
+      it.effect(
+        `[I-5] decodeRedacted refuses a body that holds a ${kind}${nested ? " inside a paragraph" : ""}: InvalidRedacted at stage decode, where its notice decodes`,
+        () =>
+          Effect.gen(function* refusesTemplateContent() {
+            const error = yield* failureOf(
+              decodeRedacted(
+                withNode(
+                  {
+                    content: [{ kind: "text", text: "Shown by a template value" }],
+                    identifier: "SHOWN",
+                    kind,
+                    path: templatePath(kind),
+                    templateVisibility: { showHide: "show", templateIdentifier: "VISIBLE" },
+                  },
+                  nested,
+                ),
+              ),
+            );
+            const notice = decodeRedacted(
+              withNode(
+                { feature: `qti-${kind}`, kind: "unsupported", path: templatePath(kind) },
+                nested,
+              ),
+            );
+
+            assert.strictEqual(error._tag, "InvalidRedacted");
+            assert.strictEqual(error.stage, "decode");
+            assert.isTrue(Result.isSuccess(notice));
+          }),
+      );
+    }
+
+    it.effect(
+      `[I-5] encodeRedacted refuses a body built by hand that holds a ${kind}: InvalidRedacted at stage encode`,
+      () =>
+        Effect.gen(function* refusesTemplateContentOut() {
+          const node: TemplateContent = {
+            content: [{ kind: "text", text: "Shown by a template value" }],
+            identifier: "SHOWN",
+            kind,
+            path: templatePath(kind),
+            templateVisibility: { showHide: "show", templateIdentifier: "VISIBLE" },
+          };
+          const redacted = redact(acceptForTest(choiceItem));
+          const error = yield* failureOf(
+            encodeRedacted(brandRedacted({ ...redacted, body: [...redacted.body, node] })),
+          );
+
+          assert.strictEqual(error._tag, "InvalidRedacted");
+          assert.strictEqual(error.stage, "encode");
+        }),
+    );
+  }
 });
 
 describe("decodeRedacted on a deeply nested body", () => {
