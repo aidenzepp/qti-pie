@@ -28,23 +28,11 @@
  * section document's references resolved under each test that places it.
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { Addition, DbConnection, Fact, Law } from "@bjornpagen/grizzle";
-import { NodeFileSystem } from "@effect/platform-node";
+import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Option, Redacted } from "effect";
-import { Client } from "pg";
-import type { DatabaseError, QueryResultRow } from "pg";
+import { Effect, Option } from "effect";
 import { describe } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import {
-  AttributeName,
-  BaseType,
-  Cardinality,
-  DeclarationKind,
-  NodeKind,
-  SchemaVersion,
-} from "#pantry/grammar/install.ts";
 import { Declaration } from "#pantry/qti/declarations.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
@@ -64,26 +52,19 @@ import {
   SectionFeedbackRef,
   SectionScope,
   Slider,
+  VarRef,
 } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
+import {
+  foreignKeysBetween,
+  judged,
+  loginSession,
+  statedInserts,
+} from "#pantry/test/direct-sql.ts";
+import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, which is also the schema of its views.
- */
-const authorRole = "qti__author";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
 
 /**
  * A uuid no stored row holds: the document and the declaration every stray row names.
@@ -351,321 +332,48 @@ const hottextOf = (at: number, fields: Partial<Fact<typeof Hottext>> = {}) =>
   }) satisfies Fact<typeof Hottext>;
 
 /**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA, closed
- * with its scope: a direct SQL writer.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-}).pipe(Effect.provide(NodeFileSystem.layer));
-
-/**
- * Run one statement on a session and return its rows.
- *
- * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters.
- * @returns The rows, each as node-postgres decodes it.
- */
-const rowsOf = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly unknown[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
- * Whether a failure is a server error of node-postgres's, which carries a SQLSTATE and the
- * constraint it names.
- *
- * @param error - The failure's cause.
- * @returns Whether it is one.
- */
-const isServerError = (error: unknown): error is DatabaseError =>
-  error instanceof Error && "code" in error && "constraint" in error;
-
-/**
- * A row a direct writer inserts into one of `Qti`'s tables: every column it fills by name, a closed
- * id by its code, a boolean as itself.
- */
-type SqlRow = Readonly<Record<string, string | number | boolean>>;
-
-/**
- * Read the columns of one of `Qti`'s tables a direct writer fills: every live column PostgreSQL
- * does not generate, a family's hidden ones among them (README, "Direct SQL access": a family's
- * values are a direct writer's to fill).
- *
- * @param client - The session.
- * @param table - The table.
- * @returns The columns' names, none for a table the schema does not hold.
- */
-const writtenColumnsOf = (client: Client, table: string) =>
-  rowsOf<{ readonly name: string }>(
-    client,
-    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
-      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
-        AND a.attgenerated = ''
-      ORDER BY a.attnum`,
-    [`${qtiSchema}.${table}`],
-  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
-
-/**
- * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
- * catalogue: the constraints the containments between the two relations install.
- *
- * @param client - The session, before `SET ROLE`.
- * @param from - The referencing table.
- * @param to - The referenced table.
- * @returns The constraint names.
- */
-const foreignKeys = (client: Client, from: string, to: string) =>
-  rowsOf<{ readonly conname: string }>(
-    client,
-    `SELECT con.conname FROM pg_constraint con
-       JOIN pg_class src ON src.oid = con.conrelid
-       JOIN pg_class dst ON dst.oid = con.confrelid
-       JOIN pg_namespace n ON n.oid = src.relnamespace
-      WHERE con.contype = 'f' AND n.nspname = $1 AND src.relname = $2 AND dst.relname = $3`,
-    [qtiSchema, from, to],
-  ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
-
-/**
- * Insert rows into their tables as the author role, every constraint deferred, then set the given
- * ones immediate, and roll back: the server's verdict on the rows by those constraints alone, or
- * none when the rows' own laws and those constraints accept them. Each row fills exactly its
- * table's written columns, or the case fails before any statement runs.
- *
- * @param client - The session.
- * @param inserts - Each row, with the table it is inserted into.
- * @param immediate - The constraints to check at once after the inserts.
- * @returns The server's error, or none when every statement succeeded; fails with any other
- *   failure.
- */
-const deferredInsert = (
-  client: Client,
-  inserts: readonly { readonly row: SqlRow; readonly table: string }[],
-  immediate: readonly string[],
-) =>
-  Effect.gen(function* insertDeferred() {
-    for (const { row, table } of inserts) {
-      assert.sameMembers(
-        Object.keys(row),
-        yield* writtenColumnsOf(client, table),
-        `${table}: the row fills every column a direct writer fills`,
-      );
-    }
-
-    yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
-
-    const outcome = yield* Effect.gen(function* statements() {
-      yield* rowsOf(client, `SET ROLE ${authorRole}`);
-      yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
-      for (const { row, table } of inserts) {
-        const columns = Object.keys(row);
-        yield* rowsOf(
-          client,
-          `INSERT INTO ${qtiSchema}.${table} (${columns.join(", ")}) VALUES (${columns
-            .map((_, at) => `$${String(at + 1)}`)
-            .join(", ")})`,
-          Object.values(row),
-        );
-      }
-
-      for (const name of immediate) {
-        yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchema}."${name}" IMMEDIATE`);
-      }
-    }).pipe(
-      Effect.as(Option.none<DatabaseError>()),
-      Effect.catch((error) =>
-        isServerError(error.cause) ? Effect.succeed(Option.some(error.cause)) : Effect.fail(error),
-      ),
-    );
-    yield* rowsOf(client, "ROLLBACK");
-
-    return outcome;
-  });
-
-/**
- * The code of a handle in its roster, the value a direct writer stores in its closed-id column.
- *
- * @param handles - The roster's handles.
- * @param handle - The handle.
- * @returns Its code.
- */
-const codeOf = (handles: readonly string[], handle: string): number => {
-  const code = handles.indexOf(handle);
-  assert.isAtLeast(code, 0, `${handle} is a handle of its roster`);
-
-  return code;
-};
-
-/**
- * A count bound as a direct writer's row, every closed id by its code.
- *
- * @param fields - The row as the API writes it.
- * @returns The table's row.
- */
-const countBoundSql = (fields: Fact<typeof CountBound>) =>
-  ({
-    choices: String(fields.choices),
-    document: fields.document,
-    kind: codeOf(NodeKind.handles, fields.kind),
-    least: fields.least,
-    least_value: String(fields.leastValue),
-    max_name: codeOf(AttributeName.handles, fields.maxName),
-    max_written: fields.maxWritten,
-    min_name: codeOf(AttributeName.handles, fields.minName),
-    min_written: fields.minWritten,
-    most: fields.most,
-    most_value: String(fields.mostValue),
-    nearest: fields.nearest,
-    node: fields.node,
-    parent: fields.parent,
-    start: String(fields.start),
-    version: codeOf(SchemaVersion.handles, fields.version),
-  }) satisfies SqlRow;
-
-/**
- * A bound variable as a direct writer's row, every closed id by its code.
- *
- * @param fields - The row as the API writes it.
- * @returns The table's row.
- */
-const boundVariableSql = (fields: Fact<typeof BoundVariable>) =>
-  ({
-    adaptive: fields.adaptive,
-    attribute: codeOf(AttributeName.handles, fields.attribute),
-    document: fields.document,
-    identifier: fields.identifier,
-    kind: codeOf(NodeKind.handles, fields.kind),
-    node: fields.node,
-  }) satisfies SqlRow;
-
-/**
- * A binding's declaration row as a direct writer's row, every closed id by its code.
- *
- * @param fields - The row as the API writes it.
- * @returns The table's row.
- */
-const declarationSql = (fields: Fact<typeof BindingDeclaration>) =>
-  ({
-    attribute: codeOf(AttributeName.handles, fields.attribute),
-    base_type: codeOf(BaseType.handles, fields.baseType),
-    cardinality: codeOf(Cardinality.handles, fields.cardinality),
-    declaration: fields.declaration,
-    declaration_kind: codeOf(DeclarationKind.handles, fields.declarationKind),
-    document: fields.document,
-    identifier: fields.identifier,
-    kind: codeOf(NodeKind.handles, fields.kind),
-    node: fields.node,
-  }) satisfies SqlRow;
-
-/**
- * A content reference as a direct writer's row, every closed id by its code.
- *
- * @param fields - The row as the API writes it.
- * @returns The table's row.
- */
-const referenceSql = (fields: Fact<typeof FeedbackRef>) =>
-  ({
-    attribute: codeOf(AttributeName.handles, fields.attribute),
-    base_type: codeOf(BaseType.handles, fields.baseType),
-    cardinality: codeOf(Cardinality.handles, fields.cardinality),
-    declaration: fields.declaration,
-    declaration_kind: codeOf(DeclarationKind.handles, fields.declarationKind),
-    document: fields.document,
-    identifier: fields.identifier,
-    kind: codeOf(NodeKind.handles, fields.kind),
-    node: fields.node,
-  }) satisfies SqlRow;
-
-/**
- * A hotspot as a direct writer's row, every closed id by its code.
- *
- * @param fields - The row as the API writes it.
- * @returns The table's row.
- */
-const hotspotSql = (fields: Fact<typeof Hotspot>) =>
-  ({
-    area: fields.area,
-    document: fields.document,
-    element_children: String(fields.elementChildren),
-    elements: String(fields.elements),
-    kind: codeOf(NodeKind.handles, fields.kind),
-    nearest: fields.nearest,
-    node: fields.node,
-    parent: fields.parent,
-    parent_element_children: String(fields.parentElementChildren),
-    parent_elements: String(fields.parentElements),
-    parent_kind: codeOf(NodeKind.handles, fields.parentKind),
-    start: String(fields.start),
-    version: codeOf(SchemaVersion.handles, fields.version),
-  }) satisfies SqlRow;
-
-/**
- * A printed variable's `index` reference as a direct writer's row.
+ * A printed variable's `index` reference: a `VarRef` fact of the given name and declaration.
  *
  * @param identifier - The name it makes.
  * @param declaration - The declaration it resolves to.
- * @returns The table's row.
+ * @returns The fact.
  */
-const indexReference = (identifier: string, declaration: Fact<typeof FeedbackRef>["declaration"]) =>
-  referenceSql(
-    feedbackOf({ attribute: "index", declaration, identifier, kind: "qti-printed-variable" }),
-  );
+const indexReference = (
+  identifier: string,
+  declaration: Fact<typeof FeedbackRef>["declaration"],
+): Stated => ({
+  fact: feedbackOf({ attribute: "index", declaration, identifier, kind: "qti-printed-variable" }),
+  relation: VarRef,
+});
 
 /**
- * A used identifier's projection row as a direct writer's row, its counts written as the families
- * would draw them, its root kind by its code: no assembly places it, so its placed counts are 0.
+ * A used identifier's projection fact, its counts as the case states them, none of whose members
+ * it writes: no assembly places it, so its placed counts are 0.
  *
  * @param identifier - The identifier.
  * @param rootKind - Its document's root kind.
  * @param counts - Its counts of choices, declarations and hottexts.
- * @returns The table's row.
+ * @returns The fact.
  */
-const nameSql = (
+const choiceName = (
   identifier: string,
   rootKind: Fact<typeof ChoiceVariableName>["rootKind"],
   counts: {
-    readonly choices: number;
-    readonly declarations: number;
-    readonly hottexts: number;
+    readonly choices: bigint;
+    readonly declarations: bigint;
+    readonly hottexts: bigint;
   },
-) =>
-  ({
-    choices: String(counts.choices),
-    declarations: String(counts.declarations),
+): Stated => ({
+  fact: {
+    ...counts,
     document: stray,
-    hottexts: String(counts.hottexts),
     identifier,
-    placed_choices: "0",
-    placed_hottexts: "0",
-    root_kind: codeOf(NodeKind.handles, rootKind),
-  }) satisfies SqlRow;
+    placedChoices: 0n,
+    placedHottexts: 0n,
+    rootKind,
+  },
+  relation: ChoiceVariableName,
+});
 
 describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
   layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
@@ -723,35 +431,41 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // break BindingFit's row CHECK at the insert, ahead of the deferred key).
           Effect.gen(function* bindingDeclaredRows() {
             const client = yield* loginSession;
-            const existence = yield* foreignKeys(client, "bound_variable", "binding_declaration");
-            const named = yield* foreignKeys(client, "binding_declaration", "declaration");
+            const existence = yield* foreignKeysBetween(
+              client,
+              "bound_variable",
+              "binding_declaration",
+            );
+            const named = yield* foreignKeysBetween(client, "binding_declaration", "declaration");
             assert.isNotEmpty(existence);
             assert.isNotEmpty(named);
 
-            const bound = { row: boundVariableSql(boundRow(0)), table: "bound_variable" };
-            const alone = Option.getOrUndefined(yield* deferredInsert(client, [bound], existence));
+            const bound = { fact: boundRow(0), relation: BoundVariable };
+            const alone = Option.getOrUndefined(
+              yield* judged(client, statedInserts([bound]), existence),
+            );
             assert.strictEqual(alone?.code, "23503", "a binding with no declaration row");
             assert.include(existence, alone?.constraint);
 
             const declared = Option.getOrUndefined(
-              yield* deferredInsert(
+              yield* judged(
                 client,
-                [bound, { row: declarationSql(declarationRow(0)), table: "binding_declaration" }],
+                statedInserts([bound, { fact: declarationRow(0), relation: BindingDeclaration }]),
                 existence,
               ),
             );
             assert.isUndefined(declared, "a binding beside its declaration row");
 
             const sentinel = Option.getOrUndefined(
-              yield* deferredInsert(
+              yield* judged(
                 client,
-                [
+                statedInserts([
                   bound,
                   {
-                    row: declarationSql(declarationRow(0, { declaration: nilUuid })),
-                    table: "binding_declaration",
+                    fact: declarationRow(0, { declaration: nilUuid }),
+                    relation: BindingDeclaration,
                   },
-                ],
+                ]),
                 named,
               ),
             );
@@ -876,11 +590,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               }),
             ]) {
               const refused = Option.getOrUndefined(
-                yield* deferredInsert(
-                  client,
-                  [{ row: countBoundSql(row), table: "count_bound" }],
-                  [],
-                ),
+                yield* judged(client, statedInserts([{ fact: row, relation: CountBound }]), []),
               );
 
               assert.isUndefined(refused, refused?.message);
@@ -896,7 +606,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // Bound: a choice interaction's most of 2 and of 0, refused, and of 1, accepted.
           Effect.gen(function* bindingCardinality() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeys(client, "binding_declaration", "count_bound");
+            const keys = yield* foreignKeysBetween(client, "binding_declaration", "count_bound");
             assert.isNotEmpty(keys);
 
             for (const [most, refusedExpected] of [
@@ -905,27 +615,22 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               [1n, false],
             ] as const) {
               const refused = Option.getOrUndefined(
-                yield* deferredInsert(
+                yield* judged(
                   client,
-                  [
+                  statedInserts([
+                    { fact: declarationRow(0), relation: BindingDeclaration },
                     {
-                      row: declarationSql(declarationRow(0)),
-                      table: "binding_declaration",
+                      fact: boundOf({
+                        choices: 0n,
+                        kind: "qti-choice-interaction",
+                        least: "0",
+                        leastValue: 0n,
+                        most: String(most),
+                        mostValue: most,
+                      }),
+                      relation: CountBound,
                     },
-                    {
-                      row: countBoundSql(
-                        boundOf({
-                          choices: 0n,
-                          kind: "qti-choice-interaction",
-                          least: "0",
-                          leastValue: 0n,
-                          most: String(most),
-                          mostValue: most,
-                        }),
-                      ),
-                      table: "count_bound",
-                    },
-                  ],
+                  ]),
                   keys,
                 ),
               );
@@ -950,40 +655,36 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // Bound: a multiple binding with max-strings unwritten, refused, and written, accepted.
           Effect.gen(function* maxStrings() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeys(client, "binding_declaration", "count_bound");
+            const keys = yield* foreignKeysBetween(client, "binding_declaration", "count_bound");
             for (const written of [false, true]) {
               const refused = Option.getOrUndefined(
-                yield* deferredInsert(
+                yield* judged(
                   client,
-                  [
+                  statedInserts([
                     {
-                      row: declarationSql(
-                        declarationRow(0, {
-                          baseType: "string",
-                          cardinality: "multiple",
-                          kind: "qti-extended-text-interaction",
-                        }),
-                      ),
-                      table: "binding_declaration",
+                      fact: declarationRow(0, {
+                        baseType: "string",
+                        cardinality: "multiple",
+                        kind: "qti-extended-text-interaction",
+                      }),
+                      relation: BindingDeclaration,
                     },
                     {
-                      row: countBoundSql(
-                        boundOf({
-                          choices: 0n,
-                          kind: "qti-extended-text-interaction",
-                          least: "0",
-                          leastValue: 0n,
-                          maxName: "max-strings",
-                          maxWritten: written,
-                          minName: "min-strings",
-                          minWritten: false,
-                          most: written ? "2" : "0",
-                          mostValue: written ? 2n : 0n,
-                        }),
-                      ),
-                      table: "count_bound",
+                      fact: boundOf({
+                        choices: 0n,
+                        kind: "qti-extended-text-interaction",
+                        least: "0",
+                        leastValue: 0n,
+                        maxName: "max-strings",
+                        maxWritten: written,
+                        minName: "min-strings",
+                        minWritten: false,
+                        most: written ? "2" : "0",
+                        mostValue: written ? 2n : 0n,
+                      }),
+                      relation: CountBound,
                     },
-                  ],
+                  ]),
                   keys,
                 ),
               );
@@ -1029,7 +730,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const client = yield* loginSession;
             for (const row of [hotspotOf(), hotspotOf({ area: "rect", elements: 1n })]) {
               const refused = Option.getOrUndefined(
-                yield* deferredInsert(client, [{ row: hotspotSql(row), table: "hotspot" }], []),
+                yield* judged(client, statedInserts([{ fact: row, relation: Hotspot }]), []),
               );
 
               assert.isUndefined(refused, refused?.message);
@@ -1126,23 +827,19 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // accepted.
           Effect.gen(function* varRef() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeys(client, "var_ref", "declaration");
+            const keys = yield* foreignKeysBetween(client, "var_ref", "declaration");
             assert.isNotEmpty(keys);
 
             const undeclared = Option.getOrUndefined(
-              yield* deferredInsert(
-                client,
-                [{ row: indexReference("UNDECLARED", stray), table: "var_ref" }],
-                keys,
-              ),
+              yield* judged(client, statedInserts([indexReference("UNDECLARED", stray)]), keys),
             );
             assert.strictEqual(undeclared?.code, "23503");
             assert.include(keys, undeclared?.constraint);
 
             const builtIn = Option.getOrUndefined(
-              yield* deferredInsert(
+              yield* judged(
                 client,
-                [{ row: indexReference("completionStatus", nilUuid), table: "var_ref" }],
+                statedInserts([indexReference("completionStatus", nilUuid)]),
                 keys,
               ),
             );
@@ -1292,36 +989,52 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             for (const [label, row, refusedBy] of [
               [
                 "choices alone",
-                nameSql("A", "qti-assessment-item", { choices: 2, declarations: 0, hottexts: 0 }),
+                choiceName("A", "qti-assessment-item", {
+                  choices: 2n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                }),
                 undefined,
               ],
               [
                 "a declaration alone",
-                nameSql("A", "qti-assessment-item", { choices: 0, declarations: 1, hottexts: 0 }),
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 1n,
+                  hottexts: 0n,
+                }),
                 undefined,
               ],
               [
                 "a stimulus choice named numAttempts",
-                nameSql("numAttempts", "qti-assessment-stimulus", {
-                  choices: 1,
-                  declarations: 0,
-                  hottexts: 0,
+                choiceName("numAttempts", "qti-assessment-stimulus", {
+                  choices: 1n,
+                  declarations: 0n,
+                  hottexts: 0n,
                 }),
                 undefined,
               ],
               [
                 "a hottext and a declaration",
-                nameSql("A", "qti-assessment-item", { choices: 0, declarations: 1, hottexts: 1 }),
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 1n,
+                  hottexts: 1n,
+                }),
                 "choice_not_variable",
               ],
               [
                 "no use",
-                nameSql("A", "qti-assessment-item", { choices: 0, declarations: 0, hottexts: 0 }),
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                }),
                 "e_1_derived",
               ],
             ] as const) {
               const refused = Option.getOrUndefined(
-                yield* deferredInsert(client, [{ row, table: "choice_variable_name" }], []),
+                yield* judged(client, statedInserts([row]), []),
               );
 
               if (refusedBy === undefined) {
