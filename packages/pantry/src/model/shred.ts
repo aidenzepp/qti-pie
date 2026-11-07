@@ -222,7 +222,7 @@ export type ValueSite<V extends XdmVocabulary> =
  *   §3.2.4 clause 1.2, §3.15.3; spec reading 83);
  * - `prefix-unbound`: a value of a QName type (`Qualified`), an attribute's other than `xsi:type` or
  *   an element's text, one of whose QNames has a prefix no declaration in scope binds, so it has no
- *   value (XML Schema 1.0 Part 2, §3.2.18; spec reading 74): the codec reads it with the bindings
+ *   value (XML Schema 1.0 Part 2, §3.2.18; spec reading 83): the codec reads it with the bindings
  *   in scope, as it reads `xsi:type`'s, since no row holds them ({@link resolvesIn});
  * - `type-unknown`: an `xsi:type` on an element of a kind whose QName names no type of the pinned
  *   schemas (clause 4.2); on a foreign element such a name leaves it to lax assessment, or under
