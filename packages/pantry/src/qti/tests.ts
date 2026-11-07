@@ -5,14 +5,15 @@
  * Two layers of rows hold a test's structure.
  *
  * **The documents.** Every document whose root is a test or a section has a {@link TestDocument}
- * row, the owner of three counted families: its sites ({@link Site}, each section ref and each
- * `xi:include` a section holds as a part), its names ({@link Named}, each test part, section,
- * section ref and item ref) and its branch rules that name a target ({@link BranchRule}). Each
- * section is a {@link Section}, the owner of its parts ({@link SectionMember}, C15's counted
- * family), with its `qti-selection` ({@link SectionSelection}) and its `qti-ordering`
- * ({@link SectionOrdering}) beside it. Each href of an item ref or a site resolves, against its
- * document's path or the `xml:base` in scope, to an entry of the package through its
- * `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`, spec readings 102 and 103).
+ * row, the owner of three counted families: its sites' targets ({@link SiteTarget}, each section
+ * ref and each `xi:include` a section holds as a part, where it names a document), its names
+ * ({@link Named}, each test part, section, section ref and item ref) and its branch rules that name
+ * a target ({@link BranchRule}). Each section is a {@link Section}, the owner of its parts
+ * ({@link SectionMember}, C15's counted family), with its `qti-selection`
+ * ({@link SectionSelection}) and its `qti-ordering` ({@link SectionOrdering}) beside it. Each href
+ * of an item ref or a site resolves, against its document's path or the `xml:base` in scope, to an
+ * entry of the package through its `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`, spec
+ * readings 102 and 103).
  *
  * **The assembled test** (RG3, reading 5). {@link Instance} is a tree: its root is a document of
  * a test or a section, and each instance has exactly one child per site of its document, the
@@ -470,13 +471,12 @@ export const SectionOrdering = relation(
  * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`,
  *   `ancestry`, `document`, `governs`, `kind`, `nearest`, `nearestKind`, `parentKind`, `start`,
  *   `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`; its href's
- *   `package` and `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`); `target`, the
- *   document at that path, with its root kind (`targetRoot`) and its context's nearest interaction
- *   (`targetNearest`, `targetNearestKind`); and the scope it is placed in, its parent's: `part`,
- *   `replaced` (its parent section's `replacing`), `parentMixes` and `parentLooseChain`.
+ *   `package` and `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`); and the scope
+ *   it is placed in, its parent's: `part`, `replaced` (its parent section's `replacing`),
+ *   `parentMixes` and `parentLooseChain`.
  *
- * Its ancestry is its target's context's part (`Document.context`, the union over the sites that
- * name a document, spec reading 117).
+ * The document its href names is its {@link SiteTarget}, a row of its own, since a href may name
+ * none (spec reading 115).
  */
 export const Site = relation(
   "Site",
@@ -498,6 +498,37 @@ export const Site = relation(
     path: keyText,
     replaced: pg.boolean,
     start: natural,
+    version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
+ * A site's target, keyed by the site's node: the document its href names, a row only where the
+ * href names a document of the package, so a site whose href names none has no row, and "Include
+ * target" refuses it (spec readings 114 and 115). It is the member of the family of the sites that
+ * name a document ({@link siteTargetFamily}), so every member's owner is a document the package
+ * writes, and of its own document's ({@link siteFamily}), so a site that names none places nothing.
+ *
+ * - **the host's:** `target`, the document, with its root kind (`targetRoot`) and its context's
+ *   nearest interaction (`targetNearest`, `targetNearestKind`);
+ * - **the site's copies:** its `document`; its href's `package` and `path`; its `kind`, `parentKind`
+ *   and `version`; its own context's nearest interaction (`nearest`, `nearestKind`); and its
+ *   `ancestry`, its part of the target's context (`Document.context`, the union over the sites that
+ *   name a document, spec reading 117).
+ */
+export const SiteTarget = relation(
+  "SiteTarget",
+  {
+    ancestry: bits(Flag),
+    document: uuid,
+    kind: closedId(NodeKind),
+    nearest: uuid,
+    nearestKind: closedId(NodeKind),
+    node: uuid,
+    package: uuid,
+    parentKind: closedId(NodeKind),
+    path: keyText,
     target: uuid,
     targetNearest: uuid,
     targetNearestKind: closedId(NodeKind),
@@ -826,6 +857,7 @@ export const testRelations = {
   SectionOrdering,
   SectionSelection,
   Site,
+  SiteTarget,
   StimulusRef,
   TestDocument,
   TestFlag,
@@ -834,14 +866,16 @@ export const testRelations = {
 };
 
 /**
- * Each document's sites, counted by `TestDocument.sites`.
+ * Each document's sites that name a document, counted by `TestDocument.sites`: the children its
+ * instance places (reading 85). A site that names none places nothing, and "Include target" alone
+ * refuses it (reading 115).
  */
-export const siteFamily = counted(on(Site, "document"), fin(TestDocument, "sites"));
+export const siteFamily = counted(on(SiteTarget, "document"), fin(TestDocument, "sites"));
 
 /**
  * The sites that name each document, counted by `Document.targetedBy` (spec reading 117).
  */
-export const siteTargetFamily = counted(on(Site, "target"), fin(Document, "targetedBy"));
+export const siteTargetFamily = counted(on(SiteTarget, "target"), fin(Document, "targetedBy"));
 
 /**
  * A document's context: the union of the ancestries of the sites that name it, `Document.context`,
@@ -852,7 +886,7 @@ export const siteTargetFamily = counted(on(Site, "target"), fin(Document, "targe
 export const contextFold = fold(
   siteTargetFamily,
   Monoid.or,
-  on(Site, "target", "ancestry"),
+  on(SiteTarget, "target", "ancestry"),
   on(Document, "node", "context"),
 );
 
@@ -917,14 +951,24 @@ const assembledDocuments = select(Document, (d) => d.eq(d.assembled, true));
 const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
 /**
- * The sites that are section refs, whose target is a section document (information model §7.5).
+ * The sites that are section refs, each naming a section document (information model §7.5).
  */
 const sectionRefSites = select(Site, (s) => s.eq(s.kind, sectionRefKind));
 
 /**
- * The sites that are includes, each with its {@link Inclusion}.
+ * The targets of the sites that are section refs, each a section document (information model §7.5).
+ */
+const sectionRefTargets = select(SiteTarget, (s) => s.eq(s.kind, sectionRefKind));
+
+/**
+ * The sites that are includes, each naming a document of the package (spec reading 115).
  */
 const includeSites = select(Site, (s) => s.eq(s.kind, includeKind));
+
+/**
+ * The targets of the sites that are includes, each with its {@link Inclusion}.
+ */
+const includeTargets = select(SiteTarget, (s) => s.eq(s.kind, includeKind));
 
 /**
  * Select the nodes of one kind, a constant selection, whose containments share `Node`'s one
@@ -1339,18 +1383,45 @@ export const testOverlayLaws = [
   contained(on(Site, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
   key(on(sectionDocuments, "package", "path")),
   contained(
-    on(sectionRefSites, "package", "path", "target"),
+    on(sectionRefTargets, "package", "path", "target"),
     on(sectionDocuments, "package", "path", "node"),
   ),
+  contained(on(sectionRefSites, "package", "path"), on(sectionDocuments, "package", "path")),
+  contained(on(includeSites, "node"), on(SiteTarget, "node")),
   contained(
-    on(Site, "package", "path", "target", "targetRoot", "targetNearest", "targetNearestKind"),
+    on(
+      SiteTarget,
+      "node",
+      "ancestry",
+      "document",
+      "kind",
+      "nearest",
+      "nearestKind",
+      "parentKind",
+      "version",
+    ),
+    on(
+      Site,
+      "node",
+      "ancestry",
+      "document",
+      "kind",
+      "nearest",
+      "nearestKind",
+      "parentKind",
+      "version",
+    ),
+  ),
+  contained(on(SiteTarget, "node", "package", "path"), on(Site, "node", "package", "path")),
+  contained(
+    on(SiteTarget, "package", "path", "target", "targetRoot", "targetNearest", "targetNearestKind"),
     on(Document, "package", "path", "node", "rootKind", "contextNearest", "contextNearestKind"),
   ),
   contained(on(nodesOf(sectionRefKind), "id"), on(Site, "node")),
   contained(on(includes, "id"), on(Site, "node")),
   siteTargetFamily,
   contextFold,
-  check("Fragment_context", Site, (s) =>
+  check("Fragment_context", SiteTarget, (s) =>
     s.or(
       s.and(s.eq(s.nearestKind, "document"), s.eq(s.targetNearestKind, "document")),
       s.and(s.eq(s.nearest, s.targetNearest), s.eq(s.nearestKind, s.targetNearestKind)),
@@ -1358,9 +1429,9 @@ export const testOverlayLaws = [
   ),
   contained(
     on(Inclusion, "node", "parentKind", "root", "version"),
-    on(Site, "node", "parentKind", "targetRoot", "version"),
+    on(SiteTarget, "node", "parentKind", "targetRoot", "version"),
   ),
-  contained(on(includeSites, "node"), on(Inclusion, "node")),
+  contained(on(includeTargets, "node"), on(Inclusion, "node")),
   check("E1_derived", Inclusion, (i) =>
     i.eq(IncludeParentKind.at("kind", i.includeParent), i.parentKind),
   ),
@@ -1619,25 +1690,15 @@ export const inclusionLaws = [
       instanceMembers,
       "parentDocument",
       "site",
-      "document",
       "siteLooseChain",
       "siteMixes",
       "sitePart",
       "siteReplaced",
       "siteStart",
     ),
-    on(
-      Site,
-      "document",
-      "node",
-      "target",
-      "parentLooseChain",
-      "parentMixes",
-      "part",
-      "replaced",
-      "start",
-    ),
+    on(Site, "document", "node", "parentLooseChain", "parentMixes", "part", "replaced", "start"),
   ),
+  contained(on(instanceMembers, "site", "document"), on(SiteTarget, "node", "target")),
   key(on(instanceMembers, "parent", "site")),
   contained(
     on(Instance, "document", "rootKind", "children"),
@@ -1947,8 +2008,9 @@ export const itemRefLaws = [
  *   `required ≤ select`;
  * - **the hrefs:** each item ref and site has its href's `ReferencePath` (`#pantry/qti/package.ts`
  *   `hrefPaths`), an entry of the package, under the stated limit `Href_form`;
- * - **the sites** ({@link Site}): each section ref and section-level include names a section
- *   document;
+ * - **the sites** ({@link Site}, {@link SiteTarget}): each names a document of the package, its
+ *   target, a row of its own ("Include target", reading 115), and each section ref and
+ *   section-level include names a section document;
  * - **the branch rules** ({@link BranchRule}): each one that names no exit;
  * - **the mappings** ({@link VariableMapping}): no two of one item ref name one target, and none a
  *   session variable (reading 97, `Variable_mapping_target`);

@@ -8,8 +8,9 @@
  * - **Pieces**: a lexical form's split restates it, its value collapsed.
  * - **The assembly** (reading 85, 86): over every small package of a test and two section documents,
  *   the instance trees hold one child per site exactly where the inclusion graph has no cycle and
- *   no dangling site, each child places its site's target, and the namespace key holds exactly
- *   where the test's distinct written elements have distinct identifiers.
+ *   no dangling site, each site has its target exactly where its href names a listed document, each
+ *   child places its site's target, and the namespace key holds exactly where the test's distinct
+ *   written elements have distinct identifiers.
  * - **The jumps** (reading 87): over every branch rule of a small test, the branch laws accept a rule
  *   exactly where reading 87's bullets do.
  */
@@ -847,6 +848,29 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
                   [...rows.TestDocument.values()].map((row) => [row.node, rows] as const),
                 ),
               );
+              // A site's target is the document its href names, a row only where it names one, so
+              // no sentinel stands in for a missing document and "Include target" refuses the rest
+              // (reading 115).
+              const listed = new Map(
+                documents.flatMap((rows) =>
+                  [...rows.TestDocument.values()].map((row) => [row.path, row.node] as const),
+                ),
+              );
+              for (const rows of documents) {
+                assert.deepStrictEqual(
+                  [...rows.Site.values()].map((site) => [
+                    site.path,
+                    rows.SiteTarget.get(site.node)?.target,
+                  ]),
+                  [...rows.Site.values()].map((site) => [site.path, listed.get(site.path)]),
+                  "each site's target, none where its href names no listed document",
+                );
+                assert.deepStrictEqual(
+                  [...rows.SiteTarget.keys()].filter((node) => !rows.Site.has(node)),
+                  [],
+                  "a target of no site",
+                );
+              }
               const instances = instancesOf(assembled);
               const counts = instances.every(
                 ({ instance }) =>
@@ -862,9 +886,9 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
               );
 
               for (const { instance } of instances) {
-                const sites = byDocument.get(instance.document)?.Site;
+                const siteTargets = byDocument.get(instance.document)?.SiteTarget;
                 for (const child of instance.children) {
-                  assert.strictEqual(sites?.get(child.site)?.target, child.document);
+                  assert.strictEqual(siteTargets?.get(child.site)?.target, child.document);
                 }
                 assert.strictEqual(
                   new Set(instance.children.map(({ site }) => site)).size,

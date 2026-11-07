@@ -2,7 +2,9 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
+import { fragmentType } from "#pantry/grammar/include.ts";
 import {
+  danglingIncludeName,
   materializeProcessing,
   processingFixtureNames,
   specOfProcessing,
@@ -80,6 +82,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing fixtures", 
           "padded-literal",
           "padded-reference",
           "processing-item",
+          danglingIncludeName,
         ];
 
         for (const name of names) {
@@ -88,6 +91,39 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing fixtures", 
           assert.isTrue(
             yield* fs.exists(path.join(dir, "shared-rules.xml")),
             `${name}: no shared-rules.xml in the package`,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "lists the included shared-rules.xml as a fragment resource, but in the dangling package",
+    () =>
+      // Oracle: the specification as a checker, readings 114 and 115: a fragment's document is
+      // listed by a resource of type imsqti_fragment_xmlv3p0, so an include names a document only
+      // where one lists it, and the dangling package lists the file under choice.xml's resource
+      // alone.
+      Effect.gen(function* fragmentListed() {
+        const fs = yield* FileSystem.FileSystem;
+        const names: readonly ProcessingFixtureName[] = [
+          "padded-literal",
+          "padded-reference",
+          "processing-item",
+          danglingIncludeName,
+        ];
+
+        for (const name of names) {
+          const dir = yield* materializeProcessing(name);
+          const manifest = (yield* readXml(yield* fs.readFile(path.join(dir, "imsmanifest.xml"))))
+            .root;
+          const listing = elementsNamed(manifest, "resource").filter(
+            (resource) => attributeOf(resource, "href") === "shared-rules.xml",
+          );
+
+          assert.deepStrictEqual(
+            listing.map((resource) => attributeOf(resource, "type")),
+            name === danglingIncludeName ? [] : [fragmentType],
+            name,
           );
         }
       }),

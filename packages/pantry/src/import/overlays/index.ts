@@ -703,6 +703,10 @@ const mergedOf = (
       "Site",
       parts.map(({ Site: rows }) => rows),
     ),
+    SiteTarget: unionOf(
+      "SiteTarget",
+      parts.map(({ SiteTarget: rows }) => rows),
+    ),
     Slider: unionOf(
       "Slider",
       parts.map(({ Slider: rows }) => rows),

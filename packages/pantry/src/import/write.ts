@@ -221,6 +221,7 @@ import {
   SectionOrdering,
   SectionSelection,
   Site,
+  SiteTarget,
   StimulusRef,
   TestDocument,
   TestFlag,
@@ -1281,6 +1282,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(SectionTemplateName, [...inputs.SectionTemplateName.values()])
     .insert(SectionTemplateRef, [...inputs.SectionTemplateRef.values()])
     .insert(Site, [...inputs.Site.values()])
+    .insert(SiteTarget, [...inputs.SiteTarget.values()])
     .insert(Slider, [...inputs.Slider.values()])
     .insert(StatisticDate, [...inputs.StatisticDate.values()])
     .insert(StimulusRef, [...inputs.StimulusRef.values()])

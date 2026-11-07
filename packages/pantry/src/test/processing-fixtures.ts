@@ -5,6 +5,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Config, Console, Effect, FileSystem, Match, Schema } from "effect";
 import type { PlatformError } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
+import { fragmentType } from "#pantry/grammar/include.ts";
 import { materialize, materializeCorpus } from "#pantry/test/fixtures.ts";
 import type { ExamplesError } from "#pantry/test/fixtures.ts";
 
@@ -211,9 +212,19 @@ export const processingFixtureNames = [
 ] as const;
 
 /**
- * One of {@link processingFixtureNames}.
+ * The package whose include names no document: `response.xml`'s rules, with `shared-rules.xml`
+ * written and listed only as a file of `choice.xml`'s resource ({@link listedFileEdits}), so
+ * "Include target" refuses it (spec reading 115). It has no frozen processing verdict, so it is
+ * none of {@link processingFixtureNames}.
  */
-export type ProcessingFixtureName = (typeof processingFixtureNames)[number];
+export const danglingIncludeName = "dangling-include";
+
+/**
+ * One of {@link processingFixtureNames}, or {@link danglingIncludeName}.
+ */
+export type ProcessingFixtureName =
+  | (typeof processingFixtureNames)[number]
+  | typeof danglingIncludeName;
 
 const brokenSet: ReadonlySet<string> = new Set(brokenNames);
 
@@ -256,13 +267,29 @@ const simpleItemName: ProcessingEdit = {
 };
 
 /**
- * The edits that give a package the file `response.xml`'s `xi:include` names:
- * `include/shared-rules.xml` written at the package root as `shared-rules.xml`, and listed as a
- * `file` of `choice.xml`'s resource (R6: a referenced in-package file is described in the
- * manifest). The `xi:fallback` does not lift that rule. The manifest's lines end `\r\n`, as
- * `simple`'s do.
+ * The edits that give a package the document `response.xml`'s `xi:include` names:
+ * `include/shared-rules.xml` written at the package root as `shared-rules.xml`, and listed by a
+ * resource of its own of type `imsqti_fragment_xmlv3p0`, so it is a document the manifest lists
+ * (spec readings 114 and 115). The `xi:fallback` does not lift that rule.
  */
 const sharedRulesEdits: readonly ProcessingEdit[] = [
+  { _tag: "replaceFile", fromFile: "include/shared-rules.xml", path: "shared-rules.xml" },
+  {
+    _tag: "addResource",
+    href: "shared-rules.xml",
+    identifier: "shared-rules",
+    type: fragmentType,
+  },
+];
+
+/**
+ * The edits that give a package the file `response.xml`'s `xi:include` names, listed only as a
+ * `file` of `choice.xml`'s resource (R6: a referenced in-package file is described in the
+ * manifest): a file of the package that no resource lists as a document, so the include names no
+ * document and "Include target" refuses it (spec reading 115). The manifest's lines end `\r\n`,
+ * as `simple`'s do.
+ */
+const listedFileEdits: readonly ProcessingEdit[] = [
   { _tag: "replaceFile", fromFile: "include/shared-rules.xml", path: "shared-rules.xml" },
   {
     _tag: "replaceText",
@@ -312,8 +339,8 @@ const templateResourceEdits: readonly ProcessingEdit[] = templateFiles.flatMap(
  *
  * - `processing-item`: `simple` with `choice.xml`'s processing replaced by `response.xml`'s rules,
  *   and the declarations and the `xi` namespace those rules need added, and `shared-rules.xml` (the
- *   file the rules' `xi:include` names) written and listed in the manifest; the body kinds are
- *   unchanged.
+ *   document the rules' `xi:include` names) written and listed as a fragment resource
+ *   ({@link sharedRulesEdits}); the body kinds are unchanged.
  * - `template-item`: `simple` with the declarations, template processing and response processing of
  *   `template.xml` and `response-mapped.xml` added. `RESPONSE` keeps `simple`'s identifier type and
  *   gains the mapping of `response-mapped.xml`, so the template's integer correct response is
@@ -321,10 +348,13 @@ const templateResourceEdits: readonly ProcessingEdit[] = templateFiles.flatMap(
  * - `rptemplates`: `simple` plus the five template documents of the corpus under `rptemplates/`, each
  *   listed as an `imsqti_rptemplate_xmlv3p0` resource.
  * - `padded-reference`: `response.xml` with `figures=" COUNT "` on a `qti-equal-rounded`, and
- *   `shared-rules.xml` written and listed, refused under `attribute-lexical` (decision 123).
+ *   `shared-rules.xml` written and listed as a fragment resource, refused under `attribute-lexical`
+ *   (decision 123).
  * - `padded-literal`: `response.xml` with an identifier `qti-base-value` written on its own line
- *   between indentation, as the corpus's six are, and `shared-rules.xml` written and listed;
- *   admitted with its literal trimmed (decision 157).
+ *   between indentation, as the corpus's six are, and `shared-rules.xml` written and listed as a
+ *   fragment resource; admitted with its literal trimmed (decision 157).
+ * - `dangling-include`: `response.xml` with `shared-rules.xml` written and listed only as a file,
+ *   refused under `include-target` ({@link danglingIncludeName}).
  * - Every other name: `simple` with `choice.xml` replaced by the document of that name.
  *
  * @param name - One of {@link processingFixtureNames}.
@@ -388,6 +418,10 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
       ],
       name,
     };
+  }
+
+  if (name === danglingIncludeName) {
+    return { base: "simple", edits: [responseItem, simpleItemName, ...listedFileEdits], name };
   }
 
   if (name === "padded-literal") {
@@ -862,8 +896,9 @@ export const materializeProcessing = Effect.fn("fixtures.materializeProcessing")
 );
 
 if (import.meta.main) {
+  const names: readonly ProcessingFixtureName[] = [...processingFixtureNames, danglingIncludeName];
   const main = Effect.forEach(
-    processingFixtureNames,
+    names,
     (name) =>
       materializeProcessing(name).pipe(Effect.flatMap((dir) => Console.log(`${name}: ${dir}`))),
     { discard: true },
