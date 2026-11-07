@@ -229,7 +229,8 @@ const readOf = ({ idOf, path, tree }: Listed): Read => {
     nodes: rows.nodes,
     self: rows.document.node,
     sites: written.flatMap((node): readonly SiteOf[] => {
-      const resolved = entryPathOf(resolve(node.id, hrefs.get(node.id) ?? ""));
+      const href = hrefs.get(node.id);
+      const resolved = href === undefined ? undefined : entryPathOf(resolve(node.id, href));
 
       return resolved === undefined ? [] : [{ node: node.id, path: resolved }];
     }),

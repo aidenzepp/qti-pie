@@ -182,8 +182,10 @@ export const packageMutations = {
     'aria-labelledby="caption absent"',
   ]),
   // Include fragment identifier, Include target and Include root (readings 85, 114 and 117): the
-  // second item's include naming its fragment by a fragment identifier, naming no document, or
-  // naming the rule fragment, whose root no item body holds.
+  // second item's include naming its fragment by a fragment identifier; naming no document, by an
+  // entry the manifest lists as none, a file outside the package or no href (one naming a file the
+  // package does not hold is "File exists"'s alone); or naming the rule fragment, whose root no
+  // item body holds.
   "Include fragment identifier": passageAt("items/item2.xml", '<xi:include href="fragment.xml"/>', [
     '<xi:include href="fragment.xml#part"/>',
   ]),
@@ -191,8 +193,9 @@ export const packageMutations = {
     '<xi:include href="fragment.xml"/><xi:include href="rules.xml"/>',
   ]),
   "Include target": passageAt("items/item2.xml", '<xi:include href="fragment.xml"/>', [
-    '<xi:include href="fragment.xml"/><xi:include href="missing.xml"/>',
     '<xi:include href="fragment.xml"/><xi:include href="media/pic.png"/>',
+    '<xi:include href="fragment.xml"/><xi:include href="https://example.com/external.xml"/>',
+    '<xi:include href="fragment.xml"/><xi:include/>',
   ]),
   // Inclusion cycle (reading 85): the section document placing itself.
   "Inclusion cycle": passageAt("section.xml", "</qti-assessment-section>", [

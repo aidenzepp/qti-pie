@@ -4384,8 +4384,14 @@ const sameContexts = (
  * Evaluate the include laws over the listed documents (readings 114, 115 and 117):
  *
  * - **"Include target":** an include the information model reads names, by an href this
- *   representation resolves, a document the manifest lists;
+ *   representation resolves, a document the manifest lists; an href that resolves to a path no
+ *   entry holds is "File exists"'s alone (the references' law), which the import's `SitePath`
+ *   refuses as its row is inserted, so it breaks no include law;
  * - **"Include root":** that document's root is a kind the include may stand for ({@link standsFor});
+ * - **"Document entry"**, of a section ref: a section ref that writes an href names, by an href this
+ *   representation resolves, a section document the manifest lists (information model §7.5, a
+ *   section ref "functions as a facade for the qti-assessment-section to which it refers"); one
+ *   with no href is AL3's, and one whose path no entry holds "File exists"'s;
  * - **"Include fragment identifier":** no include's href carries a `#` after its path (XInclude 1.0
  *   §3.1), wherever the include stands;
  * - **"Fragment context"**, a stated limit: the sites that name one document stand inside one
@@ -4394,11 +4400,13 @@ const sameContexts = (
  *
  * @param documents - The documents the manifest lists, read.
  * @param grammar - The composed grammar.
+ * @param entryPaths - The paths of the package's entries.
  * @returns The breaches, each at the including document.
  */
 const inclusionBreaches = (
   documents: readonly Listed[],
   grammar: ComposedGrammar,
+  entryPaths: ReadonlySet<string>,
 ): readonly Breach[] => {
   const sites = sitesOf(documents, grammar);
   const includes = documents.flatMap(({ folded, path }) =>
@@ -4445,8 +4453,20 @@ const inclusionBreaches = (
 
   return [
     ...sites.flatMap((site) => {
-      if (site.node.kind !== "xi:include") {
+      if (Option.exists(site.path, (path) => !entryPaths.has(path))) {
         return [];
+      }
+
+      if (site.node.kind !== "xi:include") {
+        return Option.isSome(site.href) &&
+          !Option.exists(site.target, ({ rootKind }) => rootKind === "qti-assessment-section")
+          ? [
+              siteBreach(site, "Document entry", {
+                href: Option.getOrElse(site.href, () => ""),
+                path: Option.getOrElse(site.path, () => ""),
+              }),
+            ]
+          : [];
       }
 
       return Option.match(site.target, {
@@ -4825,7 +4845,7 @@ const packageBreaches = (
     ...inclusionCycles(input.documents, grammar).map((chain) =>
       breach("Inclusion cycle", { chain: spaced(chain), path: chain[0] ?? "" }),
     ),
-    ...inclusionBreaches(input.documents, grammar),
+    ...inclusionBreaches(input.documents, grammar, entryPaths),
     ...resources
       .filter(({ identifier }) => Option.exists(manifestId, (id) => id === identifier))
       .map((resource) =>
@@ -5684,10 +5704,13 @@ const ownLaws = {
     source: "the XDM document node as the Document row (plan §1.4, fin.md D7)",
   },
   "Document entry": {
-    explain: (keys) => `the listed document ${field(keys, "path")} is no entry of the package`,
+    explain: (keys) =>
+      keys["href"] === undefined
+        ? `the listed document ${field(keys, "path")} is no entry of the package`
+        : `the section ref's href ${JSON.stringify(field(keys, "href"))} names no section document the package lists`,
     rule: "entry-kind",
     source:
-      "IMS Content Packaging 1.2: a listed document is an entry of the package, and one document: a resource names the document at its href, read as a document of its type (reading 93), so no path is listed as documents of two types (qti/package.ts, Document's key over package and path)",
+      "IMS Content Packaging 1.2: a listed document is an entry of the package, and one document: a resource names the document at its href, read as a document of its type (reading 93), so no path is listed as documents of two types (qti/package.ts, Document's key over package and path); and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: a section ref 'functions as a facade for the qti-assessment-section to which it refers'): a section ref's href names a section document the package lists, its path an entry (qti/tests.ts sectionRefPaths)",
   },
   "Document lang": {
     explain: (keys) =>

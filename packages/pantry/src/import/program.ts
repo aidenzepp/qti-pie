@@ -183,7 +183,11 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
     Effect.catchIf(isReadRefusal, (refusal) => Effect.fail(ruleOfError(refusal))),
   );
   const draw = mint ?? ((): NodeId => crypto.randomUUID());
-  const ids = nodeIdsOf(documents, draw);
+  const ids = nodeIdsOf(
+    documents,
+    files.map(({ path }) => path),
+    draw,
+  );
   const placed = documents.flatMap((listed, at) => {
     const held = ids.documents[at];
 

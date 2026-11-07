@@ -68,6 +68,7 @@ import type {
   SectionOrdering,
   SectionSelection,
   Site,
+  SitePath,
   SiteTarget,
   StimulusRef,
   TestDocument,
@@ -94,6 +95,11 @@ export interface TestIds {
    */
   readonly context?: DocumentContext;
   readonly documentAt: (path: string) => Option.Option<NodeId>;
+  /**
+   * Whether the package holds an entry at a path; where none is given, exactly where it holds a
+   * document.
+   */
+  readonly entryAt?: (path: string) => boolean;
   readonly idOf: (index: number) => NodeId;
   readonly package: Uuid;
   readonly path: string;
@@ -122,6 +128,7 @@ export interface TestRows {
   readonly SectionOrdering: ReadonlyMap<string, Addition<typeof SectionOrdering>>;
   readonly SectionSelection: ReadonlyMap<string, Addition<typeof SectionSelection>>;
   readonly Site: ReadonlyMap<string, Addition<typeof Site>>;
+  readonly SitePath: ReadonlyMap<string, Addition<typeof SitePath>>;
   readonly SiteTarget: ReadonlyMap<string, Addition<typeof SiteTarget>>;
   readonly StimulusRef: ReadonlyMap<string, Addition<typeof StimulusRef>>;
   readonly TestDocument: ReadonlyMap<string, Addition<typeof TestDocument>>;
@@ -610,20 +617,23 @@ const isSite = (view: View, node: NodeRow<Composed>): boolean =>
 
 /**
  * An item ref's or a site's href, resolved as its `ReferencePath` is: its node and kind, its
- * package, and the entry it names. A target this representation does not resolve keeps its
- * directory and target as written, which no `ReferencePath` holds, so "Href form" refuses it.
+ * package, the entry path it names, and whether it names one (`resolved`). A target this
+ * representation does not resolve keeps its directory and target as written, which no
+ * `ReferencePath` holds, so "Href form" refuses an item ref's; a site's has no {@link SitePath}.
  */
 export interface ResolvedHref {
   readonly kind: string;
   readonly node: NodeId;
   readonly package: Uuid;
   readonly path: string;
+  readonly resolved: boolean;
 }
 
 /**
- * Resolve a document's hrefs: each item ref's and site's, against the document's directory, as
- * `referenceRowsOf` resolves a `ReferencePath`. An item ref or a section ref with no href has none:
- * AL3 refuses it; an include with none has an empty one, which no document's path is.
+ * Resolve a document's hrefs: each item ref's and site's that writes one, against the document's
+ * directory, as `referenceRowsOf` resolves a `ReferencePath`. An item ref or a site with no href
+ * has none: AL3 refuses an item ref or a section ref without one, and an include without one names
+ * no document, which its site's existence law refuses ("Include target", spec reading 115).
  *
  * @param view - The document.
  * @returns The hrefs, by node.
@@ -633,15 +643,13 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
 
   return new Map(
     view.rows.nodes.flatMap((node) => {
-      const written = valueOf(view, node, "href");
-      // An include's href is optional in the XSD, and one with none names no document: its site
-      // is written with an empty path, so "Include target" refuses it rather than its existence.
-      const lexical = written ?? (node.kind === includeKind && isSite(view, node) ? "" : undefined);
+      const lexical = valueOf(view, node, "href");
       if (lexical === undefined || !(node.kind === itemRefKind || isSite(view, node))) {
         return [];
       }
 
       const { target } = referencePiecesOf(lexical);
+      const path = entryPathOf(resolve(node.id, lexical));
 
       return [
         [
@@ -650,7 +658,8 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
             kind: node.kind,
             node: node.id,
             package: view.ids.package,
-            path: entryPathOf(resolve(node.id, lexical)) ?? `${view.directory}${target}`,
+            path: path ?? `${view.directory}${target}`,
+            resolved: path !== undefined,
           },
         ] as const,
       ];
@@ -672,6 +681,19 @@ export const itemRefPathsOf = (doc: XdmDocument<Composed>, ids: TestIds): readon
     : [];
 
 /**
+ * Read whether the package holds an entry at a path a site's href names: the importer's entries,
+ * and with no `entryAt`, its documents.
+ *
+ * @param view - The site's document.
+ * @param path - The path.
+ * @returns Whether an entry is there.
+ */
+const entryOf = (view: View, path: string): boolean =>
+  view.ids.entryAt === undefined
+    ? Option.isSome(view.ids.documentAt(path))
+    : view.ids.entryAt(path);
+
+/**
  * Read the document a site's href names: the listed document there, with its root's kind and its
  * context, and with no `targetAt`, the document at the path with the document node's own kind as
  * its root. None where the path names no listed document: the site then has no
@@ -691,22 +713,19 @@ const targetOf = (view: View, path: string): Option.Option<ListedTarget> =>
     : view.ids.targetAt(path);
 
 /**
- * Write a document's sites, each with its href's path and the scope it is placed in.
+ * Write a document's sites, each with the scope it is placed in, whether or not it writes an href.
  *
  * @param view - The document.
- * @param hrefs - The document's hrefs.
  * @param scopes - The sections' scopes.
  * @returns The rows, by node.
  */
 const sitesOf = (
   view: View,
-  hrefs: ReadonlyMap<string, ResolvedHref>,
   scopes: ReadonlyMap<NodeId, Scope>,
 ): ReadonlyMap<string, Addition<typeof Site>> =>
   new Map(
     view.rows.nodes.flatMap((node) => {
-      const href = hrefs.get(node.id);
-      if (href === undefined || !isSite(view, node)) {
+      if (!isSite(view, node)) {
         return [];
       }
 
@@ -722,12 +741,10 @@ const sitesOf = (
             children: BigInt(view.childrenOf.get(node.id)?.length ?? 0),
             governs: node.governs,
             nearestKind: view.inherited.nearestKind.get(node.id) ?? "document",
-            package: view.ids.package,
             parentKind,
             parentLooseChain: parentKind === sectionKind && above.parentLooseChain,
             parentMixes: above.parentMixes,
             part: above.part,
-            path: href.path,
             replaced: above.replaced,
           },
         ] as const,
@@ -736,44 +753,88 @@ const sitesOf = (
   );
 
 /**
- * Write each site's {@link SiteTarget}: the document its href names, with that document's root
- * kind and context, and the site's fields the target's laws read. A site whose href names no
- * listed document has none.
+ * Write each site's {@link SitePath}: its href's package and path, and whether the package holds
+ * an entry there, a row only where the site writes an href that resolves to a path of the package.
  *
  * @param view - The document.
  * @param sites - The document's sites.
+ * @param hrefs - The document's hrefs.
+ * @returns The rows, by node.
+ */
+const sitePathsOf = (
+  view: View,
+  sites: ReadonlyMap<string, Addition<typeof Site>>,
+  hrefs: ReadonlyMap<string, ResolvedHref>,
+): ReadonlyMap<string, Addition<typeof SitePath>> =>
+  new Map(
+    [...sites.values()].flatMap((site) =>
+      Option.match(
+        Option.filter(Option.fromNullishOr(hrefs.get(site.node)), ({ resolved }) => resolved),
+        {
+          onNone: () => [],
+          onSome: (href) => [
+            [
+              site.node,
+              {
+                entry: entryOf(view, href.path),
+                kind: site.kind,
+                node: site.node,
+                package: href.package,
+                path: href.path,
+              },
+            ] as const,
+          ],
+        },
+      ),
+    ),
+  );
+
+/**
+ * Write each site's {@link SiteTarget}: the document its href's path names, with that document's
+ * root kind and context, and the site's fields the target's laws read. A site that writes no href,
+ * or whose path names no listed document, has none.
+ *
+ * @param view - The document.
+ * @param sites - The document's sites.
+ * @param paths - The sites' paths.
  * @returns The rows, by node.
  */
 const siteTargetsOf = (
   view: View,
   sites: ReadonlyMap<string, Addition<typeof Site>>,
+  paths: ReadonlyMap<string, Addition<typeof SitePath>>,
 ): ReadonlyMap<string, Addition<typeof SiteTarget>> =>
   new Map(
     [...sites.values()].flatMap((site) =>
-      Option.match(targetOf(view, site.path), {
-        onNone: () => [],
-        onSome: (target) => [
-          [
-            site.node,
-            {
-              ancestry: site.ancestry,
-              document: site.document,
-              kind: site.kind,
-              nearest: site.nearest,
-              nearestKind: site.nearestKind,
-              node: site.node,
-              package: site.package,
-              parentKind: site.parentKind,
-              path: site.path,
-              target: target.node,
-              targetNearest: target.context.nearest,
-              targetNearestKind: target.context.nearestKind,
-              targetRoot: target.rootKind,
-              version: site.version,
-            },
-          ] as const,
-        ],
-      }),
+      Option.match(
+        Option.flatMap(Option.fromNullishOr(paths.get(site.node)), (href) =>
+          Option.map(targetOf(view, href.path), (target) => ({ href, target })),
+        ),
+        {
+          onNone: () => [],
+          onSome: ({ href, target }) => [
+            [
+              site.node,
+              {
+                ancestry: site.ancestry,
+                document: site.document,
+                kind: site.kind,
+                nearest: site.nearest,
+                nearestKind: site.nearestKind,
+                node: site.node,
+                package: href.package,
+                parentKind: site.parentKind,
+                path: href.path,
+                target: target.node,
+                targetNearest: target.context.nearest,
+                targetNearestKind: target.context.nearestKind,
+                targetRoot: target.rootKind,
+                version: site.version,
+              },
+            ] as const,
+          ],
+        },
+      ),
     ),
   );
 
@@ -910,8 +971,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: TestIds): TestRows => {
   const root = doc.root.kind;
   const sections = sectionsOf(view, flag);
   const hrefs = hrefsOf(view);
-  const sites = sitesOf(view, hrefs, sections.scopes);
-  const targets = siteTargetsOf(view, sites);
+  const sites = sitesOf(view, sections.scopes);
+  const paths = sitePathsOf(view, sites, hrefs);
+  const targets = siteTargetsOf(view, sites, paths);
   const assembled =
     ids.assembled ?? (among(assembledRoots, root) || sites.size > 0 || ids.targeted === true);
 
@@ -924,6 +986,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: TestIds): TestRows => {
     SectionOrdering: keptIf(assembled, orderingsOf(view, flag)),
     SectionSelection: keptIf(assembled, selectionsOf(view, flag)),
     Site: sites,
+    SitePath: paths,
     SiteTarget: targets,
     StimulusRef: stimulusRefsOf(view, token),
     TestDocument: keptIf(

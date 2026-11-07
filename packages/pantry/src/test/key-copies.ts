@@ -1534,3 +1534,57 @@ export const judgedLaws = (statements: typeof Qti.statements): readonly JudgedLa
  */
 export const closedRows = (relation: string): Option.Option<readonly Row[]> =>
   Option.map(factsOf(relation), ({ rows }) => rows);
+
+/**
+ * A containment the schema states, read from the statement grizzle keeps for it: its law as an
+ * outcome names it, each side's relation and fields, and each side's selection as SQL's `WHERE`
+ * reads it.
+ */
+export interface Containment {
+  readonly from: string;
+  readonly fromFields: readonly string[];
+  readonly law: Law;
+  readonly selected: (row: Readonly<Record<string, Datum>>) => boolean;
+  readonly targeted: (row: Readonly<Record<string, Datum>>) => boolean;
+  readonly to: string;
+  readonly toFields: readonly string[];
+}
+
+/**
+ * Read every containment the schema states from one relation, so a test can judge rows by the
+ * schema's own statements, their selections included: a source row its selection holds must meet
+ * a target row its selection holds on the paired fields.
+ *
+ * @param statements - The schema's statements.
+ * @param from - The source relation.
+ * @returns The containments, in statement order.
+ */
+export const containmentsOf = (
+  statements: typeof Qti.statements,
+  from: string,
+): readonly Containment[] =>
+  statements.flatMap((statement) =>
+    Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+      onNone: () => [],
+      onSome: (read): readonly Containment[] => {
+        if (read.kind !== "contained" || sourceOf(read.left).name !== from) {
+          return [];
+        }
+
+        const left = sourceOf(read.left);
+        const right = sourceOf(read.right);
+
+        return [
+          {
+            from: left.name,
+            fromFields: fieldsOf(read.left),
+            law: { from: lawSideOf(read.left), kind: "contained", to: lawSideOf(read.right) },
+            selected: selectedBy(left.predicate),
+            targeted: selectedBy(right.predicate),
+            to: right.name,
+            toFields: fieldsOf(read.right),
+          },
+        ];
+      },
+    }),
+  );

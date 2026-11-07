@@ -89,7 +89,7 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
-import { hrefPaths, NamedHref } from "#pantry/qti/package.ts";
+import { Entry, hrefPaths, NamedHref } from "#pantry/qti/package.ts";
 
 /**
  * The test's root kind, the root of an assembly whose names and branch rules resolve.
@@ -487,8 +487,7 @@ export const SectionOrdering = relation(
  *
  * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`,
  *   `ancestry`, `document`, `governs`, `kind`, `nearest`, `nearestKind`, `parentKind`, `start`,
- *   `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`; its href's
- *   `package` and `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`); and the scope
+ *   `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`; and the scope
  *   it is placed in, its parent's: `part`, `replaced` (its parent section's `replacing`),
  *   `parentMixes` and `parentLooseChain`.
  *
@@ -498,8 +497,9 @@ export const SectionOrdering = relation(
  * ({@link placedScope}). Only a section's scope is replaced, mixed or loose, so a site under any
  * other parent is none of them.
  *
- * The document its href names is its {@link SiteTarget}, a row of its own, since a href may name
- * none (spec reading 115).
+ * Its href's path is its {@link SitePath}, a row of its own, since an include may write no href;
+ * and the document that path names is its {@link SiteTarget}, a row of its own, since a path may
+ * name none (spec reading 115).
  */
 export const Site = relation(
   "Site",
@@ -512,17 +512,35 @@ export const Site = relation(
     nearest: uuid,
     nearestKind: closedId(NodeKind),
     node: uuid,
-    package: uuid,
     parent: uuid,
     parentKind: closedId(NodeKind),
     parentLooseChain: pg.boolean,
     parentMixes: pg.boolean,
     part: uuid,
-    path: keyText,
     replaced: pg.boolean,
     start: natural,
     version: closedId(SchemaVersion),
   },
+  ["node"],
+);
+
+/**
+ * A site's href, keyed by the site's node: its `package` and `path`, the entry path its
+ * `ReferencePath` resolves it to (`#pantry/qti/package.ts` `hrefPaths`), the site's `kind`, and
+ * `entry`, whether the package holds an entry at that path. A row only where the site writes an
+ * href that resolves to a path of the package.
+ *
+ * - An include may write none (XInclude 1.0 §3.1, the href "absent when parse="xml""), or one that is
+ *   external or names its own document, and names no document of the package then, so it has no row
+ *   and "Include target" refuses it alone (spec reading 115); a section ref must write one, and AL3
+ *   refuses one that does not.
+ * - A path no entry holds is `entry` false, which `File_exists` refuses as the row is inserted,
+ *   before any deferred key: an href naming an absent file is refused under "File exists" alone,
+ *   whatever its site is, and the site's document laws read only paths an entry holds.
+ */
+export const SitePath = relation(
+  "SitePath",
+  { entry: pg.boolean, kind: closedId(NodeKind), node: uuid, package: uuid, path: keyText },
   ["node"],
 );
 
@@ -535,10 +553,10 @@ export const Site = relation(
  *
  * - **the host's:** `target`, the document, with its root kind (`targetRoot`) and its context's
  *   nearest interaction (`targetNearest`, `targetNearestKind`);
- * - **the site's copies:** its `document`; its href's `package` and `path`; its `kind`, `parentKind`
- *   and `version`; its own context's nearest interaction (`nearest`, `nearestKind`); and its
- *   `ancestry`, its part of the target's context (`Document.context`, the union over the sites that
- *   name a document, spec reading 117).
+ * - **the site's copies:** its `document`; its {@link SitePath}'s `package` and `path`; its `kind`,
+ *   `parentKind` and `version`; its own context's nearest interaction (`nearest`, `nearestKind`);
+ *   and its `ancestry`, its part of the target's context (`Document.context`, the union over the
+ *   sites that name a document, spec reading 117).
  */
 export const SiteTarget = relation(
   "SiteTarget",
@@ -880,6 +898,7 @@ export const testRelations = {
   SectionOrdering,
   SectionSelection,
   Site,
+  SitePath,
   SiteTarget,
   StimulusRef,
   TestDocument,
@@ -1013,9 +1032,28 @@ const headDocuments = select(Document, (d) => d.and(d.eq(d.assembled, true), d.e
 export const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
 /**
- * The sites that are section refs, each naming a section document (information model §7.5).
+ * The sites that are section refs, each with its href (information model §7.5).
  */
 const sectionRefSites = select(Site, (s) => s.eq(s.kind, sectionRefKind));
+
+/**
+ * The hrefs of the sites that are section refs whose path an entry holds, each naming a section
+ * document (information model §7.5).
+ */
+const sectionRefPaths = select(SitePath, (s) =>
+  s.and(s.eq(s.kind, sectionRefKind), s.eq(s.entry, true)),
+);
+
+/**
+ * The hrefs of the sites that are includes whose path an entry holds, each naming a document of
+ * the package (spec reading 115).
+ */
+const includePaths = select(SitePath, (s) => s.and(s.eq(s.kind, includeKind), s.eq(s.entry, true)));
+
+/**
+ * The hrefs whose path an entry holds.
+ */
+const entryPaths = select(SitePath, (s) => s.eq(s.entry, true));
 
 /**
  * The targets of the sites that are section refs, each a section document (information model §7.5).
@@ -1023,7 +1061,8 @@ const sectionRefSites = select(Site, (s) => s.eq(s.kind, sectionRefKind));
 const sectionRefTargets = select(SiteTarget, (s) => s.eq(s.kind, sectionRefKind));
 
 /**
- * The sites that are includes, each naming a document of the package (spec reading 115).
+ * The sites that are includes, each with an href that names a path of the package (spec reading
+ * 115).
  */
 const includeSites = select(Site, (s) => s.eq(s.kind, includeKind));
 
@@ -1442,14 +1481,19 @@ export const testOverlayLaws = [
     nodeContext,
   ),
   contained(on(Site, "node", "parent"), on(Node, "id", "parent")),
-  contained(on(Site, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
+  contained(on(SitePath, "node", "kind"), on(Site, "node", "kind")),
+  contained(on(SitePath, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
+  check("File_exists", SitePath, (s) => s.eq(s.entry, true)),
+  contained(on(entryPaths, "package", "path"), on(Entry, "package", "path")),
+  contained(on(sectionRefSites, "node"), on(SitePath, "node")),
+  contained(on(includeSites, "node", "kind"), on(SitePath, "node", "kind")),
   key(on(sectionDocuments, "package", "path")),
   contained(
     on(sectionRefTargets, "package", "path", "target"),
     on(sectionDocuments, "package", "path", "node"),
   ),
-  contained(on(sectionRefSites, "package", "path"), on(sectionDocuments, "package", "path")),
-  contained(on(includeSites, "node"), on(SiteTarget, "node")),
+  contained(on(sectionRefPaths, "package", "path"), on(sectionDocuments, "package", "path")),
+  contained(on(includePaths, "node"), on(SiteTarget, "node")),
   contained(
     on(
       SiteTarget,
@@ -1474,7 +1518,7 @@ export const testOverlayLaws = [
       "version",
     ),
   ),
-  contained(on(SiteTarget, "node", "package", "path"), on(Site, "node", "package", "path")),
+  contained(on(SiteTarget, "node", "package", "path"), on(SitePath, "node", "package", "path")),
   contained(
     on(SiteTarget, "package", "path", "target", "targetRoot", "targetNearest", "targetNearestKind"),
     on(Document, "package", "path", "node", "rootKind", "contextNearest", "contextNearestKind"),
@@ -2091,8 +2135,9 @@ export const itemRefLaws = [
  *   ({@link requiredFold}), their flags and scope; reading 79's `Selection_bound`, `select ≤
  *   members` unless the selection is with replacement, and info §4.2.2's `Selection_required`,
  *   `required ≤ select`;
- * - **the hrefs:** each item ref and site has its href's `ReferencePath` (`#pantry/qti/package.ts`
- *   `hrefPaths`), an entry of the package, under the stated limit `Href_form`;
+ * - **the hrefs:** each item ref and each site that writes one ({@link SitePath}, a row of its own,
+ *   every section ref's) has its href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an
+ *   entry of the package, under the stated limit `Href_form`;
  * - **the sites** ({@link Site}, {@link SiteTarget}): each names a document of the package, its
  *   target, a row of its own ("Include target", reading 115), and each section ref and
  *   section-level include names a section document;

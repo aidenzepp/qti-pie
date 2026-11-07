@@ -857,13 +857,23 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
                 ),
               );
               for (const rows of documents) {
+                const pathOf = (node: string) => rows.SitePath.get(node)?.path;
                 assert.deepStrictEqual(
                   [...rows.Site.values()].map((site) => [
-                    site.path,
+                    pathOf(site.node),
                     rows.SiteTarget.get(site.node)?.target,
                   ]),
-                  [...rows.Site.values()].map((site) => [site.path, listed.get(site.path)]),
+                  [...rows.Site.values()].map((site) => {
+                    const path = pathOf(site.node);
+
+                    return [path, path === undefined ? undefined : listed.get(path)];
+                  }),
                   "each site's target, none where its href names no listed document",
+                );
+                assert.deepStrictEqual(
+                  [...rows.SitePath.keys()].filter((node) => !rows.Site.has(node)),
+                  [],
+                  "a path of no site",
                 );
                 assert.deepStrictEqual(
                   [...rows.SiteTarget.keys()].filter((node) => !rows.Site.has(node)),

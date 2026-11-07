@@ -1033,8 +1033,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
       Effect.gen(function* freshIds() {
         const program = yield* readProgram(fixtures.simple);
         const listed = program.documents.map(({ listed: held }) => held);
-        const first = nodeIdsOf(listed);
-        const second = nodeIdsOf(listed);
+        const entries = program.files.map(({ path }) => path);
+        const first = nodeIdsOf(listed, entries);
+        const second = nodeIdsOf(listed, entries);
         const idsOf = (minted: typeof first) => [
           minted.package,
           ...minted.documents.flatMap((ids) => Array.from({ length: 8 }, (_, at) => ids.idOf(at))),

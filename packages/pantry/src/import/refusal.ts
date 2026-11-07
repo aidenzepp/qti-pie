@@ -562,7 +562,7 @@ export const lawTable = {
   "Document entry": {
     rule: "entry-kind",
     source:
-      "IMS Content Packaging 1.2: a listed document is an entry of the package, and one document: a resource names the document at its href, read as a document of its type (reading 93), so no path is listed as documents of two types (qti/package.ts, Document's key over package and path)",
+      "IMS Content Packaging 1.2: a listed document is an entry of the package, and one document: a resource names the document at its href, read as a document of its type (reading 93), so no path is listed as documents of two types (qti/package.ts, Document's key over package and path); and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: a section ref 'functions as a facade for the qti-assessment-section to which it refers'): a section ref's href names a section document the package lists, its path an entry (qti/tests.ts sectionRefPaths)",
   },
   "Document lang": {
     rule: "document-lang",
@@ -1633,13 +1633,25 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ),
     "E1 derived",
   ],
-  // A site names a document of the package by its SiteTarget, a row only where its href names one:
-  // an include with none is refused here (reading 115), a section ref by "Document entry" below on
-  // its path, and the target is the document at its path.
-  [containedIn(sideOf("Site", "node"), sideOf("SiteTarget", "node")), "Include target"],
+  // A site's href is its SitePath, a row only where the href names a path of the package, and the
+  // document there is its SiteTarget. An href naming a path no entry holds is refused by the
+  // SitePath's File_exists check alone, and the laws below read only paths an entry holds: an
+  // include with no such href, or whose path names no listed document, is refused here (reading
+  // 115); a section ref, which must write an href, by "Document entry" on its path; and the target
+  // is the document at its path.
+  [containedIn(sideOf("SitePath", "node"), sideOf("SiteTarget", "node")), "Include target"],
   [
-    containedIn(sideOf("Site", "package", "path"), sideOf("TestDocument", "package", "path")),
+    containedIn(sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind")),
+    "Include target",
+  ],
+  [containedIn(sideOf("Site", "node"), sideOf("SitePath", "node")), "Document entry"],
+  [
+    containedIn(sideOf("SitePath", "package", "path"), sideOf("TestDocument", "package", "path")),
     "Document entry",
+  ],
+  [
+    containedIn(sideOf("SitePath", "package", "path"), sideOf("Entry", "package", "path")),
+    "File exists",
   ],
   [
     containedIn(
