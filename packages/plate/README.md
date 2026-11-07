@@ -118,7 +118,7 @@ request. [Navigation](#navigation) moves the session on.
 | `solution` | Gives an item's correct responses, from its record where template processing set them |
 | `openPackage` | Reads and checks a content package's files, and returns a verdict on the package |
 | `itemRefs` | Lists a test's item refs in document order |
-| `startTest` | Starts a test session |
+| `startTest` | Starts a test session, and fails with `EngineFailure` when a template default of its first part does not fit its variable |
 | `current`, `itemView` | Give what a session shows now, and what any of its items renders with |
 | `permits` | Says whether an item of a session may be shown in review or solution |
 | `navigationState`, `allowedIntents`, `advance` | Give the session's navigation, list the intents it takes now, and carry one out |
@@ -316,9 +316,22 @@ that each value is well formed. `restore` also checks that each response and out
 record fits the item's declarations, as `results` does, and refuses another item's record with
 `RecordMismatch`, as `score` does. For an item whose template processing runs, `score` and
 `restore` also refuse, with `InvalidRecord`, a record that holds no value for one of its template
-variables. `decodeSession` also checks that the session names the test you pass it and that test's
-document. It does not check the session's items against the test's item refs, so keep the stored
-session where only your server can change it.
+variables.
+
+`decodeSession` refuses with `SessionMismatch` a session that names another test or test document.
+It refuses with `InvalidSession` a session that does not fit the test you pass it:
+
+- its items are not the test's item refs in document order, numbered from 1
+- its parts are not the test's parts in order, ended, then at most one current, then pending, with
+  none current after the test closes
+- an item's record does not carry the session's instance and the item's number
+- its dates are not UTC instants, or it was updated before it started
+- its position names none of its items
+- its outcomes are not the test's declared outcomes, each of its declared base type and cardinality
+
+`decodeSession` does not check an item's template defaults, since the test does not hold the
+items. `advance` checks them when it shows the item, and fails with `EngineFailure` when one does
+not fit. Keep the stored session where only your server can change it.
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
@@ -345,7 +358,8 @@ each take is `Parameters<typeof redact>[1]`, `Parameters<typeof checkResponses>[
 
 `results` writes a Results Reporting `assessmentResult` document as XML text, for one item's
 `StoredRecord` or for a whole `StoredTestSession`. The document holds no correct response, but
-`results` reads the accepted items, so call it on the server.
+`results` reads the accepted items, so call it on the server. For a test session it writes the
+test's own outcomes as [Outcome processing](#outcome-processing) says.
 
 ## Interactions
 
@@ -397,21 +411,15 @@ value for such a response: validate it, or draw its interaction yourself.
 Inline processing runs every response rule. `qti-lookup-outcome-value` maps a value through a
 match or interpolation table, `qti-exit-response` ends processing, and a
 `qti-response-processing-fragment`'s rules run where the fragment stands. Of the 64 expressions
-QTI 3.0 defines, plate runs 53. Later stages of M3 bring the other 11:
-
-| Stage | Expressions | Lands with |
-| --- | --- | --- |
-| M3.b-3 | `qti-duration-lt`, `qti-duration-gte` | Duration values |
-| M3.b-3 | `qti-number-correct`, `qti-number-incorrect`, `qti-number-presented`, `qti-number-responded`, `qti-number-selected`, `qti-outcome-maximum`, `qti-outcome-minimum`, `qti-test-variables` | A test's outcome processing |
-| M3.b-4 | `qti-field-value` | Record values |
-
-Until M3.b-4 lands, the [ledger](#conformance-ledger) reports row I-9a (Response Processing: Full)
-as `limited`. Only a test's outcome processing may hold the eight expressions of the third row, so
-`open` refuses one in an item with `expression-placement`.
+QTI 3.0 defines, plate runs 63. M3.b-4 brings the last, `qti-field-value`, with record values.
+Until it lands, the [ledger](#conformance-ledger) reports row I-9a (Response Processing: Full) as
+`limited`. Eight of the 63 belong to a test's outcome processing, as
+[Outcome processing](#outcome-processing) says, so `open` refuses one in an item with
+`expression-placement`.
 
 The verdict marks each of these, and `score` runs no processing that holds one:
 
-- One of the other six expressions in the table
+- `qti-field-value`, which M3.b-4 brings
 - An `xi:include`, which plate never fetches
 - A `%` coordinate in a `qti-inside`, or in an area mapping that `qti-map-response-point` reads
 - A `qti-pattern-match` pattern that plate cannot translate
@@ -432,6 +440,7 @@ its processing runs, and the operator's value is NULL.
 | A reference attribute that names no declared variable | `undeclared-variable` | P8 |
 | The built-in `duration`, read in an item that is not time dependent | `undeclared-variable` | `item-duration` |
 | A `qti-lookup-outcome-value` that sets the built-in `completionStatus` | `undeclared-variable` | P9 |
+| A `qti-variable` with a `weight-identifier`, which only a test's outcome processing may hold | `expression-placement` | P12 |
 | A literal `figures` below 1, or below 0 in `decimalPlaces` mode | `attribute-type` | P10 |
 | A literal `n` of `qti-index` below 1 | `attribute-type` | P11 |
 | A declaration named `completionStatus`, `numAttempts` or `duration`, the names of the built-in variables | `attribute-type` | `DeclarationNotReserved` |
@@ -451,6 +460,15 @@ integer result of more than 1,000,000 bits. `qti-multiple`, `qti-ordered` and `q
 NULL for a container of more than 1,000,000 values. Values written in an item or stored in a
 record are never bounded. These bounds limit size, not time.
 
+A duration is a number of seconds, held as a double and written as a float is, such as `90.5`, `INF`
+or `-2`, in `qti-value`, `qti-base-value` and a stored record. `open` refuses an ISO 8601 duration
+such as `PT1M30.5S` with `value-type`. `qti-match` must not compare durations, and a duration is not
+numerical *(pending)*, so `open` refuses one as an operand of `qti-match`, of arithmetic or of an
+order comparison such as `qti-lt`, with `expression-type`. `qti-duration-lt` and `qti-duration-gte`
+compare two durations' seconds exactly, so 89.95 is shorter than 90. NaN is neither shorter nor as
+long as anything, and `INF` and `-INF` compare as infinities *(pending)*. `results` writes a
+duration as its seconds, and a printed variable prints one as it prints a float *(pending)*.
+
 To score items you do not trust, call `begin`, `score` and `advance` under a time limit, for
 example in a worker that you can stop. `render` writes at most the configuration's `outputBudget`
 characters of HTML, counted as a string's `length` counts them. `outputBudget` is 16,777,216 by
@@ -459,7 +477,10 @@ which names the budget and the item, and writes nothing, so a page never shows a
 left out. `redact` takes the same budget as its last argument, as `{ outputBudget }` or the
 configuration itself. It stops printing once the item's printed variables pass the budget, and
 `render` then returns `OutputTooLarge`, which names the printed variable. Pass the same
-configuration to both.
+configuration to both. `OutputTooLarge`'s `printed` and the redacted item's `unprinted` name the
+limit passed in `limit`: `"text"` for the 1,000,000 characters one printed text may hold, or
+`"budget"` for the output budget. `redact` holds a budget outside 1 to 536,870,888 to that range,
+and reads `NaN` as the default.
 
 Where QTI makes an integer a float, an integer beyond the largest finite float becomes the largest
 finite float of its sign, not an infinity ([reading 45](../../docs/spec-readings.md)). The math
@@ -503,6 +524,22 @@ const first = Result.gen(function* firstPage() {
 `score(accepted, responses, stored)` then scores the post and returns the record to store in its
 place. A test session starts each item's record when it first shows the item, and `itemView` and
 `current` give it as `record`. Pass that record to `redact`, `checkResponses` and `solution`.
+
+In a test, an item ref's `qti-template-default` gives a template variable the value its template
+processing starts from, in place of its declared default, and again each time a
+`qti-template-constraint` starts that processing over. A linear part evaluates an item's defaults
+when it first shows the item. A nonlinear part evaluates the defaults of all its items when it
+starts, and the session keeps them until it first shows each item. Either way, a default reads the
+test's outcomes as the session holds them then, may read an item's variable by a dotted name
+*(pending)*, and draws from the session's processing seed.
+
+`startTest` fails with `EngineFailure` when a default of its first part names no template variable
+of its item or gives a value of another base type or cardinality. `advance` fails with it when it
+shows a later item or starts a later part. `openPackage` refuses such a default, so only a test and
+items you `open` one at a time reach that failure. A default that reads a variable plate holds no
+value for in a test, one that [Outcome processing](#outcome-processing) names, is marked and not
+applied, so its variable starts at its declared default *(pending)*. A default that reads the test's
+own `duration` reads NULL *(pending)*.
 
 The seed is a string, and it is the record's secret: it keys every value that template and
 response processing draw. A seed someone can guess, such as `"7"` or `""`, lets anyone who sees
@@ -587,11 +624,91 @@ precision has no digits, such as `%.f`, and a printed variable that names the bu
 `completionStatus`. It refuses a wrong `template-identifier` on a `qti-simple-choice`, which pantry
 does not check.
 
-The verdict marks a template declaration of base type `duration` or `file`, of cardinality
-`record`, or with no base type, as it marks such a response or outcome declaration. It also marks
-template processing that reads `QTI_CONTEXT` or a context variable, or that reads or sets a variable
-plate does not model. Template processing that holds a feature the verdict marks does not run, and
-its template variables hold no value.
+The verdict marks a template declaration of base type `file`, of cardinality `record`, or with no
+base type, as it marks such a response or outcome declaration. It also marks template processing
+that reads `QTI_CONTEXT` or a context variable, or that reads or sets a variable plate does not
+model. Template processing that holds a feature the verdict marks does not run, and its template
+variables hold no value.
+
+## Outcome processing
+
+A test's outcome processing sets the test's own outcomes from what its items' records hold. A test
+session runs it after the items' response processing, each time from the declared defaults:
+
+- after `advance` submits an item of an individual part
+- once after `advance` submits a simultaneous part, over every item of the part
+- once more when the test closes
+
+`TestSession.outcomes` holds what the last run left, and the stored session keeps it. A run reads
+the test's built-in `duration` as the seconds from the session's start to the `now` of the step
+that runs it. It draws from the session's processing seed, so the same seed and the same steps give
+the same outcomes. `results` writes the test's outcomes as the session holds them. A test with no
+outcome processing writes its outcomes' defaults. A test whose outcome processing the verdict marks
+writes none of its own, since nothing ran, so no default reads as a score.
+
+Outcome processing runs every outcome rule, and the eight expressions only a test may hold:
+`qti-number-correct`, `qti-number-incorrect`, `qti-number-presented`, `qti-number-responded`,
+`qti-number-selected`, `qti-outcome-minimum`, `qti-outcome-maximum` and `qti-test-variables`. A
+dotted name such as `ITEM1.SCORE` reads the variable `SCORE` of the item that the item ref `ITEM1`
+names ([reading 48](../../docs/spec-readings.md)). An item ref's `qti-variable-mapping` applies to
+every read by name, dotted or through one of the eight expressions, so a mapped name reads the
+item's source outcome. A `qti-variable` whose `weight-identifier` names a `qti-weight` of its item
+ref reads an integer or a float as a float times the weight.
+
+The verdict marks a test's outcome processing, and the session does not run it, when it holds an
+expression plate does not run or an `xi:include`. It does the same when the processing reads or
+sets a variable plate holds no value for in a test *(pending)*: the test's own `numAttempts`,
+`completionStatus`, `QTI_CONTEXT` or a context variable, the `duration` of a part, a section or an
+item ref, or a `qti-test-variables` of `duration`. `open` accepts these, as pantry does.
+
+Where QTI 3.0 leaves a choice open, plate makes one. A choice marked *(pending)* awaits approval
+and can change.
+
+- `qti-exit-test` ends only the current run, and the next run starts the rules again.
+- A weight that the item ref does not define is 1.0. A weighted read of a base type other than
+  integer or float, or of a name with no item ref, reads unweighted *(pending)*.
+- A read through an item ref gives NULL of the variable's declared type and cardinality when the
+  item's record holds no value for it, such as a template variable of an item not yet shown. So do
+  a read of a `file` or `record` variable, and a read of an item's second or later occurrence, such
+  as `ITEM1.2.SCORE` *(pending)*.
+- An item ref that shares one category with `include-category` is included, and one that shares
+  one with `exclude-category` is left out *(pending)*.
+- An item that declares no response is neither correct nor incorrect to `qti-number-correct` and
+  `qti-number-incorrect` *(pending)*.
+- `qti-outcome-minimum` leaves out an item whose outcome declares no `normal-minimum`, and applies
+  no default in its place *(pending)*.
+- `qti-test-variables`, `qti-outcome-minimum` and `qti-outcome-maximum` read an item's
+  `numAttempts` and `completionStatus` as a dotted name reads them. A built-in declares no
+  `normal-minimum` or `normal-maximum`, so the minimum leaves the item out and the maximum is NULL
+  *(pending)*.
+
+`open` refuses the following in a test's or a section's processing, each as pantry does:
+
+| Refused | Rule | pantry's rule |
+| --- | --- | --- |
+| A name that nothing declares, other than a dotted name, in outcome processing, a pre-condition, a branch rule or a template default | `undeclared-variable` | P8 |
+| An operand of a type its expression does not take, or a reference attribute that names a variable of another kind or type | `expression-type` | P23, P24 |
+| A `qti-set-outcome-value` whose value is not of its outcome's type, or a `qti-lookup-outcome-value` whose value its outcome's table does not take | `expression-type` | P20, P22 |
+| A `qti-lookup-outcome-value` whose outcome holds no lookup table | `template-requirements` | P22 |
+| A `qti-outcome-if` or `qti-outcome-else-if` whose condition is not a single `boolean` | `expression-type` | P21 |
+| A `qti-base-value` whose text is not of its base type | `value-type` | P7 |
+| A `qti-test-variables` with a `weight-identifier` and a `base-type` other than `float` | `expression-type` | P29 |
+
+`openPackage` also refuses the following, which need the items that a test's item refs name. It
+never splits a dotted name the test declares whole, such as an outcome named `S.TOTAL`.
+
+| Refused | Rule | pantry's rule |
+| --- | --- | --- |
+| A dotted name that no reading resolves to an item ref, a test part or a section and one of its variables | `undeclared-variable` | `prefixed-ref` |
+| A dotted name that reads the built-in `duration` of an item that is not time dependent | `undeclared-variable` | `item-duration` |
+| A dotted read whose variable's type breaks a rule of the table above, or a template default whose value is not of its variable's type | `expression-type` | P20 to P24 |
+| A `qti-variable-mapping` whose `source-identifier` names no outcome its item declares | `undeclared-variable` | `variable-mapping-source` |
+| A second `qti-variable-mapping` on one item ref with the same `target-identifier` | `duplicate-identifier` | `variable-mapping-target` |
+| A `qti-template-default` whose `template-identifier` names no template variable of its item | `undeclared-variable` | `template-default-target` |
+| A dotted `qti-map-response` or `qti-map-response-point` that reads anything but a response *(pending)* | `undeclared-variable` | none |
+| A dotted `qti-map-response` or `qti-map-response-point` whose response declares no mapping or area mapping *(pending)* | `template-requirements` | none |
+
+plate and pantry differ in the last two rows until pantry follows: pantry accepts both.
 
 ## Server and browser
 
@@ -602,9 +719,9 @@ this split. A host that sends the accepted item to the browser sends what `redac
 - `open` and `openPackage` run on Node, not in a browser.
 - An accepted item is not JSON, so a stateless server opens the bytes again for each request. To
   send the redacted item itself, write it with `encodeRedacted` and read it with `decodeRedacted`.
-- A page that holds a `TestSession` holds every item's outcomes, scores included, and every
-  item's record. A page that calls `solution`, `results` or `advance` holds the accepted items,
-  correct responses included. Keep the session and those calls on the server.
+- A page that holds a `TestSession` holds every item's outcomes and the test's own, scores included,
+  and every item's record. A page that calls `solution`, `results` or `advance` holds the accepted
+  items, correct responses included. Keep the session and those calls on the server.
 - A `TestSession`'s `seed` is its processing seed, which keys every value the session's processing
   draws, so it is server data, as an item's record is. Pass `startTest` a processing seed apart
   from the configuration's `seed`, never one string as both: the configuration's `seed` orders the
