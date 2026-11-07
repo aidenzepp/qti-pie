@@ -246,6 +246,26 @@ const totalProcessing = [
 ].join("");
 
 /**
+ * A test's float `SCORE` with a default, which a test with no outcome processing reports.
+ */
+const scoreDeclaration = [
+  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">',
+  "<qti-default-value><qti-value>0.5</qti-value></qti-default-value>",
+  "</qti-outcome-declaration>",
+].join("");
+
+/**
+ * Outcome processing that reads the built-in `numAttempts`, which the engine does not hold in a
+ * test, so the test model marks it.
+ */
+const attemptsProcessing = [
+  "<qti-outcome-processing><qti-outcome-condition><qti-outcome-if>",
+  '<qti-gte><qti-variable identifier="numAttempts"/><qti-base-value base-type="integer">1</qti-base-value></qti-gte>',
+  '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>',
+  "</qti-outcome-if></qti-outcome-condition></qti-outcome-processing>",
+].join("");
+
+/**
  * The six attributes of an outcome declaration that Results Reporting mirrors, as written.
  */
 const reportingMarkup = [
@@ -1246,6 +1266,62 @@ describe("results", () => {
             ["answered", ["A"]],
           ],
         );
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[T-9] writes no test outcome of its own for a test whose outcome processing is marked",
+    () =>
+      Effect.gen(function* markedTest() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("marked", [
+          scoreDeclaration,
+          part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+          attemptsProcessing,
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["one", single]]),
+          kind: "test",
+          session: storedSession(test, [sessionItem(single, "one", 1)]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.strictEqual(test.test.outcomeProcessing.kind, "marked");
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(Object.keys(written.outcomes), []);
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[T-9] writes SCORE at its default for a test with no outcome processing",
+    () =>
+      Effect.gen(function* unprocessedTest() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("unprocessed", [
+          scoreDeclaration,
+          part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["one", single]]),
+          kind: "test",
+          session: storedSession(test, [sessionItem(single, "one", 1)]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.strictEqual(test.test.outcomeProcessing.kind, "absent");
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(written.outcomes["SCORE"], {
+          attributes: { baseType: "float", cardinality: "single", identifier: "SCORE" },
+          values: ["0.5"],
+        });
       }),
     { tags: ["qti-xsd"] },
   );

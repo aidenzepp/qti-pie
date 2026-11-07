@@ -51,7 +51,7 @@ import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
-import type { AnsweredStatus, SessionStatus, TestMark } from "#plate/vocabulary.ts";
+import type { AnsweredStatus, SessionStatus } from "#plate/vocabulary.ts";
 
 /**
  * The namespace of every element a result holds.
@@ -181,12 +181,6 @@ const judging: Configuration = {
   showSolution: false,
   validateResponses: true,
 };
-
-/**
- * The test mark of outcome processing, which M2 does not run, so a test that has it reports no
- * outcome of its own.
- */
-const outcomeProcessing: TestMark = "qti-outcome-processing";
 
 /**
  * What a result says about one item: where it sits, how its session stands, and the values to
@@ -960,11 +954,35 @@ const sessionItemReport = (
   });
 
 /**
+ * Write a test's own outcome variables, by the state of its outcome processing: each at its
+ * starting value when it has none, and none when it has outcome processing the engine cannot run
+ * (`marked`) or, until the outcome runs are written, outcome processing it runs (`runs`), so no
+ * default reads as a score.
+ *
+ * @param test The test.
+ * @returns The `outcomeVariable` elements.
+ */
+const testOutcomes = (test: AcceptedTest["test"]): readonly Element[] => {
+  switch (test.outcomeProcessing.kind) {
+    case "absent": {
+      return outcomeVariables(test.outcomes, {});
+    }
+    case "marked":
+    case "runs": {
+      return [];
+    }
+    default: {
+      return test.outcomeProcessing satisfies never;
+    }
+  }
+};
+
+/**
  * Write the result of a test session.
  *
  * The test result holds the built-in `duration`, from the session's start to its last change in
  * seconds, of base type duration (reading 29). The test's own outcomes are written at their
- * starting values only when it has no outcome processing, which M2 does not run, so no default
+ * starting values only when it has no outcome processing ({@link testOutcomes}), so no default
  * reads as a score. Then one item result per session item, in sequence order. Every item ref's
  * session control is resolved in one walk of the test (`sessionControls`), since resolving each
  * item's alone walks the test up to its ref again, which grows with the square of the item count.
@@ -990,9 +1008,7 @@ const testResults = (
     }
 
     const { test } = input.test;
-    const outcomes = input.test.unsupported.some((mark) => mark.feature === outcomeProcessing)
-      ? []
-      : outcomeVariables(test.outcomes, {});
+    const outcomes = testOutcomes(test);
 
     return documentOf([
       context,
