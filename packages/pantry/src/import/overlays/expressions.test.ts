@@ -488,7 +488,12 @@ const referenceLawsOnHost: readonly (readonly [
   ["E1_derived", (v, rows) => spells(v) && resolves(v) && claims(v) && copies(v, rows)],
   [
     "Variable_declared",
-    (v) => v.rootKind !== "qti-assessment-item" || v.resolution !== "unresolved",
+    (v) =>
+      v.rootKind !== "qti-assessment-item" ||
+      v.resolution !== "unresolved" ||
+      // Reading R15-k: a braced reference, a string attribute's, that names no variable is a
+      // string value.
+      spellings.get(`${v.kind} ${v.attribute}`) === "braced",
   ],
   [
     "Variable_kind",
@@ -767,6 +772,81 @@ describe("import/overlays/expressions.ts, the fixtures' verdicts", () => {
         }
       }
     }),
+  );
+});
+
+/**
+ * Shred a document's text and build its rows.
+ *
+ * @param text - The document's text.
+ * @returns Its rows.
+ */
+const rowsOfText = (text: string) =>
+  Effect.gen(function* rowsOfDocument() {
+    const xml = yield* readXml(new TextEncoder().encode(text));
+    const tree = yield* shred(xml, "3.0.0", shredGrammarOf(grammar));
+
+    return rowsOf(tree, { idOf });
+  });
+
+/**
+ * An item that declares a string response `RESPONSE` and a float outcome `SCORE`, and sets `SCORE`
+ * under the given condition expression.
+ *
+ * @param condition - The expression of the response processing's one `qti-response-if`.
+ * @returns The item's text.
+ */
+const itemUnder = (condition: string): string =>
+  `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="I" title="I" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-response-condition><qti-response-if>${condition}<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-if></qti-response-condition></qti-response-processing></qti-assessment-item>`;
+
+/**
+ * The laws an item's rows break when its response processing sets a score under an expression.
+ *
+ * @param condition - The expression, as written.
+ * @returns The names of the laws broken.
+ */
+const breachesUnder = (condition: string) =>
+  Effect.map(rowsOfText(itemUnder(condition)), (rows) => [...breachesOf(rows)]);
+
+/**
+ * A `qti-pattern-match` of the given `pattern` over a string literal.
+ *
+ * @param pattern - The `pattern`, as written.
+ * @returns The expression's text.
+ */
+const patternMatch = (pattern: string): string =>
+  `<qti-pattern-match pattern="${pattern}"><qti-base-value base-type="string">x</qti-base-value></qti-pattern-match>`;
+
+describe("import/overlays/expressions.ts, a braced pattern that names no variable (reading R15-k)", () => {
+  it.effect(
+    "is a string value in an item, while a name of the wrong kind or base type and an unresolved bare reference stay refused",
+    () =>
+      // Oracle: information model §2.7.2 and §9.3.4, "if a string attribute appears to be a
+      // reference to a template or outcome variable but there is no variable with the given name it
+      // should be treated simply as string value", and §2.11.3's base type for a name that is one
+      // (P24). Bound: the item's one reference, each of the four spellings.
+      Effect.gen(function* braced() {
+        assert.deepStrictEqual(
+          yield* breachesUnder(patternMatch("{NOSUCH}")),
+          [],
+          "no such variable",
+        );
+        assert.deepStrictEqual(
+          yield* breachesUnder(patternMatch("{RESPONSE}")),
+          ["Reference_type"],
+          "a response variable",
+        );
+        assert.deepStrictEqual(
+          yield* breachesUnder(patternMatch("{SCORE}")),
+          ["Reference_type"],
+          "a float outcome",
+        );
+        assert.deepStrictEqual(
+          yield* breachesUnder(`<qti-is-null><qti-variable identifier="NOSUCH"/></qti-is-null>`),
+          ["Variable_declared"],
+          "an unresolved bare reference",
+        );
+      }),
   );
 });
 

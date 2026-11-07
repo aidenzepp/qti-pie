@@ -39,7 +39,8 @@
  * keeps: `Arity` (P2); `Operand_fit` and `One_base` (P23); `Condition_type` (P21); `Set_type`
  * (P20); `Lookup_type` (P22); `Reference_type` (P24); `Outcome_only` (P25); `Template_reads` (P26);
  * `Mapped_response` (P27); `Weighted_base` (P29); `Variable_declared` (P8, over an item's names
- * and a test's and a section's unprefixed ones); `Item_duration` (item-duration, in an item and
+ * and a test's and a section's unprefixed ones, a braced `pattern` that names none a string value,
+ * reading R15-k); `Item_duration` (item-duration, in an item and
  * through an item ref); `Literal_lexical` (attribute-lexical); `Prefixed_reference` (prefixed-ref);
  * `Section_identifier_target`; `Template_default_target` and `Template_default_type` (P20);
  * `Variable_mapping_source` and `Variable_mapping_target`; and `E1_derived`, every code the host
@@ -2524,6 +2525,16 @@ export const expressionLaws = [
     v.or(
       v.not(v.in(v.rootKind, ["qti-assessment-item", "qti-assessment-test"])),
       v.ne(v.resolution, "unresolved"),
+      // A braced reference is a string attribute's: where it names no variable it is a string
+      // value, not a reference to one nothing declares (reading R15-k; information model §2.7.2
+      // and §9.3.4: "if a string attribute appears to be a reference to a template or outcome
+      // variable but there is no variable with the given name it should be treated simply as
+      // string value"). A numeric attribute's stand-in is bare, and an unresolved one stays
+      // refused.
+      v.and(
+        v.eq(v.rootKind, "qti-assessment-item"),
+        v.eq(VariableReference.at("spelling", v.kind, v.attribute), "braced"),
+      ),
       v.and(v.eq(v.rootKind, "qti-assessment-test"), Compute.matches(v.identifier, prefixedName)),
     ),
   ),
@@ -2596,7 +2607,12 @@ export const expressionLaws = [
     ),
   ),
   check("Variable_declared", PlacedVariableRef, (v) =>
-    v.or(v.ne(v.rootKind, "qti-assessment-item"), v.ne(v.resolution, "unresolved")),
+    v.or(
+      v.ne(v.rootKind, "qti-assessment-item"),
+      v.ne(v.resolution, "unresolved"),
+      // A braced reference that names none is a string value (reading R15-k), as `VariableRef`'s.
+      v.eq(VariableReference.at("spelling", v.kind, v.attribute), "braced"),
+    ),
   ),
   key(on(itemTimes, "node")),
   contained(
