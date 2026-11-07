@@ -1115,7 +1115,7 @@ describe("domainOrdered", () => {
       "DeclaredValue",
       "ExpressionAttribute",
       "LiteralTyped",
-      "UsageValue",
+      "UsageValueBaseType",
     ]);
   });
 });

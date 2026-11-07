@@ -122,7 +122,7 @@ import {
   ResourceType,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
-import { languageTag } from "#pantry/grammar/attributes.ts";
+import { baseTypes, languageTag } from "#pantry/grammar/attributes.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
@@ -554,9 +554,9 @@ export const StatisticDate = relation.generated(
 
 /**
  * A usage statistic's value that forms part of a record and names its base type, keyed by its
- * `ud:value` node: its `baseType` as written, `baseTypeLexical`, the `BaseType` code that lexical
- * form spells (C17), and `text`, its string value, `Node.stringValue` folded by `copiedTextKinds`
- * (`#pantry/qti/node.ts`).
+ * `ud:value` node: its `baseType` as written, `baseTypeLexical`, and `text`, its string value,
+ * `Node.stringValue` folded by `copiedTextKinds` (`#pantry/qti/node.ts`). The `BaseType` code its
+ * lexical form spells is a row of its own, {@link UsageValueBaseType}, where it spells one.
  *
  * A value forms part of a record where it writes a `fieldIdentifier` (usage data binding §2.6.5.1).
  * A value outside a record, or one that writes no `baseType`, has no row: the binding has no base
@@ -565,6 +565,19 @@ export const StatisticDate = relation.generated(
  */
 export const UsageValue = relation(
   "UsageValue",
+  { baseTypeLexical: keyText, node: uuid, text: keyText },
+  ["node"],
+);
+
+/**
+ * A record's usage value whose `baseType` spells a code (`baseTypes`, as written), keyed by its
+ * `ud:value` node: `baseType`, the `BaseType` code its lexical form spells (C17), beside that form
+ * and the value's `text`, both its {@link UsageValue}'s. A `baseType` that spells no code has no
+ * row, so no base type stands for it, and its value domain refuses it alone (decision 427, as
+ * `DeclarationBaseType` holds a declaration's base type only where it has one).
+ */
+export const UsageValueBaseType = relation(
+  "UsageValueBaseType",
   { baseType: closedId(BaseType), baseTypeLexical: keyText, node: uuid, text: keyText },
   ["node"],
 );
@@ -658,6 +671,7 @@ export const metadataRelations = {
   StatisticDate,
   UsageBaseType,
   UsageValue,
+  UsageValueBaseType,
 };
 
 /**
@@ -876,6 +890,12 @@ const usageRecordValues = select(Node, (n) =>
 );
 
 /**
+ * The record usage values whose `baseType` spells a code, as written: each has its
+ * {@link UsageValueBaseType}, and only these do.
+ */
+const spelledUsageValues = select(UsageValue, (u) => u.in(u.baseTypeLexical, baseTypes));
+
+/**
  * Every statement over the metadata overlays, each `check` named by its oracle law:
  *
  * - **the resources:** each `Resource` has its {@link LomResource}, both ways; and its `named` is
@@ -922,9 +942,10 @@ const usageRecordValues = select(Node, (n) =>
  * - **Usage typed value:** each usage value that writes a `baseType` has its {@link UsageBaseType},
  *   and every such row is one, its lexical form the attribute's; each that also writes a
  *   `fieldIdentifier` has its {@link UsageValue}, and every such row is one, with its `baseType`
- *   copied from that row; its `text` is its node's string value; its code is the one its lexical
- *   form spells ("E1 derived"); and its text is a lexical form of that base type ("Usage typed
- *   value").
+ *   copied from that row; its `text` is its node's string value; one whose `baseType` spells a
+ *   code has its {@link UsageValueBaseType}, and every such row is one, its lexical form and text
+ *   copied; its code is the one its lexical form spells ("E1 derived"); and its text is a lexical
+ *   form of that base type ("Usage typed value").
  */
 export const metadataLawsByName = {
   "Document entry": [contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named"))],
@@ -1159,7 +1180,15 @@ export const metadataLawsByName = {
     contained(on(usageRecordValues, "id"), on(UsageValue, "node")),
     contained(on(UsageValue, "node"), on(usageRecordValues, "id")),
     contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
-    check("E1_derived", UsageValue, (u) =>
+    contained(
+      on(spelledUsageValues, "node", "baseTypeLexical", "text"),
+      on(UsageValueBaseType, "node", "baseTypeLexical", "text"),
+    ),
+    contained(
+      on(UsageValueBaseType, "node", "baseTypeLexical", "text"),
+      on(spelledUsageValues, "node", "baseTypeLexical", "text"),
+    ),
+    check("E1_derived", UsageValueBaseType, (u) =>
       u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
     ),
   ],
@@ -1198,7 +1227,7 @@ export const metadataLawsByName = {
     key(on(resourceTypeSources, "id")),
   ],
   "Usage typed value": [
-    check("Usage_typed_value", UsageValue, (u) =>
+    check("Usage_typed_value", UsageValueBaseType, (u) =>
       u.or(
         u.in(u.baseType, unjudgedBaseTypes),
         Compute.matches(u.text, BaseTypePattern.at("pattern", u.baseType)),

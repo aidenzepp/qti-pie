@@ -54,6 +54,7 @@ import type {
   StatisticDate,
   UsageBaseType,
   UsageValue,
+  UsageValueBaseType,
 } from "#pantry/qti/metadata.ts";
 
 /**
@@ -111,6 +112,7 @@ export interface MetadataRows {
   readonly StatisticDate: ReadonlyMap<string, Addition<typeof StatisticDate>>;
   readonly UsageBaseType: ReadonlyMap<string, Addition<typeof UsageBaseType>>;
   readonly UsageValue: ReadonlyMap<string, Addition<typeof UsageValue>>;
+  readonly UsageValueBaseType: ReadonlyMap<string, Addition<typeof UsageValueBaseType>>;
 }
 
 /**
@@ -851,9 +853,9 @@ const usageBaseTypeRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Us
 
 /**
  * Build a document's {@link UsageValue} rows: one per usage value that forms part of a record, that
- * is, writes a `fieldIdentifier` and a `baseType` (spec reading 105), its code the handle its
- * lexical form spells (`none` where it spells none, which `E1_derived` refuses) and its text its
- * string value. A `baseType` outside a record states no base type, so its value has no row.
+ * is, writes a `fieldIdentifier` and a `baseType` (spec reading 105), its `baseType` as written and
+ * its text its string value. A `baseType` outside a record states no base type, so its value has no
+ * row.
  *
  * @param tree - The document's tree.
  * @returns The rows, by their node's id.
@@ -869,15 +871,30 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
       return [
         [
           node.id,
-          {
-            baseType: spelledBaseTypes.has(lexical) ? lexical : "none",
-            baseTypeLexical: lexical,
-            node: node.id,
-            text: tree.stringValueOf(node.id),
-          },
+          { baseTypeLexical: lexical, node: node.id, text: tree.stringValueOf(node.id) },
         ] as const,
       ];
     }),
+  );
+
+/**
+ * Build a document's {@link UsageValueBaseType} rows: one per {@link UsageValue} row whose
+ * `baseType` spells a code, as written (`spelledBaseTypes`), that code beside its lexical form and
+ * text. A `baseType` that spells none has no row, and its value domain refuses it alone (decision
+ * 427).
+ *
+ * @param values - The document's usage value rows.
+ * @returns The rows, by their node's id.
+ */
+const usageValueBaseTypeRowsOf = (
+  values: ReadonlyMap<string, Addition<typeof UsageValue>>,
+): ReadonlyMap<string, Addition<typeof UsageValueBaseType>> =>
+  new Map(
+    [...values].flatMap(([id, value]) =>
+      spelledBaseTypes.has(value.baseTypeLexical)
+        ? [[id, { ...value, baseType: value.baseTypeLexical }] as const]
+        : [],
+    ),
   );
 
 /**
@@ -910,6 +927,7 @@ const noRecordRows = {
   | "StatisticDate"
   | "UsageBaseType"
   | "UsageValue"
+  | "UsageValueBaseType"
 >;
 
 /**
@@ -926,7 +944,8 @@ const noRecordRows = {
  * {@link LomResourceTypeSource} where it writes a source. In every document, an item's or
  * test's root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where
  * it writes a `lastUpdated`, and a usage value its {@link UsageBaseType} where it writes a
- * `baseType` and its {@link UsageValue} where it also writes a `fieldIdentifier`; an optional
+ * `baseType`, its {@link UsageValue} where it also writes a `fieldIdentifier`, and its
+ * {@link UsageValueBaseType} where that `baseType` spells a code; an optional
  * attribute's row exists where it is written.
  *
  * @param doc - The document's tree, as shred gives it.
@@ -935,11 +954,13 @@ const noRecordRows = {
  */
 export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRows => {
   const tree = treeOf(doc, ids);
+  const usageValues = usageValueRowsOf(tree);
   const everyDocument = {
     ...objectRowsOf(tree, tree.document),
     StatisticDate: dateRowsOf(tree),
     UsageBaseType: usageBaseTypeRowsOf(tree),
-    UsageValue: usageValueRowsOf(tree),
+    UsageValue: usageValues,
+    UsageValueBaseType: usageValueBaseTypeRowsOf(usageValues),
   };
   if (!recordTypes.has(ids.documentType)) {
     return { ...noRecordRows, ...everyDocument };

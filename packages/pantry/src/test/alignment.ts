@@ -551,7 +551,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     105,
     {
       owner:
-        "PM's `UsageValue` (`src/qti/metadata.ts`): a row only for a `ud:value` that writes a `fieldIdentifier` (inside a record) and a `baseType` (`usageRecordValues`), `Usage_typed_value` over `BaseTypePattern` on its text, folded by `copiedTextKinds` (`src/qti/node.ts`), and a `baseType` outside a record left untyped; the oracle's Usage typed value (`src/test/oracle.ts`), the same test",
+        "PM's `UsageValue` (`src/qti/metadata.ts`): a row only for a `ud:value` that writes a `fieldIdentifier` (inside a record) and a `baseType` (`usageRecordValues`), its code a row of its own where the `baseType` spells one (`UsageValueBaseType`, decision 427), `Usage_typed_value` over `BaseTypePattern` on its text, folded by `copiedTextKinds` (`src/qti/node.ts`), and a `baseType` outside a record left untyped; the oracle's Usage typed value (`src/test/oracle.ts`), the same test",
       status: "G",
     },
   ],

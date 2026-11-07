@@ -53,7 +53,7 @@ import {
   LomObjectTitle,
   LomTitleString,
   StatisticDate,
-  UsageValue,
+  UsageValueBaseType,
 } from "#pantry/qti/metadata.ts";
 import {
   assertVerdict,
@@ -160,7 +160,7 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
       const rows = rowsOf(tree.value, ids);
       documents.set(file.path, namedDocumentOf(ids.idOf(0), rows));
       dates.push(...rows.StatisticDate.values());
-      values.push(...rows.UsageValue.values());
+      values.push(...rows.UsageValueBaseType.values());
     }
   }
 
@@ -384,7 +384,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
   it.effect(
     "accepts each usage value its base type reads, and refuses a float under integer and a code its lexical form does not spell, by Usage typed value and E1 derived",
     () =>
-      // Oracle: PostgreSQL, `UsageValue`'s own laws: the `Usage_typed_value` check (reading 105),
+      // Oracle: PostgreSQL, `UsageValueBaseType`'s own laws: the `Usage_typed_value` check (reading 105),
       // its text matched against `BaseTypePattern`'s pattern of its base type (23514 on
       // `usage_typed_value`), and `E1_derived`, its code the one `BaseTypeLexical` spells.
       // Bound: the three usage-data fixtures whose values write a `baseType`: `usage3-typed`'s 24
@@ -403,7 +403,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
 
           for (const row of built.values) {
             assertVerdict(
-              yield* judged(client, statedInserts([{ fact: row, relation: UsageValue }])),
+              yield* judged(client, statedInserts([{ fact: row, relation: UsageValueBaseType }])),
               "usage_typed_value",
               refused,
               `${name} ${row.text}`,
@@ -422,7 +422,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
                   node: "00000000-0000-4000-8fff-000000000001",
                   text: "1",
                 },
-                relation: UsageValue,
+                relation: UsageValueBaseType,
               },
             ]),
           ),

@@ -191,6 +191,7 @@ import {
   StatisticDate,
   UsageBaseType,
   UsageValue,
+  UsageValueBaseType,
 } from "#pantry/qti/metadata.ts";
 import { EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
@@ -699,6 +700,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     StatisticDate,
     UsageBaseType,
     UsageValue,
+    UsageValueBaseType,
   ].map(
     ({ name, primaryKey }) =>
       [
