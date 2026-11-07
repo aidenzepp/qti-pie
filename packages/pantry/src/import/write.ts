@@ -121,6 +121,7 @@ import {
 } from "#pantry/qti/mathml-align.ts";
 import { MathApply, MathArgument, MathQualifier } from "#pantry/qti/mathml-apply.ts";
 import { CnPartText, MathCn } from "#pantry/qti/mathml-cn.ts";
+import { MathRank, ShareTarget } from "#pantry/qti/mathml-share.ts";
 import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
 import { Rounding, Tolerance } from "#pantry/qti/operators.ts";
 import {
@@ -1270,6 +1271,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(MathCell, [...inputs.MathCell.values()])
     .insert(MathCn, [...inputs.MathCn.values()])
     .insert(MathQualifier, [...inputs.MathQualifier.values()])
+    .insert(MathRank, [...inputs.MathRank.values()])
     .insert(Named, [...inputs.Named.values()])
     .insert(NamedHref, [...inputs.NamedHref.values()])
     .insert(ObjectLang, [...inputs.ObjectLang.values()])
@@ -1302,6 +1304,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(SectionSelection, [...inputs.SectionSelection.values()])
     .insert(SectionTemplateName, [...inputs.SectionTemplateName.values()])
     .insert(SectionTemplateRef, [...inputs.SectionTemplateRef.values()])
+    .insert(ShareTarget, [...inputs.ShareTarget.values()])
     .insert(Site, [...inputs.Site.values()])
     .insert(SiteTarget, [...inputs.SiteTarget.values()])
     .insert(Slider, [...inputs.Slider.values()])
