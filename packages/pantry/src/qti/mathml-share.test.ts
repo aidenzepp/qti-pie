@@ -251,11 +251,22 @@ describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
     );
   });
 
-  it("reads every containment and key of the module as 'E1 derived'", () => {
-    // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds.
+  it("reads every containment and key of the module as 'E1 derived', but the share's resolution as 'Idref target'", () => {
+    // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds; a
+    // share whose id names nothing breaks its resolution beside "Idref target"'s own statement,
+    // so the resolution is stated under that law and the share is refused by it alone.
     const own = ownLaws();
     assert.isAbove(own.length, 0);
-    assert.deepStrictEqual([...new Set(own.map(([, name]) => name))], ["E1 derived"]);
+    assert.deepStrictEqual([...new Set(own.map(([, name]) => name))].toSorted(), [
+      "E1 derived",
+      "Idref target",
+    ]);
+
+    const resolutions = own.filter(([, name]) => name === "Idref target");
+    assert.lengthOf(resolutions, 1);
+    for (const [law] of resolutions) {
+      assert.match(Formatter.format(law), /"relation":"ShareFragment".*"relation":"ShareTarget"/su);
+    }
 
     for (const [law, name] of own) {
       assert.deepStrictEqual(lawNameOf(law), Option.some(name));

@@ -61,7 +61,6 @@ import {
   contained,
   counted,
   fin,
-  mirrors,
   natural,
   on,
   relation,
@@ -218,6 +217,18 @@ const assembledShares = select(ShareFragment, (f) => f.eq(f.assembled, true));
 const unassembledShares = select(ShareFragment, (f) => f.eq(f.assembled, false));
 
 /**
+ * A share of a document in no assembly resolves: it has its {@link ShareTarget}, whose `target` is
+ * an owner of its id under {@link IdBinding}. A share whose id names nothing has none, and this is
+ * the one statement it breaks beside "Idref target"'s own, so it is stated under that law (spec
+ * reading 2; decision 428): a dangling share is refused by "Idref target" alone, and every share
+ * of a document that law accepts has its target, the one the cycle check reads.
+ */
+export const shareResolution = contained(
+  on(unassembledShares, "node", "document", "id"),
+  on(ShareTarget, "node", "document", "id"),
+);
+
+/**
  * Each share's placements, counted by `ShareFragment.placements`.
  */
 export const placedShareFamily = counted(
@@ -238,9 +249,10 @@ export const shareRelations = { MathRank, PlacedMathRank, PlacedShareTarget, Sha
  *   rank is above its parent's for every kind but `m:math`, the root of a tree, and the document
  *   node, which is its own parent and ends the chain of a target no `m:math` holds, and each other
  *   row's `(parent, parentRank)` contained in its parent's `(node, rank)`;
- * - **the targets:** a {@link ShareTarget} row for each {@link ShareFragment} and no other (both
- *   ways), its `target` an owner of its id under {@link IdBinding}, its two ranks copied from the
- *   {@link MathRank} rows of the share and of the target, and `MathML_share_cycle`: the share's
+ * - **the targets:** a {@link ShareTarget} row only for a {@link ShareFragment} of a document in no
+ *   assembly, and one for each such share that resolves ({@link shareResolution}, under "Idref
+ *   target"), its `target` an owner of its id under {@link IdBinding}, its two ranks copied from
+ *   the {@link MathRank} rows of the share and of the target, and `MathML_share_cycle`: the share's
  *   rank is above its target's;
  * - **the placed ranks and targets:** the same per instance of an assembled document: each
  *   {@link PlacedMathRank} row's tuple and instance proved by containment, its `(parent,
@@ -258,10 +270,11 @@ export const shareLaws = [
     r.or(r.eq(r.kind, "m:math"), r.eq(r.node, r.parent), r.lt(r.rank, r.parentRank)),
   ),
 
-  mirrors(
+  contained(
     on(ShareTarget, "node", "document", "id"),
     on(unassembledShares, "node", "document", "id"),
   ),
+  shareResolution,
   contained(on(ShareTarget, "document", "id", "target"), on(IdBinding, "document", "id", "owner")),
   contained(on(ShareTarget, "node", "shareRank"), on(MathRank, "node", "rank")),
   contained(on(ShareTarget, "target", "targetRank"), on(MathRank, "node", "rank")),

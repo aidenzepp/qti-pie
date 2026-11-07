@@ -9,7 +9,7 @@
 import { alignLaws, alignRelations } from "#pantry/qti/mathml-align.ts";
 import { applyLaws, applyRelations, headQualifierLaw } from "#pantry/qti/mathml-apply.ts";
 import { cnCountLaws, cnLaws, cnRelations } from "#pantry/qti/mathml-cn.ts";
-import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
+import { shareLaws, shareRelations, shareResolution } from "#pantry/qti/mathml-share.ts";
 
 /**
  * The relations of the four MathML families, in the order apply, cn, align, share.
@@ -37,13 +37,15 @@ const checksNamed = (name: string) =>
 
 /**
  * Whether a statement is one {@link mathmlLawsByName} names apart from the restatements: the head
- * qualifier containment or a cn part count containment.
+ * qualifier containment, a cn part count containment or the share resolution.
  *
  * @param statement - A statement of {@link mathmlLaws}.
  * @returns Whether it is.
  */
 const namedApart = (statement: (typeof mathmlLaws)[number]): boolean =>
-  statement === headQualifierLaw || Object.values(cnCountLaws).some((count) => count === statement);
+  statement === headQualifierLaw ||
+  statement === shareResolution ||
+  Object.values(cnCountLaws).some((count) => count === statement);
 
 /**
  * {@link mathmlLaws} by the law each states, the law's name its key, as every other module names
@@ -52,6 +54,9 @@ const namedApart = (statement: (typeof mathmlLaws)[number]): boolean =>
  *
  * - **MathML head qualifier:** the apply family's head qualifier containment, a pair MathML 3's §4.4
  *   syntax tables list (`mathml-apply.ts`, reading R6-head-qualifiers);
+ * - **Idref target:** a share's resolution ({@link shareResolution}): a share of a document in no
+ *   assembly has its target, which one whose id names nothing breaks beside that law's own
+ *   statement over its id, so it is refused under that law alone (decision 428);
  * - **MathML cn form:** a `cn`'s four part count containments, over the judged `cn`s and over every
  *   typed `cn` ({@link cnCountLaws}): a wrong part count is a `cn` of the wrong form;
  * - **E1 derived:** every other statement of the four families, a restatement of the tree, the align
@@ -62,6 +67,7 @@ export const mathmlLawsByName = {
   "E1 derived": mathmlLaws.filter((statement) =>
     statement.kind === "check" ? statement.name === "E1_derived" : !namedApart(statement),
   ),
+  "Idref target": [shareResolution],
   "MathML align first": checksNamed("MathML_align_first"),
   "MathML align placement": checksNamed("MathML_align_placement"),
   "MathML arity": checksNamed("MathML_arity"),
