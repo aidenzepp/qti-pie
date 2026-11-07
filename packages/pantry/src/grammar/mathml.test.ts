@@ -43,7 +43,7 @@ import { admits, step } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { contentEnds, contentStep } from "#pantry/grammar/content.ts";
+import { accepts } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -236,44 +236,6 @@ const patternOf = (
   );
 
   return new RegExp(domain.pattern, patternFlags);
-};
-
-/**
- * Judge a family of child kinds by the installed automaton, as the database does.
- *
- * @param composedGrammar - The grammar.
- * @param version - The version.
- * @param parent - The parent's kind.
- * @param children - The children's kinds, in order.
- * @returns Whether the family's content is the model's.
- */
-const accepts = (
-  composedGrammar: Pick<ComposedGrammar, "admission" | "content">,
-  version: SchemaVersion,
-  parent: string,
-  children: readonly string[],
-): boolean => {
-  const positionOf = (key: {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: SchemaVersion;
-  }) => Option.map(composedGrammar.admission.lookup(key), ({ position }) => Number(position));
-  let state = 0;
-  for (const child of children) {
-    const next = contentStep(
-      composedGrammar.content,
-      positionOf,
-      { child, parent, version },
-      state,
-    );
-    if (Option.isNone(next)) {
-      return false;
-    }
-
-    state = next.value;
-  }
-
-  return contentEnds(composedGrammar.content, version, parent, state);
 };
 
 /**

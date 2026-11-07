@@ -12,12 +12,15 @@
  * this guard holds that the check is made, on every built-in and in both contexts.
  *
  * Bound: every built-in simple type each version's `TypeText` holds, exhausted, × {valid text,
- * invalid text, element child} × {foreign element, ASI element under a foreign one} × the two
- * versions. A valid text is the first of the domain's own samples it accepts; an invalid one the
- * first of a fixed list of candidates it refuses, none for a type every string is a value of. The
- * foreign content stands in an SSML `mark`'s `##other` `lax` wildcard in an item's companion
- * materials. Kept: the shapes GEN-B's XSD search reported (`xs:unsignedShort` with `x&`,
- * `xs:anyURI` with an element child, `xs:float` on a `qti-prompt`), which HEAD already refused.
+ * invalid text, element child} × {foreign element, ASI element under a foreign one, foreign element
+ * whose `xs` prefix the root binds to another namespace and it rebinds} × the two versions. The
+ * rebound context is the shape GEN-B's search found before 5cdc88e7, where the codec read the
+ * root's binding of the prefix: the nearest declaration must win. A valid text is the first of the
+ * domain's own samples it accepts; an invalid one the first of a fixed list of candidates it
+ * refuses, none for a type every string is a value of. The foreign content stands in an SSML
+ * `mark`'s `##other` `lax` wildcard in an item's companion materials. Kept: the shapes GEN-B's XSD
+ * search reported (`xs:unsignedShort` with `x&`, `xs:anyURI` with an element child, `xs:float` on a
+ * `qti-prompt`), which HEAD already refused.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
@@ -74,7 +77,7 @@ const holdings = ["valid", "invalid", "element"] as const;
 /**
  * Where the governed element stands.
  */
-const contexts = ["foreign", "local"] as const;
+const contexts = ["foreign", "local", "rebound"] as const;
 
 /**
  * Write the item a case reads.
@@ -93,11 +96,14 @@ const itemOf = (
 ): string => {
   const typed = `xmlns:xsi="${xsiNamespace}" xmlns:xs="${xsNamespace}" xsi:type="xs:${type}"`;
   const governed =
-    context === "foreign"
-      ? `<x:f xmlns:x="urn:x" ${typed}>${content}</x:f>`
-      : `<x:f xmlns:x="urn:x"><qti-prompt ${typed}>${content}</qti-prompt></x:f>`;
+    context === "local"
+      ? `<x:f xmlns:x="urn:x"><qti-prompt ${typed}>${content}</qti-prompt></x:f>`
+      : `<x:f xmlns:x="urn:x" ${typed}>${content}</x:f>`;
+  // The root binds the type's prefix to a namespace of no type, and the governed element rebinds
+  // it to XML Schema's: the nearest declaration binds it (Namespaces in XML 1.0, §6.1).
+  const outer = context === "rebound" ? ` xmlns:xs="urn:qti-pie:no-types"` : "";
 
-  return `<qti-assessment-item xmlns="${asiNamespace}" identifier="i" title="t" time-dependent="false" adaptive="false"><qti-companion-materials-info><ssml:mark xmlns:ssml="http://www.w3.org/2001/10/synthesis" name="m">${governed}</ssml:mark></qti-companion-materials-info><qti-item-body><p${Option.match(target, { onNone: () => "", onSome: (id) => ` id="${id}"` })}>x</p></qti-item-body></qti-assessment-item>`;
+  return `<qti-assessment-item xmlns="${asiNamespace}"${outer} identifier="i" title="t" time-dependent="false" adaptive="false"><qti-companion-materials-info><ssml:mark xmlns:ssml="http://www.w3.org/2001/10/synthesis" name="m">${governed}</ssml:mark></qti-companion-materials-info><qti-item-body><p${Option.match(target, { onNone: () => "", onSome: (id) => ` id="${id}"` })}>x</p></qti-item-body></qti-assessment-item>`;
 };
 
 /**
@@ -208,7 +214,9 @@ describe("a simple xsi:type on foreign content", () => {
           "every governed text is checked, and an element child refused",
         );
         assert.deepStrictEqual(
-          unchecked.filter((line) => !/ invalid (?:foreign|local): no such text$/u.test(line)),
+          unchecked.filter(
+            (line) => !/ invalid (?:foreign|local|rebound): no such text$/u.test(line),
+          ),
           ["3.0.0 xs:NOTATION: no domain", "3.0.1 xs:NOTATION: no domain"],
           "every built-in but xs:NOTATION, whose value space no pinned XSD fills (§3.2.19), has a domain and a valid text",
         );

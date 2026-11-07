@@ -721,8 +721,8 @@ describe("references", () => {
 });
 
 /**
- * Spec reading 103's census, every vocabulary's entries, and the prefix of the kinds an entry that
- * lists none reads.
+ * Spec reading 103's census, every vocabulary's entries, and the prefix its handles carry, which an
+ * entry that lists no kinds must name: the oracle's own, so a wrong prefix in a census entry fails.
  */
 const censuses = [
   { census: asiCensus, prefix: Option.none<string>() },
@@ -744,15 +744,19 @@ describe("ReferenceAttribute, spec reading 103's census", () => {
         const unlisted: string[] = [];
         for (const { census: entries, prefix } of censuses) {
           for (const entry of entries) {
+            const { kinds } = entry;
+            if (kinds._tag === "prefixed" && !Option.contains(prefix, kinds.prefix)) {
+              unlisted.push(`${entry.name}: the prefix ${kinds.prefix}`);
+            }
+
             const declaring = attributeDeclarations.filter(
               ({ kind, name }) =>
                 name === entry.name &&
-                Option.match(entry.kinds, {
-                  onNone: () => Option.exists(prefix, (held) => kind.startsWith(held)),
-                  onSome: (kinds) => kinds.includes(kind),
-                }),
+                (kinds._tag === "listed"
+                  ? kinds.kinds.includes(kind)
+                  : Option.exists(prefix, (held) => kind.startsWith(held))),
             );
-            for (const kind of Option.getOrElse(entry.kinds, () => [])) {
+            for (const kind of kinds._tag === "listed" ? kinds.kinds : []) {
               if (!declaring.some((declaration) => declaration.kind === kind)) {
                 unlisted.push(`${kind}@${entry.name}`);
               }

@@ -10,7 +10,7 @@
 import { Array as Arr, Option, Result } from "effect";
 import { admissionOf, textDomainOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
-import { contentStep } from "#pantry/grammar/content.ts";
+import { placedStep, placementOf } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import type { Qualified } from "#pantry/grammar/domains.ts";
 import { expandedText } from "#pantry/grammar/names.ts";
@@ -132,39 +132,31 @@ export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed>
 
 /**
  * Read the composed grammar as the folds read a grammar: a child's state in its parent's content
- * automaton, from `Admission`'s position or, where it names none, `contentStep` over `Symbol` and
- * `Follow`; `AttributeAdmission`'s position; `Enters`, `Interaction` and `IsElement`.
+ * automaton, from its placement (`placementOf`): its position where it names one, which the laws
+ * judge, and otherwise `placedStep` over `Symbol` and `Follow`; `AttributeAdmission`'s position;
+ * `Enters`, `Interaction` and `IsElement`.
  *
  * @param grammar - The composed grammar.
  * @returns The closed relations the folds read.
  */
-export const foldGrammarOf = (grammar: ComposedGrammar): FoldGrammar<Composed> => {
-  const positionOf = (key: {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: Composed["version"];
-  }): Option.Option<number> =>
-    Option.map(grammar.admission.lookup(key), ({ position }) => Number(position));
-
-  return {
-    ancestry: grammar.ancestry,
-    attributePosition: (key) =>
-      Option.map(admissionOf(grammar.attributes, key), ({ position }) => position),
-    interaction: grammar.kinds.interaction,
-    isElement: grammar.kinds.isElement,
-    state: (key, was) =>
-      Option.match(positionOf(key), {
-        onNone: () => Result.fail("unadmitted" as const),
-        onSome: (position) =>
-          position === 0
-            ? Result.fromOption(
-                contentStep(grammar.content, positionOf, key, was),
-                () => "unfollowed" as const,
-              )
-            : Result.succeed(position),
-      }),
-  };
-};
+export const foldGrammarOf = (grammar: ComposedGrammar): FoldGrammar<Composed> => ({
+  ancestry: grammar.ancestry,
+  attributePosition: (key) =>
+    Option.map(admissionOf(grammar.attributes, key), ({ position }) => position),
+  interaction: grammar.kinds.interaction,
+  isElement: grammar.kinds.isElement,
+  state: (key, was) =>
+    Option.match(placementOf(grammar, key), {
+      onNone: () => Result.fail("unadmitted" as const),
+      onSome: (placement) =>
+        placement._tag === "at"
+          ? Result.succeed(placement.position)
+          : Result.fromOption(
+              placedStep(grammar.content, key, placement, was),
+              () => "unfollowed" as const,
+            ),
+    }),
+});
 
 /**
  * Name the attribute a closed handle spells: a handle that begins with a prefix of

@@ -177,9 +177,17 @@ export const noReferences: ReferenceFacet = {
  * on every kind of the vocabulary that declares it where none are listed, how its value names the
  * file, and the source that makes its value a reference to a file.
  */
+/**
+ * The kinds a census entry names its attribute on: the kinds it lists, or every kind whose handle
+ * carries its vocabulary's prefix (MathML's `href`, which makes any element a hyperlink).
+ */
+export type CensusKinds =
+  | { readonly _tag: "listed"; readonly kinds: readonly [string, ...string[]] }
+  | { readonly _tag: "prefixed"; readonly prefix: string };
+
 export interface CensusEntry {
   readonly form: ReferenceForm;
-  readonly kinds: Option.Option<readonly [string, ...string[]]>;
+  readonly kinds: CensusKinds;
   readonly name: string;
   readonly source: string;
 }
@@ -198,7 +206,7 @@ const onKinds = (
   kinds: readonly [string, ...string[]],
   source: string,
   form: ReferenceForm = "uri",
-): CensusEntry => ({ form, kinds: Option.some(kinds), name, source });
+): CensusEntry => ({ form, kinds: { _tag: "listed", kinds }, name, source });
 
 /**
  * Spec reading 103's census in the ASI vocabulary: the attributes of QTI's HTML subset whose HTML
@@ -283,7 +291,12 @@ export const xiCensus: readonly CensusEntry[] = [
  * `definitionURL` identifies a symbol's definition and names no file, so it is left out.
  */
 export const mathmlCensus: readonly CensusEntry[] = [
-  { form: "uri", kinds: Option.none(), name: "href", source: "MathML 3 §2.1.6: a hyperlink" },
+  {
+    form: "uri",
+    kinds: { _tag: "prefixed", prefix: "m:" },
+    name: "href",
+    source: "MathML 3 §2.1.6: a hyperlink",
+  },
   onKinds("altimg", ["m:math"], "MathML 3 §2.2.1: the fallback image"),
   onKinds("cdgroup", ["m:math"], "MathML 3 §2.2.1: a content dictionary group file"),
   onKinds("src", ["m:mglyph"], "MathML 3 §3.2.1.2: the glyph's image"),
@@ -310,23 +323,20 @@ export const ssmlCensus: readonly CensusEntry[] = [
  *
  * @param declarations - The attribute declarations.
  * @param census - The census.
- * @param inVocabulary - Whether a kind is the vocabulary's, for an entry that lists no kinds.
  * @returns The rows, in declaration order.
  */
 export const fileReferencesIn = (
   declarations: readonly AttributeDeclaration[],
   census: readonly CensusEntry[],
-  inVocabulary: (kind: string) => boolean,
 ): readonly FileReferenceRow[] =>
   declarations.flatMap(({ kind, name, versions }) =>
     census
       .filter(
         (entry) =>
           entry.name === name &&
-          Option.match(entry.kinds, {
-            onNone: () => inVocabulary(kind),
-            onSome: (kinds) => kinds.includes(kind),
-          }),
+          (entry.kinds._tag === "listed"
+            ? entry.kinds.kinds.includes(kind)
+            : kind.startsWith(entry.kinds.prefix)),
       )
       .slice(0, 1)
       .map(({ form }) => ({ form, kind, name, versions })),
@@ -839,7 +849,7 @@ export const asiReferences: ReferenceFacet = {
   choiceBounds: boundsIn(attributeDeclarations),
   choiceCounts: Array.from(orderedChoices, ([kind, choice]) => ({ choice, kind })),
   declarations: declarationsIn(attributeDeclarations),
-  fileReferences: fileReferencesIn(attributeDeclarations, asiCensus, () => false),
+  fileReferences: fileReferencesIn(attributeDeclarations, asiCensus),
   references: [
     ...processingReferences(attributeDeclarations, processingKinds),
     ...contentReferences(attributeDeclarations, itemContentKinds),
@@ -857,33 +867,30 @@ export const asiReferences: ReferenceFacet = {
 
 /**
  * The reference facet of a vocabulary whose only references are to files: its share of
- * {@link fileReferencesIn}, its kinds named by their handle's prefix.
+ * {@link fileReferencesIn}.
  *
  * @param census - The vocabulary's census.
- * @param prefix - The prefix every kind of the vocabulary's handles carries.
  * @returns The facet.
  */
-const fileReferenceFacet = (census: readonly CensusEntry[], prefix: string): ReferenceFacet => ({
+const fileReferenceFacet = (census: readonly CensusEntry[]): ReferenceFacet => ({
   ...noReferences,
-  fileReferences: fileReferencesIn(attributeDeclarations, census, (kind) =>
-    kind.startsWith(prefix),
-  ),
+  fileReferences: fileReferencesIn(attributeDeclarations, census),
 });
 
 /**
  * MathML's reference facet: its file references ({@link mathmlCensus}).
  */
-export const mathmlReferences: ReferenceFacet = fileReferenceFacet(mathmlCensus, "m:");
+export const mathmlReferences: ReferenceFacet = fileReferenceFacet(mathmlCensus);
 
 /**
  * SSML's reference facet: its file references ({@link ssmlCensus}).
  */
-export const ssmlReferences: ReferenceFacet = fileReferenceFacet(ssmlCensus, "ssml:");
+export const ssmlReferences: ReferenceFacet = fileReferenceFacet(ssmlCensus);
 
 /**
  * XInclude's reference facet: its file reference ({@link xiCensus}).
  */
-export const xiReferences: ReferenceFacet = fileReferenceFacet(xiCensus, "xi:");
+export const xiReferences: ReferenceFacet = fileReferenceFacet(xiCensus);
 
 /**
  * A `NodeKind` key field.

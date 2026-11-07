@@ -36,7 +36,7 @@
  * Q3's `automatonOf` builds every automaton from the content-model IR; this module installs them.
  */
 import { Array as Arr, Option, pipe, Result, Schema } from "effect";
-import type { AdmittedChild } from "#pantry/grammar/admission.ts";
+import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
 import {
   closed,
   dependentField,
@@ -1366,12 +1366,134 @@ export const contentFollows = (
   );
 
 /**
- * Step a family's automaton by one child, as `Node`'s position derives (the host's evaluation of
- * the law the database proves).
+ * Where a child stands in its family's content model, read once from its `Admission` position and
+ * the family's `Symbol` rows. `Admission` installs one position per (version, parent, child), 0 for
+ * a kind that names no position or several; the host tells the two apart here, once.
  *
- * A child whose `Admission` position is not 0 moves to it where `Follow` allows; one whose kind
- * several positions name moves to the one position both `Follow` and `Symbol` hold; one whose kind
- * names no position (character data) keeps its predecessor's state.
+ * - `at`: the one position the child's kind names.
+ * - `carries`: a kind no position names, character data, which keeps its predecessor's state.
+ * - `shared`: the positions several of which name the child's kind, where the state decides.
+ */
+export type Placement =
+  | { readonly _tag: "at"; readonly position: number }
+  | { readonly _tag: "carries" }
+  | { readonly _tag: "shared"; readonly positions: readonly [number, ...number[]] };
+
+/**
+ * The family and child a step reads.
+ */
+interface StepKey {
+  readonly child: string;
+  readonly parent: string;
+  readonly version: SchemaVersion;
+}
+
+/**
+ * Read a child's placement from its `Admission` position.
+ *
+ * @param content - The content grammar, whose `Symbol` rows hold a shared kind's positions.
+ * @param key - The family and the child.
+ * @param position - The child's `Admission` position.
+ * @returns The placement.
+ */
+const placementAt = (content: ContentGrammar, key: StepKey, position: number): Placement => {
+  if (position !== 0) {
+    return { _tag: "at", position };
+  }
+
+  const shared = content.sharedPositions({
+    kind: key.child,
+    parent: key.parent,
+    version: key.version,
+  });
+
+  return Arr.isReadonlyArrayNonEmpty(shared)
+    ? { _tag: "shared", positions: shared }
+    : { _tag: "carries" };
+};
+
+/**
+ * Read where a child stands in its family's content model.
+ *
+ * @param grammar - The composed grammar's `Admission` and content grammar.
+ * @param grammar.admission - `Admission`.
+ * @param grammar.content - The content grammar.
+ * @param key - The family and the child.
+ * @returns The child's placement, or none where the parent does not admit its kind.
+ */
+export const placementOf = (
+  grammar: { readonly admission: Admission; readonly content: ContentGrammar },
+  key: StepKey,
+): Option.Option<Placement> =>
+  Option.map(grammar.admission.lookup(key), ({ position }) =>
+    placementAt(grammar.content, key, Number(position)),
+  );
+
+/**
+ * Step a family's automaton by one placed child, as `Node`'s position derives (the host's
+ * evaluation of the law the database proves): an `at` child moves to its position where `Follow`
+ * allows, a `shared` one to the one of its positions `Follow` allows, and a `carries` one keeps its
+ * predecessor's state.
+ *
+ * @param content - The content grammar.
+ * @param key - The family and the child.
+ * @param placement - The child's placement.
+ * @param was - The predecessor's state, 0 for the first child.
+ * @returns The child's state, or none when no position follows.
+ */
+export const placedStep = (
+  content: ContentGrammar,
+  key: StepKey,
+  placement: Placement,
+  was: number,
+): Option.Option<number> => {
+  const model = contentModelOf(content, key);
+  const follows = (to: number) =>
+    Option.exists(model, (held) =>
+      Option.isSome(content.follow.lookup({ from: String(was), model: held, to: String(to) })),
+    );
+
+  switch (placement._tag) {
+    case "at": {
+      return Option.liftPredicate(placement.position, follows);
+    }
+    case "carries": {
+      return Option.some(was);
+    }
+    case "shared": {
+      const next = placement.positions.filter(follows);
+
+      return next.length === 1 ? Arr.head(next) : Option.none();
+    }
+    default: {
+      return placement satisfies never;
+    }
+  }
+};
+
+/**
+ * Step a family's automaton by one child: its {@link placementOf}, then {@link placedStep}.
+ *
+ * @param grammar - The composed grammar's `Admission` and content grammar.
+ * @param grammar.admission - `Admission`.
+ * @param grammar.content - The content grammar.
+ * @param key - The family and the child.
+ * @param was - The predecessor's state, 0 for the first child.
+ * @returns The child's state, or none where the parent does not admit the kind or no position
+ *   follows.
+ */
+export const stepOf = (
+  grammar: { readonly admission: Admission; readonly content: ContentGrammar },
+  key: StepKey,
+  was: number,
+): Option.Option<number> =>
+  Option.flatMap(placementOf(grammar, key), (placement) =>
+    placedStep(grammar.content, key, placement, was),
+  );
+
+/**
+ * Step a family's automaton by one child whose `Admission` position a caller reads: the step of
+ * {@link stepOf}, for the callers that look `Admission` up themselves.
  *
  * @param content - The content grammar.
  * @param positionOf - A child's `Admission` position.
@@ -1384,39 +1506,13 @@ export const contentFollows = (
  */
 export const contentStep = (
   content: ContentGrammar,
-  positionOf: (key: {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: SchemaVersion;
-  }) => Option.Option<number>,
-  key: { readonly child: string; readonly parent: string; readonly version: SchemaVersion },
+  positionOf: (key: StepKey) => Option.Option<number>,
+  key: StepKey,
   was: number,
-): Option.Option<number> => {
-  const model = contentModelOf(content, key);
-  const follows = (to: number) =>
-    Option.exists(model, (held) =>
-      Option.isSome(content.follow.lookup({ from: String(was), model: held, to: String(to) })),
-    );
-
-  return Option.flatMap(positionOf(key), (position) => {
-    if (position !== 0) {
-      return Option.liftPredicate(position, follows);
-    }
-
-    const shared = content.sharedPositions({
-      kind: key.child,
-      parent: key.parent,
-      version: key.version,
-    });
-    if (shared.length === 0) {
-      return Option.some(was);
-    }
-
-    const next = shared.filter(follows);
-
-    return next.length === 1 ? Arr.head(next) : Option.none();
-  });
-};
+): Option.Option<number> =>
+  Option.flatMap(positionOf(key), (position) =>
+    placedStep(content, key, placementAt(content, key, position), was),
+  );
 
 /**
  * Whether a family may end in a state: `Last`'s cell under the family's model.
@@ -1436,3 +1532,34 @@ export const contentEnds = (
   Option.exists(contentModelOf(content, { parent, version }), (model) =>
     Option.isSome(content.last.lookup({ model, position: String(state) })),
   );
+
+/**
+ * Judge a family of child kinds by the installed automaton, as the database does: each child steps
+ * from its predecessor's state (0 for the first), and the last state must be one `Last` holds.
+ *
+ * @param grammar - The composed grammar's `Admission` and content grammar.
+ * @param grammar.admission - `Admission`.
+ * @param grammar.content - The content grammar.
+ * @param version - The version.
+ * @param parent - The parent's kind.
+ * @param children - The children's kinds, in order.
+ * @returns Whether the family's content is the model's.
+ */
+export const accepts = (
+  grammar: { readonly admission: Admission; readonly content: ContentGrammar },
+  version: SchemaVersion,
+  parent: string,
+  children: readonly string[],
+): boolean => {
+  let state = 0;
+  for (const child of children) {
+    const next = stepOf(grammar, { child, parent, version }, state);
+    if (Option.isNone(next)) {
+      return false;
+    }
+
+    state = next.value;
+  }
+
+  return contentEnds(grammar.content, version, parent, state);
+};
