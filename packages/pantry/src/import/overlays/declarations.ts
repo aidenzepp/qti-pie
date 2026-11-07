@@ -29,6 +29,7 @@ import type {
   NormalMaximum,
   NormalMinimum,
   RecordField,
+  RecordFieldName,
   Value,
   ValueBaseType,
   ValueSet,
@@ -63,6 +64,7 @@ export interface DeclarationRows {
   readonly NormalMaximum: ReadonlyMap<string, Addition<typeof NormalMaximum>>;
   readonly NormalMinimum: ReadonlyMap<string, Addition<typeof NormalMinimum>>;
   readonly RecordField: ReadonlyMap<string, Addition<typeof RecordField>>;
+  readonly RecordFieldName: ReadonlyMap<string, Addition<typeof RecordFieldName>>;
   readonly Value: ReadonlyMap<string, Addition<typeof Value>>;
   readonly ValueBaseType: ReadonlyMap<string, Addition<typeof ValueBaseType>>;
   readonly ValueSet: ReadonlyMap<string, Addition<typeof ValueSet>>;
@@ -200,6 +202,19 @@ export const piecesOf = (lexical: string): Pieces => {
 };
 
 /**
+ * Split an identifier's lexical form into its pieces where it names something once collapsed: a
+ * form of whitespace alone names nothing, and has no row that holds a name (lane NIL's audit, B10).
+ *
+ * @param lexical - The lexical form, as written.
+ * @returns Its pieces, none where it names nothing.
+ */
+const namedPiecesOf = (lexical: string): Option.Option<Pieces> => {
+  const pieces = piecesOf(lexical);
+
+  return pieces.name === "" ? Option.none() : Option.some(pieces);
+};
+
+/**
  * Read the code a `base-type` spells (C17): its lexical form, where that is one of
  * `BaseTypeLexical`'s, since each code is spelled as its lexical form.
  *
@@ -264,17 +279,13 @@ export const typedDeclarationOf = ({
     return Option.none();
   }
 
-  const pieces = piecesOf(identifier);
-
-  return pieces.name === ""
-    ? Option.none()
-    : Option.some({
-        baseType: spelled,
-        cardinality,
-        cardinalityLexical: cardinality,
-        identifier: pieces,
-        identifierLexical: identifier,
-      });
+  return Option.map(namedPiecesOf(identifier), (pieces) => ({
+    baseType: spelled,
+    cardinality,
+    cardinalityLexical: cardinality,
+    identifier: pieces,
+    identifierLexical: identifier,
+  }));
 };
 
 /**
@@ -552,14 +563,17 @@ const addValueSet = (
 };
 
 /**
- * Add a value's row, its own base type's where it writes one that spells a code, and its field's
- * where it writes both a `field-identifier` and a `base-type`.
+ * Add a value's row, its own base type's where it writes one that spells a code, its field's where
+ * it writes both a `field-identifier` and a `base-type`, and its field's name where that
+ * `field-identifier` names something once collapsed.
  *
  * A value writes either only as a record's field (information model §7.46.1 and §7.46.2: each "is
  * only used for" a value "that forms part of a record"). The rows hold what it writes and nothing
  * else, so `Value_cardinality` refuses a record's value that writes either alone or neither, and
  * any other set's value that writes either, through its count of fields and each attribute's copy
- * into {@link RecordField}.
+ * into {@link RecordField}. A field whose `field-identifier` is whitespace alone names no field: it
+ * has no {@link RecordFieldName}, and its value domain refuses it alone, never `E1_derived` over an
+ * empty name.
  *
  * @param reading - The document.
  * @param node - The value's node.
@@ -591,23 +605,29 @@ const addValue = (
   }
 
   if (fieldIdentifier !== undefined && fieldBaseType !== undefined) {
-    const { lead, name, trail } = piecesOf(fieldIdentifier);
     reading.rows.RecordField.set(node.id, {
       ...tupleOf(reading, node),
       baseTypeLexical: fieldBaseType,
-      identifier: name,
-      identifierLead: lead,
       identifierLexical: fieldIdentifier,
-      identifierTrail: trail,
     });
+    for (const { lead, name, trail } of Option.toArray(namedPiecesOf(fieldIdentifier))) {
+      reading.rows.RecordFieldName.set(node.id, {
+        identifier: name,
+        identifierLead: lead,
+        identifierLexical: fieldIdentifier,
+        identifierTrail: trail,
+        node: node.id,
+        parent: node.parent,
+      });
+    }
   }
 };
 
 /**
  * Build the O2 overlay rows of a document: a row per declaration that has one
  * ({@link typedDeclarationOf}) and per base type it writes, per value set of such a declaration,
- * per value of a value set, per value's own base type and per record field, and per scale
- * attribute of such an outcome declaration and per pair of them it writes.
+ * per value of a value set, per value's own base type, per record field and per field name, and
+ * per scale attribute of such an outcome declaration and per pair of them it writes.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -628,6 +648,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
       NormalMaximum: new Map(),
       NormalMinimum: new Map(),
       RecordField: new Map(),
+      RecordFieldName: new Map(),
       Value: new Map(),
       ValueBaseType: new Map(),
       ValueSet: new Map(),

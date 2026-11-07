@@ -18,6 +18,7 @@
  *   base type a record's field's text is read in.
  * - {@link RecordField}, one per `qti-value` of a value set that writes both a `field-identifier` and
  *   a `base-type`, a counted member of its set.
+ * - {@link RecordFieldName}, a record field's name, where its `field-identifier` names something.
  * - {@link MasteryValue}, {@link NormalMinimum} and {@link NormalMaximum}, an outcome declaration's
  *   `mastery-value`, `normal-minimum` and `normal-maximum`, each where it writes it, and
  *   {@link MasteryFloor} and {@link MasteryCeiling}, each pair of them `Mastery_range` compares as
@@ -90,6 +91,12 @@ const Space = str.regex("^[\\t\\n\\r ]*$");
  * form.
  */
 const nonSpacePattern = "^[^\\t\\n\\r ]+$";
+
+/**
+ * A lexical form that holds a character other than XML whitespace: an identifier's that names
+ * something once collapsed, since collapsing strips whitespace alone.
+ */
+const namingPattern = "[^\\t\\n\\r ]";
 
 /**
  * The kinds that declare a variable: the `NodeKind` handles that are `DeclarationKind` handles too
@@ -345,8 +352,8 @@ export const ValueBaseType = relation(
  * Its fields, every one written by the host:
  *
  * - The node's {@link nodeRef} tuple;
- * - `identifier`, `identifierLexical`, `identifierLead` and `identifierTrail`, its
- *   `field-identifier`'s name and pieces, as {@link Declaration}'s identifier is written;
+ * - `identifierLexical`, its `field-identifier`'s lexical form as written, whose name, where it names
+ *   one, is its {@link RecordFieldName}'s;
  * - `baseTypeLexical`, its `base-type`'s lexical form, whose code, where it spells one, is its
  *   {@link ValueBaseType}'s.
  */
@@ -355,16 +362,38 @@ export const RecordField = relation(
   {
     baseTypeLexical: keyText,
     document: uuid,
-    identifier: keyText,
-    identifierLead: Space,
     identifierLexical: keyText,
-    identifierTrail: Space,
     kind: closedId(NodeKind),
     nearest: uuid,
     node: uuid,
     parent: uuid,
     start: natural,
     version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
+ * A record field's name, keyed by its `qti-value` node, where its `field-identifier` names
+ * something once collapsed: `identifier`, the lexical form without its outer whitespace, and
+ * `identifierLead` and `identifierTrail`, the whitespace written around it, as
+ * {@link Declaration}'s identifier is written, with the {@link RecordField}'s `parent` and
+ * `identifierLexical` it is copied from. `Record field key` compares fields by it.
+ *
+ * A `field-identifier` of whitespace alone, or none at all, names no field, so it has no row, and
+ * its value domain (`IdentifierDType`, an `xs:NCName`, never empty) refuses it alone: a missing
+ * value is a row of its own relation, never a sentinel (lane NIL's audit, B10; the orchestrator's
+ * ruling of 2026-11-06: one cause is refused under one rule).
+ */
+export const RecordFieldName = relation(
+  "RecordFieldName",
+  {
+    identifier: keyText,
+    identifierLead: Space,
+    identifierLexical: keyText,
+    identifierTrail: Space,
+    node: uuid,
+    parent: uuid,
   },
   ["node"],
 );
@@ -492,6 +521,12 @@ const spelledFieldBaseTypes = select(Attribute, (a) =>
 );
 
 /**
+ * The record fields whose `field-identifier` names something once collapsed: the fields each of
+ * which has its {@link RecordFieldName}. A form of whitespace alone is its value domain's alone.
+ */
+const namedFields = select(RecordField, (f) => Compute.matches(f.identifierLexical, namingPattern));
+
+/**
  * An outcome declaration's attribute that bounds or places its value on its normal scale.
  *
  * @param name - The attribute's name.
@@ -521,9 +556,9 @@ const normalMaximums = scaleAttributes("normal-maximum");
 type DeclarationRow = RowScalars<typeof Declaration>;
 
 /**
- * A `RecordField` row as a row check reads it.
+ * A `RecordFieldName` row as a row check reads it.
  */
-type RecordFieldRow = RowScalars<typeof RecordField>;
+type RecordFieldNameRow = RowScalars<typeof RecordFieldName>;
 
 /**
  * A `Value` row as a row check reads it.
@@ -562,13 +597,13 @@ const collapsedDeclared = (d: DeclarationRow) =>
   );
 
 /**
- * State that a record field's identifier is the collapsed form of its lexical form, as
+ * State that a record field's name is the collapsed form of its lexical form, as
  * {@link collapsedDeclared} states a declaration's.
  *
  * @param f - The row.
  * @returns The predicate.
  */
-const collapsedField = (f: RecordFieldRow) =>
+const collapsedField = (f: RecordFieldNameRow) =>
   f.and(
     f.eq(
       f.identifierLexical,
@@ -701,7 +736,8 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  * - **the copies (C18):** each overlay copies its node's {@link nodeRef} tuple; `Declaration` its
  *   `identifier` and `cardinality`, {@link DeclarationBaseType} its `base-type`, a value set its
  *   declaration's, a value its text and its set's types, {@link ValueBaseType} a value's own
- *   `base-type` that spells a code, a record field its `field-identifier` and `base-type`, and each
+ *   `base-type` that spells a code, a record field its `field-identifier` and `base-type`,
+ *   {@link RecordFieldName} its field's `field-identifier` where that names something, and each
  *   scale row its attribute. Each optional attribute's copy has a reverse containment, so a row
  *   holds a lexical form exactly where its element writes one.
  * - **existence:** a declaration has its row exactly where it writes its required `identifier` and
@@ -710,9 +746,11 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   row, and AL3 or the attribute's value domain refuses it alone (lane NIL's audit, B10 and B11: a
  *   missing value is a row of its own relation, never a sentinel; its copies refuse it too, after
  *   them). Every value set and value of a declaration with a row has its row through a containment
- *   from `Node`, every record value its field (`Value_cardinality`), and every outcome declaration
- *   that writes both ends of a pair of its scale its {@link MasteryFloor} or
- *   {@link MasteryCeiling}, through its counts.
+ *   from `Node`, every record value its field (`Value_cardinality`), every field whose
+ *   `field-identifier` names something its name, through {@link namedFields}, and every outcome
+ *   declaration that writes both ends of a pair of its scale its {@link MasteryFloor} or
+ *   {@link MasteryCeiling}, through its counts. A field whose `field-identifier` is whitespace
+ *   alone has no name, and its value domain refuses it alone.
  * - **E1 (C17), `E1_derived`:** a declaration's kind is its `Declares` kind; each code is the one its
  *   lexical form spells (`<Roster>Lexical`), a declaration's base type its
  *   {@link DeclarationBaseType}'s, and `none` exactly where it has none; each identifier is its
@@ -724,8 +762,9 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  * - **`Reserved type`**: SCORE, MAXSCORE, PASSED and QTI_CONTEXT keep their specified types.
  * - **`Declaration base type`**: a record has no base type, and every other variable has one.
  * - **`Value cardinality`**: a single variable's value set holds one value, and a record's set holds
- *   only fields, one per value, distinct by identifier (`Record field key`); a value writes a
- *   `field-identifier` or a `base-type` only as a field.
+ *   only fields, one per value, distinct by name (`Record field key`, over
+ *   {@link RecordFieldName}); a value writes a `field-identifier` or a `base-type` only as a
+ *   field.
  * - **`Typed value`** (C1, G-match): each value's text is a lexical form of its base type, its set's
  *   or, a record's field's, its own.
  * - **`Mastery range`** (C2, G-parse): the mastery value lies in the normal range, each pair judged
@@ -812,6 +851,14 @@ export const declarationLawsByName = {
       on(RecordField, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
+    contained(
+      on(RecordFieldName, "node", "parent", "identifierLexical"),
+      on(RecordField, "node", "parent", "identifierLexical"),
+    ),
+    contained(
+      on(namedFields, "node", "identifierLexical"),
+      on(RecordFieldName, "node", "identifierLexical"),
+    ),
     masteryValueFamily,
     contained(on(masteryValues, "node", "lexical"), on(MasteryValue, "node", "lexical")),
     contained(on(MasteryValue, "node"), on(masteryValues, "node")),
@@ -872,13 +919,13 @@ export const declarationLawsByName = {
     check("E1_derived", ValueBaseType, (b) =>
       b.eq(BaseTypeLexical.at("lexical", b.baseType), b.baseTypeLexical),
     ),
-    check("E1_derived", RecordField, collapsedField),
+    check("E1_derived", RecordFieldName, collapsedField),
   ],
   "Mastery range": [
     check("Mastery_range", MasteryFloor, floorCheck),
     check("Mastery_range", MasteryCeiling, ceilingCheck),
   ],
-  "Record field key": [key(on(RecordField, "parent", "identifier"))],
+  "Record field key": [key(on(RecordFieldName, "parent", "identifier"))],
   "Reserved type": [
     check("Reserved_type", Declaration, (d) =>
       d.and(

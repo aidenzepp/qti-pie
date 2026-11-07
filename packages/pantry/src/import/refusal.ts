@@ -666,6 +666,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       "Value",
       "ValueBaseType",
       "RecordField",
+      "RecordFieldName",
       "MasteryValue",
       "NormalMinimum",
       "NormalMaximum",

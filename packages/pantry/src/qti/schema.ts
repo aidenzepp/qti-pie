@@ -112,6 +112,7 @@ import {
   NormalMaximum,
   NormalMinimum,
   RecordField,
+  RecordFieldName,
   Value,
   ValueBaseType,
   ValueSet,
@@ -342,7 +343,8 @@ const packageRelations = {
 
 /**
  * `declarations.ts`'s relations: each variable's declaration and its base type, its value sets and
- * values, a value's own base type, a record's fields, and an outcome's mastery value and normal
+ * values, a value's own base type, a record's fields and their names, and an outcome's mastery
+ * value and normal
  * range, each end and each pair of them.
  */
 const declarationRelations = {
@@ -354,6 +356,7 @@ const declarationRelations = {
   NormalMaximum,
   NormalMinimum,
   RecordField,
+  RecordFieldName,
   Value,
   ValueBaseType,
   ValueSet,
