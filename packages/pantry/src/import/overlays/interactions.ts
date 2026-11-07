@@ -22,6 +22,7 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import type { Declaration } from "#pantry/qti/declarations.ts";
+import { declarationKinds } from "#pantry/qti/declarations.ts";
 import { itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import {
@@ -263,13 +264,15 @@ const treeFactsOf = (nodes: readonly NodeRow<Composed>[], context: DocumentConte
 
 /**
  * One document as the builders read it: its flat rows, its document node and root kind, the tree's
- * facts, each element's attributes, its declarations and whether it is an adaptive item.
+ * facts, each element's attributes, its declarations that have a `Declaration` row, the names only
+ * a declaration with none holds, and whether it is an adaptive item.
  */
 interface Context {
   readonly adaptive: boolean;
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
   readonly declared: readonly (DeclaredVariable & { readonly identifier: string })[];
   readonly document: NodeId;
+  readonly untyped: ReadonlySet<string>;
   readonly facts: TreeFacts;
   readonly rootKind: KindOfNode;
   readonly rows: FlatRows<Composed>;
@@ -327,27 +330,46 @@ const tupleOf = (context: Context, node: NodeRow<Composed>) => ({
  *
  * @param context - The document.
  * @param node - The element.
- * @returns Its fields; the kind none for an element that declares nothing.
+ * @returns Its fields; none for an element that declares nothing or a declaration with no row.
  */
 const declaredFieldsAt = (context: Pick<Context, "attributes">, node: NodeRow<Composed>) =>
   declaredFieldsOf(node.kind, (name) => Option.getOrUndefined(lexicalOf(context, node.id, name)));
 
 /**
- * Read a document's declarations, each declaring element that writes an `identifier`, as
- * {@link declaredFieldsAt} reads them; one that writes none names nothing a reference resolves to.
+ * Read a document's declarations as their `Declaration` rows hold them ({@link declaredFieldsAt}),
+ * and the names only a declaration with no row holds, one whose identifier or cardinality is
+ * unwritten or spells nothing, or whose base type spells nothing, which nothing binds or references
+ * (lane NIL's audit, B11). A declaring element that writes no `identifier` names nothing.
  *
  * @param context - The document, its declarations not yet read.
- * @returns The declarations.
+ * @returns The declarations and the untyped names.
  */
-const declaredOf = (context: Omit<Context, "adaptive" | "declared">): Context["declared"] =>
-  context.rows.nodes.flatMap((node) => {
-    const { declarationKind, ...fields } = declaredFieldsAt(context, node);
+const declaredOf = (
+  context: Omit<Context, "adaptive" | "declared" | "untyped">,
+): Pick<Context, "declared" | "untyped"> => {
+  const read = context.rows.nodes.flatMap((node) =>
+    declarationKinds.some((kind) => kind === node.kind)
+      ? Option.toArray(lexicalOf(context, node.id, "identifier")).map((identifier) => ({
+          fields: declaredFieldsAt(context, node),
+          node: node.id,
+          written: pieces(identifier).value,
+        }))
+      : [],
+  );
+  const declared = read.flatMap(({ fields, node }) =>
+    Option.toArray(fields).map((declaration) => ({ ...declaration, node })),
+  );
+  const names = new Set(declared.map(({ identifier }) => identifier));
 
-    return Option.isSome(declarationKind) &&
-      Option.isSome(lexicalOf(context, node.id, "identifier"))
-      ? [{ ...fields, declarationKind: declarationKind.value, node: node.id }]
-      : [];
-  });
+  return {
+    declared,
+    untyped: new Set(
+      read.flatMap(({ fields, written }) =>
+        Option.isNone(fields) && !names.has(written) ? [written] : [],
+      ),
+    ),
+  };
+};
 
 /**
  * Read a document for the builders.
@@ -379,7 +401,7 @@ const contextOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Context => 
     adaptive:
       item !== undefined &&
       Option.contains(Option.flatMap(valueOf(base, item.id, adaptiveName), booleanOf), true),
-    declared: declaredOf(base),
+    ...declaredOf(base),
   };
 };
 
@@ -441,6 +463,25 @@ const resolveIn = (
     }
   );
 };
+
+/**
+ * Resolve a name among one document's own declarations, as {@link resolveIn} does, but for a name
+ * only a declaration with no `Declaration` row holds, which nothing references: no row is written
+ * for it, and its declaration's own law refuses it alone (lane NIL's audit, B11).
+ *
+ * @param context - The document.
+ * @param identifier - The name, collapsed.
+ * @param allowed - The declaration kinds the name may resolve to.
+ * @returns The variable, or none for an untyped name.
+ */
+const resolve = (
+  context: Context,
+  identifier: string,
+  allowed: readonly ReferenceRow["declarationKind"][],
+): Option.Option<DeclaredVariable> =>
+  context.untyped.has(identifier)
+    ? Option.none()
+    : Option.some(resolveIn(context.declared, identifier, allowed));
 
 /**
  * Find the response declaration a binding names among its item's declarations. A built-in
@@ -666,8 +707,8 @@ const hottextsOf = (context: Context) =>
  * Build each identifier's {@link ChoiceVariableName} row: one per identifier a choice, a hottext
  * or a declaration of the document bears, each once, with the document's root kind. Its counts are
  * the families' to draw, so the row is the identifier alone. A declaration is read as Q5.08's
- * builder writes its `Declaration` row, its identifier collapsed or empty where it writes none (AL3
- * refuses that element), so every `Declaration` row has its projection row.
+ * builder writes its `Declaration` row (`typedDeclarationOf`), so every `Declaration` row has its
+ * projection row, and a declaration with none counts toward no name.
  *
  * @param context - The document.
  * @param choices - Its choices' rows.
@@ -683,11 +724,7 @@ const choiceNamesOf = (
     [
       ...[...choices.values()].map(({ identifier }) => identifier),
       ...[...hottexts.values()].map(({ identifier }) => identifier),
-      ...context.rows.nodes.flatMap((node) => {
-        const { declarationKind, identifier } = declaredFieldsAt(context, node);
-
-        return Option.isSome(declarationKind) ? [identifier] : [];
-      }),
+      ...context.declared.map(({ identifier }) => identifier),
     ].map(
       (identifier) =>
         [
@@ -893,24 +930,25 @@ const referencesOf = (
               reference.kinds.some((kind) => kind === row.kind) &&
               names(row.value),
           )
-          .map((row) => {
-            const variable = resolveIn(context.declared, row.value, allowedOf(row.name, row.kind));
-
-            return [
-              keyOf([row.node, row.name]),
-              {
-                attribute: row.name,
-                baseType: variable.baseType,
-                cardinality: variable.cardinality,
-                declaration: variable.node,
-                declarationKind: variable.declarationKind,
-                document: context.document,
-                identifier: row.value,
-                kind: row.kind,
-                node: row.node,
-              },
-            ] as const;
-          })
+          .flatMap((row) =>
+            Option.toArray(resolve(context, row.value, allowedOf(row.name, row.kind))).map(
+              (variable) =>
+                [
+                  keyOf([row.node, row.name]),
+                  {
+                    attribute: row.name,
+                    baseType: variable.baseType,
+                    cardinality: variable.cardinality,
+                    declaration: variable.node,
+                    declarationKind: variable.declarationKind,
+                    document: context.document,
+                    identifier: row.value,
+                    kind: row.kind,
+                    node: row.node,
+                  },
+                ] as const,
+            ),
+          )
       : [],
   );
 
@@ -1007,9 +1045,11 @@ const sectionPrints = [
  * Build the interaction overlays' rows of one document.
  *
  * A required attribute that is absent leaves out the row its copy proves (a choice's `identifier`,
- * a hotspot's `shape`), and AL3 refuses the element. A binding or a reference whose name no
- * declaration of the document holds is written resolved to the nil declaration, which
- * `declarationRef` refuses.
+ * a hotspot's `shape`), and AL3 refuses the element. A reference whose name no declaration of the
+ * document holds is written resolved to the nil declaration, which `declarationRef` refuses; a
+ * binding to it has no declaration row, which "Binding declared" refuses; and a binding or a
+ * reference to a name only a declaration with no `Declaration` row holds has neither, as that
+ * declaration's own law refuses it alone (lane NIL's audit, B11).
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.

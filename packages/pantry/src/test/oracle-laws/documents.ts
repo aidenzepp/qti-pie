@@ -22,7 +22,6 @@ import { booleanOf } from "#pantry/grammar/domains.ts";
 import {
   ancestorsOf,
   breachAt,
-  collapsedOf,
   elementsOf,
   field,
   typedOr,
@@ -234,9 +233,11 @@ const valueSetLawsOf = (
         return [];
       }
 
+      // A field's own base type outside its domain types nothing, as an unwritten one does: that
+      // domain refuses it alone (the ruling of 2026-11-06; lane NIL's audit, B11).
       const typed =
         baseType === "none"
-          ? Option.getOrElse(collapsedOf(rows, value.id, "base-type"), () => "none")
+          ? Option.getOrElse(typedValueOf(rows, value.id, "base-type"), () => "none")
           : baseType;
 
       return typedValueHolds(grammar, typed, value.stringValue)
@@ -262,20 +263,22 @@ const declarationLawsOf = (
   sessionVariables: ReadonlySet<string>,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
-  const written = {
-    cardinality: collapsedOf(rows, node.id, "cardinality"),
-    identifier: typedValueOf(rows, node.id, "identifier"),
-  };
-  // A declaration that writes no identifier or no cardinality is refused by AL3
-  // ("required-attribute") alone: an absent attribute is no empty one, and these laws do not read
-  // the `single` the schema holds an unwritten cardinality as.
-  if (Option.isNone(written.identifier) || Option.isNone(written.cardinality)) {
+  // A declaration that writes no identifier or no cardinality, or one of the three outside its
+  // value domain, is refused by AL3 ("required-attribute") or that domain ("attribute-lexical")
+  // alone: an absent attribute is no empty one, and it has no `Declaration` row for these laws to
+  // read (lane NIL's audit, B11). Each is read as its type reads it, and `base-type` and
+  // `cardinality` enumerate a restriction of `xs:string`, whose whiteSpace is `preserve`, so a
+  // padded form lies outside its domain.
+  const typed = Option.all([
+    typedValueOf(rows, node.id, "identifier"),
+    typedValueOf(rows, node.id, "cardinality"),
+    typedOr(rows, node.id, "base-type", "none"),
+  ]);
+  if (Option.isNone(typed)) {
     return [];
   }
 
-  const identifier = written.identifier.value;
-  const cardinality = written.cardinality.value;
-  const baseType = Option.getOrElse(collapsedOf(rows, node.id, "base-type"), () => "none");
+  const [identifier, cardinality, baseType] = typed.value;
   const keys = { baseType, cardinality, identifier };
   const reserved = reservedBaseTypes.get(identifier);
   const reservedBroken =
@@ -340,12 +343,12 @@ const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breac
     return Option.toArray(typedValueOf(rows, node.id, "response-identifier")).flatMap(
       (identifier) => {
         const declaration = declared.get(identifier);
-        // The cardinality as written, which max-strings judges only where it spells a container
-        // (the orchestrator's ruling of 2026-11-06: an absent attribute is no empty one).
+        // The cardinality as its type reads it, which max-strings judges only where it is a
+        // container (the orchestrator's ruling of 2026-11-06: an absent attribute is no empty one).
         const cardinality =
           declaration === undefined
             ? ""
-            : Option.getOrElse(valueOf(rows, declaration.id, "cardinality"), () => "");
+            : Option.getOrElse(typedValueOf(rows, declaration.id, "cardinality"), () => "");
         const inFeedback = [...step(grammar.ancestry, node.parentAncestry, node.kind)].some(
           (flag) => feedback.has(flag),
         );

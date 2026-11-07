@@ -189,22 +189,41 @@ const walkedPieces = (lexical: string) => {
 };
 
 /**
- * Collect a declaration's expected rows, and its outcome range's.
+ * Collect a declaration's expected rows, and its outcome range's, where it has them: its
+ * identifier written and naming something once collapsed, its cardinality written and spelling a
+ * handle, and its base type unwritten or spelling one. Any other declaration has no row, and no
+ * value set, value or field below it either (lane NIL's audit, B10 and B11: a missing value is a
+ * row of its own relation, never a sentinel).
  *
  * @param expected - The rows so far.
  * @param met - The declaration's element.
- * @returns What its value sets copy.
+ * @returns What its value sets copy, or none where it has no row.
  */
-const walkDeclaration = (expected: Expected, { tuple, valueOf }: Met): WalkedDeclaration => {
-  const identifierLexical = valueOf("identifier") ?? "";
-  const baseTypeLexical = valueOf("base-type") ?? "";
-  const cardinalityLexical = valueOf("cardinality") ?? "";
-  const { lead, name, trail } = walkedPieces(identifierLexical);
+const walkDeclaration = (
+  expected: Expected,
+  { tuple, valueOf }: Met,
+): Option.Option<WalkedDeclaration> => {
+  const identifierLexical = valueOf("identifier");
+  const baseTypeLexical = valueOf("base-type");
+  const cardinalityLexical = valueOf("cardinality");
+  const { lead, name, trail } = walkedPieces(identifierLexical ?? "");
+  const cardinality = spelledCardinalities.get(cardinalityLexical ?? "");
+  const baseType = baseTypeLexical === undefined ? "none" : spelledBaseTypes.get(baseTypeLexical);
+  if (
+    identifierLexical === undefined ||
+    name === "" ||
+    cardinalityLexical === undefined ||
+    cardinality === undefined ||
+    baseType === undefined
+  ) {
+    return Option.none();
+  }
+
   const row = {
     ...tuple,
-    baseType: spelledBaseTypes.get(baseTypeLexical) ?? "none",
-    baseTypeLexical,
-    cardinality: spelledCardinalities.get(cardinalityLexical) ?? "single",
+    baseType,
+    baseTypeLexical: baseTypeLexical ?? "",
+    cardinality,
     cardinalityLexical,
     declarationKind: tuple.kind,
     identifier: name,
@@ -231,7 +250,7 @@ const walkDeclaration = (expected: Expected, { tuple, valueOf }: Met): WalkedDec
     });
   }
 
-  return row;
+  return Option.some(row);
 };
 
 /**
@@ -353,7 +372,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
         )?.lexical,
     };
     const declaration = declaring.has(kind)
-      ? Option.some(walkDeclaration(expected, met))
+      ? walkDeclaration(expected, met)
       : Option.none<WalkedDeclaration>();
     const set =
       holding.has(kind) && Option.isSome(parent.declaration)
@@ -468,8 +487,8 @@ const generatedKinds = [
  */
 interface DeclarationCase {
   readonly baseType: string | undefined;
-  readonly cardinality: string;
-  readonly identifier: string;
+  readonly cardinality: string | undefined;
+  readonly identifier: string | undefined;
   readonly kind: (typeof generatedKinds)[number];
   readonly mastery: string | undefined;
   readonly minimum: string | undefined;
@@ -501,8 +520,10 @@ const piece: Gen<XdmChild<Composed>> = element<XdmChild<Composed>>([
 const declarationsGen: Gen<readonly DeclarationCase[]> = array(
   (source) => ({
     baseType: source.draw(element(["float", "identifier", "bogus", undefined] as const)),
-    cardinality: source.draw(element(["single", "multiple", "record"] as const)),
-    identifier: source.draw(element(["A", " B", "C\n", "\tD "] as const)),
+    cardinality: source.draw(
+      element(["single", "multiple", "record", undefined, "", "many", " single "] as const),
+    ),
+    identifier: source.draw(element(["A", " B", "C\n", "\tD ", undefined, "", " "] as const)),
     kind: source.draw(element(generatedKinds)),
     mastery: source.draw(element(["0.5", undefined] as const)),
     minimum: source.draw(element(["0", undefined] as const)),
@@ -533,6 +554,8 @@ const declarationsGen: Gen<readonly DeclarationCase[]> = array(
  */
 type Situation =
   | "field-outside-record"
+  | "no-identifier"
+  | "unspelled-cardinality"
   | "no-base-type"
   | "outcome-range"
   | "padded"
@@ -549,7 +572,25 @@ type Situation =
 const situationsOf = (input: readonly DeclarationCase[]): readonly Situation[] => {
   const values = input.flatMap(({ sets }) => sets.flatMap(({ values: held }) => held));
   const reached: [Situation, boolean][] = [
-    ["padded", input.some(({ identifier }) => identifier !== identifier.trim())],
+    [
+      "padded",
+      input.some(
+        ({ identifier }) =>
+          identifier !== undefined && identifier.trim() !== "" && identifier !== identifier.trim(),
+      ),
+    ],
+    [
+      "no-identifier",
+      input.some(({ identifier }) => identifier === undefined || identifier.trim() === ""),
+    ],
+    [
+      "unspelled-cardinality",
+      input.some(
+        ({ cardinality }) =>
+          cardinality === undefined ||
+          !["single", "multiple", "ordered", "record"].includes(cardinality),
+      ),
+    ],
     ["no-base-type", input.some(({ baseType }) => baseType === undefined)],
     ["unknown-base-type", input.some(({ baseType }) => baseType === "bogus")],
     ["record", input.some(({ cardinality, sets }) => cardinality === "record" && sets.length > 0)],
@@ -647,7 +688,8 @@ describe("import/overlays/declarations.ts", () => {
     // Oracle: a second implementation, a direct walk of the XDM document that numbers its nodes in
     // document order and reads each element's attributes and children, against the builder's read
     // of the tree's flat rows; the codes against `BaseTypeLexical` and `CardinalityLexical`.
-    // Bound: up to 3 declarations of 4 kinds, 4 identifiers, 4 base types and 3 cardinalities, each
+    // Bound: up to 3 declarations of 4 kinds, 7 identifiers (3 unwritten or naming nothing), 4
+    // base types (one spelling nothing) and 7 cardinalities (4 unwritten or spelling nothing), each
     // with up to 2 value sets of 1 to 3 values of up to 3 text pieces, 300 runs.
     searched(
       ctx,
@@ -658,6 +700,8 @@ describe("import/overlays/declarations.ts", () => {
           coverage: required<Situation>(
             [
               "padded",
+              "no-identifier",
+              "unspelled-cardinality",
               "no-base-type",
               "unknown-base-type",
               "record",

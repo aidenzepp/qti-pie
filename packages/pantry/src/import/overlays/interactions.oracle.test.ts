@@ -1004,7 +1004,11 @@ const nameTreeOf = (input: NameCase): XdmDocument<Composed> => {
           ws,
           elementOf(
             "qti-response-declaration",
-            name === undefined ? [] : [["identifier", name]],
+            [
+              ...(name === undefined ? [] : [["identifier", name] as const]),
+              ["cardinality", "single"],
+              ["base-type", "identifier"],
+            ],
             [],
           ),
         ]),
@@ -1040,8 +1044,9 @@ describe("import/overlays/interactions.ts, choice names", () => {
     (ctx) =>
       // Oracle: the specification as a checker, reading 104's projection read off the tree: the set
       // of every choice's and hottext's identifier and every declaration's, each collapsed (XML
-      // Schema Part 2 §4.3.6), a declaration without one as the empty name Q5.08's Declaration row
-      // holds, under the document node and the item's root kind.
+      // Schema Part 2 §4.3.6), under the document node and the item's root kind. A declaration
+      // without one has no Declaration row and names nothing (lane NIL's audit, B10), so AL3
+      // refuses it alone.
       // Bound: 0 to 2 declarations over 3 names by 0 to 2 marks over 3 kinds and 3 names,
       // 13 × 91 = 1,183.
       searched(
@@ -1066,7 +1071,9 @@ describe("import/overlays/interactions.ts, choice names", () => {
           },
           (input: NameCase, c) =>
             Effect.sync(() => {
-              const declared = input.declarations.map((name) => name?.trim() ?? "");
+              const declared = input.declarations.flatMap((name) =>
+                name === undefined ? [] : [name.trim()],
+              );
               const marked = input.marks.map(({ kind, name }) => ({ kind, name: name.trim() }));
               c.noteAll(
                 (

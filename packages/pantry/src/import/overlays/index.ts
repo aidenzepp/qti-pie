@@ -19,7 +19,10 @@
 import { Equal, Formatter, Result, Schema } from "effect";
 import { placedCatalogRowsOf, rowsOf as catalogRowsOf } from "#pantry/import/overlays/catalog.ts";
 import type { CatalogRows, PlacedCatalogRows } from "#pantry/import/overlays/catalog.ts";
-import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
+import {
+  rowsOf as declarationRowsOf,
+  untypedNamesOf,
+} from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import {
   assembledExpressionRowsOf,
@@ -353,6 +356,7 @@ export const overlayPartsOf = (
       declarations: built.flatMap(({ rows }) => [...rows.declarations.Declaration.values()]),
       instances: assembled.Instance.values(),
       references: built.flatMap(({ rows }) => [...rows.expressions.VariableRef.values()]),
+      untyped: documents.flatMap(({ ids, listed }) => untypedNamesOf(listed.tree, ids)),
     }),
     ...(manifest === undefined
       ? []

@@ -38,7 +38,6 @@ import { itemRefDocument, testDocumentsOf, testKinds } from "#pantry/test/oracle
 import {
   breachAt,
   collapsed,
-  collapsedOf,
   elementsOf,
   typedOr,
   typedValueOf,
@@ -405,15 +404,18 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
                   identifier,
                   node,
                   resolution: "declared",
+                  // A base type or a cardinality outside its domain types nothing, as an unwritten
+                  // one does: its declaration's value domain refuses it alone (the ruling of
+                  // 2026-11-06; lane NIL's audit, B11).
                   type: {
                     base: valueBaseOf(
                       Option.getOrElse(
-                        collapsedOf(rows, declaration.id, "base-type"),
+                        typedValueOf(rows, declaration.id, "base-type"),
                         () => "none",
                       ),
                     ),
                     cardinality: Option.getOrElse(
-                      collapsedOf(rows, declaration.id, "cardinality"),
+                      typedValueOf(rows, declaration.id, "cardinality"),
                       () => "unknown",
                     ),
                   },
@@ -885,15 +887,15 @@ export const expressionPackageBreaches = (
               Option.contains(typedValueOf(item.rows, held.id, "identifier"), template),
           ),
         ).pipe(
-          // A declaration that writes no cardinality is refused by AL3 alone, not compared as the
-          // `single` the schema holds it as (the orchestrator's ruling of 2026-11-06).
+          // A declaration that writes no cardinality, or a cardinality or a base type outside its
+          // domain, is refused by AL3 or that domain alone, as it has no `Declaration` row to
+          // compare against (the orchestrator's ruling of 2026-11-06; lane NIL's audit, B11).
           Option.flatMap((declaration) =>
-            Option.map(collapsedOf(item.rows, declaration.id, "cardinality"), (cardinality) => ({
-              base: valueBaseOf(
-                Option.getOrElse(collapsedOf(item.rows, declaration.id, "base-type"), () => "none"),
-              ),
-              cardinality,
-            })),
+            Option.zipWith(
+              typedOr(item.rows, declaration.id, "base-type", "none"),
+              typedValueOf(item.rows, declaration.id, "cardinality"),
+              (base, cardinality) => ({ base: valueBaseOf(base), cardinality }),
+            ),
           ),
         ),
       );

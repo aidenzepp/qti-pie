@@ -8751,6 +8751,14 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"declaration\" ADD CONSTRAINT \"__declaration_fk_node_fmwvj5nb36\" FOREIGN KEY (\"node\") REFERENCES \"qti\".\"attribute\" (\"__node_ytivgtmxbd\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"declaration\" ADD CONSTRAINT \"__declaration_fk_node_wyv42lidub\" FOREIGN KEY (\"node\") REFERENCES \"qti\".\"attribute\" (\"__node_lpxsr4hbto\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"declaration\" ADD CONSTRAINT \"__declaration_fk_node_document_kind_start_nearest_nmnr7f3tx7\" FOREIGN KEY (\"node\", \"document\", \"kind\", \"start\", \"nearest\", \"version\", \"parent\") REFERENCES \"qti\".\"node\" (\"id\", \"document\", \"kind\", \"start\", \"nearest\", \"version\", \"parent\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
@@ -22521,6 +22529,14 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__declaration_fk_node_fmwvj5nb36\" ON \"qti\".\"declaration\" IS 'foreign key Declaration(node) to Attribute(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-context-declaration\",\"qti-outcome-declaration\",\"qti-response-declaration\",\"qti-template-declaration\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"cardinality\"}})'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__declaration_fk_node_wyv42lidub\" ON \"qti\".\"declaration\" IS 'foreign key Declaration(node) to Attribute(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-context-declaration\",\"qti-outcome-declaration\",\"qti-response-declaration\",\"qti-template-declaration\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"identifier\"}})'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__declaration_fk_node_document_kind_start_nearest_nmnr7f3tx7\" ON \"qti\".\"declaration\" IS 'foreign key Declaration(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)'"
 					},
 					{
@@ -26070,7 +26086,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "a27384cb2a245da58be1ede862ada16d648af8281fd10f4979d51f7cbe08ba50"
+		"target": "0bb7efed9810af97c271002daabda949794895d644306e0054b61ebb99d5f69c"
 	},
-	"seal": "440b2502fc31e997d834ed60cd7f27c9e04eb5978b9cb35ab8afbb3ef48a6eb0"
+	"seal": "9d4a7ecc6e0f56d21c6cece39aa765f804dd39d2867065054c7de1ce3220ad0a"
 }

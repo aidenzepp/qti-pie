@@ -137,6 +137,25 @@ export interface Vocabulary extends KindsVocabulary {
 export const typedCardinalities = ["single", "multiple", "ordered"] as const;
 
 /**
+ * The cardinality of a record variable, whose fields carry their own base types and which has none.
+ */
+export const recordCardinality = "record";
+
+/**
+ * The forms a `cardinality` is spelled as, each the code it spells: the XSD's enumeration, a typed
+ * variable's three and `record`, the `Cardinality` roster's handles. The enumeration restricts
+ * `xs:string`, whose whitespace is preserved, so a form is compared as written: a padded one spells
+ * none, which its value domain refuses. It is the one reading of a cardinality, the importer's
+ * (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`) and the law oracle's, so a
+ * declaration whose `cardinality` spells none has no row and no law reads a type of it (lane NIL's
+ * audit, B11).
+ */
+export const spelledCardinalities: ReadonlySet<string> = new Set([
+  ...typedCardinalities,
+  recordCardinality,
+]);
+
+/**
  * Pair a vocabulary the pinned XSDs declare with its content models, its attribute declarations and
  * its facets: the leaves' rows of its kinds, the declarations as the spec readings that add or
  * remove an attribute read them (`readDeclarations`: readings 10 and 85).

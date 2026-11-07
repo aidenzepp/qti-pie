@@ -38,7 +38,7 @@ import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
-import { composed } from "#pantry/grammar/compose.ts";
+import { composed, recordCardinality } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
 import {
   cnForms,
@@ -240,11 +240,6 @@ export const BaseType = closed(
  * A generated value as a `BaseType` handle ({@link handleLookup}).
  */
 const asBaseType = handleLookup("BaseType", BaseType.handles);
-
-/**
- * The cardinality of a record variable, whose fields carry their own base types and which has none.
- */
-const recordCardinality = "record";
 
 /**
  * The `Cardinality` roster: the cardinalities of a typed variable, each spelled as its lexical

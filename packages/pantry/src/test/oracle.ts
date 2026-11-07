@@ -72,7 +72,6 @@ import {
   textDomainOf,
 } from "#pantry/grammar/attributes.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
-import { typedCardinalities } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import {
   contentEnds,
@@ -149,6 +148,7 @@ import {
   pathOf,
   resolvedAt,
   slotKey,
+  typedOr,
   typedValueOf,
   valueOf,
   viewOf,
@@ -3243,24 +3243,6 @@ interface Finding {
 }
 
 /**
- * Read a node's collapsed attribute: a declaration's `cardinality` and `base-type`, which VD's B11
- * patch reads as written through each type's own domain.
- *
- * @param overlay - The document.
- * @param node - The node.
- * @param name - The attribute's closed name.
- * @returns The collapsed form, or none when the node carries no such attribute.
- */
-const collapsedOf = (overlay: Overlay, node: FoldedNode<Composed>, name: string) =>
-  valueOf(overlay.view, node.id, name).pipe(Option.map(collapsed));
-
-/**
- * The cardinalities a declaration's `cardinality` spells: a typed variable's three and `record`,
- * the `Cardinality` roster's handles.
- */
-const spelledCardinalities: ReadonlySet<string> = new Set([...typedCardinalities, "record"]);
-
-/**
  * The attributes by which an interaction binds a response variable: its `response-identifier`,
  * and an entry interaction's `string-identifier` (§5.48.2, §5.162.3: "binding the interaction to a
  * second response variable (of base-type string)").
@@ -3268,28 +3250,49 @@ const spelledCardinalities: ReadonlySet<string> = new Set([...typedCardinalities
 const bindingNames = ["response-identifier", "string-identifier"] as const;
 
 /**
- * Read the cardinality a response declaration writes, where it writes one as a cardinality is
- * spelled: the bindings the fit laws judge ("BindingFit", "RecordBindingFit" and "Binding
- * cardinality"). A cardinality left unwritten is refused by AL3 alone, and one written as no
- * cardinality by its value domain alone, never by a fit law over a type the declaration does not
- * have (the orchestrator's ruling of 2026-11-06: an absent attribute is no empty one, and one cause
- * is refused under one rule). The schema's fit laws read a binding's `BindingDeclaration`
- * (`#pantry/qti/interactions.ts`), which only a declared binding has, and that row's cardinality is
- * the `Declaration` row's, which holds an unwritten or unspelled one as `single` (lane NIL's audit,
- * B11): until no `Declaration` row is written for one, a binding whose `single` its interaction
- * does not fit is refused by the schema under BindingFit as well as AL3 or the value domain.
+ * Read the base type a declaration writes, as its type reads it ({@link typedOr}): the type every
+ * law that reads one judges, a binding's fit, a mapping's or an area mapping's type, a map key's or
+ * a table value's form, and a feedback outcome's type. An unwritten `base-type` reads as empty. One
+ * written outside its value domain has none: that domain refuses it alone, never a law over a type
+ * the declaration does not have (the orchestrator's ruling of 2026-11-06: one cause is refused
+ * under one rule), and the schema writes no `Declaration` row for it, nor any row below it (lane
+ * NIL's audit, B11). Its type enumerates a restriction of `xs:string`, whose whiteSpace is
+ * `preserve`, so a padded form lies outside it (`imsqti_asiv3p0_v1p0.xsd`, each declaration's
+ * `base-type`).
  *
  * @param overlay - The item.
- * @param declaration - The response declaration.
- * @returns The cardinality as written, or none.
+ * @param declaration - The declaration, or none where the node it types has no declaration parent.
+ * @returns Its base type, empty where it writes none or there is no declaration, or none where it
+ *   writes one outside its domain.
  */
-const spelledCardinalityOf = (
+const baseTypeOf = (
+  overlay: Overlay,
+  declaration: FoldedNode<Composed> | undefined,
+): Option.Option<string> =>
+  declaration === undefined
+    ? Option.some("")
+    : typedOr(overlay.view, declaration.id, "base-type", "");
+
+/**
+ * Read the cardinality a declaration writes, as its type reads it ({@link typedValueOf}): the
+ * cardinality the fit laws judge ("BindingFit", "RecordBindingFit" and "Binding cardinality"), a
+ * lookup table's outcome's and a feedback outcome's. A cardinality left unwritten is refused by AL3
+ * alone, and one written outside its value domain by that domain alone, never by a law over a type
+ * the declaration does not have (the orchestrator's ruling of 2026-11-06: an absent attribute is no
+ * empty one, and one cause is refused under one rule). The schema's fit laws read a binding's
+ * `BindingDeclaration` (`#pantry/qti/interactions.ts`), which only a declared binding has, and that
+ * row's cardinality is the `Declaration` row's, which such a declaration does not have (lane NIL's
+ * audit, B11). Its type enumerates a restriction of `xs:string`, whose whiteSpace is `preserve`, so
+ * a padded form lies outside it (`imsqti_asiv3p0_v1p0.xsd`, each declaration's `cardinality`).
+ *
+ * @param overlay - The item.
+ * @param declaration - The declaration.
+ * @returns Its cardinality, or none where it writes none or one outside its domain.
+ */
+const cardinalityOf = (
   overlay: Overlay,
   declaration: FoldedNode<Composed>,
-): Option.Option<string> =>
-  Option.filter(valueOf(overlay.view, declaration.id, "cardinality"), (written) =>
-    spelledCardinalities.has(written),
-  );
+): Option.Option<string> => typedValueOf(overlay.view, declaration.id, "cardinality");
 
 /**
  * `xs:integer`'s lexical space.
@@ -3837,12 +3840,13 @@ const overlayLaws: readonly ((
         return [{ keys: { attribute, identifier }, law: "Binding declared" }];
       }
 
-      const cardinality = spelledCardinalityOf(overlay, response);
-      if (Option.isNone(cardinality)) {
+      const cardinality = cardinalityOf(overlay, response);
+      const typedBase = baseTypeOf(overlay, response);
+      if (Option.isNone(cardinality) || Option.isNone(typedBase)) {
         return [];
       }
 
-      const baseType = Option.getOrElse(collapsedOf(overlay, response, "base-type"), () => "");
+      const baseType = typedBase.value;
       if (attribute === "string-identifier") {
         return baseType === "string"
           ? []
@@ -3962,32 +3966,33 @@ const overlayLaws: readonly ((
           .map(({ identifier }): Finding => ({ keys: { identifier }, law: "Variable declared" }))
       : [],
   (node, overlay) => {
-    const mapped =
-      node.kind === "qti-response-declaration" &&
-      (overlay.view.childrenOf.get(node.id) ?? []).some(({ kind }) => kind === "qti-mapping");
-    const baseType = Option.getOrElse(collapsedOf(overlay, node, "base-type"), () => "");
+    const baseType = baseTypeOf(overlay, node);
 
-    return mapped && Option.isNone(overlay.laws.grammar.mappableBaseType.lookup({ baseType }))
-      ? [{ keys: { baseType }, law: "MappableBaseType" }]
+    return node.kind === "qti-response-declaration" &&
+      Option.isSome(baseType) &&
+      (overlay.view.childrenOf.get(node.id) ?? []).some(({ kind }) => kind === "qti-mapping") &&
+      Option.isNone(overlay.laws.grammar.mappableBaseType.lookup({ baseType: baseType.value }))
+      ? [{ keys: { baseType: baseType.value }, law: "MappableBaseType" }]
       : [];
   },
   (node, overlay) => {
     const children = overlay.view.childrenOf.get(node.id) ?? [];
-    const baseType = Option.getOrElse(collapsedOf(overlay, node, "base-type"), () => "");
-    // The cardinality the schema holds of the declaration (`cardinalityOf` of the declarations
-    // overlay): an unwritten or unspelled one is held as `single`, so its own laws refuse it
-    // (AL1's required attribute, the value domain) and Lookup table cardinality does not again.
-    const written = Option.getOrElse(collapsedOf(overlay, node, "cardinality"), () => "");
-    const cardinality = spelledCardinalities.has(written) ? written : "single";
+    const baseType = baseTypeOf(overlay, node);
+    // A declaration whose cardinality is unwritten or outside its domain has no `Declaration` row,
+    // nor any table row below it (the declarations overlay's `typedDeclarationOf`; lane NIL's audit,
+    // B11), so its own laws refuse it (AL3's required attribute, the value domain) and Lookup table
+    // cardinality does not again: such a cardinality is read as `single`, which it never judges.
+    const cardinality = Option.getOrElse(cardinalityOf(overlay, node), () => "single");
     const tables = children.filter(
       ({ kind }) => kind === "qti-match-table" || kind === "qti-interpolation-table",
     );
 
     return [
       ...(node.kind === "qti-response-declaration" &&
-      baseType !== "point" &&
+      Option.isSome(baseType) &&
+      baseType.value !== "point" &&
       children.some(({ kind }) => kind === "qti-area-mapping")
-        ? [{ keys: { baseType }, law: "AreaMapping base type" } as const]
+        ? [{ keys: { baseType: baseType.value }, law: "AreaMapping base type" } as const]
         : []),
       ...(node.kind === "qti-outcome-declaration" && cardinality !== "single"
         ? tables.map(({ kind }): Finding => ({
@@ -4002,11 +4007,12 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const declaration = overlay.view.byId.get(node.parent);
-    const baseType =
-      declaration === undefined
-        ? ""
-        : Option.getOrElse(collapsedOf(overlay, declaration, "base-type"), () => "");
+    const typedBase = baseTypeOf(overlay, overlay.view.byId.get(node.parent));
+    if (Option.isNone(typedBase)) {
+      return [];
+    }
+
+    const baseType = typedBase.value;
     const seen = new Set<string>();
 
     return (overlay.view.childrenOf.get(node.id) ?? [])
@@ -4039,11 +4045,12 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const declaration = overlay.view.byId.get(node.parent);
-    const baseType =
-      declaration === undefined
-        ? ""
-        : Option.getOrElse(collapsedOf(overlay, declaration, "base-type"), () => "");
+    const typedBase = baseTypeOf(overlay, overlay.view.byId.get(node.parent));
+    if (Option.isNone(typedBase)) {
+      return [];
+    }
+
+    const baseType = typedBase.value;
     const values = [
       ...Option.toArray(valueOf(overlay.view, node.id, "default-value")),
       ...(overlay.view.childrenOf.get(node.id) ?? []).flatMap(({ id }) =>
@@ -4168,9 +4175,7 @@ const overlayLaws: readonly ((
       ({ kind }) => kind === "qti-response-declaration",
     );
     const cardinality =
-      response === undefined
-        ? ""
-        : Option.getOrElse(spelledCardinalityOf(overlay, response), () => "");
+      response === undefined ? "" : Option.getOrElse(cardinalityOf(overlay, response), () => "");
 
     return Option.exists(most, (count) => count === 0n || count > 1n) && cardinality === "single"
       ? [
@@ -4231,15 +4236,16 @@ const overlayLaws: readonly ((
         : [];
     }
 
-    // An outcome that writes no cardinality is refused by AL3 ("required-attribute") alone, not
-    // judged as the `single` the schema holds it as (the orchestrator's ruling of 2026-11-06).
-    const written = collapsedOf(overlay, outcome, "cardinality");
-    if (Option.isNone(written)) {
+    // An outcome that writes no cardinality, or one outside its domain, or a base type outside its
+    // domain, is refused by AL3 ("required-attribute") or that domain alone, as it has no
+    // `Declaration` row for a reference to read (the orchestrator's ruling of 2026-11-06; lane
+    // NIL's audit, B11).
+    const typed = Option.all([baseTypeOf(overlay, outcome), cardinalityOf(overlay, outcome)]);
+    if (Option.isNone(typed)) {
       return [];
     }
 
-    const baseType = Option.getOrElse(collapsedOf(overlay, outcome, "base-type"), () => "");
-    const cardinality = written.value;
+    const [baseType, cardinality] = typed.value;
 
     return baseType === "identifier" && (cardinality === "single" || cardinality === "multiple")
       ? []

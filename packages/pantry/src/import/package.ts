@@ -262,7 +262,7 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   if (outcome.kind === "invariant-rejected") {
     // The laws the refusal names, by how grizzle decided them (grizzle-engine
     // `src/types/changeset/changeset.ts:895` and `src/write/program/witness.ts`'s hostJudgement at
-    // `234e398`):
+    // `4aa817a`):
     // - `every`: every law of the refused row's table that the stated row breaks, each once, in
     //   the schema's order; for any other refusal, the laws its one PostgreSQL object discharges.
     // - `first`: the laws of the first CHECK PostgreSQL tried, where grizzle's host cannot witness

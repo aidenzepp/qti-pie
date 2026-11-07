@@ -107,6 +107,16 @@ export const baseTypes: readonly string[] = [
 ];
 
 /**
+ * The forms a `base-type` is spelled as, each the code it spells: {@link baseTypes}, the XSD's
+ * `BaseTypeDType` enumeration. It restricts `xs:string`, whose whitespace is preserved, so a form
+ * is compared as written: a padded one spells none, which its value domain refuses. It is the one
+ * reading of a base type, the importer's and the law oracle's, so a declaration whose `base-type`
+ * is written and spells none has no row and no law reads a type of it (the orchestrator's ruling of
+ * 2026-11-06: one cause is refused under one rule; lane NIL's audit, B11).
+ */
+export const spelledBaseTypes: ReadonlySet<string> = new Set(baseTypes);
+
+/**
  * One attribute a kind declares in some schema versions: the leaf's `AttributeDeclaration`, or one
  * the composition states (the document layer's `xml:` and `xsi:` names and the open classes), each
  * with its XSD type and that type's resolved domain.

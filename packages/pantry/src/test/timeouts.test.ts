@@ -54,6 +54,10 @@ const hangGuardMs = 60_000;
  */
 const exempt: ReadonlyMap<string, string> = new Map([
   [
+    "pantry/src/test/declaration-rows.oracle.test.ts",
+    "measurement owed: its 338-case exhaust ran 620.1 s in lane NIL's run of 2026-11-07 under the swarm, whose load was not recorded, and 48.3 s at a load average of 5 to 12; its 1_800_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/test/census.migration.test.ts",
     "LANES.md: no lane touches census.migration.test.ts, so its timeout is named when its owner edits it",
   ],

@@ -300,19 +300,6 @@ export const valueOf = (view: View, node: NodeId, name: string): Option.Option<s
   Option.fromNullishOr(view.valuesOf.get(node)?.get(name));
 
 /**
- * Read an element's closed attribute collapsed: a declaration's `cardinality` and `base-type`,
- * which VD's B11 patch reads as written through each type's own domain. Every other read is
- * {@link typedValueOf}'s.
- *
- * @param view - The document.
- * @param node - The element's id.
- * @param name - The attribute's closed name.
- * @returns Its collapsed form, or none when the element carries no such attribute.
- */
-export const collapsedOf = (view: View, node: NodeId, name: string): Option.Option<string> =>
-  Option.map(valueOf(view, node, name), collapsed);
-
-/**
  * Read an element's closed attribute as its type reads it ({@link TypedReading}): the form every
  * law past AL1 compares an identifier, a number or a code in.
  *

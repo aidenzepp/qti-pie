@@ -14,7 +14,8 @@
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import { BaseType, ResourceType } from "#pantry/grammar/install.ts";
+import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
+import { ResourceType } from "#pantry/grammar/install.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -110,19 +111,6 @@ type ResourceTypeHandle = Addition<typeof LomResource>["named"];
  */
 const spelledTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
   ResourceType.handles.flatMap((handle) => (handle === "none" ? [] : [[handle, handle] as const])),
-);
-
-/**
- * The `BaseType` handle a usage value's `baseType` names.
- */
-type BaseTypeHandle = Addition<typeof UsageValue>["baseType"];
-
-/**
- * The `BaseType` handles a lexical form can spell: every one but the null object `none`, which
- * `BaseTypeLexical` holds no row for (C17), each spelled as itself.
- */
-const spelledBaseTypes: ReadonlyMap<string, BaseTypeHandle> = new Map(
-  BaseType.handles.flatMap((handle) => (handle === "none" ? [] : [[handle, handle] as const])),
 );
 
 /**
@@ -729,7 +717,7 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
         [
           node.id,
           {
-            baseType: spelledBaseTypes.get(lexical) ?? "none",
+            baseType: spelledBaseTypes.has(lexical) ? lexical : "none",
             baseTypeLexical: lexical,
             node: node.id,
             text: tree.stringValueOf(node.id),

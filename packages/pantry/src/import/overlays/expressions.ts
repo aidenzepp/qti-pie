@@ -32,7 +32,7 @@ import type {
 import { BuiltInVariable, nonElementKinds } from "#pantry/grammar/install.ts";
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
-import { baseTypeOf, cardinalityOf, piecesOf } from "#pantry/import/overlays/declarations.ts";
+import { baseTypeOf, piecesOf, typedDeclarationOf } from "#pantry/import/overlays/declarations.ts";
 import { itemRefPathsOf, keyOf } from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledRows,
@@ -530,7 +530,8 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
 /**
  * One document as the builder reads it: its flat rows indexed by node, each node's attributes,
  * children, fold (`#pantry/import/fold.ts`, its nearest interaction among the rest) and processing
- * language, its root's kind and its declarations.
+ * language, its root's kind, its declarations that have a `Declaration` row, and the names only a
+ * declaration with none holds.
  */
 interface Document {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>>;
@@ -538,6 +539,7 @@ interface Document {
   readonly childrenOf: ReadonlyMap<NodeId, readonly NodeRow<Composed>[]>;
   readonly declarations: ReadonlyMap<string, DeclarationEntry>;
   readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly untyped: ReadonlySet<string>;
   readonly id: NodeId;
   readonly language: ReadonlyMap<NodeId, Language>;
   readonly rootKind: NodeRow<Composed>["kind"];
@@ -603,39 +605,56 @@ const languagesOf = (
 
 /**
  * The document's declarations by collapsed identifier, the first of a repeated one (which
- * `declaration-key` refuses), each with the tables it holds.
+ * `declaration-key` refuses), each with the tables it holds: those with a `Declaration` row
+ * (`typedDeclarationOf`), and the names only declarations with none hold, whose identifier or
+ * cardinality is unwritten or spells nothing. No reference to such a name is written: AL3 or the
+ * value domain refuses its declaration alone, and no law reads a type it does not have (lane NIL's
+ * audit, B11).
  *
  * @param rows - The document's flat rows.
  * @param attributes - Each element's attributes.
  * @param childrenOf - Each node's children.
- * @returns The declarations.
+ * @returns The declarations, and the untyped names.
  */
 const declarationsOf = (
   rows: FlatRows<Composed>,
   attributes: Document["attributes"],
   childrenOf: Document["childrenOf"],
-): ReadonlyMap<string, DeclarationEntry> => {
+): Pick<Document, "declarations" | "untyped"> => {
   const declarations = new Map<string, DeclarationEntry>();
+  const unnamed = new Set<string>();
   for (const node of rows.nodes) {
-    const identifier = attributes.get(node.id)?.get("identifier")?.lexical;
-    const name = identifier === undefined ? undefined : piecesOf(identifier).name;
-    if (declarationKinds.has(node.kind) && name !== undefined && !declarations.has(name)) {
-      const lexical = (attribute: string) => attributes.get(node.id)?.get(attribute)?.lexical;
-      declarations.set(name, {
-        baseType: baseTypeOf(lexical("base-type")),
-        cardinality: cardinalityOf(lexical("cardinality") ?? ""),
-        kind: node.kind,
-        node: node.id,
-        tables: new Set(
-          (childrenOf.get(node.id) ?? []).flatMap(({ kind }) =>
-            tableKinds.has(kind) ? [kind] : [],
-          ),
-        ),
+    const lexical = (attribute: string) => attributes.get(node.id)?.get(attribute)?.lexical;
+    const identifier = lexical("identifier");
+    if (declarationKinds.has(node.kind) && identifier !== undefined) {
+      const typed = typedDeclarationOf({
+        baseType: lexical("base-type"),
+        cardinality: lexical("cardinality"),
+        identifier,
       });
+      const { name } = piecesOf(identifier);
+      if (Option.isNone(typed)) {
+        unnamed.add(name);
+      } else if (!declarations.has(name)) {
+        declarations.set(name, {
+          baseType: typed.value.baseType,
+          cardinality: typed.value.cardinality,
+          kind: node.kind,
+          node: node.id,
+          tables: new Set(
+            (childrenOf.get(node.id) ?? []).flatMap(({ kind }) =>
+              tableKinds.has(kind) ? [kind] : [],
+            ),
+          ),
+        });
+      }
     }
   }
 
-  return declarations;
+  return {
+    declarations,
+    untyped: new Set([...unnamed].filter((name) => !declarations.has(name))),
+  };
 };
 
 /**
@@ -658,7 +677,7 @@ const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document =
     attributes,
     byId,
     childrenOf,
-    declarations: declarationsOf(rows, attributes, childrenOf),
+    ...declarationsOf(rows, attributes, childrenOf),
     folds: foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node)),
     id: rows.document.node,
     language: languagesOf(rows, byId),
@@ -741,7 +760,8 @@ const resolve = (doc: Document, name: string) => {
  * @param doc - The document.
  * @param node - The element.
  * @param attribute - The attribute it makes the reference by.
- * @returns The row, or none for a literal value.
+ * @returns The row, or none for a literal value and for a name only a declaration with no row
+ *   holds (`declarationsOf`).
  */
 const referenceOf = (
   doc: Document,
@@ -749,7 +769,7 @@ const referenceOf = (
   attribute: AttributeRow<Composed>,
 ): Addition<typeof VariableRef> | undefined => {
   const spelled = spelledBy(node, attribute);
-  if (spelled === undefined) {
+  if (spelled === undefined || doc.untyped.has(spelled.name)) {
     return undefined;
   }
 
@@ -1141,9 +1161,9 @@ const lookupOf = (held: ReadonlySet<string>): ReferencedTable => heldTableOf(loo
 const tableReaderKinds: ReadonlySet<string> = new Set(tablesRead.keys());
 
 /**
- * Write a document's declaration tables: a row for every declaration that holds a table, and for
- * every declaration a map response or a lookup names, each slot the table the declaration holds
- * there or `none`.
+ * Write a document's declaration tables: a row for every declaration with a `Declaration` row that
+ * holds a table, and for every such declaration a map response or a lookup names, each slot the
+ * table the declaration holds there or `none`.
  *
  * @param doc - The document.
  * @param references - Its references.
@@ -1162,8 +1182,9 @@ const declarationTablesOf = (
         : [],
     ),
   );
+  const typed = new Set([...doc.declarations.values()].map(({ node }) => node));
   const tables = new Map<string, Addition<typeof DeclarationTable>>();
-  for (const node of doc.rows.nodes) {
+  for (const node of doc.rows.nodes.filter(({ id }) => typed.has(id))) {
     const held = new Set(
       (doc.childrenOf.get(node.id) ?? []).flatMap(({ kind }) =>
         tableKinds.has(kind) ? [kind] : [],
@@ -2315,29 +2336,36 @@ const placedResolutionOf = (
  * item's assembly, every `VariableRef` of the instance's document, its name resolved as an item's
  * own is, among the item's declarations, else to one of an item's built-in variables, else to
  * nothing, which "Variable declared" refuses; and for each name that resolves to no declaration,
- * the item's absent lookup that proves it.
+ * the item's absent lookup that proves it. A name only an item's declaration with no `Declaration`
+ * row holds is placed nowhere, as its own references are written nowhere (`declarationsOf`).
  *
  * @param input - The package's rows the placed references read.
  * @param input.declarations - Every declaration of the package (Q5.08's `Declaration` rows).
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
  * @param input.references - Every document's references ({@link rowsOf}'s `VariableRef`).
+ * @param input.untyped - Every document's names only a declaration with no row holds
+ *   (`#pantry/import/overlays/declarations.ts` `untypedNamesOf`).
  * @returns The rows.
  */
 export const placedVariableRowsOf = (input: {
   readonly declarations: Iterable<Addition<typeof Declaration>>;
   readonly instances: Iterable<InstanceRoot>;
   readonly references: Iterable<Addition<typeof VariableRef>>;
+  readonly untyped: Iterable<{ readonly document: NodeId; readonly name: string }>;
 }): PlacedVariableRows => {
   const declared = new Map(
     [...input.declarations].map((row) => [keyOf([row.document, row.identifier]), row] as const),
   );
+  const untyped = new Set([...input.untyped].map(({ document, name }) => keyOf([document, name])));
   const referencesOf = Map.groupBy(input.references, ({ document }) => document);
   const placed = new Map<string, Addition<typeof PlacedVariableRef>>();
   const lookups = new Map<string, Addition<typeof VariableLookup>>();
   for (const root of input.instances) {
     for (const instance of root.assemblyKind === itemKind ? instancesIn(root) : []) {
-      for (const reference of referencesOf.get(instance.document) ?? []) {
+      for (const reference of (referencesOf.get(instance.document) ?? []).filter(
+        ({ identifier }) => !untyped.has(keyOf([root.assembly, identifier])),
+      )) {
         const declaration = declared.get(keyOf([root.assembly, reference.identifier]));
         placed.set(keyOf([instance.id, reference.node, reference.attribute]), {
           ...placedResolutionOf(declaration, reference.identifier),

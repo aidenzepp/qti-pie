@@ -100,7 +100,7 @@ type InputRow =
  * @param inputs - The import's inputs.
  * @returns The rows of each relation.
  */
-const rowsByRelation = (inputs: PackageInputs): ReadonlyMap<string, readonly InputRow[]> => {
+export const rowsByRelation = (inputs: PackageInputs): ReadonlyMap<string, readonly InputRow[]> => {
   const { Instance, Node, ...flat } = inputs;
   const nodes = (node: NodeMember): readonly NodeMember[] => [
     node,
