@@ -1688,9 +1688,12 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
     and refused with 23503.
 - **At `e9227af`:** `AriaRange` → `AriaValue` and the owner axis are deferred, because the owner axis counts in the
   cycle search and `AriaElement` → `AriaRange` → `AriaValue` → `AriaElement` is a cycle. The acyclic form is ordered by
-  the joint schedule. Standalone reproduction: `~/.cache/gr8des/integration/grizzle-repros/ar-order/` (case, cycle,
-  control).
-- **qti-pie's workaround:** none. The import needs the repin, which `e9227af`'s next entry blocks.
+  the joint schedule, so both forms are fixed there. Standalone reproduction:
+  `~/.cache/gr8des/integration/grizzle-repros/ar-order/` (case, cycle, control), and lane N2's SQL run of it,
+  `~/.cache/gr8des/n2/repro/ar-order-n2.out`, where the immediate key refuses `r`'s insert with `Key (node, v)=(…0001,
+  10) is not present in table "m"`.
+- **Classification:** confirmed, a grizzle defect, fixed in `e9227af`.
+- **qti-pie:** no workaround. The import needs the repin, which the `UnorderableStratum` entry below blocks.
 
 ### A ChangeSet chain of more than about 94 inserts is TS2589 at `e9227af` (grizzle defect, type layer)
 
@@ -1713,7 +1716,7 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 - **Status:** relayed to grizzle-c5, with a guard asked for: a 300-insert chain that typechecks in linear time, with
   a planted nested variant shown failing. Not filed.
 
-### `UnorderableStratum` on qti-pie's import ChangeSet at `e9227af` (under triage)
+### `UnorderableStratum` on qti-pie's import ChangeSet at `e9227af`, whose cycle is not real (grizzle defect, confirmed; lane AR)
 
 - **What happens:** `e9227af`'s single schedule, in which plain and family statements share one order, refuses qti-pie's
   152-insert stratum:
@@ -1721,14 +1724,30 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   a cycle of 52 statements through the count of `ReferringDocument`, the insert of `SectionScope` and the update of
   `SectionTemplateRef` (R87's compile at `e9227af`,
   `~/.cache/gr8des/integration/grizzle-repros/chain-depth/clean-f-r87.out`). At `1bf3dbb` the same stratum compiled.
-- **Lane AR's reduction:** a 4-relation reproduction (`~/.cache/gr8des/integration/grizzle-repros/ar-order/`,
-  `unorderable`) fails at `e9227af` and compiles at `1bf3dbb`. The preliminary cause is that the joint schedule
-  treats a family's in-place update, which sets only hidden index columns, as an addition for every reference from
-  its relation (`schedule.ts:253`), and chains every family statement in one total order (`schedule.ts:159`). The
-  import's ChangeSet is in the author login's workload (`src/qti/logins.ts:54`, `importWork`), so at `e9227af`
-  `grizzle generate` refuses at stage generate, as the reproduction's generate does.
-- **Status:** under triage, not yet through the six-step gate. Lane AR is computing whether the immediate keys alone
-  make a cycle, and grizzle-c5 has the text. It blocks repin F.
+- **The cycle is not real** (lane AR, checked at `e9227af`, still `origin/main`):
+  - The NOT DEFERRABLE foreign keys among the cycle's 31 relations number 4 in `e9227af`'s own draft, and they form no
+    cycle among relations: `AssembledLang` → `DocumentGenerals`, `AssembledReference` → `TestReference`, `SectionScope`
+    → `ReferringDocument`, and `SectionTemplateRef` → `SectionScope` (its owner axis, ON UPDATE CASCADE). The `1bf3dbb`
+    draft has 10, among them the owner axes of `Site`, `VariableRef` and `XmlLang` and `DocumentLang`'s key, which
+    `e9227af` defers.
+  - The 52-statement cycle has 2 key edges and 50 chain edges. The key edges run from the count of `ReferringDocument`
+    to the insert of `SectionScope` (its key over the counts), then to the update of `SectionTemplateRef` (the owner
+    axis). The chain edges come from `write/frontend/schedule.ts:158-163`, where each family statement follows the
+    previous one. That makes one total order over every family of the stratum (deletes, then updates in place, then
+    counts, then inserts; `compile.ts:1745-1786`, `familyNodesOf`), so an update of `SectionTemplateRef` precedes the
+    count of `ReferringDocument`, a family it has no key to.
+  - The evidence: `e9227af`'s scheduler run on the import ChangeSet, patched at load time, with a Tarjan search for
+    cyclic components (`~/.cache/gr8des/integration/grizzle-repros/ar-order/pantry-schedule/`, `sched.out` and
+    `immediate-fks.out`). As shipped, it finds 1 component of 90 statements, and the ChangeSet is refused. With the chain
+    kept only between related family statements (the same relation, or an owner and its member) and every key edge
+    kept, it finds 0 components, and the ChangeSet compiles. With update and count edges kept only where their columns
+    meet the key's and the total chain kept, it is still refused, with 64 statements.
+  - The standalone 4-relation reproduction is `ar-order` `unorderable`: it fails at `e9227af` and compiles at
+    `1bf3dbb`.
+- **Classification:** a grizzle defect, introduced by `e9227af`'s joint schedule, the fix for the `AriaRange` class.
+- **Status:** relayed to grizzle-c5's lane F as a hotfix with a guard. Nothing is filed. qti-pie carries no workaround:
+  `ChangeSet.sequence`, which the refusal suggests, would split the import into strata, and is ruled out. It blocks
+  repin F.
 
 ### A nested write's dedupe signature concatenates every member's full content text, so a lawful write past V8's string limit dies in the host (grizzle defect, confirmed; lane N2)
 
