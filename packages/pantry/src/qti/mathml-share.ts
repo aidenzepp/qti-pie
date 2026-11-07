@@ -16,8 +16,9 @@
  *   containment of `(parent, parentRank)` into `(node, rank)`). Every element below an `m:math` has
  *   a parent that is a MathML element (the grammar admits no MathML kind but `m:math` under another
  *   parent), so the parents' rows are written step by step up to the root, an `m:math`, whose
- *   `parentRank` states nothing. `E1_derived` holds the root's rank free and every other row's rank
- *   below its `parentRank`.
+ *   `parentRank` states nothing. A target no `m:math` holds has a chain that ends at the document
+ *   node instead, the one node that is its own parent: its row states nothing either. `E1_derived`
+ *   holds each of those two tops' rank free and every other row's rank below its `parentRank`.
  * - **{@link ShareTarget}**, one row per `m:share` with a same-document fragment, keyed by the
  *   share's node: its `document` and `id` as {@link ShareFragment} holds them, `target`, the
  *   element that carries the id (an {@link IdBinding} owner), and the two ranks, `shareRank` copied
@@ -106,10 +107,10 @@ export const ShareTarget = relation(
 );
 
 /**
- * The {@link MathRank} rows below a tree's root: every row but an `m:math`'s, each tied to its
- * parent's row.
+ * The {@link MathRank} rows below a chain's top: every row but an `m:math`'s and the document
+ * node's (the one node that is its own parent), each tied to its parent's row.
  */
-const innerRanks = select(MathRank, (r) => r.ne(r.kind, "m:math"));
+const innerRanks = select(MathRank, (r) => r.and(r.ne(r.kind, "m:math"), r.ne(r.node, r.parent)));
 
 /**
  * The relations the share law declares, each under its own name, as `#pantry/qti/schema.ts`
@@ -121,8 +122,9 @@ export const shareRelations = { MathRank, ShareTarget };
  * Every statement over the module's relations, the check named by its law:
  *
  * - **the ranks:** each row's `nodeRef` tuple proved by containment, and `E1_derived`: an element's
- *   rank is above its parent's for every kind but `m:math`, the root of a tree, and each row's
- *   `(parent, parentRank)` contained in its parent's `(node, rank)`;
+ *   rank is above its parent's for every kind but `m:math`, the root of a tree, and the document
+ *   node, which is its own parent and ends the chain of a target no `m:math` holds, and each other
+ *   row's `(parent, parentRank)` contained in its parent's `(node, rank)`;
  * - **the targets:** a {@link ShareTarget} row for each {@link ShareFragment} and no other (both
  *   ways), its `target` an owner of its id under {@link IdBinding}, its two ranks copied from the
  *   {@link MathRank} rows of the share and of the target, and `MathML_share_cycle`: the share's
@@ -134,7 +136,9 @@ export const shareLaws: readonly Statement[] = [
     nodeRef,
   ),
   contained(on(innerRanks, "parent", "parentRank"), on(MathRank, "node", "rank")),
-  check("E1_derived", MathRank, (r) => r.or(r.eq(r.kind, "m:math"), r.lt(r.rank, r.parentRank))),
+  check("E1_derived", MathRank, (r) =>
+    r.or(r.eq(r.kind, "m:math"), r.eq(r.node, r.parent), r.lt(r.rank, r.parentRank)),
+  ),
 
   mirrors(on(ShareTarget, "node", "document", "id"), on(ShareFragment, "node", "document", "id")),
   contained(on(ShareTarget, "document", "id", "target"), on(IdBinding, "document", "id", "owner")),
