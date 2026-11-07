@@ -2204,84 +2204,146 @@ const printedSource = "info.txt:70296";
 const printedKinds = "outcome template";
 
 /**
- * Report whether a declaration declares a template or an outcome variable, the kinds a printed
- * variable names.
- *
- * @param declaration The declaration.
- * @returns Whether it is a `qti-template-declaration` or a `qti-outcome-declaration`.
+ * The kind of variable a printed variable may name or be refused for naming.
  */
-const isTemplateOrOutcome = (declaration: SourceElement): boolean =>
-  isQti(
-    declaration,
-    (local) => local === "qti-template-declaration" || local === "qti-outcome-declaration",
-  );
+type PrintedKind = "context" | "outcome" | "response" | "template";
 
 /**
- * Give the kind of variable a declaration that is neither a template nor an outcome declaration
- * declares, as a refusal's `variableKind` names it: `response` or `context`.
- *
- * @param declaration The declaration, a response or a context declaration.
- * @returns Its kind.
+ * The kind of each built-in variable, which is declared implicitly (`info.txt:8440`): "There are
+ * two built-in response variables: 'numAttempts' and 'duration'" (`:8466`), "There is one built-in
+ * outcome variable, 'completionStatus'" (`:8488`), and "There is one built-in context variable:
+ * 'QTI_CONTEXT'" (`:8456`). Their types are {@link builtIns}'.
  */
-const otherKind = (declaration: SourceElement): string =>
-  isQti(declaration, (local) => local === "qti-response-declaration") ? "response" : "context";
+const builtInKinds: ReadonlyMap<string, PrintedKind> = new Map<string, PrintedKind>([
+  ["completionStatus", "outcome"],
+  ["duration", "response"],
+  ["numAttempts", "response"],
+  ["QTI_CONTEXT", "context"],
+]);
+
+/**
+ * The kind each declaration that a `qti-variable` may read declares, by its local name.
+ */
+const declarationKinds: ReadonlyMap<string, PrintedKind> = new Map<string, PrintedKind>([
+  ["qti-context-declaration", "context"],
+  ["qti-outcome-declaration", "outcome"],
+  ["qti-response-declaration", "response"],
+  ["qti-template-declaration", "template"],
+]);
+
+/**
+ * The variable a printed variable's attribute names: its kind, and its type unless its
+ * declaration's type is not judged ({@link declarationType}).
+ */
+interface PrintedTarget {
+  readonly kind: PrintedKind;
+  readonly type: Option.Option<ExpressionType>;
+}
+
+/**
+ * Find the variable a name a printed variable gives names: a declaration of the item, or else a
+ * built-in, which counts as declared (Mind amendment 1 to `p8-06e`, from `info.txt:8440`). A
+ * declaration wins over a built-in of the same name, as {@link variableType} finds one; the
+ * structural walk refuses such a declaration.
+ *
+ * @param identifier The name.
+ * @param context The item's declarations.
+ * @returns The variable's kind and type; none when neither a declaration nor a built-in answers.
+ */
+const printedTarget = (identifier: string, context: Context): Option.Option<PrintedTarget> => {
+  const declaration = context.variables.get(identifier);
+  if (declaration !== undefined) {
+    return Option.map(
+      Option.fromUndefinedOr(declarationKinds.get(declaration.local)),
+      (kind): PrintedTarget => ({ kind, type: declarationType(declaration) }),
+    );
+  }
+
+  return Option.map(
+    Option.fromUndefinedOr(builtInKinds.get(identifier)),
+    (kind): PrintedTarget => ({ kind, type: Option.fromUndefinedOr(builtIns.get(identifier)) }),
+  );
+};
+
+/**
+ * Report whether a kind of variable is one a printed variable prints: a template or an outcome.
+ *
+ * @param kind The kind.
+ * @returns Whether it is `template` or `outcome`.
+ */
+const printable = (kind: PrintedKind): boolean => kind === "template" || kind === "outcome";
+
+/**
+ * Construct the `undeclared-variable` refusal of a name a printed variable's attribute gives that
+ * nothing declares or builds in.
+ *
+ * @param source The document.
+ * @param path The attribute's path.
+ * @param attribute The attribute's local name.
+ * @param identifier The name.
+ * @returns The refusal, at the attribute's path.
+ */
+const printedUndeclared = (
+  source: SourceDocument,
+  path: string,
+  attribute: string,
+  identifier: string,
+): Refusal =>
+  refusal(source, "undeclared-variable", path, {
+    attribute,
+    element: "qti-printed-variable",
+    expected: printedKinds,
+    identifier,
+  });
 
 /**
  * Judge what a printed variable's `identifier` names: an outcome or a template variable of any
- * type, which the item declares.
+ * type, which the item declares or builds in (`completionStatus`).
  *
  * @param source The document.
  * @param path The `identifier` attribute's path.
  * @param identifier The name, as {@link identifierOf} reads it.
  * @param context The item's declarations.
- * @returns The refusal when the item declares no variable of the name, or declares a response or
- *   a context variable of it; none otherwise.
+ * @returns The refusal when nothing answers the name, or a response or a context variable does,
+ *   declared or built in; none otherwise.
  */
 const printedIdentifier = (
   source: SourceDocument,
   path: string,
   identifier: string,
   context: Context,
-): readonly Refusal[] => {
-  const declaration = context.variables.get(identifier);
-  if (declaration === undefined) {
-    return [
-      refusal(source, "undeclared-variable", path, {
-        attribute: "identifier",
-        element: "qti-printed-variable",
-        expected: printedKinds,
-        identifier,
-      }),
-    ];
-  }
-
-  return isTemplateOrOutcome(declaration)
-    ? []
-    : [
-        refusal(source, "expression-type", path, {
-          attribute: "identifier",
-          check: "reference",
-          element: "qti-printed-variable",
-          identifier,
-          source: printedSource,
-          variableKind: otherKind(declaration),
-        }),
-      ];
-};
+): readonly Refusal[] =>
+  Option.match(printedTarget(identifier, context), {
+    onNone: () => [printedUndeclared(source, path, "identifier", identifier)],
+    onSome: ({ kind }) =>
+      printable(kind)
+        ? []
+        : [
+            refusal(source, "expression-type", path, {
+              attribute: "identifier",
+              check: "reference",
+              element: "qti-printed-variable",
+              identifier,
+              source: printedSource,
+              variableKind: kind,
+            }),
+          ],
+  });
 
 /**
  * Judge what a printed variable's `base` or `index` names when it is written as a name: a single
- * integer outcome or template variable, which the item declares. One written as an integer names
- * no variable, and one whose text is no NCName is the structural validator's refusal; both are
- * passed over. The value is classified as the item model classifies an integer attribute
- * ({@link integerOrRefOf}).
+ * integer outcome or template variable, which the item declares or builds in. A built-in follows
+ * the same rule, so `numAttempts`, a response, is refused by its kind and `completionStatus`, a
+ * single identifier, by its type. One written as an integer names no variable, and one whose text
+ * is no NCName is the structural validator's refusal; both are passed over. The value is
+ * classified as the item model classifies an integer attribute ({@link integerOrRefOf}).
  *
  * @param source The document.
  * @param path The attribute's path.
  * @param attribute The attribute.
  * @param context The item's declarations.
- * @returns The refusal when the name is one the item declares no variable of, or names a variable
- *   that is not a single integer outcome or template variable; none otherwise.
+ * @returns The refusal when nothing answers the name, or it names a variable that is not a single
+ *   integer outcome or template variable; none otherwise.
  */
 const printedInteger = (
   source: SourceDocument,
@@ -2295,33 +2357,22 @@ const printedInteger = (
   }
 
   const { identifier } = classified;
-  const declaration = context.variables.get(identifier);
-  if (declaration === undefined) {
-    return [
-      refusal(source, "undeclared-variable", path, {
-        attribute: attribute.local,
-        element: "qti-printed-variable",
-        expected: printedKinds,
-        identifier,
-      }),
-    ];
-  }
 
-  const fits =
-    isTemplateOrOutcome(declaration) &&
-    !Option.exists(declarationType(declaration), (type) => !agree(type, singleOf("integer")));
-
-  return fits
-    ? []
-    : [
-        refusal(source, "expression-type", path, {
-          attribute: attribute.local,
-          check: "reference",
-          element: "qti-printed-variable",
-          expectedBaseType: "integer",
-          identifier,
-        }),
-      ];
+  return Option.match(printedTarget(identifier, context), {
+    onNone: () => [printedUndeclared(source, path, attribute.local, identifier)],
+    onSome: ({ kind, type }) =>
+      printable(kind) && !Option.exists(type, (known) => !agree(known, singleOf("integer")))
+        ? []
+        : [
+            refusal(source, "expression-type", path, {
+              attribute: attribute.local,
+              check: "reference",
+              element: "qti-printed-variable",
+              expectedBaseType: "integer",
+              identifier,
+            }),
+          ],
+  });
 };
 
 /**
@@ -2333,15 +2384,18 @@ const printedInteger = (
  * Its `identifier` names an outcome or a template variable of any type: "The outcome variable or
  * template variable must have been defined. The values of response variables cannot be printed
  * directly" (`info.txt:70296`). Its `base` and `index`, each an `IntegerOrVariableRef`, name a
- * single integer outcome or template variable when written as a name. A name no declaration of
- * the item answers is `undeclared-variable` with the `attribute` and the kinds a printed variable
- * names as `expected`; a built-in such as `completionStatus` is declared by no declaration, and
- * the qti package reads only the item's four kinds of declaration, so it is refused the same. A
- * name that a declaration of another kind or type answers is `expression-type` with
- * `check: "reference"`: for `identifier`, a response or a context variable, with its
- * `variableKind` and the information model's line as `source`, since any type may be printed; for
- * `base` and `index`, anything but a single integer outcome or template variable, with
- * `expectedBaseType` as P24 words it. A declaration whose own type is not judged
+ * single integer outcome or template variable when written as a name. A built-in counts as
+ * declared, since it is declared implicitly (`info.txt:8440`), and has its kind
+ * ({@link builtInKinds}): `completionStatus` may be printed, and `numAttempts`, `duration` and
+ * `QTI_CONTEXT` are refused by kind (Mind amendment 1). The qti package's `printedRows` reads only
+ * the item's four kinds of declaration and refuses `completionStatus` as undeclared, so that one
+ * case is an agreement difference (G-R2, pending: plate accepts a printed `completionStatus`, the
+ * qti package refuses it). A name that nothing declares or builds in is `undeclared-variable` with
+ * the `attribute` and the kinds a printed variable names as `expected`. A name of another kind or
+ * type is `expression-type` with `check: "reference"`: for `identifier`, a response or a context
+ * variable, with its `variableKind` and the information model's line as `source`, since any type
+ * may be printed; for `base` and `index`, anything but a single integer outcome or template
+ * variable, with `expectedBaseType` as P24 words it. A declaration whose own type is not judged
  * ({@link declarationType}) is not refused. Each refusal is at the attribute's path.
  *
  * A printed variable anywhere in the item is judged, in its body, a feedback or a rubric block

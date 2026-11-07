@@ -2451,20 +2451,18 @@ describe("checkRules", () => {
     const printing = (...variables: readonly SourceElement[]) =>
       judged(item(declared, [el("p", [], variables)]));
 
-    it("[I-5] refuses a printed variable whose identifier, base or index names nothing the item declares, at that attribute (pantry printed-variable-ref)", () => {
+    it("[I-5] refuses a printed variable whose identifier, base or index names nothing the item declares or builds in, at that attribute (pantry printed-variable-ref)", () => {
       assert.deepStrictEqual(
         printing(
           printed("NOPE"),
-          printed("completionStatus"),
           printed("SCORE", { base: "RADIX" }),
-          printed("M", { index: "numAttempts" }),
+          printed("M", { index: "POSITION" }),
         ),
         (
           [
             ["1", "identifier", "NOPE"],
-            ["2", "identifier", "completionStatus"],
-            ["3", "base", "RADIX"],
-            ["4", "index", "numAttempts"],
+            ["2", "base", "RADIX"],
+            ["3", "index", "POSITION"],
           ] as const
         ).map(([position, attribute, identifier]) => ({
           detail: {
@@ -2479,13 +2477,22 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-5] refuses a printed variable whose identifier names a response or a context variable, with its kind and no base type (pantry printed-variable-ref, PrintedVariableRefKind)", () => {
+    it("[I-5] refuses a printed variable whose identifier names a response or a context variable, the built-ins numAttempts, duration and QTI_CONTEXT among them, with its kind and no base type (pantry printed-variable-ref, PrintedVariableRefKind; Mind amendment 1)", () => {
       assert.deepStrictEqual(
-        printing(printed("RESPONSE"), printed("CONTEXT")),
+        printing(
+          printed("RESPONSE"),
+          printed("CONTEXT"),
+          printed("numAttempts"),
+          printed("duration"),
+          printed("QTI_CONTEXT"),
+        ),
         (
           [
             ["1", "RESPONSE", "response"],
             ["2", "CONTEXT", "context"],
+            ["3", "numAttempts", "response"],
+            ["4", "duration", "response"],
+            ["5", "QTI_CONTEXT", "context"],
           ] as const
         ).map(([position, identifier, variableKind]) => ({
           detail: {
@@ -2502,18 +2509,22 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-5] refuses a printed variable's index naming a float, and its base naming a multiple integer or a response, where a single integer outcome or template variable is needed (pantry printed-variable-ref, PrintedVariableVarRefType)", () => {
+    it("[I-5] refuses a printed variable's index naming a float or the built-in response numAttempts, and its base naming a multiple integer, a response or the built-in identifier completionStatus, where a single integer outcome or template variable is needed (pantry printed-variable-ref, PrintedVariableVarRefType; Mind amendment 1)", () => {
       assert.deepStrictEqual(
         printing(
           printed("M", { index: "F" }),
           printed("SCORE", { base: "M" }),
           printed("COUNT", { base: "RESPONSE" }),
+          printed("M", { index: "numAttempts" }),
+          printed("COUNT", { base: "completionStatus" }),
         ),
         (
           [
             ["1", "index", "F"],
             ["2", "base", "M"],
             ["3", "base", "RESPONSE"],
+            ["4", "index", "numAttempts"],
+            ["5", "base", "completionStatus"],
           ] as const
         ).map(([position, attribute, identifier]) => ({
           detail: {
@@ -2529,10 +2540,11 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-5] accepts a printed variable of an outcome or a template variable of any type, a base or index naming a single integer outcome or template variable, and a base or index written as an integer", () => {
+    it("[I-5] accepts a printed variable of an outcome or a template variable of any type, the built-in outcome completionStatus among them, a base or index naming a single integer outcome or template variable, and a base or index written as an integer (Mind amendment 1)", () => {
       assert.deepStrictEqual(
         printing(
           printed("SCORE", { format: "%.1f" }),
+          printed("completionStatus"),
           printed("F"),
           printed(" M "),
           printed("M", { index: "N" }),
