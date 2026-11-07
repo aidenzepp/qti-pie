@@ -95,21 +95,10 @@ that needs one asks the operator first.
 
    The Recommendation's prose rules this package does not check are these, each a recorded limit (reading 91), with
    its cause and what would lift it:
-   - a `cn`'s text by its `type`, each of whose values "implies that the content be of a certain form" (§4.2.1.2,
-     §4.2.1.3): the form depends on `type`, on `base` and on the `sep`s between the number's parts, and no law reads
-     an element's text against another attribute's value. A domain per `type` over `cn`'s text, as the MathML port
-     brings main's, would lift it;
-   - `share`'s target and its acyclicity, "An element may not dominate itself" (§4.2.7.2): its `src` is an
-     `xs:anyURI`, checked as one, that no law resolves to the `id` it names (§4.2.7.1). Resolving a same-document
-     `src` against the document's IDs, as Idref target resolves an IDREF, would lift the first, and a walk of the
-     resolved references the second;
-   - `indenttarget` and `xref` naming an element (§2.1.5.1's `idref`, "an identifier referring to another element
-     within the document"; §3.2.5.2.3, "it must appear before being referenced"): the RelaxNG types both `text` and
-     the XSD leaves them untyped. Reading them as `xs:IDREF` would put them under Idref target;
-   - `maction`'s selected sub-expression, "If the value specified is out of range, it is an error" (§3.7.1.1): its
-     `selection` against its number of children is a comparison no law states, as the choice bounds compare a count;
-   - an `mscarries` as the last child of an `mstack` or an `mlongdiv`, "an error" (§3.6.5.1): both schemas repeat
-     those children in any order, and a content-model edit would state it;
+   - `indenttarget` naming an element (§2.1.5.1's `idref`, "an identifier referring to another element within the
+     document"; §3.2.5.2.3, "it must appear before being referenced"): the RelaxNG types it `text` and the XSD
+     leaves it untyped. Reading it as `xs:IDREF`, as `xref` is read (`mathmlXrefReading`), would put it under Idref
+     target;
    - the cells a `rowspan` or `columnspan` covers, which "must be omitted" (§3.5.4.2): a count of a row's cells
      against the spans above it, which no law states;
    - a space inside an `mpadded` length, "Formally, spaces are not allowed within these values" (§3.3.6.2), where
@@ -120,6 +109,32 @@ that needs one asks the operator first.
      where no bound variable is given (§4.4.6.1, §4.4.6.2), the coordinate names of `divergence`, `grad`, `curl` and
      `laplacian` "must be provided as bound variables" where the functions are defined implicitly (§4.4.4.4 to
      §4.4.4.7), and `definitionURL` and `cd` naming a definition (§4.2.3). No structural law reads a meaning.
+
+   The importer's checks of some of the rules above stop short of the law oracle's in these cases, each a known limit
+   (reading 91), with its cause. Where the two differ the database may judge a document otherwise than the oracle does:
+   - a `cn` the database does not judge (`rowsOf`, `src/import/overlays/mathml-cn.ts`): one with a part that holds an
+     element or an entity reference, or a `base` outside 2 to 36, has no `MathCn` row, so its part count is not
+     checked, as the oracle's "MathML cn form" checks it (`src/test/oracle.ts`), nor, under a `base` outside 2 to 36,
+     are its `double` and `hexdouble` parts, which the oracle reads in any base. A `cn` of any other `type` is text in
+     both. A row that carries the part count alone would lift it;
+   - rows the host states that no statement refutes: a `MathCn` row's empty `typeLexical` or `baseLexical` says the
+     attribute is unwritten and nothing refutes it where the node writes one, only a written lexical being proved
+     (`cnLaws`, `src/qti/mathml-cn.ts`); a `MathQualifier` row's existence is proved row to node and row to head, so a
+     host that omits the row of a stray `degree`, `momentabout` or `logbase` is not caught (`applyLaws`,
+     `src/qti/mathml-apply.ts`); a `MathAlignScope` row's existence, its written `dir` and a cell's inherited direction
+     (`alignLaws`, `src/qti/mathml-align.ts`); and a `MathRank` row's rank, of which only the order is proved
+     (`shareLaws`, `src/qti/mathml-share.ts`). A statement over the tree's rows that states each row's existence would
+     lift them;
+   - a cell's alignment where the builder and the oracle read the tree differently (`src/import/overlays/mathml-align.ts`,
+     `contentOfCell` and `placeOfGroup` in `src/test/oracle.ts`): an empty `m:mtd` nested in a cell is a cell of its
+     own with no leaf, where the oracle counts it a leaf of the outer cell; a `dir` that is neither `ltr` nor `rtl`
+     (HTML's `auto`) is no direction and the cell's root takes the nearest ancestor's `ltr` or `rtl`, where the oracle
+     compares the raw nearest written `dir`. A non-integer or negative `selection` is refused by the database under
+     "MathML maction selection" and the attribute domain, where the oracle skips it, a difference of the law's name
+     only;
+   - a `share` cycle that crosses a foreign element between two MathML elements (`annotation-xml`, then a foreign
+     element, then an `m:math`): `MathRank` rows end at the nearest `m:math` (`src/import/overlays/mathml-share.ts`),
+     so the cycle is not followed, where the oracle's "MathML share cycle" follows each child.
 
    Every other normative sentence of chapters 2 to 4 is one of the laws above, the content models and value domains of
    the XSD under this reading's edits, or binds a processor rather than a document (§2.3). (Listed 2026-11-06 by
