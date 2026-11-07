@@ -94,6 +94,18 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 343-package box ran 137.6 s at a load average of 26 to 44, and 198.4 s at a load average of 34 to 46, in FIX-NCNAME's runs of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/import/law-names.test.ts",
+    "measurement owed: its one test compiles Qti's law model twice (6caa20ef), measured only at a load average below 60; its 300_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/expressions.ns1.oracle.test.ts",
+    "measurement owed: FB-EXPR's NS1 guard (66716a8b) ran at a load average below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/operators.holds.oracle.test.ts",
+    "measurement owed: FB-EXPR's Rounding guard (33a71bb7) ran at a load average below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/test/census.migration.test.ts",
     "LANES.md: no lane touches census.migration.test.ts, so its timeout is named when its owner edits it",
   ],
