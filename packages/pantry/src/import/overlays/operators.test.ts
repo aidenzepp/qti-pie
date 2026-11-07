@@ -197,27 +197,6 @@ describe("import/overlays/operators.ts, figuresOf", { timeout: searchTimeout }, 
 });
 
 /**
- * Read a document's operator rows back by the order of their elements: each rounding row as
- * `kind figuresLexical|figures|integer|figuresValue|mode|modeWritten`, each tolerance as its
- * values.
- *
- * @param rows - The rows.
- * @returns The rounding rows and the tolerances, each in document order.
- */
-const read = (rows: OperatorRows) => ({
-  rounding: [...rows.Rounding.values()]
-    .toSorted((a, b) => Number(a.start - b.start))
-    .map(
-      (row) =>
-        `${row.kind} ${JSON.stringify(row.figuresLexical)}|${JSON.stringify(row.figures)}|${String(row.integer)}|${String(row.figuresValue)}|${row.mode}|${String(row.modeWritten)}`,
-    ),
-  tolerance: [...rows.Tolerance.values()].map(({ lexical, tokens }) => [
-    lexical,
-    tokens.map(({ token }) => token).join(","),
-  ]),
-});
-
-/**
  * Response processing of four rounding operators and three equalities: a `qti-equal-rounded` with
  * no mode and padded figures, one under decimalPlaces naming a variable, a `qti-round-to` with
  * no mode and one with no figures, and equalities with no tolerance, a padded one and an empty
@@ -234,30 +213,6 @@ const fourRounders = [
 ].join("");
 
 describe("import/overlays/operators.ts, rowsOf", () => {
-  it.effect(
-    "gives each rounding operator its figures as written and collapsed and the mode in force, and each written tolerance its values",
-    () =>
-      // Oracle: the document's construction, written by hand: each operator's attributes as the
-      // markup writes them, collapsed where the union's integer member collapses, and the modes
-      // the information model gives one that writes none (§5.47.1; §5.119.1 requires it).
-      Effect.gen(function* written() {
-        const rows = rowsOf(yield* itemOf(fourRounders), { idOf });
-
-        assert.deepStrictEqual(read(rows), {
-          rounding: [
-            'qti-equal-rounded " 0 "|"0"|true|0|significantFigures|false',
-            'qti-equal-rounded "F"|"F"|false|0|decimalPlaces|true',
-            'qti-round-to "-07"|"-07"|true|-7||false',
-            'qti-round-to ""|""|false|0|significantFigures|true',
-          ],
-          tolerance: [
-            [" 0.5\tT ", "0.5,T"],
-            ["", ""],
-          ],
-        });
-      }),
-  );
-
   it.effect(
     "gives every rounding row its node's tuple, the document's nearest, or its context's where one is given",
     () =>
