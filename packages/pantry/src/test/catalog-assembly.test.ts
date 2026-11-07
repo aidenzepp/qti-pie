@@ -171,7 +171,7 @@ const replaced = (
 
 /**
  * A package of a test and the section document it places, each with a rubric: the test's in its
- * first section, the section document's before its item ref.
+ * first section, after its ordering, the section document's before its item ref.
  *
  * @param spec - The package.
  * @param spec.section - The section document's rubric.
@@ -189,8 +189,8 @@ const testPackage = ({
     replaced(
       everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 }),
       "test.xml",
-      '<qti-assessment-section identifier="first" title="First" visible="true">\n',
-      `<qti-assessment-section identifier="first" title="First" visible="true">\n      ${rubricOf(test)}\n`,
+      '<qti-ordering shuffle="true"/>\n',
+      `<qti-ordering shuffle="true"/>\n      ${rubricOf(test)}\n`,
     ),
     "section.xml",
     '  <qti-assessment-item-ref identifier="placedItem"',
