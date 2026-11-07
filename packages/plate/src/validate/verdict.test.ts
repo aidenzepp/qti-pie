@@ -922,6 +922,115 @@ describe("check, processing the model does not hold", () => {
 });
 
 /**
+ * Construct an item that declares one single variable, and a body.
+ *
+ * @param kind The declaration's local name.
+ * @param identifier Its `identifier`.
+ * @param baseType Its `base-type`.
+ * @returns The item.
+ */
+const declaring = (kind: string, identifier: string, baseType: string): SourceDocument =>
+  item([
+    el(kind, [
+      attr("base-type", baseType),
+      attr("cardinality", "single"),
+      attr("identifier", identifier),
+    ]),
+    body([el("p", [], [text("Hello")])]),
+  ]);
+
+/**
+ * Construct an item whose response processing sets `SCORE` when two floats are equal within an
+ * absolute tolerance.
+ *
+ * @param tolerance The `qti-equal`'s `tolerance`, as written.
+ * @returns The item.
+ */
+const tolerating = (tolerance: string): SourceDocument =>
+  item([
+    score(),
+    body([el("p", [], [text("Hello")])]),
+    el(
+      "qti-response-processing",
+      [],
+      [
+        el(
+          "qti-response-condition",
+          [],
+          [
+            el(
+              "qti-response-if",
+              [],
+              [
+                el(
+                  "qti-equal",
+                  [attr("tolerance", tolerance), attr("tolerance-mode", "absolute")],
+                  [
+                    el("qti-base-value", [attr("base-type", "float")], [text("1.0")]),
+                    el("qti-base-value", [attr("base-type", "float")], [text("1.5")]),
+                  ],
+                ),
+                el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", "SCORE")],
+                  [el("qti-base-value", [attr("base-type", "float")], [text("1")])],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ]);
+
+describe("check, the built-in variables' identifiers and qti-equal's tolerance tokens (pantry DeclarationNotReserved and P6)", () => {
+  it("[I-9a] refuses an item that declares a variable named completionStatus, numAttempts or duration as attribute-type at its identifier (pantry DeclarationNotReserved)", () => {
+    for (const [kind, identifier, baseType] of [
+      ["qti-outcome-declaration", "completionStatus", "identifier"],
+      ["qti-response-declaration", "numAttempts", "integer"],
+      ["qti-response-declaration", "duration", "float"],
+      ["qti-template-declaration", "duration", "float"],
+    ] as const) {
+      assert.deepStrictEqual(refusalsOf(verdictOf(declaring(kind, identifier, baseType))), [
+        { location: { kind: "path", path: `${root}/${kind}/@identifier` }, rule: "attribute-type" },
+      ]);
+    }
+  });
+
+  it("[I-9a] accepts an item that declares a variable with any other identifier", () => {
+    for (const [kind, identifier, baseType] of [
+      ["qti-outcome-declaration", "STATUS", "identifier"],
+      ["qti-response-declaration", "ATTEMPTS", "integer"],
+      ["qti-outcome-declaration", "Duration", "float"],
+    ] as const) {
+      assert.notStrictEqual(
+        verdictOf(declaring(kind, identifier, baseType)).verdict,
+        "refused",
+        identifier,
+      );
+    }
+  });
+
+  it("[I-9a] refuses an item whose qti-equal tolerance holds a token that is neither an xs:double nor an NCName, 1,5, as attribute-type (pantry P6)", () => {
+    assert.deepStrictEqual(refusalsOf(verdictOf(tolerating("1,5"))), [
+      {
+        location: {
+          kind: "path",
+          path: `${root}/qti-response-processing/qti-response-condition/qti-response-if/qti-equal/@tolerance`,
+        },
+        rule: "attribute-type",
+      },
+    ]);
+  });
+
+  it("[I-9a] accepts an item whose qti-equal tolerance is 0.5, 1 2, TOL (an NCName) or INF", () => {
+    for (const tolerance of ["0.5", "1 2", "TOL", "INF"]) {
+      assert.notStrictEqual(verdictOf(tolerating(tolerance)).verdict, "refused", tolerance);
+    }
+  });
+});
+
+/**
  * The location of every hand-built test, section and stimulus document in these tests.
  */
 const testLocation = "tests/test.xml";
@@ -1921,6 +2030,54 @@ describe("describeRefusal", () => {
     );
     assert.include(read, "which is not an integer at least 1 (reading 18).");
     assert.notInclude(read, "info.txt");
+  });
+
+  it("[I-9a] words a declaration that takes a built-in variable's identifier, citing the information model's line (pantry DeclarationNotReserved)", () => {
+    const sentence = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "identifier",
+        check: "reserved-identifier",
+        element: "qti-outcome-declaration",
+        expected:
+          "an identifier other than the built-in variables' completionStatus, numAttempts and duration",
+        pantry: "DeclarationNotReserved",
+        source: "info.txt:12006",
+        value: "completionStatus",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-outcome-declaration`'s attribute `identifier` is `completionStatus`, the identifier of a built-in variable, which no declaration may take (info.txt:12006).",
+    );
+    assert.include(sentence, "Rule `attribute-type`.");
+    assert.include(
+      sentence,
+      "To make it valid: give `qti-outcome-declaration` another identifier; the built-in variable needs no declaration.",
+    );
+  });
+
+  it("[I-9a] words a qti-equal tolerance whose token is neither a number nor a variable's name, citing the information model's line (pantry P6)", () => {
+    const sentence = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "tolerance",
+        check: "tolerance-token",
+        element: "qti-equal",
+        expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
+        pantry: "P6",
+        source: "info.txt:24946",
+        value: "1,5",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-equal`'s attribute `tolerance` is `1,5`, which holds a token that is neither a number (`xs:double`) nor a variable's name (an NCName) (info.txt:24946).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: write each token of `tolerance` as a number or a variable's name, one space apart.",
+    );
   });
 
   it("[I-9a] names the mode under which a qti-equal must carry a tolerance, and cites the information model's line", () => {

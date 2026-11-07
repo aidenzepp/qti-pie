@@ -1192,10 +1192,11 @@ const variableType = (
  * One that reads the built-in `duration`, which no declaration of the expected kind answers, in an
  * item that is not time dependent is refused too, with `check: "untimed-duration"`
  * ({@link untimedDuration}, pantry's `item-duration`). A declaration named `duration` is read
- * instead, timed or not, as the qti package's `reference` reads the declaration first. A rule
- * other than {@link builtInSetters} that targets a built-in no declaration answers, a
- * `qti-lookup-outcome-value` of `completionStatus`, is refused with `check: "built-in-target"`
- * and the information model's line as `source` (pantry's P9).
+ * instead, timed or not, as the qti package's `reference` reads the declaration first; the
+ * structural walk refuses such a declaration (pantry's `DeclarationNotReserved`), so a checked item
+ * holds none. A rule other than {@link builtInSetters} that targets a built-in no declaration
+ * answers, a `qti-lookup-outcome-value` of `completionStatus`, is refused with
+ * `check: "built-in-target"` and the information model's line as `source` (pantry's P9).
  *
  * @param source The document.
  * @param visit The element's visit.
