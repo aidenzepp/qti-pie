@@ -20,7 +20,9 @@
  *   `Section identifier target`, a `section-identifier` names one section or section ref the test
  *   places once (A61); and `Prefixed reference`, exactly one reading of a test-level variable
  *   reference resolves, through a name the test places once (readings 48 and 88, M3), with
- *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`).
+ *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`); a braced one
+ *   (a string attribute's) that resolves nowhere is a string value, with two readings still refused
+ *   (reading R15-k).
  */
 import { Option, Result } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -842,10 +844,17 @@ const referenceLawsOf = (
               readings: resolving.map(({ text }) => text).join("; "),
               resolving: String(resolving.length),
             };
+            // Reading R15-k: a braced reference, a string attribute's, that resolves nowhere is a
+            // string value, so it is neither undeclared nor short of a resolving reading; two
+            // resolving readings are still ambiguous.
+            const braced = spelling === "braced";
             const prefixed =
-              (resolving.length !== 1 && !setterKinds.has(node.kind)) ||
+              (braced
+                ? resolving.length > 1
+                : resolving.length !== 1 && !setterKinds.has(node.kind)) ||
               resolving.some(({ placements }) => placements !== 1);
             const undeclared =
+              !braced &&
               !identifier.includes(".") &&
               readings.some(({ form, source }) => form === "unsplit" && source === "none");
             // Variable kind over the readings: a setter's name resolves, and every resolving

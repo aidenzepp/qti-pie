@@ -2168,7 +2168,13 @@ const referenceLaws = [
   contained(
     on(
       select(AssembledReference, (a) =>
-        a.and(a.eq(a.role, "variable"), a.not(a.in(a.kind, setterKinds))),
+        a.and(
+          a.eq(a.role, "variable"),
+          a.not(a.in(a.kind, setterKinds)),
+          // A braced reference may have no resolving reading, being then a string value (reading
+          // R15-k); the key over `resolvingReadings` still refuses more than one.
+          a.eq(VariableReference.at("spelling", a.kind, a.attribute), "bare"),
+        ),
       ),
       "assembly",
       "node",
@@ -2196,6 +2202,9 @@ const referenceLaws = [
       r.ne(r.form, "unsplit"),
       Compute.matches(r.identifier, prefixedName),
       r.ne(r.source, "none"),
+      // A braced reference that names no variable is a string value (reading R15-k), a test's as an
+      // item's.
+      r.eq(VariableReference.at("spelling", r.kind, r.attribute), "braced"),
     ),
   ),
   check("Item_duration", Reading, (r) =>
