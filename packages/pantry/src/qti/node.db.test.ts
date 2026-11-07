@@ -25,7 +25,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import type { DbConnection } from "@bjornpagen/grizzle";
-import { Array as Arr, Effect, Option, Order, Redacted, Result } from "effect";
+import { Array as Arr, Effect, Formatter, Option, Order, Redacted, Result } from "effect";
 import { Client, DatabaseError } from "pg";
 import type { QueryResultRow } from "pg";
 import { describe } from "vitest";
@@ -1286,7 +1286,7 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
 
                 assert.isTrue(
                   Option.isNone(verdict),
-                  `${name}/${file.path}: ${JSON.stringify(verdict)}`,
+                  `${name}/${file.path}: ${Formatter.format(verdict)}`,
                 );
               }
             }
@@ -1800,7 +1800,7 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
                       } else {
                         assert.isTrue(
                           Option.isNone(verdict),
-                          `${label}: ${JSON.stringify(verdict)}`,
+                          `${label}: ${Formatter.format(verdict)}`,
                         );
                       }
                     }

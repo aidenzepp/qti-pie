@@ -12,8 +12,11 @@
  * - **One flight per page.** Every document's scan explains to the same statements, one for the
  *   scan's rows and one for each attachment, whatever the document: a page's cost does not grow
  *   with the rows it holds.
- * - **The plan audit.** The scan's own statement reads `Node` by an index in `start` order, with no
- *   sort, and no statement of it recurses.
+ * - **The plan audit.** The scan's own statement reads `Node` through an index of the derived key
+ *   `(document, start)`, by an index scan or a bitmap index scan, never a sequential scan, and no
+ *   statement of it recurses. Which of the two index scans, and whether a small document's rows are
+ *   sorted after a bitmap one, is PostgreSQL's cost model's choice, not the contract. The
+ *   contract's order is the scan's output: every document's rows come back in `start` order.
  * - **The export charset.** A document is written in its `Document` row's export charset: `latin1`'s
  *   `choice.xml` in ISO-8859-1, a character that charset lacks as a character reference, and
  *   `windows-1252`'s, which no encoder writes, in UTF-8, its declaration naming it.
@@ -33,6 +36,7 @@ import { documentScan, documentsOf } from "#pantry/export/scan.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
+import { loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -68,14 +72,23 @@ const scanStatements = 10;
 const recursive: ReadonlySet<string> = new Set(["Recursive Union", "WorkTable Scan"]);
 
 /**
- * The plan node types that sort.
+ * The plan node types that read a relation through an index: in the index's order, or as a bitmap
+ * of its matches.
  */
-const sorts: ReadonlySet<string> = new Set(["Sort", "Incremental Sort"]);
+const indexScans: ReadonlySet<string> = new Set([
+  "Bitmap Index Scan",
+  "Index Only Scan",
+  "Index Scan",
+]);
 
 /**
- * The plan node types that read a relation through an index, in the index's order.
+ * Whether a statement's plan reads its relation through an index and never by a sequential scan.
+ *
+ * @param types - The plan's node types ({@link nodeTypesOf}).
+ * @returns Whether it does.
  */
-const indexScans: ReadonlySet<string> = new Set(["Index Scan", "Index Only Scan"]);
+const readsByIndex = (types: readonly string[]): boolean =>
+  types.some((type) => indexScans.has(type)) && !types.includes("Seq Scan");
 
 /**
  * List a plan's node types, the plan's own first, then each child's in order.
@@ -224,10 +237,48 @@ describe.skipIf(!hasLease)(
         );
 
         it.effect(
-          "scans every document in one flight of the same statements, by an index in start order, with no sort and no recursion",
+          "scans every document in one flight of the same statements, through the (document, start) key's index, in start order, with no recursion",
           () =>
+            // Oracle: PostgreSQL's planner and the scan's own output. The catalogue names the key
+            // by grizzle's comment on it, and every index of Node that leads with `document`
+            // continues with `start`, so an index access of the scan's one relation reads the
+            // key's order; `db.explain`'s plans carry each node's type, not its index.
+            // Bound: every document of the three accepted packages.
             Effect.gen(function* planAudit() {
               const db = yield* Db.open(AuthorApp.roles.author, {});
+              const client = yield* loginSession;
+              const key = yield* rowsOf<{ readonly name: string }>(
+                client,
+                `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
+                  WHERE c.conrelid = 'qti.node'::regclass AND c.contype = 'u'
+                    AND pg_catalog.obj_description(c.oid, 'pg_constraint') = 'key Node(document, start)'`,
+              );
+              const byDocument = yield* rowsOf<{
+                readonly columns: readonly string[];
+                readonly name: string;
+              }>(
+                client,
+                `SELECT i.relname AS name,
+                        ARRAY(SELECT a.attname::text
+                                FROM unnest(x.indkey::int2[]) WITH ORDINALITY AS k(n, o)
+                                JOIN pg_catalog.pg_attribute a
+                                  ON a.attrelid = x.indrelid AND a.attnum = k.n
+                               ORDER BY k.o) AS columns
+                   FROM pg_catalog.pg_index x
+                   JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid
+                  WHERE x.indrelid = 'qti.node'::regclass`,
+              ).pipe(Effect.map((rows) => rows.filter(({ columns }) => columns[0] === "document")));
+
+              assert.lengthOf(key, 1, "the key Node(document, start)");
+              assert.includeMembers(
+                byDocument.map(({ name }) => name),
+                key.map(({ name }) => name),
+                "the key's index leads with document",
+              );
+              for (const { columns, name } of byDocument) {
+                assert.strictEqual(columns[1], "start", `${name} continues with start`);
+              }
+
               for (const { id, name } of yield* Imported) {
                 const documents = yield* (yield* db.execute(documentsOf, { package: id })).collect;
 
@@ -242,15 +293,15 @@ describe.skipIf(!hasLease)(
                   if (scan !== undefined) {
                     const types = nodeTypesOf(scan);
 
-                    assert.isTrue(
-                      types.some((type) => indexScans.has(type)),
-                      `${where}: ${types.join(" > ")}`,
-                    );
-                    assert.isFalse(
-                      types.some((type) => sorts.has(type)),
-                      `${where}: ${types.join(" > ")}`,
-                    );
+                    assert.isTrue(readsByIndex(types), `${where}: ${types.join(" > ")}`);
                   }
+
+                  const starts = (yield* (yield* db.execute(documentScan, { document: node }))
+                    .collect).map(({ start }) => start);
+                  assert.isTrue(
+                    starts.every((start, at) => at === 0 || (starts[at - 1] ?? start) < start),
+                    `${where}: the scan's rows in start order`,
+                  );
 
                   for (const plan of plans) {
                     assert.isFalse(
@@ -260,7 +311,7 @@ describe.skipIf(!hasLease)(
                   }
                 }
               }
-            }),
+            }).pipe(Effect.scoped),
         );
 
         it.effect(

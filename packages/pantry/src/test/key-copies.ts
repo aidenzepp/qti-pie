@@ -1237,3 +1237,32 @@ export const keyCopies: readonly KeyCopy[] = Result.getOrThrowWith(
       `The oracle cannot count the key text ${field} of ${law}: ${reason}. Teach src/test/key-copies.ts to read it.`,
     ),
 );
+
+/**
+ * Judge rows by a check the schema states, read from the predicate grizzle keeps for it, as
+ * PostgreSQL's CHECK reads it: a row is refused where the predicate is false and kept where it is
+ * true or unknown, a field the row does not hold being unknown.
+ *
+ * @param statements - The schema's statements.
+ * @param relation - The check's relation.
+ * @param name - The check's name.
+ * @returns Whether a row passes the check; none where the schema states no such check, or states
+ *   it in a shape this module does not read.
+ */
+export const checkOf = (
+  statements: typeof Qti.statements,
+  relation: string,
+  name: string,
+): Option.Option<(row: Readonly<Record<string, Datum>>) => boolean> =>
+  Arr.findFirst(statements, (statement) =>
+    Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+      onNone: () => Option.none(),
+      onSome: (read) =>
+        read.kind === "check" && read.relation.name === relation && read.desc.name === name
+          ? Option.some(
+              (row: Readonly<Record<string, Datum>>) =>
+                evaluate(termOf(read.desc.predicate), row, () => false) !== false,
+            )
+          : Option.none(),
+    }),
+  );

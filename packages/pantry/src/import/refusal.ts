@@ -1585,24 +1585,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ],
   [
     containedIn(
-      sideOf("Node", "version", "parentKind", "was", "state"),
-      sideOf("Follow", "version", "parent", "from", "to"),
-    ),
-    "N5 Follow",
-  ],
-  [
-    containedIn(
       sideOf("Node", "id", "pred:children", "lastState"),
       sideOf("Node", "parent", "at", "state"),
     ),
     "N7 last slot",
-  ],
-  [
-    containedIn(
-      sideOf("Node", "version", "kind", "lastState"),
-      sideOf("Last", "version", "parent", "position"),
-    ),
-    "N7 Last",
   ],
   [
     foldOf(
@@ -2625,14 +2611,14 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [
     containedIn(
       sideOf("LomObjectTitle", "string", "record", "title"),
-      sideOf("LomTitleString", "node", "record", "text"),
+      sideOf("LomTitleString", "node", "record", "textValue"),
     ),
     "LomObjectTitle",
   ],
   [
     containedIn(
       sideOf("LomObjectTitle", "string", "stringLanguage"),
-      sideOf("LomTitleString", "node", "language"),
+      sideOf("LomTitleString", "node", "languageTag"),
     ),
     "LomObjectTitle",
   ],

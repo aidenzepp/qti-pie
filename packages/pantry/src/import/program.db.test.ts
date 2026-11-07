@@ -21,7 +21,7 @@ import { CommitUnknown, Db, query, uuid, v } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, DbConnection, Law, Plan } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Duration, Effect, Layer, Redacted, Result } from "effect";
+import { Duration, Effect, Formatter, Layer, Redacted, Result } from "effect";
 import { Client } from "pg";
 import type { QueryResultRow } from "pg";
 import { describe, inject } from "vitest";
@@ -561,7 +561,11 @@ describe.skipIf(!hasLease)(
                 `${name}: the oracle's verdict`,
               );
               if (accepted) {
-                assert.strictEqual(outcome.kind, "accepted", `${name}: ${JSON.stringify(outcome)}`);
+                assert.strictEqual(
+                  outcome.kind,
+                  "accepted",
+                  `${name}: ${Formatter.format(outcome)}`,
+                );
               } else {
                 assert.isTrue(
                   judgment._tag === "Judged" &&
@@ -570,7 +574,7 @@ describe.skipIf(!hasLease)(
                 );
                 assert.isTrue(
                   rejectedBy(outcome, [containedIn("LabelUse", "Attribute")]),
-                  `${name}: ${JSON.stringify(outcome)}`,
+                  `${name}: ${Formatter.format(outcome)}`,
                 );
               }
             }
@@ -607,7 +611,7 @@ describe.skipIf(!hasLease)(
               judgment._tag === "Judged" && judgment.breaches.length === 0,
               "the oracle's verdict",
             );
-            assert.strictEqual(outcome.kind, "accepted", JSON.stringify(outcome));
+            assert.strictEqual(outcome.kind, "accepted", Formatter.format(outcome));
           }),
       );
 
@@ -813,8 +817,10 @@ describe.skipIf(!hasLease)(
           apply: () =>
             applyEdited(
               fixtures.simple,
+              // The item body's first paragraph's text, which no text domain holds, so the text
+              // arm alone refuses it: the manifest's first text, cp:schema's, is TextDomain's first.
               editNode(
-                (node) => node.kind === "text",
+                (node) => node.kind === "text" && node.chars === "Look at the text in the picture.",
                 (node) => ({
                   ...node,
                   chars: " ",
@@ -937,7 +943,7 @@ describe.skipIf(!hasLease)(
               editedSimple("dangling-idref", [inBody(`<p aria-describedby="nowhere">See.</p>`)]),
               (dir) => applyEdited(dir),
             ),
-          laws: [containedIn("Idref", "IdBinding")],
+          laws: [containedIn("IdrefTarget", "IdBinding")],
           name: "an IDREF token naming no id of its document (Idref target, Q5.07)",
         },
         {
@@ -1010,7 +1016,7 @@ describe.skipIf(!hasLease)(
             const before = yield* storedPackages;
             const { outcome } = yield* apply();
 
-            assert.isTrue(rejectedBy(outcome, laws), `${name}: ${JSON.stringify(outcome)}`);
+            assert.isTrue(rejectedBy(outcome, laws), `${name}: ${Formatter.format(outcome)}`);
             assert.strictEqual(yield* storedPackages, before);
           }),
         );
@@ -1064,7 +1070,7 @@ describe.skipIf(!hasLease)(
                   checkNamed("Node", "N7_Last"),
                   checkNamed("Node", "N5_Follow"),
                 ]),
-                `${name}: ${JSON.stringify(outcome)}`,
+                `${name}: ${Formatter.format(outcome)}`,
               );
 
               return;

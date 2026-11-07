@@ -18,7 +18,7 @@ import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { Fact, Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
@@ -203,9 +203,7 @@ describe.skipIf(!hasLease)(
 
               assert.isTrue(
                 rejectedBy(outcome, quotationCheck("E1_derived")),
-                Object.entries(fields)
-                  .map(([field, value]) => `${field} ${String(value)}`)
-                  .join(", "),
+                Formatter.format(fields),
               );
             }
           }),

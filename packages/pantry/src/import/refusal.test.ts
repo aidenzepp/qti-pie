@@ -832,7 +832,7 @@ const crossTier = nonEmpty("the cross-tier laws", [
   ...statedNamed("Choice bounds"),
   { kind: "check", name: checkNameOf("MathML arity"), relation: "Node" } satisfies Law,
   ...statedNamed("AL1 owner", "Attribute(node, kind"),
-  ...statedNamed("N5 Follow"),
+  { kind: "check", name: checkNameOf("N5 Follow"), relation: "Node" } satisfies Law,
   ...statedNamed("N7 last slot"),
   ...statedNamed("N2 tree"),
   ...statedNamed("E1 derived", "fold over Node.children"),
@@ -1310,8 +1310,10 @@ const kindsAt = (state: ModelState, position: string): ReadonlySet<string> =>
   positionKinds.get(`${state.version} ${state.parent} ${position}`) ?? new Set();
 
 describe("the explanation of a content-order refusal", () => {
-  const follow = statedNamed("N5 Follow");
-  const last = statedNamed("N7 Last");
+  const follow: readonly Law[] = [
+    { kind: "check", name: checkNameOf("N5 Follow"), relation: "Node" },
+  ];
+  const last: readonly Law[] = [{ kind: "check", name: checkNameOf("N7 Last"), relation: "Node" }];
 
   it.effect(
     "names exactly the positions Follow allows after every state of every model, for N5's step and N7's end",
@@ -1594,6 +1596,36 @@ describe("the census of the composed Qti schema", () => {
             `${String(laws.length)} laws, ${String(axes.length)} merged axes`,
             "the census",
           ),
+        );
+      }),
+    120_000,
+  );
+
+  it.effect(
+    "states no law of a statement's kind that Qti does not state, so a renamed field leaves no row behind",
+    () =>
+      // Oracle: the schema's own statements, read by this file's reader: a row of the table that
+      // names a containment, key, fold or family no statement of Qti states names no law an outcome
+      // can carry, and the law it meant falls to its group's name (the LOM title's two rows, stale
+      // since ad1b20b5 renamed LomTitleString's text and language, and N5's and N7's containments,
+      // which Qti states as checks).
+      Effect.gen(function* staleRows() {
+        const Qti = yield* composedQti;
+        const stated = new Set((yield* lawsOf(Qti.statements)).map(lawIdentity));
+        const statementKinds: ReadonlySet<string> = new Set([
+          "contained",
+          "family",
+          "fold",
+          "key",
+          "tree",
+        ]);
+
+        assert.deepStrictEqual(
+          statedLaws
+            .filter(([law]) => statementKinds.has(law.kind) && !stated.has(lawIdentity(law)))
+            .map(([law, name]) => `${name}: ${lawIdentity(law)}`),
+          [],
+          "rows of the table that name a law no statement of Qti states",
         );
       }),
     120_000,

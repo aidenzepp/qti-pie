@@ -21,7 +21,7 @@ import { Db, query, v } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { readProgram } from "#pantry/import/program.ts";
@@ -387,7 +387,7 @@ describe.skipIf(!hasLease)(
           const before = yield* storedPackages;
           const outcome = yield* applyRules("valid", validRules);
 
-          assert.strictEqual(outcome.kind, "accepted", JSON.stringify(outcome));
+          assert.strictEqual(outcome.kind, "accepted", Formatter.format(outcome));
           assert.strictEqual(yield* storedPackages, before + 1n);
         }),
       );
@@ -399,7 +399,7 @@ describe.skipIf(!hasLease)(
             const before = yield* storedPackages;
             const outcome = yield* apply();
 
-            assert.isTrue(rejectedBy(outcome, laws), `${name}: ${JSON.stringify(outcome)}`);
+            assert.isTrue(rejectedBy(outcome, laws), `${name}: ${Formatter.format(outcome)}`);
             assert.strictEqual(yield* storedPackages, before);
           }),
         );
