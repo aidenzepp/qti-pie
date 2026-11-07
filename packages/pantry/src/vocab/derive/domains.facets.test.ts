@@ -1256,7 +1256,7 @@ describe("vocab/derive/domains.ts, length facets", () => {
               const compiled = compile(domain, "exact");
               if (Result.isFailure(compiled)) {
                 assert.isTrue(
-                  compiled.failure.detail.includes("holds no value") && !sizes.some(holds),
+                  compiled.failure._tag === "EmptyDefinition" && !sizes.some(holds),
                   `${base} restricted by ${Formatter.format(steps)}: ${compiled.failure.message}`,
                 );
 

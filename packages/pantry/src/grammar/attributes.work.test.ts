@@ -280,7 +280,7 @@ const holdToOracle = (
     const expected = read(declared).compiled;
     const where = `${version} ${declared.kind}@${declared.name}`;
     if (Result.isFailure(expected)) {
-      assert.isTrue(unwrapped.isEmptyDefinition(expected.failure), `${where} compiles`);
+      assert.strictEqual(expected.failure._tag, "EmptyDefinition", `${where} compiles`);
       assert.isTrue(empty.has(handle), `${where} names an empty domain`);
     } else {
       const actual = byHandle.get(handle) ?? assert.fail(`${where} names no domain`);

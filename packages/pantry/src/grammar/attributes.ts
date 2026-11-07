@@ -34,8 +34,15 @@
  * A declaration's domain is the leaf's resolution of its XSD type (`Domain`), with a spec reading
  * applied where QTI reads the attribute otherwise ({@link specReadings}).
  */
-import { Option, Result, Schema } from "effect";
-import { closed, fin, idField, roster, valueField } from "#pantry/grammar/closed.ts";
+import { Array as Arr, Option, Result, Schema } from "effect";
+import {
+  closed,
+  fin,
+  idField,
+  OutsideCodeSpace,
+  roster,
+  valueField,
+} from "#pantry/grammar/closed.ts";
 import type {
   Closed,
   ClosedRelationError,
@@ -48,7 +55,6 @@ import {
   boundFacets,
   domainPrimitives,
   identities,
-  isEmptyDefinition,
   openCompiled,
 } from "#pantry/grammar/domains.ts";
 import type {
@@ -278,7 +284,7 @@ interface SpecReading {
   readonly name: string;
   readonly reading: number;
   readonly read: (domain: Domain) => Domain;
-  readonly readAs?: string;
+  readonly readAs: Option.Option<string>;
   readonly whiteSpace: Reading;
 }
 
@@ -298,7 +304,14 @@ const on = (
   name: string,
   whiteSpace: Reading,
   read: (domain: Domain) => Domain = (domain) => domain,
-): SpecReading => ({ kinds: Option.some(kinds), name, read, reading, whiteSpace });
+): SpecReading => ({
+  kinds: Option.some(kinds),
+  name,
+  read,
+  readAs: Option.none(),
+  reading,
+  whiteSpace,
+});
 
 /**
  * A reading of the attribute on every kind that declares it, its whitespace read as its type reads
@@ -313,7 +326,14 @@ const everywhere = (
   reading: number,
   name: string,
   read: (domain: Domain) => Domain,
-): SpecReading => ({ kinds: Option.none(), name, read, reading, whiteSpace: "xsd" });
+): SpecReading => ({
+  kinds: Option.none(),
+  name,
+  read,
+  readAs: Option.none(),
+  reading,
+  whiteSpace: "xsd",
+});
 
 /**
  * `xs:string`'s definition, every value with its whitespace preserved: what spec reading 8 reads a
@@ -779,6 +799,14 @@ const counts = [
 ] as const;
 
 /**
+ * MathML 3's `positive-integer` notation, "a string of decimal-digits, but not consisting solely
+ * of "0"s (U+0030), representing a positive integer" (§2.1.5.1), as an XSD pattern over the value
+ * after its whitespace is collapsed: {@link mathmlNotations}' `m:positive-integer`, and the
+ * notation spec reading 2 reads a content `cn`'s `base` by.
+ */
+const positiveInteger = "[0-9]*[1-9][0-9]*";
+
+/**
  * MathML 3's notation for the three integer types and `number` (§2.1.5.1, "Syntax notation used in
  * the MathML specification"), as XSD patterns over the value after its whitespace is collapsed:
  *
@@ -804,7 +832,7 @@ const counts = [
  */
 const mathmlNotations: ReadonlyMap<string, string> = new Map([
   ["m:unsigned-integer", "[0-9]+"],
-  ["m:positive-integer", "[0-9]*[1-9][0-9]*"],
+  ["m:positive-integer", positiveInteger],
   ["m:integer", "-?[0-9]+"],
   ["m:number", String.raw`-?([0-9]+(\.[0-9]*)?|\.[0-9]+)`],
 ]);
@@ -824,26 +852,26 @@ const ownNotations: ReadonlySet<string> = new Set(["scriptlevel"]);
  * ({@link mathmlNotations}), but {@link ownNotations}, on every kind that declares it, read with
  * the notation's pattern beside its type's.
  */
-const mathmlNotationReadings: readonly SpecReading[] = [
-  ...Map.groupBy(
-    attributeDeclarations.filter(
-      ({ kind, name, type }) =>
-        kind.startsWith("m:") && mathmlNotations.has(type.type) && !ownNotations.has(name),
+const mathmlNotationReadings: readonly SpecReading[] = Object.values(
+  Arr.groupBy(
+    attributeDeclarations.flatMap((declaration) =>
+      declaration.kind.startsWith("m:") && !ownNotations.has(declaration.name)
+        ? Option.toArray(Option.fromNullishOr(mathmlNotations.get(declaration.type.type))).map(
+            (pattern) => ({ declaration, pattern }),
+          )
+        : [],
     ),
-    ({ name, type }) => `${name} ${type.type}`,
-  ).values(),
-].flatMap((declarations) => {
-  const [first] = declarations;
-  const pattern = first === undefined ? undefined : mathmlNotations.get(first.type.type);
-
-  return first === undefined || pattern === undefined
-    ? []
-    : [
-        on(2, [...new Set(declarations.map(({ kind }) => kind))], first.name, "xsd", (domain) =>
-          withPattern(domain, pattern),
-        ),
-      ];
-});
+    ({ declaration: { name, type } }) => `${name} ${type.type}`,
+  ),
+).map(([{ declaration, pattern }, ...rest]) =>
+  on(
+    2,
+    [...new Set([declaration, ...rest.map((held) => held.declaration)].map(({ kind }) => kind))],
+    declaration.name,
+    "xsd",
+    (domain) => withPattern(domain, pattern),
+  ),
+);
 
 /**
  * A content `cn`'s `base`, which the XSD leaves untyped (`mathml3-content.xsd` line 18) and the
@@ -859,18 +887,10 @@ const mathmlNotationReadings: readonly SpecReading[] = [
 const cnBaseReadings: readonly SpecReading[] = attributeDeclarations
   .filter(({ type }) => type.type === "m:positive-integer")
   .slice(0, 1)
-  .flatMap(({ domain }) => {
-    const pattern = mathmlNotations.get("m:positive-integer");
-
-    return pattern === undefined
-      ? []
-      : [
-          {
-            ...on(2, ["m:cn"], "base", "xsd", () => withPattern(domain, pattern)),
-            readAs: "m:positive-integer",
-          },
-        ];
-  });
+  .map(({ domain }) => ({
+    ...on(2, ["m:cn"], "base", "xsd", () => withPattern(domain, positiveInteger)),
+    readAs: Option.some("m:positive-integer"),
+  }));
 
 /**
  * The attribute readings of `docs/spec-readings.md`, the only places the grammar departs from the
@@ -973,6 +993,7 @@ export const specReadings: readonly SpecReading[] = [
     kinds: name === "figures" ? Option.some(["qti-round-to", "qti-equal-rounded"]) : Option.none(),
     name,
     read: toInt64,
+    readAs: Option.none(),
     reading: 46,
     whiteSpace: "xsd",
   })),
@@ -993,6 +1014,19 @@ export const specReadings: readonly SpecReading[] = [
 ];
 
 /**
+ * Whether a spec reading reads one kind's attribute: the reading's attribute, on a kind it lists,
+ * or on every kind where it lists none.
+ *
+ * @param reading - The reading.
+ * @param kind - The kind.
+ * @param name - The attribute.
+ * @returns Whether the reading applies.
+ */
+const appliesTo = (reading: SpecReading, kind: string, name: string): boolean =>
+  reading.name === name &&
+  Option.match(reading.kinds, { onNone: () => true, onSome: (kinds) => kinds.includes(kind) });
+
+/**
  * The spec readings of one kind's attribute, in the order {@link specReadings} lists them.
  *
  * @param kind - The kind.
@@ -1000,11 +1034,7 @@ export const specReadings: readonly SpecReading[] = [
  * @returns The readings that apply.
  */
 export const readingsOf = (kind: string, name: string): readonly SpecReading[] =>
-  specReadings.filter(
-    (reading) =>
-      reading.name === name &&
-      Option.match(reading.kinds, { onNone: () => true, onSome: (kinds) => kinds.includes(kind) }),
-  );
+  specReadings.filter((reading) => appliesTo(reading, kind, name));
 
 /**
  * A second spelling a spec reading admits beside a declared attribute: the declared name, the
@@ -1211,7 +1241,7 @@ export interface AttributeGrammar {
   readonly domains: readonly ValueDomain[];
   /**
    * The `ValueDomain` handles of the empty domains, after {@link AttributeGrammar.domains} in code
-   * order: each definition whose lexical space holds no value (`isEmptyDefinition`), which no
+   * order: each definition whose lexical space holds no value (`EmptyDefinition`), which no
    * pattern spells, so `ValueDomain` holds no row of it and no lexical form is in it. In the pinned
    * grammar only `xs:NOTATION`'s, whose value space is the notations a schema declares and no
    * pinned XSD declares one (XML Schema Part 2, §3.2.19).
@@ -1335,12 +1365,9 @@ const boundText = (domain: CompiledDomain): string =>
  * @returns The key.
  */
 const definitionKey = (domain: CompiledDomain): string =>
-  [
-    domain.primitive,
-    domain.pattern,
-    boundText(domain),
-    Option.getOrElse(domain.identity, () => ""),
-  ].join("\u0000");
+  [domain.primitive, domain.pattern, boundText(domain), ...Option.toArray(domain.identity)].join(
+    "\u0000",
+  );
 
 /**
  * One declaration as the attribute grammar reads its domain: the declaring kind (a named type's
@@ -1379,11 +1406,6 @@ export interface DeclarationDomain {
   readonly compiled: Result.Result<KeyedDomain, CompileError>;
   readonly readings: readonly SpecReading[];
 }
-
-/**
- * Each spec reading's place in {@link specReadings}, which names a declaration's readings in a key.
- */
-const readingIndex = new Map(specReadings.map((reading, index) => [reading, index] as const));
 
 /**
  * Spell a definition as text, each of its fields in one order, so two equal definitions spell one
@@ -1464,29 +1486,28 @@ export const domainReader = (): DomainReader => {
   const byText = new Map<string, Result.Result<KeyedDomain, CompileError>>();
 
   return (declared) => {
-    const readings = readingsOf(declared.kind, declared.name);
-    const key = readings.map((reading) => readingIndex.get(reading)).join(" ");
-    const byReadings = groups.get(declared.domain) ?? new Map<string, DeclarationDomain>();
-    groups.set(declared.domain, byReadings);
+    const applied = specReadings.flatMap((reading, index) =>
+      appliesTo(reading, declared.kind, declared.name) ? [{ index, reading }] : [],
+    );
+    const readings = applied.map(({ reading }) => reading);
 
-    const known = byReadings.get(key);
-    if (known !== undefined) {
-      return known;
-    }
+    return groups
+      .getOrInsertComputed(declared.domain, () => new Map())
+      .getOrInsertComputed(applied.map(({ index }) => index).join(" "), () => {
+        const read = readDefinitionOf(declared, readings);
 
-    const read = readDefinitionOf(declared, readings);
-    const text = definitionText(read);
-    const compiled =
-      byText.get(text) ??
-      compile(read.definition, read.whiteSpace).pipe(
-        Result.map((domain): KeyedDomain => ({ compiled: domain, key: definitionKey(domain) })),
-      );
-    byText.set(text, compiled);
-
-    const domain: DeclarationDomain = { compiled, readings };
-    byReadings.set(key, domain);
-
-    return domain;
+        return {
+          compiled: byText.getOrInsertComputed(definitionText(read), () =>
+            compile(read.definition, read.whiteSpace).pipe(
+              Result.map((domain): KeyedDomain => ({
+                compiled: domain,
+                key: definitionKey(domain),
+              })),
+            ),
+          ),
+          readings,
+        };
+      });
   };
 };
 
@@ -1589,9 +1610,10 @@ const intern = (
  * @returns The handle.
  */
 const handleOf = (type: ValueType, anonymous: string, readings: readonly SpecReading[]): string => {
-  const base =
-    readings.findLast(({ readAs }) => readAs !== undefined)?.readAs ??
-    (Option.isNone(type.inline) ? type.type : anonymous);
+  const base = Option.match(Option.firstSomeOf(readings.toReversed().map(({ readAs }) => readAs)), {
+    onNone: () => (Option.isNone(type.inline) ? type.type : anonymous),
+    onSome: (named) => named,
+  });
 
   return readings.length === 0
     ? base
@@ -1619,7 +1641,7 @@ const domainOf = (
   return read.compiled.pipe(
     Result.map((keyed): DomainRef => intern(domains, keyed, handle)),
     Result.orElse((cause) =>
-      isEmptyDefinition(cause)
+      cause._tag === "EmptyDefinition"
         ? Result.succeed(internEmpty(domains, handle))
         : Result.fail(
             new UncompiledDomain({
@@ -1642,6 +1664,42 @@ interface Admitted {
   readonly use: Use;
   readonly version: SchemaVersion;
 }
+
+/**
+ * Number each family's attributes from 0 in `AttributeName` code order, keeping the rows in the
+ * order they were read in.
+ *
+ * @param rows - The rows, in the order they were read in.
+ * @param familyOf - A row's family.
+ * @param names - The `AttributeName` roster.
+ * @param relation - The relation the rows are, as a refusal names it.
+ * @returns Each row with its position, or a row whose name the roster does not hold.
+ */
+const positioned = <R extends Admitted>(
+  rows: readonly R[],
+  familyOf: (row: R) => string,
+  names: Roster<string>,
+  relation: string,
+): Result.Result<readonly { readonly position: number; readonly row: R }[], OutsideCodeSpace> =>
+  Result.map(
+    Result.all(
+      rows.map((row, at) =>
+        Option.match(names.codeOf(row.name), {
+          onNone: () =>
+            Result.fail(new OutsideCodeSpace({ field: "name", relation, value: row.name })),
+          onSome: (code) => Result.succeed({ at, code, row }),
+        }),
+      ),
+    ),
+    (coded) =>
+      [...Map.groupBy(coded, ({ row }) => familyOf(row)).values()]
+        .flatMap((family) =>
+          family
+            .toSorted((left, right) => left.code - right.code)
+            .map(({ at, row }, position) => ({ at, position, row })),
+        )
+        .toSorted((left, right) => left.at - right.at),
+  );
 
 /**
  * Generate the attribute grammar of a composition.
@@ -1763,18 +1821,24 @@ export const generate = (
     const version: IdField<"version", string> = idField("version", input.versions);
     const kind = idField("kind", input.kinds);
     const domain = idField("domain", domainRoster);
-    const byKind = Map.groupBy(admitted, (row) => `${row.version}\u0000${row.kind}`);
-    const byGovernor = Map.groupBy(governed, (row) => `${row.version}\u0000${row.governor}`);
-    const families: readonly (readonly Admitted[])[] = [...byKind.values(), ...byGovernor.values()];
-    const positionOf = new Map(
-      families.flatMap((rows) =>
-        rows
-          .map((row) => ({ code: Option.getOrElse(input.names.codeOf(row.name), () => -1), row }))
-          .toSorted((left, right) => left.code - right.code)
-          .map(({ row }, position) => [row, position] as const),
-      ),
+    // Each (version, kind) and each (version, governor) family numbers its attributes from 0 in
+    // `AttributeName` code order; the rows keep the order they were read in.
+    const kindRows = yield* positioned(
+      admitted,
+      (row) => `${row.version}\u0000${row.kind}`,
+      input.names,
+      "AttributeGrammar",
     );
-    const positions = fin("AttributePosition", Math.max(0, ...families.map((rows) => rows.length)));
+    const governorRows = yield* positioned(
+      governed,
+      (row) => `${row.version}\u0000${row.governor}`,
+      input.names,
+      "GovernedAttribute",
+    );
+    const positions = fin(
+      "AttributePosition",
+      Math.max(0, ...[...kindRows, ...governorRows].map(({ position: at }) => at + 1)),
+    );
     const use = idField("use", yield* roster("Use", uses));
     const position = idField("position", positions);
     const name = idField("name", input.names);
@@ -1787,11 +1851,11 @@ export const generate = (
       key: [version, kind, name],
       name: "AttributeGrammar",
       payload: [domain, use, position],
-      rows: admitted.map((row) => ({
+      rows: kindRows.map(({ position: at, row }) => ({
         domain: row.domain.handle,
         kind: row.kind,
         name: row.name,
-        position: String(positionOf.get(row) ?? 0),
+        position: String(at),
         use: row.use,
         version: row.version,
       })),
@@ -1860,11 +1924,11 @@ export const generate = (
       key: [version, governorField, name],
       name: "GovernedAttribute",
       payload: [domain, use, position],
-      rows: governed.map((row) => ({
+      rows: governorRows.map(({ position: at, row }) => ({
         domain: row.domain.handle,
         governor: row.governor,
         name: row.name,
-        position: String(positionOf.get(row) ?? 0),
+        position: String(at),
         use: row.use,
         version: row.version,
       })),

@@ -635,9 +635,7 @@ describe("The whitespace fold", () => {
     for (const pattern of [" a", "a ", "( a)+"]) {
       const compiled = compile(collapsedToken(pattern), "xsd");
       assert.isTrue(
-        Result.isFailure(compiled) &&
-          compiled.failure._tag === "UnreadDefinition" &&
-          compiled.failure.detail.includes("holds no value"),
+        Result.isFailure(compiled) && compiled.failure._tag === "EmptyDefinition",
         `the pattern ${JSON.stringify(pattern)} under collapse`,
       );
     }
@@ -1482,9 +1480,7 @@ describe("Length facets", () => {
               const compiled = compile(domain, "exact");
               if (admitted.length === 0) {
                 assert.isTrue(
-                  Result.isFailure(compiled) &&
-                    compiled.failure._tag === "UnreadDefinition" &&
-                    compiled.failure.detail.includes("holds no value"),
+                  Result.isFailure(compiled) && compiled.failure._tag === "EmptyDefinition",
                   `${Formatter.format(lengths)} admits no length, and compiled`,
                 );
 
