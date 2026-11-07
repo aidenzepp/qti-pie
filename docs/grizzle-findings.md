@@ -1483,8 +1483,11 @@ target's UNIQUE are both representable, and only the source's index is refused.
   - `recountValues` reads them back with `scalarCodec(…).convert` (`edit.ts:194` to `209`, the read at `:203`), which
     reads `bit_out` text (`packages/engine/src/codec/scalar.ts:52`). `convertBits` collects the positions of `"1"`
     (`packages/engine/src/scalar/values/convert.ts:60` to `68`).
-  - So the hex parameter text `"XC"`, which is {a, b}, reads back as ∅. N2's trace of the recount shows it:
-    `recount ends bases: host=Set{a,b} text="XC"`.
+  - So the hex parameter text `"XC"`, which is {a, b}, reads back as ∅. N2's trace of the host-bits run shows it
+    (`~/.cache/gr8des/n2/repro/fold-closed-row-27c4cd2/trace-27c4cd2.out`, captured at 19:07 on 2026-11-06):
+    `N2TRACE recount ends bases: host=Set{a,b} text="XC"`. The owner's INSERT then binds
+    `[…"{\"X0\"}","{\"2\"}"]`, bases `X0`, the empty set, beside members 2, while the members' after is
+    `{"X8","XC"}`, so the owner's end matches no member's after.
   - It is a regression from `a2ff5eb`, where hex became the one form. At `f66c05b`, `codec/scalar.ts:51`'s parameter
     text was binary, the same as `bit_out`. A count or sum end is unaffected.
 - **Reproduction:** `~/.cache/gr8des/n2/repro/fold-closed-row/` (`run-4b155e8.out`), and the same at `27c4cd2` in
