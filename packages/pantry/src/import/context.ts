@@ -20,12 +20,13 @@
  */
 import { Option } from "effect";
 import type { Kind } from "#pantry/grammar/compose.ts";
-import { Enters, includeParentKinds, interactionKinds } from "#pantry/grammar/install.ts";
+import { includeParentKinds } from "#pantry/grammar/install.ts";
 import type { Flag } from "#pantry/grammar/install.ts";
+import { foldOf } from "#pantry/import/fold.ts";
 import { entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import { assembledRoots } from "#pantry/qti/tests.ts";
 
 /**
@@ -66,77 +67,9 @@ export const ownContext = (self: NodeId): DocumentContext => ({
 });
 
 /**
- * The flags each kind enters for its descendants, the installed `Enters`.
- */
-const entersAt: ReadonlyMap<string, readonly FlagHandle[]> = new Map(
-  [...Map.groupBy(Enters.rows, ({ kind }) => kind)].map(
-    ([kind, rows]) => [kind, rows.map(({ flag }) => flag)] as const,
-  ),
-);
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
-
-/**
  * The kinds an include is a site under (spec reading 114).
  */
 const includeParents: ReadonlySet<string> = new Set(includeParentKinds);
-
-/**
- * What each node of a document inherits under a context: its ancestry and its nearest interaction
- * with that interaction's kind, by its id.
- */
-export interface Inherited {
-  readonly ancestry: ReadonlyMap<NodeId, ReadonlySet<FlagHandle>>;
-  readonly nearest: ReadonlyMap<NodeId, NodeId>;
-  readonly nearestKind: ReadonlyMap<NodeId, Kind>;
-}
-
-/**
- * Walk a document's nodes under a context: each node's ancestry is its parent's with the flags its
- * kind enters (`E1_derived`), and its nearest interaction its parent where the parent is an
- * interaction, else its parent's (N8); the document node's are its context's.
- *
- * @param nodes - The document's node rows in document order, so each parent precedes its children.
- * @param context - The document's context.
- * @returns What each node inherits.
- */
-export const inheritedOf = (
-  nodes: readonly { readonly id: NodeId; readonly kind: Kind; readonly parent: NodeId }[],
-  context: DocumentContext,
-): Inherited => {
-  const kinds = new Map<NodeId, Kind>();
-  const ancestry = new Map<NodeId, ReadonlySet<FlagHandle>>();
-  const nearest = new Map<NodeId, NodeId>();
-  const nearestKind = new Map<NodeId, Kind>();
-
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      ancestry.set(node.id, context.ancestry);
-      nearest.set(node.id, context.nearest);
-      nearestKind.set(node.id, context.nearestKind);
-      continue;
-    }
-
-    const parentKind = kinds.get(node.parent) ?? "document";
-    ancestry.set(
-      node.id,
-      new Set([...(ancestry.get(node.parent) ?? []), ...(entersAt.get(node.kind) ?? [])]),
-    );
-    if (interactions.has(parentKind)) {
-      nearest.set(node.id, node.parent);
-      nearestKind.set(node.id, parentKind);
-    } else {
-      nearest.set(node.id, nearest.get(node.parent) ?? node.parent);
-      nearestKind.set(node.id, nearestKind.get(node.parent) ?? "document");
-    }
-  }
-
-  return { ancestry, nearest, nearestKind };
-};
 
 /**
  * Whether a node is a site: a section ref, or an include under a parent that holds an explicit
@@ -194,7 +127,7 @@ export interface Contexts {
 interface Read {
   readonly assembledRoot: boolean;
   readonly holdsSites: boolean;
-  readonly nodes: readonly { readonly id: NodeId; readonly kind: Kind; readonly parent: NodeId }[];
+  readonly nodes: readonly NodeRow<Composed>[];
   readonly self: NodeId;
   readonly sites: readonly SiteOf[];
 }
@@ -254,21 +187,20 @@ const stepOf = (
   const unions = new Map<NodeId, Set<FlagHandle>>();
   const nearests = new Map<NodeId, { readonly kind: Kind; readonly node: NodeId }>();
   for (const { nodes, self, sites } of read) {
-    const inherited = inheritedOf(nodes, contexts.get(self) ?? ownContext(self));
+    const folds = foldOf(nodes, contexts.get(self) ?? ownContext(self));
     for (const site of sites) {
       const target = byPath.get(site.path);
-      if (target !== undefined) {
+      const folded = folds.get(site.node);
+      if (target !== undefined && folded !== undefined) {
         const union = unions.get(target) ?? new Set<FlagHandle>();
-        for (const flag of inherited.ancestry.get(site.node) ?? []) {
+        for (const flag of folded.ancestry) {
           union.add(flag);
         }
 
         unions.set(target, union);
 
-        const kind = inherited.nearestKind.get(site.node) ?? "document";
-        const node = inherited.nearest.get(site.node);
-        if (kind !== "document" && node !== undefined && !nearests.has(target)) {
-          nearests.set(target, { kind, node });
+        if (folded.nearestKind !== "document" && !nearests.has(target)) {
+          nearests.set(target, { kind: folded.nearestKind, node: folded.nearest });
         }
       }
     }

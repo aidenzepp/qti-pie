@@ -27,8 +27,10 @@ import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import { Flag } from "#pantry/grammar/install.ts";
-import { inheritedOf, isSiteKind, ownContext } from "#pantry/import/context.ts";
-import type { DocumentContext, Inherited, ListedTarget } from "#pantry/import/context.ts";
+import { isSiteKind, ownContext } from "#pantry/import/context.ts";
+import { foldOf } from "#pantry/import/fold.ts";
+import type { Folded } from "#pantry/import/fold.ts";
+import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import {
   directoryOf,
   entryPathOf,
@@ -204,12 +206,12 @@ interface View {
   readonly childrenOf: ReadonlyMap<NodeId, readonly NodeRow<Composed>[]>;
   readonly directory: string;
   readonly document: NodeId;
-  readonly ids: TestIds;
   /**
-   * What each node inherits under the document's context: its ancestry and nearest interaction.
+   * Each node's fold under the document's context: its ancestry and nearest interaction among
+   * them.
    */
-  readonly inherited: Inherited;
-  readonly nearest: ReadonlyMap<NodeId, NodeId>;
+  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly ids: TestIds;
   readonly rows: FlatRows<Composed>;
 }
 
@@ -229,7 +231,7 @@ const viewOf = (doc: XdmDocument<Composed>, ids: TestIds): View => {
     attributes.set(node, named);
   }
 
-  const inherited = inheritedOf(rows.nodes, ids.context ?? ownContext(rows.document.node));
+  const folds = foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node));
 
   return {
     attributes,
@@ -240,9 +242,8 @@ const viewOf = (doc: XdmDocument<Composed>, ids: TestIds): View => {
     ),
     directory: directoryOf(ids.path).directory,
     document: rows.document.node,
+    folds,
     ids,
-    inherited,
-    nearest: inherited.nearest,
     rows,
   };
 };
@@ -277,7 +278,7 @@ const kindOf = (view: View, id: NodeId): Kind => view.byId.get(id)?.kind ?? "doc
 const tupleOf = (view: View, node: NodeRow<Composed>) => ({
   document: view.document,
   kind: node.kind,
-  nearest: view.nearest.get(node.id) ?? view.document,
+  nearest: view.folds.get(node.id)?.nearest ?? view.document,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -745,11 +746,11 @@ const sitesOf = (
           node.id,
           {
             ...tupleOf(view, node),
-            ancestry: Bits.of(Flag, [...(view.inherited.ancestry.get(node.id) ?? [])]),
+            ancestry: Bits.of(Flag, [...(view.folds.get(node.id)?.ancestry ?? [])]),
             children: BigInt(view.childrenOf.get(node.id)?.length ?? 0),
             external: hrefs.get(node.id)?.external ?? false,
             governs: node.governs,
-            nearestKind: view.inherited.nearestKind.get(node.id) ?? "document",
+            nearestKind: view.folds.get(node.id)?.nearestKind ?? "document",
             parentKind,
             parentLooseChain: parentKind === sectionKind && above.parentLooseChain,
             parentMixes: above.parentMixes,

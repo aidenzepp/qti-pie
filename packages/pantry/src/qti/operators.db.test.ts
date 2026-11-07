@@ -1,7 +1,7 @@
 /**
  * The operator overlays' laws on the lease, PostgreSQL itself the judge (testing doctrine, rule 3),
  * written to run at Z and never by a hand: each refused package is refused under the law its one
- * edit of `simple` breaks (membership in the outcome's `laws`, since one native object may
+ * edit of `simple` breaks (membership in the outcome's `refused.laws`, since one native object may
  * discharge several, C22), and the nearest valid package beside it is accepted whole.
  *
  * `simple`'s response processing template is replaced by rules that hold the operators, beside a
@@ -128,8 +128,8 @@ const foldInto =
     law.end.terms.some((term) => term.field === field);
 
 /**
- * Whether an outcome is `invariant-rejected` with a law among its `laws` one of the predicates
- * picks.
+ * Whether an outcome is `invariant-rejected` with a law among its `refused.laws` one of the
+ * predicates picks.
  *
  * @param outcome - The apply's outcome.
  * @param picks - The laws the case may be refused under.
@@ -140,7 +140,7 @@ const rejectedBy = (
   picks: readonly ((law: Law) => boolean)[],
 ): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.laws.some((law) => picks.some((pick) => pick(law)));
+  outcome.refused.laws.some((law) => picks.some((pick) => pick(law)));
 
 /**
  * The number of packages stored, through a query that counts each by its key.
@@ -394,7 +394,7 @@ describe.skipIf(!hasLease)(
 
       for (const { apply, laws, name } of refusedCases) {
         it.effect(`refuses ${name}`, () =>
-          // Oracle: PostgreSQL, the law the case's one edit breaks, named in the outcome's `laws`.
+          // Oracle: PostgreSQL, the law the case's one edit breaks, named in the outcome's `refused.laws`.
           Effect.gen(function* refused() {
             const before = yield* storedPackages;
             const outcome = yield* apply();

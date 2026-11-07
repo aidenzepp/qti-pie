@@ -52,9 +52,9 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
  * @returns Whether it holds one.
  */
 const rejectedBy = (
-  outcome: { readonly kind: string; readonly laws?: readonly Law[] },
+  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly Law[] } },
   picks: (law: Law) => boolean,
-): boolean => outcome.kind === "invariant-rejected" && (outcome.laws ?? []).some(picks);
+): boolean => outcome.kind === "invariant-rejected" && (outcome.refused?.laws ?? []).some(picks);
 
 /**
  * Pick the check of one relation by its name.
