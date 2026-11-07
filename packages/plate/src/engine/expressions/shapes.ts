@@ -2,8 +2,9 @@
  * The areas of a `qti-area-map-entry` and whether each holds a point ({@link areaHolds}), a leaf:
  * M1's area tests, which `qti-map-response-point` reads.
  *
- * Every test is geometry on floats, as HTML's image maps define it. The module value-imports only
- * `Array` from `effect`, and the area's type from the item model.
+ * Every test is geometry on floats, as HTML's image maps define it, and decides a boundary point by
+ * products, never a quotient. The module value-imports only `Array` from `effect`, and the area's
+ * type from the item model.
  *
  * @module
  */
@@ -91,6 +92,12 @@ const square = (value: number): number => value * value;
  * coordinates beyond them are ignored (a `poly`'s odd last one too), a `rect`'s corners may come
  * in either order, and a radius of zero or less holds no point.
  *
+ * A boundary point is judged exactly at integer coordinates, because no test divides before it
+ * compares: `rect` only compares, `circle` and `ellipse` compare sums of squared products, and
+ * `poly` decides its edges by cross-products. Each of those is an integer below 2^53, so exact,
+ * while coordinate differences and radii stay within 8192 (`ellipse`, whose terms have four
+ * factors) or 2^25 (the others).
+ *
  * @see https://html.spec.whatwg.org/multipage/image-maps.html#image-map-processing-model
  */
 export const areaHolds: Readonly<
@@ -110,7 +117,9 @@ export const areaHolds: Readonly<
     down !== undefined &&
     across > 0 &&
     down > 0 &&
-    square((x - centerX) / across) + square((y - centerY) / down) <= 1,
+    // (dx / across)² + (dy / down)² <= 1, multiplied through by (across · down)² so no quotient
+    // rounds: in floats (12 / 13)² + (5 / 13)² is 1.0000000000000002, though 12,5 is on the boundary.
+    square((x - centerX) * down) + square((y - centerY) * across) <= square(across * down),
   poly: (coords, x, y) => {
     const vertices = Arr.chunksOf(coords, 2).flatMap(([vertexX, vertexY]) =>
       vertexY === undefined ? [] : [[vertexX, vertexY] as const],
