@@ -32,7 +32,8 @@ import { settings as hostSettings } from "#pantry/test/settings.ts";
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
  * describe: a hang guard, never a budget. Measured 2026-11-07: 53.8 s at a load average of 63 to
- * 73, its slowest test.
+ * 73, its slowest test. Measured 2026-11-07: 13.8 s at a load average of 8.06 to 48.90, its slowest
+ * test with Stage N's fixtures, each of which states this timeout.
  */
 const testTimeoutMs = 180_000;
 
@@ -1838,7 +1839,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect("the pattern fixtures name a variable that no document of the package declares", () =>
@@ -1984,7 +1985,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2067,7 +2068,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2123,7 +2124,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.include(padded, "A ruler&#9;of one metre");
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2226,7 +2227,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect("the empty card and the empty entry are cut-catalog-supports with one card more", () =>
@@ -2399,7 +2400,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2571,7 +2572,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
-    240_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2603,6 +2604,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.strictEqual(yield* textOf("pci-items-missing", "fractions_deps.xml"), modules);
         }),
       ),
-    240_000,
+    testTimeoutMs,
   );
 });

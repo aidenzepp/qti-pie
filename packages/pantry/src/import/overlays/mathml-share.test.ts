@@ -28,6 +28,12 @@ import type {
 import { idOf } from "#pantry/test/gen/xdm.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower test states: a hang guard, never a budget.
+ * Measured 2026-11-07: 3.7 s at a load average of 17.65 to 123.38, its slowest test, in a free run.
+ */
+const testTimeoutMs = 60_000;
+
+/**
  * The version every case is written in.
  */
 const version = "3.0.1";
@@ -441,18 +447,22 @@ describe("import/overlays/mathml-share.ts, the rank and share rows (spec reading
     assert.deepStrictEqual(keysOf(rows.MathRank), nodesOf(0, 1, 2, 3, 4));
   });
 
-  it("builds a document of 50,000 siblings and one share, each element's children collected once", () => {
-    // Nodes: 0 document, 1 math, 2 apply, 3 plus, 4 to 50,003 ci (the first holds the id), 50,004 share.
-    const count = 50_000;
-    const siblings = Array.from({ length: count }, (_, at) =>
-      elementOf("m:ci", at === 0 ? [attribute("id", "a")] : []),
-    );
-    const doc = documentOf(
-      elementOf("m:math", [], [plusOf(undefined, [...siblings, shareOf("#a")])]),
-    );
-    const rows = rowsOf(doc, ids);
+  it(
+    "builds a document of 50,000 siblings and one share, each element's children collected once",
+    () => {
+      // Nodes: 0 document, 1 math, 2 apply, 3 plus, 4 to 50,003 ci (the first holds the id), 50,004 share.
+      const count = 50_000;
+      const siblings = Array.from({ length: count }, (_, at) =>
+        elementOf("m:ci", at === 0 ? [attribute("id", "a")] : []),
+      );
+      const doc = documentOf(
+        elementOf("m:math", [], [plusOf(undefined, [...siblings, shareOf("#a")])]),
+      );
+      const rows = rowsOf(doc, ids);
 
-    assert.deepStrictEqual(keysOf(rows.MathRank), nodesOf(1, 2, 4, count + 4));
-    assert.deepStrictEqual(breachesOf(rows), []);
-  }, 60_000);
+      assert.deepStrictEqual(keysOf(rows.MathRank), nodesOf(1, 2, 4, count + 4));
+      assert.deepStrictEqual(breachesOf(rows), []);
+    },
+    testTimeoutMs,
+  );
 });
