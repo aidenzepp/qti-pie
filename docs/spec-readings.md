@@ -2454,6 +2454,6 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `ISO-8859-1` in the declared label, so `é` reads as `Ã©`; it exits 0 for each, and this reading refuses each, so
      its verdict is not this reading's. The 1EdTech example corpus holds no document with a mark or in UTF-16, and of
      the QTI 3.0 schema set only `w3/XInclude.xsd` opens with one (`FF FE`, no declaration), which reads as `UTF-16` as
-     before. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by lane
-     CRUST (`23329950`), on GEN-B/codec's findings N3 and N4, under the operator's standing ruling of 2026-11-05 that
-     the spec wins.)
+     before. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from RV seat CRUST (`23329950`), on GEN-B/codec's
+     findings N3 and N4.)
