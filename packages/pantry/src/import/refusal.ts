@@ -2513,7 +2513,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [keyOver(sideOf("TestDocument", "package", "path")), "Document entry"],
   [
     containedIn(
-      sideOf("Site", "package", "path", "target"),
+      sideOf("SiteTarget", "package", "path", "target"),
       sideOf("TestDocument", "package", "path", "node"),
     ),
     "Document entry",
@@ -2538,10 +2538,18 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ),
     "E1 derived",
   ],
+  // A site names a document of the package by its SiteTarget, a row only where its href names one:
+  // an include with none is refused here (reading 115), a section ref by "Document entry" below on
+  // its path, and the target is the document at its path.
+  [containedIn(sideOf("Site", "node"), sideOf("SiteTarget", "node")), "Include target"],
+  [
+    containedIn(sideOf("Site", "package", "path"), sideOf("TestDocument", "package", "path")),
+    "Document entry",
+  ],
   [
     containedIn(
       sideOf(
-        "Site",
+        "SiteTarget",
         "package",
         "path",
         "target",
@@ -2568,12 +2576,12 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ),
     "Include root",
   ],
-  [familyOf("counted", sideOf("Site", "target"), "Document", "targetedBy"), "E1 derived"],
+  [familyOf("counted", sideOf("SiteTarget", "target"), "Document", "targetedBy"), "E1 derived"],
   [
     foldOf(
       { count: "targetedBy", owner: "Document" },
       "or",
-      sideOf("Site", "ancestry"),
+      sideOf("SiteTarget", "ancestry"),
       sideOf("Document", "node", "context"),
     ),
     "E1 derived",

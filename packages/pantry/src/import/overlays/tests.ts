@@ -65,6 +65,7 @@ import type {
   SectionOrdering,
   SectionSelection,
   Site,
+  SiteTarget,
   StimulusRef,
   TestDocument,
   TestFlag,
@@ -95,7 +96,7 @@ export interface TestIds {
   readonly path: string;
   /**
    * The document a site's href names, with its root's kind and context; where none is given, the
-   * document at the path with an unknown root, which no `Document` row holds.
+   * document at the path, with the document node's own kind as its root.
    */
   readonly targetAt?: (path: string) => Option.Option<ListedTarget>;
   /**
@@ -118,18 +119,13 @@ export interface TestRows {
   readonly SectionOrdering: ReadonlyMap<string, Addition<typeof SectionOrdering>>;
   readonly SectionSelection: ReadonlyMap<string, Addition<typeof SectionSelection>>;
   readonly Site: ReadonlyMap<string, Addition<typeof Site>>;
+  readonly SiteTarget: ReadonlyMap<string, Addition<typeof SiteTarget>>;
   readonly StimulusRef: ReadonlyMap<string, Addition<typeof StimulusRef>>;
   readonly TestDocument: ReadonlyMap<string, Addition<typeof TestDocument>>;
   readonly TestFlag: ReadonlyMap<string, Addition<typeof TestFlag>>;
   readonly TestToken: ReadonlyMap<string, Addition<typeof TestToken>>;
   readonly VariableMapping: ReadonlyMap<string, Addition<typeof VariableMapping>>;
 }
-
-/**
- * The nil uuid: a site's target where its href names no document of the package, which no
- * `TestDocument` row holds, so the site's target law refuses it.
- */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * A row's key text, its key's values in key order as a JSON array.
@@ -679,33 +675,25 @@ export const itemRefPathsOf = (doc: XdmDocument<Composed>, ids: TestIds): readon
 
 /**
  * Read the document a site's href names: the listed document there, with its root's kind and its
- * context; with no `targetAt`, the document at the path with the document node's own kind as its
- * root; and with no document there, the nil uuid, which no `Document` row holds, so the site's
- * target law refuses it.
+ * context, and with no `targetAt`, the document at the path with the document node's own kind as
+ * its root. None where the path names no listed document: the site then has no
+ * {@link SiteTarget}, and "Include target" refuses it (spec reading 115).
  *
  * @param view - The site's document.
  * @param path - The path its href names.
- * @returns The target.
+ * @returns The target, if any.
  */
-const targetOf = (view: View, path: string): ListedTarget => {
-  const listed =
-    view.ids.targetAt === undefined
-      ? Option.map(view.ids.documentAt(path), (node): ListedTarget => ({
-          context: ownContext(node),
-          node,
-          rootKind: "document",
-        }))
-      : view.ids.targetAt(path);
-
-  return Option.getOrElse(listed, () => ({
-    context: ownContext(nilUuid),
-    node: nilUuid,
-    rootKind: "document",
-  }));
-};
+const targetOf = (view: View, path: string): Option.Option<ListedTarget> =>
+  view.ids.targetAt === undefined
+    ? Option.map(view.ids.documentAt(path), (node): ListedTarget => ({
+        context: ownContext(node),
+        node,
+        rootKind: "document",
+      }))
+    : view.ids.targetAt(path);
 
 /**
- * Write a document's sites, each with the document its href names and the scope it is placed in.
+ * Write a document's sites, each with its href's path and the scope it is placed in.
  *
  * @param view - The document.
  * @param hrefs - The document's hrefs.
@@ -726,7 +714,6 @@ const sitesOf = (
 
       const parentKind = kindOf(view, node.parent);
       const above = aboveOf(view, scopes, node);
-      const target = targetOf(view, href.path);
 
       return [
         [
@@ -744,10 +731,6 @@ const sitesOf = (
             part: above.part,
             path: href.path,
             replaced: above.replaced,
-            target: target.node,
-            targetNearest: target.context.nearest,
-            targetNearestKind: target.context.nearestKind,
-            targetRoot: target.rootKind,
           },
         ] as const,
       ];
@@ -755,17 +738,60 @@ const sitesOf = (
   );
 
 /**
- * Write each include's {@link Inclusion}: its site's version, parent kind and target root, and the
- * include parent its parent's kind is.
+ * Write each site's {@link SiteTarget}: the document its href names, with that document's root
+ * kind and context, and the site's fields the target's laws read. A site whose href names no
+ * listed document has none.
  *
+ * @param view - The document.
  * @param sites - The document's sites.
  * @returns The rows, by node.
  */
-const inclusionsOf = (
+const siteTargetsOf = (
+  view: View,
   sites: ReadonlyMap<string, Addition<typeof Site>>,
-): ReadonlyMap<string, Addition<typeof Inclusion>> =>
+): ReadonlyMap<string, Addition<typeof SiteTarget>> =>
   new Map(
     [...sites.values()].flatMap((site) =>
+      Option.match(targetOf(view, site.path), {
+        onNone: () => [],
+        onSome: (target) => [
+          [
+            site.node,
+            {
+              ancestry: site.ancestry,
+              document: site.document,
+              kind: site.kind,
+              nearest: site.nearest,
+              nearestKind: site.nearestKind,
+              node: site.node,
+              package: site.package,
+              parentKind: site.parentKind,
+              path: site.path,
+              target: target.node,
+              targetNearest: target.context.nearest,
+              targetNearestKind: target.context.nearestKind,
+              targetRoot: target.rootKind,
+              version: site.version,
+            },
+          ] as const,
+        ],
+      }),
+    ),
+  );
+
+/**
+ * Write each include's {@link Inclusion}: its site's version, parent kind and target root, and the
+ * include parent its parent's kind is. An include whose href names no document has no target, so
+ * no root and no row.
+ *
+ * @param targets - The document's sites' targets.
+ * @returns The rows, by node.
+ */
+const inclusionsOf = (
+  targets: ReadonlyMap<string, Addition<typeof SiteTarget>>,
+): ReadonlyMap<string, Addition<typeof Inclusion>> =>
+  new Map(
+    [...targets.values()].flatMap((site) =>
       site.kind === includeKind
         ? [
             [
@@ -887,18 +913,20 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: TestIds): TestRows => {
   const sections = sectionsOf(view, flag);
   const hrefs = hrefsOf(view);
   const sites = sitesOf(view, hrefs, sections.scopes);
+  const targets = siteTargetsOf(view, sites);
   const assembled =
     ids.assembled ?? (among(assembledRoots, root) || sites.size > 0 || ids.targeted === true);
 
   return {
     BranchRule: keptIf(assembled, rulesOf(view, token)),
-    Inclusion: inclusionsOf(sites),
+    Inclusion: inclusionsOf(targets),
     Named: keptIf(assembled, namedOf(view, token, sections.scopes)),
     Section: keptIf(assembled, sections.rows),
     SectionMember: keptIf(assembled, membersOf(view, flag)),
     SectionOrdering: keptIf(assembled, orderingsOf(view, flag)),
     SectionSelection: keptIf(assembled, selectionsOf(view, flag)),
     Site: sites,
+    SiteTarget: targets,
     StimulusRef: stimulusRefsOf(view, token),
     TestDocument: keptIf(
       assembled,
@@ -1003,24 +1031,24 @@ const place = (
   };
   walk.walked.push(self);
 
-  const sites = [...(walk.byDocument.get(self.document)?.Site.values() ?? [])].toSorted((a, b) =>
-    a.start < b.start ? -1 : 1,
-  );
+  const rows = walk.byDocument.get(self.document);
+  const sites = [...(rows?.Site.values() ?? [])].toSorted((a, b) => (a.start < b.start ? -1 : 1));
   const children = chain.includes(self.document)
     ? []
-    : sites.flatMap((site) =>
-        walk.byDocument.has(site.target)
+    : sites.flatMap((site) => {
+        const target = rows?.SiteTarget.get(site.node)?.target;
+
+        return target !== undefined && walk.byDocument.has(target)
           ? [
               place(walk, [...chain, self.document], self, {
                 assemblyKind: walk.assemblyKind,
-                document: site.target,
+                document: target,
                 id: walk.newId(),
                 mixes: site.parentMixes || (site.parentLooseChain && self.mixes),
                 part: site.part === self.document ? self.part : site.part,
                 replaced: site.replaced || self.replaced,
                 rootKind:
-                  walk.byDocument.get(site.target)?.TestDocument.get(site.target)?.rootKind ??
-                  sectionKind,
+                  walk.byDocument.get(target)?.TestDocument.get(target)?.rootKind ?? sectionKind,
                 site: site.node,
                 siteLooseChain: site.parentLooseChain,
                 siteMixes: site.parentMixes,
@@ -1029,8 +1057,8 @@ const place = (
                 siteStart: site.start,
               }),
             ]
-          : [],
-      );
+          : [];
+      });
   self.end = walk.walked.length;
 
   return { ...fields, children };

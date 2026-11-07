@@ -418,11 +418,20 @@ against it. A reading that is not an information-model-over-XSD case says which 
     declared identifier must not contain one, and the XSD's identifier type allows it. This follows the information
     model and the XSD, which admit it, and reads "reserved" as stated, not as a prohibition, because reading 1 refuses
     nothing valid. (2026-11-04.)
-38. **A `qti-gap` appears only within a gap-match interaction.** The information model's normative prose says a
-    `qti-gap` must only appear within a gap-match interaction. The XSD admits it in any phrasing container. This follows
-    the information model's prose and sets the XSD aside. The rule also refuses a gap inside the gap text of a graphic
-    gap-match interaction. Where the prose is silent, such as hottext placement or a gap text that contains gaps,
-    nothing is refused. (2026-11-04.)
+38. **A `qti-gap` appears only within a gap-match interaction, and a `qti-hottext` may appear in any flow or inline
+    content.** The information model's normative prose says a `qti-gap` must only appear within a gap-match
+    interaction (section 5.55). The XSD admits it in any phrasing container. This follows the information model's prose
+    and sets the XSD aside. The rule also refuses a gap inside the gap text of a graphic gap-match interaction. A
+    hottext is not confined to a hottext interaction. Section 5.65 says "A HotText area is used within the content of an
+    hotTextInteraction to provide the individual choices", which describes what a hottext is for and states no
+    requirement. Its next sentence says a hottext "must not contain any nested interactions or other hottext areas",
+    and the grammar's ancestry holds that one. The class tables give HotText the parents FlowGroup, InlineGroup,
+    InlineStaticGroup and FeedbackFlowStaticGroup (section 5.65). FlowGroup's entry for it says only "used within the
+    content" (section 6.15.3), and the XSD agrees. No normative source confines the hottext, so there is no stricter
+    source to follow, and a hottext anywhere else is accepted, owned by no interaction (reading 1). Nothing is refused
+    for a gap text that contains gaps either, because the prose says nothing about it. (2026-11-04. Amended 2026-11-06
+    by RV seat VD, on the review of the import's sentinel values: the hottext sentence is reasoned from section 5.65
+    rather than called silent; nothing it admits changed.)
 39. **An SSML `speak/@version` is `1.1`.** The SSML 1.1 Recommendation says `speak` "must have the value "1.1"". QTI's
     core XSD types the attribute as `xs:NMTOKEN`. This follows the SSML Recommendation and sets the XSD aside, because
     the Recommendation defines the language and the XSD's type is wider than it. (2026-11-04.)

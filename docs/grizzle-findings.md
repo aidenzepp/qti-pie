@@ -1640,7 +1640,7 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   - **snapshots:** `N2DeferCycle` moves to `6af324cb…` (it was `bfc36e51…`), and `N2DeferTurned` is unchanged at
     `2b51d625…`.
 
-### A closed `C.row` read whose key is an absent `C.at` casts NULL to a bits domain, whose CHECK raises 23514 (grizzle defect, confirmed; lane DBT)
+### A closed `C.row` read whose key is an absent `C.at` casts NULL to a bits domain, whose CHECK raises 23514 (grizzle defect, fixed in `0e4454d`; lane DBT)
 
 - **Checked at:** the vendored `dec8ab3`, and grizzle `main` `0a8f697` for the pull-first check.
 - **Cause:**
@@ -1665,8 +1665,26 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   every lawful `Node` row is refused: node.db's six direct-SQL cases, and every package import. The pin evidence is in
   `~/.cache/gr8des/n2/t2/logs/node-pin.out` and `node-pin-2.out`.
 - **Status:** relayed to grizzle-c5 under the operator's standing order: fixed at the root, with a search guard over
-  closed reads with absent keys in every position, planted bugs, and this case kept. Nothing is filed and no
-  workaround is applied. DBT's `Compute.cond` guard is recorded only as an option not taken.
+  closed reads with absent keys in every position, planted bugs, and this case kept. Nothing is filed and no workaround
+  is applied. DBT's `Compute.cond` guard is recorded only as an option not taken.
+- **Fixed in grizzle `0e4454d`** (`0e4454d3d35470904cd5eaeb4ea452a90b5ebae7`), `origin/main` by `git ls-remote`:
+  - every domain CHECK is printed in one place, and admits NULL;
+  - a selection containment into a closed relation reads `NOT (φ) IS TRUE OR member`;
+  - a generated field at an absent key is its law's 23502;
+  - an installed database fails closed on domain drift.
+
+  The guard is grizzle's `test/pg/closed/absent.test.ts`, with this case's `Kind`, `Flag`, `Pick` and `FlagSelf` shape
+  kept.
+
+- **Confirmed downstream by lane N2** at `0e4454d`, from tarballs packed from a `git archive` of it (grizzle
+  `d1a32154…`, engine `41e59398…`), with DBT's `src/schema.ts` and `run.sql` and the migration regenerated there, in
+  `~/.cache/gr8des/n2/repro/null-set-read-0e4454d/run-0e4454d.out`:
+  - each domain's CHECK now reads `((VALUE IS NULL) OR (…))`;
+  - the absent-key set item (kind b, {}) is `INSERT 0 1`, judged by its law's `kind <> a` disjunct;
+  - the bare `NULL::bit varying::…__flag_bits_4_urrfzqnzt6` cast returns one row, NULL;
+  - both controls are `INSERT 0 1`.
+
+  At `0a8f697` the first two raised 23514. qti-pie's repin F to `0e4454d` follows.
 
 ### `AriaRange`'s immediate key into `AriaValue` is refused at import (grizzle defect, fixed upstream in `e9227af`; lane AR)
 
@@ -1718,7 +1736,7 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 - **Classification:** a grizzle defect, fixed in `e9227af` by grizzle's report. It is not re-run yet, since that needs
   the repin, which the `UnorderableStratum` entry below blocks. No schema change and no workaround.
 
-### A ChangeSet chain of more than about 94 inserts is TS2589 at `e9227af` (grizzle defect, type layer)
+### A ChangeSet chain of more than about 94 inserts is TS2589 at `e9227af` (grizzle defect, type layer, fixed in `d4be74c`)
 
 - **Checked at:** grizzle `e9227af`, under grizzle's own checker (effect-tsgo `tsrs`) and under `tsc` 7.0.2. It is a
   regression from `1bf3dbb`.
@@ -1736,10 +1754,12 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 - **Workaround:** none: qti-pie stays pinned at `1bf3dbb`, where the 152-insert chain typechecks, until grizzle's
   strata-depth fix. The three-way `ChangeSet.union` split that was planned for repin F is not landing, by the operator's
   ruling that qti-pie carries no workaround, so `changeSetOf` stays one chain.
-- **Status:** relayed to grizzle-c5, with a guard asked for: a 300-insert chain that typechecks in linear time, with
-  a planted nested variant shown failing. Not filed.
+- **Status:** relayed to grizzle-c5, with a guard asked for: a 300-insert chain that typechecks in linear time, with a planted nested variant shown failing. Not filed.
+- **Fixed in grizzle `d4be74c`** (`d4be74ce9988e5408762a86b19ab8c2e64aa4326`), by grizzle's report: a chain's strata are
+  stated in constant depth, its last stratum a type argument of its own, under a cost gate at 75, 150 and 300 inserts.
+  `0e4454d` contains it, and qti-pie's repin F to `0e4454d` confirms it downstream when it lands.
 
-### `UnorderableStratum` on qti-pie's import ChangeSet at `e9227af`, whose cycle is not real (grizzle defect, confirmed; lane AR)
+### `UnorderableStratum` on qti-pie's import ChangeSet at `e9227af`, whose cycle is not real (grizzle defect, fixed in `8310ede`; lane AR)
 
 - **What happens:** `e9227af`'s single schedule, in which plain and family statements share one order, refuses qti-pie's
   152-insert stratum:
@@ -1769,8 +1789,10 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
     `1bf3dbb`.
 - **Classification:** a grizzle defect, introduced by `e9227af`'s joint schedule, the fix for the `AriaRange` class.
 - **Status:** relayed to grizzle-c5's lane F as a hotfix with a guard. Nothing is filed. qti-pie carries no workaround:
-  `ChangeSet.sequence`, which the refusal suggests, would split the import into strata, and is ruled out. It blocks
-  repin F.
+  `ChangeSet.sequence`, which the refusal suggests, would split the import into strata, and is ruled out. It blocks repin F.
+- **Fixed in grizzle `8310ede`** (`8310ede122ea9d6afbab1436cf2d2a98f3427de4`), by grizzle's report: family statements
+  are ordered among themselves only where a family states a requirement, guarded by a schedule search at qti-pie's
+  scale. `0e4454d` contains it, and qti-pie's repin F to `0e4454d` confirms it downstream when it lands.
 
 ### A nested write's dedupe signature concatenates every member's full content text, so a lawful write past V8's string limit dies in the host (grizzle defect, confirmed; lane N2)
 
