@@ -519,6 +519,12 @@ const byKind = <A>(compute: ByKind<A>): ByKind<A> => {
 const itemType = "imsqti_item_xmlv3p0";
 
 /**
+ * The resource type of a test: `RootOfType`'s root for it is the root of a document whose feedback
+ * is typed under "Feedback outcome type" beside an item's.
+ */
+const testType = "imsqti_test_xmlv3p0";
+
+/**
  * What the laws read beside a document's rows: the composed grammar, and the tables the oracle
  * derives from it.
  */
@@ -546,6 +552,10 @@ export interface Laws {
    * The root kind of an item: `RootOfType`'s root for {@link itemType}.
    */
   readonly itemRoot: Option.Option<string>;
+  /**
+   * The root kind of a test: `RootOfType`'s root for {@link testType}.
+   */
+  readonly testRoot: Option.Option<string>;
   readonly kinds: ReadonlySet<string>;
   /**
    * The (version, kind) pairs that have a content model, keyed `version kind`: each holds a row of
@@ -623,6 +633,9 @@ export const lawsOf = (grammar: ComposedGrammar): Laws => {
     ),
     required: byKind((version, kind, governs) =>
       requiredOf(grammar.attributes, grammar.kinds.attributeName, version, kind, governs),
+    ),
+    testRoot: Option.fromNullishOr(
+      grammar.package.rootOfType.rows.find(({ type }) => type === testType)?.root,
     ),
   };
 };
@@ -3930,7 +3943,9 @@ const overlayLaws: readonly ((
   (node, overlay) => {
     const named = collapsedOf(overlay, node, "outcome-identifier");
     if (
-      !overlay.isItem ||
+      !(
+        overlay.isItem || Option.exists(overlay.laws.testRoot, (kind) => kind === overlay.rootKind)
+      ) ||
       Option.isNone(named) ||
       !overlay.laws.grammar.references.contentReference.rows.some(
         (row) => row.kind === node.kind && row.attribute === "outcome-identifier",

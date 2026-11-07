@@ -46,8 +46,8 @@ export interface NegativeExpectation {
 /**
  * The oracle's prediction for each of {@link negativeNames}, keyed by name, for the leased import
  * of them to read. A negative whose `oracle` is `"accepted"` and that is not "(direct)" is a
- * finding: `feedback-outcome-float` and `item-duration-not-timed`, whose breach the oracle once hid
- * under the noise of a refused positive, and `section-ref-to-item`, whose `main` rule
+ * finding: `item-duration-not-timed`, whose breach the oracle once hid under the noise of a
+ * refused positive, and `section-ref-to-item`, whose `main` rule
  * `section-ref-target` no longer exists.
  */
 export const expectations: Readonly<Record<(typeof negativeNames)[number], NegativeExpectation>> = {
@@ -58,7 +58,7 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
   "branch-replacement-target": { main: ["branch-forward"], oracle: ["branch-target"] },
   "branch-unknown-target": { main: ["branch-target"], oracle: ["branch-target"] },
   "duration-of-item-ref": { main: ["prefixed-ref"], oracle: "accepted" },
-  "feedback-outcome-float": { main: ["feedback-ref"], oracle: "accepted" },
+  "feedback-outcome-float": { main: ["feedback-ref"], oracle: ["feedback-ref"] },
   "feedback-template": {
     main: ["ancestry-ban", "binding-declared"],
     oracle: ["P8", "ancestry-ban", "prefixed-ref"],

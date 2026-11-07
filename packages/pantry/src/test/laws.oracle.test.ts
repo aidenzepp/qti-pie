@@ -60,6 +60,38 @@ interface LawCase {
 }
 
 /**
+ * The breaches of "Feedback outcome type" among a judgment's.
+ *
+ * @param breaches - The breaches.
+ * @returns Those of that law.
+ */
+const testFeedbackTyped = (breaches: readonly Breach[]) =>
+  breaches.filter(({ law }) => law === "Feedback outcome type");
+
+/**
+ * Write a package whose test declares one outcome and names it from a `qti-test-feedback`.
+ *
+ * @param outcome - The outcome's identifier.
+ * @param baseType - The outcome's base type, of single cardinality.
+ * @returns The package.
+ */
+const testFeedbackPackage = (outcome: string, baseType: string) => ({
+  "imsmanifest.xml": manifestOf(
+    `${itemResource}<resource identifier="RT" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>`,
+  ),
+  "item.xml": item,
+  "test.xml": edit(
+    edit(
+      test,
+      "</qti-test-part>",
+      `</qti-test-part><qti-test-feedback access="during" outcome-identifier="${outcome}" show-hide="show" identifier="F"><qti-content-body><p>Seen.</p></qti-content-body></qti-test-feedback>`,
+    ),
+    '<qti-test-part identifier="P"',
+    `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="${baseType}"/><qti-test-part identifier="P"`,
+  ),
+});
+
+/**
  * The packages that break each law the oracle reads from documents, one case per law.
  */
 const lawCases: readonly LawCase[] = [
@@ -492,6 +524,20 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
       assert.isTrue(float.held, float.breaches);
       assert.isFalse(identifier.held, identifier.breaches);
       assert.isFalse(builtIn.held, builtIn.breaches);
+    }),
+  );
+
+  it.effect("Feedback outcome type: a test's feedback names an identifier outcome", () =>
+    Effect.gen(function* testFeedbackType() {
+      const float = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("PROGRESS", "float"))),
+      );
+      const identifier = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("FEEDBACK", "identifier"))),
+      );
+
+      assert.strictEqual(float.length, 1, shown(float));
+      assert.strictEqual(identifier.length, 0, shown(identifier));
     }),
   );
 
