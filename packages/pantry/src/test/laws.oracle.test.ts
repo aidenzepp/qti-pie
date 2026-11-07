@@ -1614,15 +1614,16 @@ describe("the foreign namespace classes, every class against every URI", () => {
     "an open attribute's data- name breaks its law exactly where reading 13's language refuses it: every class and host against every name",
     () =>
       // Oracle: the specification as a checker, reading 13: a `data-*` name is `data-` and one or
-      // more name characters with no ASCII upper-case letter (HTML's custom data attribute rule
-      // read in XML), and a no-namespace name beginning `data-` on an element that is not foreign
-      // is never `no-namespace`; on a foreign element it is.
+      // more lower-case ASCII letters, digits, `_`, `.` or `-` (the information model's pattern,
+      // section 7.11, held with its prose, which bars upper case), and a no-namespace name
+      // beginning `data-` on an element that is not foreign is never `no-namespace`; on a foreign
+      // element it is.
       // Bound: 2 classes, 2 hosts and 9 names, 36 rows.
       Effect.gen(function* dataName() {
         const rows = yield* foldedText(edit(item, `<p id="intro">`, `<p data-x="1" id="intro">`));
         const target = rows.attributes.find((attribute) => attribute.name === "data-*");
         const host = rows.nodes.find(({ id }) => id === target?.node);
-        const language = /^data-[^A-Z:]+$/u;
+        const language = /^data-[a-z0-9_.-]+$/u;
         const names = [
           "data-x",
           "data-é",

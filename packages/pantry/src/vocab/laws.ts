@@ -195,7 +195,7 @@ export const lawTable = {
   "AL4 data name": {
     rule: "attribute-admission",
     source:
-      "reading 13 of docs/spec-readings.md: HTML's custom data attribute rule read in XML (https://html.spec.whatwg.org/multipage/dom.html#custom-data-attribute: a name in no namespace that starts with data-, has at least one character after the hyphen, is a valid attribute local name and contains no ASCII upper alphas) and the information model's prose (dataExtension): a data-* attribute's name is in that language, and a no-namespace name of an element that is not foreign never begins data- (vocab/open.ts dataName, attributes.ts AL4_data_name)",
+      "reading 13 of docs/spec-readings.md: https://www.imsglobal.org/spec/qti/v3p0/info#Derived_DataHTML5Extension (§7.11, DataHTML5Extension: its pattern 'Default = \"(data-)[a-zA-Z0-9_\\-\\.]+\"', and 'contains no uppercase ASCII letters'), the stricter of the two on each point (readings 16 and 17): a data-* attribute's name is data-[a-z0-9_.-]+, and a no-namespace name of an element that is not foreign never begins data- (vocab/open.ts dataName, attributes.ts AL4_data_name)",
   },
   "AL4 declared data name": {
     rule: "attribute-admission",

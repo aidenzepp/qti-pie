@@ -90,26 +90,13 @@ export type OpenName =
     };
 
 /**
- * A name's later characters under HTML's custom data attribute rule, as the body of a character
- * class: XML 1.0's `NameChar` without the colon (the class `ncChar` of `qti/attributes.ts` writes)
- * and without the ASCII upper-case letters `A-Z`.
- *
- * @see {@link https://www.w3.org/TR/xml/#NT-NameChar | XML 1.0, NameChar}
- */
-const dataChar =
-  "\\-.0-9_a-z\\u{B7}\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{37D}\\u{37F}-\\u{1FFF}\\u{200C}-\\u{200D}\\u{203F}-\\u{2040}\\u{2070}-\\u{218F}\\u{2C00}-\\u{2FEF}\\u{3001}-\\u{D7FF}\\u{F900}-\\u{FDCF}\\u{FDF0}-\\u{FFFD}\\u{10000}-\\u{EFFFF}";
-
-/**
  * The language of a `data-*` attribute's name, which is in no namespace: `data-`, then one or more
- * name characters (XML 1.0's `NameChar` without the colon), none of them an ASCII upper-case
- * letter.
- *
- * It is HTML's custom data attribute rule read in XML, which accepts `data-é` and refuses `data-A`
- * and a bare `data-` (reading 13 of `docs/spec-readings.md`). It sets aside the looser pattern the
- * information model gives beside its prose, the XSD's wildcard and the Schematron's prefix test. A
- * no-namespace name that begins `data-` and breaks it is refused, never read as `no-namespace`.
+ * lower-case ASCII letters, digits, `_`, `.` or `-`: the information model's pattern, which bars
+ * every other character, held with its prose, which bars upper case (reading 13 of
+ * `docs/spec-readings.md`). A no-namespace name that begins `data-` and breaks it is refused, never
+ * read as `no-namespace`.
  */
-export const dataName = new RegExp(`^data-[${dataChar}]+$`, "u");
+export const dataName = /^data-[a-z0-9_.-]+$/u;
 
 /**
  * The global elements spec reading 6 keeps foreign inside wildcard content, by kind: QTI's
@@ -413,7 +400,7 @@ export class OpenClassRefused extends Schema.TaggedError<OpenClassRefused>()("Op
   override get message(): string {
     const { attribute, element } = this;
     const messages: Readonly<Record<OpenClassRefusal, string>> = {
-      "data-name": `${attribute} is not a valid data-* attribute name: after "data-", QTI allows one or more name characters, none of them an upper-case ASCII letter (spec reading 13). Remove the upper-case letters or rename the attribute.`,
+      "data-name": `${attribute} is not a valid data-* attribute name: after "data-", QTI allows one or more lower-case ASCII letters, digits, "_", "." and "-" (spec reading 13). Rename it in lower case.`,
       declared: `${attribute} is declared by a schema the model reads, so the model reads it only under its own name, and it has no attribute ${attribute} on ${element}. The document may still be valid: this is a gap in the model's vocabulary, so report it with the document.`,
     };
 

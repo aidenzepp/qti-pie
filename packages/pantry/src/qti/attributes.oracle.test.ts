@@ -632,10 +632,10 @@ describe("qti/attributes.ts, the data name (reading 13)", () => {
   it.effect(
     "breaks law AL4 data name on a data-* name outside reading 13's language and on a no-namespace data- name of an element that is not foreign, and on no name of the language",
     () =>
-      // Oracle: the specification as a checker, reading 13 of `docs/spec-readings.md`: HTML's
-      // custom data attribute rule read in XML, `data-` and one or more name characters with no
-      // ASCII upper-case letter, and a no-namespace `data-` name of an element that is not foreign
-      // is `data-*` or refused (a foreign element's is `no-namespace`).
+      // Oracle: the specification as a checker, reading 13 of `docs/spec-readings.md`: the
+      // information model's pattern and prose (section 7.11), `data-` and one or more lower-case
+      // ASCII letters, digits, `_`, `.` or `-`, and a no-namespace `data-` name of an element that
+      // is not foreign is `data-*` or refused (a foreign element's is `no-namespace`).
       // Bound: the four cases of the brief, written out.
       Effect.gen(function* dataNameBox() {
         const rows = yield* foldedOf(dataItem, "3.0.1");
