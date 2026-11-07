@@ -1892,7 +1892,7 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   `Document`'s `node` mirrors the document-kind nodes (`chardata.ts:617` to `623`), so each copy equals its node's
   value.
 
-### A statement can't be built by a helper generic over relations that share a heading (a limit of the typed builders, lifted in `234e3982`; lane REP-A)
+### A statement can't be built by a helper generic over relations that share a heading (a limit of the typed builders, lifted in `234e3982`, workaround removed in `e5efdc22`; lane REP-A)
 
 - **Classified:** a limit of the typed statement builders, not a defect: the checks are conditional types, which
   TypeScript defers over a type parameter. Checked at the pin `72f7d03` and at grizzle's newest `main`, `64eacbb4`.
@@ -1930,14 +1930,22 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 - **What would lift it:** a builder form that checks compatibility where the helper is applied, such as a
   `forEach(relations, (r) => statements)` typed as a mapped tuple over the concrete relations; or a `SidesCompatible`
   that resolves through the side's heading rather than its relation.
-- **Workaround in pantry:** the nine blocks stay unrolled, each fully typed.
+- **Workaround in pantry, removed in `e5efdc22`:** the blocks stayed unrolled, each fully typed. Each content
+  reference law ("Context variable reference", "Feedback reference", "Printed variable reference", "Template
+  reference") now has a row of `contentReferences` in `qti/interactions.ts`: its check, its own relation, its section
+  names and its placed relation, the eight relations that remain. `contentReferenceLaws` takes any row, the union of
+  the four, and states the law's seven statements once; its two predicates are typed as `RowScalars` of the shared
+  reference heading under any name, since a predicate typed over one relation's rows pins the name the builder infers.
+  The law catalog spreads the table mapped through it. `_init` regenerated from zero before and after is
+  byte-identical, every SQL file, `meta.json` and `snapshot.json`, and so is the law catalog; the placed
+  `declarationRef` side read through `kind` is still refused with `Refusal<"the sides' field types differ">`, and a
+  row dropped from the table fails `src/qti/interactions.oracle.test.ts`.
 - **Lifted in grizzle `234e3982`** ("Builders and query rules compile over a relation generic in its heading"), on
   grizzle's `main`, which qti-pie took at repin I, `8796df22` (grizzle `234e398`). Lane REP-A re-ran the same probe and
   command in a git archive of `234e3982` with a frozen install: exit 0, no output. Its negative control, a `uuid` side
   into a `natural` side through the same generic helper, is still refused with
   `Refusal<"the sides' field types differ">`, exit 2, so the check stands and only the deferral is gone. Both runs are
-  at the end of `~/.cache/gr8des/rep-a/generic-limit-run.md`. The nine blocks may now be stated once from a table
-  (REP-A's I1).
+  at the end of `~/.cache/gr8des/rep-a/generic-limit-run.md`.
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
