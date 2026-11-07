@@ -24,6 +24,8 @@
  *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
  *   times;
+ * - **a third item** whose response processing includes a rule fragment, and whose custom interaction
+ *   holds a text a bounded `xsi:type` types;
  * - **the stimulus** has a doctype, a processing instruction, a comment, an `xml:base` and an
  *   unexpanded entity reference in an attribute, and no reference the base would govern;
  * - **the test** has a linear part, a branch rule, a variable mapping, a template default, a
@@ -364,13 +366,22 @@ const fragment = [
 
 /**
  * The third item: a score and response processing that includes a response rule fragment (spec
- * reading 117), whose references name the item's `SCORE` and its built-in `numAttempts`.
+ * reading 117), whose references name the item's `SCORE` and its built-in `numAttempts`; and a
+ * custom interaction holding a foreign element whose text an `xsi:type` gives
+ * `NonNegativeDoubleDType`, a bounded double (spec reading 144). It is here, not in the first
+ * item's custom interaction, whose one foreign element the oracle's mutations draw.
  */
 const ruledItem = [
   declaration,
-  `<qti-assessment-item xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item3" title="Ruled" adaptive="false" time-dependent="false">`,
+  `<qti-assessment-item xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:qti="${asi}" identifier="item3" title="Ruled" adaptive="false" time-dependent="false">`,
+  '  <qti-response-declaration identifier="SIZE" cardinality="single" base-type="string"/>',
   '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
-  "  <qti-item-body><p>Scored by its included rule.</p></qti-item-body>",
+  "  <qti-item-body>",
+  "    <p>Scored by its included rule.</p>",
+  '    <qti-custom-interaction response-identifier="SIZE">',
+  '      <w:size xmlns:w="urn:example:widget" xsi:type="qti:NonNegativeDoubleDType">2.5</w:size>',
+  "    </qti-custom-interaction>",
+  "  </qti-item-body>",
   '  <qti-response-processing><xi:include href="rules.xml"/></qti-response-processing>',
   "</qti-assessment-item>",
   "",

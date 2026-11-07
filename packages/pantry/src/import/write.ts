@@ -415,7 +415,6 @@ const positionHandle = (state: number): PositionHandle => {
 };
 
 /**
- * /**
  * The domains a bound judges ({@link boundedDomains}), each with its lexical space as the host
  * reads it: its pattern, read with {@link patternFlags} as AL1 reads it.
  */
