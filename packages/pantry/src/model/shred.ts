@@ -188,12 +188,14 @@ export interface ShredGrammar<V extends XdmVocabulary> {
     kind: ForeignKind,
   ) => boolean;
   /**
-   * Find the type an expanded name names: the `TypeName` roster.
+   * Find the type an expanded name names in a version: a type the version's pinned schemas define
+   * (`XsiTypes.definedIn`), never one of another version alone.
    *
+   * @param version - The version of the element's document.
    * @param name - The name an `xsi:type` resolves to.
-   * @returns The type's handle, or none when no pinned schema names a type so.
+   * @returns The type's handle, or none when no pinned schema of the version names a type so.
    */
-  readonly typeName: (name: ExpandedName) => Option.Option<string>;
+  readonly typeName: (version: V["version"], name: ExpandedName) => Option.Option<string>;
 }
 
 /**
@@ -630,7 +632,7 @@ const governsOf = <V extends XdmVocabulary>(
     return typed === undefined
       ? Result.succeed(grammar.declaredType(version, reading.kind))
       : Result.flatMap(qNameOf(typed, reading.element, scope), (name) =>
-          Result.fromOption(grammar.typeName(name), () =>
+          Result.fromOption(grammar.typeName(version, name), () =>
             unmodeledAttribute(typed, reading.element, "type-unknown"),
           ),
         );
@@ -653,7 +655,7 @@ const governsOf = <V extends XdmVocabulary>(
     ? unassessed()
     : Result.flatMap(qNameOf(typed, element, scope), (name) =>
         Option.match(
-          Option.filter(grammar.typeName(name), () =>
+          Option.filter(grammar.typeName(version, name), () =>
             typeAvailable(parent.namespace, name.namespace),
           ),
           { onNone: unassessed, onSome: (handle) => Result.succeed(handle) },
