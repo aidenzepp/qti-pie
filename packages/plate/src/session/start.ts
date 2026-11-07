@@ -502,9 +502,10 @@ const datestampOf = (now: Date, argument: TimeArgument): Result.Result<string, I
  *
  * It cannot occur: `firstAttempt` fails only when template processing reads a variable it holds no
  * value of, sets a variable the item does not declare in the kind the rule sets, or sets one to a
- * value of another type, and the validator refuses each of these on an accepted item. It is
- * thrown, never returned, so the failures of {@link present} and the moves hold only failures a
- * caller can cause, and it is not exported.
+ * value of another type, and on an accepted item the validator refuses each of these or the item
+ * model marks the template processing that would cause it, which then does not run. It is thrown,
+ * never returned, so the failures of {@link present} and the moves hold only failures a caller can
+ * cause, and it is not exported.
  */
 class FirstAttemptDefect extends Data.TaggedError("FirstAttemptDefect")<{
   readonly failure: EngineFailure;
@@ -514,7 +515,7 @@ class FirstAttemptDefect extends Data.TaggedError("FirstAttemptDefect")<{
    * The item, the engine's failure, and what to do with it.
    */
   override get message(): string {
-    return `The first attempt of the item ${JSON.stringify(this.item)} failed with ${this.failure._tag}, though the validator refuses every cause of that failure on a checked item. This is a defect in the renderer; report it with the item that caused it.`;
+    return `The first attempt of the item ${JSON.stringify(this.item)} failed with ${this.failure._tag}, though the validator refuses, or the item model marks, every cause of that failure on a checked item. This is a defect in the renderer; report it with the item that caused it.`;
   }
 }
 
@@ -577,14 +578,19 @@ export const withItem = (
  * Mark a session item presented and start its first attempt: its record becomes the one
  * `firstAttempt` starts for the item's instance under the session's seed, which runs the item's
  * template processing and then writes each response and outcome default, the template-set one
- * first.
+ * first. An item whose template processing the item model marks (it names a variable the engine
+ * does not hold, such as `QTI_CONTEXT` or a context variable, or holds an element the engine does
+ * not run) does not run it: its record begins with each response and outcome at its declared
+ * default and no template value, correct response or default, and `check`'s verdict,
+ * `accepted-with-unsupported`, names each mark.
  *
  * @param item The session item, not yet presented.
  * @param accepted The item it delivers.
  * @param datestamp The time of the transition, in ISO 8601.
  * @param seed The session's seed.
  * @returns The item, presented.
- * @throws {FirstAttemptDefect} When `firstAttempt` fails, which no checked item can cause.
+ * @throws {FirstAttemptDefect} When `firstAttempt` fails, which no checked item can cause: the
+ *   validator refuses, or the item model marks, every cause.
  */
 const presented = (
   item: SessionItem,
@@ -607,7 +613,10 @@ const presented = (
  * in answering mode. Its record becomes the one `firstAttempt` starts: the item's template
  * processing runs once, drawing from the stream keyed by the session's seed under the template
  * label of the item's instance and the item, and each response then holds its default
- * (`info.txt:8462`), the one template processing set, else its `qti-default-value`, else NULL. An
+ * (`info.txt:8462`), the one template processing set, else its `qti-default-value`, else NULL.
+ * Where the item model marks the item's template processing, it does not run, and the record
+ * begins with each response and outcome at its declared default and no template value, as
+ * `firstAttempt` starts it; `check`'s verdict, `accepted-with-unsupported`, tells the host. An
  * item never presented keeps a fresh record, with no template value. Presenting an item already
  * presented changes nothing. The moves and a part's end call this for the item they show.
  *

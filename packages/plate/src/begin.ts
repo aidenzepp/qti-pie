@@ -46,10 +46,16 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  *   none, `begin` draws one.
  * @returns The record of the first attempt, in the form the host stores, or {@link InvalidRecord}
  *   at stage `encode`, a renderer defect, or an {@link EngineFailure} from template processing.
- *   The engine's failure cannot occur on a checked item: the validator refuses every cause on an
- *   accepted item (a read of a variable template processing holds no value of, a rule setting a
- *   variable the item does not declare in the kind the rule sets, a value of another type), so a
- *   host writes no handling for it.
+ *   The engine's failure cannot occur on a checked item: the validator refuses, or the item model
+ *   marks, every cause on an accepted item (a read of a variable template processing holds no
+ *   value of, a rule setting a variable the item does not declare in the kind the rule sets, a
+ *   value of another type), so a host writes no handling for it. An item whose template processing
+ *   the model marks, because it holds an element the engine does not run or names a variable the
+ *   engine does not hold (such as `QTI_CONTEXT`, a context variable or a template variable of a
+ *   type plate does not model), does not run it: its record begins with each response and outcome
+ *   at its declared default and no template value, correct response or default, and `check`'s
+ *   verdict tells the host, `accepted-with-unsupported` with each mark (`variable:<identifier>` at
+ *   `qti-template-processing` for a name the engine does not hold).
  */
 export const begin = (
   document: Accepted,

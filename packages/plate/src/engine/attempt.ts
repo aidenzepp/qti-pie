@@ -193,8 +193,13 @@ export const runAttempt = (
  *   the same seed, instance and item give the same values every run. Where the item has no
  *   `qti-template-processing`, each declared template variable at its declared default, else NULL,
  *   the values no processing changes, and no override; an item that declares none holds three empty
- *   maps. Where it has a `qti-template-processing` the engine does not run, which the item model
- *   marks, no template value and no override, since nothing computed them.
+ *   maps. Where it has a `qti-template-processing` the item model marks, because it holds an
+ *   element the engine does not run or names a variable the engine does not hold while it runs
+ *   (such as `QTI_CONTEXT`, a context variable, or a template variable, response or outcome of a
+ *   type plate does not model, read or set), no template value and no override, since nothing
+ *   computed them: each response and outcome begins at its declared default, and `check`'s verdict
+ *   tells the host, `accepted-with-unsupported` with each mark (`variable:<identifier>` at
+ *   `qti-template-processing` for a name the engine does not hold).
  * - `responses`: each at its default, the one template processing set, else the declared one, else
  *   NULL of its type, before any response is given.
  * - `outcomes`: each declared outcome at its default, the one template processing set, else its
@@ -209,8 +214,9 @@ export const runAttempt = (
  *   `seed`, the key of the stream template processing draws from: the caller's, used as given.
  * @returns The record, or template processing's first failure, an {@link EngineFailure}: an
  *   expression reads a variable template processing holds no value of, a rule sets a variable the
- *   item does not declare in the kind the rule sets, or sets one to a value of another type. The
- *   validator refuses each of these on a checked item.
+ *   item does not declare in the kind the rule sets, or sets one to a value of another type. None
+ *   of these occurs on a checked item: the validator refuses each, or the item model marks the
+ *   template processing that would cause it, which then does not run.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_TemplateProcessing
  */
 export const firstAttempt = (
