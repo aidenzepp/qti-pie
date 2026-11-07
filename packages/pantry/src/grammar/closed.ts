@@ -15,7 +15,7 @@
  * value order (fin.md §17, "Codes").
  */
 import { Array as Arr, Option, Result, Schema } from "effect";
-import type { Source } from "#pantry/vocab/inventory/types.ts";
+import type { Source, Sources } from "#pantry/vocab/inventory/types.ts";
 
 /**
  * A roster: the handles of a closed vocabulary, each coded by its position.
@@ -194,22 +194,71 @@ export interface Sourced<
 }
 
 /**
- * Give a closed relation's rows their sources.
- *
- * @param relation - The relation.
- * @param source - Where a row comes from, read from the row.
- * @returns The relation, answering each key's source.
+ * A row a closed relation states, with where it comes from: the XSD particle or declaration it
+ * reads, or the specification or spec reading that states it.
  */
-export const sourced = <
-  const Key extends readonly AnyKeyField[],
-  const Payload extends readonly AnyField[],
->(
-  relation: Closed<Key, Payload>,
-  source: (row: Row<Key, Payload>) => Source,
-): Sourced<Key, Payload> => ({
-  ...relation,
-  sourceOf: (key) => Option.map(relation.lookup(key), source),
-});
+export interface SourcedRow<
+  Key extends readonly AnyKeyField[],
+  Payload extends readonly AnyField[],
+> {
+  readonly row: Row<Key, Payload>;
+  readonly source: Source;
+}
+
+/**
+ * Read the source a row of the IR states for one of its versions: a row's sources align with its
+ * versions, the first source the first version's (`Sources`).
+ *
+ * @param sources - The row's sources.
+ * @param at - The version's index among the row's versions.
+ * @param row - The row, as the defect's message names it.
+ * @returns The version's source.
+ * @throws {Error} When the row states no source at the index, so its sources do not align with
+ *   its versions: a defect of the leaf or the facet that states it.
+ */
+export const sourceIn = (sources: Sources, at: number, row: string): Source =>
+  Option.getOrThrowWith(
+    Arr.get(sources, at),
+    () =>
+      new Error(
+        `${row} states ${String(sources.length)} sources and no source for its version at index ${String(at)}, and a row states one source per version, the first version's first. State the version's source.`,
+      ),
+  );
+
+/**
+ * Read the handle a dependent field's prefix holds in one of the key fields before it.
+ *
+ * @param prefix - The prefix, each key field before the first dependent one with its handle.
+ * @param name - The key field.
+ * @returns The field's handle in the prefix.
+ * @throws {Error} When no key field before the dependent field has the name, so the field's size
+ *   reads a field its relation's key does not hold before it: a defect of the relation's
+ *   declaration, met when {@link closed} lays out the key, as the grammar loads.
+ */
+export const prefixHandle = (prefix: Readonly<Record<string, string>>, name: string): string =>
+  Option.getOrThrowWith(
+    Arr.findFirst(Object.entries(prefix), ([field]) => field === name).pipe(
+      Option.map(([, handle]) => handle),
+    ),
+    () =>
+      new Error(
+        `A dependent field's size reads the key field ${name}, and the key holds ${Object.keys(prefix).join(", ") || "no field"} before it. Move ${name} before the dependent field in the key, or read a field the key holds there.`,
+      ),
+  );
+
+/**
+ * Read the rows a grouping holds at a key, as `Map.groupBy` groups them: a group is the rows that
+ * have its key, so a key no row has holds none.
+ *
+ * @param groups - The rows, grouped by key.
+ * @param key - The key.
+ * @returns The rows at the key, in order; none where no row has it.
+ */
+export const rowsAt = <K, R>(groups: ReadonlyMap<K, readonly R[]>, key: K): readonly R[] =>
+  Option.match(Option.fromNullishOr(groups.get(key)), {
+    onNone: () => [],
+    onSome: (rows) => rows,
+  });
 
 /**
  * The largest `int8`, 2⁶³ − 1: the top of the carrier of a count of children, the bound that bounds
@@ -436,15 +485,6 @@ const indexIn = <F extends AnyField | DependentField<string>>(
 };
 
 /**
- * Multiply the code-space sizes of fields: the number of mixed-radix codes over them.
- *
- * @param fields - The fields.
- * @returns The product of their code-space sizes, 1 for no fields.
- */
-const pointsOf = (fields: readonly (AnyField | DependentField<string>)[]): number =>
-  fields.reduce((points, field) => points * spaceOf(field).length, 1);
-
-/**
  * Write a row's values under its fields' names, for a failure's message.
  *
  * @param fields - The fields to write, in order.
@@ -463,6 +503,21 @@ interface Layout {
 }
 
 /**
+ * One prefix's block of a dependent key's index: the index it starts at, and each key field from
+ * the first dependent one on, with the size of its code space under the prefix.
+ */
+interface Block {
+  readonly digits: readonly { readonly field: AnyKeyField; readonly size: number }[];
+  readonly start: number;
+}
+
+/**
+ * Find a row's block among a prefix's: the block of the handles the row holds in the prefix
+ * fields, or the first field whose roster does not hold the row's value.
+ */
+type BlockOf = (row: AnyRow) => Result.Result<Block, AnyKeyField>;
+
+/**
  * Lay out a key's index: row-major mixed radix over the closed ids before the first dependent
  * field, then each such prefix's block, the mixed radix of the remaining fields at the sizes the
  * prefix gives them, at the sum of the earlier prefixes' block sizes (fin.md §17, "The index"), so
@@ -477,39 +532,49 @@ const layoutOf = (key: readonly AnyKeyField[]): Layout => {
     return { indexOf: (row) => indexIn(key, row) };
   }
 
-  const prefix = key.slice(0, split);
   const rest = key.slice(split);
-  const prefixes = pointsOf(prefix);
-  const prefixRow = (index: number) => {
-    const digits: (readonly [string, string])[] = [];
-    let remaining = index;
-    for (const field of prefix.toReversed()) {
-      const size = spaceOf(field).length;
-      digits.push([field.name, String(spaceOf(field)[remaining % size])]);
-      remaining = Math.floor(remaining / size);
+  let start = 0;
+  // The prefixes are walked most significant field first, each field's handles in code order, so
+  // the blocks are made in row-major order and each starts where the one before it ends.
+  const blocksUnder = (
+    fields: readonly AnyKeyField[],
+    prefix: Readonly<Record<string, string>>,
+  ): BlockOf => {
+    if (!Arr.isReadonlyArrayNonEmpty(fields)) {
+      const digits = rest.map((field) => ({
+        field,
+        size: field._tag === "dependent" ? field.sizeOf(prefix) : field.roster.handles.length,
+      }));
+      const block: Block = { digits, start };
+      start += digits.reduce((product, { size }) => product * size, 1);
+
+      return () => Result.succeed(block);
     }
 
-    return Object.fromEntries(digits);
+    const [field, ...after] = fields;
+    const byHandle = new Map<Primitive, BlockOf>(
+      field.roster.handles.map((handle) => [
+        handle,
+        blocksUnder(after, { ...prefix, [field.name]: handle }),
+      ]),
+    );
+
+    return (row) =>
+      Option.match(
+        Option.flatMap(Option.fromNullishOr(row[field.name]), (value) =>
+          Option.fromNullishOr(byHandle.get(value)),
+        ),
+        { onNone: () => Result.fail(field), onSome: (blockOf) => blockOf(row) },
+      );
   };
-  const sizesOf = (row: Readonly<Record<string, string>>) =>
-    rest.map((field) => (field._tag === "dependent" ? field.sizeOf(row) : spaceOf(field).length));
-  const offsets = new Float64Array(prefixes + 1);
-  for (let index = 0; index < prefixes; index += 1) {
-    offsets[index + 1] =
-      (offsets[index] ?? 0) +
-      sizesOf(prefixRow(index)).reduce((product, size) => product * size, 1);
-  }
+  const blockOf = blocksUnder(key.slice(0, split), {});
 
   return {
     indexOf: (row) =>
-      Result.flatMap(indexIn(prefix, row), (at) => {
-        const sizes = sizesOf(
-          Object.fromEntries(prefix.map(({ name }) => [name, String(row[name])])),
-        );
+      Result.flatMap(blockOf(row), (block) => {
         let index = 0;
-        for (const [position, field] of rest.entries()) {
+        for (const { field, size } of block.digits) {
           const code = codeIn(field, row[field.name]);
-          const size = sizes[position] ?? 0;
           if (Option.isNone(code) || code.value >= size) {
             return Result.fail(field);
           }
@@ -517,10 +582,62 @@ const layoutOf = (key: readonly AnyKeyField[]): Layout => {
           index = index * size + code.value;
         }
 
-        return Result.succeed((offsets[at] ?? 0) + index);
+        return Result.succeed(block.start + index);
       }),
   };
 };
+
+/**
+ * A key as a lookup names it: a handle for each key field.
+ */
+type KeyOf<Key extends readonly AnyKeyField[]> = {
+  readonly [F in Key[number] as F["name"]]: string;
+};
+
+/**
+ * Index a relation's stated entries by their rows' keys: every value must lie in its field's code
+ * space, and no two rows may share a key (E4).
+ *
+ * @param relation - The relation as a generator states it, its rows aside.
+ * @param relation.key - Its key's fields in index order, the first the most significant digit.
+ * @param relation.name - Its name, as its laws and its failures name it.
+ * @param relation.payload - The fields outside the key, none for a set.
+ * @param entries - Its rows, each with whatever the host reads beside it.
+ * @returns The entry at a key, none where the relation holds no row, or the first reason the rows
+ *   are refused.
+ */
+const indexed = <
+  Key extends readonly AnyKeyField[],
+  Payload extends readonly AnyField[],
+  Entry extends { readonly row: Row<Key, Payload> },
+>(
+  relation: { readonly key: Key; readonly name: string; readonly payload: Payload },
+  entries: readonly Entry[],
+): Result.Result<(key: KeyOf<Key>) => Option.Option<Entry>, ClosedRelationError> =>
+  Result.gen(function* indexEntries() {
+    const { key, name, payload } = relation;
+    const layout = layoutOf(key);
+    const byIndex = new Map<number, Entry>();
+    const outside = (row: AnyRow) => (field: AnyField | DependentField<string>) =>
+      new OutsideCodeSpace({ field: field.name, relation: name, value: String(row[field.name]) });
+
+    for (const entry of entries) {
+      const { row } = entry;
+      const index = yield* Result.mapError(layout.indexOf(row), outside(row));
+      yield* Result.mapError(indexIn(payload, row), outside(row));
+
+      if (byIndex.has(index)) {
+        return yield* Result.fail(new KeyCollision({ key: spell(key, row), relation: name }));
+      }
+
+      byIndex.set(index, entry);
+    }
+
+    return (at: KeyOf<Key>) =>
+      Result.getSuccess(layout.indexOf(at)).pipe(
+        Option.flatMap((index) => Option.fromNullishOr(byIndex.get(index))),
+      );
+  });
 
 /**
  * Construct a closed relation from rows of handles and values: every value must lie in its field's
@@ -542,32 +659,46 @@ export const closed = <
   readonly payload: Payload;
   readonly rows: readonly Row<Key, Payload>[];
 }): Result.Result<Closed<Key, Payload>, ClosedRelationError> =>
-  Result.gen(function* parseClosed() {
-    const { key, name, payload, rows } = relation;
-    const layout = layoutOf(key);
-    const byIndex = new Map<number, Row<Key, Payload>>();
-    const outside = (row: AnyRow) => (field: AnyField | DependentField<string>) =>
-      new OutsideCodeSpace({ field: field.name, relation: name, value: String(row[field.name]) });
+  Result.map(
+    indexed(
+      relation,
+      relation.rows.map((row) => ({ row })),
+    ),
+    (at): Closed<Key, Payload> => ({
+      key: relation.key,
+      lookup: (key) => Option.map(at(key), ({ row }) => row),
+      name: relation.name,
+      payload: relation.payload,
+      rows: relation.rows,
+    }),
+  );
 
-    for (const row of rows) {
-      const index = yield* Result.mapError(layout.indexOf(row), outside(row));
-      yield* Result.mapError(indexIn(payload, row), outside(row));
-
-      if (byIndex.has(index)) {
-        return yield* Result.fail(new KeyCollision({ key: spell(key, row), relation: name }));
-      }
-
-      byIndex.set(index, row);
-    }
-
-    return {
-      key,
-      lookup: (at) =>
-        Result.getSuccess(layout.indexOf(at)).pipe(
-          Option.flatMap((index) => Option.fromNullishOr(byIndex.get(index))),
-        ),
-      name,
-      payload,
-      rows,
-    };
-  });
+/**
+ * Construct a closed relation whose rows carry their sources (the operator's ruling of 2026-11-05),
+ * each row stated with its own: the source is host data, read by key, and never enters the
+ * relation's constant.
+ *
+ * @param relation - The relation as a generator states it, each row with its source.
+ * @param relation.key - Its key's fields in index order, the first the most significant digit.
+ * @param relation.name - Its name, as its laws and its failures name it.
+ * @param relation.payload - The fields outside the key, none for a set.
+ * @param relation.rows - Its rows, each with where it comes from.
+ * @returns The relation, answering each key's source, or the first reason it is refused.
+ */
+export const sourced = <
+  const Key extends readonly AnyKeyField[],
+  const Payload extends readonly AnyField[],
+>(relation: {
+  readonly key: Key;
+  readonly name: string;
+  readonly payload: Payload;
+  readonly rows: readonly SourcedRow<Key, Payload>[];
+}): Result.Result<Sourced<Key, Payload>, ClosedRelationError> =>
+  Result.map(indexed(relation, relation.rows), (at): Sourced<Key, Payload> => ({
+    key: relation.key,
+    lookup: (key) => Option.map(at(key), ({ row }) => row),
+    name: relation.name,
+    payload: relation.payload,
+    rows: relation.rows.map(({ row }) => row),
+    sourceOf: (key) => Option.map(at(key), ({ source }) => source),
+  }));

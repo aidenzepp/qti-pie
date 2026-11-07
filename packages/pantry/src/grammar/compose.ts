@@ -52,7 +52,7 @@ import type {
 } from "#pantry/grammar/attributes.ts";
 import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
-import { closed, idField, roster, sourced } from "#pantry/grammar/closed.ts";
+import { idField, roster, sourced } from "#pantry/grammar/closed.ts";
 import type { ClosedRelationError, Roster } from "#pantry/grammar/closed.ts";
 import { compositions } from "#pantry/grammar/compositions.ts";
 import {
@@ -705,42 +705,27 @@ export const compose = <const V extends readonly Vocabulary[]>(
     });
     const stating = list.flatMap((entry) => entry.admission);
     const kinds = yield* resolution(base, [...installed.admitted, ...stating]);
-    const statedSources = new Map(
-      stating.map(
-        ({ child, parent, source, version }) => [`${version} ${parent} ${child}`, source] as const,
-      ),
-    );
-    // A child the models admit is its position's particle, or its model's at 0; a triple a
+    // A child the models admit carries its position's particle, or its model's at 0; a triple a
     // vocabulary states beside them carries its own source.
-    const admission = sourced(
-      yield* closed({
-        key: [
-          idField("version", kinds.versions),
-          idField("parent", kinds.nodeKind),
-          idField("child", kinds.nodeKind),
-        ],
-        name: "Admission",
-        payload: [idField("position", installed.content.positions)],
-        rows: [
-          ...installed.admitted.map((row) => ({ ...row, position: String(row.position) })),
-          ...stating.map(({ child, parent, version }) => ({
-            child,
-            parent,
-            position: "0",
-            version,
-          })),
-        ],
-      }),
-      ({ child, parent, position, version }) =>
-        Option.getOrThrowWith(
-          Option.orElse(
-            Option.fromNullishOr(statedSources.get(`${version} ${parent} ${child}`)),
-            () => installed.content.sourceOf({ parent, position, version }),
-          ),
-          () =>
-            new Error(`Admission states ${child} under ${parent} in ${version} with no source.`),
-        ),
-    );
+    const admission = yield* sourced({
+      key: [
+        idField("version", kinds.versions),
+        idField("parent", kinds.nodeKind),
+        idField("child", kinds.nodeKind),
+      ],
+      name: "Admission",
+      payload: [idField("position", installed.content.positions)],
+      rows: [
+        ...installed.admitted.map(({ child, parent, position, source, version }) => ({
+          row: { child, parent, position: String(position), version },
+          source,
+        })),
+        ...stating.map(({ child, parent, source, version }) => ({
+          row: { child, parent, position: "0", version },
+          source,
+        })),
+      ],
+    });
     const declarations = list.flatMap((entry) => entry.declarations);
     const declared = new Set(
       declarations.flatMap(({ kind, name, versions }) =>
@@ -755,11 +740,8 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const xsi = yield* xsiTypesOf({
       derivations: typeDerivations,
       kinds: kinds.nodeKind,
-      models: list.flatMap((entry) => entry.models),
-      namespaceOf: new Map(
-        list.flatMap(({ models, namespace }) =>
-          models.map(({ kind }) => [kind, namespace] as const),
-        ),
+      models: list.flatMap(({ models, namespace }) =>
+        models.map((model) => ({ ...model, namespace })),
       ),
       versions: kinds.versions,
     });
