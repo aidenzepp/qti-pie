@@ -1690,8 +1690,11 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   stratum. So n inserts make n nested instantiations, past the depth limit of 100.
 - **Symptom:** `chain100` gives TS2589 seven times, and from the 95th insert on TS2345, "a member fact is not a fact
   of the relation". The controls: `chain100` is ok at `1bf3dbb`, and `chain90` and `union100` are ok at `e9227af`.
-- **Files:** `packages/pantry/work/rv/s-oracle/chain/` (`chain100.ts`, `chain90.ts`, `union100.ts`, `tsrs.out`,
-  `tsrs-control.out`, `tc-e9227af.out`, `tc-1bf3dbb.out`).
+- **Files:** `~/.cache/gr8des/integration/grizzle-repros/chain-depth/`: the sources `chain100.ts`, `chain90.ts`
+  and `union100.ts` with their `tsconfig.json`; `tsrs.out`, grizzle's own `effect-tsgo tsrs` at `e9227af`, TS2589 seven
+  times at `chain100.ts(104,22)` and then TS2345; `tsrs-control.out`, `chain90` and `union100` exiting 0;
+  `tc-e9227af.out`, TypeScript 7.0.2 at `e9227af` with the same errors; and `tc-1bf3dbb.out`, `chain100` at `1bf3dbb`
+  exiting 0.
 - **Effect in qti-pie:** `changeSetOf`'s 152 inserts gave 117 errors in `write.ts`, and cascades from them.
 - **Workaround:** `changeSetOf` is three ChangeSets of 51, 51 and 50 inserts, joined by `ChangeSet.union` (repin F).
   It goes back to one chain when the depth is fixed.
@@ -1700,11 +1703,12 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 
 ### `UnorderableStratum` on qti-pie's import ChangeSet at `e9227af` (under triage)
 
-- **What happens:** `e9227af`'s single schedule, in which plain and family statements share one order, refuses
-  qti-pie's 152-insert stratum: `changeSetOf: REFUSED: UnorderableStratum at ChangeSet: the stratum's count of
-  ChoiceVariableName, then count of Document, …`, a cycle of 52 statements through the count of `ReferringDocument`,
-  the insert of `SectionScope` and the update of `SectionTemplateRef`
-  (`~/.cache/gr8des/s-oracle/clean-f-r87.out`). At `1bf3dbb` the same stratum compiled.
+- **What happens:** `e9227af`'s single schedule, in which plain and family statements share one order, refuses qti-pie's
+  152-insert stratum:
+  `changeSetOf: REFUSED: UnorderableStratum at ChangeSet: the stratum's count of ChoiceVariableName, then count of Document, …`,
+  a cycle of 52 statements through the count of `ReferringDocument`, the insert of `SectionScope` and the update of
+  `SectionTemplateRef` (R87's compile at `e9227af`,
+  `~/.cache/gr8des/integration/grizzle-repros/chain-depth/clean-f-r87.out`). At `1bf3dbb` the same stratum compiled.
 - **Lane AR's reduction:** a 4-relation reproduction (`~/.cache/gr8des/integration/grizzle-repros/ar-order/`,
   `unorderable`) fails at `e9227af` and compiles at `1bf3dbb`. The preliminary cause is that the joint schedule
   treats a family's in-place update, which sets only hidden index columns, as an addition for every reference from
