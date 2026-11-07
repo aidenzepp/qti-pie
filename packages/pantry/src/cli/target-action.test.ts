@@ -47,13 +47,18 @@ const targetCase: Gen<TargetCase> = (source) => ({
 });
 
 /**
+ * What a case may come to: the action, or the refusal's tag.
+ */
+type Verdict = "create" | "replace" | "TargetNotEmpty";
+
+/**
  * The ruling: `create` where nothing is, `replace` where anything is, and a refusal for content
  * the person did not agree to replace.
  *
  * @param drawnCase - The case.
  * @returns The action, or the refusal's tag.
  */
-const expected = ({ content, yes }: TargetCase): string => {
+const expected = ({ content, yes }: TargetCase): Verdict => {
   if (content === "nothing") {
     return "create";
   }
@@ -106,7 +111,7 @@ describe("a written target's action", () => {
           {
             box: "every kind of target (nothing, an empty directory, a directory with an entry, a file, a symlink to a directory, a dangling symlink) with and without --yes: 12 cases",
             caseHang: Duration.seconds(30),
-            coverage: requiredInSpace<string>(["create", "replace", "TargetNotEmpty"]),
+            coverage: requiredInSpace<Verdict>(["create", "replace", "TargetNotEmpty"]),
             generator: targetCase,
             limit: CONTENTS.length * 2,
             literal: Formatter.format,
@@ -120,7 +125,7 @@ describe("a written target's action", () => {
             Effect.gen(function* judgeTarget() {
               const folder = yield* scratchDirectory("target-action-");
               const target = yield* targetIn(folder, drawnCase.content);
-              const got = yield* requireReplaceable(target, drawnCase.yes).pipe(
+              const got: Verdict = yield* requireReplaceable(target, drawnCase.yes).pipe(
                 Effect.catchTag("TargetNotEmpty", (refusal) => Effect.succeed(refusal._tag)),
               );
               c.note(got);
