@@ -12,6 +12,7 @@
 import { Option, Result } from "effect";
 import { runRules } from "#plate/engine/evaluate.ts";
 import type { EngineFailure, Variables } from "#plate/engine/evaluate.ts";
+import { drawStream, responseKey } from "#plate/engine/random.ts";
 import type { Item } from "#plate/model/item.ts";
 import {
   completionStatus,
@@ -73,6 +74,15 @@ const startingOutcomes = (item: Item, record: ItemRecord): ItemRecord["outcomes"
  * `completionStatus`, which the record then keeps into the next attempt. The record passed in is
  * not changed, on success or on failure.
  *
+ * The rules draw from one stream, under the attempt's response key (`responseKey`):
+ * `<seed>\u001F<instance>\u001Fresponse\u001F<numAttempts>`, with the record's instance and the
+ * raised count the rules read, so each attempt draws its own values and the same record and
+ * responses give the same values every run. The key's seed is the empty string: the record's own
+ * `seed` is not read yet. Every operand of an expression is evaluated, left to right, and a
+ * condition's branches until the first true one, so each random kind takes its draws in that
+ * order; `qti-custom-operator` evaluates none of its operands, so a random kind inside it never
+ * draws.
+ *
  * @param item The item the record belongs to.
  * @param record The session record before the attempt.
  * @param responses The candidate's responses, by identifier, each a value of its declaration's
@@ -88,21 +98,23 @@ export const runAttempt = (
   record: ItemRecord,
   responses: ItemRecord["responses"],
 ): Result.Result<ItemRecord, EngineFailure> => {
+  const numAttempts = record.numAttempts + 1;
   const before: Variables = {
-    numAttempts: BigInt(record.numAttempts) + 1n,
+    numAttempts: BigInt(numAttempts),
     outcomes: startingOutcomes(item, record),
     responses: { ...record.responses, ...responses },
   };
   const after: Result.Result<Variables, EngineFailure> = Option.match(item.processing, {
     onNone: () => Result.succeed(before),
-    onSome: (rules) => runRules(rules, item, before),
+    onSome: (rules) =>
+      runRules(rules, item, before, drawStream(responseKey("", record.instance, numAttempts))),
   });
 
   return after.pipe(
     Result.map((variables): ItemRecord => ({
       ...record,
       attempt: "submitted",
-      numAttempts: record.numAttempts + 1,
+      numAttempts,
       outcomes: variables.outcomes,
       responses: before.responses,
     })),
