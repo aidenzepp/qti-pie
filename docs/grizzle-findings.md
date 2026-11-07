@@ -1603,9 +1603,9 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   - expected: invariant-rejected 23503 on the containment's key at `O`'s INSERT, with generate drafting that key
     without DEFERRABLE;
   - control: the containment turned to `M` → `O` is accepted.
-- **Workaround in qti-pie:** both laws are stated member → owner (`a6d23fcc`), which is equivalent under the count and
-  E1. The guard `src/test/write-order.test.ts` restates the deferral rule over Qti's statements. It comes out once
-  grizzle fixes the gap.
+- **Workaround in qti-pie (removed in `5eb05874`):** both laws were stated member → owner (`a6d23fcc`), which is
+  equivalent under the count and E1, and the guard `src/test/write-order.test.ts` restated the deferral rule over Qti's
+  statements.
 - **Confirmed by lane N2** at grizzle `27c4cd2` and at its newest `main`, `dec8ab3`
   (`dec8ab32289d91d0190c676e6232ca89a74697a2`), with the same results in
   `~/.cache/gr8des/n2/repro/deferral-owner-cycle/run-27c4cd2.out` and `run-dec8ab3.out`:
@@ -1617,14 +1617,17 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
     2b51d625…)`).
   - **Anchors:** `model.ts:1050-1051`'s comment, "A family axis fixes its own deferral and is no edge of the cycle
     graph…", is the stated reason owner axes are left out.
-- **Status:** handed to grizzle-c5, whose lane F takes it as a defect, with a generated-search guard and this case
-  kept. Nothing is filed. The workaround, `a6d23fcc`, is being removed under the no-workaround ruling (below).
+- **Status:** handed to grizzle-c5, whose lane F takes it as a defect, with a generated-search guard and this case kept.
+  Nothing is filed. The workaround, `a6d23fcc`, was removed in `5eb05874` (below).
 - **Fixed in `e9227af`** (`e9227afd2fa183bba52d74829b38aa52e973cef0`), by grizzle's report: a cycle through an owner
   axis is now deferred or refused, and this case is kept in grizzle's `test/pg/write/deferral/owner-cycle.test.ts`. Lane
   N2 confirmed it downstream (below). qti-pie's repin to `e9227af` is held on the `UnorderableStratum` entry below. By
-  the operator's ruling that qti-pie carries no workaround, `a6d23fcc` is being removed now: DBT's next commit restores
-  the owner-into-member laws and deletes `src/test/write-order.test.ts`, so the LOM-language imports are red at
-  `1bf3dbb` until the repin onto `e9227af`. The removal commit is recorded here when it lands.
+  the operator's ruling that qti-pie carries no workaround, the workaround was removed in `5eb05874`: the laws are owner
+  into member again, `contained(select(LomString, languages = 1)(node, language), LomStringLanguage(node, language))`
+  and its `AssessmentObject` → `ObjectLang` twin; `src/test/write-order.test.ts` is deleted, since grizzle states the
+  rule itself (`e9227af` defers or refuses a cycle through an owner axis); and the `_init` is regenerated,
+  `20261107041337_init`, snapshot `b903bdfd`. Until repin F brings `e9227af`, the LOM-language imports, `sharedMedia`
+  and `metaData`, are refused with 23503 at `1bf3dbb`.
 - **Confirmed downstream by lane N2** at `e9227af`, from tarballs packed from a `git archive` of it (grizzle
   `d1a32154…`, engine `e3978234…`), in `~/.cache/gr8des/n2/repro/deferral-owner-cycle/run-e9227af.out`:
   - **case:** now `accepted`, where at `27c4cd2` and `dec8ab3` it was `invariant-rejected` with 23503 at `O`'s insert.
