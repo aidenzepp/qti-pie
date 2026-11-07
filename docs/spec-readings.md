@@ -279,8 +279,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `max-choices` with no `min-choices` beside it is ignored, so no rule reads it. Neither interaction gives `0` the
     meaning "no restriction" that the choice interaction's `max-choices` has (section 5.30.2), so a `max-choices="0"`
     beside a written `min-choices` is below it and is refused. The Schematron's rules for the two (5Ba and 8Ba,
-    `not(not(@max-choices=0) and @max-choices < @min-choices)`) exempt 0, and the information model outranks the XSD
-    that embeds them, so the exemption is set aside. Decision 321 (6d) of 2026-11-06 asked whether this reversal
+    `not(not(@max-choices=0) and @max-choices < @min-choices)`) exempt 0: they skip the comparison with `min-choices`
+    when `max-choices` is 0. The Schematron is a normative source here (reading 9) and the looser one, while the
+    information model's comparison, which has no exemption, is the stricter. Readings 16 and 17 let the stricter
+    source decide where both are normative, so the skip loses and the exemption is set aside. Decision 321 (6d) of
+    2026-11-06 asked whether this reversal
     refuses any document whose `max-choices="0"` means unlimited, and found none. (1) No text gives `0` that meaning
     for either interaction: sections 5.97.3 and 5.61.2 describe `max-choices` as the most the candidate may select
     and order, with "If unspecified, all of the choices may be ordered" and nothing on `0`; the implementation guide's
