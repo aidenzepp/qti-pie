@@ -109,6 +109,7 @@ import {
   Declaration,
   DeclarationBaseType,
   declarationLaws,
+  DeclarationName,
   DeclaredValue,
   MasteryCeiling,
   MasteryFloor,
@@ -351,14 +352,15 @@ const packageRelations = {
 };
 
 /**
- * `declarations.ts`'s relations: each variable's declaration and its base type, its value sets and
- * values, a value's text in its declaration's base type, a value's own base type, a record's
- * fields and their names, and an outcome's mastery value and normal range, each end and each pair
- * of them.
+ * `declarations.ts`'s relations: each variable's declaration, its base type and its name, its value
+ * sets and values, a value's text in its declaration's base type, a value's own base type, a
+ * record's fields and their names, and an outcome's mastery value and normal range, each end and
+ * each pair of them.
  */
 const declarationRelations = {
   Declaration,
   DeclarationBaseType,
+  DeclarationName,
   DeclaredValue,
   MasteryCeiling,
   MasteryFloor,

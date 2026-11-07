@@ -324,7 +324,7 @@ export const overlayPartsOf = (
     ),
     placedVariableRowsOf({
       baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
-      declarations: built.flatMap(({ rows }) => [...rows.declarations.Declaration.values()]),
+      declarations: built.flatMap(({ rows }) => [...rows.declarations.DeclarationName.values()]),
       instances: assembled.Instance.values(),
       references: built.flatMap(({ rows }) => [...rows.expressions.VariableRef.values()]),
       untyped: documents.flatMap(({ ids, listed }) => untypedNamesOf(listed.tree, ids)),
@@ -334,7 +334,7 @@ export const overlayPartsOf = (
       adaptive: built.flatMap(({ rows }) => [...rows.interactions.ItemMode.values()]),
       baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
       choices: built.flatMap(({ rows }) => [...rows.interactions.Choice.values()]),
-      declarations: built.flatMap(({ rows }) => [...rows.declarations.Declaration.values()]),
+      declarations: built.flatMap(({ rows }) => [...rows.declarations.DeclarationName.values()]),
       hottexts: built.flatMap(({ rows }) => [...rows.interactions.Hottext.values()]),
       instances: assembled.Instance.values(),
       mosts: built.flatMap(({ rows }) => [...rows.interactions.MostCount.values()]),
@@ -348,7 +348,7 @@ export const overlayPartsOf = (
     sectionRowsOf({
       baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
       contexts: built.flatMap(({ rows }) => [...rows.interactions.SectionContextName.values()]),
-      declarations: built.flatMap(({ rows }) => [...rows.declarations.Declaration.values()]),
+      declarations: built.flatMap(({ rows }) => [...rows.declarations.DeclarationName.values()]),
       feedbacks: built.flatMap(({ rows }) => [...rows.interactions.SectionFeedbackName.values()]),
       instances: assembled.Instance.values(),
       prints: built.flatMap(({ rows }) => [...rows.interactions.SectionPrintedName.values()]),

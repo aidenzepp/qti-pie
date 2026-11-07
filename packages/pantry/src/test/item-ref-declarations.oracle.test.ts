@@ -41,7 +41,7 @@ import { lawOfCheck, ruleOfLaws, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
-import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
+import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
 import type {
   Expression,
   MappingSourceDeclaration,
@@ -381,7 +381,7 @@ const valueCardinalityOf = (cardinality: string): string =>
  */
 interface HostRows {
   readonly baseTypes: ReadonlyMap<string, Addition<typeof DeclarationBaseType>>;
-  readonly declarations: readonly Addition<typeof Declaration>[];
+  readonly declarations: readonly Addition<typeof DeclarationName>[];
   readonly documentOf: ReadonlyMap<string, string>;
   readonly expressions: readonly Addition<typeof Expression>[];
   readonly inputs: PackageInputs;
@@ -699,7 +699,7 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
 const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const rows: HostRows = {
     baseTypes: inputs.DeclarationBaseType,
-    declarations: [...inputs.Declaration.values()],
+    declarations: [...inputs.DeclarationName.values()],
     documentOf: new Map(
       [...inputs.ItemRefDocument.values()].map(({ document, node }) => [node, document]),
     ),

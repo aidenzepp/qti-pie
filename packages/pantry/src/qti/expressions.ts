@@ -17,7 +17,7 @@
  * - **{@link Processing}**, one row per rule and processing element, carries the processing language
  *   from its root down; each expression takes its parent's.
  * - **{@link VariableRef}**, one row per variable reference a processing element makes, resolves it
- *   to a declaration of its document (`declarationRef`), a built-in variable (the installed
+ *   to a declaration of its document (`declarationNameRef`), a built-in variable (the installed
  *   `BuiltInVariable`, A63), or nothing, which only a document that is no item may hold; a claim of
  *   no declaration is proved by {@link VariableLookup}, and a table it reads by
  *   {@link DeclarationTable} (M2). The type a setter or a lookup sets its variable to is a row of
@@ -100,7 +100,11 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { Declaration, DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
+import {
+  DeclarationBaseType,
+  DeclarationName,
+  declarationNameRef,
+} from "#pantry/qti/declarations.ts";
 import {
   BaseTypePattern,
   conditionKindHandles,
@@ -348,12 +352,12 @@ export const VariableRef = relation(
 
 /**
  * The declaration a declared {@link VariableRef} names, keyed as the reference: its
- * `declarationRef` tuple (`declaration`, `declarationKind`, `declCardinality` and `declBaseTypes`,
- * with its reference's `document` and `identifier`), and the reference's fields its laws read
- * beside it, each copied from the reference: its `baseType` is `unknown` where the declaration has
- * no base type, a record's, and else its {@link DeclarationBaseType}'s `valueBase` (lane NIL's
- * audit, B12). A reference exactly where its `resolution` is `declared` has
- * one (lane NIL's NS1), so one that names a built-in variable or nothing has none.
+ * `declarationNameRef` tuple (`declaration`, `declarationKind`, `declCardinality` and
+ * `declBaseTypes`, with its reference's `document` and `identifier`), and the reference's fields
+ * its laws read beside it, each copied from the reference: its `baseType` is `unknown` where the
+ * declaration has no base type, a record's, and else its {@link DeclarationBaseType}'s `valueBase`
+ * (lane NIL's audit, B12). A reference exactly where its `resolution` is `declared` has one (lane
+ * NIL's NS1), so one that names a built-in variable or nothing has none.
  */
 export const VariableRefDeclaration = relation(
   "VariableRefDeclaration",
@@ -435,8 +439,8 @@ export const PlacedVariableRef = relation(
 
 /**
  * The declaration a declared {@link PlacedVariableRef} names among its assembly's item's
- * declarations, keyed as the placed reference: its `declarationRef` tuple (with its `assembly` as
- * its document and its `identifier`), and its reference's `kind` and `attribute`. A placed
+ * declarations, keyed as the placed reference: its `declarationNameRef` tuple (with its `assembly`
+ * as its document and its `identifier`), and its reference's `kind` and `attribute`. A placed
  * reference exactly where its `resolution` is `declared` has one (lane NIL's NS1).
  */
 export const PlacedVariableRefDeclaration = relation(
@@ -1779,7 +1783,7 @@ export const referenceLawsByName = {
     // again, and a second declaration of a name would break both. Declaration key alone says a
     // name's declaration is one, and the justification makes a found row that one, with its codes.
     contained(
-      on(Declaration, "document", "identifier", constant(true)),
+      on(DeclarationName, "document", "identifier", constant(true)),
       on(VariableLookup, "document", "name", "declared"),
     ),
     contained(
@@ -1792,7 +1796,7 @@ export const referenceLawsByName = {
         "cardinality",
         "baseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     key(on(absentNames, "document", "name")),
     check("E1_derived", VariableLookup, (l) =>
@@ -2284,7 +2288,7 @@ export const referenceLawsByName = {
         "declCardinality",
         "declBaseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Template_default_target", TemplateDefaultTarget, (t) =>
       t.eq(t.declarationKind, "qti-template-declaration"),
@@ -2351,7 +2355,7 @@ export const referenceLawsByName = {
         "declCardinality",
         "declBaseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Variable_mapping_source", MappingSourceDeclaration, (m) =>
       m.eq(m.declarationKind, "qti-outcome-declaration"),
@@ -2998,7 +3002,7 @@ export const expressionLawsByName = {
         "declCardinality",
         "declBaseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Variable_declared", VariableRef, (v) =>
       v.or(
@@ -3017,7 +3021,7 @@ export const expressionLawsByName = {
         "declCardinality",
         "declBaseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Variable_declared", PlacedVariableRef, (v) =>
       v.or(v.ne(v.rootKind, itemKind), v.ne(v.resolution, "unresolved")),

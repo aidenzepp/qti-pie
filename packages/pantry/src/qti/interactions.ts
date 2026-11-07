@@ -9,7 +9,7 @@
  * count, number and flag these laws read is an atomic XSD type whose whiteSpace is `collapse` (spec
  * reading 7: "An attribute the XSD itself types ... is read as the XSD reads it, outer whitespace
  * collapsed"), so the value is the form its type's lexical space is read on, the one
- * `Declaration.identifier` holds. The copy claims no type of it: a value with whitespace inside
+ * `DeclarationName.identifier` holds. The copy claims no type of it: a value with whitespace inside
  * (`max-choices="1 2"`) is in no such type's lexical space, and its value domain alone refuses it.
  * One selection of `Attribute` costs one UNIQUE on it (the addendum's "Text in keys"), so the
  * overlays below read `InteractionAttribute` and never `Attribute`.
@@ -24,12 +24,12 @@
  *   its `response-identifier` and its `string-identifier` (§5.48.2, §5.162.3: "binding the
  *   interaction to a second response variable (of base-type string)"), and beside it, where a
  *   response declaration of the item holds the name, its {@link BindingDeclaration}: the variable's
- *   declaration, through `declarationRef`. A binding with none is "Binding declared"'s, and the fit
- *   laws read the declaration row, so they judge only a declared variable (lane NIL's audit, B1: a
- *   missing value is a row of its own relation, never a sentinel). `key(document, identifier)` is
- *   "Binding unique" (reading 92: "Each response variable declared may be bound to one and only one
- *   interaction"), so an interaction whose string identifier is its response identifier, the old
- *   `string-identifier-distinct`, breaks that key.
+ *   declaration, through `declarationNameRef`. A binding with none is "Binding declared"'s, and the
+ *   fit laws read the declaration row, so they judge only a declared variable (lane NIL's audit,
+ *   B1: a missing value is a row of its own relation, never a sentinel). `key(document,
+ *   identifier)` is "Binding unique" (reading 92: "Each response variable declared may be bound to
+ *   one and only one interaction"), so an interaction whose string identifier is its response
+ *   identifier, the old `string-identifier-distinct`, breaks that key.
  * - {@link Choice}: every choice, with its identifier distinct among its document's choices of its
  *   kind, and its {@link ChoiceInteraction}, its nearest interaction (N8) (§5.132.1 and the other
  *   choice classes': "This identifier must not be used by any other choice or item variable"; spec
@@ -56,7 +56,7 @@
  * - The content references: {@link FeedbackRef}, {@link TemplateRef}, {@link PrintedVariableRef} (a
  *   printed variable's name, and its `base` or `index` where that names a variable) and
  *   {@link ContextRef}, each naming a declaration of a kind `ContentReference` allows, its row of
- *   its own ({@link FeedbackRefDeclaration} and the others), through `declarationRef`, or a
+ *   its own ({@link FeedbackRefDeclaration} and the others), through `declarationNameRef`, or a
  *   built-in variable that stands as one (reading 77), in an item's or a test's own declarations
  *   (the port audit's A43 and A44), each built-in one its root holds (spec reading 29: an item's
  *   `completionStatus` is no test's), so each reference carries the root kind it resolves under. A
@@ -125,7 +125,11 @@ import {
 import { booleanTrue, ncNamePattern } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { Declaration, DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
+import {
+  DeclarationBaseType,
+  DeclarationName,
+  declarationNameRef,
+} from "#pantry/qti/declarations.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, itemInstances, itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
@@ -508,7 +512,8 @@ export const BoundVariable = relation(
  * - `node`, `attribute`, `kind`, `document` and `identifier`, its binding's, copied from
  *   {@link BoundVariable};
  * - `declaration`, `declarationKind`, `cardinality` and `baseTypes`, the declaration's, copied
- *   through `declarationRef`: its base type, where it has one, is its {@link BindingBaseType}'s;
+ *   through `declarationNameRef`: its base type, where it has one, is its
+ *   {@link BindingBaseType}'s;
  * - `mosts`, its interaction's count of most values, its {@link CountBound}'s `mosts` where
  *   `ChoiceBound` pairs the kind's counts, and 0 on any other kind, which has none: "Binding
  *   cardinality" judges a binding only where its interaction's most has a value.
@@ -585,8 +590,8 @@ export const PlacedBinding = relation(
  * Its fields, every one written by the host: `instance`, `node`, `attribute`, `assembly`,
  * `document`, `kind` and `identifier`, its binding's, copied from `PlacedBinding`; and
  * `declaration`, `declarationKind`, `cardinality` and `baseTypes`, the declaration's, copied
- * through `declarationRef`; and `mosts`, as {@link BindingDeclaration}'s. Its base type, where it
- * has one, is its {@link PlacedBindingBaseType}'s.
+ * through `declarationNameRef`; and `mosts`, as {@link BindingDeclaration}'s. Its base type, where
+ * it has one, is its {@link PlacedBindingBaseType}'s.
  */
 export const PlacedBindingDeclaration = relation(
   "PlacedBindingDeclaration",
@@ -778,7 +783,7 @@ export const placedHottextFamily = counted(
 /**
  * An identifier a document's choices, hottexts or variable declarations use, or that an assembly
  * rooted at the document places, a projection keyed by the document and the identifier: the
- * document's root kind, how many {@link Choice}, {@link Hottext} and `Declaration` rows of the
+ * document's root kind, how many {@link Choice}, {@link Hottext} and `DeclarationName` rows of the
  * document bear it, and how many {@link PlacedChoice} and {@link PlacedHottext} rows of its
  * assembly do, which the five families draw.
  *
@@ -825,10 +830,10 @@ export const hottextNameFamily = counted(
 
 /**
  * Each used identifier's declarations, counted by `ChoiceVariableName.declarations`: Q5.08's
- * `Declaration`, whose `key(document, identifier)` makes the count 0 or 1 on an accepted state.
+ * `DeclarationName`, whose `key(document, identifier)` makes the count 0 or 1 on an accepted state.
  */
 export const declarationNameFamily = counted(
-  on(Declaration, "document", "identifier"),
+  on(DeclarationName, "document", "identifier"),
   fin(ChoiceVariableName, "declarations"),
 );
 
@@ -1048,7 +1053,7 @@ const referenceFields = {
 
 /**
  * The fields of the declaration a content reference names, keyed as its reference is: the
- * reference's fields, and the declaration as `declarationRef` holds it, of a kind
+ * reference's fields, and the declaration as `declarationNameRef` holds it, of a kind
  * `ContentReference` lets the reference name.
  */
 const referenceDeclarationFields = {
@@ -1273,7 +1278,7 @@ const sectionReferenceFields = {
 
 /**
  * The fields of the declaration a placed reference names among its assembly's declarations, keyed
- * as its placed reference is: its fields, and the declaration as `declarationRef` holds it.
+ * as its placed reference is: its fields, and the declaration as `declarationNameRef` holds it.
  */
 const sectionReferenceDeclarationFields = {
   assembly: uuid,
@@ -2049,7 +2054,7 @@ const namesAllowedBuiltIn = (r: ReferenceRow) =>
  *
  * - An own reference that names no built-in variable of its root has its declaration row, which is
  *   its own reference's, of a kind `ContentReference` allows, a declaration of its document through
- *   `declarationRef`, and names no built-in of its root; one that names a built-in of its root
+ *   `declarationNameRef`, and names no built-in of its root; one that names a built-in of its root
  *   names one it may;
  * - A placed reference is one of its document's names, and under its placement resolves the same way
  *   among its assembly's declarations.
@@ -2087,7 +2092,7 @@ const contentReferenceLaws = ({
       "cardinality",
       "baseTypes",
     ),
-    declarationRef,
+    declarationNameRef,
   ),
   check(rule, ownDeclared, namesNoBuiltIn),
   check(rule, own, namesAllowedBuiltIn),
@@ -2134,7 +2139,7 @@ const contentReferenceLaws = ({
       "cardinality",
       "baseTypes",
     ),
-    declarationRef,
+    declarationNameRef,
   ),
   check(rule, placedDeclared, namesNoBuiltIn),
   check(rule, placed, namesAllowedBuiltIn),
@@ -2225,11 +2230,11 @@ const identifierTyped = on(
  * - **content references:** each relation's rows are its source's, its `assemblyKind` its document's
  *   root kind; a name that is no built-in's of that root has its declaration row, the reference's,
  *   of a declaration kind `ContentReference` allows for its kind and attribute, a declaration
- *   through `declarationRef`; and a built-in's of that root is one its kind and attribute may name
- *   there, under its reference's law ("Feedback reference", "Template reference", "Printed variable
- *   reference", "Context variable reference"); and "Feedback outcome type" over the declaration
- *   rows (reading 77: an outcome of base type identifier, single or multiple; the one built-in a
- *   feedback may name, `completionStatus`, is a single identifier, §2.2.2.3).
+ *   through `declarationNameRef`; and a built-in's of that root is one its kind and attribute may
+ *   name there, under its reference's law ("Feedback reference", "Template reference", "Printed
+ *   variable reference", "Context variable reference"); and "Feedback outcome type" over the
+ *   declaration rows (reading 77: an outcome of base type identifier, single or multiple; the one
+ *   built-in a feedback may name, `completionStatus`, is a single identifier, §2.2.2.3).
  */
 export const interactionLawsByName = {
   ...pipe(contentReferences, Rec.map(contentReferenceLaws)),
@@ -2320,7 +2325,7 @@ export const interactionLawsByName = {
         "cardinality",
         "baseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Binding_declared", BindingDeclaration, (r) =>
       r.eq(r.declarationKind, "qti-response-declaration"),
@@ -2366,7 +2371,7 @@ export const interactionLawsByName = {
         "cardinality",
         "baseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Binding_declared", PlacedBindingDeclaration, (r) =>
       r.eq(r.declarationKind, "qti-response-declaration"),

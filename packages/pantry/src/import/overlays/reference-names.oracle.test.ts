@@ -8,9 +8,9 @@
  * rows as in the law oracle. The import read any string as a name before, its rows breaking
  * "Template reference", "Feedback reference", "Printed variable reference", "Context variable
  * reference", "Binding declared", "Variable declared" or "E1 derived" beside the value domain the
- * oracle alone raises. A declaration whose identifier names nothing still breaks "Declaration
- * overlay"'s copies of its cardinality and base type, since it has no row: `known` records that
- * class, and the others the box meets that no NCName reading causes.
+ * oracle alone raises. A declaration whose identifier names nothing keeps its row and every row
+ * below it, and has no name alone (spec reading 157), so the laws over its type and values judge it
+ * alike on both sides: `known` records the classes the box meets that no NCName reading causes.
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), which

@@ -942,6 +942,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    157,
+    {
+      owner:
+        "the import's `DeclarationName`, a declaration's name as a row of its own beside its `Declaration`, which every reference by name targets through `declarationNameRef` and every row that hangs from a declaration copies without it through `declarationRef` (`src/qti/declarations.ts`; `typedDeclarationOf`, `src/import/overlays/declarations.ts`), so a declaration whose identifier names nothing keeps its rows, values, mapping, map keys and tables (`declarationsOf` and `declarationTablesOf`, `src/import/overlays/expressions.ts`; `declaredFieldsOf`, read by `src/import/overlays/mapping.ts`); the oracle's declaration laws over every declaration, named or not, and its names by their typed value (`declarationLawsOf`, `src/test/oracle-laws/documents.ts`; `overlayBreaches`, `src/test/oracle.ts`); held by `src/import/overlays/unnamed-declarations.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

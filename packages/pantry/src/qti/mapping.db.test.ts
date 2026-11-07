@@ -120,7 +120,6 @@ const declaredRow = <const F extends Partial<Fact<typeof AreaMapping>>>(fields: 
   declaration: stray,
   declarationKind: "qti-response-declaration" as const,
   document: stray,
-  identifier: "RESPONSE",
   kind: "qti-area-mapping" as const,
   nearest: stray,
   node: strayNode(0),

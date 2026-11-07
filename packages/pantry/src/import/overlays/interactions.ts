@@ -26,7 +26,7 @@ import { baseTypesOf, declaredFieldsOf } from "#pantry/import/overlays/declarati
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
+import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
 import { declarationKinds } from "#pantry/qti/declarations.ts";
 import { itemKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
@@ -349,10 +349,11 @@ const declaredFieldsAt = (context: Pick<Context, "attributes">, node: NodeRow<Co
   declaredFieldsOf(node.kind, (name) => Option.getOrUndefined(lexicalOf(context, node.id, name)));
 
 /**
- * Read a document's declarations as their `Declaration` rows hold them ({@link declaredFieldsAt}),
- * and the names only a declaration with no row holds, one whose identifier or cardinality is
- * unwritten or spells nothing, or whose base type spells nothing, which nothing binds or references
- * (lane NIL's audit, B11). A declaring element that writes no `identifier` names nothing.
+ * Read a document's named declarations as their `DeclarationName` rows hold them
+ * ({@link declaredFieldsAt}), and the names only a declaration with no row holds, one whose
+ * cardinality is unwritten or spells nothing, or whose base type spells nothing, which nothing
+ * binds or references (lane NIL's audit, B11). A declaring element whose `identifier` is unwritten
+ * or names nothing has no name, so nothing binds or references it (spec reading 157).
  *
  * @param context - The document, its declarations not yet read.
  * @returns The declarations and the untyped names.
@@ -370,7 +371,13 @@ const declaredOf = (
       : [],
   );
   const declared = read.flatMap(({ fields, node }) =>
-    Option.toArray(fields).map((declaration) => ({ ...declaration, node })),
+    Option.toArray(fields).flatMap((declaration) =>
+      Option.toArray(declaration.identifier).map((identifier) => ({
+        ...declaration,
+        identifier,
+        node,
+      })),
+    ),
   );
   const names = new Set(declared.map(({ identifier }) => identifier));
 
@@ -1389,15 +1396,15 @@ const placedOf = (
 
 /**
  * Read a package's declarations as the placed bindings and references resolve against them: each
- * `Declaration` row with its document and its base type, its `DeclarationBaseType`'s, none where it
- * has none, a record's (lane NIL's audit, B12).
+ * `DeclarationName` row with its document and its base type, its `DeclarationBaseType`'s, none
+ * where it has none, a record's (lane NIL's audit, B12).
  *
- * @param declarations - Every declaration of the package (Q5.08's `Declaration` rows).
+ * @param declarations - Every named declaration of the package (Q5.08's `DeclarationName` rows).
  * @param baseTypes - Every declaration's base type, where it has one.
  * @returns The declarations.
  */
 const declaredVariablesOf = (
-  declarations: Iterable<Addition<typeof Declaration>>,
+  declarations: Iterable<Addition<typeof DeclarationName>>,
   baseTypes: Iterable<Addition<typeof DeclarationBaseType>>,
 ): readonly (DeclaredVariable & {
   readonly document: NodeId;
@@ -1441,7 +1448,8 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  *   `DeclarationBaseType` rows).
  * @param input.contexts - Every fragment's context variable references ({@link rowsOf}'s
  *   `SectionContextName`).
- * @param input.declarations - Every declaration of the package (Q5.08's `Declaration` rows).
+ * @param input.declarations - Every named declaration of the package (Q5.08's `DeclarationName`
+ *   rows).
  * @param input.feedbacks - Every section document's and fragment's feedback references
  *   ({@link rowsOf}'s `SectionFeedbackName`).
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
@@ -1455,7 +1463,7 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
 export const sectionRowsOf = (input: {
   readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
   readonly contexts: Iterable<Addition<typeof SectionContextName>>;
-  readonly declarations: Iterable<Addition<typeof Declaration>>;
+  readonly declarations: Iterable<Addition<typeof DeclarationName>>;
   readonly feedbacks: Iterable<Addition<typeof SectionFeedbackName>>;
   readonly instances: Iterable<InstanceRoot>;
   readonly prints: Iterable<Addition<typeof SectionPrintedName>>;
@@ -1543,7 +1551,8 @@ export interface PlacedBindingRows {
  * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
  *   `DeclarationBaseType` rows).
  * @param input.choices - Every document's choices ({@link rowsOf}'s `Choice`).
- * @param input.declarations - Every declaration of the package (Q5.08's `Declaration` rows).
+ * @param input.declarations - Every named declaration of the package (Q5.08's `DeclarationName`
+ *   rows).
  * @param input.hottexts - Every document's hottexts ({@link rowsOf}'s `Hottext`).
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
@@ -1556,7 +1565,7 @@ export const placedBindingRowsOf = (input: {
   readonly adaptive: Iterable<Addition<typeof ItemMode>>;
   readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
   readonly choices: Iterable<Addition<typeof Choice>>;
-  readonly declarations: Iterable<Addition<typeof Declaration>>;
+  readonly declarations: Iterable<Addition<typeof DeclarationName>>;
   readonly hottexts: Iterable<Addition<typeof Hottext>>;
   readonly instances: Iterable<InstanceRoot>;
   readonly mosts: Iterable<Addition<typeof MostCount>>;

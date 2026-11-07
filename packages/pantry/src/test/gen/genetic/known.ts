@@ -68,11 +68,11 @@ export const known = {
           "item.xml",
           "xml",
           `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"/></qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="many" base-type="identifier"/></qti-assessment-item>`,
         ],
       ],
-      fix: "a declaration whose identifier names nothing (empty, whitespace alone, or no NCName: spec reading 152, lane NIL's B10) has no Declaration row, but Declaration overlay's forward copies of its cardinality and base type demand one of every declaration that writes them; the declaration's name wants a row of its own (as RecordFieldName), so the copies hold without a name and the value domain refuses it alone",
-      owner: "unassigned, found by FIX-NCNAME",
+      fix: "a declaration whose cardinality spells nothing, or whose base type spells nothing, has no Declaration row (lane NIL's B11), but Declaration overlay's copy of its cardinality asks a row of every declaration that writes one; it shows first where its identifier names nothing too, since a nameless declaration asks no DeclarationName (spec reading 157 closed the case of a declaration whose identifier alone names nothing, kept in fixed)",
+      owner: "unassigned, found by FIX-DECLNAME",
     },
   "import-only-law: Mapping overlay, contained Attribute(node, lexical) in MapKey(node, key)": {
     files: [
@@ -86,11 +86,11 @@ export const known = {
         "item.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"><qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping></qti-response-declaration></qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="many" base-type="identifier"><qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping></qti-response-declaration></qti-assessment-item>`,
       ],
     ],
-    fix: "a response declaration with no Declaration row (its identifier names nothing) writes no MapKey rows for its mapping's keys, which the mapping overlay's copy demands of every map key; the copy wants to hold over the declarations that have rows",
-    owner: "unassigned, found by FIX-NCNAME",
+    fix: "a response declaration with no Declaration row, its cardinality or its base type spelling nothing (lane NIL's B11), writes no MapKey rows for its mapping's keys, which the mapping overlay's copy asks of every map key; the copy wants to hold over the declarations that have rows (spec reading 157 closed the case of a declaration whose identifier alone names nothing, kept in fixed)",
+    owner: "unassigned, found by FIX-DECLNAME",
   },
   "import-only-law: Test overlay, contained Section(node, visible) in TestFlag(node, value)": {
     files: [
@@ -595,6 +595,25 @@ export const fixed = {
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
   },
+  "import-only-law: Declaration overlay, contained Attribute(node, lexical) in Declaration(node, cardinalityLexical)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+        ],
+        [
+          "item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"/></qti-assessment-item>`,
+        ],
+      ],
+      fix: "spec reading 157: a declaration's name is a row of its own, DeclarationName, so a declaration whose identifier is unwritten or names nothing keeps its Declaration row and every row below it, and AL3 or the value domain refuses it alone",
+      owner: "FIX-DECLNAME",
+    },
   "import-only-law: Declaration overlay, contained Value(node, baseType) in RecordField(node, baseType)":
     {
       files: [
@@ -1259,6 +1278,24 @@ export const fixed = {
       fix: "fix (3): a package's records are read from its manifest and its record files alone (recordDocumentTypes), and the Manifest overlay selections read the manifest's cp:* attributes alone, each by its node's and attribute's documentType (170356bd's reading)",
       owner: "GEN-A",
     },
+  "import-only-law: Mapping overlay, contained Attribute(node, lexical) in MapKey(node, key)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"><qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping></qti-response-declaration></qti-assessment-item>`,
+      ],
+    ],
+    fix: "spec reading 157: a response declaration whose identifier names nothing keeps its Declaration row, so its mapping and each map key have their rows, judged as any other's",
+    owner: "FIX-DECLNAME",
+  },
   "import-only-law: N8 nearest, contained Choice(node) in ChoiceInteraction(node)": {
     files: [
       [
@@ -1277,7 +1314,7 @@ export const fixed = {
     fix: "N8: the oracle states the choice law the schema does, every choice that writes its identifier in an interaction, its nearest (the information model's parents of each choice class, §5.55's gap, reading 38), so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
     owner: "OL",
   },
-  "import-only-law: Reserved type, check Reserved_type on Declaration": {
+  "import-only-law: Reserved type, check Reserved_type on DeclarationName": {
     files: [
       [
         "imsmanifest.xml",

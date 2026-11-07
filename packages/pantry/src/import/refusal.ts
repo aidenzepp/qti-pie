@@ -611,6 +611,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     [
       "Declaration",
       "DeclarationBaseType",
+      "DeclarationName",
       "ValueSet",
       "Value",
       "DeclaredValue",

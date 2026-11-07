@@ -33,7 +33,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { Declaration } from "#pantry/qti/declarations.ts";
+import { Declaration, DeclarationName } from "#pantry/qti/declarations.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   AriaRange,
@@ -1091,10 +1091,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               cardinalityLexical: "single",
               declarationKind: "qti-outcome-declaration",
               document: stray,
-              identifier: "A",
-              identifierLead: "",
-              identifierLexical: "A",
-              identifierTrail: "",
               kind: "qti-outcome-declaration",
               nearest: stray,
               node: strayNode(50),
@@ -1102,13 +1098,25 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               start: 2n,
               version: "3.0.1",
             } satisfies Addition<typeof Declaration>;
+            const name = {
+              baseTypes: 0n,
+              cardinality: "single",
+              declarationKind: "qti-outcome-declaration",
+              document: stray,
+              identifier: "A",
+              identifierLead: "",
+              identifierLexical: "A",
+              identifierTrail: "",
+              node: strayNode(50),
+            } satisfies Addition<typeof DeclarationName>;
 
             const choice = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(Document, [strayDocument])
                 .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Choice, [choiceOf(0, "A")])
-                .insert(Declaration, [declared]),
+                .insert(Declaration, [declared])
+                .insert(DeclarationName, [name]),
               {},
             );
             assert.isTrue(
@@ -1121,7 +1129,8 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 .insert(Document, [strayDocument])
                 .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Hottext, [hottextOf(0, { identifier: "A" })])
-                .insert(Declaration, [declared]),
+                .insert(Declaration, [declared])
+                .insert(DeclarationName, [name]),
               {},
             );
             assert.isTrue(

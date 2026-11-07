@@ -36,7 +36,7 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
-import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
+import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
 import { choiceKinds, hottextInteraction, hottextKind } from "#pantry/qti/interactions.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
@@ -776,24 +776,19 @@ const assemblyOf = (tree: readonly Placement[]) => {
 };
 
 /**
- * The declaration of the section box's test: an outcome `SCORED`, a single identifier, its base
- * type its {@link scoredBaseType}.
+ * The name of the section box's test's declaration: an outcome `SCORED`, a single identifier, its
+ * base type its {@link scoredBaseType}.
  */
-const scored: Addition<typeof Declaration> = {
+const scored: Addition<typeof DeclarationName> = {
+  baseTypes: 1n,
   cardinality: "single",
-  cardinalityLexical: "single",
   declarationKind: "qti-outcome-declaration",
   document: testDocument,
   identifier: "SCORED",
   identifierLead: "",
   identifierLexical: "SCORED",
   identifierTrail: "",
-  kind: "qti-outcome-declaration",
-  nearest: testDocument,
   node: idOf(1001),
-  parent: idOf(1000),
-  start: 2n,
-  version: "3.0.1",
 };
 
 /**
@@ -1013,8 +1008,8 @@ describe("import/overlays/interactions.ts, choice names", () => {
       // Oracle: the specification as a checker, reading 104's projection read off the tree: the set
       // of every choice's and hottext's identifier and every declaration's, each collapsed (XML
       // Schema Part 2 §4.3.6), under the document node and the item's root kind. A declaration
-      // without one has no Declaration row and names nothing (lane NIL's audit, B10), so AL3
-      // refuses it alone.
+      // without one has no DeclarationName and names nothing (lane NIL's audit, B10; spec reading
+      // 157), so AL3 refuses it alone.
       // Bound: 0 to 2 declarations over 3 names by 0 to 2 marks over 3 kinds and 3 names,
       // 13 × 91 = 1,183.
       searched(

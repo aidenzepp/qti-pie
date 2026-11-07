@@ -3778,15 +3778,18 @@ const overlayLaws: readonly ((
  * @returns The breaches.
  */
 const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
-  // A declaration without an identifier declares no variable: AL3 refuses it, and it shares no
-  // identifier with another declaration that lacks one.
-  const declarations = view.members.filter(
-    ({ id, kind }) =>
-      laws.grammar.references.declarationKind.has(kind) &&
-      Option.isSome(valueOf(view, id, "identifier")),
+  // A declaration whose identifier is unwritten, or outside its value domain, names no variable:
+  // AL3 or that domain refuses it alone, and it shares no name with another declaration that names
+  // nothing (spec readings 152 and 157). A name is the identifier as its type reads it, collapsed.
+  const declarations = view.members.flatMap((node) =>
+    laws.grammar.references.declarationKind.has(node.kind)
+      ? Option.toArray(typedValueOf(view, node.id, "identifier")).map((name) => ({ name, node }))
+      : [],
   );
-  const declared = Map.groupBy(declarations, (node) =>
-    collapsed(Option.getOrElse(valueOf(view, node.id, "identifier"), () => "")),
+  const declared = new Map(
+    [...Map.groupBy(declarations, ({ name }) => name)].map(
+      ([name, held]) => [name, held.map(({ node }) => node)] as const,
+    ),
   );
   const root = view.childrenOf.get(view.self)?.find(({ kind }) => laws.elements.has(kind));
   const overlay: Overlay = {
@@ -6112,7 +6115,7 @@ const ownLaws = {
   },
   "Declaration base type": {
     explain: (keys) =>
-      `${field(keys, "identifier")} is of cardinality ${JSON.stringify(field(keys, "cardinality"))} and base type ${JSON.stringify(field(keys, "baseType"))}, where a record declares no base type and every other variable declares one`,
+      `the ${field(keys, "kind")} at ${field(keys, "node")} is of cardinality ${JSON.stringify(field(keys, "cardinality"))} and base type ${JSON.stringify(field(keys, "baseType"))}, where a record declares no base type and every other variable declares one`,
   },
   "Declaration key": {
     explain: (keys) => `a second declaration of ${field(keys, "identifier")}`,

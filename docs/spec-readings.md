@@ -2810,3 +2810,29 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `id` as a header whatever its form, under which `headers="1a"` named `<th id="1a">`. This binds pantry and plate
      alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the
      operator's standing ruling of 2026-11-05, from seat FIX-IDNCNAME.)
+157. **A declaration whose identifier names nothing is still a declaration: its type, its values, its mapping and its
+     tables are judged by their own laws, and only its name is missing.** The ASI XSD requires a declaration's
+     `identifier`, typed `IdentifierDType`, an `xs:NCName` (`imsqti_asiv3p0_v1p0.xsd`, each of
+     `qti-response-declaration`, `qti-outcome-declaration`, `qti-template-declaration` and `qti-context-declaration`),
+     so one that writes none breaks AL3, and one whose value is no NCName once collapsed names nothing and breaks its
+     value domain (reading 152). The information model states the rest of a declaration apart from its identifier: its
+     cardinality and base type (§4.5.2 and §4.5.3, and §5.34, §5.115 and §5.151 alike), its default value and correct
+     response (§5.41, §5.35), its mapping and area mapping (§5.88, §5.5) and its lookup tables (§4.5.13). The laws over
+     them read the declaration's type and its children, never its name: Declaration base type, Value cardinality,
+     Typed value, Mastery range, MappableBaseType, AreaMapping base type, Map key, Typed attribute value, Lookup table
+     cardinality and Key text bound. So each judges a declaration whose identifier is unwritten or names nothing as it
+     judges any other, which is also the stricter reading. Only the laws over a name do not read it: Declaration key
+     (reading 74), Declaration not reserved (reading 72), Reserved type, and every reference's and binding's
+     resolution, since such a declaration holds no place in its document's namespace, and two of them share no name.
+     The importer writes the declaration's row and every row below it, and its name as a row of its own,
+     `DeclarationName` (`src/qti/declarations.ts`), only where the identifier names something, as `RecordFieldName` is
+     a field's: a missing value is a row of its own relation, never a sentinel. This sets aside reading 152's leaving
+     such a declaration no `Declaration` row, under which the importer's rows broke "Declaration overlay"'s copy of its
+     cardinality and "Mapping overlay"'s copy of each map key beside the value domain, and judged none of its values,
+     map keys or tables, so a map key past the key-text bound went unrefused where the law oracle named "Key text
+     bound"; and it sets aside the law oracle's reading, which judged such a declaration's mapping and tables but not
+     its type and values, and read two declarations that name nothing as one name under Declaration key. A declaration
+     whose cardinality is unwritten or spells nothing, or whose base type spells nothing, still has no row (lane NIL's
+     audit, B11), and the copies its children ask still break beside its own law; that is a case of its own, which
+     `known.ts` records. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-DECLNAME.)

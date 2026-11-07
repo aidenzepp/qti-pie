@@ -1,12 +1,13 @@
 /**
- * Declarations that have no `Declaration` row (lane NIL's audit, B10 and B11), held three ways over
- * every declaration of the every-relation package: the law oracle, the importer's rows, and the
- * families and checks those rows feed.
+ * Declarations that have no `Declaration` row (lane NIL's audit, B11), held three ways over every
+ * declaration of the every-relation package: the law oracle, the importer's rows, and the families
+ * and checks those rows feed.
  *
- * A declaration's row is written only where its `identifier` is written and names something, its
- * `cardinality` is written and spells a handle, and its `base-type` is unwritten or spells one
- * (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`). Before, one whose identifier or
- * cardinality was unwritten or spelled nothing still had a row, holding `""` and `single`: a
+ * A declaration's row is written only where its `cardinality` is written and spells a handle, and
+ * its `base-type` is unwritten or spells one (`#pantry/import/overlays/declarations.ts`
+ * `typedDeclarationOf`); its identifier is its name's alone (spec reading 157). Before, one whose
+ * identifier or cardinality was unwritten or spelled nothing still had a row, holding `""` and
+ * `single`: a
  * missing value as a sentinel. Its own `E1_derived` refused that row, and every row that copied it,
  * a binding's declaration row, a reference, a value set, a table, judged the `single`. grizzle
  * writes those flat relations before `Node`, whose AL3 is the law, and `Attribute`, whose value
@@ -179,7 +180,7 @@ const holds = (at: number) =>
           holder,
           identifier,
         ]),
-        ...[...inputs.Declaration.values()].map(({ document: holder, identifier }) => [
+        ...[...inputs.DeclarationName.values()].map(({ document: holder, identifier }) => [
           holder,
           identifier,
         ]),
@@ -201,14 +202,14 @@ const holds = (at: number) =>
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
-describe("declarations with no Declaration row (lane NIL's audit, B10 and B11)", () => {
+describe("declarations with no Declaration row (lane NIL's audit, B11)", () => {
   it.effect(
     "are refused by AL3 or the value domain, and no row stands for them or names them",
     (ctx) =>
       // Oracle: the specification as a checker (the law oracle), and the families and checks the
       // importer's rows feed, read over those rows. Bound: every declaration of the every-relation
-      // items and test, under each state of its identifier, cardinality and base type that leaves
-      // it no row, exhausted.
+      // items and test, under each state of its cardinality and base type that leaves it no row,
+      // exhausted.
       searched(
         ctx,
         exhaust(
