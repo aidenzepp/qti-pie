@@ -9,7 +9,7 @@ import { drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { restore } from "#plate/restore.ts";
-import { integer } from "#plate/test/fixtures.ts";
+import { float, integer } from "#plate/test/fixtures.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
@@ -136,6 +136,111 @@ const templated = accepted(
 );
 
 /**
+ * The integer response `RESPONSE`, whose declared default is 7.
+ */
+const answered = declaration("qti-response-declaration", "RESPONSE", "integer", [defaultOf("7")]);
+
+/**
+ * The float outcome `SCORE`, whose declared default is 1.
+ */
+const scored = declaration("qti-outcome-declaration", "SCORE", "float", [defaultOf("1")]);
+
+/**
+ * The single integer context variable `CTX`, whose default is 4.
+ */
+const contextVariable = el(
+  "qti-context-declaration",
+  [attr("base-type", "integer"), attr("cardinality", "single"), attr("identifier", "CTX")],
+  [defaultOf("4")],
+);
+
+/**
+ * Construct a `qti-template-processing` of one rule.
+ *
+ * @param rule The rule.
+ * @returns The element.
+ */
+const processingOf = (rule: SourceElement): SourceElement =>
+  el("qti-template-processing", [], [rule]);
+
+/**
+ * Construct a `qti-is-null` of a `qti-variable`.
+ *
+ * @param identifier The variable it reads.
+ * @returns The expression.
+ */
+const isNullVariable = (identifier: string): SourceElement =>
+  el("qti-is-null", [], [el("qti-variable", [attr("identifier", identifier)])]);
+
+/**
+ * The seven shapes of template processing `check` accepts whose first attempt reads or sets a
+ * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each
+ * beside {@link answered} and {@link scored}: a read of `QTI_CONTEXT`; a read of a context
+ * variable through `qti-variable`, then through `qti-default`; a read of a template variable of
+ * cardinality `record`; a set of one of base type `duration`; a `qti-set-correct-response` of a
+ * `duration` response; and a `qti-set-default-value` of a `file` outcome. `check` marks each, so
+ * its template processing does not run.
+ */
+const unheldTemplating: readonly Accepted[] = [
+  accepted(
+    "reads-qti-context",
+    answered,
+    scored,
+    declaration("qti-template-declaration", "B", "boolean"),
+    processingOf(setFrom("qti-set-template-value", "B", isNullVariable("QTI_CONTEXT"))),
+  ),
+  accepted(
+    "reads-context-variable",
+    contextVariable,
+    answered,
+    scored,
+    declaration("qti-template-declaration", "T", "integer"),
+    processingOf(
+      setFrom("qti-set-template-value", "T", el("qti-variable", [attr("identifier", "CTX")])),
+    ),
+  ),
+  accepted(
+    "reads-context-default",
+    contextVariable,
+    answered,
+    scored,
+    declaration("qti-template-declaration", "T", "integer"),
+    processingOf(
+      setFrom("qti-set-template-value", "T", el("qti-default", [attr("identifier", "CTX")])),
+    ),
+  ),
+  accepted(
+    "reads-record-template",
+    answered,
+    scored,
+    el("qti-template-declaration", [attr("cardinality", "record"), attr("identifier", "R")]),
+    declaration("qti-template-declaration", "B", "boolean"),
+    processingOf(setFrom("qti-set-template-value", "B", isNullVariable("R"))),
+  ),
+  accepted(
+    "sets-duration-template",
+    answered,
+    scored,
+    declaration("qti-template-declaration", "D", "duration"),
+    processingOf(setFrom("qti-set-template-value", "D", el("qti-null"))),
+  ),
+  accepted(
+    "sets-duration-correct",
+    answered,
+    declaration("qti-response-declaration", "RD", "duration"),
+    scored,
+    processingOf(setFrom("qti-set-correct-response", "RD", el("qti-null"))),
+  ),
+  accepted(
+    "sets-file-default",
+    answered,
+    scored,
+    declaration("qti-outcome-declaration", "OF", "file"),
+    processingOf(setFrom("qti-set-default-value", "OF", el("qti-null"))),
+  ),
+];
+
+/**
  * An item that declares no template variable: one identifier response and one float outcome.
  */
 const untemplated = accepted(
@@ -243,6 +348,31 @@ describe("begin", () => {
       assert.deepStrictEqual(record, { ...fresh(untemplated.item, instance), seed: "42" });
       assert.deepStrictEqual([record.templates, record.correct, record.defaults], [{}, {}, {}]);
     }),
+  );
+
+  it.effect(
+    "[I-5] begins each item whose template processing names a variable the engine does not hold, marked, with no template value, correct response or default, and each response and outcome at its declared default",
+    () =>
+      Effect.gen(function* beginsMarked() {
+        for (const document of unheldTemplating) {
+          const label = document.item.identifier;
+          const { record } = yield* begun(document, "42");
+
+          assert.deepStrictEqual(document.item.templateProcessing, Option.none(), label);
+          assert.deepStrictEqual(
+            [record.templates, record.correct, record.defaults],
+            [{}, {}, {}],
+            label,
+          );
+          assert.deepStrictEqual(record.responses, { RESPONSE: integer(7n) }, label);
+          assert.deepStrictEqual(record.outcomes["SCORE"], float(1), label);
+          assert.deepStrictEqual(
+            record,
+            { ...fresh(document.item, instance), responses: { RESPONSE: integer(7n) }, seed: "42" },
+            label,
+          );
+        }
+      }),
   );
 
   it.effect("[I-5] stores a record restore takes back, its responses the values to render", () =>

@@ -202,6 +202,32 @@ const templatedXml = (identifier: string): string =>
   ].join("");
 
 /**
+ * Write the text of a hand-built item whose template processing reads `QTI_CONTEXT`, which the
+ * engine does not hold while template processing runs, so `check` marks it and it does not run:
+ * one Choice over `A`, `B` and `C` bound to the single identifier `RESPONSE`, which declares the
+ * default `B`, and the single boolean template variable `B`, which the one rule sets to whether
+ * `QTI_CONTEXT` is NULL.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const contextReadingXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    "<qti-default-value><qti-value>B</qti-value></qti-default-value></qti-response-declaration>",
+    '<qti-template-declaration identifier="B" cardinality="single" base-type="boolean"/>',
+    '<qti-template-processing><qti-set-template-value identifier="B">',
+    '<qti-is-null><qti-variable identifier="QTI_CONTEXT"/></qti-is-null>',
+    "</qti-set-template-value></qti-template-processing>",
+    '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="false">',
+    ...["A", "B", "C"].map(
+      (choice) => `<qti-simple-choice identifier="${choice}">Choice ${choice}</qti-simple-choice>`,
+    ),
+    "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
+  ].join("");
+
+/**
  * Write the text of a hand-built test: one nonlinear, individual part with one section that holds
  * each item ref.
  *
@@ -1007,6 +1033,37 @@ describe("a templated item in a session", () => {
         assert.deepStrictEqual(restoredView.record, shown.record);
         assert.deepStrictEqual(restoredView.record.templates, shown.record.templates);
         assert.deepStrictEqual(restoredView.values, { RESPONSE: choiceC });
+      }),
+  );
+
+  it.effect(
+    "[I-5] starts a test whose item's template processing reads QTI_CONTEXT, marked, and presents that item with a record that holds no template value",
+    () =>
+      Effect.gen(function* startsMarked() {
+        const delivery = yield* builtDelivery("marked", [["first", contextReadingXml("first")]]);
+        const configuration = yield* configure({ seed: "11" });
+        const returned = Result.getOrElse(
+          Result.try(() =>
+            startTest(delivery.test, delivery.items, configuration, {
+              instance,
+              now: startedAt,
+            }),
+          ),
+          () => assert.fail("startTest threw"),
+        );
+        const session = Result.getOrElse(returned, (failure) =>
+          assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const record = recordUnder(session);
+
+        assert.deepStrictEqual(
+          delivery.items.get("first")?.item.templateProcessing,
+          Option.none(),
+          "the item's template processing is marked",
+        );
+        assert.deepStrictEqual([record.templates, record.correct, record.defaults], [{}, {}, {}]);
+        assert.deepStrictEqual(record.responses, { RESPONSE: choiceB });
+        assert.deepStrictEqual(currentItem(delivery, session, configuration).record, record);
       }),
   );
 

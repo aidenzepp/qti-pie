@@ -349,6 +349,191 @@ const stalledTemplating: SourceElement = el(
 );
 
 /**
+ * Construct a `qti-template-declaration`.
+ *
+ * @param identifier The declared identifier.
+ * @param cardinality The `cardinality` value.
+ * @param baseType The `base-type` value, none when absent, as a record's is.
+ * @returns The declaration element.
+ */
+const templateDeclaration = (
+  identifier: string,
+  cardinality: string,
+  baseType?: string,
+): SourceElement =>
+  el("qti-template-declaration", [
+    ...(baseType === undefined ? [] : [attr("base-type", baseType)]),
+    attr("cardinality", cardinality),
+    attr("identifier", identifier),
+  ]);
+
+/**
+ * Construct a template setting rule.
+ *
+ * @param local The rule's name.
+ * @param identifier The variable it sets.
+ * @param expression Its expression.
+ * @returns The rule element.
+ */
+const templateSetting = (
+  local: "qti-set-correct-response" | "qti-set-default-value" | "qti-set-template-value",
+  identifier: string,
+  expression: SourceElement,
+): SourceElement => el(local, [attr("identifier", identifier)], [expression]);
+
+/**
+ * Construct a `qti-variable`.
+ *
+ * @param identifier The variable it reads.
+ * @returns The expression element.
+ */
+const variableElement = (identifier: string): SourceElement =>
+  el("qti-variable", [attr("identifier", identifier)]);
+
+/**
+ * Construct a `qti-is-null` of one operand.
+ *
+ * @param operand The operand.
+ * @returns The expression element.
+ */
+const isNullOf = (operand: SourceElement): SourceElement => el("qti-is-null", [], [operand]);
+
+/**
+ * The float outcome `SCORE`, which {@link templatingItem}'s response processing sets.
+ */
+const scoreDeclaration: SourceElement = declaration(
+  "qti-outcome-declaration",
+  "SCORE",
+  "float",
+  "single",
+);
+
+/**
+ * The single integer context variable `CTX`, whose default is 4.
+ */
+const contextDeclaration: SourceElement = el(
+  "qti-context-declaration",
+  [attr("base-type", "integer"), attr("cardinality", "single"), attr("identifier", "CTX")],
+  [values("qti-default-value", "4")],
+);
+
+/**
+ * Construct an item whose template processing is one rule, and whose inline response processing
+ * sets `SCORE` to 1, or, with a condition given, to 1 when that condition is true.
+ *
+ * @param declarations The declarations, in document order, `SCORE` among them.
+ * @param rule The template rule.
+ * @param condition The response processing's condition, none by default.
+ * @returns The document at `items/test.xml`.
+ */
+const templatingItem = (
+  declarations: readonly SourceElement[],
+  rule: SourceElement,
+  condition?: SourceElement,
+): SourceDocument =>
+  item({
+    after: [
+      el(
+        "qti-response-processing",
+        [],
+        [
+          condition === undefined
+            ? setScore("1")
+            : el(
+                "qti-response-condition",
+                [],
+                [el("qti-response-if", [], [condition, setScore("1")])],
+              ),
+        ],
+      ),
+    ],
+    attributes: [attr("time-dependent", "false")],
+    body: [],
+    declarations: [...declarations, el("qti-template-processing", [], [rule])],
+  });
+
+/**
+ * The seven shapes of template processing `check` accepts whose first attempt reads or sets a
+ * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each with
+ * its declarations, its one rule, the name it marks and the declarations' own marks: a read of
+ * `QTI_CONTEXT`; a read of a context variable through `qti-variable`, then through `qti-default`;
+ * a read of a template variable of cardinality `record`; a set of one of base type `duration`; a
+ * `qti-set-correct-response` of a `duration` response; and a `qti-set-default-value` of a `file`
+ * outcome.
+ */
+const unheldTemplating: readonly {
+  readonly declarations: readonly SourceElement[];
+  readonly marks: readonly Pick<UnsupportedFeature, "feature" | "path">[];
+  readonly rule: SourceElement;
+  readonly unheld: string;
+}[] = [
+  {
+    declarations: [scoreDeclaration, templateDeclaration("B", "single", "boolean")],
+    marks: [],
+    rule: templateSetting("qti-set-template-value", "B", isNullOf(variableElement("QTI_CONTEXT"))),
+    unheld: "QTI_CONTEXT",
+  },
+  {
+    declarations: [
+      contextDeclaration,
+      scoreDeclaration,
+      templateDeclaration("T", "single", "integer"),
+    ],
+    marks: [{ feature: "qti-context-declaration", path: `${root}/qti-context-declaration` }],
+    rule: templateSetting("qti-set-template-value", "T", variableElement("CTX")),
+    unheld: "CTX",
+  },
+  {
+    declarations: [
+      contextDeclaration,
+      scoreDeclaration,
+      templateDeclaration("T", "single", "integer"),
+    ],
+    marks: [{ feature: "qti-context-declaration", path: `${root}/qti-context-declaration` }],
+    rule: templateSetting(
+      "qti-set-template-value",
+      "T",
+      el("qti-default", [attr("identifier", "CTX")]),
+    ),
+    unheld: "CTX",
+  },
+  {
+    declarations: [
+      scoreDeclaration,
+      templateDeclaration("R", "record"),
+      templateDeclaration("B", "single", "boolean"),
+    ],
+    marks: [{ feature: 'cardinality="record"', path: `${root}/qti-template-declaration[1]` }],
+    rule: templateSetting("qti-set-template-value", "B", isNullOf(variableElement("R"))),
+    unheld: "R",
+  },
+  {
+    declarations: [scoreDeclaration, templateDeclaration("D", "single", "duration")],
+    marks: [{ feature: 'base-type="duration"', path: `${root}/qti-template-declaration` }],
+    rule: templateSetting("qti-set-template-value", "D", el("qti-null")),
+    unheld: "D",
+  },
+  {
+    declarations: [
+      declaration("qti-response-declaration", "RD", "duration", "single"),
+      scoreDeclaration,
+    ],
+    marks: [{ feature: 'base-type="duration"', path: `${root}/qti-response-declaration` }],
+    rule: templateSetting("qti-set-correct-response", "RD", el("qti-null")),
+    unheld: "RD",
+  },
+  {
+    declarations: [
+      scoreDeclaration,
+      declaration("qti-outcome-declaration", "OF", "file", "single"),
+    ],
+    marks: [{ feature: 'base-type="file"', path: `${root}/qti-outcome-declaration[2]` }],
+    rule: templateSetting("qti-set-default-value", "OF", el("qti-null")),
+    unheld: "OF",
+  },
+];
+
+/**
  * A float `SCORE` and a float template variable `T`, with inline response processing that sets
  * `SCORE` to `T`.
  *
@@ -4012,6 +4197,95 @@ describe("buildItem", () => {
         ]);
       }),
   );
+
+  it("[I-5] marks template processing that reads or sets a name the engine does not hold while it runs, at the qti-template-processing, and runs neither processing", () => {
+    for (const { declarations, marks, rule, unheld } of unheldTemplating) {
+      const verdict = check(templatingItem(declarations, rule), tables);
+      const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+        assert.fail(`${unheld}: the item is ${verdict.verdict}, not accepted.`),
+      );
+
+      assert.strictEqual(verdict.verdict, "accepted-with-unsupported", unheld);
+      assert.deepStrictEqual(accepted.item.templateProcessing, Option.none(), unheld);
+      assert.deepStrictEqual(accepted.item.processing, Option.none(), unheld);
+      assert.deepStrictEqual(
+        accepted.unsupported,
+        [
+          ...marks.map((mark): UnsupportedFeature => ({ ...mark, shown: "mark" })),
+          {
+            feature: `variable:${unheld}`,
+            path: `${root}/qti-template-processing`,
+            shown: "mark",
+          },
+        ],
+        unheld,
+      );
+    }
+  });
+
+  it("[I-5] places the template processing's mark before the response processing's, in document order", () => {
+    const verdict = check(
+      templatingItem(
+        [scoreDeclaration, templateDeclaration("B", "single", "boolean")],
+        templateSetting("qti-set-template-value", "B", isNullOf(variableElement("QTI_CONTEXT"))),
+        variableElement("B"),
+      ),
+      tables,
+    );
+    const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+      assert.fail(`the item is ${verdict.verdict}, not accepted.`),
+    );
+
+    assert.deepStrictEqual(accepted.unsupported, [
+      { feature: "variable:QTI_CONTEXT", path: `${root}/qti-template-processing`, shown: "mark" },
+      { feature: "variable:B", path: `${root}/qti-response-processing`, shown: "mark" },
+    ]);
+  });
+
+  it("[I-5] keeps template processing that reads and sets only template variables the model holds, and response processing, with no mark", () => {
+    const verdict = check(
+      templatingItem(
+        [
+          scoreDeclaration,
+          templateDeclaration("T", "single", "integer"),
+          templateDeclaration("B", "single", "boolean"),
+        ],
+        el(
+          "qti-template-condition",
+          [],
+          [
+            el(
+              "qti-template-if",
+              [],
+              [
+                isNullOf(variableElement("T")),
+                templateSetting(
+                  "qti-set-template-value",
+                  "T",
+                  el("qti-base-value", [attr("base-type", "integer")], [text("3")]),
+                ),
+              ],
+            ),
+            el(
+              "qti-template-else",
+              [],
+              [templateSetting("qti-set-template-value", "B", isNullOf(variableElement("T")))],
+            ),
+          ],
+        ),
+        variableElement("B"),
+      ),
+      tables,
+    );
+    const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+      assert.fail(`the item is ${verdict.verdict}, not accepted.`),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted");
+    assert.isTrue(Option.isSome(accepted.item.templateProcessing), "the template processing runs");
+    assert.isTrue(Option.isSome(accepted.item.processing), "the response processing runs");
+    assert.deepStrictEqual(accepted.unsupported, []);
+  });
 
   it.effect(
     "gives equal outcomes for the correct value and another on an item whose template processing does not run",
