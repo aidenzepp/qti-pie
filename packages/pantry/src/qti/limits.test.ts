@@ -4,7 +4,7 @@
  * leaves beside its key's other fields, and every index of the composed `Qti` that holds a text of
  * one of the bounded kinds holds it at its kind's one bound and is representable.
  */
-import { keyTextBytes, natural, str, uuid } from "@bjornpagen/grizzle";
+import { keyTextBytes, natural, str, uuid, writableNamesOf } from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Predicate, Result, Schema } from "effect";
@@ -67,21 +67,6 @@ const StatementSchema = Schema.Struct({
 });
 
 /**
- * A field as grizzle keeps it, the part this test reads: its SQL type.
- */
-const FieldSchema = Schema.Struct({ sql: Schema.String });
-
-/**
- * A stored relation of the schema: its name, primary key and fields.
- */
-const RelationSchema = Schema.Struct({
-  fields: Schema.Record(Schema.String, FieldSchema),
-  kind: Schema.Literal("relation"),
-  name: Schema.String,
-  primaryKey: Schema.Array(Schema.String),
-});
-
-/**
  * One B-tree index a statement installs: the relation, the terms of the statement's side over it,
  * and how many hidden bigint columns a family adds beside them.
  */
@@ -91,18 +76,6 @@ interface IndexedKey {
   readonly relation: string;
   readonly terms: Side["terms"];
 }
-
-/**
- * The stored relations of the composed schema, by name, each parsed at the boundary.
- */
-const relations: ReadonlyMap<string, typeof RelationSchema.Type> = new Map(
-  Object.values(Qti.relations).flatMap((member) =>
-    Option.match(Schema.decodeUnknownOption(RelationSchema)(member), {
-      onNone: () => [],
-      onSome: (relation) => [[relation.name, relation] as const],
-    }),
-  ),
-);
 
 /**
  * List the index one side of a statement installs: its terms, beside `hidden` family columns.
@@ -157,30 +130,25 @@ const isField = (value: unknown): value is FieldBase =>
  * The field descriptors of each stored relation of the composed schema, by relation and name.
  */
 const descriptors: ReadonlyMap<string, ReadonlyMap<string, FieldBase>> = new Map(
-  Object.values(Qti.relations).flatMap((member) =>
-    member.kind === "relation"
-      ? [
-          [
-            member.name,
-            new Map(
-              Object.entries(member.fields).flatMap(
-                ([name, field]): (readonly [string, FieldBase])[] => {
-                  // An accumulated or generated field is stored as its own type, a drawn one as a natural.
-                  if (Predicate.hasProperty(field, "writing") && field.writing === "drawn") {
-                    return [[name, natural]];
-                  }
+  writableNamesOf(Qti).map(
+    (relation) =>
+      [
+        relation,
+        new Map(
+          Object.entries(Qti.relations[relation].fields).flatMap(
+            ([name, field]): (readonly [string, FieldBase])[] => {
+              // An accumulated or generated field is stored as its own type, a drawn one as a natural.
+              if (Predicate.hasProperty(field, "writing") && field.writing === "drawn") {
+                return [[name, natural]];
+              }
 
-                  const stored: unknown = Predicate.hasProperty(field, "field")
-                    ? field.field
-                    : field;
+              const stored: unknown = Predicate.hasProperty(field, "field") ? field.field : field;
 
-                  return isField(stored) ? [[name, stored]] : [];
-                },
-              ),
-            ),
-          ] as const,
-        ]
-      : [],
+              return isField(stored) ? [[name, stored]] : [];
+            },
+          ),
+        ),
+      ] as const,
   ),
 );
 
@@ -270,11 +238,11 @@ describe("qti/limits.ts", () => {
     // that puts a key text in a wider index fails here.
     // Bound: every relation's primary key and every statement of `Qti`.
     const keys: readonly IndexedKey[] = [
-      ...[...relations.values()].map(({ name, primaryKey }): IndexedKey => ({
+      ...writableNamesOf(Qti).map((relation): IndexedKey => ({
         hidden: 0,
         label: "primary key",
-        relation: name,
-        terms: primaryKey,
+        relation,
+        terms: Qti.relations[relation].primaryKey,
       })),
       ...Qti.statements.flatMap((statement) =>
         Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {

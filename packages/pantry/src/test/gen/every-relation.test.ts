@@ -4,6 +4,7 @@
  * import program writes a row of every stored relation of `Qti`, and the law oracle accepts it.
  * The list of relations is read from the schema, so a relation that joins `Qti` joins this test.
  */
+import { writableNamesOf } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -28,13 +29,6 @@ import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 const testTimeoutMs = 300_000;
 
 /**
- * Every stored relation of `Qti`, by name, read from the schema.
- */
-const storedRelations = Object.entries(Qti.relations).flatMap(([name, member]) =>
-  member.kind === "relation" ? [name] : [],
-);
-
-/**
  * The situations the box reaches: a count past its least.
  */
 type CountSituation = "a choice past the mapped two" | "a second hotspot" | "a second hottext";
@@ -45,8 +39,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/every-relatio
     (ctx) =>
       // Oracle: the specification as a checker. A package's entries are a set by path, read back
       // by `readPackage` as written, each once; the import's program (`readProgram`, the rows its
-      // one ChangeSet writes, counted by `rowCountsOf`) holds a row of each relation `Qti`'s
-      // `relations` record holds as stored; and the law oracle (`#pantry/test/oracle.ts`, plan
+      // one ChangeSet writes, counted by `rowCountsOf`) holds a row of each stored relation of
+      // `Qti`, grizzle's `writableNamesOf(Qti)`; and the law oracle (`#pantry/test/oracle.ts`, plan
       // §1.3 to §1.7 on the host) finds no breach.
       // Bound: every count of 2 or 3 choices, 1 or 2 hottexts and 1 or 2 hotspots, 8 cases.
       searched(
@@ -97,7 +91,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/every-relatio
               assert.deepStrictEqual(yield* oracleVerdict(files), { kind: "accepted" });
 
               const counts = rowCountsOf(yield* readProgram(dir));
-              const unwritten = storedRelations.filter((name) => (counts.get(name) ?? 0) === 0);
+              const unwritten = writableNamesOf(Qti).filter(
+                (name) => (counts.get(name) ?? 0) === 0,
+              );
 
               assert.deepStrictEqual(
                 unwritten,

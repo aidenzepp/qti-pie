@@ -16,7 +16,7 @@
  *
  * @see {@link https://www.postgresql.org/docs/19/ddl-system-columns.html | PostgreSQL 19, §5.6 System Columns}
  */
-import { CommitUnknown, Db } from "@bjornpagen/grizzle";
+import { CommitUnknown, Db, writableNamesOf } from "@bjornpagen/grizzle";
 import type { DbConnection } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -71,13 +71,6 @@ const packageTable = `${qtiSchema}.package`;
  * The timeout of each test here: every one imports the package once per case of its box.
  */
 const boxTimeoutMs = 900_000;
-
-/**
- * Every stored relation of `Qti`, by name, read from the schema.
- */
-const storedRelations = Object.entries(Qti.relations).flatMap(([name, member]) =>
-  member.kind === "relation" ? [name] : [],
-);
 
 /**
  * The box every test but the injection's exhausts, the generator's whole space.
@@ -421,7 +414,7 @@ describe.skipIf(!hasLease)(
 
                   assert.strictEqual(
                     written.length,
-                    storedRelations.length,
+                    writableNamesOf(Qti).length,
                     `tables written: ${written.map(([table]) => table).join(", ")}`,
                   );
                 }).pipe(Effect.scoped),
