@@ -4276,15 +4276,15 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    // A template that writes no cardinality is refused by AL3 ("required-attribute") alone, as an
-    // outcome is under "Feedback outcome type".
-    const written = collapsedOf(overlay, template, "cardinality");
-    if (Option.isNone(written)) {
+    // A template that writes no cardinality, or one outside its domain, or a base type outside its
+    // domain, is refused by AL3 ("required-attribute") or that domain alone, as an outcome is under
+    // "Feedback outcome type": it has no `Declaration` row for a reference to read.
+    const typed = Option.all([baseTypeOf(overlay, template), cardinalityOf(overlay, template)]);
+    if (Option.isNone(typed)) {
       return [];
     }
 
-    const baseType = Option.getOrElse(collapsedOf(overlay, template, "base-type"), () => "");
-    const cardinality = written.value;
+    const [baseType, cardinality] = typed.value;
 
     return baseType === "identifier" && (cardinality === "single" || cardinality === "multiple")
       ? []
@@ -4370,10 +4370,12 @@ const overlayBreaches = (
   const cards = Map.groupBy(
     view.members.flatMap((node) =>
       node.kind === "qti-card"
-        ? Option.toArray(collapsedOf(overlay, node, "support")).map((support) => ({
-            node,
-            support,
-          }))
+        ? Option.toArray(Option.map(valueOf(view, node.id, "support"), collapsed)).map(
+            (support) => ({
+              node,
+              support,
+            }),
+          )
         : [],
     ),
     ({ node, support }) => `${node.parent} ${support}`,
@@ -4382,7 +4384,10 @@ const overlayBreaches = (
     view.members.filter(
       (node) =>
         node.kind === "qti-card-entry" &&
-        Option.contains(Option.flatMap(collapsedOf(overlay, node, "default"), booleanOf), true),
+        Option.contains(
+          Option.flatMap(Option.map(valueOf(view, node.id, "default"), collapsed), booleanOf),
+          true,
+        ),
     ),
     ({ parent }) => parent,
   );

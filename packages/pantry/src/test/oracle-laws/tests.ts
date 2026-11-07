@@ -55,7 +55,6 @@ import type {
 import {
   breachAt,
   collapsed,
-  collapsedOf,
   elementsOf,
   typedOr,
   typedValueOf,
@@ -878,15 +877,17 @@ const feedbackTypeOf = (
       kind === "qti-outcome-declaration" &&
       Option.contains(typedValueOf(declared, id, "identifier"), named.value),
   );
-  const written = Option.flatMap(Option.fromNullishOr(outcome), ({ id }) =>
-    collapsedOf(declared, id, "cardinality"),
+  // An outcome that writes no cardinality, or one outside its domain, or a base type outside its
+  // domain, is refused by AL3 ("required-attribute") or that domain alone: it has no `Declaration`
+  // row for a reference to read (lane NIL's audit, B11).
+  const typed = Option.flatMap(Option.fromNullishOr(outcome), ({ id }) =>
+    Option.all([typedOr(declared, id, "base-type", ""), typedValueOf(declared, id, "cardinality")]),
   );
-  if (outcome === undefined || Option.isNone(written)) {
+  if (Option.isNone(typed)) {
     return [];
   }
 
-  const baseType = Option.getOrElse(collapsedOf(declared, outcome.id, "base-type"), () => "");
-  const cardinality = written.value;
+  const [baseType, cardinality] = typed.value;
 
   return baseType === "identifier" && (cardinality === "single" || cardinality === "multiple")
     ? []
