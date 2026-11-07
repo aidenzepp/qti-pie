@@ -466,6 +466,40 @@ describe("README.md", () => {
     );
   });
 
+  it("names the record's type in Records as Restored[\"record\"], and redact's narrower one through Parameters", () => {
+    const paragraphs = sectionOf("## Records")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("`ItemRecord`") &&
+          paragraph.includes('`Restored["record"]`') &&
+          paragraph.includes("`Parameters<typeof redact>[1]`"),
+      ),
+      "a paragraph of Records names the record's type Restored[\"record\"] and redact's through Parameters",
+    );
+  });
+
+  it('says configure reads a seed of "" as no seed', () => {
+    const paragraphs = markdownLines(readme())
+      .filter(({ code }) => !code)
+      .map(({ line }) => line)
+      .join("\n")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          /`configure` reads a `seed` of `""` as no seed/u.test(paragraph) &&
+          paragraph.includes("`startTest`"),
+      ),
+      'a paragraph says configure reads a seed of "" as no seed, so startTest draws one',
+    );
+  });
+
   it("passes the session item's record to redact in Start's test and the server action", () => {
     for (const heading of ["## Start", "### A plain server action"]) {
       const scripts = codeBlocks(sectionOf(heading)).map(scriptOf);

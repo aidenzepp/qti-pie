@@ -168,11 +168,11 @@ const checkedInstance = (
  * always gives a redacted item: what it cannot print shows as a notice.
  *
  * @example
- *   const shown = redact(accepted, record); // record: the attempt's ItemRecord
+ *   const shown = redact(accepted, record); // record: the attempt's Restored["record"]
  *
  * @param document The document `check` accepted.
- * @param record The attempt's template values and outcome values, such as its `ItemRecord`;
- *   none to show the item as it reads with no record.
+ * @param record The attempt's template values and outcome values, such as its record, whose type
+ *   is `Restored["record"]`; none to show the item as it reads with no record.
  * @returns The redacted item, the one input {@link render} takes.
  */
 export const redact = (document: Accepted, record?: RedactRecord): Redacted =>
