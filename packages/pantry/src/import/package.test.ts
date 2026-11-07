@@ -8,8 +8,23 @@
  * refuses is refused under one of the rules its breaches keep. A disagreement is a finding of the
  * schema or the oracle, never of the package.
  */
-import { CommitUnknown, Db, query, TransientFailure, uuid, v } from "@bjornpagen/grizzle";
-import type { SerializationFailure, ServerError, Uuid } from "@bjornpagen/grizzle";
+import {
+  CommitUnknown,
+  Db,
+  query,
+  ReadFailure,
+  StaleSnapshot,
+  TransientFailure,
+  uuid,
+  v,
+} from "@bjornpagen/grizzle";
+import type {
+  ReadError,
+  SerializationFailure,
+  ServerError,
+  StaleReason,
+  Uuid,
+} from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
 import { Clock, Effect, Fiber, Layer, Option, Ref, Result, Schedule } from "effect";
@@ -208,50 +223,109 @@ describe("import/package.test.ts, the retry budget", () => {
  */
 const readBackId: Uuid = "00000000-0000-4000-8000-000000000001";
 
-describe("import/package.test.ts, CommitUnknown's read-back", () => {
-  plainIt.effect(
-    "fails with CommitUnresolved, carrying both failures, when the read-back fails",
-    () =>
-      // Oracle: the specification as a checker, grizzle's README on `CommitUnknown` ("read back
-      // before you run it again"): a read-back that fails settles nothing, so it must not answer as
-      // a read-back that found no package, which fails with the `CommitUnknown` alone.
-      Effect.gen(function* readBackFails() {
+const migratingReason = {
+  _tag: "Migrating",
+  message: "a migration is running or stopped part-way",
+};
+
+// SAFETY: Grizzle exports `StaleReason` as a type only (`adapter/public/errors.ts`), so no public
+// constructor builds a `Migrating`. The plain fields of the class at `adapter/errors/failures.ts`
+// stand for it: `StaleSnapshot` reads its reason only through `message`.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+const migratingReasonAsType = migratingReason as StaleReason;
+
+/**
+ * The snapshot a {@link StaleSnapshot} names.
+ */
+type Fingerprint = ConstructorParameters<typeof StaleSnapshot>[0]["snapshot"];
+
+// SAFETY: `SchemaFingerprint` is a branded string with no public parse; `StaleSnapshot` only
+// prints it, so any string stands for one.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+const fingerprintAsType = "fingerprint-of-another-snapshot" as Fingerprint;
+
+/**
+ * A failure of each kind grizzle's README gives a read ("Errors": `ReadFailure`, `TransientFailure`
+ * or `StaleSnapshot`), each built from the plain fields asserted above.
+ */
+const readFailures: readonly ReadError[] = [
+  new ReadFailure({ reason: serverReportAsType }),
+  serializationFailure,
+  new StaleSnapshot({
+    error: serverReportAsType,
+    reason: migratingReasonAsType,
+    snapshot: fingerprintAsType,
+  }),
+];
+
+/**
+ * What the read-back of a `CommitUnknown` can answer: the package row, no row, or a failure.
+ */
+type ReadBack =
+  | { readonly kind: "present" }
+  | { readonly kind: "absent" }
+  | { readonly failure: ReadError; readonly kind: "fails" };
+
+/**
+ * Every read-back: present, absent, and a failure of each kind a read has.
+ */
+const readBacks: readonly ReadBack[] = [
+  { kind: "present" },
+  { kind: "absent" },
+  ...readFailures.map((failure): ReadBack => ({ failure, kind: "fails" })),
+];
+
+/**
+ * The read a {@link ReadBack} stands for, as `db.get` of the package row would answer it.
+ *
+ * @param readBack - The read-back.
+ * @returns The stub of the read.
+ */
+const stubRead = (
+  readBack: ReadBack,
+): Effect.Effect<Option.Option<{ readonly id: Uuid }>, ReadError> =>
+  readBack.kind === "fails"
+    ? Effect.fail(readBack.failure)
+    : Effect.succeed(readBack.kind === "present" ? Option.some({ id: readBackId }) : Option.none());
+
+/**
+ * Name a {@link ReadBack}, for an assertion's message.
+ *
+ * @param readBack - The read-back.
+ * @returns Its kind, and a failure's tag.
+ */
+const readBackName = (readBack: ReadBack): string =>
+  readBack.kind === "fails" ? `fails with ${readBack.failure._tag}` : readBack.kind;
+
+describe("import/package.test.ts, the read-back that settles a CommitUnknown", () => {
+  plainIt.effect("answers by the read-back alone, and a failed read-back never as absent", () =>
+    // Oracle: the specification as a checker, grizzle's README on `CommitUnknown` ("The change may
+    // have committed: read back before you run it again"), over every read-back a read can give:
+    // a package read back committed; no package read back did not, and the `CommitUnknown` is the
+    // answer; a read-back that fails settles nothing, so the answer is `CommitUnresolved` carrying
+    // the `CommitUnknown` and the read's own failure, never the absent package's answer.
+    Effect.gen(function* everyReadBack() {
+      for (const readBack of readBacks) {
+        const name = readBackName(readBack);
         const commit = new CommitUnknown();
-        const failure = yield* Effect.flip(
-          settleCommitUnknown(commit, readBackId, Effect.fail(serializationFailure)),
+        const answer = yield* Effect.result(
+          settleCommitUnknown(commit, readBackId, stubRead(readBack)),
         );
 
-        assert.instanceOf(failure, CommitUnresolved, failure.message);
-        assert.strictEqual(failure.commit, commit);
-        assert.strictEqual(failure.cause, serializationFailure);
-        assert.include(failure.message, readBackId);
-        assert.include(failure.message, serializationFailure.message);
-      }),
-  );
+        if (readBack.kind === "present") {
+          assert.deepStrictEqual(answer, Result.succeed({ kind: "committed" }), name);
+        } else if (readBack.kind === "absent") {
+          assert.deepStrictEqual(answer, Result.fail(commit), name);
+        } else {
+          const failure = Result.isFailure(answer) ? answer.failure : undefined;
 
-  plainIt.effect("fails with the CommitUnknown itself when the read-back finds no package", () =>
-    // Oracle: the specification as a checker, the same resolution: a read-back that succeeds and
-    // finds nothing says the apply did not commit.
-    Effect.gen(function* readBackAbsent() {
-      const commit = new CommitUnknown();
-      const failure = yield* Effect.flip(
-        settleCommitUnknown(commit, readBackId, Effect.succeed(Option.none())),
-      );
-
-      assert.strictEqual(failure, commit);
-    }),
-  );
-
-  plainIt.effect("answers committed when the read-back finds the package", () =>
-    // Oracle: the specification as a checker, the same resolution: a package read back committed.
-    Effect.gen(function* readBackPresent() {
-      const settled = yield* settleCommitUnknown(
-        new CommitUnknown(),
-        readBackId,
-        Effect.succeed(Option.some({ id: readBackId })),
-      );
-
-      assert.deepStrictEqual(settled, { kind: "committed" });
+          assert.instanceOf(failure, CommitUnresolved, name);
+          assert.strictEqual(failure.commit, commit, name);
+          assert.strictEqual(failure.cause, readBack.failure, name);
+          assert.include(failure.message, readBackId, name);
+          assert.include(failure.message, readBack.failure.message, name);
+        }
+      }
     }),
   );
 });
