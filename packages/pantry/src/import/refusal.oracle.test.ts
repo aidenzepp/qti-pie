@@ -30,7 +30,7 @@ import {
   tree,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
 import { globSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -130,11 +130,16 @@ interface Axis {
  * @param prefix - The terms.
  * @returns Whether they begin it.
  */
-const beginsWith = (side: LawSide, prefix: readonly LawSide["terms"][number][]): boolean =>
+const beginsWith = (side: LawSourceSide, prefix: readonly LawSide["terms"][number][]): boolean =>
   prefix.every((term, at) => {
     const own = side.terms[at];
 
-    return own !== undefined && own.kind === term.kind && own.field === term.field;
+    return (
+      own !== undefined &&
+      own.kind !== "constant" &&
+      own.kind === term.kind &&
+      own.field === term.field
+    );
   });
 
 /**
@@ -143,7 +148,7 @@ const beginsWith = (side: LawSide, prefix: readonly LawSide["terms"][number][]):
  * @param side - The side.
  * @returns Whether it selects.
  */
-const selects = (side: LawSide): boolean => side.selection.conjuncts.length > 0;
+const selects = (side: LawSourceSide): boolean => side.selection.conjuncts.length > 0;
 
 /**
  * Read the axes of every family of a schema, each with the laws its foreign key carries: the
@@ -431,13 +436,18 @@ const scratch = (() => {
  * @param expected - The side, as {@link sideOf} builds it.
  * @returns Whether it reads it.
  */
-const readsAs = (side: LawSide, expected: LawSide): boolean =>
+const readsAs = (side: LawSourceSide, expected: LawSide): boolean =>
   side.relation === expected.relation &&
   side.terms.length === expected.terms.length &&
   side.terms.every((term, at) => {
     const held = expected.terms[at];
 
-    return held !== undefined && term.kind === held.kind && term.field === held.field;
+    return (
+      held !== undefined &&
+      term.kind !== "constant" &&
+      term.kind === held.kind &&
+      term.field === held.field
+    );
   });
 
 /**

@@ -23,8 +23,8 @@
  * evaluated on the host in SQL's three-valued logic, over the fields the oracle knows of a row
  * ({@link attributeFields}, {@link nodeFields}).
  */
-import type { Law, LawSide } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, pipe, Predicate, Result, Schema } from "effect";
+import type { Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
+import { Array as Arr, Formatter, Option, pipe, Predicate, Result, Schema } from "effect";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -1027,14 +1027,29 @@ const lawSideOf = (side: StoredSide): LawSide => ({
 });
 
 /**
+ * Write one term of a law side: a field as its name, `pred` of a field as `pred(field)`, and a
+ * containment source's constant as `constant(value)`.
+ *
+ * @param term - The term.
+ * @returns Its text.
+ */
+const termText = (term: LawSourceSide["terms"][number]): string => {
+  if (term.kind === "constant") {
+    return `constant(${Formatter.format(term.value)})`;
+  }
+
+  return term.kind === "pred" ? `pred(${term.field})` : term.field;
+};
+
+/**
  * Write a law side as {@link identityOf} spells it: its relation and its terms, `pred` of a field as
  * `pred(field)`, its selection left out.
  *
  * @param side - The side.
  * @returns Its text.
  */
-const sideText = (side: LawSide): string =>
-  `${side.relation}(${side.terms.map((term) => (term.kind === "field" ? term.field : `pred(${term.field})`)).join(", ")})`;
+const sideText = (side: LawSourceSide): string =>
+  `${side.relation}(${side.terms.map(termText).join(", ")})`;
 
 /**
  * Write a containment's or a fold's identity as this list keys its copies, and as

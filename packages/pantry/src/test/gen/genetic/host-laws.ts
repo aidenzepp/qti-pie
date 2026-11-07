@@ -29,7 +29,7 @@
  */
 import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
-import type { Law, LawSide } from "@bjornpagen/grizzle";
+import type { Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
 import { lawNameOf, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
@@ -389,13 +389,18 @@ type Evaluated =
  * @param read - The side as this module read it.
  * @returns Whether they are one side.
  */
-const sameSide = (law: LawSide, read: LawSide): boolean =>
+const sameSide = (law: LawSourceSide, read: LawSide): boolean =>
   law.relation === read.relation &&
   law.terms.length === read.terms.length &&
   law.terms.every((term, at) => {
     const held = read.terms[at];
 
-    return held !== undefined && term.kind === held.kind && term.field === held.field;
+    return (
+      held !== undefined &&
+      term.kind !== "constant" &&
+      term.kind === held.kind &&
+      term.field === held.field
+    );
   });
 
 /**

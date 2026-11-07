@@ -79,6 +79,10 @@ const isKeyText = (relation: string, field: string): boolean =>
 const statedCopies = statedLaws().flatMap(([law]) => {
   if (law.kind === "contained") {
     return law.from.terms.flatMap((term, at) => {
+      if (term.kind === "constant") {
+        return [];
+      }
+
       const held = law.to.terms[at]?.field ?? "";
 
       return isKeyText(law.to.relation, held) && !isKeyText(law.from.relation, term.field)
