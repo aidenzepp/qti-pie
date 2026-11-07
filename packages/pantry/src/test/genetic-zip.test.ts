@@ -85,9 +85,11 @@ const budget: Budget = settings.geneticRequested
   : { candidates: 1600, edits: 3, generation: 200, initial: 100 };
 
 /**
- * The most reduction proposals one finding is judged on, and how many go to Python at once.
+ * The most reduction proposals one finding is judged on, how many go to Python at once, and how
+ * many kinds of disagreement a run reduces, the rest reported as found, so a run that meets many
+ * kinds, as a planted bug's does, reports them within its timeout.
  */
-const reduction = { batch: 60, tries: 600 } as const;
+const reduction = { batch: 60, kinds: 6, tries: 600 } as const;
 
 /**
  * The timeout, in milliseconds, of each test. Measured on 2026-11-07 at load averages of 70 to 78
@@ -200,7 +202,13 @@ const reportsOf = Effect.fn("test.geneticZip.reportsOf")(function* reportsOf(
   >,
 ) {
   const reports: string[] = [];
-  for (const [kind, { disagreement, genome, lineage }] of found) {
+  for (const [kind, { disagreement, lineage }] of [...found].slice(reduction.kinds)) {
+    reports.push(
+      `${kind}\n  reader: ${disagreement.got}\n  policy over python: ${disagreement.expected}\n  (not reduced: past the first ${String(reduction.kinds)} kinds)\n  bred by: ${lineage.join(" ; ")}`,
+    );
+  }
+
+  for (const [kind, { disagreement, genome, lineage }] of [...found].slice(0, reduction.kinds)) {
     const small = yield* reduced(script, genome, kind);
     const last = yield* judgeZips(script, [small.genome]);
     const shown = last[0]?.disagreements.find((held) => held.kind === kind) ?? disagreement;
