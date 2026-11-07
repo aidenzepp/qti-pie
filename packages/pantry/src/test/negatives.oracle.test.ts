@@ -46,9 +46,7 @@ export interface NegativeExpectation {
 /**
  * The oracle's prediction for each of {@link negativeNames}, keyed by name, for the leased import
  * of them to read. A negative whose `oracle` is `"accepted"` and that is not "(direct)" is a
- * finding: `item-duration-not-timed`, whose breach the oracle once hid under the noise of a
- * refused positive, and `section-ref-to-item`, whose `main` rule
- * `section-ref-target` no longer exists.
+ * finding: `section-ref-to-item`, whose `main` rule `section-ref-target` no longer exists.
  */
 export const expectations: Readonly<Record<(typeof negativeNames)[number], NegativeExpectation>> = {
   "branch-backward": { main: ["branch-forward"], oracle: ["branch-forward"] },
@@ -67,7 +65,7 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
   "include-xpointer": { main: ["include-xpointer"], oracle: ["attribute-admission"] },
   "instance-spelling-canonical": { main: ["value-lexical"], oracle: "accepted" },
   "item-duration-in-item": { main: ["item-duration"], oracle: ["item-duration"] },
-  "item-duration-not-timed": { main: ["item-duration"], oracle: "accepted" },
+  "item-duration-not-timed": { main: ["item-duration"], oracle: ["item-duration"] },
   "item-in-section": { main: ["admission"], oracle: ["unmodeled-vocabulary"] },
   "item-prefixed": { main: ["prefixed-root"], oracle: "accepted" },
   "item-ref-missing": { main: ["item-ref-target"], oracle: ["file-exists", "item-ref-target"] },
