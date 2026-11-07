@@ -253,11 +253,11 @@ export interface Renders {
    */
   readonly controlNotices: readonly FeatureRule[];
   /**
-   * The `qti-*` elements plate renders or reads, the engine's response rules,
+   * The `qti-*` elements plate renders or reads. They include the engine's response rules, the
+   * template declarations, the template processing and its template rules, and
    * `qti-printed-variable`, `qti-template-block` (whose content is its `qti-content-body`'s) and
-   * `qti-template-inline`, which the item model holds as body nodes, the template declarations, the
-   * template processing and its template rules included. The item model also reads the element
-   * of each expression kind the registry has landed (`landedKinds` in
+   * `qti-template-inline`, which the item model holds as body nodes. The item model also reads the
+   * element of each expression kind the registry has landed (`landedKinds` in
    * `#plate/model/expressions/read.ts`). Every element in the QTI namespace without the `qti-`
    * prefix is HTML and renders as itself.
    */

@@ -211,18 +211,22 @@ const Count = Schema.BigIntFromString.check(Schema.isGreaterThanOrEqualToBigInt(
 const OptionalCount = Schema.OptionFromOptionalKey(Count);
 
 /**
+ * A template visibility's type side, the model's `TemplateVisibility`: a choice's, a template
+ * block's or a template inline's `show-hide` and `template-identifier`.
+ */
+const TemplateVisibility = Schema.Struct({
+  showHide: Schema.Literals(["hide", "show"]),
+  templateIdentifier: Schema.String,
+});
+
+/**
  * A choice's template visibility, which the JSON form never holds: decoding gives none, and
  * encoding refuses a choice that holds one, because `redact` settles each choice's visibility
  * before the item leaves the server.
  */
 const NoTemplateVisibility = Schema.optionalKey(Schema.Never).pipe(
   Schema.decodeTo(
-    Schema.Option(
-      Schema.Struct({
-        showHide: Schema.Literals(["hide", "show"]),
-        templateIdentifier: Schema.String,
-      }),
-    ).check(
+    Schema.Option(TemplateVisibility).check(
       Schema.makeFilter(Option.isNone, {
         message: "a redacted choice holds no template visibility; redact settles it",
       }),
@@ -310,10 +314,7 @@ const NoTemplateContent = Schema.Never.pipe(
       kind: Schema.Literals(["template-block", "template-inline"]),
       path: Schema.String,
       responses: Schema.Array(Schema.String),
-      templateVisibility: Schema.Struct({
-        showHide: Schema.Literals(["hide", "show"]),
-        templateIdentifier: Schema.String,
-      }),
+      templateVisibility: TemplateVisibility,
     }),
     {
       decode: SchemaGetter.forbidden(() => noTemplateContent),
@@ -710,13 +711,12 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  *
  * It checks the JSON's shape, every field against {@link RedactedSchema}, which admits no printed
  * variable and no template block or inline, since `redact` leaves none, and one rule of the body's
- * content: no interaction stands,
- * at any depth, inside a Choice's Prompt or a choice's content, inside an Extended Text's Prompt,
- * or inside an Inline Choice's Label or a choice's content, where QTI's schema admits none and
- * `render` cannot emit one, so `render` never meets such an interaction in a `Redacted` it
- * returns. It checks the item against no other rule of QTI's, so a host trusts redacted JSON only
- * as far as the item it came from; the emitter still keeps only the HTML subset's elements and
- * attributes, and the URLs `url.ts` keeps.
+ * content: no interaction stands, at any depth, inside a Choice's Prompt or a choice's content,
+ * inside an Extended Text's Prompt, or inside an Inline Choice's Label or a choice's content, where
+ * QTI's schema admits none and `render` cannot emit one, so `render` never meets such an
+ * interaction in a `Redacted` it returns. It checks the item against no other rule of QTI's, so a
+ * host trusts redacted JSON only as far as the item it came from; the emitter still keeps only the
+ * HTML subset's elements and attributes, and the URLs `url.ts` keeps.
  *
  * @param input The JSON form as the host handed it over: the {@link RedactedJson}
  *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is

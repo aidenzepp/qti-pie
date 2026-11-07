@@ -12,9 +12,9 @@ import type { BodyNode, Interaction } from "#plate/model/item.ts";
 
 /**
  * Collect the interactions of body nodes in document order, inside elements, template blocks and
- * inlines, Prompts, Labels and choices. A template block's content is walked whatever its
- * visibility, so over the model its interactions are found; a redacted body holds no template
- * block, its hidden content already gone.
+ * inlines, Prompts, Labels and choices. A template block's or inline's content is walked whatever
+ * its visibility, so over the model its interactions are found; a redacted body holds no template
+ * block or inline, its hidden content already gone.
  *
  * @param nodes The body nodes.
  * @returns The interactions.
