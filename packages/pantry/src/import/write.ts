@@ -111,6 +111,7 @@ import {
   Mapping,
   MatchTable,
 } from "#pantry/qti/mapping.ts";
+import { MathApply, MathArgument, MathQualifier } from "#pantry/qti/mathml-apply.ts";
 import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
 import { Rounding, Tolerance } from "#pantry/qti/operators.ts";
 import {
@@ -1248,6 +1249,9 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(MapKeyPoint, [...inputs.MapKeyPoint.values()])
     .insert(Mapping, [...inputs.Mapping.values()])
     .insert(MatchTable, [...inputs.MatchTable.values()])
+    .insert(MathApply, [...inputs.MathApply.values()])
+    .insert(MathArgument, [...inputs.MathArgument.values()])
+    .insert(MathQualifier, [...inputs.MathQualifier.values()])
     .insert(Named, [...inputs.Named.values()])
     .insert(NamedHref, [...inputs.NamedHref.values()])
     .insert(ObjectLang, [...inputs.ObjectLang.values()])
