@@ -300,10 +300,16 @@ const isDirectory = (name: string, versionMadeBy: number, attributes: number): b
 /**
  * Find the end record and the central directory it points at.
  *
+ * The central directory must end exactly where the end record begins: APPNOTE's overall layout
+ * places nothing between them but the ZIP64 records (section 4.3.6, reading 140), which are not
+ * read, so an archive with other bytes in that gap is not a zip.
+ *
  * @param archive - The zip file's path, naming refusals.
  * @param view - The whole file.
  * @returns Where the central directory is, or a {@link ZipRefusal} for a file that is not a zip, is
- *   split across disks or uses ZIP64.
+ *   split across disks, uses ZIP64, or holds bytes between its central directory and its end
+ *   record.
+ * @see {@link https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT | APPNOTE 6.3.10, sections 4.3.6, 4.4.23 and 4.4.24}
  */
 const locateDirectory = Effect.fn("package.locateDirectory")(function* locateDirectory(
   archive: string,
@@ -352,8 +358,15 @@ const locateDirectory = Effect.fn("package.locateDirectory")(function* locateDir
     );
   }
 
-  if (offset + size > end) {
-    return yield* malformed("the central directory does not parse: it runs past the end record");
+  // The end record follows the central directory, with only the ZIP64 records, refused above,
+  // between them (APPNOTE 6.3.10, section 4.3.6), so the directory's own offset and size (sections
+  // 4.4.23 and 4.4.24) name the end record's offset, and any other bytes there are no zip.
+  if (offset + size !== end) {
+    return yield* malformed(
+      offset + size > end
+        ? "the central directory does not parse: it runs past the end record"
+        : "the central directory does not parse: bytes stand between it and the end record",
+    );
   }
 
   return { count, end, offset };
