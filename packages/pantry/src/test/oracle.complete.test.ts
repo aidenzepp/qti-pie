@@ -110,9 +110,12 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "Href form": "its mutation is not written yet",
   "Manifest id space":
     "every resource identifier and the manifest's are xs:ID values of one document, so a resource named as its manifest breaks DocumentId key, which ranks first, and the database names document-key: the law is shadowed (lane OL's finding)",
+  "MathML align first": "its mutation is not written yet",
+  "MathML align placement": "its mutation is not written yet",
   "MathML cn form": "its mutation is not written yet",
   "MathML foreign element": "its mutation is not written yet",
   "MathML head qualifier": "its mutation is not written yet",
+  "MathML maction selection": "its mutation is not written yet",
   "N1 one document node": "its mutation is not written yet",
   "N2 key": "its mutation is not written yet",
   "N2 mirrors": "its mutation is not written yet",

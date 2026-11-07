@@ -1846,6 +1846,38 @@ const unownedValid: readonly {
     name: "reading 2: a cn whose base lies beyond the alphabet, where the digits are application specific",
   },
   {
+    files: withMath(
+      `<m:maction actiontype="toggle" selection="2"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction>`,
+    ),
+    name: "reading 2: an maction whose selection names its second of two children",
+  },
+  {
+    files: withMath(`<m:maction actiontype="toggle"><m:mi>a</m:mi></m:maction>`),
+    name: "reading 2: an maction with no selection over one child",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:maligngroup/><m:mi>a</m:mi></m:mtd></m:mtr></m:mtable>`,
+    ),
+    name: "reading 2: an alignment group first in its cell",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:mrow dir="ltr"><m:maligngroup/><m:mi>a</m:mi></m:mrow></m:mtd></m:mtr></m:mtable>`,
+    ),
+    name: "reading 2: an alignment group under an mrow that changes no direction",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:maction actiontype="toggle"><m:mi>a</m:mi><m:mrow><m:mi>b</m:mi><m:maligngroup/></m:mrow></m:maction></m:mtd></m:mtr></m:mtable>`,
+    ),
+    name: "reading 2: an alignment group in an maction's child that is not selected",
+  },
+  {
+    files: withMath(`<m:mrow><m:maligngroup/><m:mi>a</m:mi></m:mrow>`),
+    name: "reading 2: an alignment group outside a table cell",
+  },
+  {
     files: {
       ...base,
       "item.xml": edit(
@@ -2058,6 +2090,38 @@ const unownedBroken: readonly LawCase[] = [
     law: "MathML cn form",
     name: "reading 2: an integer cn of letters",
     rule: "attribute-lexical",
+  },
+  {
+    files: withMath(
+      `<m:maction actiontype="toggle" selection="3"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction>`,
+    ),
+    law: "MathML maction selection",
+    name: "reading 2: an maction whose selection names a third of two children",
+    rule: "union-count",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:mfrac><m:mrow><m:maligngroup/><m:mi>a</m:mi></m:mrow><m:mi>b</m:mi></m:mfrac></m:mtd></m:mtr></m:mtable>`,
+    ),
+    law: "MathML align placement",
+    name: "reading 2: an alignment group under an mfrac in a table cell",
+    rule: "admission",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:mrow dir="rtl"><m:maligngroup/><m:mi>a</m:mi></m:mrow></m:mtd></m:mtr></m:mtable>`,
+    ),
+    law: "MathML align placement",
+    name: "reading 2: an alignment group under an mrow that changes the direction",
+    rule: "admission",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:mi>a</m:mi><m:maligngroup/><m:mi>b</m:mi></m:mtd></m:mtr></m:mtable>`,
+    ),
+    law: "MathML align first",
+    name: "reading 2: a cell whose first complete element is no alignment group",
+    rule: "ordering",
   },
   {
     files: withScore(

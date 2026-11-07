@@ -408,10 +408,13 @@ const lawRules = {
   MappableBaseType: "mapping-base-type",
   "Mapped response": "P27",
   "Mastery range": "mastery-range",
+  "MathML align first": "ordering",
+  "MathML align placement": "admission",
   "MathML arity": "math-arity",
   "MathML cn form": "attribute-lexical",
   "MathML foreign element": "unmodeled-vocabulary",
   "MathML head qualifier": "admission",
+  "MathML maction selection": "union-count",
   "Media source src": "source-src",
   "N1 one document node": "reachability",
   "N1 sentinel": "reachability",
@@ -626,6 +629,10 @@ export const lawSources = {
     "https://www.imsglobal.org/spec/qti/v3p0/info#ExprMapResponse (§2.11.3.29, MapResponse: 'the response variable must have been declared with an associated mapping'; §2.11.3.30, MapResponsePoint: an areaMapping, of base-type point) (expressions.ts Mapped_response; the old checker's P27)",
   "Mastery range":
     "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both are written, as xs:double values (INF and -INF infinite), NaN ordered against nothing; a value outside grizzle's double lexical form (outer whitespace, over 15 significant digits, an exponent beyond 293) is not judged, a recorded limit",
+  "MathML align first":
+    "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.malign.group (MathML 3 §3.5.5.2: 'the first complete element must be an maligngroup element' in a table cell whose alignment groups are checked, a complete element being one with no element children); a cell is judged when it holds a group that stands where §3.5.5.2 lets it (the align placement law), and a group outside a cell or under an maction child that is not selected is not judged (§3.5.5.9)",
+  "MathML align placement":
+    "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.malign.group (MathML 3 §3.5.5.2: an maligngroup in a table cell stands in the cell directly or inside an mrow or mstyle that changes no direction, mphantom, mfenced, the selected sub-expression of an maction, or semantics) and #presm.malign.mtable (§3.5.5.9); a group with no cell above it is ignored, only an maction's selected sub-expression is checked, and a change of direction is a dir other than the one the element inherits, so mrow dir='ltr' in a formula that reads left to right changes none (operator decision 321)",
   "MathML arity":
     "reading 2 (expression.ts mathArities): https://www.w3.org/TR/MathML3/chapter4.html#contm.unary (MathML 3 §4.3.4.6: 'Unary operators take a single argument') and #contm.binary (§4.3.4.5: 'Binary operators take two arguments'), each operator's class from its syntax table in §4.4 (§4.1.5: the Class row 'indicate[s] how many arguments the operator represented by this element takes'); an apply with a qualifier or an interval beside its operator is not judged, and moment is left out, since §4.4.8.6's own example applies it to five arguments",
   "MathML cn form":
@@ -634,6 +641,8 @@ export const lawSources = {
     "MathML 3 RelaxNG mathml3-common.rnc: start = math (line 15) and anyElement = element (* - m:*) (line 61); MathML 3 §2.2, 'All other MathML content must be contained in a math element'; reading 2",
   "MathML head qualifier":
     "spec reading R6-head-qualifiers (expression.ts mathHeadQualifiers) and MathML 3's §4.4 syntax tables: https://www.w3.org/TR/MathML3/chapter4.html#contm.root (§4.4.2.11), #contm.log (§4.4.7.7) and #contm.moment (§4.4.8.6) list degree, logbase and momentabout beside their operators; an apply whose first child is no built-in operator is not judged",
+  "MathML maction selection":
+    "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.maction (MathML 3 §3.7.1.1: 'If the value specified is out of range, it is an error' and 'If no selected sub-expression exists, it is a MathML error'): an maction has at least one element child and its selection, 1 when absent, is at most their number",
   "Media source src":
     "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_src (§5.135.1: 'The value must be a valid non-empty URL potentially surrounded by spaces. This characteristic must be present'), read in a media element as the HTML Standard it restates splits it (https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element: where 'The source element's parent is a media element', 'This attribute must be present'; where it is a picture element, 'The src attribute must not be present'): a source whose parent is an audio or a video carries src (html.ts Media_source_src)",
   "N1 one document node": "XML 1.0 §2.1, one document entity; fin.md §12, entry 8",
@@ -1388,6 +1397,9 @@ export const nodeLawNames = [
   "MathML arity",
   "MathML head qualifier",
   "MathML cn form",
+  "MathML maction selection",
+  "MathML align placement",
+  "MathML align first",
   "SSML lexicon reference",
   "SSML trim mark",
   "XsiType derived",
@@ -1781,6 +1793,176 @@ const cnPartsOf = (
   }
 
   return raw.map(({ judged, text }) => ({ judged, text: collapsed(text) }));
+};
+
+/**
+ * The direction in effect around an element: the `dir` of its nearest ancestor that writes one
+ * (`m:math`'s among them), `ltr` where none does (MathML 3 §3.1.5.1).
+ *
+ * @param view - The document.
+ * @param node - The element.
+ * @returns The direction its parent passes it.
+ */
+const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string => {
+  for (const above of ancestorsOf(view, node)) {
+    const written = collapsedValueOf(view, above.id, "dir");
+    if (Option.isSome(written)) {
+      return written.value;
+    }
+  }
+
+  return "ltr";
+};
+
+/**
+ * Tell whether an element writes a `dir` other than the one it inherits, so `mrow dir="ltr"` in a
+ * left-to-right formula changes none (operator decision 321).
+ *
+ * @param view - The document.
+ * @param node - The element.
+ * @returns True when its `dir` differs from {@link inheritedDirectionOf}.
+ */
+const changesDirection = (view: View, node: FoldedNode<Composed>): boolean =>
+  Option.exists(
+    collapsedValueOf(view, node.id, "dir"),
+    (written) => written !== inheritedDirectionOf(view, node),
+  );
+
+/**
+ * Find the child an `maction` shows: the one its `selection` (1 when absent) numbers, counted among
+ * its element children from 1 (MathML 3 §3.7.1.1).
+ *
+ * @param view - The document.
+ * @param node - The `maction`.
+ * @param elements - The kinds that are elements.
+ * @returns The id of the selected child, none when `selection` is no whole number or is out of
+ *   range.
+ */
+const selectedChildOf = (
+  view: View,
+  node: FoldedNode<Composed>,
+  elements: ReadonlySet<string>,
+): Option.Option<NodeId> => {
+  const rank = Option.match(collapsedValueOf(view, node.id, "selection"), {
+    onNone: () => 1,
+    onSome: (text) => (/^[0-9]+$/u.test(text) ? Number(text) : Number.NaN),
+  });
+
+  return Option.map(
+    Option.fromNullishOr(elementChildrenOf(view, node, elements)[rank - 1]),
+    ({ id }) => id,
+  );
+};
+
+/**
+ * Tell whether an element on the way up from an alignment group lets it through to its cell
+ * (MathML 3 §3.5.5.2): an `mrow` or `mstyle` that changes no direction, `mphantom`, `mfenced`,
+ * `semantics`, and an `maction` (whose selected child the caller has checked).
+ *
+ * @param view - The document.
+ * @param node - The element.
+ * @returns True when a group below it still stands in the cell.
+ */
+const letsGroupThrough = (view: View, node: FoldedNode<Composed>): boolean =>
+  node.kind === "m:mrow" || node.kind === "m:mstyle"
+    ? !changesDirection(view, node)
+    : ["m:maction", "m:mfenced", "m:mphantom", "m:semantics"].includes(node.kind);
+
+/**
+ * Where an alignment group stands in its table cell.
+ */
+interface GroupPlace {
+  /**
+   * The group's nearest `m:mtd`.
+   */
+  readonly cell: FoldedNode<Composed>;
+  /**
+   * The kind of the first element between the group and its cell that stops it, none where the
+   * group stands.
+   */
+  readonly through: Option.Option<string>;
+}
+
+/**
+ * Judge where an `m:maligngroup` stands (MathML 3 §3.5.5.2 and §3.5.5.9).
+ *
+ * @param view - The document.
+ * @param group - The group.
+ * @param elements - The kinds that are elements.
+ * @returns Its cell and the element that stops it, none when the group is not judged: no `m:mtd`
+ *   holds it, or it sits under an `maction` child that is not the selected one.
+ */
+const placeOfGroup = (
+  view: View,
+  group: FoldedNode<Composed>,
+  elements: ReadonlySet<string>,
+): Option.Option<GroupPlace> => {
+  const chain = ancestorsOf(view, group);
+  const cell = chain.find(({ kind }) => kind === "m:mtd");
+  if (cell === undefined) {
+    return Option.none();
+  }
+
+  const between = chain.slice(0, chain.indexOf(cell));
+  const path = [group, ...between];
+  const shown = between.every(
+    (above, index) =>
+      above.kind !== "m:maction" ||
+      Option.exists(selectedChildOf(view, above, elements), (id) => id === path[index]?.id),
+  );
+
+  return shown
+    ? Option.some({
+        cell,
+        through: Option.map(
+          Option.fromNullishOr(between.find((above) => !letsGroupThrough(view, above))),
+          ({ kind }) => kind,
+        ),
+      })
+    : Option.none();
+};
+
+/**
+ * The elements a table cell holds, apart from the cells nested in it: its alignment groups and its
+ * complete elements (those with no element children), each in document order.
+ */
+interface CellContent {
+  readonly groups: readonly FoldedNode<Composed>[];
+  readonly leaves: readonly FoldedNode<Composed>[];
+}
+
+/**
+ * Collect a cell's alignment groups and complete elements in document order. A nested `m:mtd`
+ * that holds elements is another cell's and is not entered.
+ *
+ * @param view - The document.
+ * @param cell - The `m:mtd`.
+ * @param elements - The kinds that are elements.
+ * @returns What the cell holds.
+ */
+const contentOfCell = (
+  view: View,
+  cell: FoldedNode<Composed>,
+  elements: ReadonlySet<string>,
+): CellContent => {
+  const groups: FoldedNode<Composed>[] = [];
+  const leaves: FoldedNode<Composed>[] = [];
+  const visit = (parent: FoldedNode<Composed>): void => {
+    for (const child of elementChildrenOf(view, parent, elements)) {
+      if (child.kind === "m:maligngroup") {
+        groups.push(child);
+      }
+
+      if (elementChildrenOf(view, child, elements).length === 0) {
+        leaves.push(child);
+      } else if (child.kind !== "m:mtd") {
+        visit(child);
+      }
+    }
+  };
+  visit(cell);
+
+  return { groups, leaves };
 };
 
 /**
@@ -2561,6 +2743,53 @@ const nodeLaws: readonly NodeLaw[] = [
         : Option.some({ ...keys, part: String(wrong + 1), text: parts[wrong]?.text ?? "" });
     },
     law: "MathML cn form",
+    over: "members",
+  },
+  {
+    breaks: (node, view, { elements }) => {
+      if (node.kind !== "m:maction") {
+        return Option.none();
+      }
+
+      const children = elementChildrenOf(view, node, elements).length;
+      const selection = Option.getOrElse(collapsedValueOf(view, node.id, "selection"), () => "1");
+      const out = children === 0 || (/^[0-9]+$/u.test(selection) && Number(selection) > children);
+
+      return out ? Option.some({ children: String(children), selection }) : Option.none();
+    },
+    law: "MathML maction selection",
+    over: "members",
+  },
+  {
+    breaks: (node, view, { elements }) =>
+      node.kind === "m:maligngroup"
+        ? Option.flatMap(placeOfGroup(view, node, elements), ({ cell, through }) =>
+            Option.match(through, {
+              onNone: () => Option.none(),
+              onSome: (stopper) => Option.some({ cell: pathOf(view, cell.id), through: stopper }),
+            }),
+          )
+        : Option.none(),
+    law: "MathML align placement",
+    over: "members",
+  },
+  {
+    breaks: (node, view, { elements }) => {
+      if (node.kind !== "m:mtd") {
+        return Option.none();
+      }
+
+      const { groups, leaves } = contentOfCell(view, node, elements);
+      const [first] = leaves;
+      const judged = groups.some((group) =>
+        Option.exists(placeOfGroup(view, group, elements), ({ through }) => Option.isNone(through)),
+      );
+
+      return judged && first !== undefined && first.kind !== "m:maligngroup"
+        ? Option.some({ cell: pathOf(view, node.id), first: first.kind })
+        : Option.none();
+    },
+    law: "MathML align first",
     over: "members",
   },
   {
@@ -6521,6 +6750,10 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     `${field(keys, "kind")} names ${field(keys, "identifier")}, a ${field(keys, "declarationKind")} with no ${field(keys, "kind") === "qti-map-response-point" ? "qti-area-mapping of base-type point" : "qti-mapping"}`,
   "Mastery range": (keys) =>
     `mastery-value ${field(keys, "masteryValue")} lies outside the normal range from ${JSON.stringify(field(keys, "normalMinimum"))} to ${JSON.stringify(field(keys, "normalMaximum"))}`,
+  "MathML align first": (keys) =>
+    `the table cell at ${field(keys, "cell")} holds an alignment group, so its first complete element must be an m:maligngroup (MathML 3 §3.5.5.2), and it is ${field(keys, "first")}`,
+  "MathML align placement": (keys) =>
+    `an m:maligngroup in the table cell at ${field(keys, "cell")} stands under ${field(keys, "through")}, which MathML 3 §3.5.5.2 does not let a group through to its cell: an mrow or mstyle that changes no direction, mphantom, mfenced, the selected child of an maction, and semantics do`,
   "MathML arity": (keys) =>
     Option.match(Option.fromNullishOr(mathArities.get(field(keys, "operator"))), {
       onNone: () => `${field(keys, "operator")} has no MathML arity`,
@@ -6542,6 +6775,10 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
         .filter(({ qualifier }) => qualifier === field(keys, "qualifier"))
         .map(({ head }) => head),
     )} take it`,
+  "MathML maction selection": (keys) =>
+    field(keys, "children") === "0"
+      ? "an m:maction has no child, so no sub-expression is selected (MathML 3 §3.7.1.1)"
+      : `an m:maction selects child ${field(keys, "selection")} of its ${field(keys, "children")}, where MathML 3 §3.7.1.1 calls a selection out of range an error`,
   "Media source src": (keys) =>
     `a source in ${field(keys, "parentKind") || "a media element"} carries no src, where a source of an audio or a video names its media resource`,
   "N1 one document node": (keys) =>
