@@ -85,6 +85,7 @@ import {
   PiTarget,
   XmlVersion,
 } from "#pantry/qti/chardata.ts";
+import { readerOrigin, RefusalOrigin } from "#pantry/package/refusal-origin.ts";
 import { keyText, namespaceText } from "#pantry/qti/limits.ts";
 import {
   AriaElement,
@@ -2474,27 +2475,18 @@ export const explain = (
 };
 
 /**
- * How a database refusal names the row that broke its laws, the kind of its {@link RefusalWitness}:
- * `key`, grizzle's key witness, the violating row's key fields; `row`, the row the caller located,
- * such as a test's locator; `unreported`, no row, for a constraint PostgreSQL reports by its name
- * alone.
- */
-export const WitnessKind = Schema.Literals(["key", "row", "unreported"]);
-
-/**
  * The package was refused under one rule of the roster.
  *
- * `detail` says what broke it. `laws` are the schema's laws as grizzle reported them, `sources`
- * where each is stated and `witness` how the refusal names the row that broke them, all three
- * present when the database refused the apply, so a reader that tells the user where to look reads
- * the witness's kind rather than the detail's wording.
+ * `detail` says what broke it, and `origin` where the refusal came from
+ * (`#pantry/package/refusal-origin.ts`): the reader, the container or the codec, or the database,
+ * whose case carries the laws it named, each parsed into its identity, name and rule, where each
+ * is stated, and how the refusal names the row that broke them. A reader that tells the user where
+ * to look reads the witness's kind rather than the detail's wording.
  */
 export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRefused", {
   detail: Schema.String,
-  laws: Schema.optional(Schema.Unknown),
+  origin: RefusalOrigin,
   rule: ImportRule,
-  sources: Schema.optional(Schema.Array(Schema.String)),
-  witness: Schema.optional(WitnessKind),
 }) {
   /**
    * What was refused and by which rule, in one sentence.
@@ -2541,9 +2533,24 @@ export const refusalOfLaws = (
     onNone: () => Result.fail(new UnownedLaws({ laws: laws.map(lawIdentity) })),
     onSome: (rule) => {
       const { detail, sources } = explain(laws, witness, constants);
+      const named = pipe(
+        laws,
+        Arr.map((law) => {
+          const identity = lawIdentity(law);
+
+          return Option.match(lawNameOf(law), {
+            onNone: () => ({ identity }),
+            onSome: (name) => ({ identity, name, rule: lawTable[name].rule }),
+          });
+        }),
+      );
 
       return Result.succeed(
-        new ImportRefused({ detail, laws, rule, sources, witness: witness.kind }),
+        new ImportRefused({
+          detail,
+          origin: { _tag: "Database", laws: named, sources, witness: witness.kind },
+          rule,
+        }),
       );
     },
   });
@@ -2576,24 +2583,33 @@ export const ruleOfError = (e: ReadRefusal): ImportRefused =>
   Match.value(e).pipe(
     Match.tagsExhaustive({
       ImportRefused: (refused) => refused,
-      NotQti3: (refused) => new ImportRefused({ detail: refused.message, rule: "not-qti3" }),
+      NotQti3: (refused) =>
+        new ImportRefused({ detail: refused.message, origin: readerOrigin, rule: "not-qti3" }),
       PackageReadError: (refused) =>
         new ImportRefused({
           detail: refused.message,
+          origin: readerOrigin,
           rule: refused.rule === "manifest-root" ? "manifest-root" : "href-path",
         }),
       ReaderRefusal: (refused) =>
-        new ImportRefused({ detail: `${refused.rule}: ${refused.detail}`, rule: "reader-refusal" }),
+        new ImportRefused({
+          detail: `${refused.rule}: ${refused.detail}`,
+          origin: readerOrigin,
+          rule: "reader-refusal",
+        }),
       UnmodeledVocabulary: (refused) =>
         new ImportRefused({
           detail: refused.message,
+          origin: readerOrigin,
           rule: refused.reason === "unadmitted" ? "attribute-admission" : "unmodeled-vocabulary",
         }),
       WellFormednessError: (refused) =>
         new ImportRefused({
           detail: `${refused.message} at line ${String(refused.line)}, column ${String(refused.column)}`,
+          origin: readerOrigin,
           rule: "well-formedness",
         }),
-      ZipRefusal: (refused) => new ImportRefused({ detail: refused.message, rule: refused.rule }),
+      ZipRefusal: (refused) =>
+        new ImportRefused({ detail: refused.message, origin: readerOrigin, rule: refused.rule }),
     }),
   );

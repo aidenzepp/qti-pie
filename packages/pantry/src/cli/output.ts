@@ -4,7 +4,7 @@
  */
 import { Config, Console, Effect, Option, Schema } from "effect";
 import { CliError, Flag, GlobalFlag } from "effect/cli";
-import type { RefusalWitness } from "#pantry/import/refusal.ts";
+import { RefusedLaw, WitnessKind } from "#pantry/package/refusal-origin.ts";
 
 /**
  * The modes `--output` names, in the order the help lists them.
@@ -152,15 +152,10 @@ export const modeOfEnvironment = Effect.gen(function* resolveEnvironmentMode() {
 }).pipe(Effect.orElseSucceed(() => Option.none<OutputMode>()));
 
 /**
- * One law the database refused an import under, as the error object names it: its identity as
- * grizzle reports the law, and the name and rule the law table gives it, absent for a law the table
- * does not hold.
+ * One law the database refused an import under, as the error object names it: the refusal's own
+ * `RefusedLaw` (`#pantry/package/refusal-origin.ts`).
  */
-export const ErrorLaw = Schema.Struct({
-  identity: Schema.String,
-  name: Schema.optionalKey(Schema.String),
-  rule: Schema.optionalKey(Schema.String),
-});
+export const ErrorLaw = RefusedLaw;
 
 /**
  * One law of a refusal, as {@link ErrorLaw} reads it.
@@ -168,23 +163,12 @@ export const ErrorLaw = Schema.Struct({
 export type LawFact = typeof ErrorLaw.Type;
 
 /**
- * The kinds of witness a refusal the database gave names its row by (the kinds of
- * `RefusalWitness` of `#pantry/import/refusal.ts`), spelled here so the command line reads them
- * without loading the importer, and checked against that union both ways: a kind it adds or drops
- * fails to compile here.
- */
-const witnessKinds = {
-  key: "key",
-  row: "row",
-  unreported: "unreported",
-} as const satisfies { readonly [Kind in RefusalWitness["kind"]]: Kind };
-
-/**
  * How a refusal the database gave names the row that broke its laws, as the error object prints
- * it: `key` (grizzle's key witness) and `row` (a row the host located) name one in the message,
- * and `unreported` names none, for a constraint PostgreSQL reports by its name alone.
+ * it: the refusal's own `WitnessKind` (`#pantry/package/refusal-origin.ts`). `key` (grizzle's key
+ * witness) and `row` (a row the host located) name one in the message, and `unreported` names
+ * none, for a constraint PostgreSQL reports by its name alone.
  */
-export const ErrorWitness = Schema.Literals(Object.values(witnessKinds));
+export const ErrorWitness = WitnessKind;
 
 /**
  * What a failure prints under `json` and `jsonl`: one line on standard error, in the shape of the

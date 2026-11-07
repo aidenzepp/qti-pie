@@ -58,6 +58,7 @@ import {
   ruleOfLaws,
   statedLaws,
 } from "#pantry/import/refusal.ts";
+import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import type { ReadRefusal, Rule } from "#pantry/import/refusal.ts";
 import {
   NotQti3,
@@ -1688,7 +1689,7 @@ describe("the refusals made before the database", () => {
       assert.strictEqual(ruleOfError(error).rule, rule, error._tag);
     }
 
-    const refused = new ImportRefused({ detail: "x", rule: "admission" });
+    const refused = new ImportRefused({ detail: "x", origin: readerOrigin, rule: "admission" });
     assert.strictEqual(ruleOfError(refused), refused);
   });
 });

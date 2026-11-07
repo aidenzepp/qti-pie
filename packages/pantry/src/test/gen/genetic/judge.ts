@@ -580,6 +580,15 @@ const rowDisagreements = (
 const unreported = { kind: "unreported" } as const;
 
 /**
+ * Read a refusal's witness kind: the database's, or `none` for a refusal made before the database.
+ *
+ * @param refused - The refusal.
+ * @returns Its witness kind, or `none`.
+ */
+const witnessOf = (refused: ImportRefused): string =>
+  refused.origin._tag === "Database" ? refused.origin.witness : "none";
+
+/**
  * Judge the refusal the import names for a package whose oracle breaks one law alone: the import's
  * rows break laws on the host, and `refusalOfLaws` names the refusal over them and the lone law
  * (which the database breaks too, by a statement the host may not evaluate, so it stands as its
@@ -621,7 +630,7 @@ const loneRefusal = (
       },
     ],
     onSuccess: (refused): readonly Disagreement[] =>
-      refused.rule === rule && refused.witness === unreported.kind
+      refused.rule === rule && witnessOf(refused) === unreported.kind
         ? []
         : [
             {
@@ -630,7 +639,7 @@ const loneRefusal = (
               law: lone,
               laws: laws.map(lawIdentity).join("; "),
               rule,
-              witness: refused.witness ?? "none",
+              witness: witnessOf(refused),
             },
           ],
   });
