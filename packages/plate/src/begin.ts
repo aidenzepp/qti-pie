@@ -41,9 +41,10 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  *   // every run.
  *
  * @param document The document `check` accepted.
- * @param start `instance`, the host's name for this use of the item, which scopes its ids, and
- *   `seed`, the host's seed, which keys every value template processing draws, used as given; with
- *   none, `begin` draws one.
+ * @param start The use of the item the record starts.
+ * @param start.instance The host's name for this use of the item, which scopes its ids.
+ * @param start.seed The host's seed, which keys every value template processing draws, used as
+ *   given; with none, `begin` draws one.
  * @returns The record of the first attempt, in the form the host stores, or {@link InvalidRecord}
  *   at stage `encode`, a renderer defect, or an {@link EngineFailure} from template processing.
  *   The engine's failure cannot occur on a checked item: the validator refuses, or the item model

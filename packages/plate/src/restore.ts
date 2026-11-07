@@ -6,7 +6,7 @@
  *
  * @module
  */
-import { Result } from "effect";
+import { pipe, Result } from "effect";
 import { decodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord, StoredRecord } from "#plate/codec/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
@@ -71,13 +71,10 @@ export const restore = (
   document: Accepted,
   record: StoredRecord,
 ): Result.Result<Restored, InvalidRecord | RecordMismatch> =>
-  Result.map(
-    Result.flatMap(
-      Result.flatMap(decodeRecord(record), (decoded) => belonging(document.item, decoded)),
-      (decoded) =>
-        Result.flatMap(fitting(document.item, decoded), (fitted) =>
-          templatesHeld(document.item, fitted),
-        ),
-    ),
-    (decoded) => ({ record: decoded, values: decoded.responses }),
+  pipe(
+    decodeRecord(record),
+    Result.flatMap((decoded) => belonging(document.item, decoded)),
+    Result.flatMap((decoded) => fitting(document.item, decoded)),
+    Result.flatMap((decoded) => templatesHeld(document.item, decoded)),
+    Result.map((decoded) => ({ record: decoded, values: decoded.responses })),
   );

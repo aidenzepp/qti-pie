@@ -385,10 +385,11 @@ your own control supplies.
 
 `score` judges a post as the page its record showed. It refuses a choice that the record's
 template values hide, with `ResponsesRefused`, and keeps the record's value for a response that
-only hidden template content binds, whatever the post holds. A response that no interaction on
-the page binds, because the item never asks for it or shows a notice in its place, is scored as
-the host posts it. Do not trust a posted value for such a response: validate it, or draw its
-interaction yourself.
+only hidden template content binds, whatever the post holds. A response that both an interaction
+inside hidden template content and a notice on shown content bind counts as hidden, so its posted
+value is dropped too. A response that no interaction on the page binds, because the item never
+asks for it or shows a notice in its place, is scored as the host posts it. Do not trust a posted
+value for such a response: validate it, or draw its interaction yourself.
 
 Inline processing runs every response rule. `qti-lookup-outcome-value` maps a value through a
 match or interpolation table, `qti-exit-response` ends processing, and a

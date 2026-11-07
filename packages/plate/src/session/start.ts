@@ -576,13 +576,8 @@ export const withItem = (
 
 /**
  * Mark a session item presented and start its first attempt: its record becomes the one
- * `firstAttempt` starts for the item's instance under the session's seed, which runs the item's
- * template processing and then writes each response and outcome default, the template-set one
- * first. An item whose template processing the item model marks (it names a variable the engine
- * does not hold, such as `QTI_CONTEXT` or a context variable, or holds an element the engine does
- * not run) does not run it: its record begins with each response and outcome at its declared
- * default and no template value, correct response or default, and `check`'s verdict,
- * `accepted-with-unsupported`, names each mark.
+ * `firstAttempt` starts for the item's instance under the session's seed, as {@link present}
+ * describes.
  *
  * @param item The session item, not yet presented.
  * @param accepted The item it delivers.
@@ -609,16 +604,19 @@ const presented = (
 /**
  * Mark an item of a session presented, starting its first attempt when it was not.
  *
- * An attempt starts when the item's session first enters interacting: at its first presentation
- * in answering mode. Its record becomes the one `firstAttempt` starts: the item's template
- * processing runs once, drawing from the stream keyed by the session's seed under the template
- * label of the item's instance and the item, and each response then holds its default
- * (`info.txt:8462`), the one template processing set, else its `qti-default-value`, else NULL.
- * Where the item model marks the item's template processing, it does not run, and the record
- * begins with each response and outcome at its declared default and no template value, as
- * `firstAttempt` starts it; `check`'s verdict, `accepted-with-unsupported`, tells the host. An
- * item never presented keeps a fresh record, with no template value. Presenting an item already
- * presented changes nothing. The moves and a part's end call this for the item they show.
+ * An attempt starts when the item's session first enters interacting: at its first presentation in
+ * answering mode. Its record becomes the one `firstAttempt` starts: the item's template processing
+ * runs once, drawing from the stream keyed by the session's seed under the template label of the
+ * item's instance and the item, and each response then holds its default (`info.txt:8462`), the one
+ * template processing set, else its `qti-default-value`, else NULL, and each outcome its default,
+ * the one template processing set, else its starting value. Where the item model marks the item's
+ * template processing (it names a variable the engine does not hold, such as `QTI_CONTEXT` or a
+ * context variable, or holds an element the engine does not run), it does not run, and the record
+ * begins with each response and outcome at its declared default and no template value, correct
+ * response or default, as `firstAttempt` starts it; `check`'s verdict, `accepted-with-unsupported`,
+ * names each mark. An item never presented keeps a fresh record, with no template value. Presenting
+ * an item already presented changes nothing. The moves and a part's end call this for the item they
+ * show.
  *
  * @example
  *   present(items, session, 2, new Date()); // item 2 presented, its template values and defaults written
