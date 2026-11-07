@@ -227,6 +227,26 @@ export const ownContext = (self: NodeId): DocumentContext => ({
 });
 
 /**
+ * Read one node's fold: total, since {@link foldOf} folds every node it is given or throws.
+ *
+ * @param folds - A document's folds, as {@link foldOf} gives them.
+ * @param node - The id of a node of that document.
+ * @returns The node's fold.
+ * @throws {Error} When the node is no node of the folded document: a defect of the caller, which
+ *   read a node of one document in another's folds.
+ */
+export const foldAt = (folds: ReadonlyMap<NodeId, Folded>, node: NodeId): Folded => {
+  const folded = folds.get(node);
+  if (folded === undefined) {
+    throw new Error(
+      `Node ${node} is no node of the folded document, and foldOf folds every node it is given. Read each node in the folds of its own document.`,
+    );
+  }
+
+  return folded;
+};
+
+/**
  * Fold a document's nodes under its context.
  *
  * The nodes come in document order, so each node's parent is folded before it, and its siblings
@@ -236,7 +256,7 @@ export const ownContext = (self: NodeId): DocumentContext => ({
  *
  * @param nodes - The document's node rows as `flatten` writes them, in document order.
  * @param context - The document's context.
- * @returns Each node's fold, by its id.
+ * @returns Each node's fold, by its id, which {@link foldAt} reads.
  * @throws {Error} When a node comes before its parent, which `flatten`'s document order rules out:
  *   a defect of the caller, never of the document.
  */
