@@ -15,6 +15,7 @@ import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
+import { isNcName } from "#pantry/grammar/domains.ts";
 import { spelledCardinalities } from "#pantry/grammar/compose.ts";
 import { DeclarationKind } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -203,17 +204,16 @@ export const piecesOf = (lexical: string): Pieces => {
 };
 
 /**
- * Split an identifier's lexical form into its pieces where it names something once collapsed: a
- * form of whitespace alone names nothing, and has no row that holds a name (lane NIL's audit, B10).
+ * Split an identifier's lexical form into its pieces where it names something once collapsed, an
+ * NCName ({@link isNcName}): any other form, whitespace alone or a name with whitespace or a digit
+ * at its start, names nothing, and has no row that holds a name (lane NIL's audit, B10), so its
+ * value domain refuses it alone (spec reading 152).
  *
  * @param lexical - The lexical form, as written.
  * @returns Its pieces, none where it names nothing.
  */
-const namedPiecesOf = (lexical: string): Option.Option<Pieces> => {
-  const pieces = piecesOf(lexical);
-
-  return pieces.name === "" ? Option.none() : Option.some(pieces);
-};
+const namedPiecesOf = (lexical: string): Option.Option<Pieces> =>
+  Option.liftPredicate(piecesOf(lexical), ({ name }) => isNcName(name));
 
 /**
  * Read the code a `base-type` spells (C17): its lexical form, where that is one of
@@ -601,9 +601,10 @@ const addValueSet = (
  * only used for" a value "that forms part of a record"). The rows hold what it writes and nothing
  * else, so `Value_cardinality` refuses a record's value that writes either alone or neither, and
  * any other set's value that writes either, through its count of fields and each attribute's copy
- * into {@link RecordField}. A field whose `field-identifier` is whitespace alone names no field: it
- * has no {@link RecordFieldName}, and its value domain refuses it alone, never `E1_derived` over an
- * empty name.
+ * into {@link RecordField}. A field whose `field-identifier` is no NCName once collapsed,
+ * whitespace alone among them, names no field: it has no {@link RecordFieldName}, and its value
+ * domain refuses it alone, never `E1_derived` over a name it does not have (spec reading
+ * 152).
  *
  * @param reading - The document.
  * @param node - The value's node.

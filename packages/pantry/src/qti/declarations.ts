@@ -74,6 +74,7 @@ import {
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
+import { ncNamePattern } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
@@ -89,18 +90,18 @@ import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 const Space = str.regex("^[\\t\\n\\r ]*$");
 
 /**
- * A run of characters holding no XML whitespace: a collapsed identifier, which `E1_derived` holds
- * each written name to, so its pieces are its lexical form's outer whitespace and nothing more.
- * That it is an NCName follows from AL1's lexical half, since the pieces concatenate to the lexical
- * form.
+ * A collapsed identifier that names something: an NCName (`ncNamePattern`), `IdentifierDType`'s
+ * lexical space, which `E1_derived` holds each written name to, so its pieces are its lexical
+ * form's outer whitespace and nothing more.
  */
-const nonSpacePattern = "^[^\\t\\n\\r ]+$";
+const namePattern = `^${ncNamePattern}$`;
 
 /**
- * A lexical form that holds a character other than XML whitespace: an identifier's that names
- * something once collapsed, since collapsing strips whitespace alone.
+ * A lexical form that names something once collapsed: an NCName with XML whitespace around it,
+ * which collapsing strips. Any other form names nothing, and its value domain refuses it alone
+ * (spec reading 152).
  */
-const namingPattern = "[^\\t\\n\\r ]";
+const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
 
 /**
  * The kinds that declare a variable: the `NodeKind` handles that are `DeclarationKind` handles too
@@ -385,8 +386,9 @@ export const RecordField = relation(
  * {@link Declaration}'s identifier is written, with the {@link RecordField}'s `parent` and
  * `identifierLexical` it is copied from. `Record field key` compares fields by it.
  *
- * A `field-identifier` of whitespace alone, or none at all, names no field, so it has no row, and
- * its value domain (`IdentifierDType`, an `xs:NCName`, never empty) refuses it alone: a missing
+ * A `field-identifier` that is no NCName once collapsed, whitespace alone among them, or none at
+ * all, names no field, so it has no row, and its value domain (`IdentifierDType`, an `xs:NCName`)
+ * or AL3 refuses it alone (spec reading 152): a missing
  * value is a row of its own relation, never a sentinel (lane NIL's audit, B10; the orchestrator's
  * ruling of 2026-11-06: one cause is refused under one rule).
  */
@@ -504,7 +506,6 @@ const attributesOf = (
     | "base-type"
     | "cardinality"
     | "field-identifier"
-    | "identifier"
     | "mastery-value"
     | "normal-maximum"
     | "normal-minimum",
@@ -512,9 +513,17 @@ const attributesOf = (
 ) => select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
 
 /**
- * The `identifier` of each declaration.
+ * The `identifier` of each declaration that names something once collapsed ({@link namingPattern}):
+ * each such declaration's, and only theirs, is copied into its row. Any other identifier names
+ * nothing, and its value domain refuses it alone (spec reading 152).
  */
-const identifiers = attributesOf("identifier", declarationKinds);
+const identifiers = select(Attribute, (a) =>
+  a.and(
+    a.eq(a.name, "identifier"),
+    a.in(a.kind, declarationKinds),
+    Compute.matches(a.lexical, namingPattern),
+  ),
+);
 
 /**
  * The `base-type` of each declaration that writes one.
@@ -552,8 +561,9 @@ const spelledFieldBaseTypes = select(Attribute, (a) =>
 );
 
 /**
- * The record fields whose `field-identifier` names something once collapsed: the fields each of
- * which has its {@link RecordFieldName}. A form of whitespace alone is its value domain's alone.
+ * The record fields whose `field-identifier` names something once collapsed ({@link
+ * namingPattern}): the fields each of which has its {@link RecordFieldName}. Any other form is its
+ * value domain's alone.
  */
 const namedFields = select(RecordField, (f) => Compute.matches(f.identifierLexical, namingPattern));
 
@@ -630,7 +640,7 @@ const collapsedDeclared = (d: DeclarationRow) =>
       d.identifierLexical,
       Compute.concat(Compute.concat(d.identifierLead, d.identifier), d.identifierTrail),
     ),
-    Compute.matches(d.identifier, nonSpacePattern),
+    Compute.matches(d.identifier, namePattern),
   );
 
 /**
@@ -646,7 +656,7 @@ const collapsedField = (f: RecordFieldNameRow) =>
       f.identifierLexical,
       Compute.concat(Compute.concat(f.identifierLead, f.identifier), f.identifierTrail),
     ),
-    Compute.matches(f.identifier, nonSpacePattern),
+    Compute.matches(f.identifier, namePattern),
   );
 
 /**

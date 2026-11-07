@@ -2706,3 +2706,26 @@ against it. A reading that is not an information-model-over-XSD case says which 
      the same attribute is reading 134's. This binds pantry and plate alike. This is not a case of documents in
      conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
      FIX-LOMLANG.)
+152. **A value names something only where it is an NCName: a variable reference's, an interaction's binding, a
+     declaration's `identifier` and a record field's `field-identifier`. Any other value names nothing: no row holds
+     it as a name, and its value domain alone refuses it.** The ASI XSD types each such attribute `IdentifierDType`,
+     which restricts `xs:NCName` (`imsqti_asiv3p0_v1p0.xsd`), or, in a literal-or-reference union, holds the
+     variable by its `VariableStringDType` member, an `xs:NCName` too (a printed variable's `base` and `index`, a
+     random integer's `min` and `max`, a rounding's `figures`), or by `EncVariableStringDType`, an NCName between
+     braces. A form outside a type's lexical space denotes no value of it (XML Schema Part 2, §2.3), so `""`, a form
+     of whitespace alone, `1a`, `a b`, or a name only XML 1.0's fifth edition admits, such as one that starts with
+     ARABIC-INDIC DIGIT ZERO, which the `Letter` tables `\i` and `\c` read (XML Schema Part 2, Appendix F) hold as a
+     digit, names no variable, declaration or field. It shares no name with another, no
+     reference resolves to it, and the law a reference, a binding or a name is held to does not judge it; the
+     attribute's value domain refuses it under its own rule. The grammar states the NCName once
+     (`ncNamePattern`, `src/grammar/domains.ts`), and the schema's sources and the importer's readers each read it.
+     This sets aside the importer's reading of any string as a name: a content reference or a binding by its
+     collapsed value, so `template-identifier=""` was a template reference no declaration held, a declaration's or a
+     field's identifier by any form not whitespace alone, and a processing reference by the fifth edition's names. Its
+     rows broke the reference's law, "Binding declared", "Variable declared" or "E1 derived" beside the value domain
+     the law oracle alone raised (`referenced`, `typedValueOf`, `src/test/oracle.ts`). A declaration whose identifier
+     names nothing has no `Declaration` row, so "Declaration overlay"'s copies of its cardinality and base type, which
+     ask a row of every declaration, still break beside its value domain, as they did for an empty identifier
+     before; that wants the declaration's name as a row of its own, as `RecordFieldName` is a field's. This
+     binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NCNAME.)

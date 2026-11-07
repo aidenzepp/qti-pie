@@ -81,6 +81,7 @@ import {
   rpTemplatePattern,
   rpTemplates,
 } from "#pantry/grammar/expression.ts";
+import { ncNamePattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeName,
   BaseType,
@@ -107,8 +108,6 @@ import {
   Language,
   LeadCardinality,
   lookupKindHandle,
-  ncChar,
-  ncStart,
   numericKinds,
   oneBaseKinds,
   oneCardinalityKinds,
@@ -178,16 +177,12 @@ export const Affix = str.regex("^(?:[\\t\\n\\r ]*|\\{|\\})$");
 const spacePattern = "^[\\t\\n\\r ]*$";
 
 /**
- * A name a reference spells: an NCName, the reference member of a literal-or-reference union
- * (`VariableStringDType`, `xs:NCName`, `EncVariableStringDType`'s braced one), which no integer or
- * float literal is but `INF` and `NaN`.
+ * The pattern of a name a reference spells: an NCName (`ncNamePattern`), the reference member of a
+ * literal-or-reference union (`VariableStringDType`, `xs:NCName`, `EncVariableStringDType`'s
+ * braced one), which no integer or float literal is but `INF` and `NaN`. Any other value names
+ * nothing, and its value domain refuses it alone (spec reading 152).
  */
-const ncName = `[${ncStart}][${ncChar}]*`;
-
-/**
- * The pattern of a referenced name.
- */
-const namePattern = `^${ncName}$`;
+const namePattern = `^${ncNamePattern}$`;
 
 /**
  * The empty base-type set, every operand fold's start.
@@ -935,12 +930,12 @@ const silentBases = ["any", "unknown"] as const;
  * The bare and braced spellings a reference's lexical form takes: the name with the whitespace a
  * collapsing type absorbs, or the name between braces exactly (`EncVariableStringDType`).
  */
-const bareReference = `^[\\t\\n\\r ]*${ncName}[\\t\\n\\r ]*$`;
+const bareReference = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
 
 /**
  * A braced reference's lexical form.
  */
-const bracedReference = `^\\{${ncName}\\}$`;
+const bracedReference = `^\\{${ncNamePattern}\\}$`;
 
 /**
  * A float literal that is also a name, which a float-or-reference attribute reads as the literal:

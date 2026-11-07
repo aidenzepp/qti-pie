@@ -121,7 +121,7 @@ import {
   SchemaVersion,
   versions,
 } from "#pantry/grammar/install.ts";
-import { booleanTrue } from "#pantry/grammar/domains.ts";
+import { booleanTrue, ncNamePattern } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { Declaration, declarationRef } from "#pantry/qti/declarations.ts";
@@ -155,11 +155,12 @@ const Space = str.regex("^[\\t\\n\\r ]*$");
 export const atomicValuePattern = "^[^\\t\\n\\r ]*$";
 
 /**
- * A printed variable's `base` or `index` that is an integer, not a variable's name: its first
- * character is a digit or a sign, which no `VariableStringDType` name starts with. The laws read it
- * as a POSIX pattern and the overlay's builder as a JavaScript one; the two agree on it.
+ * A collapsed value that names a variable: an NCName (`ncNamePattern`), the lexical space of each
+ * reference attribute's `IdentifierDType` and of the `VariableStringDType` member of a printed
+ * variable's `base` and `index`. Any other value names nothing, an integer of `base` or `index`
+ * among them, and its value domain refuses it alone (spec reading 152).
  */
-export const integerStartPattern = "^[+\\-0-9]";
+const namePattern = `^${ncNamePattern}$`;
 
 /**
  * The root kinds of the documents whose content references resolve in their own declarations: an
@@ -367,8 +368,8 @@ const contextVariableKind = "qti-context-variable" satisfies Kind;
 /**
  * Each content reference relation's attributes and kinds, as `ContentReference` lists them. A
  * printed variable's `base` and `index` hold an integer or a variable's name (the XSD's union of
- * `xs:integer` and `VariableStringDType`); each other attribute is an `IdentifierDType` and always
- * names one.
+ * `xs:integer` and `VariableStringDType`); each other attribute is an `IdentifierDType`. Each names
+ * a variable exactly where its value is an NCName ({@link namePattern}).
  */
 export const references = {
   context: { attributes: ["identifier"], kinds: [contextVariableKind] },
@@ -485,7 +486,9 @@ export const Binding = relation(
 
 /**
  * One binding of an item's interaction to a response variable, keyed by the interaction's node and
- * the attribute that binds it: `response-identifier`, or `string-identifier`'s second variable.
+ * the attribute that binds it: `response-identifier`, or `string-identifier`'s second variable,
+ * where its value names a variable, an NCName ({@link namePattern}). Any other value binds nothing,
+ * and its value domain refuses it alone (spec reading 152).
  *
  * Its fields, every one written by the host:
  *
@@ -543,10 +546,11 @@ export const BindingDeclaration = relation(
 
 /**
  * One attribute by which an interaction of any document binds a response variable, keyed by the
- * interaction's node and the attribute (spec reading 117): `kind`, the interaction's; `document`;
- * and `identifier`, the attribute's value collapsed. A fragment's interactions bind no variable of
- * their own document, which declares none, but one of each item that places the fragment
- * ({@link PlacedBinding}); its rows count as `Document.bindings`.
+ * interaction's node and the attribute (spec reading 117), where its value names a variable:
+ * `kind`, the interaction's; `document`; and `identifier`, the attribute's value collapsed. A
+ * fragment's interactions bind no variable of their own document, which declares none, but one of
+ * each item that places the fragment ({@link PlacedBinding}); its rows count as
+ * `Document.bindings`.
  */
 export const BindingName = relation(
   "BindingName",
@@ -1001,11 +1005,13 @@ export const ItemMode = relation("ItemMode", { adaptive: pg.boolean, document: u
 /**
  * The fields of a content reference: the referring element's node, kind and document, the root kind
  * of the assembly it resolves in, which for an item's or a test's own reference is its document's
- * own root kind, the attribute it refers by, and the name it refers to, collapsed. What the name
- * resolves to is a row of its own, where it names a declaration (`referenceDeclarationFields`),
- * and none where it names a built-in variable of that root, as the installed `BuiltInVariable`
- * holds each under its root (spec reading 29: an item's are not a test's), or nothing, which its
- * law refuses (lane NIL's NS2: a missing value is a row of its own relation, never the nil uuid).
+ * own root kind, the attribute it refers by, and the name it refers to, collapsed. A value that is
+ * no NCName ({@link namePattern}) names nothing and has no row: its value domain refuses it alone
+ * (spec reading 152). What the name resolves to is a row of its own, where it names a
+ * declaration (`referenceDeclarationFields`), and none where it names a built-in variable of that
+ * root, as the installed `BuiltInVariable` holds each under its root (spec reading 29: an item's
+ * are not a test's), or nothing, which its law refuses (lane NIL's NS2: a missing value is a row of
+ * its own relation, never the nil uuid).
  */
 const referenceFields = {
   assemblyKind: closedId(NodeKind),
@@ -1514,20 +1520,34 @@ const readOf = (names: readonly Name[], kinds: readonly Kind[]) =>
   select(InteractionAttribute, (v) => v.and(v.in(v.name, names), v.in(v.kind, kinds)));
 
 /**
- * Select the read attributes of some names on some kinds in item documents.
+ * State that a read attribute is an interaction's binding that names a variable
+ * ({@link namePattern}).
  *
- * @param names - The attributes' names.
- * @param kinds - Their elements' kinds.
- * @returns The selection of `InteractionAttribute`.
+ * @param v - The row.
+ * @returns The predicate.
  */
-const itemReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
-  select(InteractionAttribute, (v) =>
-    v.and(v.in(v.name, names), v.in(v.kind, kinds), v.eq(v.rootKind, itemKind)),
+const namedBinding = (v: AttributeRow) =>
+  v.and(
+    v.in(v.name, bindingAttributes),
+    v.in(v.kind, interactionKinds),
+    Compute.matches(v.value, namePattern),
   );
 
 /**
- * Select the read attributes of some names on some kinds in the documents whose references resolve
- * in their own declarations, items and tests.
+ * The bindings that name a variable, in every document: {@link BindingName}'s source.
+ */
+const namedBindings = select(InteractionAttribute, namedBinding);
+
+/**
+ * The bindings that name a variable in item documents: {@link BoundVariable}'s source.
+ */
+const itemBindings = select(InteractionAttribute, (v) =>
+  v.and(namedBinding(v), v.eq(v.rootKind, itemKind)),
+);
+
+/**
+ * Select the read attributes of some names on some kinds that name a variable ({@link namePattern})
+ * in the documents whose references resolve in their own declarations, items and tests.
  *
  * @param names - The attributes' names.
  * @param kinds - Their elements' kinds.
@@ -1535,7 +1555,12 @@ const itemReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
  */
 const referenceReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
   select(InteractionAttribute, (v) =>
-    v.and(v.in(v.name, names), v.in(v.kind, kinds), v.in(v.rootKind, referringRoots)),
+    v.and(
+      v.in(v.name, names),
+      v.in(v.kind, kinds),
+      v.in(v.rootKind, referringRoots),
+      Compute.matches(v.value, namePattern),
+    ),
   );
 
 /**
@@ -1785,6 +1810,22 @@ const adaptiveTrue = select(InteractionAttribute, (v) =>
 );
 
 /**
+ * State that a read attribute is a printed variable's reference: its `identifier`, or its `base`
+ * or `index`, where its value names a variable.
+ *
+ * @param v - The row.
+ * @returns The predicate.
+ */
+const printedReference = (v: AttributeRow) =>
+  v.and(
+    Compute.matches(v.value, namePattern),
+    v.or(
+      v.and(v.in(v.name, references.printed.attributes), v.in(v.kind, references.printed.kinds)),
+      v.and(v.in(v.name, references.variable.attributes), v.in(v.kind, references.variable.kinds)),
+    ),
+  );
+
+/**
  * The read attributes each content reference relation holds: those that name a variable, in items
  * and tests, each resolving in its own document's declarations.
  */
@@ -1792,54 +1833,36 @@ const referenceSources = {
   context: referenceReadOf(references.context.attributes, references.context.kinds),
   feedback: referenceReadOf(references.feedback.attributes, references.feedback.kinds),
   printed: select(InteractionAttribute, (v) =>
-    v.and(
-      v.in(v.rootKind, referringRoots),
-      v.or(
-        v.and(v.in(v.name, references.printed.attributes), v.in(v.kind, references.printed.kinds)),
-        v.and(
-          v.in(v.name, references.variable.attributes),
-          v.in(v.kind, references.variable.kinds),
-          v.not(Compute.matches(v.value, integerStartPattern)),
-        ),
-      ),
-    ),
+    v.and(v.in(v.rootKind, referringRoots), printedReference(v)),
   ),
   template: referenceReadOf(references.template.attributes, references.template.kinds),
 };
 
 /**
  * The read attributes a section document's or a fragment's feedback references are: its feedback
- * elements' outcomes.
+ * elements' outcomes, where they name a variable.
  */
 const sectionFeedbackSource = select(InteractionAttribute, (v) =>
   v.and(
     v.not(v.in(v.rootKind, referringRoots)),
     v.in(v.name, references.feedback.attributes),
     v.in(v.kind, references.feedback.kinds),
+    Compute.matches(v.value, namePattern),
   ),
 );
 
 /**
  * The read attributes a section document's or a fragment's printed variable references are:
- * printed variables' names, and their bases and indices where they name a variable.
+ * printed variables' names, bases and indices, where they name a variable.
  */
 const sectionPrintedSource = select(InteractionAttribute, (v) =>
-  v.and(
-    v.not(v.in(v.rootKind, referringRoots)),
-    v.or(
-      v.and(v.in(v.name, references.printed.attributes), v.in(v.kind, references.printed.kinds)),
-      v.and(
-        v.in(v.name, references.variable.attributes),
-        v.in(v.kind, references.variable.kinds),
-        v.not(Compute.matches(v.value, integerStartPattern)),
-      ),
-    ),
-  ),
+  v.and(v.not(v.in(v.rootKind, referringRoots)), printedReference(v)),
 );
 
 /**
  * Select the read attributes a fragment's references of one class are (spec reading 117): the
- * class's attributes on its kinds, in a document that is no item, test or section.
+ * class's attributes on its kinds that name a variable, in a document that is no item, test or
+ * section.
  *
  * @param reference - The class's attributes and kinds.
  * @returns The selection.
@@ -1853,6 +1876,7 @@ const fragmentReferenceOf = (reference: {
       v.not(v.in(v.rootKind, unfragmentedRoots)),
       v.in(v.name, reference.attributes),
       v.in(v.kind, reference.kinds),
+      Compute.matches(v.value, namePattern),
     ),
   );
 
@@ -2364,21 +2388,14 @@ export const interactionLawsByName = {
     mirrors(on(responseIdentifiers, "node"), on(Binding, "node")),
     check("E1_derived", Binding, (b) => b.in(b.kind, interactionKinds)),
     contained(
-      on(
-        itemReadOf(bindingAttributes, interactionKinds),
-        "node",
-        "name",
-        "kind",
-        "document",
-        "value",
-      ),
+      on(itemBindings, "node", "name", "kind", "document", "value"),
       on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(on(BoundVariable, "node", "kind"), on(Binding, "node", "kind")),
     contained(on(BindingDeclaration, "node", "attribute"), on(BoundVariable, "node", "attribute")),
     contained(on(BoundVariable, "document", "adaptive"), on(ItemMode, "document", "adaptive")),
     contained(
-      on(readOf(bindingAttributes, interactionKinds), "node", "name", "kind", "document", "value"),
+      on(namedBindings, "node", "name", "kind", "document", "value"),
       on(BindingName, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(on(BindingName, "node", "kind"), on(Binding, "node", "kind")),

@@ -320,7 +320,7 @@ export const spelledBasesPattern = `^(?:${valueBases
  *
  * @see {@link https://www.w3.org/TR/xml-names/#NT-NCName | Namespaces in XML 1.0, NCName}
  */
-export const ncStart =
+const ncStart =
   "A-Z_a-z\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{2FF}\\u{370}-\\u{37D}\\u{37F}-\\u{1FFF}\\u{200C}-\\u{200D}\\u{2070}-\\u{218F}\\u{2C00}-\\u{2FEF}\\u{3001}-\\u{D7FF}\\u{F900}-\\u{FDCF}\\u{FDF0}-\\u{FFFD}\\u{10000}-\\u{EFFFF}";
 
 /**
@@ -328,7 +328,7 @@ export const ncStart =
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-NameChar | XML 1.0, NameChar}
  */
-export const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncStart}`;
+const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncStart}`;
 
 /**
  * The base types whose values a value domain's pattern judges, and that domain: QTI's base types

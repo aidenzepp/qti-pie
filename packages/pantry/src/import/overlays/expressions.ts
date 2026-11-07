@@ -28,6 +28,7 @@ import type {
   ValueBase,
   ValueCardinality,
 } from "#pantry/grammar/expression.ts";
+import { isNcName } from "#pantry/grammar/domains.ts";
 import { BuiltInVariable, nonElementKinds } from "#pantry/grammar/install.ts";
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
@@ -54,8 +55,6 @@ import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pant
 import {
   expressionKinds,
   heldKinds,
-  ncChar,
-  ncStart,
   processingReferences,
   rootLanguages,
   ruleKindHandles,
@@ -249,11 +248,6 @@ const spellingOf: ReadonlyMap<string, "bare" | "braced"> = new Map(
  * template defaults name the templates of the items their item refs name.
  */
 const tests: ReadonlySet<string> = new Set(testRoots);
-
-/**
- * A name a reference spells: an NCName.
- */
-const nameForm = new RegExp(`^[${ncStart}][${ncChar}]*$`, "u");
 
 /**
  * What a reference's lexical form holds around its name, as `VariableRef` types it.
@@ -900,7 +894,7 @@ const spelledBy = (
   if (spelling === "braced") {
     const name = lexical.slice(1, -1);
 
-    return lexical.startsWith("{") && lexical.endsWith("}") && nameForm.test(name)
+    return lexical.startsWith("{") && lexical.endsWith("}") && isNcName(name)
       ? { after: "}", before: "{", name }
       : undefined;
   }
@@ -908,7 +902,7 @@ const spelledBy = (
   const rest = lexical.replace(/^[\t\n\r ]+/u, "");
   const name = rest.replace(/[\t\n\r ]+$/u, "");
 
-  return nameForm.test(name)
+  return isNcName(name)
     ? {
         after: affixOf(rest.slice(name.length)),
         before: affixOf(lexical.slice(0, lexical.length - rest.length)),
