@@ -67,6 +67,10 @@ const unjudged = {
   "Idref: a base term": unreadTerm("base"),
   "MapKeyFloat.value": "a float, which no datum of the host's evaluator is",
   "MapKeyFloat: a cast term": unreadTerm("cast"),
+  "MathAction: a base term": unreadTerm("base"),
+  "MathAction: a when term": unreadTerm("when"),
+  "MathApply: a base term": unreadTerm("base"),
+  "MathApply: a between term": unreadTerm("between"),
   "Node.elements":
     "a tree root's running value of the element fold, the start value grizzle keeps in the field's builder",
   "Node.lastState": "a copy along a last axis, `pred(children)`, which the host does not restore",
@@ -85,6 +89,9 @@ const unjudged = {
   "Rounding: a when term": unreadTerm("when"),
   "SectionSelection.select": "a field PostgreSQL generates, a cast of `selectForm`",
   "SectionSelection: a base term": unreadTerm("base"),
+  "ShareFragment: a charLength function term":
+    "its predicate calls Compute.charLength, a function the host's evaluator does not compute",
+  "ShareFragment: a literal term": "its predicate holds a literal of no datum's type",
   "Slider: a when term": unreadTerm("when"),
 } satisfies Readonly<Record<string, string>>;
 

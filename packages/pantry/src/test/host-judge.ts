@@ -13,9 +13,9 @@
  *   child under its root's root field, the tree's root its own parent;
  * - **every count**: an ordered family's or a tree's members, a counted family's by its group, and a
  *   tree's pre-order interval `[start, end)`;
- * - **each fold** of `Monoid.count`, `Monoid.or`, `Monoid.concat` or `Monoid.sum`: its owner's end,
- *   and its members' running values in slot order, a member its step's selection does not hold
- *   stepping by the identity;
+ * - **each fold** of `Monoid.count`, `Monoid.or`, `Monoid.concat`, `Monoid.sum` or `Monoid.max`: its
+ *   owner's end, and its members' running values in slot order, a member its step's selection does
+ *   not hold stepping by the identity;
  * - **each copy along a family's axis**: an accumulated field of a member that a containment pairs,
  *   beside the member's group and the owner's primary key, with a field of the owner.
  *
@@ -26,7 +26,7 @@
  * absent value, so a skip is always named by its cause.
  */
 import type { Law } from "@bjornpagen/grizzle";
-import { Option, Predicate, Schema } from "effect";
+import { Option, Order, Predicate, Schema } from "effect";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import {
@@ -455,6 +455,18 @@ const monoids: ReadonlyMap<
       combine: (running: Datum, step: Datum | undefined) =>
         Predicate.isString(running) && Predicate.isString(step) ? running + step : undefined,
       identity: () => "",
+    },
+  ],
+  [
+    // The greater of the two, from natural's least value: grizzle's max starts from its carrier's
+    // least value, and the schema's one max fold, MathML's leaf starts, is over naturals.
+    "max",
+    {
+      combine: (running: Datum, step: Datum | undefined) =>
+        Predicate.isBigInt(running) && Predicate.isBigInt(step)
+          ? Order.max(Order.BigInt)(running, step)
+          : undefined,
+      identity: () => 0n,
     },
   ],
 ]);
