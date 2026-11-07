@@ -3,8 +3,10 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, el, text } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
+import { runRules } from "#plate/engine/evaluate.ts";
 import type { Expression, Rule } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
+import { outcomeDefaults } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { checkStructure } from "#plate/validate/structure.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -390,9 +392,9 @@ describe("the text family's reader specs and kind rules", () => {
   );
 
   it.effect(
-    "[I-9a] mark a qti-pattern-match whose {name} pattern names a template variable variable:<id> and run none",
+    "[I-5] [I-9a] run a qti-pattern-match whose {name} pattern names a template variable with the template value, with no mark",
     () =>
-      Effect.gen(function* marksTemplatePattern() {
+      Effect.gen(function* runsTemplatePattern() {
         const document = passedItem(patternElement("{T}", stringElement("1")), [
           el("qti-template-declaration", [
             attr("base-type", "string"),
@@ -401,17 +403,26 @@ describe("the text family's reader specs and kind rules", () => {
           ]),
         ]);
         const built = yield* buildItem(document);
+        const rules = Option.getOrElse(built.processing, () => assert.fail("no processing"));
+        const passedAt = (pattern: string) =>
+          Effect.fromResult(
+            runRules(rules, built, {
+              outcomes: outcomeDefaults(built),
+              responses: {},
+              templates: {
+                T: {
+                  baseType: "string",
+                  cardinality: "single",
+                  values: [{ baseType: "string", value: pattern }],
+                },
+              },
+            }),
+          ).pipe(Effect.map((after) => after.outcomes["PASSED"]));
 
         assert.deepStrictEqual(refusalsOf(document), []);
-        assert.deepStrictEqual(built.processing, Option.none());
-        assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: "qti-template-declaration",
-            path: "qti-assessment-item/qti-template-declaration",
-            shown: "mark",
-          },
-          { feature: "variable:T", path: processing, shown: "mark" },
-        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(yield* passedAt("[0-9]"), truth(true));
+        assert.deepStrictEqual(yield* passedAt("[a-z]"), truth(false));
       }),
   );
 

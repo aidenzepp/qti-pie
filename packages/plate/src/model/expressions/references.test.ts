@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { attr, el } from "#plate/document/source.ts";
+import { attr, el, text } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { evaluators } from "#plate/engine/evaluate.ts";
 import type { Variables } from "#plate/engine/evaluate.ts";
@@ -15,6 +15,7 @@ import {
   evaluateIn,
   expressionElement,
   outcomeDeclaration,
+  processed,
   processingItem,
   refusalsOf,
   responseDeclaration,
@@ -212,23 +213,23 @@ describe("the references family's reader specs", () => {
 });
 
 /**
- * The path of the `qti-response-processing` of an item {@link processingItem} builds.
- */
-const processing = "qti-assessment-item/qti-response-processing";
-
-/**
  * Construct a single template declaration.
  *
  * @param identifier Its `identifier`.
  * @param baseType Its `base-type`.
+ * @param children Its children, such as a `qti-default-value`; none by default.
  * @returns The `qti-template-declaration`.
  */
-const templateDeclaration = (identifier: string, baseType: string): SourceElement =>
-  el("qti-template-declaration", [
-    attr("base-type", baseType),
-    attr("cardinality", "single"),
-    attr("identifier", identifier),
-  ]);
+const templateDeclaration = (
+  identifier: string,
+  baseType: string,
+  children: readonly SourceElement[] = [],
+): SourceElement =>
+  el(
+    "qti-template-declaration",
+    [attr("base-type", baseType), attr("cardinality", "single"), attr("identifier", identifier)],
+    children,
+  );
 
 /**
  * Construct a `qti-default` of a variable.
@@ -280,22 +281,23 @@ describe("the references family's qti-default and qti-null", () => {
   });
 
   it.effect(
-    "[I-9a] mark a qti-default that names a template variable variable:<id>, its processing none",
+    "[I-5] [I-9a] run a qti-default that names a template variable, giving its declared default, with no mark",
     () =>
-      Effect.gen(function* marksTemplateDefault() {
-        const document = scoreItem(defaultElement("T"), [templateDeclaration("T", "float")]);
+      Effect.gen(function* runsTemplateDefault() {
+        const document = scoreItem(defaultElement("T"), [
+          templateDeclaration("T", "float", [
+            el("qti-default-value", [], [el("qti-value", [], [text("2.5")])]),
+          ]),
+        ]);
         const built = yield* buildItem(document);
+        const after = yield* processed(document, {});
 
         assert.deepStrictEqual(refusalsOf(document), []);
-        assert.deepStrictEqual(built.processing, Option.none());
-        assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: "qti-template-declaration",
-            path: "qti-assessment-item/qti-template-declaration",
-            shown: "mark",
-          },
-          { feature: "variable:T", path: processing, shown: "mark" },
-        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(
+          after.pipe(Option.map((variables) => variables.outcomes["SCORE"])),
+          Option.some(float(2.5)),
+        );
       }),
   );
 

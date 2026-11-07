@@ -667,9 +667,10 @@ export type BodyNode =
  * `responses`, `outcomes` and `templates` hold the declarations of modelled base types and
  * cardinalities, in document order; every other declaration is a mark. `processing` is none when
  * the item has no response processing, or when plate cannot run it, which `unsupported` then marks.
- * Plate cannot run it on an item with template processing, which plate does not run and which may
- * set a value response processing reads, such as a correct response. `unsupported` lists every
- * feature not rendered, in document order, each once per feature and path.
+ * Plate cannot run it beside a `qti-template-processing` that does not run (`templateProcessing`
+ * none, an element in it marked), which may set a value response processing reads, such as a
+ * correct response. `unsupported` lists every feature not rendered, in document order, each once
+ * per feature and path.
  */
 export interface Item {
   readonly body: readonly BodyNode[];
@@ -726,7 +727,8 @@ interface Build extends ModelWalk {
 
 /**
  * The `qti-*` elements the model reads or renders: those `renders` lists, the engine's response
- * rules among them, and the element of each expression kind the registry has landed.
+ * rules and the template rules among them, and the element of each expression kind the registry has
+ * landed.
  */
 const readElements: ReadonlySet<string> = new Set([
   ...renders.elements,
@@ -2439,17 +2441,19 @@ const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedRe
  * Give each identifier a rule tree names that the engine does not hold, once, in the order the tree
  * first names it.
  *
- * The evaluator holds only the item's modelled responses and outcomes and the built-in
- * `numAttempts` and `completionStatus` ({@link heldBuiltIns}; `Variables` in
+ * The evaluator holds only the item's modelled responses, outcomes and template variables and the
+ * built-in `numAttempts` and `completionStatus` ({@link heldBuiltIns}; `Variables` in
  * `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError` for any other identifier a rule
  * names, so `buildItem` runs no tree this walk finds a name in, and that failure stays
- * unreachable. The walk reads each expression through its kind's rule in the
- * registry (`kindRules` in `#plate/model/expressions/read.ts`), in place of a case per kind:
+ * unreachable. A template variable is held only beside template processing that runs or is
+ * absent: the record then holds its value, as template processing or its declared default left it.
+ * The walk reads each expression through its kind's rule in the registry (`kindRules` in
+ * `#plate/model/expressions/read.ts`), in place of a case per kind:
  *
  * - The declaration facet: the `identifier` of a kind that expects a response, such as `qti-correct`,
  *   `qti-map-response` and `qti-map-response-point`, names one the engine holds only among the
  *   responses; that of a kind that expects any variable, such as `qti-variable`, among the
- *   responses, the outcomes and the built-in variables.
+ *   responses, the outcomes, the template variables and the built-in variables.
  * - The reference facet: each variable an attribute names (`referencesOf`), before the operands, in
  *   the facet's order. A checked reference names one the engine holds as `qti-variable` does. An
  *   unchecked one, a `qti-equal`'s `tolerance` token, is judged only when a declaration or a
@@ -2458,19 +2462,23 @@ const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedRe
  *   operator.
  *
  * `qti-set-outcome-value` and `qti-lookup-outcome-value` set an outcome, or the built-in
- * `completionStatus` where the engine holds it ({@link settableBuiltIns}). The names it finds are
- * valid content, never refused (reading 1): a response the model does not hold (base type
- * `duration` or `file`, cardinality `record`, or no base type), a template variable, an outcome the
- * model does not hold, the built-in variable `duration`, read or set, which the engine holds no
- * value for, and the built-in `completionStatus` where a declaration names it. Reading 29 makes an
- * item's `duration` a single float, so it is a valid name in an item's rules. An identifier nothing
- * declares is refused before the model is built when inline rules name it; the walk finds it too.
- * One a built-in template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is not in
- * the document, so nothing refuses it: the walk finds it, and the processing is marked.
+ * `completionStatus` where the engine holds it ({@link settableBuiltIns}), never a template
+ * variable, which only template processing sets. The names it finds are valid content, never
+ * refused (reading 1): a response, an outcome or a template variable the model does not hold (base
+ * type `duration` or `file`, cardinality `record`, or no base type), a template variable beside
+ * template processing that does not run, the built-in variable `duration`, read or set, which the
+ * engine holds no value for, and the built-in `completionStatus` where a declaration names it.
+ * Reading 29 makes an item's `duration` a single float, so it is a valid name in an item's rules.
+ * An identifier nothing declares is refused before the model is built when inline rules name it;
+ * the walk finds it too. One a built-in template names, such as `MAXSCORE` or `FEEDBACK` in a
+ * `CC2_*` template, is not in the document, so nothing refuses it: the walk finds it, and the
+ * processing is marked.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
+ * @param heldTemplates The template variables the engine holds a value of: the model's, or none
+ *   beside template processing that does not run.
  * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
  * @param names The names of the variables the item holds ({@link declaredNames}).
  * @returns The identifiers the engine does not hold, empty when it can run the tree.
@@ -2479,6 +2487,7 @@ const unheldIdentifiers = (
   tree: readonly Rule[],
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  heldTemplates: ReadonlyMap<string, TemplateDeclaration>,
   builtIns: ReadonlySet<string>,
   names: ReadonlySet<string>,
 ): readonly string[] => {
@@ -2488,10 +2497,14 @@ const unheldIdentifiers = (
    * Report whether the engine holds a variable of a name, as `qti-variable` reads it.
    *
    * @param identifier The name.
-   * @returns Whether a response, an outcome or a built-in variable the engine holds has it.
+   * @returns Whether a response, an outcome, a template variable or a built-in variable the engine
+   *   holds has it.
    */
   const isHeld = (identifier: string): boolean =>
-    responses.has(identifier) || outcomes.has(identifier) || builtIns.has(identifier);
+    responses.has(identifier) ||
+    outcomes.has(identifier) ||
+    heldTemplates.has(identifier) ||
+    builtIns.has(identifier);
 
   /**
    * Add each identifier an expression and its operands read that the engine does not hold: the
@@ -2662,14 +2675,16 @@ const valueTypeOf = (type: ExpressionType): Option.Option<ValueType> => {
 /**
  * Give the type of the declaration an expression's declaration facet names, as the engine reads
  * its value: among the responses for a kind that expects a response; among the responses, the
- * outcomes and the built-in variables the engine holds for one that expects any variable. The
- * built-ins the engine holds ({@link heldBuiltIns}) have the types {@link builtInTypes} gives:
- * `numAttempts` a single integer, `completionStatus` a single identifier.
+ * outcomes, the template variables and the built-in variables the engine holds for one that
+ * expects any variable. The built-ins the engine holds ({@link heldBuiltIns}) have the types
+ * {@link builtInTypes} gives: `numAttempts` a single integer, `completionStatus` a single
+ * identifier.
  *
  * @param identifier The identifier the expression names.
  * @param expected The kind of variable the facet expects.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
+ * @param heldTemplates The template variables the engine holds a value of.
  * @param builtIns The built-in variables the engine holds for this item.
  * @returns The declaration's type, none when the engine holds no variable of that name.
  */
@@ -2678,6 +2693,7 @@ const declarationType = (
   expected: DeclarationFacet["expected"],
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  heldTemplates: ReadonlyMap<string, TemplateDeclaration>,
   builtIns: ReadonlySet<string>,
 ): Option.Option<ValueType> => {
   const response: ValueType | undefined = responses.get(identifier);
@@ -2685,7 +2701,9 @@ const declarationType = (
     return Option.fromUndefinedOr(response);
   }
 
-  return Option.fromUndefinedOr(response ?? outcomes.get(identifier)).pipe(
+  return Option.fromUndefinedOr(
+    response ?? outcomes.get(identifier) ?? heldTemplates.get(identifier),
+  ).pipe(
     Option.orElse(() =>
       builtIns.has(identifier)
         ? Option.fromUndefinedOr(builtInTypes.get(identifier))
@@ -2738,6 +2756,7 @@ const ownAttributes = (operand: Expression): ResultAttributes => {
  * @param operand The expression.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
+ * @param heldTemplates The template variables the engine holds a value of.
  * @param builtIns The built-in variables the engine holds for this item.
  * @returns Its type, none when the rule gives a type the value model does not hold.
  */
@@ -2745,6 +2764,7 @@ const typeOf = (
   operand: Expression,
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  heldTemplates: ReadonlyMap<string, TemplateDeclaration>,
   builtIns: ReadonlySet<string>,
 ): Option.Option<ValueType> => {
   /**
@@ -2763,6 +2783,7 @@ const typeOf = (
             kindRule.declaration.expected,
             responses,
             outcomes,
+            heldTemplates,
             builtIns,
           );
     const operands: readonly Expression[] = each.operands;
@@ -2801,6 +2822,8 @@ const typeOf = (
  * @param tree The rule tree.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
+ * @param heldTemplates The template variables the engine holds a value of
+ *   ({@link unheldIdentifiers}).
  * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
  * @param written `template` for a built-in template's tree, whose every need is judged, or
  *   `inline` for inline rules, of which only a lookup's outcome cardinality is.
@@ -2813,6 +2836,7 @@ const unmetNeeds = (
   tree: readonly Rule[],
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  heldTemplates: ReadonlyMap<string, TemplateDeclaration>,
   builtIns: ReadonlySet<string>,
   written: "inline" | "template",
 ): readonly string[] => {
@@ -2870,7 +2894,7 @@ const unmetNeeds = (
         if (outcome !== undefined && (written === "template" || each.kind === "lookup-outcome")) {
           const given =
             each.kind === "set-outcome"
-              ? typeOf(each.expression, responses, outcomes, builtIns)
+              ? typeOf(each.expression, responses, outcomes, heldTemplates, builtIns)
               : Option.some<ValueType>({ baseType: outcome.baseType, cardinality: "single" });
           if (
             Option.exists(
@@ -2922,6 +2946,8 @@ interface ReadProcessing extends ProcessingTree {
  * @param read The processing as read.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
+ * @param heldTemplates The template variables the engine holds a value of: the model's, or none
+ *   beside template processing that does not run.
  * @returns The tree, or none when it names an identifier the engine does not hold, is a built-in
  *   template that needs a declaration the item does not provide, or reads an area mapping with a
  *   `%` coordinate.
@@ -2931,16 +2957,18 @@ const runnable = (
   read: ReadProcessing,
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  heldTemplates: ReadonlyMap<string, TemplateDeclaration>,
 ): Option.Option<readonly Rule[]> => {
   const builtIns = heldBuiltIns(build.document.root);
   const features = [
-    ...unheldIdentifiers(read.tree, responses, outcomes, builtIns, build.names).map(
+    ...unheldIdentifiers(read.tree, responses, outcomes, heldTemplates, builtIns, build.names).map(
       (identifier) => `variable:${identifier}`,
     ),
     ...unmetNeeds(
       read.tree,
       responses,
       outcomes,
+      heldTemplates,
       builtIns,
       Option.isSome(read.template) ? "template" : "inline",
     ),
@@ -3005,10 +3033,12 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * point mapping the mark `area-coords-percent` there, and the processing is then none. Template
  * declarations of modelled types are read into `templates`, and a `qti-template-processing` into
  * `templateProcessing` through `templateRules` in `#plate/model/template.ts`, which marks what the
- * engine does not run as response processing's reader does. Both keep their marks, and an item
- * whose root has a `qti-template-processing` child has no processing, whatever the tree: template
- * processing may set a template variable, a default value or a correct response, and the engine
- * runs none of it yet, so a score computed without it could be wrong.
+ * engine does not run as response processing's reader does. A template variable the model holds
+ * is one the engine holds, unless the item's `qti-template-processing` does not run: then no
+ * template variable is held, so a tree that reads one is marked `variable:<identifier>`, and the
+ * item has no processing, whatever the tree, since that template processing may set a template
+ * variable, a default value or a correct response, so a score computed without it could be
+ * wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -3072,8 +3102,6 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
           outcomes.set(read.value.identifier, read.value);
         }
       } else if (part.local === "qti-template-declaration") {
-        // The vocabulary's `qti-template-declaration` mark stays until the engine runs template
-        // processing (spec D3); `markElement` records it.
         markElement(build, part, false);
         markUnreadWithin(build, part);
 
@@ -3082,10 +3110,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
           templateDeclarations.set(read.value.identifier, read.value);
         }
       } else if (part.local === "qti-template-processing") {
-        // It keeps the mark of an element the model does not read until the engine runs template
-        // processing (spec D3), recorded before the marks its rules add, in document order.
         markElement(build, part, false);
-        record(build, { feature: part.local, path: pathOf(build, part), shown: "mark" });
 
         templateProcessing = yield* templateRules(readingOf(build), part);
       } else {
@@ -3096,10 +3121,16 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       }
     }
 
+    // A `qti-template-processing` that does not run: its rules hold an element the engine does not
+    // run, which `templateRules` marked.
+    const stalled =
+      childrenNamed(root, "qti-template-processing").length > 0 &&
+      Option.isNone(templateProcessing);
     const runs = processing.pipe(
-      Option.flatMap((read) => runnable(build, read, responses, outcomes)),
+      Option.flatMap((read) =>
+        runnable(build, read, responses, outcomes, stalled ? new Map() : templateDeclarations),
+      ),
     );
-    const templated = childrenNamed(root, "qti-template-processing").length > 0;
 
     return {
       body,
@@ -3107,7 +3138,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       identifier,
       lang: valueOf(root, "xml:lang"),
       outcomes,
-      processing: templated ? Option.none() : runs,
+      processing: stalled ? Option.none() : runs,
       responses,
       templateProcessing,
       templates: templateDeclarations,

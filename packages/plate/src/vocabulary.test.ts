@@ -221,6 +221,9 @@ describe("the closed value sets", () => {
           "qti-label",
           "qti-printed-variable",
           ...renders.engine,
+          "qti-template-declaration",
+          "qti-template-processing",
+          ...renders.templateRules,
         ],
       ],
       [
@@ -239,7 +242,6 @@ describe("the closed value sets", () => {
         [
           "string-identifier",
           'adaptive="true"',
-          "qti-template-declaration",
           'base-type="duration"',
           'base-type="file"',
           'cardinality="record"',
@@ -385,6 +387,14 @@ describe("the closed value sets", () => {
 
   it("has every engine name in elements", () => {
     assert.includeMembers([...renders.elements], [...renders.engine]);
+  });
+
+  it("[I-5] has every template rule in elements, and marks no template declaration as such", () => {
+    assert.includeMembers([...renders.elements], [...renders.templateRules]);
+    assert.notInclude(
+      renders.marks.map((mark) => mark.feature),
+      "qti-template-declaration",
+    );
   });
 
   it("[I-5] lists the template rules once each, every one an element the XSD declares", () => {

@@ -4,7 +4,6 @@ import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Expression, TemplateBranch, TemplateRule } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
-import type { UnsupportedFeature } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import { integer } from "#plate/test/fixtures.ts";
 
@@ -12,19 +11,6 @@ import { integer } from "#plate/test/fixtures.ts";
  * The path of the template processing, which every path in these tests starts with.
  */
 const processing = "qti-assessment-item/qti-template-processing";
-
-/**
- * The marks every item {@link templated} builds carries until P7T-04 removes them (spec D3): one
- * per template declaration, then the template processing's.
- */
-const templateMarks: readonly UnsupportedFeature[] = [
-  ...[1, 2].map((position): UnsupportedFeature => ({
-    feature: "qti-template-declaration",
-    path: `qti-assessment-item/qti-template-declaration[${position}]`,
-    shown: "mark",
-  })),
-  { feature: "qti-template-processing", path: processing, shown: "mark" },
-];
 
 /**
  * Construct an item whose template processing holds some rules, beside the template variables `T`
@@ -201,7 +187,7 @@ describe("templateRules", () => {
             { expression: integerOf(0n), identifier: "SCORE", kind: "set-default-value" },
           ]),
         );
-        assert.deepStrictEqual(built.unsupported, templateMarks);
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -269,7 +255,7 @@ describe("templateRules", () => {
             },
           ]),
         );
-        assert.deepStrictEqual(built.unsupported, templateMarks);
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -347,11 +333,7 @@ describe("templateRules", () => {
           );
 
           assert.deepStrictEqual(built.templateProcessing, Option.none(), feature);
-          assert.deepStrictEqual(
-            built.unsupported,
-            [...templateMarks, { feature, path, shown: "mark" }],
-            feature,
-          );
+          assert.deepStrictEqual(built.unsupported, [{ feature, path, shown: "mark" }], feature);
         }
       }),
   );
@@ -389,7 +371,6 @@ describe("templateRules", () => {
 
         assert.deepStrictEqual(built.templateProcessing, Option.none());
         assert.deepStrictEqual(built.unsupported, [
-          ...templateMarks,
           {
             feature: "qti-field-value",
             path: `${processing}/qti-template-condition/qti-template-if/qti-set-template-value/qti-field-value`,
@@ -454,11 +435,7 @@ describe("templateRules", () => {
           );
 
           assert.deepStrictEqual(built.templateProcessing, Option.none(), path);
-          assert.deepStrictEqual(
-            built.unsupported,
-            [...templateMarks, { feature, path, shown: "mark" }],
-            path,
-          );
+          assert.deepStrictEqual(built.unsupported, [{ feature, path, shown: "mark" }], path);
         }
       }),
   );

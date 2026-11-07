@@ -111,9 +111,14 @@ const textSafeElements = [
 ] as const;
 
 /**
- * The declarations whose `base-type` and `cardinality` the model reads.
+ * The declarations whose `base-type` and `cardinality` the model reads: the response, outcome and
+ * template declarations.
  */
-const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
+const declarations = [
+  "qti-response-declaration",
+  "qti-outcome-declaration",
+  "qti-template-declaration",
+] as const;
 
 /**
  * The response rules of the engine: `qti-response-condition` with its three branches,
@@ -248,9 +253,10 @@ export interface Renders {
    */
   readonly controlNotices: readonly FeatureRule[];
   /**
-   * The `qti-*` elements plate renders or reads, the engine's response rules and
-   * `qti-printed-variable`, which the item model holds as a body node, included. The item model
-   * also reads the element of each expression kind the registry has landed (`landedKinds` in
+   * The `qti-*` elements plate renders or reads, the engine's response rules,
+   * `qti-printed-variable`, which the item model holds as a body node, the template declarations,
+   * the template processing and its template rules included. The item model also reads the element
+   * of each expression kind the registry has landed (`landedKinds` in
    * `#plate/model/expressions/read.ts`). Every element in the QTI namespace without the `qti-`
    * prefix is HTML and renders as itself.
    */
@@ -336,6 +342,9 @@ export const renders = {
     "qti-label",
     "qti-printed-variable",
     ...engine,
+    "qti-template-declaration",
+    "qti-template-processing",
+    ...templateRules,
   ],
   engine,
   marks: [
@@ -348,11 +357,6 @@ export const renders = {
       feature: 'adaptive="true"',
       on: ["qti-assessment-item"],
       when: { kind: "attribute-true", name: "adaptive" },
-    },
-    {
-      feature: "qti-template-declaration",
-      on: ["qti-template-declaration"],
-      when: { kind: "element" },
     },
     {
       feature: 'base-type="duration"',
