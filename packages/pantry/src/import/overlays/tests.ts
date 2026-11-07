@@ -612,10 +612,13 @@ const isSite = (view: View, node: NodeRow<Composed>): boolean =>
 
 /**
  * An item ref's or a site's href, resolved as its `ReferencePath` is: its node and kind, its
- * package, and the entry it names. A target this representation does not resolve keeps its
- * directory and target as written, which no `ReferencePath` holds, so "Href form" refuses it.
+ * package, the entry it names, and whether it resolves outside the package, as its `Reference`'s
+ * scope says. A target this representation does not resolve in the package keeps its directory
+ * and target as written, which no `ReferencePath` holds, so "Href form" refuses it unless it is
+ * external.
  */
 export interface ResolvedHref {
+  readonly external: boolean;
   readonly kind: string;
   readonly node: NodeId;
   readonly package: Uuid;
@@ -644,15 +647,17 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
       }
 
       const { target } = referencePiecesOf(lexical);
+      const resolution = resolve(node.id, lexical);
 
       return [
         [
           node.id,
           {
+            external: resolution.scope === "external",
             kind: node.kind,
             node: node.id,
             package: view.ids.package,
-            path: entryPathOf(resolve(node.id, lexical)) ?? `${view.directory}${target}`,
+            path: entryPathOf(resolution) ?? `${view.directory}${target}`,
           },
         ] as const,
       ];
@@ -722,6 +727,7 @@ const sitesOf = (
             ...tupleOf(view, node),
             ancestry: Bits.of(Flag, [...(view.inherited.ancestry.get(node.id) ?? [])]),
             children: BigInt(view.childrenOf.get(node.id)?.length ?? 0),
+            external: href.external,
             governs: node.governs,
             nearestKind: view.inherited.nearestKind.get(node.id) ?? "document",
             package: view.ids.package,
@@ -740,7 +746,8 @@ const sitesOf = (
 /**
  * Write each site's {@link SiteTarget}: the document its href names, with that document's root
  * kind and context, and the site's fields the target's laws read. A site whose href names no
- * listed document has none.
+ * listed document has none, nor does one whose href resolves outside the package, which is stored
+ * as written and never fetched (spec reading 115).
  *
  * @param view - The document.
  * @param sites - The document's sites.
@@ -752,7 +759,7 @@ const siteTargetsOf = (
 ): ReadonlyMap<string, Addition<typeof SiteTarget>> =>
   new Map(
     [...sites.values()].flatMap((site) =>
-      Option.match(targetOf(view, site.path), {
+      Option.match(site.external ? Option.none() : targetOf(view, site.path), {
         onNone: () => [],
         onSome: (target) => [
           [

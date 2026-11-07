@@ -86,7 +86,7 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
-import { hrefPaths, NamedHref } from "#pantry/qti/package.ts";
+import { hrefPaths, NamedHref, Reference } from "#pantry/qti/package.ts";
 
 /**
  * The test's root kind, the root of an assembly whose names and branch rules resolve.
@@ -471,8 +471,10 @@ export const SectionOrdering = relation(
  * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`,
  *   `ancestry`, `document`, `governs`, `kind`, `nearest`, `nearestKind`, `parentKind`, `start`,
  *   `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`; its href's
- *   `package` and `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`); and the scope
- *   it is placed in, its parent's: `part`, `replaced` (its parent section's `replacing`),
+ *   `package` and `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`, where its href
+ *   stays in the package); `external`, whether its href resolves outside the package, which its
+ *   href's `Reference` row proves (an include's then is stored as written and never fetched); and
+ *   the scope it is placed in, its parent's: `part`, `replaced` (its parent section's `replacing`),
  *   `parentMixes` and `parentLooseChain`.
  *
  * The document its href names is its {@link SiteTarget}, a row of its own, since a href may name
@@ -484,6 +486,7 @@ export const Site = relation(
     ancestry: bits(Flag),
     children: natural,
     document: uuid,
+    external: pg.boolean,
     governs: closedId(TypeName),
     kind: closedId(NodeKind),
     nearest: uuid,
@@ -961,9 +964,30 @@ const sectionRefSites = select(Site, (s) => s.eq(s.kind, sectionRefKind));
 const sectionRefTargets = select(SiteTarget, (s) => s.eq(s.kind, sectionRefKind));
 
 /**
- * The sites that are includes, each naming a document of the package (spec reading 115).
+ * The sites that are includes whose href stays in the package, each naming a document of the
+ * package (spec reading 115). An include whose href resolves outside it is stored as written and
+ * never fetched, so it names none.
  */
-const includeSites = select(Site, (s) => s.eq(s.kind, includeKind));
+const includeSites = select(Site, (s) => s.and(s.eq(s.kind, includeKind), s.eq(s.external, false)));
+
+/**
+ * The sites whose href has its entry path in the package: every section ref, which names a section
+ * document wherever its href resolves, and every include whose href stays in the package.
+ */
+const entrySites = select(Site, (s) => s.or(s.eq(s.kind, sectionRefKind), s.eq(s.external, false)));
+
+/**
+ * The sites marked external, each proven by its href's {@link externalHrefs} row.
+ */
+const externalSites = select(Site, (s) => s.eq(s.external, true));
+
+/**
+ * The `href` references that resolve outside the package, one per element, a constant selection
+ * keyed by its node: the side a site's external mark is proven by (readings 35 and 102).
+ */
+const externalHrefs = select(Reference, (r) =>
+  r.and(r.eq(r.name, "href"), r.eq(r.scope, "external")),
+);
 
 /**
  * The targets of the sites that are includes, each with its {@link Inclusion}.
@@ -1380,7 +1404,9 @@ export const testOverlayLaws = [
     nodeContext,
   ),
   contained(on(Site, "node", "parent"), on(Node, "id", "parent")),
-  contained(on(Site, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
+  contained(on(entrySites, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
+  key(on(externalHrefs, "node")),
+  contained(on(externalSites, "node"), on(externalHrefs, "node")),
   key(on(sectionDocuments, "package", "path")),
   contained(
     on(sectionRefTargets, "package", "path", "target"),
@@ -2007,10 +2033,12 @@ export const itemRefLaws = [
  *   members` unless the selection is with replacement, and info §4.2.2's `Selection_required`,
  *   `required ≤ select`;
  * - **the hrefs:** each item ref and site has its href's `ReferencePath` (`#pantry/qti/package.ts`
- *   `hrefPaths`), an entry of the package, under the stated limit `Href_form`;
+ *   `hrefPaths`), an entry of the package, under the stated limit `Href_form`, but an include whose
+ *   href resolves outside the package, marked `external` as its href's `Reference` proves;
  * - **the sites** ({@link Site}, {@link SiteTarget}): each names a document of the package, its
- *   target, a row of its own ("Include target", reading 115), and each section ref and
- *   section-level include names a section document;
+ *   target, a row of its own ("Include target", reading 115), but an external include, stored as
+ *   written and never fetched; and each section ref and section-level include names a section
+ *   document;
  * - **the branch rules** ({@link BranchRule}): each one that names no exit;
  * - **the mappings** ({@link VariableMapping}): no two of one item ref name one target, and none a
  *   session variable (reading 97, `Variable_mapping_target`);
