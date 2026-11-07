@@ -8,9 +8,10 @@
  * A package is an {@link ItemRefPackage}:
  *
  * - **what the item ref names** ({@link ItemTarget}): an item the package lists, an LTI link (an
- *   `imslti_xmlv1p1` resource, which QTI 3.0.1 lists and which declares no variable), a path no
- *   resource lists, or an item resource whose file the package lacks;
- * - **its template defaults**, each naming the item's template `T`, its outcome `SCORE`, its response
+ *   `imslti_xmlv1p1` resource, which QTI 3.0.1 lists and which declares no variable), a resource of
+ *   another type (a `webcontent` page), a path no resource lists and no file holds, a file the
+ *   package holds but no resource lists, or an item resource whose file the package lacks;
+ * - **its elements**, none, or each naming the item's template `T`, its outcome `SCORE`, its response
  *   `R` or the undeclared `U`, with an integer or a float expression;
  * - **its variable mappings**, each naming a source of the same four (`MISSING` for none), and a
  *   target that is a fresh name, the item's other outcome `X`, the source itself, or the session
@@ -31,7 +32,7 @@ import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 /**
  * What the item ref's href names.
  */
-export type ItemTarget = "item" | "lti" | "missing" | "unlisted";
+export type ItemTarget = "item" | "lti" | "missing" | "other" | "stray" | "unlisted";
 
 /**
  * Every {@link ItemTarget}.
@@ -40,6 +41,8 @@ export const itemTargets: readonly [ItemTarget, ...ItemTarget[]] = [
   "item",
   "lti",
   "missing",
+  "other",
+  "stray",
   "unlisted",
 ];
 
@@ -130,6 +133,8 @@ const declaration = '<?xml version="1.0" encoding="UTF-8"?>';
 export const paths = {
   item: "items/a.xml",
   link: "links/a.xml",
+  page: "items/page.html",
+  stray: "items/stray.xml",
   test: "test.xml",
   unlisted: "items/unlisted.xml",
 } as const;
@@ -162,12 +167,20 @@ const linkText = [
 ].join("\n");
 
 /**
+ * A web page, the content of the `webcontent` resource an item ref may name in place of an item.
+ */
+const pageText =
+  "<!DOCTYPE html>\n<html><head><title>A page</title></head><body><p>A page.</p></body></html>\n";
+
+/**
  * The path the item ref's href names, by what it names.
  */
 const hrefOf: Readonly<Record<ItemTarget, string>> = {
   item: paths.item,
   lti: paths.link,
   missing: paths.item,
+  other: paths.page,
+  stray: paths.stray,
   unlisted: paths.unlisted,
 };
 
@@ -216,7 +229,8 @@ const testOf = (input: ItemRefPackage): string => {
 
 /**
  * Write the manifest: the test, and the item, the LTI link, or the item whose file is missing, as
- * the package's target says; an unlisted target lists nothing at its path.
+ * the package's target says, or a web page for another type; an unlisted or stray target lists
+ * nothing at its path.
  *
  * @param input - The package.
  * @returns Its text.
@@ -248,6 +262,13 @@ const manifestOf = (input: ItemRefPackage): string =>
           "    </resource>",
         ]
       : []),
+    ...(input.target === "other"
+      ? [
+          `    <resource identifier="page" type="webcontent" href="${paths.page}">`,
+          `      <file href="${paths.page}"/>`,
+          "    </resource>",
+        ]
+      : []),
     "  </resources>",
     "</manifest>",
     "",
@@ -255,7 +276,8 @@ const manifestOf = (input: ItemRefPackage): string =>
 
 /**
  * Build a package's entries: the manifest, the test, and the item or the link where the package
- * holds one. A missing item's file is no entry, and an unlisted path is no entry either.
+ * holds one: the page for another type, and a stray item no resource lists. A missing item's file
+ * is no entry, and an unlisted path is no entry either.
  *
  * @param input - The package.
  * @returns The entries, by path.
@@ -268,6 +290,8 @@ export const itemRefPackageEntries = (input: ItemRefPackage): PackageEntries => 
     [paths.test, text.encode(testOf(input))],
     ...(input.target === "item" ? [[paths.item, text.encode(itemText)] as const] : []),
     ...(input.target === "lti" ? [[paths.link, text.encode(linkText)] as const] : []),
+    ...(input.target === "other" ? [[paths.page, text.encode(pageText)] as const] : []),
+    ...(input.target === "stray" ? [[paths.stray, text.encode(itemText)] as const] : []),
   ]);
 };
 
@@ -306,13 +330,16 @@ export const mappingSpecs: readonly [MappingSpec, ...MappingSpec[]] = [
 ];
 
 /**
- * The small box: every item ref target with one template default, or one mapping, of every shape:
- * 4 × (8 + 32) = 160 packages, so each law is judged over every name a single element can name,
- * under every target.
+ * The small box: every item ref target with no element, one template default, or one mapping, of
+ * every shape: 6 × (1 + 8 + 32) = 246 packages, so each law is judged over every name a single
+ * element can name, under every target, and the item ref's own law alone.
  */
 export const smallItemRefPackage: Gen<ItemRefPackage> = (source) => {
   const target = source.draw(element(itemTargets));
-  const arm = source.draw(element(["default", "mapping"] as const));
+  const arm = source.draw(element(["bare", "default", "mapping"] as const));
+  if (arm === "bare") {
+    return { defaults: [], mappings: [], target };
+  }
 
   return arm === "default"
     ? { defaults: [source.draw(element(templateSpecs))], mappings: [], target }
@@ -326,6 +353,8 @@ export const itemRefFeatures = [
   "lti link",
   "unlisted path",
   "missing file",
+  "other type",
+  "stray file",
   "undeclared names",
   "wrong kinds",
   "reads",
@@ -346,6 +375,8 @@ const targetsByFeature = {
   "lti link": "lti",
   mappings: "item",
   "missing file": "missing",
+  "other type": "other",
+  "stray file": "stray",
   "unlisted path": "unlisted",
 } as const satisfies Readonly<Record<string, ItemTarget>>;
 
@@ -375,9 +406,14 @@ const swarmedPackageOf =
   (source) => {
     const itemTarget =
       targetsByFeature[
-        swarmChoice(drawn, ["lti link", "unlisted path", "missing file", "mappings"] as const)(
-          source,
-        )
+        swarmChoice(drawn, [
+          "lti link",
+          "unlisted path",
+          "missing file",
+          "other type",
+          "stray file",
+          "mappings",
+        ] as const)(source)
       ];
     const nameOf = (lawful: "SCORE" | "T"): Named => {
       const arm = swarmChoice(drawn, ["undeclared names", "wrong kinds", "mappings"] as const)(

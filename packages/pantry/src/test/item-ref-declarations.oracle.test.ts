@@ -1,26 +1,29 @@
 /**
- * An item ref's declarations against the law oracle (lane NIL, the audit's A17 to A22): every
+ * An item ref's target, item and declarations against the law oracle (lane NIL, the audit's A13
+ * to A22 and NS3): every
  * package the item-ref-declarations generator (`#pantry/test/gen/item-ref-declarations.ts`) draws,
  * exhausted in a small box and sampled by a swarm beyond it, is judged two ways, and the import's
  * rows are held to the ruling that a missing value is a row of its own relation, never a sentinel.
  *
  * - **The law oracle** (`#pantry/test/oracle.ts`) judges the package's documents as written: its
- *   `Template default target`, `Template default type`, `Variable mapping source` and `Variable
- *   mapping target` breaches, each by the name its element writes.
+ *   `Item ref target`, `Template default target`, `Template default type`, `Variable mapping
+ *   source` and `Variable mapping target` breaches, each by the name its element writes.
  * - **The schema's laws, restated on the host** over the import's rows (`readProgram`): the existence
  *   of each template default's `TemplateDefaultTarget` and each mapping's
  *   `MappingSourceDeclaration`, their containments into `ItemRefDocument` and `Declaration`, their
  *   CHECKs, a mapped reading's declaration (its mapping's source's), `MappingLookup`'s forced and
- *   justified rows, and `VariableMapping`'s key and session check. Each law carries the name
- *   `src/import/refusal.ts` gives the schema's statement of it ({@link hostLaws}, held to
- *   `lawRules` by the first test).
+ *   justified rows, `VariableMapping`'s key and session check, and what each item ref names: its
+ *   `ItemRefTarget` and `ItemRefDocument`, each a row only where the package holds it, and the
+ *   assembly's names' copies of them. Each law carries the name `src/import/refusal.ts` gives the
+ *   schema's statement of it ({@link hostLaws}, held to `lawRules` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
  * mapping whose source its item declares nothing under, which `Variable mapping source` refuses
- * anyway, is not judged for its target. No package is accepted by one and refused by the other.
- * And every rule the host's laws refuse under is a rule the oracle predicts, so a package the
- * oracle refuses for one cause is refused under that cause's rule alone.
+ * anyway, is not judged for its target. No package is accepted by one and refused by the other. And
+ * every rule the host's laws refuse under is a rule the oracle predicts, so a package the oracle
+ * refuses for one cause is refused under that cause's rule alone. No row holds the nil uuid, no
+ * target a `none` type, and no family member lacks its owner (`#pantry/test/family-owners.ts`).
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -45,6 +48,8 @@ import type {
   TemplateDefaultTarget,
 } from "#pantry/qti/expressions.ts";
 import type { VariableMapping } from "#pantry/qti/tests.ts";
+import { itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
+import { orphansOf } from "#pantry/test/family-owners.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import {
   declaredKinds,
@@ -73,6 +78,7 @@ const nil = "00000000-0000-0000-0000-000000000000";
  * The laws this file compares, by the oracle's names.
  */
 const comparedLaws: ReadonlySet<LawName> = new Set([
+  "Item ref target",
   "Template default target",
   "Template default type",
   "Variable mapping source",
@@ -107,6 +113,21 @@ interface HostBreach {
  * `lawRules`, with the law name the host gives its breaches.
  */
 const hostLaws: readonly (readonly [string, LawName | "E1 derived"])[] = [
+  ["check Item_ref_target", "Item ref target"],
+  ["contained Node(id) in ItemRefTarget(node)", "Item ref target"],
+  [
+    "contained ItemRefTarget(node, package, path) in ItemRefDocument(node, package, path)",
+    "Item ref target",
+  ],
+  [
+    "contained ItemRefDocument(document, package, path) in Document(node, package, path)",
+    "Item ref target",
+  ],
+  ["contained NameLookup(node, resourceType) in ItemRefTarget(node, type)", "Item ref target"],
+  [
+    "contained NameLookup(node, itemDocument) in ItemRefDocument(node, document)",
+    "Item ref target",
+  ],
   ["contained TemplateDefault(node) in TemplateDefaultTarget(node)", "Template default target"],
   [
     "contained TemplateDefaultTarget(itemRef, itemDocument) in ItemRefDocument(node, document)",
@@ -404,6 +425,76 @@ const lookupBreaches = (rows: HostRows): readonly HostBreach[] => {
 };
 
 /**
+ * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item
+ * ref has its target, of the item type or an LTI type, named by a resource of the package; each of
+ * the item type has its document, whose root is an item, and no other has one; and each found
+ * item ref of the assembly's names reads its type and its item from them. Each is named by the
+ * empty name, as the oracle keys the law by its path alone.
+ *
+ * @param inputs - The import's rows.
+ * @returns The breaches.
+ */
+const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
+  const law = "Item ref target";
+  const targets = [...inputs.ItemRefTarget.values()];
+  const documents = [...inputs.ItemRefDocument.values()];
+  const itemTypes: ReadonlySet<string> = new Set([itemResourceType, ...linkResourceTypes]);
+  const itemRefs = [...inputs.Named.values()].filter(
+    ({ kind }) => kind === "qti-assessment-item-ref",
+  );
+  const found = [...inputs.NameLookup.values()].filter(
+    ({ found: held, kind }) => held && kind === "qti-assessment-item-ref",
+  );
+
+  return [
+    ...itemRefs.flatMap(({ node }) => unless(inputs.ItemRefTarget.has(node), law, "")),
+    ...targets.flatMap((target) => [
+      ...unless(itemTypes.has(target.type), law, ""),
+      ...unless(
+        [...inputs.NamedHref.values()].some(
+          ({ package: held, path, type }) =>
+            held === target.package && path === target.path && type === target.type,
+        ),
+        law,
+        "",
+      ),
+      ...unless(
+        target.type !== itemResourceType ||
+          documents.some(
+            ({ node, package: held, path }) =>
+              node === target.node && held === target.package && path === target.path,
+          ),
+        law,
+        "",
+      ),
+    ]),
+    ...documents.flatMap((document) => [
+      ...unless(inputs.ItemRefTarget.get(document.node)?.type === itemResourceType, law, ""),
+      ...unless(
+        [...inputs.Document.values()].some(
+          ({ node, package: held, path, rootKind }) =>
+            node === document.document &&
+            held === document.package &&
+            path === document.path &&
+            rootKind === "qti-assessment-item",
+        ),
+        law,
+        "",
+      ),
+    ]),
+    ...found.flatMap((name) => [
+      ...unless(inputs.ItemRefTarget.get(name.node)?.type === name.resourceType, law, ""),
+      ...unless(
+        name.resourceType !== itemResourceType ||
+          inputs.ItemRefDocument.get(name.node)?.document === name.itemDocument,
+        law,
+        "",
+      ),
+    ]),
+  ];
+};
+
+/**
  * Judge the import's rows by the schema's laws over an item ref's declarations, restated on the
  * host, each breach named by its law and the name its element writes.
  *
@@ -445,6 +536,7 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     ...keyBreaches(rows),
     ...readingBreaches(rows),
     ...lookupBreaches(rows),
+    ...itemRefBreaches(inputs),
   ];
 };
 
@@ -495,6 +587,8 @@ type Situation =
   | "accepted"
   | "lti link"
   | "missing file"
+  | "other type"
+  | "stray file"
   | "read through a mapping"
   | "refused for one cause"
   | "refused"
@@ -519,6 +613,8 @@ const situationsOf = (input: ItemRefPackage, rules: ReadonlySet<string>): readon
     ...(input.target === "lti" ? ["lti link" as const] : []),
     ...(input.target === "missing" ? ["missing file" as const] : []),
     ...(input.target === "unlisted" ? ["unlisted path" as const] : []),
+    ...(input.target === "other" ? ["other type" as const] : []),
+    ...(input.target === "stray" ? ["stray file" as const] : []),
     ...(names.includes("U") ? ["undeclared" as const] : []),
     ...(input.defaults.some(({ template }) => wrongKind(template, "qti-template-declaration")) ||
     input.mappings.some(({ source }) => wrongKind(source, "qti-outcome-declaration"))
@@ -559,6 +655,19 @@ const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal:
   ].filter((value) => value === nil);
 
   assert.deepStrictEqual(nilFields, [], `${literal}: a row holds the nil uuid`);
+  assert.deepStrictEqual(
+    [
+      ...[...inputs.ItemRefDocument.values()].flatMap((row) => Object.values(row)),
+      ...[...inputs.NameLookup.values()].flatMap((row) => Object.values(row)),
+    ].filter((value) => value === nil),
+    [],
+    `${literal}: an item ref's item or an assembly's name holds the nil uuid`,
+  );
+  assert.isFalse(
+    [...inputs.ItemRefTarget.values()].some(({ type }) => type === "none"),
+    `${literal}: an item ref's target stands for a resource the package lacks`,
+  );
+  assert.deepStrictEqual(orphansOf(inputs), [], `${literal}: a family member has no owner`);
   assert.isFalse(
     [...inputs.TemplateDefault.values()].some(({ lexical }) => lexical === ""),
     `${literal}: a template default's row stands for an unwritten template-identifier`,
@@ -660,18 +769,21 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "every package of the small box gets the oracle's breaches from its import rows, and no row holds a sentinel",
       (ctx) =>
         // Oracle: the law oracle's four laws over the package as written, against the schema's
-        // laws restated over the import's rows. Bound: each of four item ref targets with one
-        // template default of each of eight shapes, or one mapping of each of 32: 160 packages.
+        // laws restated over the import's rows. Bound: each of six item ref targets with no
+        // element, one template default of each of eight shapes, or one mapping of each of 32:
+        // 246 packages.
         searched(
           ctx,
           exhaust(
             {
-              box: "4 item ref targets × (8 template defaults + 32 mappings)",
+              box: "6 item ref targets × (no element + 8 template defaults + 32 mappings)",
               caseHang: Duration.seconds(30),
               coverage: requiredInSpace<Situation>([
                 "accepted",
                 "lti link",
                 "missing file",
+                "other type",
+                "stray file",
                 "read through a mapping",
                 "refused",
                 "refused for one cause",
@@ -680,7 +792,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 "wrong kind",
               ]),
               generator: smallItemRefPackage,
-              limit: 200,
+              limit: 300,
               literal: itemRefPackageLiteral,
               oracle: { kind: "second-implementation", name: "the law oracle's item ref laws" },
               suite: "pantry/test/item-ref-declarations-box",
@@ -695,7 +807,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "every sampled package, drawn by its own swarm, gets the oracle's breaches from its import rows",
       (ctx) =>
         // Oracle: as the box's. Bound: up to three template defaults and three mappings, each
-        // case under its own swarm of nine features; 200 runs.
+        // case under its own swarm of eleven features; 200 runs.
         searched(
           ctx,
           explore(

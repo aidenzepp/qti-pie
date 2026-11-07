@@ -1930,10 +1930,12 @@ interface ItemRefRows {
 }
 
 /**
- * Write what each item ref names (the UP audit's B2 and B3): its href's path and the type of the
- * resource of the package whose href's path that is, an item's before an LTI link's before any
- * other, `none` where no resource names it, which "Item ref target" refuses; and, for an item, the
- * document there, the nil uuid where the package holds none, which no `Document` row holds.
+ * Write what each item ref names (the UP audit's B2 and B3), each a row only where the package
+ * holds it (lane NIL's NS3: a missing value is a row of its own relation, never a sentinel): its
+ * href's path and the type of the resource of the package whose href's path that is, an item's
+ * before an LTI link's before any other, and none where no resource names it; and, for an item,
+ * the document there, and none where the package holds no document at that path. "Item ref target"
+ * refuses an item ref with no target, or of the item type with no document.
  *
  * @param documents - Every document of the package.
  * @param resources - The package's resources.
@@ -1950,17 +1952,20 @@ const itemRefTargetsOf = (
   for (const { ids, tree } of documents) {
     for (const href of itemRefPathsOf(tree, ids)) {
       const types = (typesAt.get(href.path) ?? []).map(({ type }) => type);
-      const type =
-        preferred.find((wanted) => types.includes(wanted)) ?? types[0] ?? ("none" as const);
-      itemRefTargets.set(href.node, {
-        node: href.node,
-        package: href.package,
-        path: href.path,
-        type,
-      });
-      if (type === itemResourceType) {
+      const type = preferred.find((wanted) => types.includes(wanted)) ?? types[0];
+      if (type !== undefined) {
+        itemRefTargets.set(href.node, {
+          node: href.node,
+          package: href.package,
+          path: href.path,
+          type,
+        });
+      }
+
+      const document = type === itemResourceType ? ids.documentAt(href.path) : Option.none();
+      if (Option.isSome(document)) {
         itemRefDocuments.set(href.node, {
-          document: Option.getOrElse(ids.documentAt(href.path), () => nilUuid),
+          document: document.value,
           node: href.node,
           package: href.package,
           path: href.path,
@@ -2054,7 +2059,10 @@ const mappingSourcesOf = (
 /**
  * Force every written element of every test's assembly into the name lookups: its node, kind and
  * placements, one instance that places it and whether a replacement can repeat it there, and,
- * for an item ref, what it names.
+ * for an item ref, what it names. An item ref of the item type whose item the package holds no
+ * document of takes the test itself as its item, `NameLookup`'s null object for "no item"
+ * (`representation-gaps.md` §4.3), which `ItemRefDocument` holds no row of, so "Item ref target"
+ * refuses it as it refuses the item ref.
  *
  * @param documents - Every document of the package.
  * @param assembled - The package's assemblies.
@@ -2084,7 +2092,7 @@ const forceNames = (
         assembly: name.assembly,
         found: true,
         instance: placements[0]?.instance ?? name.assembly,
-        itemDocument: holdsItem ? (lookups.items.get(name.node) ?? nilUuid) : name.assembly,
+        itemDocument: holdsItem ? (lookups.items.get(name.node) ?? name.assembly) : name.assembly,
         kind,
         name: name.identifier,
         node: name.node,

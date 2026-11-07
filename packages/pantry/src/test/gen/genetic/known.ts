@@ -55,42 +55,6 @@ export const knownEntries = (known: Known): PackageEntries =>
  * The known disagreements, keyed by signature.
  */
 export const known = {
-  "dangling-uuid: ItemRefDocument.document": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item2.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
-  "dangling-uuid: NameLookup.itemDocument": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
   "dangling-uuid: PlacedVariableRef.declaration": {
     files: [
       [
@@ -583,33 +547,6 @@ export const known = {
     fix: "(3): no package record is written from a cp:* element outside imsmanifest.xml, and the oracle bounds no key text of one",
     owner: "GEN-A",
   },
-  "import-only-law: E1 derived, contained NameLookup(node, resourceType) in ItemRefTarget(node, type)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-        ],
-        [
-          "test.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section>
-        
-        <qti-assessment-section>
-          
-          <qti-assessment-item-ref identifier="i27">
-          </qti-assessment-item-ref>
-        </qti-assessment-section>
-        
-      </qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-        ],
-      ],
-      fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-      owner: "NIL",
-    },
   "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
     files: [
       [
@@ -1185,6 +1122,24 @@ export const fixed = {
     fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
     owner: "NIL",
   },
+  "dangling-uuid: ItemRefDocument.document": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item2.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
+    owner: "NIL",
+  },
   "dangling-uuid: MappingLookup.declaration": {
     files: [
       [
@@ -1301,6 +1256,24 @@ export const fixed = {
     fix: "A17-A22: a template default, mapping source or lookup that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
+  "dangling-uuid: NameLookup.itemDocument": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
+    owner: "NIL",
+  },
   "dangling-uuid: PlacedId.copy": {
     files: [
       [
@@ -1405,6 +1378,33 @@ export const fixed = {
     fix: "PG's Expression base type commit: an attribute-typed expression whose base-type spells no base is unknown, and ResultBase judges no such one (resultTyped), so the containment this class broke no longer reads it and its statement is another",
     owner: "PG",
   },
+  "import-only-law: E1 derived, contained NameLookup(node, resourceType) in ItemRefTarget(node, type)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+        ],
+        [
+          "test.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section>
+        
+        <qti-assessment-section>
+          
+          <qti-assessment-item-ref identifier="i27">
+          </qti-assessment-item-ref>
+        </qti-assessment-section>
+        
+      </qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+        ],
+      ],
+      fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
+      owner: "NIL",
+    },
   "import-only-law: Idref target, contained IdrefTarget(document, id) in IdBinding(document, id)": {
     files: [
       [

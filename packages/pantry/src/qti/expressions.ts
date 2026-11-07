@@ -1703,8 +1703,6 @@ export const referenceLawsByName = {
       on(foundNames, "instance", "node", "assembly", "replaced"),
       on(InstanceName, "instance", "node", "assembly", "replaced"),
     ),
-    contained(on(foundItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
-    contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
     check("E1_derived", NameLookup, (n) =>
       n.or(
         n.and(
@@ -2089,6 +2087,13 @@ export const referenceLawsByName = {
     check("Item_duration", Reading, (r) =>
       r.or(r.not(readsItemDuration(r)), r.eq(r.timeDependent, true)),
     ),
+  ],
+  "Item ref target": [
+    // A found item ref's target and item are its `ItemRefTarget`'s and `ItemRefDocument`'s, each a
+    // row only where the package holds one, so an item ref naming no resource of the package, or an
+    // item whose file it lacks, is refused here under the law that refuses the item ref itself.
+    contained(on(foundItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
+    contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
   ],
   "Prefixed reference": [
     key(on(resolvingReadings, "assembly", "node", "attribute")),
