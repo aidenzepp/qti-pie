@@ -632,7 +632,7 @@ const unflattened: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * A pattern law, its source and its flags.
+ * A pattern law: its field's relation and name, and its source and flags.
  */
 type PatternLaw = Extract<Law, { readonly kind: "pattern" }>;
 
@@ -644,9 +644,10 @@ const patternLaws: readonly PatternLaw[] = writtenLaws.flatMap(([law]) =>
 );
 
 /**
- * Each pattern law's fields: every field whose type's pattern grizzle's `sameLaw` holds to be the
- * law, as `[relation, field]`. A pattern no row of the table names is left out, since no refusal
- * could name it.
+ * Each pattern law's field, as `[relation, field]`: the field of a stored relation whose own
+ * pattern law, grizzle's one per field, `sameLaw` holds to be the law. A law of a field the host
+ * reads no pattern of here (a generated or accumulated one, whose descriptor carries its type's) is
+ * left out, so its verdict is unknown.
  */
 const patternFields: ReadonlyMap<PatternLaw, readonly (readonly [string, string])[]> = (() => {
   const byLaw = new Map<PatternLaw, (readonly [string, string])[]>();
@@ -655,7 +656,13 @@ const patternFields: ReadonlyMap<PatternLaw, readonly (readonly [string, string]
       const law =
         kind === "relation" && pattern !== undefined
           ? patternLaws.find((stated) =>
-              sameLaw(stated, { flags: pattern.flags, kind: "pattern", source: pattern.source }),
+              sameLaw(stated, {
+                field,
+                flags: pattern.flags,
+                kind: "pattern",
+                relation: name,
+                source: pattern.source,
+              }),
             )
           : undefined;
       if (law !== undefined) {
@@ -668,7 +675,7 @@ const patternFields: ReadonlyMap<PatternLaw, readonly (readonly [string, string]
 })();
 
 /**
- * Each field's type's pattern law, by `Relation.field`.
+ * Each field's pattern law, by `Relation.field`.
  */
 const fieldPatterns: ReadonlyMap<string, PatternLaw> = new Map(
   [...patternFields].flatMap(([law, fields]) =>
@@ -684,12 +691,12 @@ const generatedRelations: ReadonlyMap<Law, string> = new Map(
 );
 
 /**
- * Judge a pattern law over a program's rows: every row of every relation whose field's type it is
- * holds a value its pattern matches. A relation the program writes no row of holds it.
+ * Judge a pattern law over a program's rows: every row of its field's relation holds a value its
+ * pattern matches. A relation the program writes no row of holds it.
  *
  * @param view - The rows.
  * @param law - The pattern law.
- * @param fields - Its fields, as `[relation, field]`.
+ * @param fields - Its field, as `[relation, field]`.
  * @returns Its verdict.
  */
 const patternVerdictOf = (

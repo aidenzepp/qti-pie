@@ -108,7 +108,6 @@ import {
   on,
   relation,
   select,
-  str,
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
@@ -123,7 +122,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { baseTypes, languageTag } from "#pantry/grammar/attributes.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
@@ -200,13 +199,6 @@ export const identifierPattern = `^[${xmlNonSpace}]+$`;
  * one included, names no language (RFC 5646 §2.1), so the root states none (spec reading 151).
  */
 export const languageTagPattern = `^(?:${languageTag})$`;
-
-/**
- * XML whitespace `S`, possibly none: what a piece's text holds around its token.
- *
- * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
- */
-const Space = str.regex("^[\\t\\n\\r ]*$");
 
 /**
  * A resource as the LOM laws read it, keyed by its `cp:resource` node: `named`, the type of the
@@ -537,6 +529,13 @@ export const LomObjectTitle = relation(
 );
 
 /**
+ * The text type of a usage statistic's day, `lexical(date)`: the language `DateDType` states,
+ * which {@link StatisticDate} casts total. Exported for `src/import/refusal.ts`, which names its
+ * pattern law.
+ */
+export const DayForm = lexical(date);
+
+/**
  * The day a usage statistic was last updated, keyed by the statistic: its `lastUpdated` as written,
  * `lexical`, in pieces, `lead ‖ day ‖ trail`, and `date`, the day as PostgreSQL's `date` derives it
  * from `day` (G-parse).
@@ -547,7 +546,7 @@ export const LomObjectTitle = relation(
  */
 export const StatisticDate = relation.generated(
   "StatisticDate",
-  { day: lexical(date), lead: Space, lexical: keyText, node: uuid, trail: Space },
+  { day: DayForm, lead: Space, lexical: keyText, node: uuid, trail: Space },
   ["node"],
   (s) => ({ date: generated(date, Compute.cast(s.day, date)) }),
 );

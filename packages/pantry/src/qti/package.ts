@@ -78,7 +78,7 @@ import {
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { anyText, keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
@@ -93,11 +93,9 @@ export const manifestPath = "imsmanifest.xml";
  * (`#pantry/import/record.ts` `packageNameOf`), any text: no law and no export reads it, and no key
  * holds it, so it carries no shape and no bound.
  */
-export const Package = relation(
-  "Package",
-  { entries: drawn(natural), id: uuid, name: str.regex("^.*$", "su") },
-  ["id"],
-);
+export const Package = relation("Package", { entries: drawn(natural), id: uuid, name: anyText }, [
+  "id",
+]);
 
 /**
  * One entry of a package, the record (plan §1.6, fin.md P7): its path and its bytes, at its slot in

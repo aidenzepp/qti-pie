@@ -1,7 +1,9 @@
 /**
- * Declarations that have no `Declaration` row, as packages (lane NIL's audit, B10 and B11): every
- * declaration of the every-relation items and test, each with its `identifier`, `cardinality` or
- * `base-type` dropped, emptied or written as no value spells.
+ * Declarations that have no `Declaration` row, as packages (lane NIL's audit, B11): every
+ * declaration of the every-relation items and test, each with its `cardinality` or `base-type`
+ * dropped, emptied or written as no value spells. A declaration whose `identifier` is dropped or
+ * names nothing keeps its row and everything below it, and has no name alone (spec reading 157),
+ * which `src/import/overlays/unnamed-declarations.oracle.test.ts` holds.
  *
  * Such a declaration has no row, and nothing binds, references or hangs from it in the importer's
  * rows (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`): its own law, AL3's
@@ -114,13 +116,12 @@ export const declarationSites: readonly DeclarationSite[] = declaringPaths.flatM
  * there from the one written (none to drop it), and the rule the oracle names it by. `alone` says
  * the oracle names that rule and no other: so where only the cardinality changes, every reference
  * still resolves and types nothing, and where only the base type does, no law reads a type it does
- * not spell; an identifier dropped or emptied leaves its references naming no declaration, which
- * their own laws refuse beside it.
+ * not spell.
  */
 export interface DeclarationState {
   readonly alone: boolean;
   readonly applies: (site: DeclarationSite) => boolean;
-  readonly attribute: "base-type" | "cardinality" | "identifier";
+  readonly attribute: "base-type" | "cardinality";
   readonly name: string;
   readonly rule: "attribute-lexical" | "required-attribute";
   readonly value?: (written: string) => string;
@@ -130,21 +131,6 @@ export interface DeclarationState {
  * Every state that leaves a declaration no row.
  */
 export const declarationStates: readonly DeclarationState[] = [
-  {
-    alone: false,
-    applies: () => true,
-    attribute: "identifier",
-    name: "identifier dropped",
-    rule: "required-attribute",
-  },
-  {
-    alone: false,
-    applies: () => true,
-    attribute: "identifier",
-    name: "identifier empty",
-    rule: "attribute-lexical",
-    value: () => "",
-  },
   {
     alone: true,
     applies: () => true,

@@ -17,7 +17,7 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import { Option } from "effect";
-import { collapse } from "#pantry/grammar/domains.ts";
+import { collapse, isNcName } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
   GoverningOf,
@@ -404,30 +404,38 @@ interface Tree {
 
 /**
  * Split an ID's lexical form into its `DocumentId` row, bound to an owner: the whitespace before
- * its value, its value, and the whitespace after (`piecesOf`). A form with whitespace inside its
- * value keeps it in `id`, which the database's `E1_derived` then refuses where the value must hold
- * none, as AL1's lexical half does.
+ * its value, its value, and the whitespace after (`piecesOf`), where the value is an NCName
+ * ({@link isNcName}). Any other form, empty, whitespace alone or holding whitespace inside, is no
+ * ID value and has no row, so its value domain or TextDomain refuses it alone (spec reading 156).
  *
  * @param tree - The document's tree.
  * @param node - The element that carries the ID.
  * @param lexical - The ID's lexical form.
  * @param owner - The element its binding names: the attribute's element, or the text's parent.
- * @returns The row.
+ * @returns The row, none where the form names nothing.
  */
 const documentIdOf = (
   tree: Tree,
   node: NodeId,
   lexical: string,
   owner: NodeId,
-): Addition<typeof DocumentId> => {
-  const { lead, token, trail } = piecesOf(lexical);
-
-  return { after: trail, before: lead, document: tree.document, id: token, lexical, node, owner };
-};
+): Option.Option<Addition<typeof DocumentId>> =>
+  Option.map(
+    Option.liftPredicate(piecesOf(lexical), ({ token }) => isNcName(token)),
+    ({ lead, token, trail }) => ({
+      after: trail,
+      before: lead,
+      document: tree.document,
+      id: token,
+      lexical,
+      node,
+      owner,
+    }),
+  );
 
 /**
- * Build the rows a document's attributes give: each attribute ID's `DocumentId` and the `LabelUse`
- * of each `label` that asks for its tool.
+ * Build the rows a document's attributes give: each attribute ID's `DocumentId` where its value is
+ * an NCName, and the `LabelUse` of each `label` that asks for its tool.
  *
  * @param tree - The document's tree.
  * @returns The rows, each by its key text.
@@ -440,10 +448,12 @@ const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUs
   for (const attribute of tree.rows.attributes) {
     const element = tree.nodeAt(attribute.node);
     const { lexical, name, node } = attribute;
-    // An element's first ID-typed attribute is its ID; XML Schema gives it no second, which
-    // "DocumentId key"'s key over the ID-typed attributes' node refuses.
+    // An element's first ID-typed attribute whose value names something is its ID; XML Schema
+    // gives it no second, which "DocumentId key"'s key over the ID-typed attributes' node refuses.
     if (holdsId(attribute, element) && !documentIds.has(node)) {
-      documentIds.set(node, documentIdOf(tree, node, lexical, node));
+      for (const id of Option.toArray(documentIdOf(tree, node, lexical, node))) {
+        documentIds.set(node, id);
+      }
     }
 
     if (
@@ -495,7 +505,8 @@ const shareFragmentsOf = (
 
 /**
  * Build the rows a document's identity-typed texts give (C50): each one's `IdentityText`, with its
- * IDREF tokens nested, and each ID text's `DocumentId`, bound to the element's parent.
+ * IDREF tokens nested, and each ID text's `DocumentId` where its value is an NCName, bound to the
+ * element's parent.
  *
  * @param tree - The document's tree.
  * @returns The rows, each by its node's id.
@@ -524,7 +535,9 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
     });
 
     if (identity === "ID") {
-      documentIds.set(node.id, documentIdOf(tree, node.id, text, node.parent));
+      for (const id of Option.toArray(documentIdOf(tree, node.id, text, node.parent))) {
+        documentIds.set(node.id, id);
+      }
     }
   }
 

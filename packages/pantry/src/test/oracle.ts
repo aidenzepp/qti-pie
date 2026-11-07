@@ -955,7 +955,7 @@ const cnPartsOf = (
  * `rtl`, `ltr` once the walk passes an `m:math` that writes neither. MathML 3 §2.2.1 says "the dir
  * attribute defaults to "ltr" on the math element (but inherits on all other elements which accept
  * the dir attribute)", and §3.1.5.1 sets a formula's direction by its `math` element, so an HTML
- * ancestor's `dir` above it is not read (reading 156).
+ * ancestor's `dir` above it is not read (reading 159).
  *
  * @param view - The document.
  * @param node - The element.
@@ -979,7 +979,7 @@ const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string =>
 /**
  * Tell whether an element writes a `dir` other than the one it inherits, so `mrow dir="ltr"` in a
  * left-to-right formula changes none (operator decision 321). A `dir` that spells neither `ltr` nor
- * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 156).
+ * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 159).
  *
  * @param view - The document.
  * @param node - The element.
@@ -1215,16 +1215,30 @@ const tableOf = (view: View, node: FoldedNode<Composed>): NodeId | undefined =>
   [node, ...ancestorsOf(view, node)].find(({ kind }) => kind === "table")?.id;
 
 /**
+ * An NCName, `xs:NCName` as the value domains compile it: the form of a bare variable reference,
+ * and of an ID's value, `xs:ID` being a restriction of it.
+ */
+const nameForm = new RegExp(
+  Result.getOrThrowWith(
+    Result.flatMap(builtinDomainOf("NCName"), (domain) => compile(domain, "exact")),
+    (unread) => unread,
+  ).pattern,
+  patternFlags,
+);
+
+/**
  * The header ids of each document's tables, computed once per document.
  */
 const tableHeaderCache = new WeakMap<View, ReadonlyMap<NodeId, ReadonlySet<string>>>();
 
 /**
  * Collect the ids of the `th`s that take part in each table of a document, by the table's id,
- * each id collapsed (an `xs:ID`'s whiteSpace).
+ * each id collapsed (an `xs:ID`'s whiteSpace) and an NCName ({@link nameForm}): an `id` outside
+ * `xs:ID`'s lexical space is no ID value, so a cell's `headers` token names no header by it (spec
+ * reading 156).
  *
  * @param view - The document.
- * @returns Each table's header ids; a table no `th` with an `id` takes part in holds none.
+ * @returns Each table's header ids; a table no `th` with an ID takes part in holds none.
  */
 const tableHeadersOf = (view: View): ReadonlyMap<NodeId, ReadonlySet<string>> => {
   const held = tableHeaderCache.get(view);
@@ -1236,8 +1250,10 @@ const tableHeadersOf = (view: View): ReadonlyMap<NodeId, ReadonlySet<string>> =>
   for (const node of view.members) {
     const table = node.kind === "th" ? tableOf(view, node) : undefined;
     if (table !== undefined) {
-      for (const id of Option.toArray(valueOf(view, node.id, "id"))) {
-        headers.set(table, (headers.get(table) ?? new Set()).add(collapsed(id)));
+      for (const id of Option.toArray(valueOf(view, node.id, "id")).map(collapsed)) {
+        if (nameForm.test(id)) {
+          headers.set(table, (headers.get(table) ?? new Set()).add(id));
+        }
       }
     }
   }
@@ -1267,6 +1283,35 @@ const heldRoot = (grammar: ComposedGrammar, view: View, node: FoldedNode<Compose
     }),
     ({ held, name }) => new RegExp(held.names, patternFlags).test(expandedText(name)),
   );
+
+/**
+ * The choices an interaction encloses, which N8's choice clause reads: each a choice class's
+ * element whose parents in the information model are interactions, or for a gap one that "must only
+ * appear within a 'gapMatchInteraction'" (reading 38). A simple choice's are the choice and order
+ * interactions (§5.132), a simple associable choice's the associate interaction and the simple
+ * match set (§5.131), which the match interaction holds (§5.133), a hotspot choice's the graphic
+ * order and hotspot interactions (§5.67), an associable hotspot's the graphic associate and graphic
+ * gap match interactions (§5.7), a gap text's and a gap image's the gap choice (§5.58, §5.56),
+ * which the gap match and graphic gap match interactions hold (§6.17), and an inline choice's the
+ * inline choice interaction (§5.73); the gap's is §5.55's sentence. A hottext may stand outside a
+ * hottext interaction (reading 38), so it is none of them.
+ *
+ * The clause reads a choice that writes its `identifier` (multiplicity [1] in each class), the
+ * value its interaction's response names: one that writes none breaks AL3, and the content model
+ * (N5 to N7) places it as it places any element.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_SimpleChoice | QTI 3.0 information model, §5.132 SimpleChoice}
+ */
+const enclosedChoices: ReadonlySet<string> = new Set([
+  "qti-associable-hotspot",
+  "qti-gap",
+  "qti-gap-img",
+  "qti-gap-text",
+  "qti-hotspot-choice",
+  "qti-inline-choice",
+  "qti-simple-associable-choice",
+  "qti-simple-choice",
+]);
 
 /**
  * The laws of §1.3 and §1.5 over node rows, in the plan's notation and order, after the key of
@@ -1557,6 +1602,18 @@ const nodeLaws: readonly NodeLaw[] = [
           parent: node.parent,
           parentNearest: node.parentNearest,
         }),
+      ),
+    law: "N8 nearest",
+    over: "members",
+  },
+  {
+    // N8's choice clause: a choice that writes its identifier lies in an interaction, its nearest.
+    breaks: (node, view, { grammar }) =>
+      unless(
+        !enclosedChoices.has(node.kind) ||
+          Option.isNone(valueOf(view, node.id, "identifier")) ||
+          Option.isSome(grammar.kinds.interaction.lookup({ kind: node.nearestKind })),
+        () => ({ nearest: node.nearest, nearestKind: node.nearestKind }),
       ),
     law: "N8 nearest",
     over: "members",
@@ -3168,17 +3225,6 @@ const wholeBreaches = (
 };
 
 /**
- * An NCName, `xs:NCName` as the value domains compile it: the form of a bare variable reference.
- */
-const nameForm = new RegExp(
-  Result.getOrThrowWith(
-    Result.flatMap(builtinDomainOf("NCName"), (domain) => compile(domain, "exact")),
-    (unread) => unread,
-  ).pattern,
-  patternFlags,
-);
-
-/**
  * A braced variable reference: `{identifier}`.
  */
 const braced = /^\{(?<identifier>[^{}]+)\}$/u;
@@ -3410,7 +3456,7 @@ const mapKeyValueOf = (baseType: string, key: string): string => {
 };
 
 /**
- * Read a map key as the identity its mapping holds it under (Map key, readings 98 and 157): a
+ * Read a map key as the identity its mapping holds it under (Map key, readings 98 and 160): a
  * string key whose own entry's `case-sensitive` is not true is `folded`, a response meeting it
  * without regard to case, and is the key as written, so `York` and `york` are two keys and a
  * `york` written twice is one; a key matched by code points is never the same key as a folded one;
@@ -4413,15 +4459,18 @@ const overlayBreaches = (
   laws: Laws,
   assembledCatalogs: ReadonlySet<string>,
 ): readonly Breach[] => {
-  // A declaration without an identifier declares no variable: AL3 refuses it, and it shares no
-  // identifier with another declaration that lacks one.
-  const declarations = view.members.filter(
-    ({ id, kind }) =>
-      laws.grammar.references.declarationKind.has(kind) &&
-      Option.isSome(valueOf(view, id, "identifier")),
+  // A declaration whose identifier is unwritten, or outside its value domain, names no variable:
+  // AL3 or that domain refuses it alone, and it shares no name with another declaration that names
+  // nothing (spec readings 152 and 157). A name is the identifier as its type reads it, collapsed.
+  const declarations = view.members.flatMap((node) =>
+    laws.grammar.references.declarationKind.has(node.kind)
+      ? Option.toArray(typedValueOf(view, node.id, "identifier")).map((name) => ({ name, node }))
+      : [],
   );
-  const declared = Map.groupBy(declarations, (node) =>
-    collapsed(Option.getOrElse(valueOf(view, node.id, "identifier"), () => "")),
+  const declared = new Map(
+    [...Map.groupBy(declarations, ({ name }) => name)].map(
+      ([name, held]) => [name, held.map(({ node }) => node)] as const,
+    ),
   );
   const root = view.childrenOf.get(view.self)?.find(({ kind }) => laws.elements.has(kind));
   const overlay: Overlay = {
@@ -6920,7 +6969,7 @@ const ownLaws = {
   },
   "Declaration base type": {
     explain: (keys) =>
-      `${field(keys, "identifier")} is of cardinality ${JSON.stringify(field(keys, "cardinality"))} and base type ${JSON.stringify(field(keys, "baseType"))}, where a record declares no base type and every other variable declares one`,
+      `the ${field(keys, "kind")} at ${field(keys, "node")} is of cardinality ${JSON.stringify(field(keys, "cardinality"))} and base type ${JSON.stringify(field(keys, "baseType"))}, where a record declares no base type and every other variable declares one`,
   },
   "Declaration key": {
     explain: (keys) => `a second declaration of ${field(keys, "identifier")}`,
@@ -7307,11 +7356,13 @@ const ownLaws = {
   },
   "N8 nearest": {
     explain: (keys, grammar) =>
-      `nearest ${field(keys, "nearest")} (${field(keys, "nearestKind")}) under ${field(keys, "parent")}, a ${field(keys, "parentKind")}, where ${
-        Option.isSome(grammar.kinds.interaction.lookup({ kind: field(keys, "parentKind") }))
-          ? "an interaction parent is the nearest"
-          : `the parent's nearest ${field(keys, "parentNearest")} is`
-      }`,
+      keys["parent"] === undefined
+        ? `${field(keys, "kind")} writes its identifier, a choice, and its nearest ${field(keys, "nearest")} is a ${field(keys, "nearestKind")}, no interaction, where every choice lies in one`
+        : `nearest ${field(keys, "nearest")} (${field(keys, "nearestKind")}) under ${field(keys, "parent")}, a ${field(keys, "parentKind")}, where ${
+            Option.isSome(grammar.kinds.interaction.lookup({ kind: field(keys, "parentKind") }))
+              ? "an interaction parent is the nearest"
+              : `the parent's nearest ${field(keys, "parentNearest")} is`
+          }`,
     node: true,
   },
   "Namespace family": {

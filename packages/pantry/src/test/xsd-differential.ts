@@ -983,6 +983,19 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "ancestry-ban",
   },
   {
+    class: "content",
+    detail:
+      /^N8 nearest at \S+: qti-gap writes its identifier, a choice, and its nearest \S+ is a \S+, no interaction, where every choice lies in one$/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 38,
+      says: "A `qti-gap` appears only within a gap-match interaction",
+      why: "a qti-gap lies in a gap-match interaction, its nearest; the XSD admits it in any phrasing container, where it may lie in no interaction",
+    },
+    rule: "owner-copy",
+  },
+  {
     class: "beyond",
     direction: "beyond",
     reason: {

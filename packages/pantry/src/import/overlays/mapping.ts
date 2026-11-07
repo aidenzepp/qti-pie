@@ -83,7 +83,7 @@ export interface MappingRows {
  */
 type DeclarationCopy = Pick<
   Addition<typeof Mapping>,
-  "baseTypes" | "cardinality" | "declarationKind" | "identifier"
+  "baseTypes" | "cardinality" | "declarationKind"
 >;
 
 /**
@@ -93,21 +93,16 @@ type BaseTypeHandle = Addition<typeof MappingBaseType>["baseType"];
 
 /**
  * Read the fields a declared overlay copies from its declaration: its base type only as its count
- * ({@link baseTypesOf}), since a record has none.
+ * ({@link baseTypesOf}), since a record has none, and never its name, which a declaration may lack
+ * (spec reading 157).
  *
  * @param declared - The declaration's fields.
  * @returns The copy.
  */
-const copyOf = ({
-  baseType,
-  cardinality,
-  declarationKind,
-  identifier,
-}: DeclaredFields): DeclarationCopy => ({
+const copyOf = ({ baseType, cardinality, declarationKind }: DeclaredFields): DeclarationCopy => ({
   baseTypes: baseTypesOf(baseType),
   cardinality,
   declarationKind,
-  identifier,
 });
 
 /**
@@ -435,9 +430,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     start: node.start,
     version: node.version,
   });
-  // Each declaration with a `Declaration` row, as that row holds it (`declaredFieldsOf`): a
-  // table hangs only below one, and copies it; one with no row has no table rows either, as its
-  // own law refuses it alone (lane NIL's audit, B11).
+  // Each declaration with a `Declaration` row, named or not (spec reading 157), as that row holds
+  // it (`declaredFieldsOf`): a table hangs only below one, and copies it; one with no row has no
+  // table rows either, as its own law refuses it alone (lane NIL's audit, B11).
   const declarations = new Map(
     rows.nodes.flatMap((node) =>
       Option.toArray(declaredFieldsOf(node.kind, (name) => valueOf(node.id, name))).map(

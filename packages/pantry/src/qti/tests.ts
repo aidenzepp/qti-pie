@@ -932,8 +932,9 @@ export const linkResourceTypes: readonly (typeof ResourceType.handles)[number][]
  * target" judges: the URI an item ref holds is "the URI used to refer to the item's file (e.g.,
  * elsewhere in the same content package)" (information model §5.6.5, `href`), so it names an item
  * of the package, or an LTI link (R36). It is a row only where a resource of the package names the
- * path, so an item ref naming none has no target, which the mirror over the item refs refuses. An
- * item it names is an {@link ItemRefDocument} row of its own.
+ * path, so an item ref whose href names none has no target, which the containment over the item
+ * refs' hrefs refuses, and one that writes no href has none, which AL3 alone refuses (spec reading
+ * 155). An item it names is an {@link ItemRefDocument} row of its own.
  *
  * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
  * its package, and testWithLti's two item refs name LTI links; both packages are refused at the
@@ -1547,10 +1548,11 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   ({@link requiredFold}), their flags and scope; reading 79's `Selection_bound`, `select ≤
  *   members` unless the selection is with replacement, and info §4.2.2's `Selection_required`,
  *   `required ≤ select`;
- * - **the hrefs:** each item ref and each site that writes one ({@link SitePath}, a row of its own,
- *   every section ref's) has its href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an
- *   entry of the package, under the stated limit `Href_form`, but an include whose href resolves
- *   outside the package, marked `external` as its href's `Reference` proves;
+ * - **the hrefs:** each site that writes one ({@link SitePath}, a row of its own, every section
+ *   ref's) has its href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an entry of the
+ *   package, under the stated limit `Href_form`, but an include whose href resolves outside the
+ *   package, marked `external` as its href's `Reference` proves; an item ref's is its target's
+ *   (below);
  * - **the sites** ({@link Site}, {@link SiteTarget}): each names a document of the package, its
  *   target, a row of its own ("Include target", reading 115), but an external include, stored as
  *   written and never fetched; and each section ref and section-level include names a section
@@ -1611,10 +1613,11 @@ const flagCopies = flagCarriers.map(flagCopy);
  * target (information model §5.98), each counted by its target, each copying its target's names
  * and the two elements it reads, its own `Branch_forward` that it orders the two.
  *
- * The statements of B2's and B3's law, "Item ref target": each item ref has one
- * {@link ItemRefTarget}, its href's path, named by a resource of the package of the item type or an
- * LTI type; and each that names an item has its {@link ItemRefDocument}, the document there, whose
- * root is an item.
+ * The statements of B2's and B3's law, "Item ref target": each item ref that writes an href has
+ * one {@link ItemRefTarget}, its href's path, named by a resource of the package of the item type
+ * or an LTI type, and no other element has one; and each that names an item has its
+ * {@link ItemRefDocument}, the document there, whose root is an item. An item ref that writes no
+ * href names nothing, and AL3 alone refuses it (spec reading 155), named or not (reading 147).
  */
 export const testLawsByName = {
   "Branch forward": [
@@ -2080,7 +2083,8 @@ export const testLawsByName = {
     check("Inclusion_cycle", TestDocument, (d) => d.gt(d.instances, 0n)),
   ],
   "Item ref target": [
-    mirrors(on(ItemRefTarget, "node"), on(nodesOf(itemRefKind), "id")),
+    contained(on(ItemRefTarget, "node"), on(nodesOf(itemRefKind), "id")),
+    contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefTarget, "node")),
     contained(
       on(ItemRefTarget, "package", "path", "type"),
       on(NamedHref, "package", "path", "type"),
@@ -2299,7 +2303,6 @@ export const testLawsByName = {
       ),
       on(SectionOrdering, "parent"),
     ),
-    contained(on(nodesOf(itemRefKind), "id"), on(hrefPaths, "node")),
     contained(
       on(
         Site,

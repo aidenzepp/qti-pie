@@ -128,7 +128,6 @@ export const Mapping = relation(
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     document: uuid,
-    identifier: keyText,
     kind: closedId(NodeKind),
     nearest: uuid,
     node: uuid,
@@ -437,7 +436,6 @@ export const AreaMapping = relation(
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     document: uuid,
-    identifier: keyText,
     kind: closedId(NodeKind),
     nearest: uuid,
     node: uuid,
@@ -463,7 +461,6 @@ export const LookupTable = relation(
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     document: uuid,
-    identifier: keyText,
     kind: closedId(NodeKind),
     nearest: uuid,
     node: uuid,
@@ -710,15 +707,7 @@ export const mappingLawsByName = {
     ),
     contained(on(Mapping, "node"), on(nodesOf("qti-mapping"), "id")),
     contained(
-      on(
-        Mapping,
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "cardinality",
-        "baseTypes",
-      ),
+      on(Mapping, "declaration", "document", "declarationKind", "cardinality", "baseTypes"),
       declarationRef,
     ),
     contained(
@@ -772,15 +761,7 @@ export const mappingLawsByName = {
     ),
     mirrors(on(AreaMapping, "node"), on(nodesOf("qti-area-mapping"), "id")),
     contained(
-      on(
-        AreaMapping,
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "cardinality",
-        "baseTypes",
-      ),
+      on(AreaMapping, "declaration", "document", "declarationKind", "cardinality", "baseTypes"),
       declarationRef,
     ),
     contained(
@@ -795,15 +776,7 @@ export const mappingLawsByName = {
       ),
     ),
     contained(
-      on(
-        LookupTable,
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "cardinality",
-        "baseTypes",
-      ),
+      on(LookupTable, "declaration", "document", "declarationKind", "cardinality", "baseTypes"),
       declarationRef,
     ),
     contained(

@@ -3015,8 +3015,72 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      accepted. The corpus holds no float mapping, so no verdict moves. This binds pantry and plate alike; plate's own
      reading of a double is the renderer team's follow-up. This is not a case of documents in conflict. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-FLOATKEY.)
-
-155. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+155. **An item ref that writes no `href` names nothing, so AL3 alone refuses it; and the laws over what an item ref
+     names judge every item ref, whether or not it, its sections or its test part write an `identifier`.** The ASI XSD
+     requires the href, with no default: `<xs:attribute name="href" use="required" type="xs:anyURI" />` in
+     `AssessmentItemRefDType` (`imsqti_asiv3p0_v1p0.xsd`), and the information model gives it multiplicity `[1]`: "The
+     URI used to refer to the item's file (e.g., elsewhere in the same content package)" (§5.6.5, info.txt:14761 to
+     :14764). An item ref that writes none refers to no file, so it has no `ReferencePath`, `ItemRefTarget` or
+     `ItemRefDocument`: the importer's laws require a target only of an item ref that writes an href ("Item ref target",
+     `src/qti/tests.ts`), and copy a target's type into an assembly's lookup only where the lookup names a resource
+     (`src/qti/expressions.ts`), so AL3 ("required-attribute") refuses the item ref under its own rule. An item ref
+     whose href names no item or LTI link of the package, an external or an empty URI included, breaks "Item ref
+     target", as before. Reading 147 takes an item ref that writes no identifier out of its document's namespace, not
+     out of its other laws: its href still names its item, and its variable mappings and template defaults still read
+     that item ("Item ref target", "Variable mapping source", "Variable mapping target", "Template default target"), as
+     the importer's rows, keyed by the item ref's node, judge them. This sets aside the importer's demand of a target
+     and a resolved href of every item ref, under which an item ref with no href broke "Item ref target" and "Test
+     overlay" beside AL3, and the law oracle's reading of an item ref's laws through its name (`itemRefLawsOf` and
+     `documentLawsOf`, `src/test/oracle-laws/tests.ts`), under which an item ref that writes no identifier escaped them.
+     The corpus moves no verdict: each of the 209 item refs of its 29 zips writes an href and an identifier, by a scan
+     of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ITEMREF.)
+156. **An ID-typed attribute or text is one of its document's IDs only where its value is an NCName. Any other value is
+     no ID: it binds nothing, no IDREF and no cell's `headers` token names it, and its value domain alone refuses it.**
+     `xs:ID` restricts `xs:NCName`, whose lexical space it keeps (XML Schema Part 2, §3.3.8), as does the
+     `IdentifierDType` a context declaration's `identifier` holds (reading 74), and a form outside a type's lexical
+     space denotes no value of it (§2.3). So `""`, a form of whitespace alone, `1a`, `a b` or `٠a`, written as an
+     `id`, a response or context declaration's `identifier`, a manifest's or a resource's `identifier`, or an
+     ID-typed element's text, is no ID value, as reading 152 reads the names. An IDREF written to the same form names
+     no ID, and cvc-id clause 1 ("There must be no ID/IDREF binding in the item's [ID/IDREF table] whose [binding] is
+     the empty set", XML Schema 1.0 Part 1, Validation Root) refuses it under "Idref target"; a cell's `headers` token
+     written to it names no `th`, since each token "must have the value of an ID of a 'th' tag taking part in the
+     same table" (info §5.140.1, reading 126), and "Table headers" refuses it. The schema copies an ID-typed
+     attribute or text into `DocumentId`, and a `th`'s `id` into `TableHeader`, only where its form names something
+     once collapsed (`namingPattern`, over the grammar's one `ncNamePattern`, `src/qti/identity.ts`), and the importer
+     writes their rows by `isNcName`. This sets aside the importer's reading of every ID-typed form as an ID, under
+     which an empty identifier, or one with whitespace inside, had a `DocumentId` row that "E1 derived" refused beside
+     its value domain, and `1a` was an ID an IDREF of `1a` resolved to; and the law oracle's reading of a `th`'s
+     `id` as a header whatever its form, under which `headers="1a"` named `<th id="1a">`. This binds pantry and plate
+     alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the
+     operator's standing ruling of 2026-11-05, from seat FIX-IDNCNAME.)
+157. **A declaration whose identifier names nothing is still a declaration: its type, its values, its mapping and its
+     tables are judged by their own laws, and only its name is missing.** The ASI XSD requires a declaration's
+     `identifier`, typed `IdentifierDType`, an `xs:NCName` (`imsqti_asiv3p0_v1p0.xsd`, each of
+     `qti-response-declaration`, `qti-outcome-declaration`, `qti-template-declaration` and `qti-context-declaration`),
+     so one that writes none breaks AL3, and one whose value is no NCName once collapsed names nothing and breaks its
+     value domain (reading 152). The information model states the rest of a declaration apart from its identifier: its
+     cardinality and base type (§4.5.2 and §4.5.3, and §5.34, §5.115 and §5.151 alike), its default value and correct
+     response (§5.41, §5.35), its mapping and area mapping (§5.88, §5.5) and its lookup tables (§4.5.13). The laws over
+     them read the declaration's type and its children, never its name: Declaration base type, Value cardinality,
+     Typed value, Mastery range, MappableBaseType, AreaMapping base type, Map key, Typed attribute value, Lookup table
+     cardinality and Key text bound. So each judges a declaration whose identifier is unwritten or names nothing as it
+     judges any other, which is also the stricter reading. Only the laws over a name do not read it: Declaration key
+     (reading 74), Declaration not reserved (reading 72), Reserved type, and every reference's and binding's
+     resolution, since such a declaration holds no place in its document's namespace, and two of them share no name.
+     The importer writes the declaration's row and every row below it, and its name as a row of its own,
+     `DeclarationName` (`src/qti/declarations.ts`), only where the identifier names something, as `RecordFieldName` is
+     a field's: a missing value is a row of its own relation, never a sentinel. This sets aside reading 152's leaving
+     such a declaration no `Declaration` row, under which the importer's rows broke "Declaration overlay"'s copy of its
+     cardinality and "Mapping overlay"'s copy of each map key beside the value domain, and judged none of its values,
+     map keys or tables, so a map key past the key-text bound went unrefused where the law oracle named "Key text
+     bound"; and it sets aside the law oracle's reading, which judged such a declaration's mapping and tables but not
+     its type and values, and read two declarations that name nothing as one name under Declaration key. A declaration
+     whose cardinality is unwritten or spells nothing, or whose base type spells nothing, still has no row (lane NIL's
+     audit, B11), and the copies its children ask still break beside its own law; that is a case of its own, which
+     `known.ts` records. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-DECLNAME.)
+158. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
      should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
@@ -3031,8 +3095,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
-
-156. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+159. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
@@ -3049,7 +3112,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
-157. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+160. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
      nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or

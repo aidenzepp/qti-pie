@@ -159,8 +159,11 @@ const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncStart}`;
 export const Lexical = str.regex(charsPattern);
 
 /**
- * XML whitespace `S`, possibly none: what an `Idref` piece holds around its token.
+ * XML whitespace `S`, possibly none: what a lexical form holds around its token or value, an
+ * `Idref` piece's and every other lead and trail of the schema, each typed by this one type.
  * Exported for `src/import/refusal.ts`, which names its pattern law.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
 export const Space = str.regex("^[\\t\\n\\r ]*$");
 

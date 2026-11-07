@@ -72,6 +72,7 @@ type Expected = { readonly [Relation in keyof DeclarationRows]: Map<string, obje
 const relationNames = [
   "Declaration",
   "DeclarationBaseType",
+  "DeclarationName",
   "DeclaredValue",
   "MasteryCeiling",
   "MasteryFloor",
@@ -150,7 +151,6 @@ interface WalkedDeclaration {
   readonly baseType: Option.Option<string>;
   readonly cardinality: string;
   readonly declarationKind: string;
-  readonly identifier: string;
   readonly node: NodeId;
 }
 
@@ -211,9 +211,10 @@ const walkedPieces = (lexical: string) => {
 const minimumByDefault: ReadonlyMap<string, string> = new Map([["3.0.1", "0.0"]]);
 
 /**
- * Collect a declaration's expected rows, where it has them: its identifier written and naming
- * something once collapsed, its cardinality written and spelling a handle, and its base type
- * unwritten or spelling one. Its base type's row is written where it writes one, and an outcome
+ * Collect a declaration's expected rows, where it has them: its cardinality written and spelling a
+ * handle, and its base type unwritten or spelling one. Its base type's row is written where it
+ * writes one, its name's where its identifier is written and names something once collapsed (spec
+ * reading 157: one that names nothing leaves the declaration every other row), and an outcome
  * declaration's row of each scale value it has, and of each pair of them it has both of: a mastery
  * value and a normal maximum where written, and a normal minimum where written or else its
  * version's default ({@link minimumByDefault}). Any other declaration has no row, and no value set,
@@ -239,8 +240,6 @@ const walkDeclaration = (
   );
   const spelled = Option.getOrUndefined(Option.flatten(baseType));
   if (
-    identifierLexical === undefined ||
-    name === "" ||
     cardinalityLexical === undefined ||
     cardinality === undefined ||
     Option.exists(baseType, Option.isNone)
@@ -253,13 +252,23 @@ const walkDeclaration = (
     cardinality,
     cardinalityLexical,
     declarationKind: tuple.kind,
-    identifier: name,
-    identifierLead: lead,
-    identifierLexical,
-    identifierTrail: trail,
     parentKind,
   };
   expected.Declaration.set(tuple.node, row);
+  if (identifierLexical !== undefined && name !== "") {
+    expected.DeclarationName.set(tuple.node, {
+      baseTypes: spelled === undefined ? 0n : 1n,
+      cardinality,
+      declarationKind: tuple.kind,
+      document: tuple.document,
+      identifier: name,
+      identifierLead: lead,
+      identifierLexical,
+      identifierTrail: trail,
+      node: tuple.node,
+    });
+  }
+
   if (baseTypeLexical !== undefined && spelled !== undefined) {
     expected.DeclarationBaseType.set(tuple.node, {
       baseType: spelled,
@@ -327,7 +336,6 @@ const walkSet = (
     declarationKind: owner.declarationKind,
     elementChildren: BigInt(child.children.filter(({ _tag }) => _tag === "element").length),
     elements: rank,
-    identifier: owner.identifier,
   });
 
   return {
@@ -433,6 +441,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
   const expected: Expected = {
     Declaration: new Map(),
     DeclarationBaseType: new Map(),
+    DeclarationName: new Map(),
     DeclaredValue: new Map(),
     MasteryCeiling: new Map(),
     MasteryFloor: new Map(),
@@ -977,7 +986,7 @@ const checkDocument = (path: string, tree: XdmDocument<Composed>): number => {
   const rows = rowsOf(tree, ids);
   assertRows(rows, walk(tree), path);
   for (const declaration of rows.Declaration.values()) {
-    const at = `${path} ${declaration.identifierLexical}`;
+    const at = `${path} ${declaration.node}`;
     assert.strictEqual(
       CardinalityLexical.rows.find(({ code }) => code === declaration.cardinality)?.lexical,
       declaration.cardinalityLexical,

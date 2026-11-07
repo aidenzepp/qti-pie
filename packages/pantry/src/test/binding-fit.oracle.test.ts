@@ -191,7 +191,7 @@ const holds = (site: BindingSite, state: BindingState) =>
       `${label}: ${String(declarations.length)} declaration rows beside ${String(bindings.length)} bindings`,
     );
 
-    const declared = [...program.inputs.Declaration.values()].find(
+    const declared = [...program.inputs.DeclarationName.values()].find(
       ({ document, identifier, declarationKind }) =>
         document === item?.node &&
         identifier === expected.identifier &&

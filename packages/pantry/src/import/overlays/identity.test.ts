@@ -653,10 +653,16 @@ type TextType = (typeof textTypes)[number];
 
 /**
  * A text an identity-typed element holds, with its pieces as the case's model writes them: the
- * ID's split around its value, and the IDREF tokens with the whitespace around each.
+ * ID's split around its value, with whether that value is an NCName and so an ID value (spec
+ * reading 156), and the IDREF tokens with the whitespace around each.
  */
 interface WrittenText {
-  readonly id: { readonly after: string; readonly before: string; readonly value: string };
+  readonly id: {
+    readonly after: string;
+    readonly before: string;
+    readonly names: boolean;
+    readonly value: string;
+  };
   readonly idrefs: readonly {
     readonly after: string;
     readonly before: string;
@@ -666,17 +672,17 @@ interface WrittenText {
 }
 
 /**
- * The texts of the identity-text box: one bare token, and two tokens padded, which an ID keeps
- * whole as its value (and `E1_derived` refuses) and an IDREF splits.
+ * The texts of the identity-text box: one bare token, and two tokens padded, which as an ID's text
+ * is no NCName, so no ID value, and as an IDREF's splits.
  */
 const writtenTexts: readonly [WrittenText, ...WrittenText[]] = [
   {
-    id: { after: "", before: "", value: "a" },
+    id: { after: "", before: "", names: true, value: "a" },
     idrefs: [{ after: "", before: "", token: "a" }],
     text: "a",
   },
   {
-    id: { after: " ", before: " ", value: "a b" },
+    id: { after: " ", before: " ", names: false, value: "a b" },
     idrefs: [
       { after: "", before: " ", token: "a" },
       { after: " ", before: " ", token: "b" },
@@ -712,6 +718,7 @@ const textCases: Gen<readonly (readonly TextChoice[])[]> = array(
  * A situation the identity-text box must reach.
  */
 type TextSituation =
+  | "an ID text that is no NCName"
   | "one id twice under one parent"
   | "one id under two parents"
   | "tokens split"
@@ -722,12 +729,13 @@ describe(
   { timeout: searchTimeout },
   () => {
     it.effect(
-      "gives each ID- or IDREF-typed text its IdentityText row with its parent and tokens, each ID text its DocumentId bound to its parent, and each (id, parent) one binding",
+      "gives each ID- or IDREF-typed text its IdentityText row with its parent and tokens, each ID text whose value is an NCName its DocumentId bound to its parent, and each (id, parent) one binding",
       (ctx) =>
         // Oracle: the case's own model read as keyed sets: each description's type and text, its
         // node and its div's numbered in document order (the root node 1, each div, then each of
-        // its descriptions and that description's text node), and XML Schema 1.0 Part 1
-        // §3.15.5's [binding], the parent of an element whose text is an ID (reading 101).
+        // its descriptions and that description's text node), XML Schema 1.0 Part 1 §3.15.5's
+        // [binding], the parent of an element whose text is an ID (reading 101), and spec reading
+        // 156: an ID-typed text whose value is no NCName is no ID value.
         // Bound: every item of 1 or 2 divs of at most 2 descriptions over 4 types and 2 texts,
         // 5,402.
         searched(
@@ -737,6 +745,7 @@ describe(
               box: "every item of 1 or 2 divs, each of at most 2 qti-descriptions of 4 governing types and 2 texts",
               caseHang: Duration.seconds(10),
               coverage: requiredInSpace<TextSituation>([
+                "an ID text that is no NCName",
                 "one id twice under one parent",
                 "one id under two parents",
                 "tokens split",
@@ -788,7 +797,9 @@ describe(
                 }
 
                 const typed = placed.filter(({ choice }) => choice.type !== "xs:normalizedString");
-                const idTexts = typed.filter(({ choice }) => choice.type !== "xs:IDREF");
+                const idTexts = typed.filter(
+                  ({ choice }) => choice.type !== "xs:IDREF" && choice.text.id.names,
+                );
                 const bindings = idTexts.map(
                   ({ choice, owner }) => `${documentNode} ${choice.text.id.value} ${owner}`,
                 );
@@ -812,6 +823,12 @@ describe(
 
                 if (placed.some(({ choice }) => choice.type === "xs:normalizedString")) {
                   c.note("untyped text");
+                }
+
+                if (
+                  typed.some(({ choice }) => choice.type !== "xs:IDREF" && !choice.text.id.names)
+                ) {
+                  c.note("an ID text that is no NCName");
                 }
 
                 assert.deepStrictEqual(

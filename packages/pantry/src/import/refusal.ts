@@ -21,8 +21,8 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { date, lawsOf, lexical, sameLaw, str } from "@bjornpagen/grizzle";
-import type { Law, Statement, Witness } from "@bjornpagen/grizzle";
+import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
   Function as Fn,
@@ -45,6 +45,7 @@ import {
   attributeLawsByName,
   EntityName,
   Idref,
+  Lexical,
   OpenLocal,
   Space,
 } from "#pantry/qti/attributes.ts";
@@ -55,6 +56,7 @@ import {
   Expression,
   ExpressionAttribute,
   expressionLawsByName,
+  HeldType,
   referenceLawsByName,
   Literal,
   LiteralTyped,
@@ -96,7 +98,7 @@ import {
   XmlVersion,
 } from "#pantry/qti/chardata.ts";
 import { readerOrigin, RefusalOrigin } from "#pantry/package/refusal-origin.ts";
-import { keyText, namespaceText } from "#pantry/qti/limits.ts";
+import { anyText, keyText, namespaceText } from "#pantry/qti/limits.ts";
 import {
   AriaElement,
   AriaRange,
@@ -163,13 +165,12 @@ import {
   MapKeyPoint,
   mappingLawsByName,
   Negative,
-  pairKeyPattern,
-  pointKeyPattern,
   Sign,
   Zeros,
 } from "#pantry/qti/mapping.ts";
 import {
   AssessmentObject,
+  DayForm,
   LomEntry,
   LomGeneral,
   LomObject,
@@ -193,7 +194,7 @@ import {
   UsageValue,
   UsageValueBaseType,
 } from "#pantry/qti/metadata.ts";
-import { EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
+import { Chars, EndCharacter, nodeLawsByName, Prefix } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
 import { catalogLawsByName } from "#pantry/qti/catalog.ts";
 import { HeaderToken, htmlLawsByName } from "#pantry/qti/html.ts";
@@ -240,12 +241,12 @@ const codecRules = [
  * `tests.ts` `Fragment_context`): a fragment two includes place in different interactions would
  * need two rows per node.
  *
- * A value over the bound is valid QTI the model cannot key, so its verdict says so by its rule.
- * The import meets it as the bound's pattern law: grizzle's encoder and its family fill check a
- * text's type, its NUL and its surrogates and never its pattern (`core/text.ts` `validateText`,
+ * A value over the bound is valid QTI the model cannot key, so its verdict says so by its rule. The
+ * import meets it as the bound's pattern law: grizzle's encoder and its family fill check a text's
+ * type, its NUL and its surrogates and never its pattern (`core/text.ts` `validateText`,
  * `write/family/fold.ts` `admittedAt`), so the column's domain CHECK refuses it as the statement
- * casts it, `invariant-rejected` on the pattern's law, its witness the key of the stated row that
- * holds the value (README, "Errors and outcomes").
+ * casts it, `invariant-rejected` on its field's pattern law, its witness the key of the stated row
+ * that holds the value (README, "Errors and outcomes").
  */
 export const limitRules = [
   "key-text-bound",
@@ -312,7 +313,7 @@ export const lawOfCheck = (name: string): Option.Option<LawName> => {
 
 /**
  * The relation each side of a law reads, in the order the law names its sides: the part of a law
- * {@link bucketOf} files it under beside its kind. A pattern and a contract read no relation.
+ * {@link bucketOf} files it under beside its kind. A contract reads no relation.
  *
  * @param law - A law as grizzle names it.
  * @returns Its sides' relations.
@@ -328,7 +329,7 @@ const relationsOf = (law: Law): readonly string[] =>
       fold: ({ end, family, step }) => [family.owner, step.relation, end.relation],
       generated: ({ relation }) => [relation],
       key: ({ side }) => [side.relation],
-      pattern: () => [],
+      pattern: ({ relation }) => [relation],
       primaryKey: ({ relation }) => [relation],
       tree: ({ member, slots }) => [member.relation, slots.owner],
     }),
@@ -388,43 +389,92 @@ const generatedOf = <R extends { readonly fields: object; readonly name: string 
 ): LawOf<"generated"> => ({ field, kind: "generated", relation: relation.name });
 
 /**
- * A text field type, as `str.regex` builds it: its pattern's source and flags.
+ * A text field type, as `str.regex` and `str.bytes` build it: its pattern's source and flags.
  */
-interface TextType {
+export interface TextType {
   readonly pattern: { readonly flags: "su" | "u"; readonly source: string };
 }
 
 /**
- * Two text types whose rows of {@link writtenLaws} name one pattern law by two names.
+ * Whether a value is a text field type ({@link TextType}), read by its shape. The guard reads the
+ * value itself, never a decoded copy, so {@link textLaws} finds it by its identity.
  */
-export interface PatternConflict {
-  readonly first: LawName;
-  readonly law: LawOf<"pattern">;
-  readonly second: LawName;
+const isTextType: (value: unknown) => value is TextType = Schema.is(
+  Schema.Struct({
+    pattern: Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
+  }),
+);
+
+/**
+ * A field PostgreSQL or grizzle writes, read from its descriptor: the type `generated(type, term)`
+ * or `accumulated(type, start)` declared it of (grizzle's `schema/relation.ts` `generatedField`
+ * and `accumulatedField`), which grizzle's installation types its column by.
+ */
+const Written = Schema.Union([
+  Schema.Struct({ type: Schema.Unknown, writing: Schema.Literal("generated") }),
+  Schema.Struct({ field: Schema.Unknown, writing: Schema.Literal("accumulated") }),
+]);
+
+/**
+ * An ordinary relation as {@link patternLawsOf} reads it, its fields' descriptors as they are. A
+ * closed relation is of another kind, and its payloads state no law.
+ */
+const Ordinary = Schema.Struct({
+  fields: Schema.Record(Schema.String, Schema.Unknown),
+  kind: Schema.Literal("relation"),
+  name: Schema.String,
+});
+
+/**
+ * A text field whose type no row of the table names: its relation and its field.
+ */
+export interface UnnamedText {
+  readonly field: string;
+  readonly relation: string;
 }
 
 /**
- * Build the pattern law of each text type, as its domain's CHECK reports it, once per language.
+ * Build the pattern law of each text field of a schema's ordinary relations, as its domain's CHECK
+ * reports it, with the name of its type's row.
  *
- * Grizzle reports one law for every spelling of the same pattern, carrying only its source and its
- * flags (docs/grizzle-findings.md, the pattern law's refusal), so two types of one source are one
- * law, and one name must hold for both: a refusal cannot tell which type's column broke it. Two
- * rows of one source that name two laws are a conflict, never the first row's silent win.
+ * Grizzle states one law per stored field a text domain types, spelled as the field declares its
+ * pattern (`physical/install/compile.ts` `textDomainConstraintLaws` of the vendored engine): every
+ * field of an ordinary relation, a generated or accumulated one included, whose type is a text of a
+ * pattern some text breaks. Two fields of one pattern share one domain and are two laws, so a
+ * refusal names the field whose value broke it, and each field's law takes its own type's name. A
+ * type of `plain` is a tautology, which grizzle installs as plain text, so its fields state none.
  *
- * @param types - Each type, with the law it states.
- * @returns The laws, one per source; or the first {@link PatternConflict}.
+ * @param relations - The schema's `relations`.
+ * @param names - Each text type, by its identity, with the law its pattern states.
+ * @param plain - The text types whose pattern is a tautology.
+ * @returns The laws, one per text field; or the first field whose type neither holds.
  */
 export const patternLawsOf = (
-  types: readonly (readonly [TextType, LawName])[],
-): Result.Result<readonly (readonly [LawOf<"pattern">, LawName])[], PatternConflict> => {
+  relations: AnySchema["relations"],
+  names: ReadonlyMap<TextType, LawName>,
+  plain: ReadonlySet<TextType>,
+): Result.Result<readonly (readonly [LawOf<"pattern">, LawName])[], UnnamedText> => {
   const named: (readonly [LawOf<"pattern">, LawName])[] = [];
-  for (const [{ pattern }, name] of types) {
-    const law: LawOf<"pattern"> = { flags: pattern.flags, kind: "pattern", source: pattern.source };
-    const held = named.find(([stated]) => sameLaw(stated, law));
-    if (held === undefined) {
-      named.push([law, name]);
-    } else if (held[1] !== name) {
-      return Result.fail({ first: held[1], law, second: name });
+  const ordinary = Object.values(relations).flatMap((member) =>
+    Option.toArray(Schema.decodeUnknownOption(Ordinary)(member)),
+  );
+  for (const { fields, name: relation } of ordinary) {
+    for (const [field, descriptor] of Object.entries(fields)) {
+      // The type grizzle's installation types the field's column by: a generated or accumulated
+      // field's declared type, any other field's descriptor itself.
+      const type = Option.match(Schema.decodeUnknownOption(Written)(descriptor), {
+        onNone: () => descriptor,
+        onSome: (written) => (written.writing === "generated" ? written.type : written.field),
+      });
+      if (isTextType(type) && !plain.has(type)) {
+        const name = names.get(type);
+        if (name === undefined) {
+          return Result.fail({ field, relation });
+        }
+
+        const { flags, source } = type.pattern;
+        named.push([{ field, flags, kind: "pattern", relation, source }, name]);
+      }
     }
   }
 
@@ -432,22 +482,88 @@ export const patternLawsOf = (
 };
 
 /**
- * {@link patternLawsOf} of the table's own rows, which fails the module's load on a conflict, naming
- * the pattern and its two laws, since the table is a constant no caller can repair.
+ * The law each text type of Qti's fields states, by the type's identity: the one object its module
+ * exports and its relations type their fields by, so a bound that moves moves its row. Every text
+ * field's pattern law is named by its type's row ({@link patternLawsOf}), in the classes of the
+ * orchestrator's ruling of 2026-11-06:
  *
- * @param types - Each type, with the law it states.
- * @returns The laws, one per source.
+ * - A bound on a text is "Key text bound", a stated limit. `keyText` and `namespaceText` hold any
+ *   text; the bounded names and paths also carry a production no package the reader accepts breaks,
+ *   so their refusal means the bound alone. A prefix and a local name are NCNames because crust
+ *   reads with saxes's `xmlns` on, which refuses a name that is no QName (Namespaces in XML 1.0,
+ *   §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
+ *   with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
+ *   refuses an absolute name; a typed float map key is an `xs:double` lexical form because the
+ *   import writes its row only for one (`doublePattern`);
+ * - An unbounded XML production (a node's or an attribute's `Char*`, a comment, an instruction, a
+ *   doctype, an encoding name, a version number, an NCName) is "XML production", which crust
+ *   refuses before any row exists;
+ * - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
+ *   which crust does not check, so the domain is the law;
+ * - The whitespace around an IDREF token is the host's own split, "E1 derived", as is every other
+ *   piece the host splits a lexical form into: a map key's, a reference's, a node's end characters,
+ *   a selection's form.
  */
-const patternLaws = (
-  types: readonly (readonly [TextType, LawName])[],
-): readonly (readonly [LawOf<"pattern">, LawName])[] =>
-  Result.getOrThrowWith(
-    patternLawsOf(types),
-    ({ first, law, second }) =>
-      new Error(
-        `Two rows of writtenLaws in src/import/refusal.ts name the law ${Formatter.format(law)} "${first}" and "${second}", and grizzle reports one law per pattern. Name both rows by the one law a package can break, or give one type a pattern of its own.`,
-      ),
-  );
+export const textLaws: ReadonlyMap<TextType, LawName> = new Map<TextType, LawName>([
+  [keyText, "Key text bound"],
+  [namespaceText, "Key text bound"],
+  [Prefix, "Key text bound"],
+  [OpenLocal, "Key text bound"],
+  [NamespacePrefix, "Key text bound"],
+  [ForeignNamespace, "Key text bound"],
+  [EntryPath, "Key text bound"],
+  [FloatKey, "Key text bound"],
+  [NamespaceUri, "Namespace name"],
+  [Chars, "XML production"],
+  [Lexical, "XML production"],
+  [CommentText, "XML production"],
+  [PiTarget, "XML production"],
+  [PiData, "XML production"],
+  [DoctypeText, "XML production"],
+  [EncName, "XML production"],
+  [XmlVersion, "XML production"],
+  [NcName, "XML production"],
+  [EntityName, "XML production"],
+  [Space, "E1 derived"],
+  [Sign, "E1 derived"],
+  [Zeros, "E1 derived"],
+  [Digits, "E1 derived"],
+  [Negative, "E1 derived"],
+  [Gap, "E1 derived"],
+  [Item, "E1 derived"],
+  [Affix, "E1 derived"],
+  [Separator, "E1 derived"],
+  [HrefParams, "E1 derived"],
+  [EndCharacter, "E1 derived"],
+  [SelectForm, "E1 derived"],
+  // `day` restates `lastUpdated`, a `DateDType`, whose language the attribute's value domain
+  // states: xs:date's lexical space, the month lengths and the leap rule included, under its
+  // pattern. Its type, `DayForm`, `lexical(date)`, is that language, and its pattern law is the
+  // value domain's, with its rule, so one cause names one rule (the orchestrator's ruling of
+  // 2026-11-06).
+  [DayForm, "value domain"],
+]);
+
+/**
+ * The text types whose pattern is a tautology, which grizzle installs as plain text, with no domain
+ * and so no law (`physical/ddl/domains.ts` `structuralRegex` and `text/refinement.ts` of the
+ * vendored engine): `anyText`, a package's name. Grizzle reports no reading of whether a type's
+ * pattern is a tautology, so its type is listed here, beside the named ones.
+ */
+export const plainTexts: ReadonlySet<TextType> = new Set([anyText]);
+
+/**
+ * Every pattern law Qti states, one per text field, each named by its type's row of
+ * {@link textLaws}. The table is a constant no caller can repair, so a text field whose type has
+ * no row fails the module's load, naming the field.
+ */
+const patternLaws = Result.getOrThrowWith(
+  patternLawsOf(Qti.relations, textLaws, plainTexts),
+  ({ field, relation }) =>
+    new Error(
+      `${relation}.${field} is typed by a text type no row of textLaws in src/import/refusal.ts names. Export the type from its module, type the field by that one object, and give it a row of textLaws, or of plainTexts if its pattern is a tautology.`,
+    ),
+);
 
 /**
  * The law each primary key of `tests.ts`'s relations is named by: an overlay's "Test overlay", and
@@ -483,29 +599,11 @@ const testKeyNames = {
 
 /**
  * The laws written out row by row, each as its outcome names it, with its name in {@link lawTable}:
- * the text types' patterns, each read from the type its module exports, so a bound that moves moves
- * its row; each relation's primary key; and the generated fields' laws ({@link WrittenLaw}), in the
- * module order of the plan's §C. A statement's laws are named where it is stated
- * ({@link namedLaws}).
+ * each text field's pattern law ({@link patternLaws}); each relation's primary key; and the
+ * generated fields' laws ({@link WrittenLaw}), in the module order of the plan's §C. A statement's
+ * laws are named where it is stated ({@link namedLaws}).
  *
- * - **The text patterns**, in three classes (the orchestrator's ruling of 2026-11-06):
- *
- *   - A bound on a text is "Key text bound", a stated limit. `keyText` and `namespaceText` hold any
- *     text; the bounded names and paths also carry a production no package the reader accepts breaks,
- *     so their refusal means the bound alone. A prefix and a local name are NCNames because crust
- *     reads with saxes's `xmlns` on, which refuses a name that is no QName (Namespaces in XML 1.0,
- *     §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
- *     with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
- *     refuses an absolute name; a typed float map key is an `xs:double` lexical form because the
- *     import writes its row only for one (`doublePattern`);
- *   - An unbounded XML production (a comment, an instruction, a doctype, an encoding name, a version
- *     number, an NCName) is "XML production", which crust refuses before any row exists. `Char*`
- *     (`Chars`, an attribute's `Lexical`) has the foreign namespace name's very pattern, so it is
- *     that law, "Key text bound": grizzle reports one law per pattern ({@link patternLawsOf}), and
- *     the bound is the one cause of it a package reaches;
- *   - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
- *     which crust does not check, so the domain is the law;
- *   - The whitespace around an IDREF token is the host's own split, "E1 derived".
+ * - **The text fields' patterns**, one law per field, named by its type's row of {@link textLaws}.
  * - **Each relation's primary key**, under the law its module's rows belong to.
  * - **The generated fields**: each one's law, its term's NULL, beside its relation's rows, under the
  *   law that states its value exists. No term of Qti's reads `C.at`, the one read that can miss, so
@@ -513,38 +611,7 @@ const testKeyNames = {
  *   so an outcome naming it still has a rule.
  */
 const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
-  ...patternLaws([
-    [keyText, "Key text bound"],
-    [namespaceText, "Key text bound"],
-    [str.regex(prefixPattern), "Key text bound"],
-    [OpenLocal, "Key text bound"],
-    [NamespacePrefix, "Key text bound"],
-    [ForeignNamespace, "Key text bound"],
-    [EntryPath, "Key text bound"],
-    [FloatKey, "Key text bound"],
-    [NamespaceUri, "Namespace name"],
-    [CommentText, "XML production"],
-    [PiTarget, "XML production"],
-    [PiData, "XML production"],
-    [DoctypeText, "XML production"],
-    [EncName, "XML production"],
-    [XmlVersion, "XML production"],
-    [NcName, "XML production"],
-    [EntityName, "XML production"],
-    [Space, "E1 derived"],
-    [str.regex(pointKeyPattern), "E1 derived"],
-    [str.regex(pairKeyPattern), "E1 derived"],
-    [Sign, "E1 derived"],
-    [Zeros, "E1 derived"],
-    [Digits, "E1 derived"],
-    [Negative, "E1 derived"],
-    [Gap, "E1 derived"],
-    [Item, "E1 derived"],
-    [Affix, "E1 derived"],
-    [Separator, "E1 derived"],
-    [HrefParams, "E1 derived"],
-    [EndCharacter, "E1 derived"],
-  ]),
+  ...patternLaws,
   [primaryKeyOf("Node", "id"), "Node key"],
   ...(
     [
@@ -624,8 +691,8 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
   // An IDREF token's piece, a header's and a tolerance value's, is its own whitespace and token
   // concatenated, its concat fold's step: written texts, none NULL, so the term is never NULL and
-  // no row breaks these. A piece past its keyText bound is refused by that type's pattern law, "Key
-  // text bound".
+  // no row breaks these. A piece past its keyText bound is refused by the piece's own pattern law,
+  // named by keyText's row, "Key text bound".
   [generatedOf(Idref, "piece"), "E1 derived"],
   [generatedOf(TextIdref, "piece"), "E1 derived"],
   [generatedOf(HeaderToken, "piece"), "E1 derived"],
@@ -634,6 +701,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     [
       "Declaration",
       "DeclarationBaseType",
+      "DeclarationName",
       "ValueSet",
       "Value",
       "DeclaredValue",
@@ -673,10 +741,10 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
         testKeyNames[name],
       ] as const,
   ),
-  ...patternLaws([[SelectForm, "E1 derived"]]),
-  // `select` casts `selectForm`, which SelectForm's pattern, the row above, holds to the language
-  // the cast reads total: a form outside it is refused by that law as the statement casts it into
-  // its column, before PostgreSQL computes `select`, so no row breaks this one.
+  // `select` casts `selectForm`, which its pattern law, named by SelectForm's row of textLaws,
+  // holds to the language the cast reads total: a form outside it is refused by that law as the
+  // statement casts it into its column, before PostgreSQL computes `select`, so no row breaks this
+  // one.
   [generatedOf(SectionSelection, "select"), "E1 derived"],
   ...[
     AssessmentObject,
@@ -708,15 +776,11 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
-  // `day` restates `lastUpdated`, a `DateDType`, whose language the attribute's value domain
-  // states: xs:date's lexical space, the month lengths and the leap rule included, under its
-  // pattern. Its type, lexical(date), is that language, and its pattern law is the value domain's,
-  // with its rule, so one cause names one rule (the orchestrator's ruling of 2026-11-06).
-  ...patternLaws([[lexical(date), "value domain"]]),
-  // `date` casts `day`, which lexical(date)'s pattern, the row above, holds to the days 0001-01-01
-  // to 9999-12-31 the cast reads total: a day outside it is refused by that law as the statement
-  // casts it into its column, before PostgreSQL computes `date`, so no row breaks this one. Its
-  // value is the calendar day `lastUpdated` names, which the value domain states exists.
+  // `date` casts `day`, which its pattern law, named by DayForm's row of textLaws, holds to the
+  // days 0001-01-01 to 9999-12-31 the cast reads total: a day outside it is refused by that law as
+  // the statement casts it into its column, before PostgreSQL computes `date`, so no row breaks
+  // this one. Its value is the calendar day `lastUpdated` names, which the value domain states
+  // exists.
   [generatedOf(StatisticDate, "date"), "value domain"],
   ...[
     AriaElement,
@@ -783,9 +847,9 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
       ] as const,
   ),
   // A typed map key's generated fields read its own split, by concatenation and conditionals, or a
-  // float key's `Compute.parseDouble`, which `FloatKey`'s law above holds to `xs:double`'s lexical
-  // space, inside the `doubleText` the parse reads total. No term reads a closed relation, so none
-  // is NULL and no row breaks these.
+  // float key's `Compute.parseDouble`, which its key's pattern law, named by FloatKey's row of
+  // textLaws, holds to `xs:double`'s lexical space, inside the `doubleText` the parse reads total.
+  // No term reads a closed relation, so none is NULL and no row breaks these.
   [generatedOf(MapKeyInteger, "negative"), "E1 derived"],
   [generatedOf(MapKeyInteger, "value"), "E1 derived"],
   [generatedOf(MapKeyFloat, "value"), "E1 derived"],
@@ -799,6 +863,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     DeclarationTable,
     Expression,
     ExpressionAttribute,
+    HeldType,
     Literal,
     LiteralTyped,
     MappingItemRef,
@@ -830,8 +895,8 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
       ] as const,
   ),
   // A segment's token is its separator and its piece concatenated, its concat fold's step: written
-  // texts, none NULL, so no row breaks this. A token past its keyText bound is refused by that
-  // type's pattern law, "Key text bound".
+  // texts, none NULL, so no row breaks this. A token past its keyText bound is refused by the
+  // token's own pattern law, named by keyText's row, "Key text bound".
   [generatedOf(ReferenceSegment, "token"), "E1 derived"],
   ...[Reference, ReferencePath, TextReference, TextReferencePath].map(
     ({ name, primaryKey }) =>
@@ -1434,7 +1499,7 @@ export class UnownedLaws extends Schema.TaggedError<UnownedLaws>()("UnownedLaws"
    * The laws, and the repair.
    */
   override get message(): string {
-    return `No rule owns the laws ${this.laws.join("; ")}. Group the statement of each under the law it states in its module's laws by name (namedLaws in src/import/refusal.ts), or give a primary key, pattern or generated field a row of writtenLaws there, and run the census in refusal.oracle.test.ts.`;
+    return `No rule owns the laws ${this.laws.join("; ")}. Group the statement of each under the law it states in its module's laws by name (namedLaws in src/import/refusal.ts), or give a primary key or generated field a row of writtenLaws there and a text type a row of textLaws, and run the census in refusal.oracle.test.ts.`;
   }
 }
 

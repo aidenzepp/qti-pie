@@ -18,7 +18,7 @@ import {
   ContentReference,
   interactionKinds,
 } from "#pantry/grammar/install.ts";
-import { booleanOf, isNcName } from "#pantry/grammar/domains.ts";
+import { booleanOf, collapse, isNcName } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
@@ -26,7 +26,7 @@ import { baseTypesOf, declaredFieldsOf } from "#pantry/import/overlays/declarati
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
+import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
 import { declarationKinds } from "#pantry/qti/declarations.ts";
 import { itemKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
@@ -191,16 +191,6 @@ type CountName = (typeof ChoiceBound.rows)[number]["min"];
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
- * XML whitespace at the start of a text.
- */
-const leading = /^[\t\n\r ]*/u;
-
-/**
- * XML whitespace at the end of a text.
- */
-const trailing = /[\t\n\r ]*$/u;
-
-/**
  * An `xs:integer` form, split into its sign and its digits (XML Schema 1.1 Part 2 §3.3.13).
  */
 const integerParts = /^(?<sign>[+-]?)(?<digits>[0-9]+)$/u;
@@ -229,67 +219,6 @@ const countValueOf = (form: string): Option.Option<bigint> => {
     Option.map((digits) => (groups?.["sign"] === "-" ? -BigInt(digits) : BigInt(digits))),
     Option.filter((value) => value >= 0n && value <= countMost),
   );
-};
-
-/**
- * XML whitespace `S`, possibly none, as the `lead` and `trail` of a read attribute are typed.
- */
-type Space = Addition<typeof InteractionAttribute>["lead"];
-
-/**
- * Decide whether a text is XML whitespace, possibly none.
- *
- * @param text - The text, none where a pattern matched nothing.
- * @returns Whether it is a {@link Space}.
- */
-const isSpace = (text: string | undefined): text is Space =>
-  text !== undefined && /^[\t\n\r ]*$/u.test(text);
-
-/**
- * Take the whitespace a pattern anchors at one end of a text: {@link leading} or {@link trailing},
- * each of which matches every text, its run possibly empty.
- *
- * @param pattern - The pattern.
- * @param text - The text.
- * @returns The run.
- * @throws {Error} When the pattern matches no whitespace run, which both patterns rule out: a
- *   defect of this splitter, never of the document.
- */
-const spaceAt = (pattern: RegExp, text: string): Space => {
-  const run = pattern.exec(text)?.[0];
-  if (!isSpace(run)) {
-    throw new Error(
-      `The whitespace pattern ${String(pattern)} took no run of XML whitespace from ${JSON.stringify(text)}, but it matches every text. Correct the pattern pieces splits by.`,
-    );
-  }
-
-  return run;
-};
-
-/**
- * A lexical form's pieces: its outer whitespace and its collapsed value.
- */
-export interface Pieces {
-  readonly lead: Space;
-  readonly trail: Space;
-  readonly value: string;
-}
-
-/**
- * Split a lexical form into its outer whitespace and its collapsed value, as `E1_derived` proves
- * it: an all-whitespace form puts its whitespace in `lead`.
- *
- * @param lexical - The lexical form as written.
- * @returns Its pieces.
- * @throws {Error} When a whitespace pattern takes no run ({@link spaceAt}): a defect of this
- *   splitter, never of the document.
- */
-export const pieces = (lexical: string): Pieces => {
-  const lead = spaceAt(leading, lexical);
-  const rest = lexical.slice(lead.length);
-  const trail = spaceAt(trailing, rest);
-
-  return { lead, trail, value: rest.slice(0, rest.length - trail.length) };
 };
 
 /**
@@ -363,7 +292,10 @@ const lexicalOf = (
 ): Option.Option<string> => Option.fromNullishOr(context.attributes.get(node)?.get(name));
 
 /**
- * Read an element's attribute collapsed.
+ * Read an element's attribute collapsed (XML Schema Part 2, §4.3.6), as
+ * `InteractionAttribute.value` holds it: whitespace inside a value is kept, one space a run, so a
+ * value with some is no value of the attribute's atomic type, and its value domain refuses it
+ * alone.
  *
  * @param context - The document.
  * @param node - The element.
@@ -374,8 +306,7 @@ const valueOf = (
   context: Pick<Context, "attributes">,
   node: NodeId,
   name: string,
-): Option.Option<string> =>
-  Option.map(lexicalOf(context, node, name), (lexical) => pieces(lexical).value);
+): Option.Option<string> => Option.map(lexicalOf(context, node, name), collapse);
 
 /**
  * Read the name an element's attribute gives: its value collapsed, where that is an NCName
@@ -422,10 +353,11 @@ const declaredFieldsAt = (context: Pick<Context, "attributes">, node: NodeRow<Co
   declaredFieldsOf(node.kind, (name) => Option.getOrUndefined(lexicalOf(context, node.id, name)));
 
 /**
- * Read a document's declarations as their `Declaration` rows hold them ({@link declaredFieldsAt}),
- * and the names only a declaration with no row holds, one whose identifier or cardinality is
- * unwritten or spells nothing, or whose base type spells nothing, which nothing binds or references
- * (lane NIL's audit, B11). A declaring element that writes no `identifier` names nothing.
+ * Read a document's named declarations as their `DeclarationName` rows hold them
+ * ({@link declaredFieldsAt}), and the names only a declaration with no row holds, one whose
+ * cardinality is unwritten or spells nothing, or whose base type spells nothing, which nothing
+ * binds or references (lane NIL's audit, B11). A declaring element whose `identifier` is unwritten
+ * or names nothing has no name, so nothing binds or references it (spec reading 157).
  *
  * @param context - The document, its declarations not yet read.
  * @returns The declarations and the untyped names.
@@ -438,12 +370,18 @@ const declaredOf = (
       ? Option.toArray(lexicalOf(context, node.id, "identifier")).map((identifier) => ({
           fields: declaredFieldsAt(context, node),
           node: node.id,
-          written: pieces(identifier).value,
+          written: collapse(identifier),
         }))
       : [],
   );
   const declared = read.flatMap(({ fields, node }) =>
-    Option.toArray(fields).map((declaration) => ({ ...declaration, node })),
+    Option.toArray(fields).flatMap((declaration) =>
+      Option.toArray(declaration.identifier).map((identifier) => ({
+        ...declaration,
+        identifier,
+        node,
+      })),
+    ),
   );
   const names = new Set(declared.map(({ identifier }) => identifier));
 
@@ -605,7 +543,7 @@ const readOnKinds: ReadonlySet<string> = new Set(
 );
 
 /**
- * Build the read attributes: each attribute O3 reads, its lexical form and its pieces.
+ * Build the read attributes: each attribute O3 reads, its lexical form and its value collapsed.
  *
  * @param context - The document.
  * @returns The rows, keyed by (node, name).
@@ -621,13 +559,13 @@ const interactionAttributesOf = (context: Context) =>
             [
               keyOf([node, name]),
               {
-                ...pieces(lexical),
                 document: context.document,
                 kind,
                 lexical,
                 name,
                 node,
                 rootKind: context.rootKind,
+                value: collapse(lexical),
               } satisfies Addition<typeof InteractionAttribute>,
             ] as const,
           ]
@@ -1488,15 +1426,15 @@ const placedOf = (
 
 /**
  * Read a package's declarations as the placed bindings and references resolve against them: each
- * `Declaration` row with its document and its base type, its `DeclarationBaseType`'s, none where it
- * has none, a record's (lane NIL's audit, B12).
+ * `DeclarationName` row with its document and its base type, its `DeclarationBaseType`'s, none
+ * where it has none, a record's (lane NIL's audit, B12).
  *
- * @param declarations - Every declaration of the package (Q5.08's `Declaration` rows).
+ * @param declarations - Every named declaration of the package (Q5.08's `DeclarationName` rows).
  * @param baseTypes - Every declaration's base type, where it has one.
  * @returns The declarations.
  */
 const declaredVariablesOf = (
-  declarations: Iterable<Addition<typeof Declaration>>,
+  declarations: Iterable<Addition<typeof DeclarationName>>,
   baseTypes: Iterable<Addition<typeof DeclarationBaseType>>,
 ): readonly (DeclaredVariable & {
   readonly document: NodeId;
@@ -1540,7 +1478,8 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  *   `DeclarationBaseType` rows).
  * @param input.contexts - Every fragment's context variable references ({@link rowsOf}'s
  *   `SectionContextName`).
- * @param input.declarations - Every declaration of the package (Q5.08's `Declaration` rows).
+ * @param input.declarations - Every named declaration of the package (Q5.08's `DeclarationName`
+ *   rows).
  * @param input.feedbacks - Every section document's and fragment's feedback references
  *   ({@link rowsOf}'s `SectionFeedbackName`).
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
@@ -1554,7 +1493,7 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
 export const sectionRowsOf = (input: {
   readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
   readonly contexts: Iterable<Addition<typeof SectionContextName>>;
-  readonly declarations: Iterable<Addition<typeof Declaration>>;
+  readonly declarations: Iterable<Addition<typeof DeclarationName>>;
   readonly feedbacks: Iterable<Addition<typeof SectionFeedbackName>>;
   readonly instances: Iterable<InstanceRoot>;
   readonly prints: Iterable<Addition<typeof SectionPrintedName>>;
@@ -1642,7 +1581,8 @@ export interface PlacedBindingRows {
  * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
  *   `DeclarationBaseType` rows).
  * @param input.choices - Every document's choices ({@link rowsOf}'s `Choice`).
- * @param input.declarations - Every declaration of the package (Q5.08's `Declaration` rows).
+ * @param input.declarations - Every named declaration of the package (Q5.08's `DeclarationName`
+ *   rows).
  * @param input.hottexts - Every document's hottexts ({@link rowsOf}'s `Hottext`).
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
@@ -1655,7 +1595,7 @@ export const placedBindingRowsOf = (input: {
   readonly adaptive: Iterable<Addition<typeof ItemMode>>;
   readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
   readonly choices: Iterable<Addition<typeof Choice>>;
-  readonly declarations: Iterable<Addition<typeof Declaration>>;
+  readonly declarations: Iterable<Addition<typeof DeclarationName>>;
   readonly hottexts: Iterable<Addition<typeof Hottext>>;
   readonly instances: Iterable<InstanceRoot>;
   readonly mosts: Iterable<Addition<typeof MostCount>>;

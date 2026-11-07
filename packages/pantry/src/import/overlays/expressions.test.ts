@@ -568,25 +568,12 @@ const referenceLawsOnHost: readonly (readonly [
       namedKinds.has(`${v.kind} ${declarationKindOf(v, rows) ?? ""}`),
   ],
   [
-    "Set_type",
-    (v) =>
-      v.attribute !== "identifier" ||
-      !setters.has(v.kind) ||
-      ((v.heldBase === v.baseType || silent.has(v.heldBase) || silent.has(v.baseType)) &&
-        (v.heldCardinality === v.cardinality ||
-          v.heldCardinality === "unknown" ||
-          v.cardinality === "unknown")),
-  ],
-  [
     "Lookup_type",
     (v) =>
       v.attribute !== "identifier" ||
       v.kind !== lookupKindHandle ||
-      (["single", "unknown"].includes(v.heldCardinality) &&
-        ["duration", "float", "integer", "any", "unknown"].includes(v.heldBase) &&
-        (v.resolution !== "declared" ||
-          ["qti-match-table", "qti-interpolation-table"].includes(v.table)) &&
-        (v.table !== "qti-match-table" || ["integer", "any", "unknown"].includes(v.heldBase))),
+      v.resolution !== "declared" ||
+      ["qti-match-table", "qti-interpolation-table"].includes(v.table),
   ],
   [
     "Reference_type",
@@ -622,6 +609,34 @@ const referenceLawsOnHost: readonly (readonly [
           (v.kind === "qti-map-response-point" &&
             v.table === "qti-area-mapping" &&
             ["point", "any", "unknown"].includes(v.baseType)))),
+  ],
+];
+
+/**
+ * A `HeldType` row.
+ */
+type Held = ExpressionRows["HeldType"] extends ReadonlyMap<string, infer R> ? R : never;
+
+/**
+ * Each law over a setter's or a lookup's held type, judged over its row.
+ */
+const heldLawsOnHost: readonly (readonly [Law, (h: Held) => boolean])[] = [
+  [
+    "Set_type",
+    (h) =>
+      !setters.has(h.kind) ||
+      ((h.heldBase === h.baseType || silent.has(h.heldBase) || silent.has(h.baseType)) &&
+        (h.heldCardinality === h.cardinality ||
+          h.heldCardinality === "unknown" ||
+          h.cardinality === "unknown")),
+  ],
+  [
+    "Lookup_type",
+    (h) =>
+      h.kind !== lookupKindHandle ||
+      (["single", "unknown"].includes(h.heldCardinality) &&
+        ["duration", "float", "integer", "any", "unknown"].includes(h.heldBase) &&
+        (h.table !== "qti-match-table" || ["integer", "any", "unknown"].includes(h.heldBase))),
   ],
 ];
 
@@ -734,6 +749,14 @@ const breachesOf = (rows: ExpressionRows): ReadonlySet<Law> => {
   for (const v of rows.VariableRef.values()) {
     for (const [law, holds] of referenceLawsOnHost) {
       if (!holds(v, rows)) {
+        broken.add(law);
+      }
+    }
+  }
+
+  for (const h of rows.HeldType.values()) {
+    for (const [law, holds] of heldLawsOnHost) {
+      if (!holds(h)) {
         broken.add(law);
       }
     }

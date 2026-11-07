@@ -622,11 +622,12 @@ const referenceBasesOf = (grammar: ComposedGrammar): ReadonlyMap<string, string>
   );
 
 /**
- * What the reference laws read of one reference: its own fields, its element's one expression's
- * type, the table its declaration holds of those its element reads, and its element's language.
+ * What the reference laws read of one reference: its own fields, its element's first expression's
+ * type, none where it holds no expression, the table its declaration holds of those its element
+ * reads, and its element's language.
  */
 interface Read {
-  readonly heldType: Type;
+  readonly heldType: Option.Option<Type>;
   readonly language: string;
   readonly reference: Reference;
   readonly referenceBase: string;
@@ -657,19 +658,23 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
     ({ heldType, reference }) =>
       reference.attribute === "identifier" &&
       setKinds.some((kind) => kind === reference.node.kind) &&
-      !fits(heldType, reference.type),
+      Option.exists(heldType, (held) => !fits(held, reference.type)),
   ],
   [
     "Lookup type",
     ({ heldType, reference, table }) =>
       reference.attribute === "identifier" &&
       reference.node.kind === lookupKind &&
-      !(
-        (heldType.cardinality === "single" || heldType.cardinality === "unknown") &&
-        ["duration", "float", "integer", "any", "unknown"].includes(heldType.base) &&
-        (reference.resolution !== "declared" || table !== "none") &&
-        (table !== "qti-match-table" || ["integer", "any", "unknown"].includes(heldType.base))
-      ),
+      ((reference.resolution === "declared" && table === "none") ||
+        Option.exists(
+          heldType,
+          (held) =>
+            !(
+              (held.cardinality === "single" || held.cardinality === "unknown") &&
+              ["duration", "float", "integer", "any", "unknown"].includes(held.base) &&
+              (table !== "qti-match-table" || ["integer", "any", "unknown"].includes(held.base))
+            ),
+        )),
   ],
   [
     "Reference type",
@@ -748,7 +753,7 @@ const referenceBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly B
         elementsOf(rows, declaration.id).find(({ kind }) => tables.includes(kind))?.kind ?? "none",
     });
     const read: Read = {
-      heldType: held === undefined ? unknownType : typed.typeOf(held),
+      heldType: Option.map(Option.fromNullishOr(held), typed.typeOf),
       language: typed.languageOf(node),
       reference,
       referenceBase: referenceBases.get(`${node.kind} ${reference.attribute}`) ?? "",
@@ -761,8 +766,10 @@ const referenceBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly B
       baseType: reference.type.base,
       cardinality: reference.type.cardinality,
       declarationKind: reference.declarationKind,
-      heldBase: read.heldType.base,
-      heldCardinality: read.heldType.cardinality,
+      ...Option.match(read.heldType, {
+        onNone: () => ({}),
+        onSome: (type) => ({ heldBase: type.base, heldCardinality: type.cardinality }),
+      }),
       identifier: reference.identifier,
       table: table === "none" ? "" : table,
     };

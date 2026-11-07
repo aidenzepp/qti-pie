@@ -44,7 +44,7 @@ import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { itemRefKind, itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
-import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
+import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
 import type {
   Expression,
   MappingSourceDeclaration,
@@ -179,7 +179,10 @@ const restates = (law: Law, restated: Restated): boolean => {
  */
 const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   [{ kind: "check", name: "Item_ref_target" }, "Item ref target"],
-  [{ from: ["Node", "id"], kind: "contained", to: ["ItemRefTarget", "node"] }, "Item ref target"],
+  [
+    { from: ["Attribute", "node"], kind: "contained", to: ["ItemRefTarget", "node"] },
+    "Item ref target",
+  ],
   [
     {
       from: ["ItemRefTarget", "node", "package", "path"],
@@ -410,7 +413,7 @@ const valueCardinalityOf = (cardinality: string): string =>
  */
 interface HostRows {
   readonly baseTypes: ReadonlyMap<string, Addition<typeof DeclarationBaseType>>;
-  readonly declarations: readonly Addition<typeof Declaration>[];
+  readonly declarations: readonly Addition<typeof DeclarationName>[];
   readonly documentOf: ReadonlyMap<string, string>;
   readonly expressions: readonly Addition<typeof Expression>[];
   readonly inputs: PackageInputs;
@@ -655,10 +658,11 @@ const lookupBreaches = (rows: HostRows): readonly HostBreach[] => {
 
 /**
  * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item
- * ref has its target, of the item type or an LTI type, named by a resource of the package; each of
- * the item type has its document, whose root is an item, and no other has one; and each found
- * item ref of the assembly's names reads its type and its item from them. Each is named by the
- * empty name, as the oracle keys the law by its path alone.
+ * ref that writes an href has its target, of the item type or an LTI type, named by a resource of
+ * the package; each of the item type has its document, whose root is an item, and no other has
+ * one; and each found item ref of the assembly's names that names a resource reads its type and
+ * its item from them. Each is named by the empty name, as the oracle keys the law by its path
+ * alone.
  *
  * @param inputs - The import's rows.
  * @returns The breaches.
@@ -668,15 +672,18 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const targets = [...inputs.ItemRefTarget.values()];
   const documents = [...inputs.ItemRefDocument.values()];
   const itemTypes: ReadonlySet<string> = new Set([itemResourceType, ...linkResourceTypes]);
-  const itemRefs = [...inputs.Named.values()].filter(
-    ({ kind }) => kind === "qti-assessment-item-ref",
+  // The item refs that write an href, each read through its href's `Reference`, the attribute's
+  // copy both ways.
+  const hrefs = [...inputs.Reference.values()].filter(
+    ({ kind, name }) => kind === "qti-assessment-item-ref" && name === "href",
   );
   const found = [...inputs.NameLookup.values()].filter(
-    ({ found: held, kind }) => held && kind === "qti-assessment-item-ref",
+    ({ found: held, kind, resourceType }) =>
+      held && kind === "qti-assessment-item-ref" && resourceType !== "none",
   );
 
   return [
-    ...itemRefs.flatMap(({ node }) => unless(inputs.ItemRefTarget.has(node), law, "")),
+    ...hrefs.flatMap(({ node }) => unless(inputs.ItemRefTarget.has(node), law, "")),
     ...targets.flatMap((target) => [
       ...unless(itemTypes.has(target.type), law, ""),
       ...unless(
@@ -733,7 +740,7 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
 const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const rows: HostRows = {
     baseTypes: inputs.DeclarationBaseType,
-    declarations: [...inputs.Declaration.values()],
+    declarations: [...inputs.DeclarationName.values()],
     documentOf: new Map(
       [...inputs.ItemRefDocument.values()].map(({ document, node }) => [node, document]),
     ),

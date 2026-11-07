@@ -9,10 +9,11 @@
  *   resolves each branch rule of its document once (the count law of `Instance.rules`), and each
  *   resolution meets `Branch_target` and `Branch_forward` at its instance's start, which grizzle
  *   copies onto it from the tree's pre-order.
- * - **The law oracle** (`#pantry/test/oracle-verdict.ts` `oracleVerdict`) must accept every package
- *   but under `branch-target` and `branch-forward`. It states no breach of either today: its tables
- *   name both laws, and no judgment of it raises them, so it accepts every package reading 87
- *   refuses (R87's finding), and the model stands in for it.
+ * - **The law oracle** (`#pantry/test/oracle-verdict.ts` `oracleVerdict`) must refuse each package
+ *   under exactly the rules its rows break, and under none but `branch-target` and
+ *   `branch-forward`: it judges reading 87 over each branch rule of each instance of the assembly
+ *   (`#pantry/test/oracle-laws/tests.ts`), as `Branch_target` and `Branch_forward` judge its
+ *   resolution, so the model and the oracle each answer for the rows.
  *
  * The same packages' write programs are compiled in `assembly.compile.oracle.test.ts`.
  */

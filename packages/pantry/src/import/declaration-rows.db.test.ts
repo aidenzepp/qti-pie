@@ -1,11 +1,13 @@
 /**
- * Declarations that have no `Declaration` row, on the lease (lane NIL's audit, B10 and B11): the
+ * Declarations that have no `Declaration` row, on the lease (lane NIL's audit, B11): the
  * database's verdict over the scope of `#pantry/test/declaration-cases.ts`, held to the law
  * oracle's (`importAgreesWithOracle`).
  *
- * A declaration whose `identifier` or `cardinality` is unwritten or spells nothing, or whose
- * `base-type` spells nothing, has no `Declaration` row, and nothing binds, references or hangs from
- * it in the importer's rows (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`).
+ * A declaration whose `cardinality` is unwritten or spells nothing, or whose `base-type` spells
+ * nothing, has no `Declaration` row, and nothing binds, references or hangs from it in the
+ * importer's rows (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`); one whose
+ * `identifier` is unwritten or names nothing keeps its row and has no name alone (spec reading
+ * 157).
  * Before, it had a row holding `""` and `single`, which its own `E1_derived` refused, and every row
  * that copied it judged the `single`. grizzle writes those flat relations before `Node` and
  * `Attribute`, whose AL3 and value domain are the laws, so such a package was refused under
@@ -50,8 +52,8 @@ describe.skipIf(!hasLease)("import/declaration-rows.db.test.ts, on the lease", (
       "the database refuses every case under a rule the law oracle predicts",
       (ctx) =>
         // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound: every declaration of the every-relation items
-        // and test, under each state of its identifier, cardinality and base type that leaves it
-        // no row, exhausted, one import each.
+        // and test, under each state of its cardinality and base type that leaves it no row,
+        // exhausted, one import each.
         searched(
           ctx,
           exhaust(

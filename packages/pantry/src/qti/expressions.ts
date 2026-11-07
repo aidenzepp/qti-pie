@@ -17,10 +17,11 @@
  * - **{@link Processing}**, one row per rule and processing element, carries the processing language
  *   from its root down; each expression takes its parent's.
  * - **{@link VariableRef}**, one row per variable reference a processing element makes, resolves it
- *   to a declaration of its document (`declarationRef`), a built-in variable (the installed
+ *   to a declaration of its document (`declarationNameRef`), a built-in variable (the installed
  *   `BuiltInVariable`, A63), or nothing, which only a document that is no item may hold; a claim of
  *   no declaration is proved by {@link VariableLookup}, and a table it reads by
- *   {@link DeclarationTable} (M2).
+ *   {@link DeclarationTable} (M2). The type a setter or a lookup sets its variable to is a row of
+ *   its own, {@link HeldType}.
  * - **{@link ExpressionAttribute}** carries the attributes an expression's type follows from
  *   (`base-type`, `name`, `weight-identifier`), an unwritten one included, {@link Literal} a base
  *   value's text, and {@link ProcessingTemplate} a response processing's published template.
@@ -100,7 +101,11 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { Declaration, DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
+import {
+  DeclarationBaseType,
+  DeclarationName,
+  declarationNameRef,
+} from "#pantry/qti/declarations.ts";
 import {
   BaseTypePattern,
   conditionKindHandles,
@@ -315,13 +320,13 @@ export const Processing = relation(
  *   spells, the whitespace around a bare name or the braces around a braced one; `parent`,
  *   `language`, `elementBase` and `elementCardinality`, its element's (`exprRef` for an expression,
  *   the language for a rule); `rootKind`, its document's root's; `resolution`; `baseType` and
- *   `cardinality`, the variable's type; `table`, the table its element needs the declaration to
- *   hold; and `heldBase` and `heldCardinality`, the type of a setter's or a lookup's one
- *   expression.
+ *   `cardinality`, the variable's type; and `table`, the table its element needs the declaration to
+ *   hold.
  *
  * The declaration a declared reference names is a row of its own, {@link VariableRefDeclaration}
  * (lane NIL's NS1: a reference that names no declaration has no declaration row, never the nil
- * uuid). A type field its element leaves unread holds `unknown`.
+ * uuid), and so is the type of a setter's or a lookup's one expression, {@link HeldType}. A type
+ * field its element leaves unread holds `unknown`.
  */
 export const VariableRef = relation(
   "VariableRef",
@@ -334,8 +339,6 @@ export const VariableRef = relation(
     document: uuid,
     elementBase: closedId(ValueBase),
     elementCardinality: closedId(ValueCardinality),
-    heldBase: closedId(ValueBase),
-    heldCardinality: closedId(ValueCardinality),
     identifier: keyText,
     kind: closedId(NodeKind),
     language: closedId(Language),
@@ -351,12 +354,12 @@ export const VariableRef = relation(
 
 /**
  * The declaration a declared {@link VariableRef} names, keyed as the reference: its
- * `declarationRef` tuple (`declaration`, `declarationKind`, `declCardinality` and `declBaseTypes`,
- * with its reference's `document` and `identifier`), and the reference's fields its laws read
- * beside it, each copied from the reference: its `baseType` is `unknown` where the declaration has
- * no base type, a record's, and else its {@link DeclarationBaseType}'s `valueBase` (lane NIL's
- * audit, B12). A reference exactly where its `resolution` is `declared` has
- * one (lane NIL's NS1), so one that names a built-in variable or nothing has none.
+ * `declarationNameRef` tuple (`declaration`, `declarationKind`, `declCardinality` and
+ * `declBaseTypes`, with its reference's `document` and `identifier`), and the reference's fields
+ * its laws read beside it, each copied from the reference: its `baseType` is `unknown` where the
+ * declaration has no base type, a record's, and else its {@link DeclarationBaseType}'s `valueBase`
+ * (lane NIL's audit, B12). A reference exactly where its `resolution` is `declared` has one (lane
+ * NIL's NS1), so one that names a built-in variable or nothing has none.
  */
 export const VariableRefDeclaration = relation(
   "VariableRefDeclaration",
@@ -376,6 +379,39 @@ export const VariableRefDeclaration = relation(
     table: closedId(ReferencedTable),
   },
   ["node", "attribute"],
+);
+
+/**
+ * The type a setter or a lookup sets its variable to, keyed by its node: the `exprRef` tuple of its
+ * first expression (`expression`, `node` its parent, `expressionKind`, `language`, `heldBase` and
+ * `heldCardinality`), the one its content model allows (a second breaks N5's `Follow`), beside the
+ * fields of its {@link VariableRef} that `Set_type` and `Lookup_type` compare with it (`kind`,
+ * `baseType`, `cardinality` and `table`), each copied from the reference.
+ *
+ * A row of its own (AGENTS.md's Schema intent: a value that may be missing is a row of its own
+ * relation), written where the setter both names a variable and holds an expression. One whose
+ * `identifier` names no variable, unwritten or no NCName (spec reading 152), has no reference, and
+ * one that holds no expression holds no type, so neither has a row, and AL3, its value domain or
+ * its content model refuses it alone. Every field is proved by a copy, but no law forces the row in
+ * where both are: a containment's source is one relation's rows, never the join of two. The import
+ * writes it there (`heldTypesOf`), and the genetic differential holds it to the oracle's `Set type`
+ * and `Lookup type`.
+ */
+export const HeldType = relation(
+  "HeldType",
+  {
+    baseType: closedId(ValueBase),
+    cardinality: closedId(ValueCardinality),
+    expression: uuid,
+    expressionKind: closedId(NodeKind),
+    heldBase: closedId(ValueBase),
+    heldCardinality: closedId(ValueCardinality),
+    kind: closedId(NodeKind),
+    language: closedId(Language),
+    node: uuid,
+    table: closedId(ReferencedTable),
+  },
+  ["node"],
 );
 
 /**
@@ -405,8 +441,8 @@ export const PlacedVariableRef = relation(
 
 /**
  * The declaration a declared {@link PlacedVariableRef} names among its assembly's item's
- * declarations, keyed as the placed reference: its `declarationRef` tuple (with its `assembly` as
- * its document and its `identifier`), and its reference's `kind` and `attribute`. A placed
+ * declarations, keyed as the placed reference: its `declarationNameRef` tuple (with its `assembly`
+ * as its document and its `identifier`), and its reference's `kind` and `attribute`. A placed
  * reference exactly where its `resolution` is `declared` has one (lane NIL's NS1).
  */
 export const PlacedVariableRefDeclaration = relation(
@@ -909,6 +945,7 @@ export const Reading = relation(
 export const referenceRelations = {
   AssembledReference,
   DeclarationTable,
+  HeldType,
   MappingItemRef,
   MappingLookup,
   MappingSourceDeclaration,
@@ -1020,8 +1057,8 @@ const templateAttributes = select(Attribute, (a) =>
 );
 
 /**
- * The setters' and the lookup's references to their variable, which copy their one expression's
- * type.
+ * The setters' and the lookup's references to their variable, whose fields a {@link HeldType}
+ * copies.
  */
 const heldReferences = select(VariableRef, (v) =>
   v.and(v.eq(v.attribute, "identifier"), v.in(v.kind, heldKinds)),
@@ -1640,10 +1677,13 @@ const digitSegments = select(ReferenceSegment, (s) => s.eq(s.digit, true));
 const foundNames = select(NameLookup, (n) => n.eq(n.found, true));
 
 /**
- * The item refs an assembly holds, with the type of what they name.
+ * The item refs an assembly holds that name a resource of the package, with its type. One whose
+ * lookup names `none`, NameLookup's null object for "no resource" (`representation-gaps.md` §4.3),
+ * has no target to copy: it writes no href, which AL3 alone refuses (spec reading 155), or its
+ * href names no resource, which "Item ref target" refuses over its target (`#pantry/qti/tests.ts`).
  */
-const foundItemRefs = select(NameLookup, (n) =>
-  n.and(n.eq(n.found, true), n.eq(n.kind, itemRefKind)),
+const targetedItemRefs = select(NameLookup, (n) =>
+  n.and(n.eq(n.found, true), n.eq(n.kind, itemRefKind), n.ne(n.resourceType, "none")),
 );
 
 /**
@@ -1779,7 +1819,7 @@ export const referenceLawsByName = {
     // again, and a second declaration of a name would break both. Declaration key alone says a
     // name's declaration is one, and the justification makes a found row that one, with its codes.
     contained(
-      on(Declaration, "document", "identifier", constant(true)),
+      on(DeclarationName, "document", "identifier", constant(true)),
       on(VariableLookup, "document", "name", "declared"),
     ),
     contained(
@@ -1792,7 +1832,7 @@ export const referenceLawsByName = {
         "cardinality",
         "baseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     key(on(absentNames, "document", "name")),
     check("E1_derived", VariableLookup, (l) =>
@@ -2197,9 +2237,9 @@ export const referenceLawsByName = {
   ],
   "Item ref target": [
     // A found item ref's target and item are its `ItemRefTarget`'s and `ItemRefDocument`'s, each a
-    // row only where the package holds one, so an item ref naming no resource of the package, or an
-    // item whose file it lacks, is refused here under the law that refuses the item ref itself.
-    contained(on(foundItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
+    // row only where the package holds one, so an item ref of the item type whose file the package
+    // lacks is refused here under the law that refuses the item ref itself.
+    contained(on(targetedItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
     contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
     // MappingItemRef: each mapping's item ref and what that names (reading 110), a row only where
     // the package holds the item ref's target, so a mapping under an item ref with none is refused
@@ -2296,7 +2336,7 @@ export const referenceLawsByName = {
         "declCardinality",
         "declBaseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Template_default_target", TemplateDefaultTarget, (t) =>
       t.eq(t.declarationKind, "qti-template-declaration"),
@@ -2367,7 +2407,7 @@ export const referenceLawsByName = {
         "declCardinality",
         "declBaseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Variable_mapping_source", MappingSourceDeclaration, (m) =>
       m.eq(m.declarationKind, "qti-outcome-declaration"),
@@ -2597,15 +2637,23 @@ export const expressionLawsByName = {
       on(Processing, "node", "language"),
     ),
     contained(on(VariableRef, "document", "rootKind"), on(Document, "node", "rootKind")),
+    // HeldType: a setter's or a lookup's reference, and its one expression, each copied.
     key(on(heldReferences, "node")),
     contained(
+      on(HeldType, "node", "kind", "baseType", "cardinality", "table"),
+      on(heldReferences, "node", "kind", "baseType", "cardinality", "table"),
+    ),
+    contained(
       on(
-        select(Expression, (e) => e.in(e.parentKind, heldKinds)),
-        "parent",
-        "baseType",
-        "cardinality",
+        HeldType,
+        "expression",
+        "node",
+        "expressionKind",
+        "language",
+        "heldBase",
+        "heldCardinality",
       ),
-      on(heldReferences, "node", "heldBase", "heldCardinality"),
+      exprRef,
     ),
     contained(
       on(
@@ -2875,14 +2923,17 @@ export const expressionLawsByName = {
       v.or(
         v.ne(v.attribute, "identifier"),
         v.ne(v.kind, lookupKindHandle),
-        v.and(
-          v.in(v.heldCardinality, ["single", "unknown"]),
-          v.in(v.heldBase, ["duration", "float", "integer", ...silentBases]),
-          v.or(
-            v.ne(v.resolution, "declared"),
-            v.in(v.table, ["qti-match-table", "qti-interpolation-table"]),
-          ),
-          v.or(v.ne(v.table, "qti-match-table"), v.in(v.heldBase, ["integer", ...silentBases])),
+        v.ne(v.resolution, "declared"),
+        v.in(v.table, ["qti-match-table", "qti-interpolation-table"]),
+      ),
+    ),
+    check("Lookup_type", HeldType, (h) =>
+      h.or(
+        h.ne(h.kind, lookupKindHandle),
+        h.and(
+          h.in(h.heldCardinality, ["single", "unknown"]),
+          h.in(h.heldBase, ["duration", "float", "integer", ...silentBases]),
+          h.or(h.ne(h.table, "qti-match-table"), h.in(h.heldBase, ["integer", ...silentBases])),
         ),
       ),
     ),
@@ -2958,20 +3009,19 @@ export const expressionLawsByName = {
     ),
   ],
   "Set type": [
-    check("Set_type", VariableRef, (v) =>
-      v.or(
-        v.ne(v.attribute, "identifier"),
-        v.not(v.in(v.kind, setKindHandles)),
-        v.and(
-          v.or(
-            v.eq(v.heldBase, v.baseType),
-            v.in(v.heldBase, silentBases),
-            v.in(v.baseType, silentBases),
+    check("Set_type", HeldType, (h) =>
+      h.or(
+        h.not(h.in(h.kind, setKindHandles)),
+        h.and(
+          h.or(
+            h.eq(h.heldBase, h.baseType),
+            h.in(h.heldBase, silentBases),
+            h.in(h.baseType, silentBases),
           ),
-          v.or(
-            v.eq(v.heldCardinality, v.cardinality),
-            v.eq(v.heldCardinality, "unknown"),
-            v.eq(v.cardinality, "unknown"),
+          h.or(
+            h.eq(h.heldCardinality, h.cardinality),
+            h.eq(h.heldCardinality, "unknown"),
+            h.eq(h.cardinality, "unknown"),
           ),
         ),
       ),
@@ -3005,7 +3055,7 @@ export const expressionLawsByName = {
         "declCardinality",
         "declBaseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Variable_declared", VariableRef, (v) =>
       v.or(
@@ -3033,7 +3083,7 @@ export const expressionLawsByName = {
         "declCardinality",
         "declBaseTypes",
       ),
-      declarationRef,
+      declarationNameRef,
     ),
     check("Variable_declared", PlacedVariableRef, (v) =>
       v.or(

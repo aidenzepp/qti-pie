@@ -265,8 +265,8 @@ const valueSetLawsOf = (
 };
 
 /**
- * Judge one declaration element by the O2 laws: its identifier, its typing, and each of its value
- * sets and values.
+ * Judge one declaration element by the O2 laws: its name, where it has one, its typing, and each of
+ * its value sets and values.
  *
  * @param rows - The document.
  * @param node - The declaration.
@@ -280,14 +280,13 @@ const declarationLawsOf = (
   sessionVariables: ReadonlySet<string>,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
-  // A declaration that writes no identifier or no cardinality, or one of the three outside its
+  // A declaration that writes no cardinality, or whose cardinality or base type lies outside its
   // value domain, is refused by AL3 ("required-attribute") or that domain ("attribute-lexical")
   // alone: an absent attribute is no empty one, and it has no `Declaration` row for these laws to
   // read (lane NIL's audit, B11). Each is read as its type reads it, and `base-type` and
   // `cardinality` enumerate a restriction of `xs:string`, whose whiteSpace is `preserve`, so a
   // padded form lies outside its domain.
   const typed = Option.all([
-    typedValueOf(rows, node.id, "identifier"),
     typedValueOf(rows, node.id, "cardinality"),
     typedOptionalOf(rows, node.id, "base-type"),
   ]);
@@ -298,29 +297,40 @@ const declarationLawsOf = (
   // A record has no base type, and every other variable has one (tables 4.5.3, 5.34.3, 5.115.3
   // and 5.151.3): its absence is no type. A typed name (SCORE, MAXSCORE, PASSED) is no record, its
   // whole value judged by its cardinality alone, and has its type where it has a base type; one
-  // with none is Declaration base type's alone (lane NIL's audit, B12).
-  const [identifier, cardinality, baseType] = typed.value;
+  // with none is Declaration base type's alone (lane NIL's audit, B12). An identifier that is
+  // unwritten, or outside its value domain, names nothing: AL3 or that domain refuses it alone, and
+  // the laws over a name do not read it, while those over the declaration's type and values judge
+  // it as they judge any other (spec reading 157).
+  const [cardinality, baseType] = typed.value;
+  const identifier = typedValueOf(rows, node.id, "identifier");
   const keys = {
     ...Option.match(baseType, { onNone: () => ({}), onSome: (held) => ({ baseType: held }) }),
+    ...Option.match(identifier, { onNone: () => ({}), onSome: (held) => ({ identifier: held }) }),
     cardinality,
-    identifier,
   };
-  const reserved = reservedBaseTypes.get(identifier);
-  const reservedBroken =
-    (node.kind === "qti-outcome-declaration" &&
-      reserved !== undefined &&
-      (cardinality === "record" || Option.exists(baseType, (held) => held !== reserved.baseType)) &&
-      (reserved.testsHeld ||
-        !Option.exists(rows.root, ({ kind }) => kind === "qti-assessment-test"))) ||
-    (identifier === "QTI_CONTEXT" &&
-      (node.kind !== "qti-context-declaration" || cardinality !== "record"));
+  const reservedBroken = Option.exists(identifier, (name) => {
+    const reserved = reservedBaseTypes.get(name);
+
+    return (
+      (node.kind === "qti-outcome-declaration" &&
+        reserved !== undefined &&
+        (cardinality === "record" ||
+          Option.exists(baseType, (held) => held !== reserved.baseType)) &&
+        (reserved.testsHeld ||
+          !Option.exists(rows.root, ({ kind }) => kind === "qti-assessment-test"))) ||
+      (name === "QTI_CONTEXT" &&
+        (node.kind !== "qti-context-declaration" || cardinality !== "record"))
+    );
+  });
   const baseBroken = (cardinality === "record") === Option.isSome(baseType);
   const sets = elementsOf(rows, node.id).filter(({ kind }) => valueSetKinds.has(kind));
 
   return [
-    ...(sessionVariables.has(identifier)
-      ? [breachAt(rows, node, "Declaration not reserved", { identifier })]
-      : []),
+    ...Option.toArray(identifier).flatMap((name) =>
+      sessionVariables.has(name)
+        ? [breachAt(rows, node, "Declaration not reserved", { identifier: name })]
+        : [],
+    ),
     ...(reservedBroken ? [breachAt(rows, node, "Reserved type", keys)] : []),
     ...(baseBroken ? [breachAt(rows, node, "Declaration base type", keys)] : []),
     ...sets.flatMap((set) => valueSetLawsOf(rows, set, cardinality, baseType, grammar)),

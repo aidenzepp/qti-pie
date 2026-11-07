@@ -225,13 +225,19 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
 
   if (outcome.kind === "invariant-rejected") {
     // The laws the refusal names, by how grizzle decided them (grizzle-engine
-    // `src/types/changeset/changeset.ts:1004` and `src/write/program/witness.ts`'s hostJudgement at
-    // `b0e98c4`):
+    // `src/types/changeset/changeset.ts:1011` and `src/write/program/witness.ts`'s hostJudgement at
+    // `1c536b5`):
     // - `every`: every law of the refused row's table that the stated row breaks, each once, in
-    //   the schema's order; for any other refusal, the laws its one PostgreSQL object discharges.
+    //   the schema's order, a domain's one per column whose value it refuses; for any other
+    //   refusal, the one law its PostgreSQL object discharges.
     // - `first`: the laws of the first CHECK PostgreSQL tried, where grizzle's host cannot witness
     //   the row, for example a law over a family's filled counts (Choice not variable's).
-    // The rule is the most specific among them either way (`ruleOfLaws`). A breach in a table
+    // - `some`: the laws one PostgreSQL object discharges, two or more, at least one of them broken
+    //   and nothing deciding which: a family's axis foreign key and every law merged into it, or a
+    //   domain over a row the host does not judge whole. A stated limit: the import cannot yet
+    //   decide which law broke (a recorded follow-up), so its rule stays the most specific among
+    //   them, what it ruled when grizzle named these laws `every` before.
+    // The rule is the most specific among them in every arm (`ruleOfLaws`). A breach in a table
     // written or checked later, or one the host cannot witness, never reaches the rule, however
     // specific its law; GEN-A's differential records any such divergence from the oracle.
     // The witness is grizzle's own, as the refusal carries it: the key of the first stated row

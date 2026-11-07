@@ -45,6 +45,7 @@ import {
   AssembledReference,
   Expression,
   ExpressionAttribute,
+  HeldType,
   LiteralTyped,
   MappingSourceDeclaration,
   Operand,
@@ -149,8 +150,6 @@ const referenceRow = (
   document: strayNode,
   elementBase: "unknown",
   elementCardinality: "unknown",
-  heldBase: "unknown",
-  heldCardinality: "unknown",
   identifier: "X",
   kind: "qti-variable",
   language: "response",
@@ -188,14 +187,18 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
 });
 
 /**
- * The change that writes a reference beside its document, the immutable owner of its family.
+ * The change that writes a reference beside its document, the immutable owner of its family, with
+ * its declaration and its held type where the case writes them, each copying the reference.
  *
  * @param reference - The reference.
+ * @param declaration - The declaration's fields the case sets, or none for no declaration row.
+ * @param held - The held type's fields the case sets, or none for no held type row.
  * @returns The change.
  */
 const referenceChange = (
   reference: Addition<typeof VariableRef>,
   declaration: Partial<Addition<typeof VariableRefDeclaration>> | undefined,
+  held?: Partial<Addition<typeof HeldType>>,
 ) =>
   ChangeSet.empty(Author)
     .insert(Document, [documentOf(reference)])
@@ -220,6 +223,26 @@ const referenceChange = (
               node: reference.node,
               table: reference.table,
               ...declaration,
+            },
+          ],
+    )
+    .insert(
+      HeldType,
+      held === undefined
+        ? []
+        : [
+            {
+              baseType: reference.baseType,
+              cardinality: reference.cardinality,
+              expression: nodeOf(2),
+              expressionKind: "qti-base-value",
+              heldBase: "unknown",
+              heldCardinality: "unknown",
+              kind: reference.kind,
+              language: reference.language,
+              node: reference.node,
+              table: reference.table,
+              ...held,
             },
           ],
     );
@@ -573,7 +596,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
       );
 
       it.effect("refuses each reference row law's breach by its law, and keeps its control", () =>
-        // Oracle: PostgreSQL, each CHECK of `VariableRef`, against the old checker's rules (P8,
+        // Oracle: PostgreSQL, each CHECK of `VariableRef` and its rows, against the old checker's rules (P8,
         // P20, P22, P24, P26, P27).
         // Bound: one breach of each law, beside the same row with the breach repaired.
         Effect.gen(function* referenceLaws() {
@@ -582,10 +605,12 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           const cases: readonly {
             readonly broken: Addition<typeof VariableRef>;
             readonly declaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+            readonly held?: Partial<Addition<typeof HeldType>>;
             readonly law: string;
-            readonly on: "VariableRef" | "VariableRefDeclaration";
+            readonly on: "HeldType" | "VariableRef" | "VariableRefDeclaration";
             readonly repaired: Partial<Addition<typeof VariableRef>>;
             readonly repairedDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
+            readonly repairedHeld?: Partial<Addition<typeof HeldType>>;
           }[] = [
             {
               broken: referenceRow({ rootKind: "qti-assessment-item" }),
@@ -598,29 +623,41 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 ...declared,
                 baseType: "integer",
                 cardinality: "single",
-                heldBase: "float",
-                heldCardinality: "single",
                 kind: "qti-set-outcome-value",
               }),
               declaration: {},
+              held: { heldBase: "float", heldCardinality: "single" },
               law: "Set_type",
-              on: "VariableRef",
-              repaired: { heldBase: "integer" },
+              on: "HeldType",
+              repaired: {},
+              repairedHeld: { heldBase: "integer" },
             },
             {
               broken: referenceRow({
                 ...declared,
                 baseType: "integer",
                 cardinality: "single",
-                heldBase: "string",
-                heldCardinality: "single",
                 kind: "qti-lookup-outcome-value",
                 table: "qti-interpolation-table",
               }),
               declaration: {},
+              held: { heldBase: "string", heldCardinality: "single" },
+              law: "Lookup_type",
+              on: "HeldType",
+              repaired: {},
+              repairedHeld: { heldBase: "float" },
+            },
+            {
+              broken: referenceRow({
+                ...declared,
+                baseType: "integer",
+                cardinality: "single",
+                kind: "qti-lookup-outcome-value",
+              }),
+              declaration: {},
               law: "Lookup_type",
               on: "VariableRef",
-              repaired: { heldBase: "float" },
+              repaired: { table: "qti-interpolation-table" },
             },
             {
               broken: referenceRow({
@@ -665,12 +702,22 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               repairedDeclaration: { table: "qti-mapping" },
             },
           ];
-          for (const { broken, declaration, law, on, repaired, repairedDeclaration } of cases) {
-            const refused = yield* db.apply(referenceChange(broken, declaration), {});
+          for (const {
+            broken,
+            declaration,
+            held,
+            law,
+            on,
+            repaired,
+            repairedDeclaration,
+            repairedHeld,
+          } of cases) {
+            const refused = yield* db.apply(referenceChange(broken, declaration, held), {});
             const kept = yield* db.apply(
               referenceChange(
                 { ...broken, ...repaired },
                 declaration === undefined ? undefined : { ...declaration, ...repairedDeclaration },
+                held === undefined ? undefined : { ...held, ...repairedHeld },
               ),
               {},
             );

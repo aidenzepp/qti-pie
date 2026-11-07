@@ -37,6 +37,7 @@ import {
   Declaration,
   DeclarationBaseType,
   declarationKinds,
+  DeclarationName,
   DeclaredValue,
   MasteryCeiling,
   MasteryFloor,
@@ -67,63 +68,86 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
 const strayDocument = strayNode(255);
 
 /**
- * A declaration fact, lawful on its own beside its base type's row ({@link declared}): an outcome
- * `A` of single cardinality, its lexical forms the handles' own.
+ * A declaration's facts: its `Declaration` row's, and its `DeclarationName`'s but the count of
+ * base types, which {@link declared} copies from the base type it writes.
+ */
+interface DeclarationFacts {
+  readonly name: Stated["fact"];
+  readonly row: Stated["fact"];
+}
+
+/**
+ * A declaration's facts, lawful on their own beside its base type's row ({@link declared}): an
+ * outcome `A` of single cardinality, its lexical forms the handles' own, and its name, which
+ * copies its row's document, kind and cardinality (spec reading 157).
  *
  * @param fields - The fields the case sets.
  * @param fields.cardinality - Its cardinality.
  * @param fields.cardinalityLexical - Its `cardinality` as written.
  * @param fields.identifier - Its collapsed identifier, written bare.
  * @param fields.kind - Its kind.
- * @returns The fact.
+ * @returns The facts.
  */
 const declarationRow = (fields: {
   readonly cardinality?: string;
   readonly cardinalityLexical?: string;
   readonly identifier?: string;
   readonly kind?: string;
-}) => {
+}): DeclarationFacts => {
   const kind = fields.kind ?? "qti-outcome-declaration";
   const cardinality = fields.cardinality ?? "single";
   const identifier = fields.identifier ?? "A";
 
   return {
-    cardinality,
-    cardinalityLexical: fields.cardinalityLexical ?? cardinality,
-    declarationKind: kind,
-    document: strayDocument,
-    identifier,
-    identifierLead: "",
-    identifierLexical: identifier,
-    identifierTrail: "",
-    kind,
-    nearest: strayDocument,
-    node: strayNode(1),
-    parent: strayDocument,
-    start: 1n,
-    version: "3.0.1",
-  } satisfies Stated["fact"];
+    name: {
+      cardinality,
+      declarationKind: kind,
+      document: strayDocument,
+      identifier,
+      identifierLead: "",
+      identifierLexical: identifier,
+      identifierTrail: "",
+      node: strayNode(1),
+    },
+    row: {
+      cardinality,
+      cardinalityLexical: fields.cardinalityLexical ?? cardinality,
+      declarationKind: kind,
+      document: strayDocument,
+      kind,
+      nearest: strayDocument,
+      node: strayNode(1),
+      parent: strayDocument,
+      start: 1n,
+      version: "3.0.1",
+    },
+  };
 };
 
 /**
- * A declaration row with its owner: the `ChoiceVariableName` row of its document and identifier,
- * which states no choice, hottext or placement and so counts it as its one declaration, and
- * "Choice not variable" holds whatever the identifier. The writer orders them and fills the
- * declaration's slot in its family (`#pantry/test/direct-sql.ts` `statedInserts`): a counted
- * family's owner axis is not deferrable, so the declaration is judged against its owner at its
- * INSERT, and the owner's own foreign keys are deferred.
+ * A declaration's rows with its name's owner: its `Declaration`, its `DeclarationName`, which
+ * copies the row's document, kind, cardinality and count of base types (spec reading 157), and the
+ * `ChoiceVariableName` row of its document and identifier, which states no choice, hottext or
+ * placement and so counts it as its one declaration, and "Choice not variable" holds whatever the
+ * identifier. The writer orders them and fills the name's slot in its family
+ * (`#pantry/test/direct-sql.ts` `statedInserts`): a counted family's owner axis is not deferrable,
+ * so the name is judged against its owner at its INSERT, and the owner's own foreign keys are
+ * deferred.
  *
- * @param row - The declaration's fact, {@link declarationRow}'s, whose node is `strayNode(1)`.
+ * @param facts - The declaration's facts, {@link declarationRow}'s, whose node is `strayNode(1)`.
  * @param baseType - Its base type, a member of its family, `float` unless the case sets one, and
  *   none for a declaration that writes none, a record's.
  * @returns The rows, in writing order.
  */
-const declared = (row: Stated["fact"], baseType: Option.Option<string> = Option.some("float")) =>
+const declared = (
+  { name, row }: DeclarationFacts,
+  baseType: Option.Option<string> = Option.some("float"),
+) =>
   statedInserts([
     {
       fact: {
-        document: row["document"] ?? strayDocument,
-        identifier: row["identifier"] ?? "",
+        document: name["document"] ?? strayDocument,
+        identifier: name["identifier"] ?? "",
         rootKind: "qti-assessment-item",
       },
       relation: ChoiceVariableName,
@@ -133,6 +157,10 @@ const declared = (row: Stated["fact"], baseType: Option.Option<string> = Option.
       fact: { baseType: code, baseTypeLexical: code, node: strayNode(1), valueBase: code },
       relation: DeclarationBaseType,
     })),
+    {
+      fact: { ...name, baseTypes: BigInt(Option.toArray(baseType).length) },
+      relation: DeclarationName,
+    },
   ]);
 
 /**
@@ -149,21 +177,13 @@ const declaredName: Addition<typeof ChoiceVariableName> = {
  * A declaration fact as the author role writes it, lawful on its own.
  *
  * @param node - Its node.
- * @param identifierLexical - Its identifier as written; its name is that collapsed.
  * @returns The fact.
  */
-const declarationFact = (
-  node: number,
-  identifierLexical: string,
-): Addition<typeof Declaration> => ({
+const declarationFact = (node: number): Addition<typeof Declaration> => ({
   cardinality: "single",
   cardinalityLexical: "single",
   declarationKind: "qti-outcome-declaration",
   document: strayDocument,
-  identifier: identifierLexical.trim(),
-  identifierLead: identifierLexical.startsWith(" ") ? " " : "",
-  identifierLexical,
-  identifierTrail: "",
   kind: "qti-outcome-declaration",
   nearest: strayDocument,
   node: strayNode(node),
@@ -171,6 +191,26 @@ const declarationFact = (
   parentKind: "qti-assessment-item",
   start: BigInt(node),
   version: "3.0.1",
+});
+
+/**
+ * A declaration's name fact as the author role writes it, lawful beside {@link declarationFact}'s
+ * row of its node, which writes no base type.
+ *
+ * @param node - Its node.
+ * @param identifierLexical - Its identifier as written; its name is that collapsed.
+ * @returns The fact.
+ */
+const nameFact = (node: number, identifierLexical: string): Addition<typeof DeclarationName> => ({
+  baseTypes: 0n,
+  cardinality: "single",
+  declarationKind: "qti-outcome-declaration",
+  document: strayDocument,
+  identifier: identifierLexical.trim(),
+  identifierLead: identifierLexical.startsWith(" ") ? " " : "",
+  identifierLexical,
+  identifierTrail: "",
+  node: strayNode(node),
 });
 
 /**
@@ -289,14 +329,15 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author)
                   .insert(ChoiceVariableName, [declaredName])
-                  .insert(Declaration, [declarationFact(1, "A"), declarationFact(2, second)]),
+                  .insert(Declaration, [declarationFact(1), declarationFact(2)])
+                  .insert(DeclarationName, [nameFact(1, "A"), nameFact(2, second)]),
                 {},
               );
 
               assert.strictEqual(outcome.kind, "invariant-rejected", second);
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
-                  outcome.refused.laws.some(keyOver("Declaration", ["document", "identifier"])),
+                  outcome.refused.laws.some(keyOver("DeclarationName", ["document", "identifier"])),
                 Formatter.format(second),
               );
             }
@@ -477,31 +518,36 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               );
             }
 
+            const control = declarationRow({});
+            const padded = declarationRow({ identifier: " A" });
             const cases = [
-              { label: "control", refused: false, row: declarationRow({}) },
+              { facts: control, label: "control", refused: false },
               {
+                facts: declarationRow({ cardinalityLexical: "multiple" }),
                 label: "cardinality single written multiple",
                 refused: true,
-                row: declarationRow({ cardinalityLexical: "multiple" }),
               },
               {
+                facts: { ...control, name: { ...control.name, identifierLexical: " A" } },
                 label: "identifier padded but written bare",
                 refused: true,
-                row: { ...declarationRow({}), identifierLexical: " A" },
               },
               {
+                facts: {
+                  ...control,
+                  name: { ...control.name, identifierLead: " ", identifierLexical: " A" },
+                },
                 label: "identifier padded, its lead written",
                 refused: false,
-                row: { ...declarationRow({}), identifierLead: " ", identifierLexical: " A" },
               },
               {
+                facts: { ...padded, name: { ...padded.name, identifierLexical: " A" } },
                 label: "identifier holding its own whitespace",
                 refused: true,
-                row: { ...declarationRow({ identifier: " A" }), identifierLexical: " A" },
               },
             ];
-            for (const { label, refused, row } of cases) {
-              assertVerdict(yield* judged(client, declared(row)), "e_1_derived", refused, label);
+            for (const { facts, label, refused } of cases) {
+              assertVerdict(yield* judged(client, declared(facts)), "e_1_derived", refused, label);
             }
           }).pipe(Effect.scoped),
         { timeout: leaseTestTimeoutMs },
@@ -559,7 +605,6 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                             elementChildren: BigInt(values),
                             elements: 1n,
                             fields: BigInt(fields),
-                            identifier: "A",
                             kind: "qti-default-value",
                             nearest: strayDocument,
                             node: strayNode(2),

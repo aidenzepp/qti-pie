@@ -68,124 +68,12 @@ export const known = {
           "item.xml",
           "xml",
           `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"/></qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="many" base-type="identifier"/></qti-assessment-item>`,
         ],
       ],
-      fix: "a declaration whose identifier names nothing (empty, whitespace alone, or no NCName: spec reading 152, lane NIL's B10) has no Declaration row, but Declaration overlay's forward copies of its cardinality and base type demand one of every declaration that writes them; the declaration's name wants a row of its own (as RecordFieldName), so the copies hold without a name and the value domain refuses it alone",
-      owner: "unassigned, found by FIX-NCNAME",
+      fix: "a declaration whose cardinality spells nothing, or whose base type spells nothing, has no Declaration row (lane NIL's B11), but Declaration overlay's copy of its cardinality asks a row of every declaration that writes one; it shows first where its identifier names nothing too, since a nameless declaration asks no DeclarationName (spec reading 157 closed the case of a declaration whose identifier alone names nothing, kept in fixed)",
+      owner: "unassigned, found by FIX-DECLNAME",
     },
-  "import-only-law: E1 derived, check E1_derived on DocumentId": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"/></qti-assessment-item>`,
-      ],
-    ],
-    fix: "an ID-typed attribute whose value is no NCName, a response or context declaration's empty identifier or one with whitespace inside, still gets a DocumentId row, which E1_derived refuses beside its value domain: an ID that names nothing wants no DocumentId row (spec reading 152's reading, applied to the identity overlay)",
-    owner: "unassigned, found by FIX-NCNAME",
-  },
-  "import-only-law: E1 derived, check E1_derived on InteractionAttribute": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="identifier"/><qti-item-body><qti-choice-interaction response-identifier="R" max-choices="1 2"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-choice-interaction></qti-item-body></qti-assessment-item>`,
-      ],
-    ],
-    fix: 'a read attribute whose collapsed value holds whitespace inside (max-choices="1 2", a reference "a b") gets an InteractionAttribute row whose value E1_derived holds to no whitespace, beside its value domain: the copy and its atomic split cannot both hold, so such a value wants a representation of its own',
-    owner: "unassigned, found by FIX-NCNAME",
-  },
-  "import-only-law: E1 derived, contained Expression(parent, baseType, cardinality) in VariableRef(node, heldBase, heldCardinality)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
-        ],
-        [
-          "item.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-set-outcome-value identifier=""><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
-        ],
-      ],
-      fix: "a setter or a lookup whose identifier names no variable (unwritten, or no NCName: spec reading 152) has no VariableRef row, but its one expression's type is copied into that row; the held type wants a row of its own, keyed by the setter, so an expression under a setter that names nothing is refused by AL3 or its value domain alone",
-      owner: "unassigned, found by FIX-NCNAME",
-    },
-  "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-  </metadata>
-  
-  <resources>
-    <resource>
-      
-    </resource>
-    <resource type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-    </resource>
-  </resources>
-</manifest>`,
-      ],
-      [
-        "item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item>
-  
-</qti-assessment-item>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
-  <qti-test-part>
-    
-    <qti-assessment-section>
-      <qti-assessment-section>
-        
-        <qti-assessment-section visible="true">
-          
-          <qti-assessment-item-ref identifier="i27">
-          </qti-assessment-item-ref>
-        </qti-assessment-section>
-        
-      </qti-assessment-section>
-    </qti-assessment-section>
-    
-  </qti-test-part>
-</qti-assessment-test>`,
-      ],
-    ],
-    fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-    owner: "NIL",
-  },
   "import-only-law: Mapping overlay, contained Attribute(node, lexical) in MapKey(node, key)": {
     files: [
       [
@@ -198,55 +86,11 @@ export const known = {
         "item.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"><qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping></qti-response-declaration></qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="many" base-type="identifier"><qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping></qti-response-declaration></qti-assessment-item>`,
       ],
     ],
-    fix: "a response declaration with no Declaration row (its identifier names nothing) writes no MapKey rows for its mapping's keys, which the mapping overlay's copy demands of every map key; the copy wants to hold over the declarations that have rows",
-    owner: "unassigned, found by FIX-NCNAME",
-  },
-  "import-only-law: N8 nearest, contained Choice(node) in ChoiceInteraction(node)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p>a <qti-gap identifier="G1"/> b</p></qti-item-body></qti-assessment-item>`,
-      ],
-    ],
-    fix: "N8: the oracle states the choice law the schema does, every choice in a choice interaction, so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
-    owner: "OL",
-  },
-  "import-only-law: Test overlay, contained Node(id) in ReferencePath(node)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part identifier="p46"><qti-assessment-section identifier="s32" visible="true"><qti-assessment-section identifier="s31" visible="true">
-        
-        <qti-assessment-section identifier="s28" visible="true">
-          
-          <qti-assessment-item-ref identifier="i27">
-          </qti-assessment-item-ref>
-        </qti-assessment-section>
-        
-      </qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-    owner: "NIL",
+    fix: "a response declaration with no Declaration row, its cardinality or its base type spelling nothing (lane NIL's B11), writes no MapKey rows for its mapping's keys, which the mapping overlay's copy asks of every map key; the copy wants to hold over the declarations that have rows (spec reading 157 closed the case of a declaration whose identifier alone names nothing, kept in fixed)",
+    owner: "unassigned, found by FIX-DECLNAME",
   },
   "import-only-law: Test overlay, contained Section(node, visible) in TestFlag(node, value)": {
     files: [
@@ -295,63 +139,6 @@ export const known = {
       </qti-assessment-section>
       
     </qti-assessment-section>
-  </qti-test-part>
-</qti-assessment-test>`,
-      ],
-    ],
-    fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-    owner: "NIL",
-  },
-  "lone-refusal: AL3 required named item-ref-target, witness unreported": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    <schema>QTI Package</schema>
-    <schemaversion>3.0.0</schemaversion>
-  </metadata>
-  <organizations/>
-  <resources>
-    <resource>
-      <file href="item.xml"/>
-    </resource>
-    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
-      <file href="test.xml"/>
-      
-    </resource>
-  </resources>
-</manifest>`,
-      ],
-      [
-        "item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item>
-  
-</qti-assessment-item>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
-  <qti-test-part>
-    
-    <qti-assessment-section identifier="s32">
-      <qti-assessment-section identifier="s31">
-        
-        <qti-assessment-section identifier="s28" title="s28" visible="true">
-          
-          <qti-assessment-item-ref identifier="i27">
-          </qti-assessment-item-ref>
-        </qti-assessment-section>
-        
-      </qti-assessment-section>
-    </qti-assessment-section>
-    
   </qti-test-part>
 </qti-assessment-test>`,
       ],
@@ -808,6 +595,25 @@ export const fixed = {
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
   },
+  "import-only-law: Declaration overlay, contained Attribute(node, lexical) in Declaration(node, cardinalityLexical)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+        ],
+        [
+          "item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"/></qti-assessment-item>`,
+        ],
+      ],
+      fix: "spec reading 157: a declaration's name is a row of its own, DeclarationName, so a declaration whose identifier is unwritten or names nothing keeps its Declaration row and every row below it, and AL3 or the value domain refuses it alone",
+      owner: "FIX-DECLNAME",
+    },
   "import-only-law: Declaration overlay, contained Value(node, baseType) in RecordField(node, baseType)":
     {
       files: [
@@ -909,6 +715,42 @@ export const fixed = {
     ],
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
+  },
+  "import-only-law: E1 derived, check E1_derived on DocumentId": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"/></qti-assessment-item>`,
+      ],
+    ],
+    fix: "spec reading 156, reading 152's for the IDs: an ID-typed attribute or text is an ID value only where its value is an NCName (the grammar's ncNamePattern), so the import and the schema's copy sources (namingIdAttributes, idTexts, headerIds) write no DocumentId and no TableHeader for an empty identifier or one with whitespace inside, its value domain refuses it alone, and an IDREF or a cell's headers token that names it is refused under its own law, as the oracle reads idsOf and tableHeadersOf",
+    owner: "FIX-IDNCNAME",
+  },
+  "import-only-law: E1 derived, check E1_derived on InteractionAttribute": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="identifier"/><qti-item-body><qti-choice-interaction response-identifier="R" max-choices="1 2"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-choice-interaction></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: 'the value of a read attribute is its lexical form collapsed (Compute.collapse, as on SsmlAttribute), never an outer-whitespace split whose value E1_derived held to no whitespace: a collapsed value with whitespace inside (max-choices="1 2", a reference "a b") is in the lexical space of no atomic type, and its value domain refuses it alone',
+    owner: "FIX-ATOMIC",
   },
   "import-only-law: E1 derived, check E1_derived on RecordField": {
     files: [
@@ -1024,6 +866,25 @@ export const fixed = {
     fix: "PG's Expression base type commit: an attribute-typed expression whose base-type spells no base is unknown, and ResultBase judges no such one (resultTyped), so the containment this class broke no longer reads it and its statement is another",
     owner: "PG",
   },
+  "import-only-law: E1 derived, contained Expression(parent, baseType, cardinality) in VariableRef(node, heldBase, heldCardinality)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+        ],
+        [
+          "item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-set-outcome-value identifier=""><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
+        ],
+      ],
+      fix: "FIX-HELDTYPE: a setter's or a lookup's held type is a row of its own, HeldType, keyed by the setter and written only where it names a variable and holds an expression, so one whose identifier names no variable (unwritten, or no NCName: spec reading 152) is refused by AL3 or its value domain alone, and the statement this class broke is gone",
+      owner: "FIX-HELDTYPE",
+    },
   "import-only-law: E1 derived, contained GeneralObject(record, document) in LomObject(record, document)":
     {
       files: [
@@ -1188,6 +1049,63 @@ export const fixed = {
     ],
     fix: "NS4: the import and the law oracle read a path two resource types name once, as the first type, so the fragment is judged where item2.xml splices it, and the second type's href names no document of its type, Document entry alone (reading 93)",
     owner: "S-ORACLE",
+  },
+  "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+  <metadata>
+    
+    <schemaversion>3.0.0</schemaversion>
+  </metadata>
+  
+  <resources>
+    <resource>
+      
+    </resource>
+    <resource type="imsqti_test_xmlv3p0" href="test.xml">
+      
+      
+    </resource>
+  </resources>
+</manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item>
+  
+</qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
+  <qti-test-part>
+    
+    <qti-assessment-section>
+      <qti-assessment-section>
+        
+        <qti-assessment-section visible="true">
+          
+          <qti-assessment-item-ref identifier="i27">
+          </qti-assessment-item-ref>
+        </qti-assessment-section>
+        
+      </qti-assessment-section>
+    </qti-assessment-section>
+    
+  </qti-test-part>
+</qti-assessment-test>`,
+      ],
+    ],
+    fix: "spec reading 155: an item ref that writes no href names nothing, so the schema demands no ItemRefTarget, ReferencePath or NameLookup type of it and AL3 alone refuses it, and the law oracle judges an item ref's laws whether or not it, its sections or its part write an identifier",
+    owner: "FIX-ITEMREF",
   },
   "import-only-law: Key text bound, a text past LomString.language, LomStringLanguage.language, LomTitleString.language, LomTitleString.languageTag's bound":
     {
@@ -1360,7 +1278,43 @@ export const fixed = {
       fix: "fix (3): a package's records are read from its manifest and its record files alone (recordDocumentTypes), and the Manifest overlay selections read the manifest's cp:* attributes alone, each by its node's and attribute's documentType (170356bd's reading)",
       owner: "GEN-A",
     },
-  "import-only-law: Reserved type, check Reserved_type on Declaration": {
+  "import-only-law: Mapping overlay, contained Attribute(node, lexical) in MapKey(node, key)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="" cardinality="single" base-type="identifier"><qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping></qti-response-declaration></qti-assessment-item>`,
+      ],
+    ],
+    fix: "spec reading 157: a response declaration whose identifier names nothing keeps its Declaration row, so its mapping and each map key have their rows, judged as any other's",
+    owner: "FIX-DECLNAME",
+  },
+  "import-only-law: N8 nearest, contained Choice(node) in ChoiceInteraction(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p>a <qti-gap identifier="G1"/> b</p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "N8: the oracle states the choice law the schema does, every choice that writes its identifier in an interaction, its nearest (the information model's parents of each choice class, §5.55's gap, reading 38), so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
+    owner: "OL",
+  },
+  "import-only-law: Reserved type, check Reserved_type on DeclarationName": {
     files: [
       [
         "imsmanifest.xml",
@@ -1414,6 +1368,32 @@ export const fixed = {
     ],
     fix: "reading 147: a test part, section, section ref, item ref or stimulus ref that writes no identifier names nothing, so it writes no Named or StimulusRef row, and AL3 alone refuses it",
     owner: "FB-TESTS",
+  },
+  "import-only-law: Test overlay, contained Node(id) in ReferencePath(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part identifier="p46"><qti-assessment-section identifier="s32" visible="true"><qti-assessment-section identifier="s31" visible="true">
+        
+        <qti-assessment-section identifier="s28" visible="true">
+          
+          <qti-assessment-item-ref identifier="i27">
+          </qti-assessment-item-ref>
+        </qti-assessment-section>
+        
+      </qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "spec reading 155: an item ref that writes no href names nothing, so the schema demands no ItemRefTarget, ReferencePath or NameLookup type of it and AL3 alone refuses it, and the law oracle judges an item ref's laws whether or not it, its sections or its part write an identifier",
+    owner: "FIX-ITEMREF",
   },
   "import-only-law: Test overlay, contained Site(node, package, path) in ReferencePath(node, package, path)":
     {
@@ -1482,6 +1462,63 @@ export const fixed = {
     ],
     fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
     owner: "VD",
+  },
+  "lone-refusal: AL3 required named item-ref-target, witness unreported": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+  <metadata>
+    <schema>QTI Package</schema>
+    <schemaversion>3.0.0</schemaversion>
+  </metadata>
+  <organizations/>
+  <resources>
+    <resource>
+      <file href="item.xml"/>
+    </resource>
+    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
+      <file href="test.xml"/>
+      
+    </resource>
+  </resources>
+</manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item>
+  
+</qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
+  <qti-test-part>
+    
+    <qti-assessment-section identifier="s32">
+      <qti-assessment-section identifier="s31">
+        
+        <qti-assessment-section identifier="s28" title="s28" visible="true">
+          
+          <qti-assessment-item-ref identifier="i27">
+          </qti-assessment-item-ref>
+        </qti-assessment-section>
+        
+      </qti-assessment-section>
+    </qti-assessment-section>
+    
+  </qti-test-part>
+</qti-assessment-test>`,
+      ],
+    ],
+    fix: "spec reading 155: an item ref that writes no href names nothing, so the schema demands no ItemRefTarget, ReferencePath or NameLookup type of it and AL3 alone refuses it, and the law oracle judges an item ref's laws whether or not it, its sections or its part write an identifier",
+    owner: "FIX-ITEMREF",
   },
   "lone-refusal: N5 Follow named owner-copy, witness unreported": {
     files: [

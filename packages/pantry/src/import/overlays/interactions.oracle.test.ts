@@ -24,7 +24,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import { ownContext } from "#pantry/import/fold.ts";
-import { pieces, rowsOf, sectionRowsOf } from "#pantry/import/overlays/interactions.ts";
+import { rowsOf, sectionRowsOf } from "#pantry/import/overlays/interactions.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import type { InteractionIds, InteractionRows } from "#pantry/import/overlays/interactions.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -36,7 +36,7 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
-import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
+import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
 import { choiceKinds, hottextInteraction, hottextKind } from "#pantry/qti/interactions.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
@@ -437,97 +437,6 @@ describe("import/overlays/interactions.ts, choices", () => {
 });
 
 /**
- * The characters the pieces box draws from: each of XML's whitespace characters but one, and two
- * letters.
- */
-const alphabet = [" ", "\t", "\n", "a", "b"] as const;
-
-/**
- * Every text of at most 4 characters over {@link alphabet}: the pieces box.
- */
-const texts: Gen<string> = (source) =>
-  source.draw(array(element(alphabet), { max: 4, min: 0 })).join("");
-
-/**
- * Whether a character is XML whitespace.
- *
- * @param character - The character.
- * @returns Whether it is.
- */
-const isWhitespace = (character: string): boolean => [" ", "\t", "\n", "\r"].includes(character);
-
-/**
- * A situation the pieces box must reach.
- */
-type PieceSituation =
-  | "all whitespace"
-  | "empty"
-  | "inner whitespace"
-  | "outer whitespace"
-  | "plain";
-
-describe("import/overlays/interactions.ts, pieces", () => {
-  it.effect(
-    "splits every lexical form into outer whitespace and its collapsed value, the one split E1_derived admits",
-    (ctx) =>
-      // Oracle: the specification as a checker, XML Schema Part 2 §4.3.6's collapse of an atomic
-      // value's outer whitespace, read character by character, and the round trip
-      // lead ‖ value ‖ trail = lexical.
-      // Bound: every text of at most 4 characters over 3 whitespace characters and 2 letters, 781.
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every text of at most 4 characters over space, tab, line feed, a and b",
-            caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<PieceSituation>([
-              "all whitespace",
-              "empty",
-              "inner whitespace",
-              "outer whitespace",
-              "plain",
-            ]),
-            generator: texts,
-            limit: 800,
-            literal: JSON.stringify,
-            oracle: { kind: "specification", name: "XML Schema Part 2 §4.3.6, collapse" },
-            suite: "pantry/import/overlays-interactions-pieces",
-          },
-          (text: string, c) =>
-            Effect.sync(() => {
-              const characters = text.split("");
-              const first = characters.findIndex((character) => !isWhitespace(character));
-              const last = characters.findLastIndex((character) => !isWhitespace(character));
-              const expected = first === -1 ? "" : characters.slice(first, last + 1).join("");
-              const situation = (): PieceSituation => {
-                if (text === "") {
-                  return "empty";
-                }
-
-                if (first === -1) {
-                  return "all whitespace";
-                }
-
-                if (expected.length < text.length) {
-                  return "outer whitespace";
-                }
-
-                return expected.split("").some(isWhitespace) ? "inner whitespace" : "plain";
-              };
-              c.note(situation());
-
-              const { lead, trail, value } = pieces(text);
-              assert.strictEqual(`${lead}${value}${trail}`, text);
-              assert.strictEqual(value, expected);
-              assert.isTrue(`${lead}${trail}`.split("").every(isWhitespace));
-              assert.isTrue(value !== "" || trail === "");
-            }),
-        ),
-      ),
-  );
-});
-
-/**
  * The defaults the oracle reads an unwritten count by, keyed `version kind name`.
  */
 const oracleDefaults = lawsOf(grammar).defaults;
@@ -867,25 +776,19 @@ const assemblyOf = (tree: readonly Placement[]) => {
 };
 
 /**
- * The declaration of the section box's test: an outcome `SCORED`, a single identifier, its base
- * type its {@link scoredBaseType}.
+ * The name of the section box's test's declaration: an outcome `SCORED`, a single identifier, its
+ * base type its {@link scoredBaseType}.
  */
-const scored: Addition<typeof Declaration> = {
+const scored: Addition<typeof DeclarationName> = {
+  baseTypes: 1n,
   cardinality: "single",
-  cardinalityLexical: "single",
   declarationKind: "qti-outcome-declaration",
   document: testDocument,
   identifier: "SCORED",
   identifierLead: "",
   identifierLexical: "SCORED",
   identifierTrail: "",
-  kind: "qti-outcome-declaration",
-  nearest: testDocument,
   node: idOf(1001),
-  parent: idOf(1000),
-  parentKind: "qti-assessment-test",
-  start: 2n,
-  version: "3.0.1",
 };
 
 /**
@@ -1105,8 +1008,8 @@ describe("import/overlays/interactions.ts, choice names", () => {
       // Oracle: the specification as a checker, reading 104's projection read off the tree: the set
       // of every choice's and hottext's identifier and every declaration's, each collapsed (XML
       // Schema Part 2 §4.3.6), under the document node and the item's root kind. A declaration
-      // without one has no Declaration row and names nothing (lane NIL's audit, B10), so AL3
-      // refuses it alone.
+      // without one has no DeclarationName and names nothing (lane NIL's audit, B10; spec reading
+      // 157), so AL3 refuses it alone.
       // Bound: 0 to 2 declarations over 3 names by 0 to 2 marks over 3 kinds and 3 names,
       // 13 × 91 = 1,183.
       searched(
