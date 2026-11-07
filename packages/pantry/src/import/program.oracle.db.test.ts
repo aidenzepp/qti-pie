@@ -1,9 +1,9 @@
 /**
  * The import on the lease, PostgreSQL itself the judge (testing doctrine, rule 3): each accepted
  * package commits whole in one transaction, and each refused one is refused under the law its one
- * edit breaks (membership in the outcome's `laws`, since one native object may discharge several,
- * C22). Written to run at N1 on the lease and restated in the network seat's probe, never by a
- * hand.
+ * edit breaks (membership in the outcome's `refused.laws`, since one native object may discharge
+ * several, C22). Written to run at N1 on the lease and restated in the network seat's probe, never
+ * by a hand.
  *
  * The cases over a whole package that the slices left to the importer (their reports, and the
  * orchestrator's lists of 2026-11-06) run through one helper: a valid package, one edit, the
@@ -177,8 +177,8 @@ const keyOn =
     law.side.terms.map((term) => term.field).join(" ") === fields.join(" ");
 
 /**
- * Whether an outcome is `invariant-rejected` with a law among its `laws` one of the predicates
- * picks.
+ * Whether an outcome is `invariant-rejected` with a law among its `refused.laws` one of the
+ * predicates picks.
  *
  * @param outcome - The apply's outcome.
  * @param picks - The laws the case may be refused under.
@@ -189,7 +189,7 @@ const rejectedBy = (
   picks: readonly ((law: Law) => boolean)[],
 ): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.laws.some((law) => picks.some((pick) => pick(law)));
+  outcome.refused.laws.some((law) => picks.some((pick) => pick(law)));
 
 /**
  * The number of packages stored, through a query that counts each by its key.
@@ -1045,7 +1045,7 @@ describe.skipIf(!hasLease)(
 
       for (const { apply, laws, name } of cases) {
         it.effect(`refuses ${name}`, () =>
-          // Oracle: PostgreSQL, the law the case's one edit breaks, named in the outcome's `laws`.
+          // Oracle: PostgreSQL, the law the case's one edit breaks, named in the outcome's `refused.laws`.
           Effect.gen(function* refused() {
             const before = yield* storedPackages;
             const { outcome } = yield* apply();

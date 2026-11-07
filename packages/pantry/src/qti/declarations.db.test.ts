@@ -6,10 +6,10 @@
  *
  * - A key the host finds is written through the author role (`db.apply`): two declarations of one
  *   identifier in one document, inserted with their owner, are refused before any SQL,
- *   `invariant-rejected` with the key law among its `laws` (membership, C22). A `Declaration` is a
- *   member of its identifier's family, `ChoiceVariableName.declarations`, whose owner is immutable,
- *   so the change inserts that owner beside its members (README, "Families": "An immutable owner's
- *   family is fixed when the owner is inserted").
+ *   `invariant-rejected` with the key law among its `refused.laws` (membership, C22). A
+ *   `Declaration` is a member of its identifier's family, `ChoiceVariableName.declarations`, whose
+ *   owner is immutable, so the change inserts that owner beside its members (README, "Families":
+ *   "An immutable owner's family is fixed when the owner is inserted").
  * - A row's own CHECKs are judged by a direct SQL writer, as the rules file's rule 8 and grizzle's
  *   README ("Direct SQL access") state it: the author login, `SET ROLE` to the author role,
  *   SERIALIZABLE, every deferrable foreign key deferred, the row inserted into its table with every
@@ -304,7 +304,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               assert.strictEqual(outcome.kind, "invariant-rejected", second);
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
-                  outcome.laws.some(keyOver("Declaration", ["document", "identifier"])),
+                  outcome.refused.laws.some(keyOver("Declaration", ["document", "identifier"])),
                 Formatter.format(second),
               );
             }

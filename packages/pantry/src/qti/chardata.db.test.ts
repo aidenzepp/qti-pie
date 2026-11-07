@@ -4,14 +4,14 @@
  * each refused state is one the law's model refuses, named by the law it breaks.
  *
  * A row whose own laws are row CHECKs is written through the author role (`db.apply`), and the
- * outcome is `invariant-rejected` with the expected law among its `laws` (membership, since a
- * merged native names several, C22). A row that breaks a deferred foreign key, or whose acceptance
- * by its own laws alone is the contract, is written by a direct SQL writer (grizzle's README,
- * "Direct SQL access"): the author login, `SET ROLE` to the author role, at SERIALIZABLE, the row
- * inserted into its table with every column a writer fills, its foreign keys deferred and then the
- * one under test set immediate, so PostgreSQL's SQLSTATE and the constraint it names are the
- * verdict, and the transaction rolls back. A role writes a table, never its own view of it, which
- * it holds SELECT on alone (README, "Security model").
+ * outcome is `invariant-rejected` with the expected law among its `refused.laws` (membership, since
+ * a merged native names several, C22). A row that breaks a deferred foreign key, or whose
+ * acceptance by its own laws alone is the contract, is written by a direct SQL writer (grizzle's
+ * README, "Direct SQL access"): the author login, `SET ROLE` to the author role, at SERIALIZABLE,
+ * the row inserted into its table with every column a writer fills, its foreign keys deferred and
+ * then the one under test set immediate, so PostgreSQL's SQLSTATE and the constraint it names are
+ * the verdict, and the transaction rolls back. A role writes a table, never its own view of it,
+ * which it holds SELECT on alone (README, "Security model").
  *
  * Every case writes rows no stored node names, so none needs a document on the lease. The cases
  * over a stored tree (a node of an arm's kind without its arm row, a prefix declared twice on one
@@ -397,7 +397,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               assert.strictEqual(outcome.kind, "invariant-rejected");
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
-                  outcome.laws.some(
+                  outcome.refused.laws.some(
                     (law) =>
                       law.kind === "check" &&
                       law.relation === "Document" &&
@@ -466,7 +466,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               assert.strictEqual(outcome.kind, "invariant-rejected", row.kind);
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
-                  outcome.laws.some(
+                  outcome.refused.laws.some(
                     (law) =>
                       law.kind === "check" &&
                       law.relation === "OpenElementName" &&
@@ -513,7 +513,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               assert.strictEqual(outcome.kind, "invariant-rejected", row.parentKind);
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
-                  outcome.laws.some(
+                  outcome.refused.laws.some(
                     (law) =>
                       law.kind === "check" &&
                       law.relation === "OpenElementName" &&
@@ -551,7 +551,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
             assert.strictEqual(outcome.kind, "invariant-rejected");
             assert.isTrue(
               outcome.kind === "invariant-rejected" &&
-                outcome.laws.some(
+                outcome.refused.laws.some(
                   (law) =>
                     law.kind === "check" &&
                     law.relation === "OpenElementName" &&
@@ -596,7 +596,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               assert.strictEqual(outcome.kind, "invariant-rejected", row.local);
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
-                  outcome.laws.some(
+                  outcome.refused.laws.some(
                     (law) =>
                       law.kind === "check" &&
                       law.relation === "OpenElementName" &&
@@ -742,7 +742,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               assert.strictEqual(outcome.kind, "invariant-rejected", name);
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
-                  outcome.laws.some(
+                  outcome.refused.laws.some(
                     (law) =>
                       law.kind === "check" &&
                       law.relation === "OpenElementName" &&

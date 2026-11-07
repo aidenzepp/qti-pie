@@ -6,8 +6,8 @@
  * Most cases write rows through the author role (`db.apply`) whose nodes no stored document holds,
  * so every containment into `Node`, `Declaration` and the other overlays fails at commit; each law
  * under test is a row CHECK, judged as its row is inserted, before any of them. So a row that
- * breaks the law comes back `invariant-rejected` with the law among its `laws`, and a row that
- * keeps it comes back rejected by its containments alone, the law absent (membership, since a
+ * breaks the law comes back `invariant-rejected` with the law among its `refused.laws`, and a row
+ * that keeps it comes back rejected by its containments alone, the law absent (membership, since a
  * merged native names several, C22). A family's member is written beside its owner, since an
  * immutable owner's family is fixed when the owner is inserted (README, "Families"): a
  * `VariableRef` beside its `Document`, the manifest's row, lawful on its own CHECKs.
@@ -260,7 +260,7 @@ const typeOver = (
  */
 const names = (outcome: ApplyOutcome<unknown>, relation: string, name: string): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.laws.some(
+  outcome.refused.laws.some(
     (law) => law.kind === "check" && law.relation === relation && law.name === name,
   );
 
@@ -396,7 +396,7 @@ const readingFacts = (
  */
 const namesVariableKind = (outcome: ApplyOutcome<unknown>, relation: string): boolean =>
   outcome.kind === "invariant-rejected" &&
-  outcome.laws.some(
+  outcome.refused.laws.some(
     (law: Law) =>
       law.kind === "contained" &&
       law.from.relation === relation &&
