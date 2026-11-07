@@ -1190,32 +1190,39 @@ describe("redact, a printed variable", () => {
 const sprawlingLength = 999_999;
 
 /**
+ * Construct a paragraph that prints the string template variable `S` at a number of slots, each in
+ * its default form.
+ *
+ * @param count How many slots it holds.
+ * @returns The paragraph.
+ */
+const slotsOfS = (count: number): BodyNode => ({
+  attributes: [],
+  children: Array.from({ length: count }, (): BodyNode => ({
+    base: { _tag: "literal", value: 10n },
+    delimiter: ";",
+    field: Option.none(),
+    format: Option.none(),
+    identifier: "S",
+    index: Option.none(),
+    kind: "printed-variable",
+    mappingIndicator: "=",
+    path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
+    powerForm: false,
+  })),
+  kind: "element",
+  path: "qti-assessment-item/qti-item-body/p",
+  tag: "p",
+});
+
+/**
  * An item whose paragraph prints the string template variable `S` at 40 slots, so a record holding
  * a {@link sprawlingLength}-character `S` prints about 40,000,000 characters, past the default
  * output budget of 16,777,216.
  */
 const sprawling: Item = {
   ...counting,
-  body: [
-    {
-      attributes: [],
-      children: Array.from({ length: 40 }, (): BodyNode => ({
-        base: { _tag: "literal", value: 10n },
-        delimiter: ";",
-        field: Option.none(),
-        format: Option.none(),
-        identifier: "S",
-        index: Option.none(),
-        kind: "printed-variable",
-        mappingIndicator: "=",
-        path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
-        powerForm: false,
-      })),
-      kind: "element",
-      path: "qti-assessment-item/qti-item-body/p",
-      tag: "p",
-    },
-  ],
+  body: [slotsOfS(40)],
   identifier: "sprawling",
   templates: new Map([
     [
@@ -1259,35 +1266,71 @@ const budgetFailure = (
 
 describe("render, the output budget", () => {
   /**
-   * {@link sprawling} redacted under a record whose `S` is {@link sprawlingLength} characters long.
+   * A record whose `S` is {@link sprawlingLength} characters long.
    */
-  const sprawled = redact(acceptForTest(sprawling), {
+  const sprawlingRecord: RedactRecord = {
     outcomes: {},
     templates: { S: one({ baseType: "string", value: "y".repeat(sprawlingLength) }) },
-  });
+  };
 
   it.effect(
-    "[I-5] fails OutputTooLarge, naming the default budget and the item, when 40 printed variables of 999,999 characters pass it",
+    "[I-5] fails OutputTooLarge through the redaction's record, naming the default budget, the item and S, when 40 printed variables of 999,999 characters pass it",
     () =>
       Effect.gen(function* failsPastDefault() {
         const configuration = yield* defaults;
+        const sprawled = redact(acceptForTest(sprawling), sprawlingRecord);
 
         assert.strictEqual(configuration.outputBudget, 16_777_216);
         assert.deepStrictEqual(
           budgetFailure(render(sprawled, configuration, { instance })),
-          Option.some({ budget: 16_777_216, item: "sprawling", printed: Option.none() }),
+          Option.some({
+            budget: 16_777_216,
+            item: "sprawling",
+            printed: Option.some({ bound: 16_777_216, identifier: "S" }),
+          }),
         );
       }),
   );
 
-  it.effect("[I-5] renders the same item once the host raises the budget to 50,000,000", () =>
-    Effect.gen(function* rendersUnderRaised() {
-      const configuration = yield* configure({ outputBudget: 50_000_000 });
-      const rendered = yield* Effect.fromResult(render(sprawled, configuration, { instance }));
+  it.effect(
+    "[I-5] renders the same item once the host raises the budget to 50,000,000 and passes that configuration to redact and render",
+    () =>
+      Effect.gen(function* rendersUnderRaised() {
+        const configuration = yield* configure({ outputBudget: 50_000_000 });
+        const sprawled = redact(acceptForTest(sprawling), sprawlingRecord, configuration);
+        const rendered = yield* Effect.fromResult(render(sprawled, configuration, { instance }));
 
-      assert.isAbove(rendered.html.length, 40 * sprawlingLength);
-      assert.isAtMost(rendered.html.length, 50_000_000);
-    }),
+        assert.isTrue(Option.isNone(sprawled.unprinted));
+        assert.isAbove(rendered.html.length, 40 * sprawlingLength);
+        assert.isAtMost(rendered.html.length, 50_000_000);
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge naming S and the bound 10,000 when an item of 4,500 slots of 100 characters is redacted and rendered under outputBudget 10,000",
+    () =>
+      Effect.gen(function* failsPastRedactBudget() {
+        const configuration = yield* configure({ outputBudget: 10_000 });
+        const slotted = acceptForTest({
+          ...sprawling,
+          body: [slotsOfS(4500)],
+          identifier: "slotted",
+        });
+        const record: RedactRecord = {
+          outcomes: {},
+          templates: { S: one({ baseType: "string", value: "y".repeat(100) }) },
+        };
+        const shown = redact(slotted, record, configuration);
+
+        assert.deepStrictEqual(
+          budgetFailure(render(shown, configuration, { instance })),
+          Option.some({
+            budget: 10_000,
+            item: "slotted",
+            printed: Option.some({ bound: 10_000, identifier: "S" }),
+          }),
+        );
+      }),
   );
 
   it.effect(

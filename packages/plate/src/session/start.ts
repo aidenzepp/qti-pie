@@ -137,9 +137,9 @@ export class ItemNotInSession extends Data.TaggedError("ItemNotInSession")<{
  * What a host renders for one item of a test session.
  *
  * The host renders it with exactly these fields:
- * `render(redact(items.get(view.ref), view.record), view.configuration, { instance:
- * view.instance, values: view.values, disabled: view.disabled })`, so a restored session presents
- * the choice order and the template values it showed.
+ * `render(redact(items.get(view.ref), view.record, view.configuration), view.configuration, {
+ * instance: view.instance, values: view.values, disabled: view.disabled })`, so a restored session
+ * presents the choice order and the template values it showed.
  *
  * The view is server data, since its `record` is: the host reads it on the server and sends the
  * page only what `render` writes.

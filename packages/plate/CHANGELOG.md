@@ -99,6 +99,12 @@ and both of its entry points are unstable until M3.
   the item, and returns none of the page. `src/index.ts` exports `OutputTooLarge`. Its `printed`
   is none for the budget. When a printed variable's text passed its bound, `printed` names the
   bound and the variable, and the redacted item and its JSON form record them as `unprinted`.
+- `redact` takes the output budget as an optional last argument, after the record:
+  `{ outputBudget }` or the configuration itself, 16,777,216 when absent. It stops printing once
+  the item's printed variables and `param-variable` values pass the budget, and records the one
+  that passed it as `unprinted`, with the budget as its bound, so `render` fails with
+  `OutputTooLarge` naming that variable, where it failed before with `printed` none. Pass the
+  configuration you pass to `render`.
 
 ### How plate reads template processing (2026-11-07)
 

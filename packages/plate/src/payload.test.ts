@@ -3779,3 +3779,135 @@ describe("redactItem records the first text past its bound on content the page s
     );
   });
 });
+
+/**
+ * The text each slot of {@link slotted} prints from the value its tests give `S`: 100 characters.
+ */
+const slotText = "y".repeat(100);
+
+/**
+ * Give the path of a slot of {@link slotted}.
+ *
+ * @param n The slot's position, from 1.
+ * @returns Its path.
+ */
+const slotPath = (n: number): string => `${bodyPath}/p/qti-printed-variable[${String(n)}]`;
+
+/**
+ * Construct a paragraph of printed variables that each print `S` in its default form.
+ *
+ * @param count How many printed variables it holds.
+ * @returns The paragraph, its printed variables at {@link slotPath}.
+ */
+const slots = (count: number): BodyNode => ({
+  attributes: [],
+  children: Array.from({ length: count }, (_, index) => printed("S", slotPath(index + 1))),
+  kind: "element",
+  path: `${bodyPath}/p`,
+  tag: "p",
+});
+
+/**
+ * Construct an item whose body is one paragraph that prints `S` in a number of slots, as the
+ * re-audit's item of 4,500 slots does.
+ *
+ * @param count How many slots it holds.
+ * @returns The item.
+ */
+const slotted = (count: number): Item => ({ ...templated, body: [slots(count)] });
+
+describe("redactItem under an output budget", () => {
+  it("[I-5] stops formatting once the printed text passes the budget: 4,500 slots of 100 characters under { outputBudget: 10_000 } format at most 101, print the first 100, and record S with the bound 10,000", () => {
+    const value = counted(one({ baseType: "string", value: slotText }));
+    const redaction = redactItem(slotted(4500), holding({ S: value.value }), {
+      outputBudget: 10_000,
+    });
+
+    assert.isAtMost(value.reads(), 101);
+    assert.deepStrictEqual(
+      paragraphOf(redaction),
+      Array.from({ length: 100 }, () => text(slotText)),
+    );
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 10_000, identifier: "S", path: slotPath(101) }),
+    );
+  });
+
+  it("[I-5] prints every slot and records nothing under a budget of exactly the item's whole printed text, and records the last slot one character under it", () => {
+    const whole = 4500 * slotText.length;
+    const value = one({ baseType: "string", value: slotText });
+    const exact = redactItem(slotted(4500), holding({ S: value }), { outputBudget: whole });
+    const under = redactItem(slotted(4500), holding({ S: value }), { outputBudget: whole - 1 });
+
+    assert.strictEqual(paragraphOf(exact).length, 4500);
+    assert.isTrue(Option.isNone(exact.unprinted));
+    assert.strictEqual(paragraphOf(under).length, 4499);
+    assert.deepStrictEqual(
+      under.unprinted,
+      Option.some({ bound: whole - 1, identifier: "S", path: slotPath(4500) }),
+    );
+  });
+
+  it("[I-5] formats nothing, spends nothing and records nothing in a template block the record hides: its 4,500 slots are never read, and the 50 slots after it all print under { outputBudget: 10_000 }", () => {
+    const value = counted(one({ baseType: "string", value: slotText }));
+    const hidden: Item = {
+      ...visibility,
+      body: [templatePart("template-block", byVisible("show"), [slots(4500)]), slots(50)],
+    };
+    const redaction = redactItem(
+      hidden,
+      holding({ S: value.value, VISIBLE: identifierValue("OTHER") }),
+      { outputBudget: 10_000 },
+    );
+
+    assert.strictEqual(value.reads(), 50);
+    assert.deepStrictEqual(
+      paragraphOf(redaction),
+      Array.from({ length: 50 }, () => text(slotText)),
+    );
+    assert.isTrue(Option.isNone(redaction.unprinted));
+  });
+
+  it("[I-5] runs under the default budget, 16,777,216, when given none: 17 slots of 1,000,000 characters print 16 and record the 17th with that bound", () => {
+    const value = counted(one({ baseType: "string", value: "y".repeat(1_000_000) }));
+    const redaction = redactItem(slotted(17), holding({ S: value.value }));
+
+    assert.strictEqual(value.reads(), 17);
+    assert.strictEqual(paragraphOf(redaction).length, 16);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 16_777_216, identifier: "S", path: slotPath(17) }),
+    );
+  });
+
+  it("[I-5] spends the budget on a param-variable parameter's value too, recording the first to pass it by its template variable and passing the empty value from there on", () => {
+    const containers = acceptedFrom(containerParameterDocument);
+    const [, setParameter] = objectChildren(containers.body);
+    const spent = redactItem(containers, containerParameterValues, { outputBudget: 7 });
+    const fits = redactItem(containers, containerParameterValues, { outputBudget: 8 });
+
+    assert.deepStrictEqual(parametersOf(objectChildren(spent.body)), [
+      ["list", "1;2;3"],
+      ["set", ""],
+      ["none", ""],
+    ]);
+    assert.deepStrictEqual(
+      spent.unprinted,
+      Option.some({
+        bound: 7,
+        identifier: "SET",
+        path:
+          setParameter?.kind === "element"
+            ? setParameter.path
+            : assert.fail("The object holds no second parameter."),
+      }),
+    );
+    assert.deepStrictEqual(parametersOf(objectChildren(fits.body)), [
+      ["list", "1;2;3"],
+      ["set", "A;B"],
+      ["none", ""],
+    ]);
+    assert.isTrue(Option.isNone(fits.unprinted));
+  });
+});

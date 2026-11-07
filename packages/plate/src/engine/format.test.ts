@@ -387,3 +387,69 @@ describe("formatPrinted: the whole text is bounded at 1,000,000 characters, so r
     assert.strictEqual(printed(integers("ordered", [1n]), { format: "%999999i" }).length, 999_999);
   });
 });
+
+/**
+ * An ordered container of strings that counts which of its members have been read.
+ */
+interface Watched {
+  /**
+   * How many distinct members have been read.
+   */
+  readonly reads: () => number;
+  readonly value: Value;
+}
+
+/**
+ * Construct an ordered container that holds one string a number of times, each member noting when
+ * it is read, as the formatter reads a member to print it.
+ *
+ * @param text The string.
+ * @param count How many times the container holds it.
+ * @returns The value and how many of its members have been read.
+ */
+const watched = (text: string, count: number): Watched => {
+  const read = new Set<number>();
+
+  return {
+    reads: () => read.size,
+    value: {
+      baseType: "string",
+      cardinality: "ordered",
+      values: Array.from({ length: count }, (_, index): Single => ({
+        baseType: "string",
+        get value() {
+          read.add(index);
+
+          return text;
+        },
+      })),
+    },
+  };
+};
+
+describe("formatPrinted: a caller's smaller bound holds the whole text, so redact can stop at its output budget", () => {
+  it("[I-5] prints a text of up to the bound in full and none past it, delimiters included, and NULL's empty text under a bound of 0", () => {
+    const list = integers("ordered", [10n, 20n, 30n]);
+
+    assert.strictEqual(Option.getOrThrow(formatPrinted(list, {}, 8)), "10;20;30");
+    assert.isTrue(Option.isNone(formatPrinted(list, {}, 7)));
+    assert.isTrue(Option.isNone(formatPrinted(integer(5n), { format: "%3i" }, 2)));
+    assert.strictEqual(Option.getOrThrow(formatPrinted(nullOf("integer", "single"), {}, 0)), "");
+  });
+
+  it("[I-5] stops at the first member whose text passes the bound, so it builds no text past it: 1,000 members of 10 characters under a bound of 25 are read 3 times", () => {
+    const counted = watched("y".repeat(10), 1000);
+
+    assert.isTrue(Option.isNone(formatPrinted(counted.value, {}, 25)));
+    assert.strictEqual(counted.reads(), 3);
+  });
+
+  it("[I-5] holds a bound above 1,000,000, or NaN, to 1,000,000", () => {
+    const longest = single({ baseType: "string", value: "y".repeat(1_000_000) });
+    const longer = single({ baseType: "string", value: "y".repeat(1_000_001) });
+
+    assert.strictEqual(Option.getOrThrow(formatPrinted(longest, {}, 5_000_000)).length, textBound);
+    assert.isTrue(Option.isNone(formatPrinted(longer, {}, 5_000_000)));
+    assert.isTrue(Option.isNone(formatPrinted(longer, {}, Number.NaN)));
+  });
+});
