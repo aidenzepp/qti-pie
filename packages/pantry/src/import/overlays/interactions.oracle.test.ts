@@ -1113,3 +1113,80 @@ describe("import/overlays/interactions.ts, choice names", () => {
       ),
   );
 });
+
+/**
+ * A document holding one portable custom interaction, with each form of its module it writes.
+ *
+ * @param forms - Which forms it writes.
+ * @param forms.attribute - Whether it writes `module`.
+ * @param forms.modules - Whether it writes `qti-interaction-modules`.
+ * @returns The tree.
+ */
+const pciTreeOf = ({
+  attribute,
+  modules,
+}: {
+  readonly attribute: boolean;
+  readonly modules: boolean;
+}): XdmDocument<Composed> => {
+  const pci = elementOf(
+    "qti-portable-custom-interaction",
+    [
+      ["response-identifier", "RESPONSE"],
+      ["custom-interaction-type-identifier", "t"],
+      ...(attribute ? [["module", "m"] as const] : []),
+    ],
+    [
+      ...(modules
+        ? [
+            elementOf(
+              "qti-interaction-modules",
+              [],
+              [
+                elementOf(
+                  "qti-interaction-module",
+                  [
+                    ["id", "m"],
+                    ["primary-path", "m.js"],
+                  ],
+                  [],
+                ),
+              ],
+            ),
+          ]
+        : []),
+      elementOf("qti-interaction-markup", [], []),
+    ],
+  );
+
+  return {
+    ...treeOf([]),
+    root: elementOf(
+      "qti-assessment-item",
+      [["identifier", "item"]],
+      [elementOf("qti-item-body", [], [pci])],
+    ),
+  };
+};
+
+describe("import/overlays/interactions.ts, PCI module forms", () => {
+  it("writes a PciModuleForm row for each form of its module a PCI writes, by the PCI's node", () => {
+    // Oracle: the document numbered in document order from the document node's 0 (the item 1, its
+    // body 2, the PCI 3), against the forms each case writes by construction.
+    const pci = idOf(3);
+    const form = (written: boolean) => JSON.stringify([pci, String(written)]);
+    for (const [forms, keys] of [
+      [{ attribute: false, modules: false }, []],
+      [{ attribute: true, modules: false }, [form(false)]],
+      [{ attribute: false, modules: true }, [form(true)]],
+      [{ attribute: true, modules: true }, [form(false), form(true)]],
+    ] as const) {
+      const rows = rowsOf(pciTreeOf(forms), ids).PciModuleForm;
+
+      assert.sameMembers([...rows.keys()], [...keys]);
+      for (const [, row] of rows) {
+        assert.strictEqual(row.node, pci);
+      }
+    }
+  });
+});

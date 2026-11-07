@@ -790,6 +790,7 @@ const unconstructed = {
   "One base": "an operator's operand types, over expressions drawn without typing",
   "Operand fit": "an operator's operand types, over expressions drawn without typing",
   "Outcome only": "a test operator's processing language, over expressions drawn without reading",
+  "PCI module source": "a PCI's module forms, attributes and children drawn without reading",
   "Printed variable reference": "a reference, over identifiers drawn without reading",
   "Record field key": "a record value's field identifiers, values drawn without reading",
   RecordBindingFit: "a response binding, over identifiers drawn without reading",
