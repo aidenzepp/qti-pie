@@ -880,7 +880,7 @@ const holds = (build: Build, condition: Condition, element: SourceElement): bool
     return Option.exists(valueOf(element, condition.name), (written) =>
       Option.exists(
         Result.getSuccess(parseLexical("integer", trimXmlSpace(written))),
-        (single) => integerOf(single) > condition.limit,
+        (single) => integerOf(build, single) > condition.limit,
       ),
     );
   }
@@ -1057,6 +1057,7 @@ const mappingOf = (
           caseSensitive: yield* xsBoolean(build, entry, "case-sensitive", false),
           key: yield* typed(build, attributePath(path, key), parseLexical(baseType, key.value)),
           value: floatOf(
+            build,
             yield* typed(build, attributePath(path, value), parseLexical("float", value.value)),
           ),
         };
@@ -1095,7 +1096,7 @@ const areaEntryOf = (
     return {
       entry: {
         coords: coords.map(([number]) => number),
-        mappedValue: floatOf(yield* typed(build, path, parseLexical("float", value.value))),
+        mappedValue: floatOf(build, yield* typed(build, path, parseLexical("float", value.value))),
         shape,
       },
       percent: coords.some(([, percent]) => percent),
@@ -1207,20 +1208,22 @@ const viewAttribute = (
  * Read the six attributes of a `qti-outcome-declaration` that Results Reporting mirrors on an
  * `outcomeVariable`, each as the XSD types it.
  *
+ * @param build The build, `buildItem`'s or `buildTest`'s, which a defect names.
  * @param declaration The declaration.
  * @param refuse The reader's refusal of an attribute, at that attribute's path in its document.
  * @returns The six, each none when absent, or the refusal `value-type` at a double outside
  *   `xs:double`'s lexical space or `attribute-type` at a `view` naming something other than a view.
  */
 const outcomeReporting = (
+  build: ModelWalk,
   declaration: SourceElement,
   refuse: AttributeRefusal,
 ): Effect.Effect<OutcomeReporting, Refusal> =>
   Effect.gen(function* readOutcomeReporting() {
     const view = yield* viewAttribute(declaration, refuse);
-    const normalMaximum = yield* doubleAttribute(declaration, "normal-maximum", refuse);
-    const normalMinimum = yield* doubleAttribute(declaration, "normal-minimum", refuse);
-    const masteryValue = yield* doubleAttribute(declaration, "mastery-value", refuse);
+    const normalMaximum = yield* doubleAttribute(build, declaration, "normal-maximum", refuse);
+    const normalMinimum = yield* doubleAttribute(build, declaration, "normal-minimum", refuse);
+    const masteryValue = yield* doubleAttribute(build, declaration, "mastery-value", refuse);
 
     return {
       interpretation: valueOf(declaration, "interpretation"),
@@ -1297,7 +1300,10 @@ const matchEntryOf = (
     const source = yield* requiredAttribute(build, entry, "source-value");
     const path = attributePath(pathOf(build, entry), source);
     const lexical = trimXmlSpace(source.value);
-    const sourceValue = integerOf(yield* typed(build, path, parseLexical("integer", lexical)));
+    const sourceValue = integerOf(
+      build,
+      yield* typed(build, path, parseLexical("integer", lexical)),
+    );
     if (sourceValue < leastInt || sourceValue > greatestInt) {
       return yield* Effect.fail(
         refusal(build, "value-type", path, { baseType: "xs:int", lexical }),
@@ -1324,6 +1330,7 @@ const interpolationEntryOf = (
   Effect.gen(function* readInterpolationEntry() {
     const source = yield* requiredAttribute(build, entry, "source-value");
     const sourceValue = floatOf(
+      build,
       yield* typed(
         build,
         attributePath(pathOf(build, entry), source),
@@ -1407,7 +1414,7 @@ export const outcomeDeclaration = (
       return Option.none();
     }
 
-    const reporting = yield* outcomeReporting(declaration, (attribute, rule, detail) =>
+    const reporting = yield* outcomeReporting(build, declaration, (attribute, rule, detail) =>
       refusal(build, rule, attributePath(pathOf(build, declaration), attribute), detail),
     );
     const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);

@@ -21,20 +21,13 @@ import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/eval
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
-import { booleanOf, toFloat } from "#plate/engine/numbers.ts";
+import { booleanNull, booleanOf, toFloat } from "#plate/engine/numbers.ts";
 import { referenceValue } from "#plate/engine/refs.ts";
 import type { Expression, StringOrRef } from "#plate/model/expression.ts";
 import { compile, matches } from "#plate/model/regex.ts";
 import type { Matcher } from "#plate/model/regex.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-
-/**
- * Give the single boolean NULL, the value of a text expression whose operand is NULL.
- *
- * @returns The NULL.
- */
-const unknown = (): Value => nullOf("boolean", "single");
 
 /**
  * Give the string a value holds: the string of a single string, none for NULL.
@@ -73,7 +66,7 @@ const comparedStrings = (
 ): Result.Result<Value, EngineFailure> =>
   Result.map(Result.all([evaluate(left, scope), evaluate(right, scope)]), ([first, second]) =>
     Option.match(Option.all([stringOf(first), stringOf(second)]), {
-      onNone: unknown,
+      onNone: () => booleanNull,
       onSome: ([one, other]) => booleanOf(compare(one, other)),
     }),
   );
@@ -175,7 +168,7 @@ const evaluatePatternMatch: Evaluator<"pattern-match"> = (expression, scope, eva
     const value = yield* evaluate(operand, scope);
 
     return Option.match(Option.all([matcher, stringOf(value)]), {
-      onNone: unknown,
+      onNone: () => booleanNull,
       onSome: ([automaton, text]) => booleanOf(matches(automaton, text)),
     });
   });
@@ -203,7 +196,7 @@ const evaluateInside: Evaluator<"inside"> = (expression, scope, evaluate) => {
 
   return Result.map(evaluate(operand, scope), (value) =>
     isNull(value)
-      ? unknown()
+      ? booleanNull
       : booleanOf(
           value.values.some(
             (single) =>
@@ -218,9 +211,10 @@ const evaluateInside: Evaluator<"inside"> = (expression, scope, evaluate) => {
  * Give the value of a `qti-custom-operator`: NULL, since the extension that defines it is not run
  * (9.21); the item model marks it, and its processing still runs.
  *
- * Its operands are not evaluated: an operator has no side effects, and its value does not depend
- * on them. Its kind rule types it unknown, so the NULL's base type says nothing; it is a single
- * string's.
+ * Its operands are not evaluated, the one exception to every operand evaluated left to right
+ * (`operandValues` in `#plate/engine/operands.ts`): its value does not depend on them, and a random
+ * kind among them draws nothing, so the values a seed gives stay those of the item without it. Its
+ * kind rule types it unknown, so the NULL's base type says nothing; it is a single string's.
  *
  * @returns The NULL.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpCustomOp

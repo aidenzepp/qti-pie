@@ -343,6 +343,7 @@ export const renders = {
     "qti-label",
     "qti-printed-variable",
     "qti-template-block",
+    "qti-content-body",
     "qti-template-inline",
     ...engine,
     "qti-template-declaration",

@@ -28,6 +28,7 @@ import {
   fresh,
   holdsCompletionStatus,
   outcomeDefaults,
+  unrunTemplateProcessing,
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
@@ -68,24 +69,6 @@ const responseStart = (item: Item, defaults: ItemRecord["defaults"]): ItemRecord
       ),
     ]),
   );
-
-/**
- * A path at or below the root's `qti-template-processing`: the root's step, then that element's
- * step, with its `[n]` where the walk writes one, then the end or a further step.
- */
-const templateProcessingPath = /^[^/]+\/qti-template-processing(?:\[\d+\])?(?:\/|$)/u;
-
-/**
- * Report whether an item has a `qti-template-processing` the engine does not run: the item model
- * holds no template rules (`Item.templateProcessing` is none) and marks something at or below that
- * element's path. An item with no `qti-template-processing` holds no such mark.
- *
- * @param item The item.
- * @returns Whether its template processing exists and does not run.
- */
-const unrunTemplateProcessing = (item: Item): boolean =>
-  Option.isNone(item.templateProcessing) &&
-  item.unsupported.some((entry) => templateProcessingPath.test(entry.path));
 
 /**
  * Give the value the built-in `completionStatus` holds when an attempt's processing starts. It

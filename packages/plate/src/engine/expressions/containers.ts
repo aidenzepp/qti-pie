@@ -34,12 +34,19 @@
 import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { booleanOf, integerValue, withinContainerBound } from "#plate/engine/numbers.ts";
+import {
+  booleanNull,
+  booleanOf,
+  integerValue,
+  singleValue,
+  withinContainerBound,
+} from "#plate/engine/numbers.ts";
+import { operandValues } from "#plate/engine/operands.ts";
 import { drawBelow } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
 import { referenceInteger } from "#plate/engine/refs.ts";
 import type { Expression, ExpressionKind } from "#plate/model/expression.ts";
-import { isNull, match, nullOf } from "#plate/model/values.ts";
+import { isNull, match, nullOf, sameSingle } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 
 /**
@@ -56,21 +63,6 @@ const evaluateIsNull: Evaluator<"is-null"> = (expression, scope, evaluate) => {
 
   return Result.map(evaluate(operand, scope), (value) => booleanOf(isNull(value)));
 };
-
-/**
- * Evaluate every operand, left to right; the first failure is the result.
- *
- * @param operands The operands.
- * @param scope The item and the variables of the attempt.
- * @param evaluate The evaluator, which gives each operand's value.
- * @returns The operands' values in order, or the first operand's failure.
- */
-const valuesOf = (
-  operands: readonly Expression[],
-  scope: Scope,
-  evaluate: Evaluate,
-): Result.Result<Value[], EngineFailure> =>
-  Result.all(operands.map((operand) => evaluate(operand, scope)));
 
 /**
  * The kinds whose rule gives no base type when one of its operands has none, each operand counted
@@ -206,28 +198,6 @@ const containerOf = (
 };
 
 /**
- * Construct the single value that holds one single.
- *
- * @param single The single.
- * @returns The value, of the single's base type.
- */
-const singleOf = (single: Single): Value => ({
-  baseType: single.baseType,
-  cardinality: "single",
-  values: [single],
-});
-
-/**
- * Report whether two singles are equal, as `qti-match` compares two single values: of one base
- * type, a `pair` in either order.
- *
- * @param left One single.
- * @param right The other single.
- * @returns Whether they are equal.
- */
-const equal = (left: Single, right: Single): boolean => match(singleOf(left), singleOf(right));
-
-/**
  * Give the value of a `qti-multiple`: a multiple container of its operands' values, a multiple
  * operand's added one by one and a NULL one ignored; NULL when there is no operand or every one is
  * NULL, when an operand is {@link untyped}, and when it would hold more than 1,000,000 values.
@@ -240,7 +210,7 @@ const equal = (left: Single, right: Single): boolean => match(singleOf(left), si
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMultiple
  */
 const evaluateMultiple: Evaluator<"multiple"> = (expression, scope, evaluate) =>
-  Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
+  Result.map(operandValues(expression.operands, scope, evaluate), (values) =>
     containerOf("multiple", expression.operands, values),
   );
 
@@ -257,7 +227,7 @@ const evaluateMultiple: Evaluator<"multiple"> = (expression, scope, evaluate) =>
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpOrdered
  */
 const evaluateOrdered: Evaluator<"ordered"> = (expression, scope, evaluate) =>
-  Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
+  Result.map(operandValues(expression.operands, scope, evaluate), (values) =>
     containerOf("ordered", expression.operands, values),
   );
 
@@ -319,7 +289,7 @@ const staticBaseOf = (
 ): ModelledBaseType =>
   operands.some((operand) => untyped(operand))
     ? "string"
-    : Result.match(valuesOf(operands, { ...scope, draw: typingDraw }, evaluate), {
+    : Result.match(operandValues(operands, { ...scope, draw: typingDraw }, evaluate), {
         onFailure: (): ModelledBaseType => "string",
         onSuccess: baseOf,
       });
@@ -350,7 +320,7 @@ const staticBaseOf = (
 const repeatOnce: Evaluator<"repeat"> = (expression, scope, evaluate) =>
   Result.gen(function* repeatOperands() {
     const repeats = yield* referenceInteger(scope.variables, expression.numberRepeats);
-    const pass = yield* valuesOf(expression.operands, scope, evaluate);
+    const pass = yield* operandValues(expression.operands, scope, evaluate);
     const count = Option.getOrElse(repeats, () => 0n);
     const unset = nullOf(baseOf(pass), "ordered");
     const passSize = sizeOf(pass);
@@ -417,7 +387,7 @@ const repeatPerPass: Evaluator<"repeat"> = (expression, scope, evaluate) =>
     const held: Single[] = [];
     let baseType = baseOf([]);
     for (let passed = 0n; passed < count; passed += 1n) {
-      const pass = yield* valuesOf(expression.operands, scope, evaluate);
+      const pass = yield* operandValues(expression.operands, scope, evaluate);
       const passSize = sizeOf(pass);
       if (passSize === 0 || !withinContainerBound(BigInt(held.length + passSize))) {
         return nullOf(baseOf(pass), "ordered");
@@ -566,7 +536,7 @@ const pairOf = (
  * @returns Whether the container holds it; false when the value is not a single one.
  */
 const holds = (container: Value, value: Value): boolean =>
-  container.values.some((held) => match(value, singleOf(held)));
+  container.values.some((held) => match(value, singleValue(held)));
 
 /**
  * Give the value of a `qti-member`: a single boolean, whether the container its second operand
@@ -580,9 +550,7 @@ const holds = (container: Value, value: Value): boolean =>
  */
 const evaluateMember: Evaluator<"member"> = (expression, scope, evaluate) =>
   Result.map(pairOf(expression.operands, scope, evaluate), ([value, container]) =>
-    isNull(value) || isNull(container)
-      ? nullOf("boolean", "single")
-      : booleanOf(holds(container, value)),
+    isNull(value) || isNull(container) ? booleanNull : booleanOf(holds(container, value)),
   );
 
 /**
@@ -600,7 +568,9 @@ const evaluateDelete: Evaluator<"delete"> = (expression, scope, evaluate) =>
   Result.map(pairOf(expression.operands, scope, evaluate), ([value, container]): Value => ({
     baseType: container.baseType,
     cardinality: container.cardinality,
-    values: isNull(value) ? [] : container.values.filter((held) => !match(value, singleOf(held))),
+    values: isNull(value)
+      ? []
+      : container.values.filter((held) => !match(value, singleValue(held))),
   }));
 
 /**
@@ -616,7 +586,7 @@ const holdsAll = (container: readonly Single[], part: readonly Single[]): boolea
   const unmatched = [...container];
 
   return part.every((single) => {
-    const index = unmatched.findIndex((held) => equal(single, held));
+    const index = unmatched.findIndex((held) => sameSingle(single, held));
     if (index === -1) {
       return false;
     }
@@ -643,7 +613,7 @@ const holdsRun = (sequence: readonly Single[], part: readonly Single[]): boolean
       part.every((single, offset) => {
         const held = sequence[start + offset];
 
-        return held !== undefined && equal(single, held);
+        return held !== undefined && sameSingle(single, held);
       }),
   );
 
@@ -662,7 +632,7 @@ const holdsRun = (sequence: readonly Single[], part: readonly Single[]): boolean
 const evaluateContains: Evaluator<"contains"> = (expression, scope, evaluate) =>
   Result.map(pairOf(expression.operands, scope, evaluate), ([container, part]) => {
     if (isNull(container) || isNull(part)) {
-      return nullOf("boolean", "single");
+      return booleanNull;
     }
 
     return booleanOf(

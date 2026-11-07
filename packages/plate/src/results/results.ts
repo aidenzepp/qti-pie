@@ -45,7 +45,8 @@ import { choiceOrder, redactItem } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
 import type { ResultSingle } from "#plate/results/values.ts";
-import { fitting, RecordMismatch } from "#plate/score.ts";
+import { belonging, fitting } from "#plate/score.ts";
+import type { RecordMismatch } from "#plate/score.ts";
 import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
@@ -644,28 +645,6 @@ const documentOf = (children: readonly Element[]): string =>
   );
 
 /**
- * Check that a record belongs to the item it is reported for, as `score` does.
- *
- * @param document The item.
- * @param record The record.
- * @returns The record, or {@link RecordMismatch} when it names another item or document.
- */
-const belonging = (
-  document: Accepted,
-  record: ItemRecord,
-): Result.Result<ItemRecord, RecordMismatch> =>
-  record.item === document.item.identifier && record.document === document.item.document
-    ? Result.succeed(record)
-    : Result.fail(
-        new RecordMismatch({
-          document: document.item.document,
-          item: document.item.identifier,
-          recordDocument: record.document,
-          recordItem: record.item,
-        }),
-      );
-
-/**
  * Write the result of an item delivered alone.
  *
  * The host holds the item's presentation and its attempt limit, so the result reads the record
@@ -695,7 +674,7 @@ const itemResults = (
 
     const record = yield* fitting(
       input.document.item,
-      yield* belonging(input.document, yield* decodeRecord(input.record)),
+      yield* belonging(input.document.item, yield* decodeRecord(input.record)),
     );
     const presented = record.numAttempts > 0;
 
@@ -856,7 +835,7 @@ const deliveredItem = (
       Option.fromUndefinedOr(items.get(entry.ref)),
       () => new ResultItemMissing({ document: entry.record.document, ref: entry.ref }),
     );
-    yield* belonging(document, entry.record);
+    yield* belonging(document.item, entry.record);
 
     const place = `its item ${String(entry.sequenceIndex)}, of the item ref ${JSON.stringify(entry.ref)}`;
     const record = yield* Result.mapError(

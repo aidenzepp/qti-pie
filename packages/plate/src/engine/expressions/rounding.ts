@@ -24,11 +24,19 @@
 import { Option, Result } from "effect";
 import type { Evaluator, FamilyTable } from "#plate/engine/evaluate.ts";
 import { shortestDecimal } from "#plate/engine/math.ts";
-import { booleanOf, floatValue, integerValue, numberOf, toFloat } from "#plate/engine/numbers.ts";
+import {
+  booleanNull,
+  booleanOf,
+  floatNull,
+  floatValue,
+  integerNull,
+  integerValue,
+  numberOf,
+  toFloat,
+} from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
 import { referenceInteger } from "#plate/engine/refs.ts";
 import type { Expression } from "#plate/model/expression.ts";
-import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
 /**
@@ -308,7 +316,7 @@ const truncatedInteger = (single: NumberSingle): Option.Option<bigint> => {
  */
 const integerOrNull = (held: Option.Option<bigint>): Value =>
   Option.match(held, {
-    onNone: () => nullOf("integer", "single"),
+    onNone: () => integerNull,
     onSome: integerValue,
   });
 
@@ -374,7 +382,7 @@ const evaluateRoundTo: Evaluator<"round-to"> = (expression, scope, evaluate) =>
     );
 
     return Option.match(rounded, {
-      onNone: () => nullOf("float", "single"),
+      onNone: () => floatNull,
       onSome: (number) => floatValue(doubleOf(number)),
     });
   });
@@ -406,7 +414,7 @@ const evaluateEqualRounded: Evaluator<"equal-rounded"> = (expression, scope, eva
       );
 
     return Option.match(Option.all([round(leftValue), round(rightValue)]), {
-      onNone: () => nullOf("boolean", "single"),
+      onNone: () => booleanNull,
       onSome: ([one, other]) => booleanOf(sameRounded(one, other)),
     });
   });

@@ -221,6 +221,7 @@ describe("the closed value sets", () => {
           "qti-label",
           "qti-printed-variable",
           "qti-template-block",
+          "qti-content-body",
           "qti-template-inline",
           ...renders.engine,
           "qti-template-declaration",

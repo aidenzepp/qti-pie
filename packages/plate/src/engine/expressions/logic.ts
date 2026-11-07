@@ -12,18 +12,11 @@
 import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { booleanOf } from "#plate/engine/numbers.ts";
+import { booleanNull, booleanOf } from "#plate/engine/numbers.ts";
+import { operandValues } from "#plate/engine/operands.ts";
 import { referenceInteger } from "#plate/engine/refs.ts";
 import type { Expression } from "#plate/model/expression.ts";
-import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-
-/**
- * Give the single boolean NULL, the value of a logic expression whose truth is not known.
- *
- * @returns The NULL.
- */
-const unknown = (): Value => nullOf("boolean", "single");
 
 /**
  * Give the truth an operand's value holds: the boolean of a single boolean, none for NULL.
@@ -54,9 +47,10 @@ interface Tally {
 /**
  * Evaluate every operand and count its truths.
  *
- * Every operand is evaluated, left to right, and the first failure is the result, so a later
- * operand's failure is not hidden by an earlier false: an operator has no side effects, so
- * evaluating them all changes no value.
+ * Every operand is evaluated, left to right ({@link operandValues}), and the first failure is the
+ * result, so a later operand's failure is not hidden by an earlier false. No operand is skipped
+ * once the value is known, as a short-circuit would skip it: a skipped operand would draw nothing,
+ * which would change the values a seed gives every later draw of the run (OD-3).
  *
  * @param operands The operands.
  * @param scope The item and the variables of the attempt.
@@ -68,7 +62,7 @@ const tallyOf = (
   scope: Scope,
   evaluate: Evaluate,
 ): Result.Result<Tally, EngineFailure> =>
-  Result.map(Result.all(operands.map((operand) => evaluate(operand, scope))), (values): Tally => {
+  Result.map(operandValues(operands, scope, evaluate), (values): Tally => {
     const truths = values.map((value) => truthOf(value));
 
     return {
@@ -95,7 +89,7 @@ const evaluateAnd: Evaluator<"and"> = (expression, scope, evaluate) =>
       return booleanOf(false);
     }
 
-    return nulls > 0n ? unknown() : booleanOf(true);
+    return nulls > 0n ? booleanNull : booleanOf(true);
   });
 
 /**
@@ -115,7 +109,7 @@ const evaluateOr: Evaluator<"or"> = (expression, scope, evaluate) =>
       return booleanOf(true);
     }
 
-    return nulls > 0n ? unknown() : booleanOf(false);
+    return nulls > 0n ? booleanNull : booleanOf(false);
   });
 
 /**
@@ -133,7 +127,7 @@ const evaluateNot: Evaluator<"not"> = (expression, scope, evaluate) => {
 
   return Result.map(evaluate(operand, scope), (value) =>
     Option.match(truthOf(value), {
-      onNone: unknown,
+      onNone: () => booleanNull,
       onSome: (held) => booleanOf(!held),
     }),
   );
@@ -162,7 +156,7 @@ const anyNOf = ({ falses, nulls, trues }: Tally, min: bigint, max: bigint): Valu
     return booleanOf(false);
   }
 
-  return trues >= min && trues + nulls <= max ? booleanOf(true) : unknown();
+  return trues >= min && trues + nulls <= max ? booleanOf(true) : booleanNull;
 };
 
 /**
@@ -185,7 +179,7 @@ const evaluateAnyN: Evaluator<"any-n"> = (expression, scope, evaluate) =>
     const tally = yield* tallyOf(expression.operands, scope, evaluate);
 
     return Option.match(Option.all([min, max]), {
-      onNone: unknown,
+      onNone: () => booleanNull,
       onSome: ([least, greatest]) => anyNOf(tally, least, greatest),
     });
   });

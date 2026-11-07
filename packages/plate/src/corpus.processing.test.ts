@@ -4,14 +4,14 @@ import { decodeRecord } from "#plate/codec/record.ts";
 import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { begin, score, solution } from "#plate/index.ts";
+import { score, solution } from "#plate/index.ts";
 import type { Accepted, StoredRecord } from "#plate/index.ts";
 import { expressionKinds, isUnlanded } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import type { SolutionRecord } from "#plate/model/record.ts";
 import { isNull, trimXmlSpace } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
-import { acceptedOf, openCorpus, sweepInstance, sweepSeeds, templated } from "#plate/test/sweep.ts";
+import { acceptedOf, begunUnder, openCorpus, sweepSeeds, templated } from "#plate/test/sweep.ts";
 
 /**
  * Opening the corpus (about 800 members) and scoring each item with inline response processing
@@ -224,8 +224,8 @@ const correctResponsesOf = (
   );
 
 /**
- * Begin an item's record under a sweep seed, with the fixed instance {@link sweepInstance}, and
- * read its correct responses from it.
+ * Begin an item's record under a sweep seed ({@link begunUnder}) and read its correct responses
+ * from it.
  *
  * @param accepted The item, whose template processing runs.
  * @param location The item's corpus path.
@@ -239,17 +239,13 @@ const begunRun = (
 ): Result.Result<Run, string> => {
   const where = `${location} (seed ${JSON.stringify(seed)})`;
 
-  return Result.gen(function* beginRun() {
-    const record = yield* Result.mapError(
-      begin(accepted, { instance: sweepInstance, seed }),
-      (error) => `${where}: begin fails with ${error._tag}`,
-    );
-    const decoded = yield* Result.mapError(
-      decodeRecord(record),
-      (error) => `${where}: the record does not decode: ${error.message}`,
-    );
-
-    return { correct: correctResponsesOf(accepted, decoded), record: Option.some(record), where };
+  return Result.mapBoth(begunUnder(accepted, seed), {
+    onFailure: (error) => `${where}: begin or the record's decoding fails with ${error._tag}`,
+    onSuccess: ({ decoded, stored }): Run => ({
+      correct: correctResponsesOf(accepted, decoded),
+      record: Option.some(stored),
+      where,
+    }),
   });
 };
 

@@ -382,7 +382,8 @@ your own control supplies.
 template values hide, with `ResponsesRefused`, and keeps the record's value for a response that
 only hidden template content binds, whatever the post holds. A response that no interaction on
 the page binds, because the item never asks for it or shows a notice in its place, is scored as
-the host posts it. Do not trust a posted value for such a response.
+the host posts it. Do not trust a posted value for such a response: validate it, or draw its
+interaction yourself.
 
 Inline processing runs every response rule. `qti-lookup-outcome-value` maps a value through a
 match or interpolation table, `qti-exit-response` ends processing, and a

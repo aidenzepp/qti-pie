@@ -4,7 +4,7 @@ import { decodeRecord } from "#plate/codec/record.ts";
 import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { begin, score, solution } from "#plate/index.ts";
+import { score, solution } from "#plate/index.ts";
 import type { Accepted, StoredRecord } from "#plate/index.ts";
 import type {
   BodyNode,
@@ -20,7 +20,7 @@ import type {
 import { outcomeDefaults } from "#plate/model/record.ts";
 import { format, isNull, trimXmlSpace } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
-import { acceptedOf, openCorpus, sweepInstance, sweepSeeds, templated } from "#plate/test/sweep.ts";
+import { acceptedOf, begunUnder, openCorpus, sweepSeeds, templated } from "#plate/test/sweep.ts";
 import { templatePrefixes } from "#plate/vocabulary.ts";
 
 /**
@@ -266,25 +266,21 @@ const classify = (
 };
 
 /**
- * Begin an item's record under a sweep seed, with the fixed instance {@link sweepInstance}, and
- * read the item's correct responses from it through `solution`, as a host would.
+ * Begin an item's record under a sweep seed ({@link begunUnder}) and read the item's correct
+ * responses from it through `solution`, as a host would.
  *
  * @param accepted The item, whose template processing runs.
  * @param seed The sweep seed.
  * @returns The record and the correct responses it holds, or what failed.
  */
 const begun = (accepted: Accepted, seed: string): Result.Result<Begun, string> =>
-  Result.gen(function* beginRecord() {
-    const record = yield* Result.mapError(
-      begin(accepted, { instance: sweepInstance, seed }),
-      (error) => `begin failed: ${error._tag}: ${error.message}`,
-    );
-    const decoded = yield* Result.mapError(
-      decodeRecord(record),
-      (error) => `the record does not decode: ${error.message}`,
-    );
-
-    return { correct: solution(accepted, decoded), record, seed };
+  Result.mapBoth(begunUnder(accepted, seed), {
+    onFailure: (error) => `begin or the record's decoding failed: ${error._tag}: ${error.message}`,
+    onSuccess: ({ decoded, stored }): Begun => ({
+      correct: solution(accepted, decoded),
+      record: stored,
+      seed,
+    }),
   });
 
 /**

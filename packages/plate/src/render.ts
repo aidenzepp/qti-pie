@@ -144,17 +144,24 @@ const checkedInstance = (
 
 /**
  * Copy an accepted document's item into the form the page may know: its body, title and language,
- * with each printed variable as the text it prints from the record, without its correct responses,
+ * shown as the record's template values and outcome values say, without its correct responses,
  * mappings, defaults, processing or template rules.
  *
  * A printed variable prints the value `record` holds for it, a template value else an outcome
  * value, formatted as its attributes say; NULL prints nothing, and one whose value `record` does
- * not hold shows the notice `qti-printed-variable`. With no record, an item whose template
- * processing does not run prints the values its first attempt starts with (its declared template
- * defaults and its outcomes' starting values), and an item whose template processing runs shows
- * every printed variable as the notice. It never copies a template value or an outcome value it
- * does not print, the record's seed or an override template processing set. `redactItem` in
- * `#plate/payload.ts` lists what it copies.
+ * not hold shows the notice `qti-printed-variable`. A template block or inline, and a choice with
+ * a `template-identifier`, is shown or hidden by the template value `record` holds: a hidden choice
+ * is absent from its interaction. A `param` whose `value` names a `param-variable` template
+ * variable passes that variable's value. One whose template value `record` does not hold is
+ * withheld: a block, an inline or a `param` shows its notice, and a choice is absent, the
+ * redacted item's notices naming `template-identifier` once for all such choices.
+ *
+ * With no record, an item whose template processing does not run reads as the record its first
+ * attempt starts with (its declared template defaults and its outcomes' starting values), and an
+ * item whose template processing runs withholds every printed variable, template block, template
+ * inline, `param-variable` parameter and choice with a template visibility. It never copies a
+ * template value or an outcome value it does not print or pass, the record's seed or an override
+ * template processing set. `redactItem` in `#plate/payload.ts` lists what it copies.
  *
  * It takes only `check`'s `Accepted` (rule `723e580c`), so a hand-built item, which may hold a
  * `javascript:` href or an `onclick` that `check` would strip, never reaches {@link render}. It

@@ -134,20 +134,44 @@ export const completionValue = (status: CompletionStart): Value => ({
 });
 
 /**
- * Report whether an item holds the built-in {@link completionStatus} among its record's outcomes:
- * unless it declares a response or an outcome of that name, which wins over the built-in as every
- * declared variable does (`variableType` in `#plate/validate/rules.ts`).
+ * Report whether an item holds the built-in {@link completionStatus} among its record's outcomes.
  *
- * The item model decides which rules run by every declaration, a template or context declaration
- * and an outcome it does not model included (`heldBuiltIns` in `#plate/model/item.ts`), so a rule
- * that reads or sets `completionStatus` past such a declaration never runs; the record then holds
- * the built-in beside it, which only a result reports.
+ * Every checked item holds it: `open` refuses a declaration of any kind named `completionStatus`
+ * (`reserved-identifier`, pantry's `DeclarationNotReserved`). Only an item `buildItem` built from
+ * an unchecked document can declare a response or an outcome of that name, which then wins over the
+ * built-in as every declared variable does (`variableType` in `#plate/validate/rules.ts`), so such
+ * an item does not hold it. Its model also decides which rules run by every declaration, a template
+ * or context declaration and an outcome it does not model included (`heldBuiltIns` in
+ * `#plate/model/item.ts`), so a rule that reads or sets `completionStatus` past such a declaration
+ * never runs; the record then holds the built-in beside it, which only a result reports.
  *
  * @param item The item.
  * @returns Whether its record's outcomes hold the built-in.
  */
 export const holdsCompletionStatus = (item: Item): boolean =>
   !item.responses.has(completionStatus) && !item.outcomes.has(completionStatus);
+
+/**
+ * A path at or below the root's `qti-template-processing`: the root's step, then that element's
+ * step, with its `[n]` where the walk writes one, then the end or a further step.
+ */
+const templateProcessingPath = /^[^/]+\/qti-template-processing(?:\[\d+\])?(?:\/|$)/u;
+
+/**
+ * Report whether an item has a `qti-template-processing` the engine does not run: the item model
+ * holds no template rules (`Item.templateProcessing` is none) and marks something at or below that
+ * element's path. An item with no `qti-template-processing` holds no such mark.
+ *
+ * Its first attempt then holds no template value, since nothing computed one: `firstAttempt` in
+ * `#plate/engine/attempt.ts` starts such a record, and `redactItem` in `#plate/payload.ts` reads
+ * the item with no record as that record.
+ *
+ * @param item The item.
+ * @returns Whether its template processing exists and does not run.
+ */
+export const unrunTemplateProcessing = (item: Item): boolean =>
+  Option.isNone(item.templateProcessing) &&
+  item.unsupported.some((entry) => templateProcessingPath.test(entry.path));
 
 /**
  * Give each outcome of an item its starting value, the value a non-adaptive attempt resets it to,

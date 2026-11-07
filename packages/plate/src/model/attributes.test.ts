@@ -78,14 +78,15 @@ describe("attributes", () => {
           attr("normal-maximum", "1e309"),
           attr("normal-minimum", "-1e309"),
         ]);
-        const refuse = refuseOn(walkOf(declaration), declaration);
+        const build = walkOf(declaration);
+        const refuse = refuseOn(build, declaration);
 
         assert.deepStrictEqual(
-          yield* doubleAttribute(declaration, "normal-maximum", refuse),
+          yield* doubleAttribute(build, declaration, "normal-maximum", refuse),
           Option.some(Number.MAX_VALUE),
         );
         assert.deepStrictEqual(
-          yield* doubleAttribute(declaration, "normal-minimum", refuse),
+          yield* doubleAttribute(build, declaration, "normal-minimum", refuse),
           Option.some(-Number.MAX_VALUE),
         );
       }),

@@ -57,8 +57,10 @@ export interface SessionItem {
    */
   readonly presented: boolean;
   /**
-   * The item's session: fresh at the start, then each processed attempt's. Its instance is the
-   * session's instance, a `.` and the item's {@link SessionItem.sequenceIndex}.
+   * The item's session: fresh until its first attempt starts, at its first presentation in
+   * answering mode, then the record `firstAttempt` (`#plate/engine/attempt.ts`) starts that attempt
+   * with, then each processed attempt's. Its instance is the session's instance, a `.` and the
+   * item's {@link SessionItem.sequenceIndex}.
    */
   readonly record: ItemRecord;
   /**

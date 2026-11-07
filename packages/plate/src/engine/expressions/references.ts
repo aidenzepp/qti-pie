@@ -17,8 +17,10 @@ import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/fai
 import { foldCase } from "#plate/engine/math.ts";
 import {
   bitLengthOf,
+  floatNull,
   floatValue,
   integerBitBound,
+  integerNull,
   integerValue,
   numberOf,
   toFloat,
@@ -40,7 +42,7 @@ import type {
   Mapping,
   ResponseDeclaration,
 } from "#plate/model/item.ts";
-import { format, match, nullOf } from "#plate/model/values.ts";
+import { format, nullOf, sameSingle } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
 /**
@@ -62,29 +64,15 @@ const responseOf = (
   );
 
 /**
- * Report whether two singles are equal, as `match` compares single values: the same base type,
- * numbers by value, strings and identifiers by code point, and a `pair` in either order.
- *
- * @param left One single.
- * @param right The other.
- * @returns Whether they are equal.
- */
-const equal = (left: Single, right: Single): boolean =>
-  match(
-    { baseType: left.baseType, cardinality: "single", values: [left] },
-    { baseType: right.baseType, cardinality: "single", values: [right] },
-  );
-
-/**
  * Give the key {@link distinct} tells a value apart by: its base type and its value as `format`
- * writes it, so two values share a key exactly when {@link equal} finds them equal, however each
- * was written (`+5` and `05` are one integer, `1.0` and `1e0` one float).
+ * writes it, so two values share a key exactly when {@link sameSingle} finds them equal, however
+ * each was written (`+5` and `05` are one integer, `1.0` and `1e0` one float).
  *
- * Where `equal` and `format` part, the key follows `equal`: a `pair`'s identifiers are written in
- * code-unit order, as `equal` matches a pair in either order, and a float's `-0` is written as `0`,
- * as `equal` compares floats with `===`. That `===` makes a NaN equal to no value, itself included,
- * so a NaN has no key. A base type holds no space, and neither does an identifier or a coordinate,
- * so one space between the parts keeps two keys apart.
+ * Where `sameSingle` and `format` part, the key follows `sameSingle`: a `pair`'s identifiers are
+ * written in code-unit order, as `sameSingle` matches a pair in either order, and a float's `-0` is
+ * written as `0`, as `sameSingle` compares floats with `===`. That `===` makes a NaN equal to no
+ * value, itself included, so a NaN has no key. A base type holds no space, and neither does an
+ * identifier or a coordinate, so one space between the parts keeps two keys apart.
  *
  * @param single The value.
  * @returns Its key; none for a NaN.
@@ -110,12 +98,12 @@ const distinctKey = (single: Single): Option.Option<string> => {
 
 /**
  * Drop a response's repeated values: each value is kept at its first occurrence, in order, and a
- * later value {@link equal} finds equal to it is dropped.
+ * later value {@link sameSingle} finds equal to it is dropped.
  *
  * A `Set` of each value's {@link distinctKey} finds the repeats, so the time is linear in the
  * number of values: a candidate's post of many members costs what its length costs, where comparing
- * every pair would cost its square. A NaN has no key and is always kept, as `equal` finds it equal
- * to nothing.
+ * every pair would cost its square. A NaN has no key and is always kept, as `sameSingle` finds it
+ * equal to nothing.
  *
  * @param values The response's values.
  * @returns The values no earlier value equals, in order.
@@ -157,7 +145,7 @@ const comparesExactly = (entry: MapEntry): boolean =>
 const keyMatches = (entry: MapEntry, single: Single): boolean =>
   !comparesExactly(entry) && entry.key.baseType === "string" && single.baseType === "string"
     ? foldCase(entry.key.value) === foldCase(single.value)
-    : equal(entry.key, single);
+    : sameSingle(entry.key, single);
 
 /**
  * Give the value a mapping maps one response value to: the value of the first entry in document
@@ -489,7 +477,7 @@ const integerDraw = (draw: Draw, min: bigint, max: bigint, step: bigint): Value 
     bitLengthOf(min) > integerBitBound ||
     bitLengthOf(max) > integerBitBound
   ) {
-    return nullOf("integer", "single");
+    return integerNull;
   }
 
   return integerValue(min + step * drawBelow(draw, (max - min) / step + 1n));
@@ -515,7 +503,7 @@ const evaluateRandomInteger: Evaluator<"random-integer"> = (expression, scope) =
     const step = yield* referenceInteger(scope.variables, expression.step);
 
     return Option.match(Option.all([min, max, step]), {
-      onNone: () => nullOf("integer", "single"),
+      onNone: () => integerNull,
       onSome: ([least, greatest, by]) => integerDraw(scope.draw, least, greatest, by),
     });
   });
@@ -557,7 +545,7 @@ const referenceFloat = (
  */
 const floatDraw = (draw: Draw, min: number, max: number): Value => {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) {
-    return nullOf("float", "single");
+    return floatNull;
   }
 
   const u = drawFloat(draw);
@@ -589,7 +577,7 @@ const evaluateRandomFloat: Evaluator<"random-float"> = (expression, scope) =>
     const max = yield* referenceFloat(scope.variables, expression.max);
 
     return Option.match(Option.all([min, max]), {
-      onNone: () => nullOf("float", "single"),
+      onNone: () => floatNull,
       onSome: ([least, greatest]) => floatDraw(scope.draw, least, greatest),
     });
   });
