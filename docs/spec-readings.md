@@ -2616,9 +2616,9 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      and a reference that begins `C:` parses as one whose scheme is `C` (section 3.1), so neither names an entry of the
      package. A zip and a directory are read alike: one rule refuses both forms in either, with the reason it gives, and
      the import names it `href-path`, as it names every entry path outside the package. This binds pantry and plate
-     alike. (Decided 2026-11-07 by the coordinator, ruling P-7, from RV seat REP-B (`5502d569`): the zip reader refused
-     both forms, and the directory reader read a `\` as a character of a file name and a drive prefix as the start of a
-     relative path, so one package was read two ways by its form.)
+     alike. (Decided 2026-11-07 by the coordinator, ruling P-7, under the operator's standing ruling of 2026-11-05, from
+     RV seat REP-B (`5502d569`): the zip reader refused both forms, and the directory reader read a `\` as a character
+     of a file name and a drive prefix as the start of a relative path, so one package was read two ways by its form.)
 139. **A package zip's central directory ends where its end record begins: other bytes between them are refused under
      `zip-format`.** APPNOTE 6.3.10 lays a zip out as its local headers and data, then the central directory, then the
      ZIP64 end of central directory record and locator, then the end of central directory record (section 4.3.6), and
@@ -2630,5 +2630,26 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      format of its own: "Physical encapsulation shall be as a compressed binary file conforming to RFC1951" (section
      6.3, condition a), so the container's form is APPNOTE's. Refusing a malformed container is no refusal of valid QTI:
      reading 1 protects valid content, and these bytes make the file no valid package interchange file. This binds
-     pantry and plate alike. (Decided 2026-11-07 by the coordinator, on GEN-B/zip's finding, from RV seat REP-B
-     (`8558cbaa`, its comments renumbered in `bcafe951`).)
+     pantry and plate alike. (Decided 2026-11-07 by the coordinator, on GEN-B/zip's finding, under the operator's
+     standing ruling of 2026-11-05, from RV seat REP-B (`8558cbaa`, its comments renumbered in `bcafe951`).)
+140. **A reader refuses where the infoset the specification defines is undetermined.** crust checks no DTD validity in
+     general, since QTI validity is XSD validity, but a default that references a general entity the internal subset
+     declares only after the attribute-list declaration is refused everywhere:
+     - In WFC Entity Declared's scope, the document is not well-formed. That scope is a document with no DTD, one whose
+       internal subset references no parameter entity, or one with `standalone='yes'`. XML 1.0 (Fifth Edition) section
+       4.1 says: "The declaration of a general entity MUST precede any reference to it which appears in a default value
+       in an attribute-list declaration."
+     - Outside that scope, the same rule is VC Entity Declared ("the declaration of a general entity MUST precede any
+       attribute-list declaration containing a default value with a direct or indirect reference to that general
+       entity"), so the document is not valid.
+     - There, too, the default's value is undetermined. A reader taking the subset in order has not seen the entity at
+       the attribute-list declaration, and neither section 4.4 nor 5.1 fixes what a reader that does not validate
+       supplies. libxml2 2.9.13 supplies the empty string.
+     - Refusing is the one choice that neither invents an infoset nor follows one implementation. Reading 1 ("Content
+       that is not valid is refused") covers it.
+     - The same scope decides an undeclared reference elsewhere: refused inside the WFC's scope, kept as an unexpanded
+       reference outside it. A parameter-entity reference in the internal subset takes a document out of the scope, as
+       an external subset does.
+
+     This binds pantry and plate alike. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
+     2026-11-05, from RV seat GEN-B/codec (`3fe6a888`, `bb71b197`; its guard `2e4d053b`).)

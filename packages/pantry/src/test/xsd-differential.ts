@@ -224,6 +224,30 @@ export const paddedTypeRecord: Recorded = {
 };
 
 /**
+ * A widened `##other` attribute wildcard: libxml2 2.9.13 builds an attribute group's wildcard once
+ * and, where a type that references the group extends a base whose wildcard is `##any`, widens it
+ * in place to the union, so every other type that references the group admits an attribute in no
+ * namespace too. QTI 3.0.1's `extensionNamespaceLax.Attr` (`##other`, lax) is such a group, so
+ * `qti-custom-operator`, whose `CustomOperatorDType` holds that group alone, admits `zz="1"` under
+ * the 3.0.1 XSD and refuses it under 3.0.0's. XML Schema assesses each type's own complete
+ * wildcard (Part 1, 3.4.2), and `##other` admits no attribute in no namespace (3.10.4, Wildcard
+ * allows Namespace Name, clause 2.3). Shown by its control: the same group widened by a derived
+ * type, and alone.
+ */
+export const widenedOtherRecord: Recorded = {
+  class: "attribute-allowed",
+  detail:
+    /^codec at \S*: The attribute [^\s:]+ in (?:[^\s:]+:)?qti-custom-operator is admitted on its element under no name or open class/u,
+  direction: "oracle-only",
+  reason: {
+    _tag: "libxml2",
+    why: "libxml2 widens a shared ##other attribute wildcard to ##any once a type that references its group extends an ##any base",
+  },
+  rule: "attribute-admission",
+  versions: ["3.0.1"],
+};
+
+/**
  * An `xml:id` held twice whose value is no NCName: libxml2 2.9.13's parser counts every `xml:id`
  * toward the document's IDs, its value valid or not, and reports the second as `ID … already
  * defined`. XML Schema keys only ID values (Part 1, 3.3.4, cvc-id.2), and a value outside
@@ -255,6 +279,7 @@ export const libxml2Records: readonly Recorded[] = [
   absentTypeRecord,
   invalidIdRecord,
   paddedTypeRecord,
+  widenedOtherRecord,
 ];
 
 /**
@@ -297,7 +322,7 @@ export const laxXsiType: Recorded = {
  * expanded name captured.
  */
 const unresolvedXsiType =
-  /^line \d+ (?<name>\{[^}]*\}\S+): The QName value '[^']*' of the xsi:type attribute does not resolve to a type definition\.$/u;
+  /^line \d+ (?<name>(?:\{[^}]*\})?\S+): The QName value '[^']*' of the xsi:type attribute does not resolve to a type definition\.$/u;
 
 /**
  * Decide whether a difference is reading 60's class ({@link laxXsiType}): every message `xmllint`
@@ -314,7 +339,9 @@ export const isLaxXsiType = (difference: Difference, laxNames: ReadonlySet<strin
   difference.detail.split(" | ").every((message) => {
     const name = unresolvedXsiType.exec(message)?.groups?.["name"];
 
-    return name !== undefined && laxNames.has(name);
+    // xmllint names an element in no namespace by its local name alone, which the rows write `{}`
+    // before.
+    return name !== undefined && laxNames.has(name.startsWith("{") ? name : `{}${name}`);
   });
 
 /**
@@ -744,6 +771,19 @@ export const generatedRecorded: readonly Recorded[] = [
       why: "xml:lang is a BCP 47 tag or empty (XML 1.0 2.12), never empty on an item or a stimulus, a lang a tag or empty and a track's srclang a tag, both as written; xml.xsd types xml:lang as xs:language, RFC 3066's pattern, or empty, and the XSD lang and srclang as xs:normalizedString",
     },
     rule: "attribute-lexical",
+  },
+  {
+    class: "content",
+    detail:
+      /^N6 ancestry at \S*\/qti-template-block(?:\.rubric)?\[\d+\]\/\S*: \S+ sits in \{[^}]*\btmpl\b[^}]*\}: Banned holds \{[^}]*\btmpl\b[^}]*\}/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_TemplateBlock (§5.145, info.txt:44712 and info301.txt:65416: 'A qti-template-block must not contain any interactions, either directly or indirectly'); VD's ruling of 2026-11-07, its reading to come at schema slot 7",
+      why: "a template block holds no interaction at any depth; the XSD admits one its content's HTML holds",
+    },
+    rule: "ancestry-ban",
   },
   {
     class: "content",
@@ -1548,6 +1588,15 @@ const messageName = ({ local, namespace }: { local: string; namespace: string })
   namespace === "" ? local : `{${namespace}}${local}`;
 
 /**
+ * The kind a node place names last, as the law oracle writes a place (`/a[0]/b[2]`).
+ *
+ * @param node - The place.
+ * @returns The kind, empty for the document.
+ */
+const kindOfNode = (node: string): string =>
+  (node.split("/").at(-1) ?? "").replace(/\[\d+\]$/u, "");
+
+/**
  * Compare the two judgments of a document element by element, in each class both sides refused it
  * under and the element grain decides ({@link elementGrainClasses}): an element of a kind the
  * grammar names that one side refuses under the class and the other does not is a difference,
@@ -1556,11 +1605,16 @@ const messageName = ({ local, namespace }: { local: string; namespace: string })
  *
  * It holds only where both judgments are whole: the law oracle stopped at no refusal, and
  * `xmllint` met no element its parent's model did not expect, below which it assesses nothing.
+ * The law oracle names a foreign element by its foreign kind, not its expanded name, so the
+ * document's foreign elements are compared as one: an `xmllint` message on one of them is matched
+ * by any refusal of its class at a node of a foreign kind, and such a refusal by any such message.
  *
  * @param xsd - `xmllint`'s verdict.
  * @param law - The law oracle's judgment.
  * @param comparison - The two compared class by class.
  * @param grammar - The composed grammar, which names each kind's element.
+ * @param foreign - The expanded names of the document's foreign elements, as `{namespace}local`
+ *   (`ForeignNames.lax`).
  * @returns The differences the class-level comparison does not report.
  */
 export const elementGrainDifferences = (
@@ -1568,6 +1622,7 @@ export const elementGrainDifferences = (
   law: LawJudgment,
   comparison: Comparison,
   grammar: ComposedGrammar,
+  foreign: ReadonlySet<string>,
 ): readonly Difference[] => {
   if (
     law.stopped ||
@@ -1578,12 +1633,21 @@ export const elementGrainDifferences = (
   }
 
   const kinds = new Set(grammar.kinds.elementName.rows.map(messageName));
-  const nameOfNode = (node: string): string | undefined => {
-    const kind = (node.split("/").at(-1) ?? "").replace(/\[\d+\]$/u, "");
+  const foreignNames = new Set([...foreign].map((name) => name.replace(/^\{\}/u, "")));
+  // A foreign element's messages and refusals meet under one name no kind has.
+  const foreignGroup = "(foreign)";
+  const nameOfNode = (node: string): string | undefined =>
+    isForeignKind(kindOfNode(node))
+      ? foreignGroup
+      : Option.getOrUndefined(
+          Option.map(grammar.kinds.elementName.lookup({ kind: kindOfNode(node) }), messageName),
+        );
+  const nameOfMessage = (name: string): string | undefined => {
+    if (foreignNames.has(name)) {
+      return foreignGroup;
+    }
 
-    return Option.getOrUndefined(
-      Option.map(grammar.kinds.elementName.lookup({ kind }), messageName),
-    );
+    return kinds.has(name) ? name : undefined;
   };
 
   return comparison.xsdClasses.flatMap((cls): readonly Difference[] => {
@@ -1593,9 +1657,13 @@ export const elementGrainDifferences = (
 
     const said = Map.groupBy(
       xsd.messages.flatMap((message) =>
-        Option.contains(classOfMessage(message), cls) &&
-        Option.exists(message.element, (name) => kinds.has(name))
-          ? [{ message, name: Option.getOrElse(message.element, () => "") }]
+        Option.contains(classOfMessage(message), cls)
+          ? Option.toArray(
+              message.element.pipe(
+                Option.flatMap((name) => Option.fromUndefinedOr(nameOfMessage(name))),
+                Option.map((name) => ({ message, name })),
+              ),
+            )
           : [],
       ),
       ({ name }) => name,

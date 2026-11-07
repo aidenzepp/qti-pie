@@ -134,8 +134,8 @@ const recorded: readonly Recorded[] = [
   {
     signature: /^O\d default names an entity declared after it: .+$/u,
     source:
-      'XML 1.0 (Fifth Edition) section 4.1, WFC Entity Declared: "The declaration of a general entity MUST precede any reference to it which appears in a default value in an attribute-list declaration" (crust\'s reading since 3fe6a888)',
-    why: "crust refuses a default naming an entity the subset declares only after the list, an external subset or none; libxml2 2.9.13 reads it when an external subset is named. A spec question for the coordinator: whether the sentence binds outside the WFC's first sentence's scope",
+      "XML 1.0 (Fifth Edition) section 4.1: WFC and VC Entity Declared both say \"The declaration of a general entity MUST precede any reference to it which appears in a default value in an attribute-list declaration\"; outside the WFC's scope sections 4.4 and 5.1 leave the default's value undetermined",
+    why: "crust refuses a forward reference in a default everywhere: inside the WFC's scope as not well-formed, outside it as an invalid document whose default has no value the specification fixes (the coordinator's ruling 5: refuse where the infoset is undetermined); libxml2 2.9.13 reads such a default as the empty string, its own choice",
   },
   {
     signature:
