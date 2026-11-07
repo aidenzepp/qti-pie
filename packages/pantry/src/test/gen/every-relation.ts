@@ -26,8 +26,9 @@
  *   times;
  * - **a third item** whose response processing includes a rule fragment, and whose custom interaction
  *   holds a text a bounded `xsi:type` types;
- * - **the stimulus** has a doctype, a processing instruction, a comment, an `xml:base` and an
- *   unexpanded entity reference in an attribute, and no reference the base would govern;
+ * - **the stimulus** has a declaration that writes `standalone`, a doctype, a processing instruction,
+ *   a comment, an `xml:base` and an unexpanded entity reference in an attribute, and no reference
+ *   the base would govern;
  * - **the test** has a linear part, a branch rule, a variable mapping, a template default, a
  *   selection and an ordering, a section ref placing the section document, and outcome processing
  *   that reads an item's variable by its item ref and a section by its identifier;
@@ -95,9 +96,19 @@ export type PackageEntries = ReadonlyMap<string, Uint8Array>;
 const manifestPath = "imsmanifest.xml";
 
 /**
- * The XML declaration every generated document opens with.
+ * The XML declaration every generated document but the stimulus opens with: a version and an
+ * encoding, each an `XmlDecl` and an `EncodingDecl` row.
  */
 const declaration = '<?xml version="1.0" encoding="UTF-8"?>';
+
+/**
+ * The stimulus's XML declaration, which writes `standalone` too, its `SdDecl` row: `no`, since its
+ * doctype names an external subset, whose markup declarations may affect the document (XML 1.0
+ * §2.9, Standalone Document Declaration), and under which its entity reference stays unexpanded.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#sec-rmd | XML 1.0, §2.9 Standalone Document Declaration}
+ */
+const standaloneDeclaration = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>';
 
 /**
  * The QTI 3.0 assessment namespace.
@@ -416,7 +427,7 @@ const rules = [
  * @see {@link https://www.w3.org/TR/xml/#wf-entdeclared | XML 1.0, §4.1 WFC: Entity Declared}
  */
 const stimulus = [
-  declaration,
+  standaloneDeclaration,
   '<!DOCTYPE qti-assessment-stimulus SYSTEM "stimulus.dtd">',
   "<!-- The every-relation stimulus. -->",
   "<?every-relation stimulus?>",

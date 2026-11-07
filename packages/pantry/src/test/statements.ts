@@ -17,11 +17,18 @@ const RelationSchema = Schema.Struct({
 
 /**
  * A side of a statement as grizzle keeps it: a selection over a relation, or a whole relation, and
- * its terms, a `pred` one as an object over its field.
+ * its terms, a `pred` one as an object over its field and a containment source's `constant(v)` as
+ * one over its value.
  */
 const SideSchema = Schema.Struct({
   source: Schema.Union([Schema.Struct({ relation: RelationSchema }), RelationSchema]),
-  terms: Schema.Array(Schema.Union([Schema.String, Schema.Struct({ field: Schema.String })])),
+  terms: Schema.Array(
+    Schema.Union([
+      Schema.String,
+      Schema.Struct({ field: Schema.String }),
+      Schema.Struct({ kind: Schema.Literal("constant"), value: Schema.Unknown }),
+    ]),
+  ),
 });
 
 /**

@@ -927,11 +927,6 @@ export const documentRowsOf = (
           nodeChildren: BigInt(
             rows.nodes.filter((node) => node.parent === self && node.id !== self).length,
           ),
-          nodeDocument: self,
-          nodeGoverns: "none",
-          nodeKind: "document",
-          nodeParentKind: "document",
-          nodeStart: 0n,
           package: ids.package,
           path: document.path,
           resourceType: document.resourceType,
