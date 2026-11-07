@@ -42,6 +42,7 @@ import type {
   ValidationMessage,
   View,
 } from "#plate/payload.ts";
+import { drawInstance } from "#plate/seed.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
@@ -321,12 +322,14 @@ const interactionRenderer =
 /**
  * Render an item: the item Root around its body, as HTML.
  *
- * It resolves the overrides once, takes the instance from `options.instance` or draws a lowercase
- * UUID (`crypto.randomUUID()`, never derived from the seed), builds the payload from the redacted
- * item and the options, and emits the body and the Root. A shuffled Choice is presented in the
- * order the configuration's `seed`, the instance and its response key give. The Root's `data-mode`
- * names `options.mode`. It writes no form, submit control, title or record. Given the same
- * instance, configuration and inputs, it gives the same HTML, and it returns the instance it used.
+ * It resolves the overrides once, takes the instance from `options.instance` as given or draws a
+ * lowercase UUID v4 (`drawInstance`, from `crypto.getRandomValues`, never derived from the seed;
+ * not `crypto.randomUUID`, which a browser gives only in a secure context, so a page served over
+ * plain HTTP lacks it), builds the payload from the redacted item and the options, and emits the
+ * body and the Root. A shuffled Choice is presented in the order the configuration's `seed`, the
+ * instance and its response key give. The Root's `data-mode` names `options.mode`. It writes no
+ * form, submit control, title or record. Given the same instance, configuration and inputs, it
+ * gives the same HTML, and it returns the instance it used.
  *
  * It prints everything or nothing. First, an item whose `unprinted` names a printed variable or a
  * parameter whose text passed its bound, 1,000,000 or the budget `redact` was given, fails
@@ -372,7 +375,7 @@ export const render = (
 
     const parts = yield* resolveOverrides(options.parts);
     const instance = yield* options.instance === undefined
-      ? Result.succeed(crypto.randomUUID())
+      ? Result.succeed(drawInstance())
       : checkedInstance(options.instance, "options.instance");
     const state = stateOf(configuration, parts, options.assetBase);
     const built = payload(item, viewOf(instance, configuration, options));
