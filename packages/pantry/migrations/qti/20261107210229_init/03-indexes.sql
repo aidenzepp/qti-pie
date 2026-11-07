@@ -1,3 +1,5 @@
+CREATE INDEX "__area_mapping_ix_declaration_oxp_5_hcydih_vedmgldn3z" ON "qti"."area_mapping" USING btree ("__declaration_oxp5hcydih");
+
 CREATE INDEX "__aria_element_ix_node_cthk_6_qaxgo_iivi4cpljk" ON "qti"."aria_element" USING btree ("__node_cthk6qaxgo");
 
 CREATE INDEX "__assembled_lang_ix_assembly_zztvlf_4_xug_generals_ybeduh5upi" ON "qti"."assembled_lang" USING btree ("__assembly_zztvlf4xug", "__generals_pdunagxmfe");
@@ -22,13 +24,17 @@ CREATE INDEX "__attribute_ix_node_mz_4_jvdrujv_imi5yesybm" ON "qti"."attribute" 
 
 CREATE INDEX "__attribute_ix_node_vakq_25_d_2_th_dq3p5mlkpj" ON "qti"."attribute" USING btree ("__node_vakq25d2th");
 
+CREATE INDEX "__binding_base_type_ix_declaration_base_type_4zc3lphpxg" ON "qti"."binding_base_type" USING btree ("declaration", "base_type");
+
 CREATE INDEX "__binding_declaration_ix_node_6_hhkc_3_nqmt_kind_wpz_rfgek7meu3" ON "qti"."binding_declaration" USING btree ("__node_6hhkc3nqmt", "__kind_wpz27h2czt");
 
 CREATE INDEX "__binding_declaration_ix_node_7_ferm_5_v_3_gc_g2syf7lsms" ON "qti"."binding_declaration" USING btree ("__node_7ferm5v3gc");
 
 CREATE INDEX "__binding_declaration_ix_node_gfaeb_4_prff_mosts_56hhno3yjq" ON "qti"."binding_declaration" USING btree ("__node_gfaeb4prff", "__mosts_tsxccemewe");
 
-CREATE INDEX "__binding_declaration_ix_declaration_document_bo7igokpag" ON "qti"."binding_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__binding_declaration_ix_node_qoaju_6_itui_attribute_ll3eq4fqmk" ON "qti"."binding_declaration" USING btree ("__node_qoaju6itui", "__attribute_cy3lzlyym2");
+
+CREATE INDEX "__binding_declaration_ix_declaration_document_ge4gvwycvg" ON "qti"."binding_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__bound_variable_ix_node_nqyr_3_apalb_boea2xstsg" ON "qti"."bound_variable" USING btree ("__node_nqyr3apalb");
 
@@ -62,7 +68,7 @@ CREATE INDEX "__choice_variable_name_ix_document_root_kind_7it7boess2" ON "qti".
 
 CREATE INDEX "__context_ref_ix_node_55_rq_6_xvhgt_attribute_ofb6ulzvpb" ON "qti"."context_ref" USING btree ("__node_55rq6xvhgt", "__attribute_hfyfakg5bn");
 
-CREATE INDEX "__context_ref_declaration_ix_declaration_document_jbdp6q6ajr" ON "qti"."context_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__context_ref_declaration_ix_declaration_document_edit3f7rcq" ON "qti"."context_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__count_bound_ix_node_hees_5_ytmaq_wvdcxve7s4" ON "qti"."count_bound" USING btree ("__node_hees5ytmaq");
 
@@ -76,13 +82,19 @@ CREATE INDEX "__count_bound_ix_node_uyvwkuoluo_max_name_perr_4_n6ow3yqmjw" ON "q
 
 CREATE INDEX "__count_bound_ix_node_wdev_3_ncr_3_a_4r36oaddlg" ON "qti"."count_bound" USING btree ("__node_wdev3ncr3a");
 
-CREATE INDEX "__declaration_ix_node_kuknox_4_dci_base_type_jmtyhi_sasn7hrdgt" ON "qti"."declaration" USING btree ("__node_kuknox4dci", "__base_type_jmtyhi5b7n");
+CREATE INDEX "__declaration_ix_node_kjsigse_5_lq_lz2chcd7s2" ON "qti"."declaration" USING btree ("__node_kjsigse5lq");
 
 CREATE INDEX "__declaration_ix_node_mp_2_o_432_mbm_nw4kkjnz4t" ON "qti"."declaration" USING btree ("__node_mp2o432mbm");
 
 CREATE INDEX "__declaration_ix_node_ss_2_nzqf_54_f_isvhdhhzrg" ON "qti"."declaration" USING btree ("__node_ss2nzqf54f");
 
 CREATE INDEX "__declaration_ix_node_ucda_4_beqaz_qhkin6wqsw" ON "qti"."declaration" USING btree ("__node_ucda4beqaz");
+
+CREATE INDEX "__declaration_ix_node_uwzvnmekar_k6jzm2b674" ON "qti"."declaration" USING btree ("__node_uwzvnmekar");
+
+CREATE INDEX "__declaration_ix_node_z_6_xuk_7_itel_ccfsqyikb2" ON "qti"."declaration" USING btree ("__node_z6xuk7itel");
+
+CREATE INDEX "__declared_value_ix_declaration_base_type_xue4f3btzc" ON "qti"."declared_value" USING btree ("declaration", "base_type");
 
 CREATE INDEX "__dependency_ix_resource_package_txdc5xfn7z" ON "qti"."dependency" USING btree ("resource", "package");
 
@@ -124,7 +136,9 @@ CREATE INDEX "__expression_attribute_ix_node_parent_kind_language_gsd2wfc7iw" ON
 
 CREATE INDEX "__feedback_ref_ix_node_55_rq_6_xvhgt_attribute_albw6cn7sl" ON "qti"."feedback_ref" USING btree ("__node_55rq6xvhgt", "__attribute_hfyfakg5bn");
 
-CREATE INDEX "__feedback_ref_declaration_ix_declaration_document_ck2ki4xyxz" ON "qti"."feedback_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__feedback_ref_declaration_ix_declaration_oxp_5_zxje2stn6h" ON "qti"."feedback_ref_declaration" USING btree ("__declaration_oxp5hcydih");
+
+CREATE INDEX "__feedback_ref_declaration_ix_declaration_document_p6zqbuulqx" ON "qti"."feedback_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__file_ix_package_a_66_fvayvxi_path_mzwjzn_5_rcd_243ov6udky" ON "qti"."file" USING btree ("__package_a66fvayvxi", "__path_mzwjzn5rcd");
 
@@ -176,35 +190,35 @@ CREATE INDEX "__interaction_ix_node_gfaeb_4_prff_on3ekn3rtn" ON "qti"."interacti
 
 CREATE INDEX "__interaction_attribute_ix_node_2_q_2_oae_7_puk_76ppcqtnu5" ON "qti"."interaction_attribute" USING btree ("__node_2q2oae7puk", "__value_oxrxhywfi2");
 
-CREATE INDEX "__interaction_attribute_ix_node_4_sdr_4_z_4_uk_4_xiomxb7m3s" ON "qti"."interaction_attribute" USING btree ("__node_4sdr4z4uk4", "__name_x2aucoa64q", "__kind_456qikcgha", "__document_wwleenfkxb", "__value_dkwqpcuznd");
+CREATE INDEX "__interaction_attribute_ix_node_4_at_4_wfkern_name_twwj3fyzmw" ON "qti"."interaction_attribute" USING btree ("__node_4at4wfkern", "__name_vzryoee3ut", "__kind_ed7oeoudui", "__document_ix6yxy75ql", "__value_q5lemkgscl");
+
+CREATE INDEX "__interaction_attribute_ix_node_5_rnstc_7_apz_name_kwmatbi4c6" ON "qti"."interaction_attribute" USING btree ("__node_5rnstc7apz", "__name_no64onddxb", "__kind_hwhvhdxdjm", "__document_snyszvnx4d", "__root_kind_vartdewc6w", "__value_o4tjm6whhr");
+
+CREATE INDEX "__interaction_attribute_ix_node_aj_26_yviopr_name_u_daziusbsih" ON "qti"."interaction_attribute" USING btree ("__node_aj26yviopr", "__name_u6ybtgxgsp", "__kind_ibqfxn7i7v", "__document_ygdlccx6m3", "__root_kind_4vzntorelb", "__value_ixz6x6c64k");
 
 CREATE INDEX "__interaction_attribute_ix_node_b_4_cysfcqdk_value_xpvzzqzb6h" ON "qti"."interaction_attribute" USING btree ("__node_b4cysfcqdk", "__value_efvhlmam3z");
 
-CREATE INDEX "__interaction_attribute_ix_node_dfhz_6_dgkds_name_2_uxbeafm4xj" ON "qti"."interaction_attribute" USING btree ("__node_dfhz6dgkds", "__name_2g7bkdjtwl", "__kind_teqpxqcv7n", "__document_kefywyspw6", "__root_kind_2a27psohyb", "__value_3u6ov5n4s6");
+CREATE INDEX "__interaction_attribute_ix_node_d_7_p_2_xd_6_rh_4_ydfktixt2q" ON "qti"."interaction_attribute" USING btree ("__node_d7p2xd6rh4", "__name_zcrch6phvd", "__kind_5iuibxv2ol", "__document_vgr5pccquo", "__root_kind_aaded7k5qn", "__value_riqyqxspqz");
+
+CREATE INDEX "__interaction_attribute_ix_node_e_24_icy_3_uhs_name_xzzx5cr7nv" ON "qti"."interaction_attribute" USING btree ("__node_e24icy3uhs", "__name_n3b7rzkrbm", "__kind_j5bpy3wkru", "__document_xibqoud3kq", "__value_mbyo4punxj");
 
 CREATE INDEX "__interaction_attribute_ix_node_flbilkbnpr_value_sdrihhtt6q" ON "qti"."interaction_attribute" USING btree ("__node_flbilkbnpr", "__value_mdalpmjeoc");
 
+CREATE INDEX "__interaction_attribute_ix_node_gycg_6_n_5_gpe_name_vdtcih3kcf" ON "qti"."interaction_attribute" USING btree ("__node_gycg6n5gpe", "__name_bd5ybzdhxi", "__kind_pxvwd5hxof", "__document_he6nln2psb", "__value_b2holw4zcx");
+
 CREATE INDEX "__interaction_attribute_ix_node_h_2_pd_4_crnor_name_4ixn5bstnq" ON "qti"."interaction_attribute" USING btree ("__node_h2pd4crnor", "__name_dedat2iga6", "__value_b2dcpkspbl");
 
-CREATE INDEX "__interaction_attribute_ix_node_j_7_kkly_36_i_5_name_gvpcvdtqta" ON "qti"."interaction_attribute" USING btree ("__node_j7kkly36i5", "__name_abegcpcfbo", "__kind_pl2fkn5cnz", "__document_adgif4vjwc", "__value_orhsjpvixb");
+CREATE INDEX "__interaction_attribute_ix_node_jmnuqwzkql_name_bd_g33afayxr4" ON "qti"."interaction_attribute" USING btree ("__node_jmnuqwzkql", "__name_bd463qcqrt", "__kind_oqzbk5hwei", "__document_kfnvsfsqsx", "__value_4loueoylry");
 
-CREATE INDEX "__interaction_attribute_ix_node_jtydmgg_6_nc_name_hei2juggao" ON "qti"."interaction_attribute" USING btree ("__node_jtydmgg6nc", "__name_ntn7qofp4y", "__kind_nfa36xovze", "__document_q2tps5dvfq", "__value_ct2tqxnafs");
+CREATE INDEX "__interaction_attribute_ix_node_n_7_p_26_mkpml_name_bxq4z7yov4" ON "qti"."interaction_attribute" USING btree ("__node_n7p26mkpml", "__name_scbhqankcb", "__kind_jerstzwuth", "__document_euhbokeuav", "__root_kind_s6liv4avuo", "__value_bfy4m3anjw");
 
 CREATE INDEX "__interaction_attribute_ix_node_nh_35_tvp_7_et_value_hjzauklvvm" ON "qti"."interaction_attribute" USING btree ("__node_nh35tvp7et", "__value_rrtdtetll6");
 
-CREATE INDEX "__interaction_attribute_ix_node_ocpnzhggsu_name_3_uo_u6ldht2ezm" ON "qti"."interaction_attribute" USING btree ("__node_ocpnzhggsu", "__name_3uo72f6kw4", "__kind_fbj4jha3yk", "__document_dzpju7pnfw", "__root_kind_ubbie4ds6n", "__value_jmfaawhlxd");
-
 CREATE INDEX "__interaction_attribute_ix_node_ozxio_6_e_2_u_5_4nyxw274vf" ON "qti"."interaction_attribute" USING btree ("__node_ozxio6e2u5", "__value_bxzxkt6uvs");
 
-CREATE INDEX "__interaction_attribute_ix_node_padbue_3_zvo_name_64_yem4rbpm3k" ON "qti"."interaction_attribute" USING btree ("__node_padbue3zvo", "__name_64kjos2b75", "__kind_2l4uhszbdi", "__document_o5amvkxi7u", "__value_dn24zfiou4");
+CREATE INDEX "__interaction_attribute_ix_node_wv_6_u_4_xry_3_f_2c5cvlbpnd" ON "qti"."interaction_attribute" USING btree ("__node_wv6u4xry3f", "__name_6i5icgme7c", "__kind_dfv5mgbpu2", "__document_em4uq5ffwf", "__value_3g4q57ndkm");
 
-CREATE INDEX "__interaction_attribute_ix_node_t_777_luyk_3_g_name_2veecz6vt4" ON "qti"."interaction_attribute" USING btree ("__node_t777luyk3g", "__name_limigk44w6", "__kind_bcfvh5xx6m", "__document_egzcabyxvz", "__value_kb5rjfmgxs");
-
-CREATE INDEX "__interaction_attribute_ix_node_tbq_7_mvy_7_hj_name_kwjepnbdat" ON "qti"."interaction_attribute" USING btree ("__node_tbq7mvy7hj", "__name_7sg2on63h6", "__kind_oqssngwejq", "__document_gfjmj2jpph", "__root_kind_nb26w2yfbv", "__value_ogpaod77i3");
-
-CREATE INDEX "__interaction_attribute_ix_node_tqbtbiuzf_7_name_2ujed4sbwk" ON "qti"."interaction_attribute" USING btree ("__node_tqbtbiuzf7", "__name_xhdwpelzd7", "__kind_wr763w6z46", "__document_wx3aj22fri", "__value_aqa3fl4va4");
-
-CREATE INDEX "__interaction_attribute_ix_node_uuxlnvvdom_name_4_w_grusornmgx" ON "qti"."interaction_attribute" USING btree ("__node_uuxlnvvdom", "__name_4w2o46ykat", "__kind_ydtwfyasxn", "__document_cro4kuimnk", "__root_kind_a2frxb5zfs", "__value_kg73het3zn");
+CREATE INDEX "__interaction_attribute_ix_node_zxcwcad_5_yi_name_qy_3mnuvxl2zc" ON "qti"."interaction_attribute" USING btree ("__node_zxcwcad5yi", "__name_qy4qyzetwe", "__kind_xgiuc6hj2f", "__document_7tpjdda2bs", "__value_vbk2ditpdb");
 
 CREATE INDEX "__interaction_attribute_ix_document_root_kind_fyhxu2mcle" ON "qti"."interaction_attribute" USING btree ("document", "root_kind");
 
@@ -268,27 +282,39 @@ CREATE INDEX "__lookup_table_ix_declaration_2_lvqlmsloq_fzhjn6ccml" ON "qti"."lo
 
 CREATE INDEX "__lookup_table_ix_declaration_3_pd_2_vxtld_5_blhv6xwg7q" ON "qti"."lookup_table" USING btree ("__declaration_3pd2vxtld5");
 
-CREATE INDEX "__lookup_value_ix_node_iqtxzzsjue_base_type_cyz_5_76y7tzzf5w" ON "qti"."lookup_value" USING btree ("__node_iqtxzzsjue", "__base_type_cyz5isoh5z");
+CREATE INDEX "__lookup_value_ix_node_iqtxzzsjue_base_types_ng3mryewgn" ON "qti"."lookup_value" USING btree ("__node_iqtxzzsjue", "__base_types_thiugiegui", "__declaration_zjpvjgtoaa");
 
-CREATE INDEX "__lookup_value_ix_parent_pewwtbkfib_base_type_twgd_5_6gtnoezzgu" ON "qti"."lookup_value" USING btree ("__parent_pewwtbkfib", "__base_type_twgd5upc66");
+CREATE INDEX "__lookup_value_ix_node_qoaju_6_itui_z5dvdvjxx6" ON "qti"."lookup_value" USING btree ("__node_qoaju6itui");
+
+CREATE INDEX "__lookup_value_ix_parent_pewwtbkfib_base_types_goa_2_yy5hnznqyq" ON "qti"."lookup_value" USING btree ("__parent_pewwtbkfib", "__base_types_goa2xo6h2n", "__declaration_ezx2427h26");
+
+CREATE INDEX "__lookup_value_type_ix_declaration_base_type_mycheohzbv" ON "qti"."lookup_value_type" USING btree ("declaration", "base_type");
 
 CREATE INDEX "__manifest_id_space_ix_package_5_ngwirsjrz_kxyjishfex" ON "qti"."manifest_id_space" USING btree ("__package_5ngwirsjrz", "__identifier_aeqb2xho4a");
 
 CREATE INDEX "__manifest_id_space_ix_package_srcfwxd_3_vo_4ya7dzzwfb" ON "qti"."manifest_id_space" USING btree ("__package_srcfwxd3vo", "__identifier_6zkottivdn");
 
-CREATE INDEX "__map_key_ix_node_6_lk_2_adbt_6_a_mapping_tkk_6_ijh_aqx5zgtmyr" ON "qti"."map_key" USING btree ("__node_6lk2adbt6a", "__mapping_tkk6ijh6ed", "__key_bf5xu2ffqp");
+CREATE INDEX "__map_key_ix_node_qoaju_6_itui_b6axafuyu5" ON "qti"."map_key" USING btree ("__node_qoaju6itui");
 
-CREATE INDEX "__map_key_ix_node_ebvkcq_3_dgn_mapping_vir_5_nmmkdk_3euaxh5cnb" ON "qti"."map_key" USING btree ("__node_ebvkcq3dgn", "__mapping_vir5nmmkdk", "__key_7ig3nflr2e");
+CREATE INDEX "__map_key_ix_mapping_base_types_7s6fe7e3uk" ON "qti"."map_key" USING btree ("mapping", "base_types");
 
-CREATE INDEX "__map_key_ix_node_eieh_3_eucve_mapping_ouqgh_2_kna_7_mm6hikjbp2" ON "qti"."map_key" USING btree ("__node_eieh3eucve", "__mapping_ouqgh2kna7", "__key_4mqdmzyt6y");
+CREATE INDEX "__map_key_type_ix_node_6_lk_2_adbt_6_a_mapping_tkk_6_ktfdhcs5wv" ON "qti"."map_key_type" USING btree ("__node_6lk2adbt6a", "__mapping_tkk6ijh6ed", "__key_bf5xu2ffqp");
 
-CREATE INDEX "__map_key_ix_node_eqoqfegnub_mapping_3_txucoorev_key_5yoq427ftm" ON "qti"."map_key" USING btree ("__node_eqoqfegnub", "__mapping_3txucoorev", "__key_rx226v6a7b");
+CREATE INDEX "__map_key_type_ix_node_ebvkcq_3_dgn_mapping_vir_5_zmak3ckd6i" ON "qti"."map_key_type" USING btree ("__node_ebvkcq3dgn", "__mapping_vir5nmmkdk", "__key_7ig3nflr2e");
 
-CREATE INDEX "__map_key_ix_node_pvsn_4_l_2_dx_5_mapping_y_7_szfvlz3cuk" ON "qti"."map_key" USING btree ("__node_pvsn4l2dx5", "__mapping_y7shykwugo", "__key_uazpfi6m3q");
+CREATE INDEX "__map_key_type_ix_node_eieh_3_eucve_mapping_ouqgh_2_nozb6kb5uk" ON "qti"."map_key_type" USING btree ("__node_eieh3eucve", "__mapping_ouqgh2kna7", "__key_4mqdmzyt6y");
 
-CREATE INDEX "__map_key_ix_mapping_base_type_gdnaq3ufjw" ON "qti"."map_key" USING btree ("mapping", "base_type");
+CREATE INDEX "__map_key_type_ix_node_eqoqfegnub_mapping_3_hq3mhrv2kx" ON "qti"."map_key_type" USING btree ("__node_eqoqfegnub", "__mapping_3txucoorev", "__key_rx226v6a7b");
 
-CREATE INDEX "__mapping_source_declaration_ix_declaration_item_uqy35mwu7k" ON "qti"."mapping_source_declaration" USING btree ("declaration", "item_document", "source", "declaration_kind", "decl_base_type", "decl_cardinality");
+CREATE INDEX "__map_key_type_ix_node_pvsn_4_l_2_dx_5_mapping_y_7_evcsg7j5b2" ON "qti"."map_key_type" USING btree ("__node_pvsn4l2dx5", "__mapping_y7shykwugo", "__key_uazpfi6m3q");
+
+CREATE INDEX "__map_key_type_ix_mapping_base_type_32xfxua7gz" ON "qti"."map_key_type" USING btree ("mapping", "base_type");
+
+CREATE INDEX "__mapping_ix_node_qoaju_6_itui_ekxlzzr4vt" ON "qti"."mapping" USING btree ("__node_qoaju6itui");
+
+CREATE INDEX "__mapping_base_type_ix_declaration_base_type_v357kb536w" ON "qti"."mapping_base_type" USING btree ("declaration", "base_type");
+
+CREATE INDEX "__mapping_source_declaration_ix_declaration_item_w2k47b5sil" ON "qti"."mapping_source_declaration" USING btree ("declaration", "item_document", "source", "declaration_kind", "decl_cardinality", "decl_base_types");
 
 CREATE INDEX "__mapping_source_declaration_ix_item_document_target_pcfndc2rtd" ON "qti"."mapping_source_declaration" USING btree ("item_document", "target", "target_declared");
 
@@ -382,13 +408,17 @@ CREATE INDEX "__placed_binding_ix_instance_document_assembly_s5h7r2ocec" ON "qti
 
 CREATE INDEX "__placed_binding_ix_node_attribute_document_kind_lxjppajjyw" ON "qti"."placed_binding" USING btree ("node", "attribute", "document", "kind", "identifier");
 
+CREATE INDEX "__placed_binding_base_type_ix_declaration_base_type_ujoyzx5e3d" ON "qti"."placed_binding_base_type" USING btree ("declaration", "base_type");
+
+CREATE INDEX "__placed_binding_declaration_ix_instance_43_ypvsngtt_chzpgkgrzd" ON "qti"."placed_binding_declaration" USING btree ("__instance_43ypvsngtt", "__node_qoaju6itui", "__attribute_cy3lzlyym2");
+
 CREATE INDEX "__placed_binding_declaration_ix_node_6_hhkc_3_nqmt_ff56uxlvmg" ON "qti"."placed_binding_declaration" USING btree ("__node_6hhkc3nqmt", "__kind_wpz27h2czt");
 
 CREATE INDEX "__placed_binding_declaration_ix_node_7_ferm_5_v_3_gc_6dihb6wcry" ON "qti"."placed_binding_declaration" USING btree ("__node_7ferm5v3gc");
 
 CREATE INDEX "__placed_binding_declaration_ix_node_gfaeb_4_prff_wgfw7jocps" ON "qti"."placed_binding_declaration" USING btree ("__node_gfaeb4prff", "__mosts_tsxccemewe");
 
-CREATE INDEX "__placed_binding_declaration_ix_declaration_assembly_k7uproog5g" ON "qti"."placed_binding_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__placed_binding_declaration_ix_declaration_assembly_p45tkg7n3f" ON "qti"."placed_binding_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__placed_choice_ix_node_document_kind_identifier_lczatqkq3c" ON "qti"."placed_choice" USING btree ("node", "document", "kind", "identifier");
 
@@ -410,17 +440,19 @@ CREATE INDEX "__placed_reference_ix_document_node_attribute_vo3wdryb65" ON "qti"
 
 CREATE INDEX "__placed_variable_ref_ix_assembly_6_phjob_5_n_63_wa46h4f2uw" ON "qti"."placed_variable_ref" USING btree ("__assembly_6phjob5n63", "__identifier_gciilot66p");
 
-CREATE INDEX "__placed_variable_ref_ix_declaration_vv_4_djfec_7_b_o4hj6cj25b" ON "qti"."placed_variable_ref" USING btree ("__declaration_vv4djfec7b", "__assembly_zrqriy6rho", "__identifier_rtiybbmuyb", "__declaration_kind_zlpyj2lbew", "__decl_base_type_bzibtgzpmh", "__decl_cardinality_riuw5wlf3u");
+CREATE INDEX "__placed_variable_ref_ix_instance_n_5_ohc_4_oypz_vdka6ilemq" ON "qti"."placed_variable_ref" USING btree ("__instance_n5ohc4oypz", "__node_uxuuifp4t7", "__attribute_r3bfjzxqlg");
 
 CREATE INDEX "__placed_variable_ref_ix_assembly_root_kind_wtjndqcygw" ON "qti"."placed_variable_ref" USING btree ("assembly", "root_kind");
 
 CREATE INDEX "__placed_variable_ref_ix_node_attribute_document_gz2i4fauh7" ON "qti"."placed_variable_ref" USING btree ("node", "attribute", "document", "identifier", "kind");
 
+CREATE INDEX "__placed_variable_ref_declaration_ix_declaration_5c6xk6gcmk" ON "qti"."placed_variable_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "decl_cardinality", "decl_base_types");
+
 CREATE INDEX "__placed_xml_lang_ix_node_document_lang_t7esja6gaa" ON "qti"."placed_xml_lang" USING btree ("node", "document", "lang");
 
 CREATE INDEX "__printed_variable_ref_ix_node_55_rq_6_xvhgt_rawuabmper" ON "qti"."printed_variable_ref" USING btree ("__node_55rq6xvhgt", "__attribute_hfyfakg5bn");
 
-CREATE INDEX "__printed_variable_ref_declaration_ix_declaration_kiezihsr3g" ON "qti"."printed_variable_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__printed_variable_ref_declaration_ix_declaration_ixblg6izi7" ON "qti"."printed_variable_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__processing_ix_parent_wsm_6_mff_5_fw_language_ysbx4c7aly" ON "qti"."processing" USING btree ("__parent_wsm6mff5fw", "__language_zyvgaanajc");
 
@@ -440,15 +472,21 @@ CREATE INDEX "__reading_ix_assembly_ngcwftk_6_ei_node_lqn_4_xsjsuw_lb7hq5tbvs" O
 
 CREATE INDEX "__reading_ix_assembly_qclpwci_4_vn_scope_lf_7_o_7_glk6qspx3k" ON "qti"."reading" USING btree ("__assembly_qclpwci4vn", "__scope_lf7o7zjvbd", "__found_hl3qu3o4n6", "__named_qj4e6jlkm3", "__named_kind_mzegqfo2hg", "__placements_ntfzv5zagj", "__replaced_dhmof6txf7", "__resource_type_6wiviefl5b", "__lookup_document_7dc42dmtoj");
 
-CREATE INDEX "__reading_ix_lookup_document_hs_4_ynirohn_variable_7_6sgwndou7y" ON "qti"."reading" USING btree ("__lookup_document_hs4ynirohn", "__variable_7e4faseoax", "__declaration_x2enltxbgk", "__declaration_kind_m5wlkzay7b", "__decl_base_type_ggb4ecicas", "__decl_cardinality_zyfwpn7xu6");
+CREATE INDEX "__reading_ix_declaration_3_ql_4_rb_2_vkm_kepmtu5dhg" ON "qti"."reading" USING btree ("__declaration_3ql4rb2vkm");
+
+CREATE INDEX "__reading_ix_declaration_jfamupczkd_uvza7qry4f" ON "qti"."reading" USING btree ("__declaration_jfamupczkd");
+
+CREATE INDEX "__reading_ix_declaration_pizwecikp_5_jfky4pxdj4" ON "qti"."reading" USING btree ("__declaration_pizwecikp5");
+
+CREATE INDEX "__reading_ix_lookup_document_hs_4_ynirohn_variable_7_gabssxnb24" ON "qti"."reading" USING btree ("__lookup_document_hs4ynirohn", "__variable_7e4faseoax", "__declaration_x2enltxbgk", "__declaration_kind_m5wlkzay7b", "__decl_cardinality_zyfwpn7xu6", "__decl_base_types_ppojr7n6wa");
 
 CREATE INDEX "__reading_ix_lookup_document_xaolx_6_jsle_variable_a76frw2ouy" ON "qti"."reading" USING btree ("__lookup_document_xaolx6jsle", "__variable_dtk7kirw66", "__declared_x4dv4rhpro");
 
-CREATE INDEX "__reading_ix_named_nrv_4_n_3_nskd_variable_n_2_k_6_uu5xpuqvyk" ON "qti"."reading" USING btree ("__named_nrv4n3nskd", "__variable_n2k6ghxyfp", "__declaration_4coqakkdpt", "__declaration_kind_uwgyhqnmnf", "__decl_base_type_owoj55adk3", "__decl_cardinality_5kh7eaever");
+CREATE INDEX "__reading_ix_named_nrv_4_n_3_nskd_variable_n_2_k_6_4hx4r5lzqw" ON "qti"."reading" USING btree ("__named_nrv4n3nskd", "__variable_n2k6ghxyfp", "__declaration_4coqakkdpt", "__declaration_kind_uwgyhqnmnf", "__decl_cardinality_5kh7eaever", "__decl_base_types_odj5qxgexu");
 
 CREATE INDEX "__reading_ix_named_txunndfjvq_variable_re_6_uebxim_4_e44qfcqa4p" ON "qti"."reading" USING btree ("__named_txunndfjvq", "__variable_re6uebxim4", "__mapped_z2jeciiv27");
 
-CREATE INDEX "__record_field_ix_node_wxxryfwey_4_identifier_3umdnrvr4z" ON "qti"."record_field" USING btree ("__node_wxxryfwey4", "__identifier_lexical_2ike7gtw3p");
+CREATE INDEX "__record_field_ix_node_ivazk_4_ulfo_identifier_e6hjpr4hds" ON "qti"."record_field" USING btree ("__node_ivazk4ulfo", "__identifier_lexical_dewsflk2g3");
 
 CREATE INDEX "__reference_path_ix_package_7_t_2_ctw_5_cbp_path_ao_ji3zvkr7e6" ON "qti"."reference_path" USING btree ("__package_7t2ctw5cbp", "__path_ao7rtnqc22");
 
@@ -480,13 +518,15 @@ CREATE INDEX "__section_context_ref_ix_instance_qrmqdmq_4_b_2_node_clrwmdx4pa" O
 
 CREATE INDEX "__section_context_ref_ix_node_attribute_kind_qvzegje45p" ON "qti"."section_context_ref" USING btree ("node", "attribute", "kind", "document", "identifier");
 
-CREATE INDEX "__section_context_ref_declaration_ix_declaration_qx7mfvcskd" ON "qti"."section_context_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__section_context_ref_declaration_ix_declaration_ql3642iqld" ON "qti"."section_context_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__section_feedback_ref_ix_instance_qrmqdmq_4_b_2_yunftoluak" ON "qti"."section_feedback_ref" USING btree ("__instance_qrmqdmq4b2", "__node_55rq6xvhgt", "__attribute_hfyfakg5bn");
 
 CREATE INDEX "__section_feedback_ref_ix_node_attribute_kind_ozyrzpd4s3" ON "qti"."section_feedback_ref" USING btree ("node", "attribute", "kind", "document", "identifier");
 
-CREATE INDEX "__section_feedback_ref_declaration_ix_declaration_dga2suwu7l" ON "qti"."section_feedback_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__section_feedback_ref_declaration_ix_declaration_n3zrwiypwy" ON "qti"."section_feedback_ref_declaration" USING btree ("__declaration_oxp5hcydih");
+
+CREATE INDEX "__section_feedback_ref_declaration_ix_declaration_nfxp6hj4hv" ON "qti"."section_feedback_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__section_identifier_ix_node_a_2_cp_5_ppi_33_yngytm7d4l" ON "qti"."section_identifier" USING btree ("__node_a2cp5ppi33", "__attribute_kvvribbpob");
 
@@ -498,7 +538,7 @@ CREATE INDEX "__section_printed_ref_ix_instance_qrmqdmq_4_b_2_node_xtdegqajaj" O
 
 CREATE INDEX "__section_printed_ref_ix_node_attribute_kind_nbntrpexzz" ON "qti"."section_printed_ref" USING btree ("node", "attribute", "kind", "document", "identifier");
 
-CREATE INDEX "__section_printed_ref_declaration_ix_declaration_jeogxziqcp" ON "qti"."section_printed_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__section_printed_ref_declaration_ix_declaration_akcw4m27hp" ON "qti"."section_printed_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__section_scope_ix_document_feedbacks_prints_e6yhseqktg" ON "qti"."section_scope" USING btree ("document", "feedbacks", "prints", "templates", "contexts");
 
@@ -508,7 +548,7 @@ CREATE INDEX "__section_template_ref_ix_instance_qrmqdmq_4_b_2_5knnemc4lt" ON "q
 
 CREATE INDEX "__section_template_ref_ix_node_attribute_kind_qitpjrt4b5" ON "qti"."section_template_ref" USING btree ("node", "attribute", "kind", "document", "identifier");
 
-CREATE INDEX "__section_template_ref_declaration_ix_declaration_mtuytnk7zn" ON "qti"."section_template_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__section_template_ref_declaration_ix_declaration_jsmtczd64q" ON "qti"."section_template_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__site_ix_node_b_42646_p_2_al_kind_spdt_2_q_7_edi_277xz3ge7u" ON "qti"."site" USING btree ("__node_b42646p2al", "__kind_spdt2q7edi");
 
@@ -538,13 +578,15 @@ CREATE INDEX "__ssml_scope_ix_parent_o_57_yro_4_pps_fragment_yno_7_jwsafodnwp" O
 
 CREATE INDEX "__table_scope_ix_parent_lek_23_hkosw_table_4_rai_3_b_u22amyjsqn" ON "qti"."table_scope" USING btree ("__parent_lek23hkosw", "__table_4rai3b23ec");
 
-CREATE INDEX "__template_default_target_ix_declaration_item_je3vk4tiju" ON "qti"."template_default_target" USING btree ("declaration", "item_document", "template", "declaration_kind", "decl_base_type", "decl_cardinality");
+CREATE INDEX "__template_default_target_ix_declaration_3_nsnittm_3y6h2urrnk" ON "qti"."template_default_target" USING btree ("__declaration_3nsnittm72", "__held_base_b3s6virptb");
+
+CREATE INDEX "__template_default_target_ix_declaration_item_tvjjw4gnlx" ON "qti"."template_default_target" USING btree ("declaration", "item_document", "template", "declaration_kind", "decl_cardinality", "decl_base_types");
 
 CREATE INDEX "__template_default_target_ix_item_ref_item_document_ny6h5uzu6j" ON "qti"."template_default_target" USING btree ("item_ref", "item_document");
 
 CREATE INDEX "__template_ref_ix_node_55_rq_6_xvhgt_attribute_7jv6gqn6ms" ON "qti"."template_ref" USING btree ("__node_55rq6xvhgt", "__attribute_hfyfakg5bn");
 
-CREATE INDEX "__template_ref_declaration_ix_declaration_document_bsvtwu5ogl" ON "qti"."template_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__template_ref_declaration_ix_declaration_document_hmf7tj44en" ON "qti"."template_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "cardinality", "base_types");
 
 CREATE INDEX "__test_flag_ix_node_2_mdqieju_4_t_u3qwtmv43a" ON "qti"."test_flag" USING btree ("__node_2mdqieju4t");
 
@@ -578,19 +620,13 @@ CREATE INDEX "__text_idref_ix_document_token_r43v6t4zvp" ON "qti"."text_idref" U
 
 CREATE INDEX "__typed_href_ix_package_tydw_4_wv_6_km_path_kcbijnm_gest4ish2j" ON "qti"."typed_href" USING btree ("__package_tydw4wv6km", "__path_kcbijnm36h", "__type_izv7wmxts7");
 
-CREATE INDEX "__value_ix_parent_base_type_cardinality_crhdj4hb5x" ON "qti"."value" USING btree ("parent", "base_type", "cardinality");
+CREATE INDEX "__value_ix_node_jsu_3_r_5_tieq_xmy755kyed" ON "qti"."value" USING btree ("__node_jsu3r5tieq");
 
-CREATE INDEX "__value_set_ix_parent_document_identifier_345mkgysll" ON "qti"."value_set" USING btree ("parent", "document", "identifier", "declaration_kind", "base_type", "cardinality");
+CREATE INDEX "__value_ix_parent_cardinality_base_types_declaration_nbwr65kn3n" ON "qti"."value" USING btree ("parent", "cardinality", "base_types", "declaration");
 
-CREATE INDEX "__variable_lookup_ix_declaration_54_lynhf_2_mc_ky6m5bu6pf" ON "qti"."variable_lookup" USING btree ("__declaration_54lynhf2mc", "__document_a7dto3wdyu", "__name_mna6bezkk7", "__declaration_kind_bx742rwsvz", "__base_type_c7k6bkm3dt", "__cardinality_h4nr7pa5es");
+CREATE INDEX "__value_set_ix_parent_document_identifier_zyjgznuhwe" ON "qti"."value_set" USING btree ("parent", "document", "identifier", "declaration_kind", "cardinality", "base_types");
 
-CREATE INDEX "__variable_ref_ix_declaration_6_uaduioa_2_e_table_3_ech56z5jw3" ON "qti"."variable_ref" USING btree ("__declaration_6uaduioa2e", "__table_3mu3imoeog");
-
-CREATE INDEX "__variable_ref_ix_declaration_r_3_uou_6_tayl_table_2_4do2idk4ei" ON "qti"."variable_ref" USING btree ("__declaration_r3uou6tayl", "__table_2ykeatkczx");
-
-CREATE INDEX "__variable_ref_ix_declaration_vv_4_djfec_7_b_tx46kjijmm" ON "qti"."variable_ref" USING btree ("__declaration_vv4djfec7b", "__document_3xfgzzvuf3", "__identifier_rtiybbmuyb", "__declaration_kind_zlpyj2lbew", "__decl_base_type_bzibtgzpmh", "__decl_cardinality_riuw5wlf3u");
-
-CREATE INDEX "__variable_ref_ix_declaration_xbiw_7_t_4_u_6_g_table_n7zxpe2w2n" ON "qti"."variable_ref" USING btree ("__declaration_xbiw7t4u6g", "__table_v433ynbs4w");
+CREATE INDEX "__variable_lookup_ix_declaration_54_lynhf_2_mc_z7gyhclris" ON "qti"."variable_lookup" USING btree ("__declaration_54lynhf2mc", "__document_a7dto3wdyu", "__name_mna6bezkk7", "__declaration_kind_bx742rwsvz", "__cardinality_h4nr7pa5es", "__base_types_ln34sy44iy");
 
 CREATE INDEX "__variable_ref_ix_document_ynmze_2_dqwf_identifier_3zg5pqwz2b" ON "qti"."variable_ref" USING btree ("__document_ynmze2dqwf", "__identifier_gciilot66p");
 
@@ -598,7 +634,19 @@ CREATE INDEX "__variable_ref_ix_node_a_2_cp_5_ppi_33_attribute_k57kmi67dy" ON "q
 
 CREATE INDEX "__variable_ref_ix_node_ept_2_xsrq_7_v_parent_ute_33_bc7uvcfnfz" ON "qti"."variable_ref" USING btree ("__node_ept2xsrq7v", "__parent_ute33fgrzx", "__kind_3skb4abdy2", "__language_g4fbnc6kzm", "__element_base_s2ys2dkumh", "__element_cardinality_kv7fsfl2bu");
 
+CREATE INDEX "__variable_ref_ix_node_uxuuifp_4_t_7_attribute_r_3_hbrsbajasi" ON "qti"."variable_ref" USING btree ("__node_uxuuifp4t7", "__attribute_r3bfjzxqlg");
+
 CREATE INDEX "__variable_ref_ix_node_w_3_q_3_f_46_jo_2_language_ylud6vetn2" ON "qti"."variable_ref" USING btree ("__node_w3q3f46jo2", "__language_hdk63u5nao");
+
+CREATE INDEX "__variable_ref_declaration_ix_declaration_6_bft_2_h_gubkmuwa3c" ON "qti"."variable_ref_declaration" USING btree ("__declaration_6bft2h4jzn", "__base_type_py5nl74fdb");
+
+CREATE INDEX "__variable_ref_declaration_ix_declaration_lullbrpul_ig5wc6kcyb" ON "qti"."variable_ref_declaration" USING btree ("__declaration_lullbrpul3", "__table_ty43vmt6ey");
+
+CREATE INDEX "__variable_ref_declaration_ix_declaration_tjmicd_327_wt2ckno32j" ON "qti"."variable_ref_declaration" USING btree ("__declaration_tjmicd327x", "__table_jd7liilgvb");
+
+CREATE INDEX "__variable_ref_declaration_ix_declaration_y_3_wy2ijqlatg" ON "qti"."variable_ref_declaration" USING btree ("__declaration_y3rrijdizl", "__table_senx5aynlq");
+
+CREATE INDEX "__variable_ref_declaration_ix_declaration_document_tuyn2pxfpx" ON "qti"."variable_ref_declaration" USING btree ("declaration", "document", "identifier", "declaration_kind", "decl_cardinality", "decl_base_types");
 
 CREATE STATISTICS "qti"."__attribute_entity_stats_attribute_node_ydjs6qqmch" (ndistinct, dependencies, mcv) ON "attribute", "node" FROM "qti"."attribute_entity";
 
