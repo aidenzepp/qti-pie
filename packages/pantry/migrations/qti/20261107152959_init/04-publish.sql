@@ -283,8 +283,8 @@ CREATE VIEW "qti__author"."lom_record" ("document", "kind", "kind_name", "named"
 SELECT "r1"."document", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."named", ("qti"."__resource_type_names_iatibe6omc"())["r1"."named" + 1]::"pg_catalog"."text", "r1"."nearest", "r1"."node", "r1"."owner", ("qti"."__node_kind_names_ulbko553n7"())["r1"."owner" + 1]::"pg_catalog"."text", "r1"."owner_parent", "r1"."owner_start", "r1"."parent", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
 FROM "qti"."lom_record" AS "r1";
 
-CREATE VIEW "qti__author"."lom_resource" ("hrefs", "named", "named_name", "node", "type", "type_name") AS
-SELECT "r1"."hrefs", "r1"."named", ("qti"."__resource_type_names_iatibe6omc"())["r1"."named" + 1]::"pg_catalog"."text", "r1"."node", "r1"."type", ("qti"."__resource_type_names_iatibe6omc"())["r1"."type" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti__author"."lom_resource" ("named", "named_name", "node") AS
+SELECT "r1"."named", ("qti"."__resource_type_names_iatibe6omc"())["r1"."named" + 1]::"pg_catalog"."text", "r1"."node"
 FROM "qti"."lom_resource" AS "r1";
 
 CREATE VIEW "qti__author"."lom_resource_type" ("node", "term", "text") AS
@@ -495,16 +495,16 @@ CREATE VIEW "qti__author"."referring_document" ("contexts", "document", "feedbac
 SELECT "r1"."contexts", "r1"."document", "r1"."feedbacks", "r1"."prints", "r1"."templates"
 FROM "qti"."referring_document" AS "r1";
 
-CREATE VIEW "qti__author"."resource" ("document", "identifier", "kind", "kind_name", "manifest_identifier", "nearest", "node", "package", "parent", "start", "type", "type_name", "type_lexical", "version", "version_name") AS
-SELECT "r1"."document", "r1"."identifier", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."manifest_identifier", "r1"."nearest", "r1"."node", "r1"."package", "r1"."parent", "r1"."start", "r1"."type", ("qti"."__resource_type_names_iatibe6omc"())["r1"."type" + 1]::"pg_catalog"."text", "r1"."type_lexical", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti__author"."resource" ("document", "identifier", "kind", "kind_name", "manifest_identifier", "nearest", "node", "package", "parent", "start", "type_lexical", "version", "version_name") AS
+SELECT "r1"."document", "r1"."identifier", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."manifest_identifier", "r1"."nearest", "r1"."node", "r1"."package", "r1"."parent", "r1"."start", "r1"."type_lexical", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
 FROM "qti"."resource" AS "r1";
 
 CREATE VIEW "qti__author"."resource_file" ("files", "path", "resource", "scope", "scope_name") AS
 SELECT "r1"."files", "r1"."path", "r1"."resource", "r1"."scope", ("qti"."__href_scope_names_y4pbuo4f5q"())["r1"."scope" + 1]::"pg_catalog"."text"
 FROM "qti"."resource_file" AS "r1";
 
-CREATE VIEW "qti__author"."resource_href" ("href", "node", "package", "path", "scope", "scope_name", "type", "type_name") AS
-SELECT "r1"."href", "r1"."node", "r1"."package", "r1"."path", "r1"."scope", ("qti"."__href_scope_names_y4pbuo4f5q"())["r1"."scope" + 1]::"pg_catalog"."text", "r1"."type", ("qti"."__resource_type_names_iatibe6omc"())["r1"."type" + 1]::"pg_catalog"."text"
+CREATE VIEW "qti__author"."resource_href" ("href", "node", "package", "path", "scope", "scope_name", "type_lexical") AS
+SELECT "r1"."href", "r1"."node", "r1"."package", "r1"."path", "r1"."scope", ("qti"."__href_scope_names_y4pbuo4f5q"())["r1"."scope" + 1]::"pg_catalog"."text", "r1"."type_lexical"
 FROM "qti"."resource_href" AS "r1";
 
 CREATE VIEW "qti__author"."resource_lom_general" ("node", "resource") AS
@@ -514,6 +514,10 @@ FROM "qti"."resource_lom_general" AS "r1";
 CREATE VIEW "qti__author"."resource_lom_language_set" ("carriers", "general", "lang") AS
 SELECT "r1"."carriers", "r1"."general", "r1"."lang"
 FROM "qti"."resource_lom_language_set" AS "r1";
+
+CREATE VIEW "qti__author"."resource_typed" ("node", "package", "type", "type_name", "type_lexical") AS
+SELECT "r1"."node", "r1"."package", "r1"."type", ("qti"."__resource_type_names_iatibe6omc"())["r1"."type" + 1]::"pg_catalog"."text", "r1"."type_lexical"
+FROM "qti"."resource_typed" AS "r1";
 
 CREATE VIEW "qti__author"."rounding" ("document", "figures", "figures_lexical", "figures_value", "integer", "kind", "kind_name", "mode", "mode_written", "nearest", "node", "parent", "start", "version", "version_name") AS
 SELECT "r1"."document", "r1"."figures", "r1"."figures_lexical", "r1"."figures_value", "r1"."integer", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."mode", "r1"."mode_written", "r1"."nearest", "r1"."node", "r1"."parent", "r1"."start", "r1"."version", ("qti"."__schema_version_names_p2hfvbhu24"())["r1"."version" + 1]::"pg_catalog"."text"
@@ -655,6 +659,10 @@ CREATE VIEW "qti__author"."tolerance_token" ("after", "at", "before", "node", "p
 SELECT "r1"."after", "r1"."at", "r1"."before", "r1"."node", "r1"."piece", "r1"."pieces_after", "r1"."pieces_was", "r1"."token"
 FROM "qti"."tolerance_token" AS "r1";
 
+CREATE VIEW "qti__author"."typed_href" ("node", "package", "path", "scope", "scope_name", "type", "type_name") AS
+SELECT "r1"."node", "r1"."package", "r1"."path", "r1"."scope", ("qti"."__href_scope_names_y4pbuo4f5q"())["r1"."scope" + 1]::"pg_catalog"."text", "r1"."type", ("qti"."__resource_type_names_iatibe6omc"())["r1"."type" + 1]::"pg_catalog"."text"
+FROM "qti"."typed_href" AS "r1";
+
 CREATE VIEW "qti__author"."usage_value" ("base_type", "base_type_name", "base_type_lexical", "node", "text") AS
 SELECT "r1"."base_type", ("qti"."__base_type_names_nr3sstjolj"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."base_type_lexical", "r1"."node", "r1"."text"
 FROM "qti"."usage_value" AS "r1";
@@ -693,7 +701,7 @@ GRANT USAGE ON SCHEMA "qti", "qti__author" TO "qti__author";
 
 GRANT USAGE ON DOMAIN "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."__flag_bits_12_i4uhexylc4", "qti"."__value_base_bits_16_7t6pwwxbsh", "qti"."__value_cardinality_bits_8_mma4mwhphy", "qti"."__domain_gfw43vigph", "qti"."attribute_model", "qti"."attribute_name", "qti"."attribute_slot", "qti"."base_type", "qti"."bound_zero", "qti"."built_in", "qti"."cardinality", "qti"."content_model", "qti"."declaration_kind", "qti"."domain_primitive", "qti"."flag", "qti"."governor", "qti"."href_scope", "qti"."identity", "qti"."include_parent", "qti"."language", "qti"."node_kind", "qti"."position", "qti"."reading_form", "qti"."reading_source", "qti"."reference_form", "qti"."reference_resolution", "qti"."reference_role", "qti"."reference_spelling", "qti"."referenced_table", "qti"."resource_type", "qti"."rp_template", "qti"."schema_version", "qti"."shared_model", "qti"."type_name", "qti"."use", "qti"."value_base", "qti"."value_cardinality", "qti"."value_domain", "qti"."xml_standalone", "qti"."__text_xj3zno7u3h", "qti"."__text_7nkeqry66t", "qti"."__text_c6iptmtj2x", "qti"."__text_ca4i7j77gp", "qti"."__text_qhjydx3ufb", "qti"."__text_gke7uypkov", "qti"."__text_htajwmyatt", "qti"."__text_mqbstvk5ay", "qti"."__text_d7mwmflg4k", "qti"."__text_l7nqeazg5h", "qti"."__text_k5kwygzatl", "qti"."__text_7dfilirtp3", "qti"."__text_xisvziygi3", "qti"."__text_blket2gym3", "qti"."__text_7j6kgluyjp", "qti"."__text_xey6ryorh5", "qti"."__text_n4nva7wrgk", "qti"."__text_pwaizaq6lx", "qti"."__text_psn65t7m7e", "qti"."__text_hdc6mvcrgm", "qti"."__text_23rzixl3a2", "qti"."__text_mpc5fvfrbl", "qti"."__text_7lh2gkatwn", "qti"."__text_jcb7qxjt3i", "qti"."__text_qvake6vbfh", "qti"."__text_zij47sgley", "qti"."__text_piekqyt5fn", "qti"."__text_fgve4r33vj", "qti"."__text_5xaumrdzw7", "qti"."__text_7v4cf2tt2q", "qti"."__text_3dlgl63rv6", "qti"."__text_3adwbksayk" TO "qti__author";
 
-GRANT SELECT ON TABLE "qti__author"."area_mapping", "qti__author"."aria_element", "qti__author"."aria_range", "qti__author"."aria_value", "qti__author"."assembled_id", "qti__author"."assembled_lang", "qti__author"."assembled_name", "qti__author"."assembled_reference", "qti__author"."assessment_object", "qti__author"."attribute", "qti__author"."attribute_entity", "qti__author"."binding", "qti__author"."binding_declaration", "qti__author"."binding_name", "qti__author"."bound_variable", "qti__author"."branch_resolution", "qti__author"."branch_rule", "qti__author"."cell_headers", "qti__author"."choice", "qti__author"."choice_interaction", "qti__author"."choice_variable_name", "qti__author"."comment", "qti__author"."context_ref", "qti__author"."count_bound", "qti__author"."declaration", "qti__author"."declaration_table", "qti__author"."dependency", "qti__author"."doctype", "qti__author"."document", "qti__author"."document_generals", "qti__author"."document_id", "qti__author"."document_lang", "qti__author"."entry", "qti__author"."expression", "qti__author"."expression_attribute", "qti__author"."feedback_ref", "qti__author"."file", "qti__author"."file_href", "qti__author"."fragment_value", "qti__author"."general_lang", "qti__author"."general_named", "qti__author"."general_object", "qti__author"."header_token", "qti__author"."hotspot", "qti__author"."hottext", "qti__author"."id_binding", "qti__author"."identity_text", "qti__author"."idref", "qti__author"."idref_target", "qti__author"."inclusion", "qti__author"."instance", "qti__author"."instance_name", "qti__author"."interaction", "qti__author"."interaction_attribute", "qti__author"."interpolation_table", "qti__author"."item_mode", "qti__author"."item_ref_document", "qti__author"."item_ref_target", "qti__author"."item_timing", "qti__author"."label_use", "qti__author"."literal", "qti__author"."literal_typed", "qti__author"."lom_entry", "qti__author"."lom_general", "qti__author"."lom_language", "qti__author"."lom_object", "qti__author"."lom_object_identifier", "qti__author"."lom_object_title", "qti__author"."lom_record", "qti__author"."lom_resource", "qti__author"."lom_resource_type", "qti__author"."lom_resource_type_source", "qti__author"."lom_string", "qti__author"."lom_string_language", "qti__author"."lom_title", "qti__author"."lom_title_string", "qti__author"."lookup_value", "qti__author"."manifest_id", "qti__author"."map_key", "qti__author"."map_key_directed_pair", "qti__author"."map_key_float", "qti__author"."map_key_integer", "qti__author"."map_key_pair", "qti__author"."map_key_point", "qti__author"."mapping", "qti__author"."mapping_lookup", "qti__author"."mapping_source_declaration", "qti__author"."match_table", "qti__author"."name_lookup", "qti__author"."named", "qti__author"."named_href", "qti__author"."namespace", "qti__author"."node", "qti__author"."object_lang", "qti__author"."open_attribute_name", "qti__author"."open_element_name", "qti__author"."operand", "qti__author"."outcome_range", "qti__author"."package", "qti__author"."pi", "qti__author"."placed_binding", "qti__author"."placed_binding_declaration", "qti__author"."placed_choice", "qti__author"."placed_document", "qti__author"."placed_general_lang", "qti__author"."placed_hottext", "qti__author"."placed_id", "qti__author"."placed_idref", "qti__author"."placed_reference", "qti__author"."placed_variable_ref", "qti__author"."placed_xml_lang", "qti__author"."printed_variable_ref", "qti__author"."processing", "qti__author"."processing_template", "qti__author"."quotation", "qti__author"."reading", "qti__author"."record_field", "qti__author"."reference", "qti__author"."reference_document", "qti__author"."reference_path", "qti__author"."reference_segment", "qti__author"."referring_document", "qti__author"."resource", "qti__author"."resource_file", "qti__author"."resource_href", "qti__author"."resource_lom_general", "qti__author"."resource_lom_language_set", "qti__author"."rounding", "qti__author"."section", "qti__author"."section_context_name", "qti__author"."section_context_ref", "qti__author"."section_feedback_name", "qti__author"."section_feedback_ref", "qti__author"."section_identifier", "qti__author"."section_member", "qti__author"."section_ordering", "qti__author"."section_printed_name", "qti__author"."section_printed_ref", "qti__author"."section_scope", "qti__author"."section_selection", "qti__author"."section_template_name", "qti__author"."section_template_ref", "qti__author"."site", "qti__author"."site_path", "qti__author"."site_target", "qti__author"."slider", "qti__author"."ssml_attribute", "qti__author"."ssml_scope", "qti__author"."statistic_date", "qti__author"."stimulus_ref", "qti__author"."table_header", "qti__author"."table_scope", "qti__author"."template_default", "qti__author"."template_default_target", "qti__author"."template_ref", "qti__author"."test_document", "qti__author"."test_flag", "qti__author"."test_reference", "qti__author"."test_token", "qti__author"."text_idref", "qti__author"."tolerance", "qti__author"."tolerance_token", "qti__author"."usage_value", "qti__author"."value", "qti__author"."value_set", "qti__author"."var_ref", "qti__author"."variable_lookup", "qti__author"."variable_mapping", "qti__author"."variable_ref", "qti__author"."xml_lang" TO "qti__author";
+GRANT SELECT ON TABLE "qti__author"."area_mapping", "qti__author"."aria_element", "qti__author"."aria_range", "qti__author"."aria_value", "qti__author"."assembled_id", "qti__author"."assembled_lang", "qti__author"."assembled_name", "qti__author"."assembled_reference", "qti__author"."assessment_object", "qti__author"."attribute", "qti__author"."attribute_entity", "qti__author"."binding", "qti__author"."binding_declaration", "qti__author"."binding_name", "qti__author"."bound_variable", "qti__author"."branch_resolution", "qti__author"."branch_rule", "qti__author"."cell_headers", "qti__author"."choice", "qti__author"."choice_interaction", "qti__author"."choice_variable_name", "qti__author"."comment", "qti__author"."context_ref", "qti__author"."count_bound", "qti__author"."declaration", "qti__author"."declaration_table", "qti__author"."dependency", "qti__author"."doctype", "qti__author"."document", "qti__author"."document_generals", "qti__author"."document_id", "qti__author"."document_lang", "qti__author"."entry", "qti__author"."expression", "qti__author"."expression_attribute", "qti__author"."feedback_ref", "qti__author"."file", "qti__author"."file_href", "qti__author"."fragment_value", "qti__author"."general_lang", "qti__author"."general_named", "qti__author"."general_object", "qti__author"."header_token", "qti__author"."hotspot", "qti__author"."hottext", "qti__author"."id_binding", "qti__author"."identity_text", "qti__author"."idref", "qti__author"."idref_target", "qti__author"."inclusion", "qti__author"."instance", "qti__author"."instance_name", "qti__author"."interaction", "qti__author"."interaction_attribute", "qti__author"."interpolation_table", "qti__author"."item_mode", "qti__author"."item_ref_document", "qti__author"."item_ref_target", "qti__author"."item_timing", "qti__author"."label_use", "qti__author"."literal", "qti__author"."literal_typed", "qti__author"."lom_entry", "qti__author"."lom_general", "qti__author"."lom_language", "qti__author"."lom_object", "qti__author"."lom_object_identifier", "qti__author"."lom_object_title", "qti__author"."lom_record", "qti__author"."lom_resource", "qti__author"."lom_resource_type", "qti__author"."lom_resource_type_source", "qti__author"."lom_string", "qti__author"."lom_string_language", "qti__author"."lom_title", "qti__author"."lom_title_string", "qti__author"."lookup_value", "qti__author"."manifest_id", "qti__author"."map_key", "qti__author"."map_key_directed_pair", "qti__author"."map_key_float", "qti__author"."map_key_integer", "qti__author"."map_key_pair", "qti__author"."map_key_point", "qti__author"."mapping", "qti__author"."mapping_lookup", "qti__author"."mapping_source_declaration", "qti__author"."match_table", "qti__author"."name_lookup", "qti__author"."named", "qti__author"."named_href", "qti__author"."namespace", "qti__author"."node", "qti__author"."object_lang", "qti__author"."open_attribute_name", "qti__author"."open_element_name", "qti__author"."operand", "qti__author"."outcome_range", "qti__author"."package", "qti__author"."pi", "qti__author"."placed_binding", "qti__author"."placed_binding_declaration", "qti__author"."placed_choice", "qti__author"."placed_document", "qti__author"."placed_general_lang", "qti__author"."placed_hottext", "qti__author"."placed_id", "qti__author"."placed_idref", "qti__author"."placed_reference", "qti__author"."placed_variable_ref", "qti__author"."placed_xml_lang", "qti__author"."printed_variable_ref", "qti__author"."processing", "qti__author"."processing_template", "qti__author"."quotation", "qti__author"."reading", "qti__author"."record_field", "qti__author"."reference", "qti__author"."reference_document", "qti__author"."reference_path", "qti__author"."reference_segment", "qti__author"."referring_document", "qti__author"."resource", "qti__author"."resource_file", "qti__author"."resource_href", "qti__author"."resource_lom_general", "qti__author"."resource_lom_language_set", "qti__author"."resource_typed", "qti__author"."rounding", "qti__author"."section", "qti__author"."section_context_name", "qti__author"."section_context_ref", "qti__author"."section_feedback_name", "qti__author"."section_feedback_ref", "qti__author"."section_identifier", "qti__author"."section_member", "qti__author"."section_ordering", "qti__author"."section_printed_name", "qti__author"."section_printed_ref", "qti__author"."section_scope", "qti__author"."section_selection", "qti__author"."section_template_name", "qti__author"."section_template_ref", "qti__author"."site", "qti__author"."site_path", "qti__author"."site_target", "qti__author"."slider", "qti__author"."ssml_attribute", "qti__author"."ssml_scope", "qti__author"."statistic_date", "qti__author"."stimulus_ref", "qti__author"."table_header", "qti__author"."table_scope", "qti__author"."template_default", "qti__author"."template_default_target", "qti__author"."template_ref", "qti__author"."test_document", "qti__author"."test_flag", "qti__author"."test_reference", "qti__author"."test_token", "qti__author"."text_idref", "qti__author"."tolerance", "qti__author"."tolerance_token", "qti__author"."typed_href", "qti__author"."usage_value", "qti__author"."value", "qti__author"."value_set", "qti__author"."var_ref", "qti__author"."variable_lookup", "qti__author"."variable_mapping", "qti__author"."variable_ref", "qti__author"."xml_lang" TO "qti__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."area_mapping" TO "qti__author";
 
@@ -949,6 +957,8 @@ GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_lom_general" TO "qti__auth
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_lom_language_set" TO "qti__author";
 
+GRANT SELECT, INSERT, DELETE ON TABLE "qti"."resource_typed" TO "qti__author";
+
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."rounding" TO "qti__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."section" TO "qti__author";
@@ -1019,6 +1029,8 @@ GRANT SELECT, INSERT, DELETE ON TABLE "qti"."tolerance" TO "qti__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."tolerance_token" TO "qti__author";
 
+GRANT SELECT, INSERT, DELETE ON TABLE "qti"."typed_href" TO "qti__author";
+
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."usage_value" TO "qti__author";
 
 GRANT SELECT, INSERT, DELETE ON TABLE "qti"."value" TO "qti__author";
@@ -1059,7 +1071,7 @@ ALTER ROLE "qti__author_app" SET lc_time = 'C.UTF-8';
 
 REVOKE ALL ON SCHEMA "qti", "qti__author" FROM PUBLIC;
 
-REVOKE ALL ON TABLE "qti"."area_mapping", "qti"."aria_element", "qti"."aria_range", "qti"."aria_value", "qti"."assembled_id", "qti"."assembled_lang", "qti"."assembled_name", "qti"."assembled_reference", "qti"."assessment_object", "qti"."attribute", "qti"."attribute_entity", "qti"."binding", "qti"."binding_declaration", "qti"."binding_name", "qti"."bound_variable", "qti"."branch_resolution", "qti"."branch_rule", "qti"."cell_headers", "qti"."choice", "qti"."choice_interaction", "qti"."choice_variable_name", "qti"."comment", "qti"."context_ref", "qti"."count_bound", "qti"."declaration", "qti"."declaration_table", "qti"."dependency", "qti"."doctype", "qti"."document", "qti"."document_generals", "qti"."document_id", "qti"."document_lang", "qti"."entry", "qti"."expression", "qti"."expression_attribute", "qti"."feedback_ref", "qti"."file", "qti"."file_href", "qti"."fragment_value", "qti"."general_lang", "qti"."general_named", "qti"."general_object", "qti"."header_token", "qti"."hotspot", "qti"."hottext", "qti"."id_binding", "qti"."identity_text", "qti"."idref", "qti"."idref_target", "qti"."inclusion", "qti"."instance", "qti"."instance_name", "qti"."interaction", "qti"."interaction_attribute", "qti"."interpolation_table", "qti"."item_mode", "qti"."item_ref_document", "qti"."item_ref_target", "qti"."item_timing", "qti"."label_use", "qti"."literal", "qti"."literal_typed", "qti"."lom_entry", "qti"."lom_general", "qti"."lom_language", "qti"."lom_object", "qti"."lom_object_identifier", "qti"."lom_object_title", "qti"."lom_record", "qti"."lom_resource", "qti"."lom_resource_type", "qti"."lom_resource_type_source", "qti"."lom_string", "qti"."lom_string_language", "qti"."lom_title", "qti"."lom_title_string", "qti"."lookup_value", "qti"."manifest_id", "qti"."map_key", "qti"."map_key_directed_pair", "qti"."map_key_float", "qti"."map_key_integer", "qti"."map_key_pair", "qti"."map_key_point", "qti"."mapping", "qti"."mapping_lookup", "qti"."mapping_source_declaration", "qti"."match_table", "qti"."name_lookup", "qti"."named", "qti"."named_href", "qti"."namespace", "qti"."node", "qti"."object_lang", "qti"."open_attribute_name", "qti"."open_element_name", "qti"."operand", "qti"."outcome_range", "qti"."package", "qti"."pi", "qti"."placed_binding", "qti"."placed_binding_declaration", "qti"."placed_choice", "qti"."placed_document", "qti"."placed_general_lang", "qti"."placed_hottext", "qti"."placed_id", "qti"."placed_idref", "qti"."placed_reference", "qti"."placed_variable_ref", "qti"."placed_xml_lang", "qti"."printed_variable_ref", "qti"."processing", "qti"."processing_template", "qti"."quotation", "qti"."reading", "qti"."record_field", "qti"."reference", "qti"."reference_document", "qti"."reference_path", "qti"."reference_segment", "qti"."referring_document", "qti"."resource", "qti"."resource_file", "qti"."resource_href", "qti"."resource_lom_general", "qti"."resource_lom_language_set", "qti"."rounding", "qti"."section", "qti"."section_context_name", "qti"."section_context_ref", "qti"."section_feedback_name", "qti"."section_feedback_ref", "qti"."section_identifier", "qti"."section_member", "qti"."section_ordering", "qti"."section_printed_name", "qti"."section_printed_ref", "qti"."section_scope", "qti"."section_selection", "qti"."section_template_name", "qti"."section_template_ref", "qti"."site", "qti"."site_path", "qti"."site_target", "qti"."slider", "qti"."ssml_attribute", "qti"."ssml_scope", "qti"."statistic_date", "qti"."stimulus_ref", "qti"."table_header", "qti"."table_scope", "qti"."template_default", "qti"."template_default_target", "qti"."template_ref", "qti"."test_document", "qti"."test_flag", "qti"."test_reference", "qti"."test_token", "qti"."text_idref", "qti"."tolerance", "qti"."tolerance_token", "qti"."usage_value", "qti"."value", "qti"."value_set", "qti"."var_ref", "qti"."variable_lookup", "qti"."variable_mapping", "qti"."variable_ref", "qti"."xml_lang", "qti__author"."area_mapping", "qti__author"."aria_element", "qti__author"."aria_range", "qti__author"."aria_value", "qti__author"."assembled_id", "qti__author"."assembled_lang", "qti__author"."assembled_name", "qti__author"."assembled_reference", "qti__author"."assessment_object", "qti__author"."attribute", "qti__author"."attribute_entity", "qti__author"."binding", "qti__author"."binding_declaration", "qti__author"."binding_name", "qti__author"."bound_variable", "qti__author"."branch_resolution", "qti__author"."branch_rule", "qti__author"."cell_headers", "qti__author"."choice", "qti__author"."choice_interaction", "qti__author"."choice_variable_name", "qti__author"."comment", "qti__author"."context_ref", "qti__author"."count_bound", "qti__author"."declaration", "qti__author"."declaration_table", "qti__author"."dependency", "qti__author"."doctype", "qti__author"."document", "qti__author"."document_generals", "qti__author"."document_id", "qti__author"."document_lang", "qti__author"."entry", "qti__author"."expression", "qti__author"."expression_attribute", "qti__author"."feedback_ref", "qti__author"."file", "qti__author"."file_href", "qti__author"."fragment_value", "qti__author"."general_lang", "qti__author"."general_named", "qti__author"."general_object", "qti__author"."header_token", "qti__author"."hotspot", "qti__author"."hottext", "qti__author"."id_binding", "qti__author"."identity_text", "qti__author"."idref", "qti__author"."idref_target", "qti__author"."inclusion", "qti__author"."instance", "qti__author"."instance_name", "qti__author"."interaction", "qti__author"."interaction_attribute", "qti__author"."interpolation_table", "qti__author"."item_mode", "qti__author"."item_ref_document", "qti__author"."item_ref_target", "qti__author"."item_timing", "qti__author"."label_use", "qti__author"."literal", "qti__author"."literal_typed", "qti__author"."lom_entry", "qti__author"."lom_general", "qti__author"."lom_language", "qti__author"."lom_object", "qti__author"."lom_object_identifier", "qti__author"."lom_object_title", "qti__author"."lom_record", "qti__author"."lom_resource", "qti__author"."lom_resource_type", "qti__author"."lom_resource_type_source", "qti__author"."lom_string", "qti__author"."lom_string_language", "qti__author"."lom_title", "qti__author"."lom_title_string", "qti__author"."lookup_value", "qti__author"."manifest_id", "qti__author"."map_key", "qti__author"."map_key_directed_pair", "qti__author"."map_key_float", "qti__author"."map_key_integer", "qti__author"."map_key_pair", "qti__author"."map_key_point", "qti__author"."mapping", "qti__author"."mapping_lookup", "qti__author"."mapping_source_declaration", "qti__author"."match_table", "qti__author"."name_lookup", "qti__author"."named", "qti__author"."named_href", "qti__author"."namespace", "qti__author"."node", "qti__author"."object_lang", "qti__author"."open_attribute_name", "qti__author"."open_element_name", "qti__author"."operand", "qti__author"."outcome_range", "qti__author"."package", "qti__author"."pi", "qti__author"."placed_binding", "qti__author"."placed_binding_declaration", "qti__author"."placed_choice", "qti__author"."placed_document", "qti__author"."placed_general_lang", "qti__author"."placed_hottext", "qti__author"."placed_id", "qti__author"."placed_idref", "qti__author"."placed_reference", "qti__author"."placed_variable_ref", "qti__author"."placed_xml_lang", "qti__author"."printed_variable_ref", "qti__author"."processing", "qti__author"."processing_template", "qti__author"."quotation", "qti__author"."reading", "qti__author"."record_field", "qti__author"."reference", "qti__author"."reference_document", "qti__author"."reference_path", "qti__author"."reference_segment", "qti__author"."referring_document", "qti__author"."resource", "qti__author"."resource_file", "qti__author"."resource_href", "qti__author"."resource_lom_general", "qti__author"."resource_lom_language_set", "qti__author"."rounding", "qti__author"."section", "qti__author"."section_context_name", "qti__author"."section_context_ref", "qti__author"."section_feedback_name", "qti__author"."section_feedback_ref", "qti__author"."section_identifier", "qti__author"."section_member", "qti__author"."section_ordering", "qti__author"."section_printed_name", "qti__author"."section_printed_ref", "qti__author"."section_scope", "qti__author"."section_selection", "qti__author"."section_template_name", "qti__author"."section_template_ref", "qti__author"."site", "qti__author"."site_path", "qti__author"."site_target", "qti__author"."slider", "qti__author"."ssml_attribute", "qti__author"."ssml_scope", "qti__author"."statistic_date", "qti__author"."stimulus_ref", "qti__author"."table_header", "qti__author"."table_scope", "qti__author"."template_default", "qti__author"."template_default_target", "qti__author"."template_ref", "qti__author"."test_document", "qti__author"."test_flag", "qti__author"."test_reference", "qti__author"."test_token", "qti__author"."text_idref", "qti__author"."tolerance", "qti__author"."tolerance_token", "qti__author"."usage_value", "qti__author"."value", "qti__author"."value_set", "qti__author"."var_ref", "qti__author"."variable_lookup", "qti__author"."variable_mapping", "qti__author"."variable_ref", "qti__author"."xml_lang" FROM PUBLIC;
+REVOKE ALL ON TABLE "qti"."area_mapping", "qti"."aria_element", "qti"."aria_range", "qti"."aria_value", "qti"."assembled_id", "qti"."assembled_lang", "qti"."assembled_name", "qti"."assembled_reference", "qti"."assessment_object", "qti"."attribute", "qti"."attribute_entity", "qti"."binding", "qti"."binding_declaration", "qti"."binding_name", "qti"."bound_variable", "qti"."branch_resolution", "qti"."branch_rule", "qti"."cell_headers", "qti"."choice", "qti"."choice_interaction", "qti"."choice_variable_name", "qti"."comment", "qti"."context_ref", "qti"."count_bound", "qti"."declaration", "qti"."declaration_table", "qti"."dependency", "qti"."doctype", "qti"."document", "qti"."document_generals", "qti"."document_id", "qti"."document_lang", "qti"."entry", "qti"."expression", "qti"."expression_attribute", "qti"."feedback_ref", "qti"."file", "qti"."file_href", "qti"."fragment_value", "qti"."general_lang", "qti"."general_named", "qti"."general_object", "qti"."header_token", "qti"."hotspot", "qti"."hottext", "qti"."id_binding", "qti"."identity_text", "qti"."idref", "qti"."idref_target", "qti"."inclusion", "qti"."instance", "qti"."instance_name", "qti"."interaction", "qti"."interaction_attribute", "qti"."interpolation_table", "qti"."item_mode", "qti"."item_ref_document", "qti"."item_ref_target", "qti"."item_timing", "qti"."label_use", "qti"."literal", "qti"."literal_typed", "qti"."lom_entry", "qti"."lom_general", "qti"."lom_language", "qti"."lom_object", "qti"."lom_object_identifier", "qti"."lom_object_title", "qti"."lom_record", "qti"."lom_resource", "qti"."lom_resource_type", "qti"."lom_resource_type_source", "qti"."lom_string", "qti"."lom_string_language", "qti"."lom_title", "qti"."lom_title_string", "qti"."lookup_value", "qti"."manifest_id", "qti"."map_key", "qti"."map_key_directed_pair", "qti"."map_key_float", "qti"."map_key_integer", "qti"."map_key_pair", "qti"."map_key_point", "qti"."mapping", "qti"."mapping_lookup", "qti"."mapping_source_declaration", "qti"."match_table", "qti"."name_lookup", "qti"."named", "qti"."named_href", "qti"."namespace", "qti"."node", "qti"."object_lang", "qti"."open_attribute_name", "qti"."open_element_name", "qti"."operand", "qti"."outcome_range", "qti"."package", "qti"."pi", "qti"."placed_binding", "qti"."placed_binding_declaration", "qti"."placed_choice", "qti"."placed_document", "qti"."placed_general_lang", "qti"."placed_hottext", "qti"."placed_id", "qti"."placed_idref", "qti"."placed_reference", "qti"."placed_variable_ref", "qti"."placed_xml_lang", "qti"."printed_variable_ref", "qti"."processing", "qti"."processing_template", "qti"."quotation", "qti"."reading", "qti"."record_field", "qti"."reference", "qti"."reference_document", "qti"."reference_path", "qti"."reference_segment", "qti"."referring_document", "qti"."resource", "qti"."resource_file", "qti"."resource_href", "qti"."resource_lom_general", "qti"."resource_lom_language_set", "qti"."resource_typed", "qti"."rounding", "qti"."section", "qti"."section_context_name", "qti"."section_context_ref", "qti"."section_feedback_name", "qti"."section_feedback_ref", "qti"."section_identifier", "qti"."section_member", "qti"."section_ordering", "qti"."section_printed_name", "qti"."section_printed_ref", "qti"."section_scope", "qti"."section_selection", "qti"."section_template_name", "qti"."section_template_ref", "qti"."site", "qti"."site_path", "qti"."site_target", "qti"."slider", "qti"."ssml_attribute", "qti"."ssml_scope", "qti"."statistic_date", "qti"."stimulus_ref", "qti"."table_header", "qti"."table_scope", "qti"."template_default", "qti"."template_default_target", "qti"."template_ref", "qti"."test_document", "qti"."test_flag", "qti"."test_reference", "qti"."test_token", "qti"."text_idref", "qti"."tolerance", "qti"."tolerance_token", "qti"."typed_href", "qti"."usage_value", "qti"."value", "qti"."value_set", "qti"."var_ref", "qti"."variable_lookup", "qti"."variable_mapping", "qti"."variable_ref", "qti"."xml_lang", "qti__author"."area_mapping", "qti__author"."aria_element", "qti__author"."aria_range", "qti__author"."aria_value", "qti__author"."assembled_id", "qti__author"."assembled_lang", "qti__author"."assembled_name", "qti__author"."assembled_reference", "qti__author"."assessment_object", "qti__author"."attribute", "qti__author"."attribute_entity", "qti__author"."binding", "qti__author"."binding_declaration", "qti__author"."binding_name", "qti__author"."bound_variable", "qti__author"."branch_resolution", "qti__author"."branch_rule", "qti__author"."cell_headers", "qti__author"."choice", "qti__author"."choice_interaction", "qti__author"."choice_variable_name", "qti__author"."comment", "qti__author"."context_ref", "qti__author"."count_bound", "qti__author"."declaration", "qti__author"."declaration_table", "qti__author"."dependency", "qti__author"."doctype", "qti__author"."document", "qti__author"."document_generals", "qti__author"."document_id", "qti__author"."document_lang", "qti__author"."entry", "qti__author"."expression", "qti__author"."expression_attribute", "qti__author"."feedback_ref", "qti__author"."file", "qti__author"."file_href", "qti__author"."fragment_value", "qti__author"."general_lang", "qti__author"."general_named", "qti__author"."general_object", "qti__author"."header_token", "qti__author"."hotspot", "qti__author"."hottext", "qti__author"."id_binding", "qti__author"."identity_text", "qti__author"."idref", "qti__author"."idref_target", "qti__author"."inclusion", "qti__author"."instance", "qti__author"."instance_name", "qti__author"."interaction", "qti__author"."interaction_attribute", "qti__author"."interpolation_table", "qti__author"."item_mode", "qti__author"."item_ref_document", "qti__author"."item_ref_target", "qti__author"."item_timing", "qti__author"."label_use", "qti__author"."literal", "qti__author"."literal_typed", "qti__author"."lom_entry", "qti__author"."lom_general", "qti__author"."lom_language", "qti__author"."lom_object", "qti__author"."lom_object_identifier", "qti__author"."lom_object_title", "qti__author"."lom_record", "qti__author"."lom_resource", "qti__author"."lom_resource_type", "qti__author"."lom_resource_type_source", "qti__author"."lom_string", "qti__author"."lom_string_language", "qti__author"."lom_title", "qti__author"."lom_title_string", "qti__author"."lookup_value", "qti__author"."manifest_id", "qti__author"."map_key", "qti__author"."map_key_directed_pair", "qti__author"."map_key_float", "qti__author"."map_key_integer", "qti__author"."map_key_pair", "qti__author"."map_key_point", "qti__author"."mapping", "qti__author"."mapping_lookup", "qti__author"."mapping_source_declaration", "qti__author"."match_table", "qti__author"."name_lookup", "qti__author"."named", "qti__author"."named_href", "qti__author"."namespace", "qti__author"."node", "qti__author"."object_lang", "qti__author"."open_attribute_name", "qti__author"."open_element_name", "qti__author"."operand", "qti__author"."outcome_range", "qti__author"."package", "qti__author"."pi", "qti__author"."placed_binding", "qti__author"."placed_binding_declaration", "qti__author"."placed_choice", "qti__author"."placed_document", "qti__author"."placed_general_lang", "qti__author"."placed_hottext", "qti__author"."placed_id", "qti__author"."placed_idref", "qti__author"."placed_reference", "qti__author"."placed_variable_ref", "qti__author"."placed_xml_lang", "qti__author"."printed_variable_ref", "qti__author"."processing", "qti__author"."processing_template", "qti__author"."quotation", "qti__author"."reading", "qti__author"."record_field", "qti__author"."reference", "qti__author"."reference_document", "qti__author"."reference_path", "qti__author"."reference_segment", "qti__author"."referring_document", "qti__author"."resource", "qti__author"."resource_file", "qti__author"."resource_href", "qti__author"."resource_lom_general", "qti__author"."resource_lom_language_set", "qti__author"."resource_typed", "qti__author"."rounding", "qti__author"."section", "qti__author"."section_context_name", "qti__author"."section_context_ref", "qti__author"."section_feedback_name", "qti__author"."section_feedback_ref", "qti__author"."section_identifier", "qti__author"."section_member", "qti__author"."section_ordering", "qti__author"."section_printed_name", "qti__author"."section_printed_ref", "qti__author"."section_scope", "qti__author"."section_selection", "qti__author"."section_template_name", "qti__author"."section_template_ref", "qti__author"."site", "qti__author"."site_path", "qti__author"."site_target", "qti__author"."slider", "qti__author"."ssml_attribute", "qti__author"."ssml_scope", "qti__author"."statistic_date", "qti__author"."stimulus_ref", "qti__author"."table_header", "qti__author"."table_scope", "qti__author"."template_default", "qti__author"."template_default_target", "qti__author"."template_ref", "qti__author"."test_document", "qti__author"."test_flag", "qti__author"."test_reference", "qti__author"."test_token", "qti__author"."text_idref", "qti__author"."tolerance", "qti__author"."tolerance_token", "qti__author"."typed_href", "qti__author"."usage_value", "qti__author"."value", "qti__author"."value_set", "qti__author"."var_ref", "qti__author"."variable_lookup", "qti__author"."variable_mapping", "qti__author"."variable_ref", "qti__author"."xml_lang" FROM PUBLIC;
 
 REVOKE ALL ON DOMAIN "qti"."attribute_model", "qti"."attribute_name", "qti"."__attribute_name_bits_416_thr6i6sipt", "qti"."attribute_slot", "qti"."__attribute_slot_bits_112_aecznthxg5", "qti"."base_type", "qti"."bound_zero", "qti"."built_in", "qti"."cardinality", "qti"."content_model", "qti"."declaration_kind", "qti"."domain_primitive", "qti"."flag", "qti"."__flag_bits_12_i4uhexylc4", "qti"."governor", "qti"."href_scope", "qti"."identity", "qti"."include_parent", "qti"."language", "qti"."node_kind", "qti"."__node_kind_bits_644_kcdmigfwqm", "qti"."position", "qti"."__position_bits_308_gsnowf36kr", "qti"."reading_form", "qti"."reading_source", "qti"."reference_form", "qti"."reference_resolution", "qti"."reference_role", "qti"."reference_spelling", "qti"."referenced_table", "qti"."resource_type", "qti"."rp_template", "qti"."schema_version", "qti"."shared_model", "qti"."type_name", "qti"."use", "qti"."value_base", "qti"."__value_base_bits_16_7t6pwwxbsh", "qti"."value_cardinality", "qti"."__value_cardinality_bits_8_mma4mwhphy", "qti"."value_domain", "qti"."xml_standalone", "qti"."__text_pwaizaq6lx", "qti"."__text_7dfilirtp3", "qti"."__text_c6iptmtj2x", "qti"."__text_5xaumrdzw7", "qti"."__text_xj3zno7u3h", "qti"."__text_7j6kgluyjp", "qti"."__text_l7nqeazg5h", "qti"."__text_xey6ryorh5", "qti"."__text_jcb7qxjt3i", "qti"."__text_ca4i7j77gp", "qti"."__text_blket2gym3", "qti"."__text_7lh2gkatwn", "qti"."__text_qhjydx3ufb", "qti"."__text_7nkeqry66t", "qti"."__text_7v4cf2tt2q", "qti"."__text_htajwmyatt", "qti"."__text_qvake6vbfh", "qti"."__text_n4nva7wrgk", "qti"."__text_hdc6mvcrgm", "qti"."__text_zij47sgley", "qti"."__text_gke7uypkov", "qti"."__text_d7mwmflg4k", "qti"."__text_piekqyt5fn", "qti"."__text_mpc5fvfrbl", "qti"."__text_fgve4r33vj", "qti"."__text_23rzixl3a2", "qti"."__text_3adwbksayk", "qti"."__text_k5kwygzatl", "qti"."__text_mqbstvk5ay", "qti"."__text_xisvziygi3", "qti"."__text_psn65t7m7e", "qti"."__text_3dlgl63rv6", "qti"."__domain_gfw43vigph" FROM PUBLIC;
 
@@ -1689,13 +1701,13 @@ COMMENT ON CONSTRAINT "__document_key_node_package_hlrywh6yam" ON "qti"."documen
 
 COMMENT ON CONSTRAINT "__document_key_package_path_root_kind_nlu75ekokq" ON "qti"."document" IS 'key Document(package, path, rootKind)';
 
-COMMENT ON CONSTRAINT "__document_key_package_path_resource_type_ksksjrikiy" ON "qti"."document" IS 'key Document(package, path, resourceType)';
-
 COMMENT ON CONSTRAINT "__document_key_package_path_node_root_kind_context_tklyn2w6lg" ON "qti"."document" IS 'key Document(package, path, node, rootKind, contextNearest, contextNearestKind)';
 
 COMMENT ON CONSTRAINT "__document_key_node_package_path_root_kind_l2tot4p4pr" ON "qti"."document" IS 'key Document(node, package, path, rootKind)';
 
 COMMENT ON CONSTRAINT "__document_key_node_assembled_vnnzfztutg" ON "qti"."document" IS 'key Document(node, assembled)';
+
+COMMENT ON CONSTRAINT "__document_key_package_path_resource_type_ksksjrikiy" ON "qti"."document" IS 'key Document(package, path, resourceType)';
 
 COMMENT ON CONSTRAINT "__document_key_node_variables_root_kind_nrz2vgcno4" ON "qti"."document" IS 'key Document(node, variables, rootKind)';
 
@@ -1972,10 +1984,6 @@ COMMENT ON CONSTRAINT "__lom_record_key_node_named_owner_parent_cvgsp6u3im" ON "
 COMMENT ON CONSTRAINT "__lom_resource_pk_jcjprudbpj" ON "qti"."lom_resource" IS 'primary key of LomResource';
 
 COMMENT ON CONSTRAINT "__lom_resource_key_node_named_ushbkvym6i" ON "qti"."lom_resource" IS 'key LomResource(node, named)';
-
-COMMENT ON CONSTRAINT "__lom_resource_key_node_type_zypqprml7n" ON "qti"."lom_resource" IS 'key LomResource(node, type)';
-
-COMMENT ON CONSTRAINT "__lom_resource_key_node_hrefs_iglpcnkxkx" ON "qti"."lom_resource" IS 'key LomResource(node, hrefs)';
 
 COMMENT ON CONSTRAINT "__lom_resource_type_pk_o4tsbio4jg" ON "qti"."lom_resource_type" IS 'primary key of LomResourceType';
 
@@ -2297,9 +2305,7 @@ COMMENT ON CONSTRAINT "__resource_key_node_package_identifier_bpstbr3wxu" ON "qt
 
 COMMENT ON CONSTRAINT "__resource_key_node_package_2zl5k2vy4m" ON "qti"."resource" IS 'key Resource(node, package)';
 
-COMMENT ON CONSTRAINT "__resource_key_node_type_fuvf47abkp" ON "qti"."resource" IS 'key Resource(node, type)';
-
-COMMENT ON CONSTRAINT "__resource_key_node_package_type_jmxe6ltg23" ON "qti"."resource" IS 'key Resource(node, package, type)';
+COMMENT ON CONSTRAINT "__resource_key_node_package_type_lexical_4g27mttnmw" ON "qti"."resource" IS 'key Resource(node, package, typeLexical)';
 
 COMMENT ON CONSTRAINT "__resource_file_pk_mvgqsw777g" ON "qti"."resource_file" IS 'primary key of ResourceFile';
 
@@ -2309,7 +2315,7 @@ COMMENT ON CONSTRAINT "__resource_href_pk_fzjlywz4ma" ON "qti"."resource_href" I
 
 COMMENT ON CONSTRAINT "__resource_href_key_node_href_vhlclfujvn" ON "qti"."resource_href" IS 'key ResourceHref(node, href)';
 
-COMMENT ON CONSTRAINT "__resource_href_key_node_package_path_type_z6zpbwrstq" ON "qti"."resource_href" IS 'key ResourceHref(node, package, path, type)';
+COMMENT ON CONSTRAINT "__resource_href_key_node_package_path_scope_3ilr66cizf" ON "qti"."resource_href" IS 'key ResourceHref(node, package, path, scope)';
 
 COMMENT ON CONSTRAINT "__resource_lom_general_pk_4gbfhozbtg" ON "qti"."resource_lom_general" IS 'primary key of ResourceLomGeneral';
 
@@ -2318,6 +2324,10 @@ COMMENT ON CONSTRAINT "__resource_lom_general_key_node_resource_gb2k35cvzu" ON "
 COMMENT ON CONSTRAINT "__resource_lom_language_set_pk_shj4yzlqx6" ON "qti"."resource_lom_language_set" IS 'primary key of ResourceLomLanguageSet';
 
 COMMENT ON CONSTRAINT "__resource_lom_language_set_key_general_lang_lbylbuxh4e" ON "qti"."resource_lom_language_set" IS 'key ResourceLomLanguageSet(general, lang, carriers)';
+
+COMMENT ON CONSTRAINT "__resource_typed_pk_bi7ndodb24" ON "qti"."resource_typed" IS 'primary key of ResourceTyped';
+
+COMMENT ON CONSTRAINT "__resource_typed_key_node_package_type_7wzpgzu2ei" ON "qti"."resource_typed" IS 'key ResourceTyped(node, package, type)';
 
 COMMENT ON CONSTRAINT "__rounding_pk_p5ba7td7t4" ON "qti"."rounding" IS 'primary key of Rounding';
 
@@ -2528,6 +2538,10 @@ COMMENT ON CONSTRAINT "__tolerance_token_pk_o33pihaiia" ON "qti"."tolerance_toke
 COMMENT ON CONSTRAINT "__tolerance_token_key_node_at_pieces_after_eplaoh4iut" ON "qti"."tolerance_token" IS 'key ToleranceToken(node, at, piecesAfter)';
 
 COMMENT ON CONSTRAINT "__tolerance_token_check_tolerance_tokens_concat_fold_rqagnlj4gp" ON "qti"."tolerance_token" IS 'check of ToleranceToken for law concat fold over fin(Tolerance, tokens) of ToleranceToken(node, piece, piecesWas, piecesAfter) into Tolerance(node, tokenText)';
+
+COMMENT ON CONSTRAINT "__typed_href_pk_wbhwlnumir" ON "qti"."typed_href" IS 'primary key of TypedHref';
+
+COMMENT ON CONSTRAINT "__typed_href_key_node_package_path_type_7rykw5lo7f" ON "qti"."typed_href" IS 'key TypedHref(node, package, path, type)';
 
 COMMENT ON CONSTRAINT "__usage_value_pk_i2ykr2qbnf" ON "qti"."usage_value" IS 'primary key of UsageValue';
 
@@ -3539,7 +3553,9 @@ COMMENT ON COLUMN "qti"."lom_record"."__owner_parent_jocfpemvgh" IS 'ownerParent
 
 COMMENT ON COLUMN "qti"."lom_record"."__owner_parent_v5upyxkd5f" IS 'ownerParent where {"kind":"compare","left":{"field":"owner","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:metadata.resource"}}';
 
-COMMENT ON COLUMN "qti"."lom_resource"."__pred_hrefs_ziv75e3m5j" IS 'pred(hrefs)';
+COMMENT ON COLUMN "qti"."lom_resource"."__named_quw3gqg6g5" IS 'named where {"kind":"compare","left":{"field":"named","kind":"field"},"op":"ne","right":{"kind":"literal","value":"none"}}';
+
+COMMENT ON COLUMN "qti"."lom_resource"."__node_uylg5h7nr5" IS 'node where {"kind":"compare","left":{"field":"named","kind":"field"},"op":"ne","right":{"kind":"literal","value":"none"}}';
 
 COMMENT ON COLUMN "qti"."lom_resource_type"."__tag_kind_lom_value_uyss5uoxlf" IS 'tag Node.kind = lom:value';
 
@@ -4187,25 +4203,11 @@ COMMENT ON COLUMN "qti"."referring_document"."__pred_templates_5bo5q45wjw" IS 'p
 
 COMMENT ON COLUMN "qti"."resource"."__tag_kind_cp_resource_d4vxcw6kik" IS 'tag Node.kind = cp:resource';
 
+COMMENT ON COLUMN "qti"."resource"."__node_ypb7qf2gry" IS 'node where {"args":[{"field":"typeLexical","kind":"field"},{"kind":"literal","value":"^(?:imsqti_test_xmlv3p0|imsqti_section_xmlv3p0|imsqti_item_xmlv3p0|imsqti_resprocessing_xmlv3p0|imsqti_outcomes_xmlv3p0|imsqti_stimulus_xmlv3p0|imsqti_fragment_xmlv3p0|imsqti_rptemplate_xmlv3p0|associatedcontent/learning-application-resource|webcontent|imsbasiclti_xmlv1p3|controlfile|resourcemetadata/xml|resourceextmetadata/xml|qtiusagedata/xml|pls|css2|css3|extension|imslti_xmlv1p1|imsltia_xmlv1p0)$"}],"fn":"matches","kind":"compute"}';
+
 COMMENT ON COLUMN "qti"."resource_file"."__pred_files_u6kfigcvxz" IS 'pred(files)';
 
-COMMENT ON COLUMN "qti"."resource_href"."__copy_hrefs_jws23niurk" IS 'the owner''s count of the family LomResource.hrefs';
-
-COMMENT ON COLUMN "qti"."resource_href"."__copy_names_aw7ejgwhxd" IS 'the owner''s count of the family NamedHref.names';
-
-COMMENT ON COLUMN "qti"."resource_href"."__index_hrefs_pdptkuqni7" IS 'the index of the family LomResource.hrefs';
-
-COMMENT ON COLUMN "qti"."resource_href"."__index_names_cgokmskmt6" IS 'the index of the family NamedHref.names';
-
-COMMENT ON COLUMN "qti"."resource_href"."__predecessor_hrefs_uzeev7dpi2" IS 'the predecessor of the index of the family LomResource.hrefs';
-
-COMMENT ON COLUMN "qti"."resource_href"."__predecessor_names_u74s46r4zm" IS 'the predecessor of the index of the family NamedHref.names';
-
-COMMENT ON COLUMN "qti"."resource_href"."__package_tydw4wv6km" IS 'package where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}';
-
-COMMENT ON COLUMN "qti"."resource_href"."__path_kcbijnm36h" IS 'path where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}';
-
-COMMENT ON COLUMN "qti"."resource_href"."__type_izv7wmxts7" IS 'type where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}';
+COMMENT ON COLUMN "qti"."resource_href"."__node_ypb7qf2gry" IS 'node where {"args":[{"field":"typeLexical","kind":"field"},{"kind":"literal","value":"^(?:imsqti_test_xmlv3p0|imsqti_section_xmlv3p0|imsqti_item_xmlv3p0|imsqti_resprocessing_xmlv3p0|imsqti_outcomes_xmlv3p0|imsqti_stimulus_xmlv3p0|imsqti_fragment_xmlv3p0|imsqti_rptemplate_xmlv3p0|associatedcontent/learning-application-resource|webcontent|imsbasiclti_xmlv1p3|controlfile|resourcemetadata/xml|resourceextmetadata/xml|qtiusagedata/xml|pls|css2|css3|extension|imslti_xmlv1p1|imsltia_xmlv1p0)$"}],"fn":"matches","kind":"compute"}';
 
 COMMENT ON COLUMN "qti"."resource_lom_general"."__tag_owner_cp_metadata_resource_6mrzzziliv" IS 'tag LomGeneral.owner = cp:metadata.resource';
 
@@ -4568,6 +4570,22 @@ COMMENT ON COLUMN "qti"."tolerance"."__pred_tokens_ip7mlgrtju" IS 'pred(tokens)'
 COMMENT ON COLUMN "qti"."tolerance_token"."__copy_tokens_6gpsc42bw5" IS 'the owner''s count of the family Tolerance.tokens';
 
 COMMENT ON COLUMN "qti"."tolerance_token"."__pred_at_xktcobhsti" IS 'pred(at)';
+
+COMMENT ON COLUMN "qti"."typed_href"."__copy_names_aw7ejgwhxd" IS 'the owner''s count of the family NamedHref.names';
+
+COMMENT ON COLUMN "qti"."typed_href"."__index_names_cgokmskmt6" IS 'the index of the family NamedHref.names';
+
+COMMENT ON COLUMN "qti"."typed_href"."__predecessor_names_u74s46r4zm" IS 'the predecessor of the index of the family NamedHref.names';
+
+COMMENT ON COLUMN "qti"."typed_href"."__node_fid66jnndo" IS 'node where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_item_xmlv3p0","imsqti_test_xmlv3p0"]}';
+
+COMMENT ON COLUMN "qti"."typed_href"."__package_tydw4wv6km" IS 'package where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}';
+
+COMMENT ON COLUMN "qti"."typed_href"."__path_kcbijnm36h" IS 'path where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}';
+
+COMMENT ON COLUMN "qti"."typed_href"."__type_izv7wmxts7" IS 'type where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}';
+
+COMMENT ON COLUMN "qti"."typed_href"."__type_bo7oxqydo6" IS 'type where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_item_xmlv3p0","imsqti_test_xmlv3p0"]}';
 
 COMMENT ON COLUMN "qti"."value"."__base_type_qsgdvyxok2" IS 'baseType where {"kind":"compare","left":{"field":"setBaseType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"none"}}';
 
@@ -4963,10 +4981,6 @@ COMMENT ON CONSTRAINT "__reference_segment_key_assembly_node_attribute_at_f3uj53
 
 COMMENT ON CONSTRAINT "__reference_segment_key_assembly_node_attribute_at_a3t6wclsbj" ON "qti"."reference_segment" IS 'key ReferenceSegment(assembly, node, attribute, at, after, the accumulator after plane 0 of the fold __assembled_reference_segments_count_fold_zly3pfbpup over the family AssembledReference.segments)';
 
-COMMENT ON CONSTRAINT "__resource_href_key_node_index_hrefs_lw6fbfrn4y" ON "qti"."resource_href" IS 'key ResourceHref(node, the index of the family LomResource.hrefs)';
-
-COMMENT ON CONSTRAINT "__resource_href_key_package_path_type_index_names_vyahvfomzk" ON "qti"."resource_href" IS 'key ResourceHref(package, path, type, the index of the family NamedHref.names)';
-
 COMMENT ON CONSTRAINT "__section_context_name_key_document_index_contexts_47hrcvwchz" ON "qti"."section_context_name" IS 'key SectionContextName(document, the index of the family ReferringDocument.contexts)';
 
 COMMENT ON CONSTRAINT "__section_context_ref_key_instance_index_contexts_qm2nwfczaf" ON "qti"."section_context_ref" IS 'key SectionContextRef(instance, the index of the family SectionScope.contexts)';
@@ -5006,6 +5020,10 @@ COMMENT ON CONSTRAINT "__test_document_key_package_path_z7p5cuus5s" ON "qti"."te
 COMMENT ON CONSTRAINT "__test_flag_key_node_joiqh6ud3j" ON "qti"."test_flag" IS 'key TestFlag(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}} and {"kind":"compare","left":{"field":"value","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
 
 COMMENT ON CONSTRAINT "__test_reference_key_document_index_references_t3lovyenv6" ON "qti"."test_reference" IS 'key TestReference(document, the index of the family ReferenceDocument.references)';
+
+COMMENT ON CONSTRAINT "__typed_href_key_package_path_type_index_names_znfwdutyxb" ON "qti"."typed_href" IS 'key TypedHref(package, path, type, the index of the family NamedHref.names)';
+
+COMMENT ON CONSTRAINT "__typed_href_key_node_type_j3zahocmoz" ON "qti"."typed_href" IS 'key TypedHref(node where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_item_xmlv3p0","imsqti_test_xmlv3p0"]}, type where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_item_xmlv3p0","imsqti_test_xmlv3p0"]})';
 
 COMMENT ON CONSTRAINT "__variable_lookup_key_document_name_wedth6kxop" ON "qti"."variable_lookup" IS 'key VariableLookup(document where {"kind":"compare","left":{"field":"declared","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}, name where {"kind":"compare","left":{"field":"declared","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}})';
 
@@ -5137,10 +5155,6 @@ COMMENT ON CONSTRAINT "__reference_segment_check_reference_segment_ordered_ehoj7
 
 COMMENT ON CONSTRAINT "__reference_segment_check_assembled_reference_pin7v3jme4" ON "qti"."reference_segment" IS 'check of ReferenceSegment for law count fold over fin(AssembledReference, segments) of ReferenceSegment(assembly, node, attribute) where {"kind":"compare","left":{"field":"digit","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}} into AssembledReference(assembly, node, attribute, digits)';
 
-COMMENT ON CONSTRAINT "__resource_href_check_resource_href_counted_lom_x6wo3yr7xb" ON "qti"."resource_href" IS 'check of ResourceHref for law counted ResourceHref(node) in fin(LomResource, hrefs)';
-
-COMMENT ON CONSTRAINT "__resource_href_check_resource_href_counted_named_nmgo6xxezd" ON "qti"."resource_href" IS 'check of ResourceHref for law counted ResourceHref(package, path, type) in fin(NamedHref, names)';
-
 COMMENT ON CONSTRAINT "__section_context_name_check_section_context_name_pxhks6qaz6" ON "qti"."section_context_name" IS 'check of SectionContextName for law counted SectionContextName(document) in fin(ReferringDocument, contexts)';
 
 COMMENT ON CONSTRAINT "__section_context_ref_check_section_context_ref_xp2paot3xr" ON "qti"."section_context_ref" IS 'check of SectionContextRef for law counted SectionContextRef(instance) in fin(SectionScope, contexts)';
@@ -5176,6 +5190,8 @@ COMMENT ON CONSTRAINT "__test_reference_check_test_reference_counted_hvco6rg24m"
 COMMENT ON CONSTRAINT "__text_idref_check_text_idref_ordered_identity_text_i523qq7kni" ON "qti"."text_idref" IS 'check of TextIdref for law ordered TextIdref(node, at) in fin(IdentityText, idrefs)';
 
 COMMENT ON CONSTRAINT "__tolerance_token_check_tolerance_token_ordered_hvy6ubp2rp" ON "qti"."tolerance_token" IS 'check of ToleranceToken for law ordered ToleranceToken(node, at) in fin(Tolerance, tokens)';
+
+COMMENT ON CONSTRAINT "__typed_href_check_typed_href_counted_named_href_q5xo42x4qb" ON "qti"."typed_href" IS 'check of TypedHref for law counted TypedHref(package, path, type) in fin(NamedHref, names)';
 
 COMMENT ON CONSTRAINT "__variable_ref_check_variable_ref_counted_document_zk5hqppt4h" ON "qti"."variable_ref" IS 'check of VariableRef for law counted VariableRef(document) in fin(Document, variables)';
 
@@ -5839,7 +5855,7 @@ COMMENT ON CONSTRAINT "__lom_object_fk_package_path_document_lrripwtddq" ON "qti
 
 COMMENT ON CONSTRAINT "__lom_object_fk_record_type_resource_6id3reqe3q" ON "qti"."lom_object" IS 'foreign key LomObject(record, type, resource) to LomRecord(node, named, ownerParent)';
 
-COMMENT ON CONSTRAINT "__lom_object_fk_resource_package_path_type_xc4s2qcrdp" ON "qti"."lom_object" IS 'foreign key LomObject(resource, package, path, type) to ResourceHref(node, package, path, type)';
+COMMENT ON CONSTRAINT "__lom_object_fk_resource_package_path_type_lfc6of4up3" ON "qti"."lom_object" IS 'foreign key LomObject(resource, package, path, type) to TypedHref(node, package, path, type)';
 
 COMMENT ON CONSTRAINT "__lom_object_identifier_fk_document_identifier_gnfkp6nnsa" ON "qti"."lom_object_identifier" IS 'foreign key LomObjectIdentifier(document, identifier) to AssessmentObject(document, identifier)';
 
@@ -5865,9 +5881,9 @@ COMMENT ON CONSTRAINT "__lom_record_fk_node_named_owner_parent_rntuh6l5ph" ON "q
 
 COMMENT ON CONSTRAINT "__lom_record_fk_owner_parent_named_jykeskdhdb" ON "qti"."lom_record" IS 'foreign key LomRecord(ownerParent where {"kind":"compare","left":{"field":"owner","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:metadata.resource"}}, named where {"kind":"compare","left":{"field":"owner","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cp:metadata.resource"}}) to LomResource(node, named)';
 
-COMMENT ON CONSTRAINT "__lom_resource_fk_node_type_5v7ztt24yn" ON "qti"."lom_resource" IS 'foreign key LomResource(node, type) to Resource(node, type)';
+COMMENT ON CONSTRAINT "__lom_resource_fk_node_slr76tmccu" ON "qti"."lom_resource" IS 'foreign key LomResource(node) to Resource(node)';
 
-COMMENT ON CONSTRAINT "__lom_resource_fk_node_pred_hrefs_ow36t6oo3o" ON "qti"."lom_resource" IS 'foreign key LomResource(node, pred(hrefs)) to ResourceHref(node, the index of the family LomResource.hrefs)';
+COMMENT ON CONSTRAINT "__lom_resource_fk_node_named_wrhz3dsh3m" ON "qti"."lom_resource" IS 'foreign key LomResource(node where {"kind":"compare","left":{"field":"named","kind":"field"},"op":"ne","right":{"kind":"literal","value":"none"}}, named where {"kind":"compare","left":{"field":"named","kind":"field"},"op":"ne","right":{"kind":"literal","value":"none"}}) to TypedHref(node where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_item_xmlv3p0","imsqti_test_xmlv3p0"]}, type where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_item_xmlv3p0","imsqti_test_xmlv3p0"]})';
 
 COMMENT ON CONSTRAINT "__lom_resource_type_fk_term_tag_kind_lom_value_tag_bttya6jjlz" ON "qti"."lom_resource_type" IS 'foreign key LomResourceType(term, tag Node.kind = lom:value, tag Node.parentKind = lom:learningResourceType) to Node(id, kind, parentKind)';
 
@@ -5997,7 +6013,7 @@ COMMENT ON CONSTRAINT "__named_fk_node_part_replaced_mixes_loose_chain_j3pdworri
 
 COMMENT ON CONSTRAINT "__named_fk_parent_part_replaced_qygcgkvxs5" ON "qti"."named" IS 'foreign key Named(parent where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-section"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, part where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-section"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, replaced where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"ne","right":{"kind":"literal","value":"qti-assessment-section"}} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}) to Section(node, part, replacing)';
 
-COMMENT ON CONSTRAINT "__named_href_fk_package_path_type_pred_names_kxfk57zacu" ON "qti"."named_href" IS 'foreign key NamedHref(package, path, type, pred(names)) to ResourceHref(package, path, type, the index of the family NamedHref.names)';
+COMMENT ON CONSTRAINT "__named_href_fk_package_path_type_pred_names_6aduw7bdsw" ON "qti"."named_href" IS 'foreign key NamedHref(package, path, type, pred(names)) to TypedHref(package, path, type, the index of the family NamedHref.names)';
 
 COMMENT ON CONSTRAINT "__namespace_fk_node_copy_namespaces_ck5n2d4dgf" ON "qti"."namespace" IS 'foreign key Namespace(node, the owner''s count of the family Node.namespaces) to Node(id, namespaces)';
 
@@ -6309,37 +6325,31 @@ COMMENT ON CONSTRAINT "__referring_document_fk_document_pred_templates_2admsu5e4
 
 COMMENT ON CONSTRAINT "__resource_fk_document_package_xih2xepten" ON "qti"."resource" IS 'foreign key Resource(document, package) to Document(node, package)';
 
-COMMENT ON CONSTRAINT "__resource_fk_node_document_kind_start_nearest_n2oxtmjwx6" ON "qti"."resource" IS 'foreign key Resource(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
+COMMENT ON CONSTRAINT "__resource_fk_node_in7c3km6zs" ON "qti"."resource" IS 'foreign key Resource(node) to LomResource(node)';
 
-COMMENT ON CONSTRAINT "__resource_fk_node_type_l6xq6xjrum" ON "qti"."resource" IS 'foreign key Resource(node, type) to LomResource(node, type)';
+COMMENT ON CONSTRAINT "__resource_fk_node_document_kind_start_nearest_n2oxtmjwx6" ON "qti"."resource" IS 'foreign key Resource(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__resource_fk_node_tag_kind_cp_resource_4wnmczlmfc" ON "qti"."resource" IS 'foreign key Resource(node, tag Node.kind = cp:resource) to Node(id, kind)';
 
 COMMENT ON CONSTRAINT "__resource_fk_package_manifest_identifier_7kiwwxd23h" ON "qti"."resource" IS 'foreign key Resource(package, manifestIdentifier) to ManifestId(package, identifier)';
 
+COMMENT ON CONSTRAINT "__resource_fk_node_kfvyisxjgu" ON "qti"."resource" IS 'foreign key Resource(node where {"args":[{"field":"typeLexical","kind":"field"},{"kind":"literal","value":"^(?:imsqti_test_xmlv3p0|imsqti_section_xmlv3p0|imsqti_item_xmlv3p0|imsqti_resprocessing_xmlv3p0|imsqti_outcomes_xmlv3p0|imsqti_stimulus_xmlv3p0|imsqti_fragment_xmlv3p0|imsqti_rptemplate_xmlv3p0|associatedcontent/learning-application-resource|webcontent|imsbasiclti_xmlv1p3|controlfile|resourcemetadata/xml|resourceextmetadata/xml|qtiusagedata/xml|pls|css2|css3|extension|imslti_xmlv1p1|imsltia_xmlv1p0)$"}],"fn":"matches","kind":"compute"}) to ResourceTyped(node)';
+
 COMMENT ON CONSTRAINT "__resource_file_fk_resource_scope_path_pred_files_7fxw3ivqvl" ON "qti"."resource_file" IS 'foreign key ResourceFile(resource, scope, path, pred(files)) to File(resource, scope, path, the index of the family ResourceFile.files)';
 
-COMMENT ON CONSTRAINT "__resource_href_fk_node_package_type_pprgztmxtm" ON "qti"."resource_href" IS 'foreign key ResourceHref(node, package, type) to Resource(node, package, type)';
+COMMENT ON CONSTRAINT "__resource_href_fk_node_package_type_lexical_7oxzbn5yvm" ON "qti"."resource_href" IS 'foreign key ResourceHref(node, package, typeLexical) to Resource(node, package, typeLexical)';
 
 COMMENT ON CONSTRAINT "__resource_href_fk_node_scope_path_txhy3mohip" ON "qti"."resource_href" IS 'foreign key ResourceHref(node, scope, path) to ResourceFile(resource, scope, path)';
 
-COMMENT ON CONSTRAINT "__resource_href_fk_node_copy_hrefs_rfarony5dz" ON "qti"."resource_href" IS 'foreign key ResourceHref(node, the owner''s count of the family LomResource.hrefs) to LomResource(node, hrefs)';
-
-COMMENT ON CONSTRAINT "__resource_href_fk_node_predecessor_hrefs_gpf7k4yaig" ON "qti"."resource_href" IS 'foreign key ResourceHref(node, the predecessor of the index of the family LomResource.hrefs) to ResourceHref(node, the index of the family LomResource.hrefs)';
-
-COMMENT ON CONSTRAINT "__resource_href_fk_package_path_type_copy_names_3izrdafd22" ON "qti"."resource_href" IS 'foreign key ResourceHref(package, path, type, the owner''s count of the family NamedHref.names) to NamedHref(package, path, type, names)';
-
-COMMENT ON CONSTRAINT "__resource_href_fk_package_path_type_predecessor_l36hg7g26h" ON "qti"."resource_href" IS 'foreign key ResourceHref(package, path, type, the predecessor of the index of the family NamedHref.names) to ResourceHref(package, path, type, the index of the family NamedHref.names)';
-
-COMMENT ON CONSTRAINT "__resource_href_fk_package_path_ccj55yfbkf" ON "qti"."resource_href" IS 'foreign key ResourceHref(package where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}, path where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}) to Entry(package, path)';
-
-COMMENT ON CONSTRAINT "__resource_href_fk_package_path_type_iimfsrvv46" ON "qti"."resource_href" IS 'foreign key ResourceHref(package where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}, path where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}, type where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}) to Document(package, path, resourceType)';
+COMMENT ON CONSTRAINT "__resource_href_fk_node_pj5bijcsjk" ON "qti"."resource_href" IS 'foreign key ResourceHref(node where {"args":[{"field":"typeLexical","kind":"field"},{"kind":"literal","value":"^(?:imsqti_test_xmlv3p0|imsqti_section_xmlv3p0|imsqti_item_xmlv3p0|imsqti_resprocessing_xmlv3p0|imsqti_outcomes_xmlv3p0|imsqti_stimulus_xmlv3p0|imsqti_fragment_xmlv3p0|imsqti_rptemplate_xmlv3p0|associatedcontent/learning-application-resource|webcontent|imsbasiclti_xmlv1p3|controlfile|resourcemetadata/xml|resourceextmetadata/xml|qtiusagedata/xml|pls|css2|css3|extension|imslti_xmlv1p1|imsltia_xmlv1p0)$"}],"fn":"matches","kind":"compute"}) to TypedHref(node)';
 
 COMMENT ON CONSTRAINT "__resource_lom_general_fk_node_wqkurznrga" ON "qti"."resource_lom_general" IS 'foreign key ResourceLomGeneral(node) to GeneralNamed(general)';
 
 COMMENT ON CONSTRAINT "__resource_lom_general_fk_node_resource_tag_owner_cp_gwjaatwidq" ON "qti"."resource_lom_general" IS 'foreign key ResourceLomGeneral(node, resource, tag LomGeneral.owner = cp:metadata.resource) to LomGeneral(node, ownerParent, owner)';
 
 COMMENT ON CONSTRAINT "__resource_lom_language_set_fk_general_lang_pred_j53gq56roz" ON "qti"."resource_lom_language_set" IS 'foreign key ResourceLomLanguageSet(general, lang, pred(carriers)) to LomLanguage(general, tag, the index of the family ResourceLomLanguageSet.carriers)';
+
+COMMENT ON CONSTRAINT "__resource_typed_fk_node_package_type_lexical_cacgt7lvlo" ON "qti"."resource_typed" IS 'foreign key ResourceTyped(node, package, typeLexical) to Resource(node, package, typeLexical)';
 
 COMMENT ON CONSTRAINT "__rounding_fk_node_document_kind_start_nearest_74lyprtkvx" ON "qti"."rounding" IS 'foreign key Rounding(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
@@ -6612,6 +6622,20 @@ COMMENT ON CONSTRAINT "__tolerance_fk_node_pred_tokens_token_text_3gftykcgdl" ON
 COMMENT ON CONSTRAINT "__tolerance_token_fk_node_copy_tokens_ipr7tyoted" ON "qti"."tolerance_token" IS 'foreign key ToleranceToken(node, the owner''s count of the family Tolerance.tokens) to Tolerance(node, tokens)';
 
 COMMENT ON CONSTRAINT "__tolerance_token_fk_node_pred_at_pieces_was_qh7utka7gs" ON "qti"."tolerance_token" IS 'foreign key ToleranceToken(node, pred(at), piecesWas) to ToleranceToken(node, at, piecesAfter)';
+
+COMMENT ON CONSTRAINT "__typed_href_fk_node_package_path_scope_lnwkngi5dm" ON "qti"."typed_href" IS 'foreign key TypedHref(node, package, path, scope) to ResourceHref(node, package, path, scope)';
+
+COMMENT ON CONSTRAINT "__typed_href_fk_node_package_type_gldlri3znj" ON "qti"."typed_href" IS 'foreign key TypedHref(node, package, type) to ResourceTyped(node, package, type)';
+
+COMMENT ON CONSTRAINT "__typed_href_fk_package_path_type_copy_names_2hojezczbd" ON "qti"."typed_href" IS 'foreign key TypedHref(package, path, type, the owner''s count of the family NamedHref.names) to NamedHref(package, path, type, names)';
+
+COMMENT ON CONSTRAINT "__typed_href_fk_package_path_type_predecessor_names_hnwdmabgls" ON "qti"."typed_href" IS 'foreign key TypedHref(package, path, type, the predecessor of the index of the family NamedHref.names) to TypedHref(package, path, type, the index of the family NamedHref.names)';
+
+COMMENT ON CONSTRAINT "__typed_href_fk_node_type_vmetaz6xx6" ON "qti"."typed_href" IS 'foreign key TypedHref(node where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_item_xmlv3p0","imsqti_test_xmlv3p0"]}, type where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_item_xmlv3p0","imsqti_test_xmlv3p0"]}) to LomResource(node, named)';
+
+COMMENT ON CONSTRAINT "__typed_href_fk_package_path_d22b6dxbmf" ON "qti"."typed_href" IS 'foreign key TypedHref(package where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}, path where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}) to Entry(package, path)';
+
+COMMENT ON CONSTRAINT "__typed_href_fk_package_path_type_wg6gqbljxz" ON "qti"."typed_href" IS 'foreign key TypedHref(package where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}, path where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}, type where {"arg":{"field":"type","kind":"field"},"kind":"in","values":["imsqti_fragment_xmlv3p0","imsqti_item_xmlv3p0","imsqti_outcomes_xmlv3p0","imsqti_resprocessing_xmlv3p0","imsqti_rptemplate_xmlv3p0","imsqti_section_xmlv3p0","imsqti_stimulus_xmlv3p0","imsqti_test_xmlv3p0","qtiusagedata/xml","resourcemetadata/xml"]}) to Document(package, path, resourceType)';
 
 COMMENT ON CONSTRAINT "__usage_value_fk_node_7b5n43piu2" ON "qti"."usage_value" IS 'foreign key UsageValue(node) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["ud:value"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"baseType"}})';
 
@@ -6911,6 +6935,8 @@ COMMENT ON INDEX "qti"."__lom_record_ix_owner_parent_v_5_upyxkd_5_f_named_2_7a6t
 
 COMMENT ON INDEX "qti"."__lom_record_ix_parent_document_owner_owner_start_3e5gpkmcp5" IS 'btree index LomRecord(parent, document, owner, ownerStart, nearest, version, ownerParent)';
 
+COMMENT ON INDEX "qti"."__lom_resource_ix_node_uylg_5_h_7_nr_5_named_quw_3_jelkqwgkj6" IS 'btree index LomResource(__node_uylg5h7nr5, __named_quw3gqg6g5)';
+
 COMMENT ON INDEX "qti"."__lom_resource_type_ix_node_dzmkpyu_5_uh_xlkqyn3rx3" IS 'btree index LomResourceType(__node_dzmkpyu5uh)';
 
 COMMENT ON INDEX "qti"."__lom_string_ix_node_najnjopqcl_language_cbidl_4_e7ous4i46d" IS 'btree index LomString(__node_najnjopqcl, __language_cbidl4nwet)';
@@ -7111,11 +7137,13 @@ COMMENT ON INDEX "qti"."__reference_path_ix_document_package_ft7vjozed2" IS 'btr
 
 COMMENT ON INDEX "qti"."__reference_path_ix_package_path_3negrpmqjv" IS 'btree index ReferencePath(package, path)';
 
+COMMENT ON INDEX "qti"."__resource_ix_node_ypb_7_qf_2_gry_cyo3jsl7dx" IS 'btree index Resource(__node_ypb7qf2gry)';
+
 COMMENT ON INDEX "qti"."__resource_ix_document_package_4v6ha45foo" IS 'btree index Resource(document, package)';
 
 COMMENT ON INDEX "qti"."__resource_ix_package_manifest_identifier_aeo4ekfra7" IS 'btree index Resource(package, manifestIdentifier)';
 
-COMMENT ON INDEX "qti"."__resource_href_ix_package_tydw_4_wv_6_km_path_dkr7f5il4v" IS 'btree index ResourceHref(__package_tydw4wv6km, __path_kcbijnm36h, __type_izv7wmxts7)';
+COMMENT ON INDEX "qti"."__resource_href_ix_node_ypb_7_qf_2_gry_b22xwn3nfo" IS 'btree index ResourceHref(__node_ypb7qf2gry)';
 
 COMMENT ON INDEX "qti"."__rounding_ix_node_n_3_wznir_2_nw_b735ps3dez" IS 'btree index Rounding(__node_n3wznir2nw)';
 
@@ -7218,6 +7246,8 @@ COMMENT ON INDEX "qti"."__test_token_ix_node_fhyljg_3_ztm_rh65lv2f3s" IS 'btree 
 COMMENT ON INDEX "qti"."__test_token_ix_node_l_7_omvxv_2_od_tskzgdxw2x" IS 'btree index TestToken(__node_l7omvxv2od)';
 
 COMMENT ON INDEX "qti"."__text_idref_ix_document_token_r43v6t4zvp" IS 'btree index TextIdref(document, token)';
+
+COMMENT ON INDEX "qti"."__typed_href_ix_package_tydw_4_wv_6_km_path_kcbijnm_gest4ish2j" IS 'btree index TypedHref(__package_tydw4wv6km, __path_kcbijnm36h, __type_izv7wmxts7)';
 
 COMMENT ON INDEX "qti"."__value_ix_node_5_ghh_4_hcv_2_e_base_type_qsgdvyxok_qp72tpyizx" IS 'btree index Value(__node_5ghh4hcv2e, __base_type_qsgdvyxok2)';
 

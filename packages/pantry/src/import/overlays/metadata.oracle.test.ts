@@ -889,9 +889,17 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
               }
 
               for (const resource of manifest.LomResource.values()) {
-                const lexical = ResourceTypeLexical.rows.find(({ code }) => code === resource.type);
-                assert.isDefined(lexical, `${resource.type} has its lexical form`);
-                assert.include(Object.values(resourceTypes), lexical?.lexical);
+                const lexical = ResourceTypeLexical.rows.find(
+                  ({ code }) => code === resource.named,
+                );
+                assert.isTrue(
+                  resource.named === "none" ||
+                    (lexical !== undefined &&
+                      [resourceTypes.item, resourceTypes.test].some(
+                        (type) => type === lexical.lexical,
+                      )),
+                  `${resource.named} is none or an assessment object's type`,
+                );
               }
 
               for (const general of manifest.ResourceLomGeneral.values()) {

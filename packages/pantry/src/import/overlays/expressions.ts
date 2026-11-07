@@ -1347,7 +1347,7 @@ export interface AssembledExpressionInput {
 
 /**
  * A resource of the package as an item ref's target reads it: the path its href names and its
- * type (`ResourceHref`'s, the package builder's).
+ * type (`TypedHref`'s, the package builder's).
  */
 export interface NamedResource {
   readonly path: string;
@@ -2191,8 +2191,8 @@ const placedRowsOf = (
  * @param documents - Every document of one package, with its rows ({@link rowsOf} and the test
  *   builder's), its tree and its ids.
  * @param assembled - The package's assemblies (`assembledRowsOf` of the test builder).
- * @param resources - The package's resources, each href's path and type (the package builder's
- *   `ResourceHref` rows).
+ * @param resources - The package's typed resources, each href's path and type (the package
+ *   builder's `TypedHref` rows).
  * @returns The rows.
  */
 export const assembledExpressionRowsOf = (

@@ -500,10 +500,10 @@ CREATE TABLE "qti"."document" (
   CONSTRAINT "__document_key_package_path_node_qotuoyok5g" UNIQUE NULLS DISTINCT ("package", "path", "node"),
   CONSTRAINT "__document_key_node_package_hlrywh6yam" UNIQUE NULLS DISTINCT ("node", "package"),
   CONSTRAINT "__document_key_package_path_root_kind_nlu75ekokq" UNIQUE NULLS DISTINCT ("package", "path", "root_kind"),
-  CONSTRAINT "__document_key_package_path_resource_type_ksksjrikiy" UNIQUE NULLS DISTINCT ("package", "path", "resource_type"),
   CONSTRAINT "__document_key_package_path_node_root_kind_context_tklyn2w6lg" UNIQUE NULLS DISTINCT ("package", "path", "node", "root_kind", "context_nearest", "context_nearest_kind"),
   CONSTRAINT "__document_key_node_package_path_root_kind_l2tot4p4pr" UNIQUE NULLS DISTINCT ("node", "package", "path", "root_kind"),
   CONSTRAINT "__document_key_node_assembled_vnnzfztutg" UNIQUE NULLS DISTINCT ("node", "assembled"),
+  CONSTRAINT "__document_key_package_path_resource_type_ksksjrikiy" UNIQUE NULLS DISTINCT ("package", "path", "resource_type"),
   CONSTRAINT "__document_key_node_variables_root_kind_nrz2vgcno4" UNIQUE NULLS DISTINCT ("node", "variables", "root_kind"),
   CONSTRAINT "__document_key_node_bindings_qs7z7zj6bk" UNIQUE NULLS DISTINCT ("node", "bindings"),
   CONSTRAINT "__document_key_node_choices_4ytuj6rbea" UNIQUE NULLS DISTINCT ("node", "choices"),
@@ -1111,15 +1111,10 @@ CREATE TABLE "qti"."lom_record" (
 );
 
 CREATE TABLE "qti"."lom_resource" (
-  "hrefs" "qti"."__domain_gfw43vigph" NOT NULL,
   "named" "qti"."resource_type" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "type" "qti"."resource_type" NOT NULL,
   CONSTRAINT "__lom_resource_pk_jcjprudbpj" PRIMARY KEY ("node"),
-  CONSTRAINT "e_1_derived" CHECK (("type" IN (3::smallint, 1::smallint) AND "hrefs" = 1::bigint AND "named" = "type" OR (NOT "type" IN (3::smallint, 1::smallint) OR "hrefs" = 0::bigint) AND "named" = 0::smallint) IS TRUE),
-  CONSTRAINT "__lom_resource_key_node_named_ushbkvym6i" UNIQUE NULLS DISTINCT ("node", "named"),
-  CONSTRAINT "__lom_resource_key_node_type_zypqprml7n" UNIQUE NULLS DISTINCT ("node", "type"),
-  CONSTRAINT "__lom_resource_key_node_hrefs_iglpcnkxkx" UNIQUE NULLS DISTINCT ("node", "hrefs")
+  CONSTRAINT "__lom_resource_key_node_named_ushbkvym6i" UNIQUE NULLS DISTINCT ("node", "named")
 );
 
 CREATE TABLE "qti"."lom_resource_type" (
@@ -1940,19 +1935,16 @@ CREATE TABLE "qti"."resource" (
   "package" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "type" "qti"."resource_type" NOT NULL,
   "type_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__resource_pk_yrfq7dxmhs" PRIMARY KEY ("node"),
   CONSTRAINT "__resource_key_package_identifier_fsvcnui6cz" UNIQUE NULLS DISTINCT ("package", "identifier"),
-  CONSTRAINT "e_1_derived" CHECK ((("qti"."__constant_uynctp5wdx"())[NULLIF("pg_catalog"."substring"("qti"."__constant_7v2rmkfszl"(), "type" * 5 + 1, 5)::integer, 0) - 1 + 1] = "type_lexical" OR "type" = 0::smallint) IS TRUE),
   CONSTRAINT "manifest_id_space" CHECK (("identifier" <> "manifest_identifier") IS TRUE),
   CONSTRAINT "__resource_key_node_identifier_acezfrvdxy" UNIQUE NULLS DISTINCT ("node", "identifier"),
   CONSTRAINT "__resource_key_node_type_lexical_kgb4w4movp" UNIQUE NULLS DISTINCT ("node", "type_lexical"),
   CONSTRAINT "__resource_key_node_package_identifier_bpstbr3wxu" UNIQUE NULLS DISTINCT ("node", "package", "identifier"),
   CONSTRAINT "__resource_key_node_package_2zl5k2vy4m" UNIQUE NULLS DISTINCT ("node", "package"),
-  CONSTRAINT "__resource_key_node_type_fuvf47abkp" UNIQUE NULLS DISTINCT ("node", "type"),
-  CONSTRAINT "__resource_key_node_package_type_jmxe6ltg23" UNIQUE NULLS DISTINCT ("node", "package", "type")
+  CONSTRAINT "__resource_key_node_package_type_lexical_4g27mttnmw" UNIQUE NULLS DISTINCT ("node", "package", "type_lexical")
 );
 
 CREATE TABLE "qti"."resource_file" (
@@ -1971,13 +1963,12 @@ CREATE TABLE "qti"."resource_href" (
   "package" "pg_catalog"."uuid" NOT NULL,
   "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "scope" "qti"."href_scope" NOT NULL,
-  "type" "qti"."resource_type" NOT NULL,
+  "type_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__resource_href_pk_fzjlywz4ma" PRIMARY KEY ("node"),
-  CONSTRAINT "document_entry" CHECK ((NOT "type" IN (7::smallint, 3::smallint, 5::smallint, 4::smallint, 8::smallint, 2::smallint, 6::smallint, 1::smallint, 15::smallint, 13::smallint) OR "scope" = 0::smallint) IS TRUE),
   CONSTRAINT "e_1_derived" CHECK (("path" ~ '\A(?:(?:[\u0001-\-0-\U0010FFFF][\u0001-\.0-\U0010FFFF]*|\.[\u0001-\-0-\U0010FFFF][\u0001-\.0-\U0010FFFF]*|\.\.[\u0001-\.0-\U0010FFFF]+)(?:\/(?:[\u0001-\-0-\U0010FFFF][\u0001-\.0-\U0010FFFF]*|\.[\u0001-\-0-\U0010FFFF][\u0001-\.0-\U0010FFFF]*|\.\.[\u0001-\.0-\U0010FFFF]+)?)*)?\Z'::"pg_catalog"."text" OR "scope" <> 0::smallint) IS TRUE),
   CONSTRAINT "href_form" CHECK (("scope" <> 3::smallint) IS TRUE),
   CONSTRAINT "__resource_href_key_node_href_vhlclfujvn" UNIQUE NULLS DISTINCT ("node", "href"),
-  CONSTRAINT "__resource_href_key_node_package_path_type_z6zpbwrstq" UNIQUE NULLS DISTINCT ("node", "package", "path", "type")
+  CONSTRAINT "__resource_href_key_node_package_path_scope_3ilr66cizf" UNIQUE NULLS DISTINCT ("node", "package", "path", "scope")
 );
 
 CREATE TABLE "qti"."resource_lom_general" (
@@ -1994,6 +1985,16 @@ CREATE TABLE "qti"."resource_lom_language_set" (
   CONSTRAINT "__resource_lom_language_set_pk_shj4yzlqx6" PRIMARY KEY ("general", "lang"),
   CONSTRAINT "e_1_derived" CHECK (("carriers" > 0::bigint) IS TRUE),
   CONSTRAINT "__resource_lom_language_set_key_general_lang_lbylbuxh4e" UNIQUE NULLS DISTINCT ("general", "lang", "carriers")
+);
+
+CREATE TABLE "qti"."resource_typed" (
+  "node" "pg_catalog"."uuid" NOT NULL,
+  "package" "pg_catalog"."uuid" NOT NULL,
+  "type" "qti"."resource_type" NOT NULL,
+  "type_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
+  CONSTRAINT "__resource_typed_pk_bi7ndodb24" PRIMARY KEY ("node"),
+  CONSTRAINT "e_1_derived" CHECK ((("qti"."__constant_uynctp5wdx"())[NULLIF("pg_catalog"."substring"("qti"."__constant_7v2rmkfszl"(), "type" * 5 + 1, 5)::integer, 0) - 1 + 1] = "type_lexical") IS TRUE),
+  CONSTRAINT "__resource_typed_key_node_package_type_7wzpgzu2ei" UNIQUE NULLS DISTINCT ("node", "package", "type")
 );
 
 CREATE TABLE "qti"."rounding" (
@@ -2537,6 +2538,17 @@ CREATE TABLE "qti"."tolerance_token" (
   CONSTRAINT "__tolerance_token_check_tolerance_tokens_concat_fold_rqagnlj4gp" CHECK ((("at" > 0::bigint OR "pieces_was" = ''::"pg_catalog"."text") AND ("pg_catalog"."char_length"("pieces_after") = "pg_catalog"."char_length"("pieces_was")::bigint + "pg_catalog"."char_length"("piece")::bigint AND "pg_catalog"."starts_with"("pieces_after", "pieces_was") AND "pg_catalog"."right"("pieces_after", "pg_catalog"."char_length"("piece")) = "piece")) IS TRUE),
   CONSTRAINT "e_1_derived" CHECK (("token" ~ '\A[\u0001-\u0008\u000B\u000C\u000E-\u001F\!-\U0010FFFF]+\Z'::"pg_catalog"."text" AND ("at" = 0::bigint OR "before" <> ''::"pg_catalog"."text") AND ("pg_catalog"."char_length"("piece") = "pg_catalog"."char_length"("before" || "token")::bigint + "pg_catalog"."char_length"("after")::bigint AND "pg_catalog"."starts_with"("piece", "before" || "token") AND "pg_catalog"."right"("piece", "pg_catalog"."char_length"("after")) = "after")) IS TRUE),
   CONSTRAINT "equal_tolerance" CHECK ((NOT "token" ~ '\A(?:[\+\-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][\+\-]?[0-9]+)?|\-?INF|NaN)\Z'::"pg_catalog"."text" OR "token" ~ '\A(?:\+?(?:[0-9]*\.[0-9]*[1-9][0-9]*|[0-9]*[1-9][0-9]*(?:\.[0-9]*)?)(?:[Ee][\+\-]?[0-9]+)?|INF)\Z'::"pg_catalog"."text") IS TRUE)
+);
+
+CREATE TABLE "qti"."typed_href" (
+  "node" "pg_catalog"."uuid" NOT NULL,
+  "package" "pg_catalog"."uuid" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "scope" "qti"."href_scope" NOT NULL,
+  "type" "qti"."resource_type" NOT NULL,
+  CONSTRAINT "__typed_href_pk_wbhwlnumir" PRIMARY KEY ("node"),
+  CONSTRAINT "document_entry" CHECK ((NOT "type" IN (7::smallint, 3::smallint, 5::smallint, 4::smallint, 8::smallint, 2::smallint, 6::smallint, 1::smallint, 15::smallint, 13::smallint) OR "scope" = 0::smallint) IS TRUE),
+  CONSTRAINT "__typed_href_key_node_package_path_type_7rykw5lo7f" UNIQUE NULLS DISTINCT ("node", "package", "path", "type")
 );
 
 CREATE TABLE "qti"."usage_value" (
@@ -3646,7 +3658,9 @@ ALTER TABLE "qti"."lom_record" ADD COLUMN "__owner_parent_jocfpemvgh" "pg_catalo
 
 ALTER TABLE "qti"."lom_record" ADD COLUMN "__owner_parent_v5upyxkd5f" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "owner" = 311::smallint THEN "owner_parent" END) STORED;
 
-ALTER TABLE "qti"."lom_resource" ADD COLUMN "__pred_hrefs_ziv75e3m5j" bigint GENERATED ALWAYS AS (CASE WHEN "hrefs" > 0::bigint THEN "hrefs"::numeric - (1::bigint)::numeric END) STORED;
+ALTER TABLE "qti"."lom_resource" ADD COLUMN "__named_quw3gqg6g5" smallint GENERATED ALWAYS AS (CASE WHEN "named" <> 0::smallint THEN "named" END) STORED;
+
+ALTER TABLE "qti"."lom_resource" ADD COLUMN "__node_uylg5h7nr5" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "named" <> 0::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."lom_resource_type" ADD COLUMN "__tag_kind_lom_value_uyss5uoxlf" smallint GENERATED ALWAYS AS (344::smallint) STORED NOT NULL;
 
@@ -4294,25 +4308,11 @@ ALTER TABLE "qti"."referring_document" ADD COLUMN "__pred_templates_5bo5q45wjw" 
 
 ALTER TABLE "qti"."resource" ADD COLUMN "__tag_kind_cp_resource_d4vxcw6kik" smallint GENERATED ALWAYS AS (314::smallint) STORED NOT NULL;
 
+ALTER TABLE "qti"."resource" ADD COLUMN "__node_ypb7qf2gry" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "type_lexical" ~ '\A(?:extension|imslti\_xmlv1p1|imsltia\_xmlv1p0|imsqti\_fragment\_xmlv3p0|imsqti\_item\_xmlv3p0|imsqti\_outcomes\_xmlv3p0|imsqti\_resprocessing\_xmlv3p0|imsqti\_rptemplate\_xmlv3p0|imsqti\_section\_xmlv3p0|imsqti\_stimulus\_xmlv3p0|imsqti\_test\_xmlv3p0|imsbasiclti\_xmlv1p3|pls|qtiusagedata\/xml|resourceextmetadata\/xml|resourcemetadata\/xml|webcontent|associatedcontent\/learning\-application\-resource|controlfile|css2|css3)\Z'::"pg_catalog"."text" THEN "node" END) STORED;
+
 ALTER TABLE "qti"."resource_file" ADD COLUMN "__pred_files_u6kfigcvxz" bigint GENERATED ALWAYS AS (CASE WHEN "files" > 0::bigint THEN "files"::numeric - (1::bigint)::numeric END) STORED;
 
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__copy_hrefs_jws23niurk" bigint NOT NULL;
-
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__copy_names_aw7ejgwhxd" bigint NOT NULL;
-
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__index_hrefs_pdptkuqni7" bigint NOT NULL;
-
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__index_names_cgokmskmt6" bigint NOT NULL;
-
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__predecessor_hrefs_uzeev7dpi2" bigint GENERATED ALWAYS AS (CASE WHEN "__index_hrefs_pdptkuqni7" > 0::bigint THEN "__index_hrefs_pdptkuqni7"::numeric - (1::bigint)::numeric END) STORED;
-
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__predecessor_names_u74s46r4zm" bigint GENERATED ALWAYS AS (CASE WHEN "__index_names_cgokmskmt6" > 0::bigint THEN "__index_names_cgokmskmt6"::numeric - (1::bigint)::numeric END) STORED;
-
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__package_tydw4wv6km" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "type" IN (7::smallint, 3::smallint, 5::smallint, 4::smallint, 8::smallint, 2::smallint, 6::smallint, 1::smallint, 15::smallint, 13::smallint) THEN "package" END) STORED;
-
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__path_kcbijnm36h" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "type" IN (7::smallint, 3::smallint, 5::smallint, 4::smallint, 8::smallint, 2::smallint, 6::smallint, 1::smallint, 15::smallint, 13::smallint) THEN "path" END) STORED;
-
-ALTER TABLE "qti"."resource_href" ADD COLUMN "__type_izv7wmxts7" smallint GENERATED ALWAYS AS (CASE WHEN "type" IN (7::smallint, 3::smallint, 5::smallint, 4::smallint, 8::smallint, 2::smallint, 6::smallint, 1::smallint, 15::smallint, 13::smallint) THEN "type" END) STORED;
+ALTER TABLE "qti"."resource_href" ADD COLUMN "__node_ypb7qf2gry" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "type_lexical" ~ '\A(?:extension|imslti\_xmlv1p1|imsltia\_xmlv1p0|imsqti\_fragment\_xmlv3p0|imsqti\_item\_xmlv3p0|imsqti\_outcomes\_xmlv3p0|imsqti\_resprocessing\_xmlv3p0|imsqti\_rptemplate\_xmlv3p0|imsqti\_section\_xmlv3p0|imsqti\_stimulus\_xmlv3p0|imsqti\_test\_xmlv3p0|imsbasiclti\_xmlv1p3|pls|qtiusagedata\/xml|resourceextmetadata\/xml|resourcemetadata\/xml|webcontent|associatedcontent\/learning\-application\-resource|controlfile|css2|css3)\Z'::"pg_catalog"."text" THEN "node" END) STORED;
 
 ALTER TABLE "qti"."resource_lom_general" ADD COLUMN "__tag_owner_cp_metadata_resource_6mrzzziliv" smallint GENERATED ALWAYS AS (311::smallint) STORED NOT NULL;
 
@@ -4675,6 +4675,22 @@ ALTER TABLE "qti"."tolerance" ADD COLUMN "__pred_tokens_ip7mlgrtju" bigint GENER
 ALTER TABLE "qti"."tolerance_token" ADD COLUMN "__copy_tokens_6gpsc42bw5" bigint NOT NULL;
 
 ALTER TABLE "qti"."tolerance_token" ADD COLUMN "__pred_at_xktcobhsti" bigint GENERATED ALWAYS AS (CASE WHEN "at" > 0::bigint THEN "at"::numeric - (1::bigint)::numeric END) STORED;
+
+ALTER TABLE "qti"."typed_href" ADD COLUMN "__copy_names_aw7ejgwhxd" bigint NOT NULL;
+
+ALTER TABLE "qti"."typed_href" ADD COLUMN "__index_names_cgokmskmt6" bigint NOT NULL;
+
+ALTER TABLE "qti"."typed_href" ADD COLUMN "__predecessor_names_u74s46r4zm" bigint GENERATED ALWAYS AS (CASE WHEN "__index_names_cgokmskmt6" > 0::bigint THEN "__index_names_cgokmskmt6"::numeric - (1::bigint)::numeric END) STORED;
+
+ALTER TABLE "qti"."typed_href" ADD COLUMN "__node_fid66jnndo" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "type" IN (3::smallint, 1::smallint) THEN "node" END) STORED;
+
+ALTER TABLE "qti"."typed_href" ADD COLUMN "__package_tydw4wv6km" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "type" IN (7::smallint, 3::smallint, 5::smallint, 4::smallint, 8::smallint, 2::smallint, 6::smallint, 1::smallint, 15::smallint, 13::smallint) THEN "package" END) STORED;
+
+ALTER TABLE "qti"."typed_href" ADD COLUMN "__path_kcbijnm36h" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "type" IN (7::smallint, 3::smallint, 5::smallint, 4::smallint, 8::smallint, 2::smallint, 6::smallint, 1::smallint, 15::smallint, 13::smallint) THEN "path" END) STORED;
+
+ALTER TABLE "qti"."typed_href" ADD COLUMN "__type_izv7wmxts7" smallint GENERATED ALWAYS AS (CASE WHEN "type" IN (7::smallint, 3::smallint, 5::smallint, 4::smallint, 8::smallint, 2::smallint, 6::smallint, 1::smallint, 15::smallint, 13::smallint) THEN "type" END) STORED;
+
+ALTER TABLE "qti"."typed_href" ADD COLUMN "__type_bo7oxqydo6" smallint GENERATED ALWAYS AS (CASE WHEN "type" IN (3::smallint, 1::smallint) THEN "type" END) STORED;
 
 ALTER TABLE "qti"."value" ADD COLUMN "__base_type_qsgdvyxok2" smallint GENERATED ALWAYS AS (CASE WHEN "set_base_type" = 11::smallint THEN "base_type" END) STORED;
 
@@ -5070,10 +5086,6 @@ ALTER TABLE "qti"."reference_segment" ADD CONSTRAINT "__reference_segment_key_as
 
 ALTER TABLE "qti"."reference_segment" ADD CONSTRAINT "__reference_segment_key_assembly_node_attribute_at_a3t6wclsbj" UNIQUE NULLS DISTINCT ("assembly", "node", "attribute", "at", "after", "__after_segments_0_5r6yknr7n5");
 
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_key_node_index_hrefs_lw6fbfrn4y" UNIQUE NULLS DISTINCT ("node", "__index_hrefs_pdptkuqni7");
-
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_key_package_path_type_index_names_vyahvfomzk" UNIQUE NULLS DISTINCT ("package", "path", "type", "__index_names_cgokmskmt6");
-
 ALTER TABLE "qti"."section_context_name" ADD CONSTRAINT "__section_context_name_key_document_index_contexts_47hrcvwchz" UNIQUE NULLS DISTINCT ("document", "__index_contexts_zkbhmjtxft");
 
 ALTER TABLE "qti"."section_context_ref" ADD CONSTRAINT "__section_context_ref_key_instance_index_contexts_qm2nwfczaf" UNIQUE NULLS DISTINCT ("instance", "__index_contexts_xbfmfmp7j7");
@@ -5113,6 +5125,10 @@ ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_key_package_pa
 ALTER TABLE "qti"."test_flag" ADD CONSTRAINT "__test_flag_key_node_joiqh6ud3j" UNIQUE NULLS DISTINCT ("__node_6wkm55u4hp");
 
 ALTER TABLE "qti"."test_reference" ADD CONSTRAINT "__test_reference_key_document_index_references_t3lovyenv6" UNIQUE NULLS DISTINCT ("document", "__index_references_sjnwzeh5ps");
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_key_package_path_type_index_names_znfwdutyxb" UNIQUE NULLS DISTINCT ("package", "path", "type", "__index_names_cgokmskmt6");
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_key_node_type_j3zahocmoz" UNIQUE NULLS DISTINCT ("__node_fid66jnndo", "__type_bo7oxqydo6");
 
 ALTER TABLE "qti"."variable_lookup" ADD CONSTRAINT "__variable_lookup_key_document_name_wedth6kxop" UNIQUE NULLS DISTINCT ("__document_2vhmlz3jyy", "__name_43sazk23fb");
 
@@ -5244,10 +5260,6 @@ ALTER TABLE "qti"."reference_segment" ADD CONSTRAINT "__reference_segment_check_
 
 ALTER TABLE "qti"."reference_segment" ADD CONSTRAINT "__reference_segment_check_assembled_reference_pin7v3jme4" CHECK ((("at" > 0::bigint OR "__before_segments_0_we7ytrw2n5" = 0::bigint) AND CASE WHEN "digit" = true THEN "__after_segments_0_5r6yknr7n5"::numeric = "__before_segments_0_we7ytrw2n5"::numeric + (1::bigint)::numeric ELSE "__after_segments_0_5r6yknr7n5" = "__before_segments_0_we7ytrw2n5" END) IS TRUE);
 
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_check_resource_href_counted_lom_x6wo3yr7xb" CHECK (("__index_hrefs_pdptkuqni7" >= 0::bigint AND "__index_hrefs_pdptkuqni7" < "__copy_hrefs_jws23niurk") IS TRUE);
-
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_check_resource_href_counted_named_nmgo6xxezd" CHECK (("__index_names_cgokmskmt6" >= 0::bigint AND "__index_names_cgokmskmt6" < "__copy_names_aw7ejgwhxd") IS TRUE);
-
 ALTER TABLE "qti"."section_context_name" ADD CONSTRAINT "__section_context_name_check_section_context_name_pxhks6qaz6" CHECK (("__index_contexts_zkbhmjtxft" >= 0::bigint AND "__index_contexts_zkbhmjtxft" < "__copy_contexts_b4vejimdcw") IS TRUE);
 
 ALTER TABLE "qti"."section_context_ref" ADD CONSTRAINT "__section_context_ref_check_section_context_ref_xp2paot3xr" CHECK (("__index_contexts_xbfmfmp7j7" >= 0::bigint AND "__index_contexts_xbfmfmp7j7" < "__copy_contexts_b2s7vz4w5o") IS TRUE);
@@ -5283,6 +5295,8 @@ ALTER TABLE "qti"."test_reference" ADD CONSTRAINT "__test_reference_check_test_r
 ALTER TABLE "qti"."text_idref" ADD CONSTRAINT "__text_idref_check_text_idref_ordered_identity_text_i523qq7kni" CHECK (("at" < "__copy_idrefs_yzf6cxxg4h") IS TRUE);
 
 ALTER TABLE "qti"."tolerance_token" ADD CONSTRAINT "__tolerance_token_check_tolerance_token_ordered_hvy6ubp2rp" CHECK (("at" < "__copy_tokens_6gpsc42bw5") IS TRUE);
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_check_typed_href_counted_named_href_q5xo42x4qb" CHECK (("__index_names_cgokmskmt6" >= 0::bigint AND "__index_names_cgokmskmt6" < "__copy_names_aw7ejgwhxd") IS TRUE);
 
 ALTER TABLE "qti"."variable_ref" ADD CONSTRAINT "__variable_ref_check_variable_ref_counted_document_zk5hqppt4h" CHECK (("__index_variables_vm4lsbbv2b" >= 0::bigint AND "__index_variables_vm4lsbbv2b" < "__copy_variables_27dsvhvwou") IS TRUE);
 
@@ -5799,6 +5813,10 @@ CREATE TRIGGER "__isolation"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."resource_typed"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."rounding"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
@@ -5936,6 +5954,10 @@ CREATE TRIGGER "__isolation"
 
 CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."tolerance_token"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."typed_href"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
@@ -6626,7 +6648,7 @@ ALTER TABLE "qti"."lom_object" ADD CONSTRAINT "__lom_object_fk_package_path_docu
 
 ALTER TABLE "qti"."lom_object" ADD CONSTRAINT "__lom_object_fk_record_type_resource_6id3reqe3q" FOREIGN KEY ("record", "type", "resource") REFERENCES "qti"."lom_record" ("node", "named", "owner_parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_object" ADD CONSTRAINT "__lom_object_fk_resource_package_path_type_xc4s2qcrdp" FOREIGN KEY ("resource", "package", "path", "type") REFERENCES "qti"."resource_href" ("node", "package", "path", "type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lom_object" ADD CONSTRAINT "__lom_object_fk_resource_package_path_type_lfc6of4up3" FOREIGN KEY ("resource", "package", "path", "type") REFERENCES "qti"."typed_href" ("node", "package", "path", "type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."lom_object_identifier" ADD CONSTRAINT "__lom_object_identifier_fk_document_identifier_gnfkp6nnsa" FOREIGN KEY ("document", "identifier") REFERENCES "qti"."assessment_object" ("document", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6652,9 +6674,9 @@ ALTER TABLE "qti"."lom_record" ADD CONSTRAINT "__lom_record_fk_node_named_owner_
 
 ALTER TABLE "qti"."lom_record" ADD CONSTRAINT "__lom_record_fk_owner_parent_named_jykeskdhdb" FOREIGN KEY ("__owner_parent_v5upyxkd5f", "__named_2elp6yjc6y") REFERENCES "qti"."lom_resource" ("node", "named") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_resource" ADD CONSTRAINT "__lom_resource_fk_node_type_5v7ztt24yn" FOREIGN KEY ("node", "type") REFERENCES "qti"."resource" ("node", "type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lom_resource" ADD CONSTRAINT "__lom_resource_fk_node_slr76tmccu" FOREIGN KEY ("node") REFERENCES "qti"."resource" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_resource" ADD CONSTRAINT "__lom_resource_fk_node_pred_hrefs_ow36t6oo3o" FOREIGN KEY ("node", "__pred_hrefs_ziv75e3m5j") REFERENCES "qti"."resource_href" ("node", "__index_hrefs_pdptkuqni7") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lom_resource" ADD CONSTRAINT "__lom_resource_fk_node_named_wrhz3dsh3m" FOREIGN KEY ("__node_uylg5h7nr5", "__named_quw3gqg6g5") REFERENCES "qti"."typed_href" ("__node_fid66jnndo", "__type_bo7oxqydo6") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."lom_resource_type" ADD CONSTRAINT "__lom_resource_type_fk_term_tag_kind_lom_value_tag_bttya6jjlz" FOREIGN KEY ("term", "__tag_kind_lom_value_uyss5uoxlf", "__tag_parent_kind_lom_learning_resource_type_vpculv3nxv") REFERENCES "qti"."node" ("id", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6784,7 +6806,7 @@ ALTER TABLE "qti"."named" ADD CONSTRAINT "__named_fk_node_part_replaced_mixes_lo
 
 ALTER TABLE "qti"."named" ADD CONSTRAINT "__named_fk_parent_part_replaced_qygcgkvxs5" FOREIGN KEY ("__parent_vipwpcgcs7", "__part_4cq4qtivnd", "__replaced_xc4ckx6v2e") REFERENCES "qti"."section" ("node", "part", "replacing") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."named_href" ADD CONSTRAINT "__named_href_fk_package_path_type_pred_names_kxfk57zacu" FOREIGN KEY ("package", "path", "type", "__pred_names_bbnnt7wrn7") REFERENCES "qti"."resource_href" ("package", "path", "type", "__index_names_cgokmskmt6") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."named_href" ADD CONSTRAINT "__named_href_fk_package_path_type_pred_names_6aduw7bdsw" FOREIGN KEY ("package", "path", "type", "__pred_names_bbnnt7wrn7") REFERENCES "qti"."typed_href" ("package", "path", "type", "__index_names_cgokmskmt6") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."namespace" ADD CONSTRAINT "__namespace_fk_node_copy_namespaces_ck5n2d4dgf" FOREIGN KEY ("node", "__copy_namespaces_bdzwu6g75r") REFERENCES "qti"."node" ("id", "namespaces") MATCH SIMPLE ON UPDATE CASCADE;
 
@@ -7096,37 +7118,31 @@ ALTER TABLE "qti"."referring_document" ADD CONSTRAINT "__referring_document_fk_d
 
 ALTER TABLE "qti"."resource" ADD CONSTRAINT "__resource_fk_document_package_xih2xepten" FOREIGN KEY ("document", "package") REFERENCES "qti"."document" ("node", "package") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."resource" ADD CONSTRAINT "__resource_fk_node_document_kind_start_nearest_n2oxtmjwx6" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."resource" ADD CONSTRAINT "__resource_fk_node_in7c3km6zs" FOREIGN KEY ("node") REFERENCES "qti"."lom_resource" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."resource" ADD CONSTRAINT "__resource_fk_node_type_l6xq6xjrum" FOREIGN KEY ("node", "type") REFERENCES "qti"."lom_resource" ("node", "type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."resource" ADD CONSTRAINT "__resource_fk_node_document_kind_start_nearest_n2oxtmjwx6" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."resource" ADD CONSTRAINT "__resource_fk_node_tag_kind_cp_resource_4wnmczlmfc" FOREIGN KEY ("node", "__tag_kind_cp_resource_d4vxcw6kik") REFERENCES "qti"."node" ("id", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."resource" ADD CONSTRAINT "__resource_fk_package_manifest_identifier_7kiwwxd23h" FOREIGN KEY ("package", "manifest_identifier") REFERENCES "qti"."manifest_id" ("package", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."resource" ADD CONSTRAINT "__resource_fk_node_kfvyisxjgu" FOREIGN KEY ("__node_ypb7qf2gry") REFERENCES "qti"."resource_typed" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."resource_file" ADD CONSTRAINT "__resource_file_fk_resource_scope_path_pred_files_7fxw3ivqvl" FOREIGN KEY ("resource", "scope", "path", "__pred_files_u6kfigcvxz") REFERENCES "qti"."file" ("resource", "scope", "path", "__index_files_lixdszqtka") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_package_type_pprgztmxtm" FOREIGN KEY ("node", "package", "type") REFERENCES "qti"."resource" ("node", "package", "type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_package_type_lexical_7oxzbn5yvm" FOREIGN KEY ("node", "package", "type_lexical") REFERENCES "qti"."resource" ("node", "package", "type_lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_scope_path_txhy3mohip" FOREIGN KEY ("node", "scope", "path") REFERENCES "qti"."resource_file" ("resource", "scope", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_copy_hrefs_rfarony5dz" FOREIGN KEY ("node", "__copy_hrefs_jws23niurk") REFERENCES "qti"."lom_resource" ("node", "hrefs") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_predecessor_hrefs_gpf7k4yaig" FOREIGN KEY ("node", "__predecessor_hrefs_uzeev7dpi2") REFERENCES "qti"."resource_href" ("node", "__index_hrefs_pdptkuqni7") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_package_path_type_copy_names_3izrdafd22" FOREIGN KEY ("package", "path", "type", "__copy_names_aw7ejgwhxd") REFERENCES "qti"."named_href" ("package", "path", "type", "names") MATCH SIMPLE ON UPDATE CASCADE;
-
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_package_path_type_predecessor_l36hg7g26h" FOREIGN KEY ("package", "path", "type", "__predecessor_names_u74s46r4zm") REFERENCES "qti"."resource_href" ("package", "path", "type", "__index_names_cgokmskmt6") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_package_path_ccj55yfbkf" FOREIGN KEY ("__package_tydw4wv6km", "__path_kcbijnm36h") REFERENCES "qti"."entry" ("package", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_package_path_type_iimfsrvv46" FOREIGN KEY ("__package_tydw4wv6km", "__path_kcbijnm36h", "__type_izv7wmxts7") REFERENCES "qti"."document" ("package", "path", "resource_type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_pj5bijcsjk" FOREIGN KEY ("__node_ypb7qf2gry") REFERENCES "qti"."typed_href" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."resource_lom_general" ADD CONSTRAINT "__resource_lom_general_fk_node_wqkurznrga" FOREIGN KEY ("node") REFERENCES "qti"."general_named" ("general") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."resource_lom_general" ADD CONSTRAINT "__resource_lom_general_fk_node_resource_tag_owner_cp_gwjaatwidq" FOREIGN KEY ("node", "resource", "__tag_owner_cp_metadata_resource_6mrzzziliv") REFERENCES "qti"."lom_general" ("node", "owner_parent", "owner") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."resource_lom_language_set" ADD CONSTRAINT "__resource_lom_language_set_fk_general_lang_pred_j53gq56roz" FOREIGN KEY ("general", "lang", "__pred_carriers_5eaxdkd6g3") REFERENCES "qti"."lom_language" ("general", "tag", "__index_carriers_hprm4xufhg") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."resource_typed" ADD CONSTRAINT "__resource_typed_fk_node_package_type_lexical_cacgt7lvlo" FOREIGN KEY ("node", "package", "type_lexical") REFERENCES "qti"."resource" ("node", "package", "type_lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."rounding" ADD CONSTRAINT "__rounding_fk_node_document_kind_start_nearest_74lyprtkvx" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7399,6 +7415,20 @@ ALTER TABLE "qti"."tolerance" ADD CONSTRAINT "__tolerance_fk_node_pred_tokens_to
 ALTER TABLE "qti"."tolerance_token" ADD CONSTRAINT "__tolerance_token_fk_node_copy_tokens_ipr7tyoted" FOREIGN KEY ("node", "__copy_tokens_6gpsc42bw5") REFERENCES "qti"."tolerance" ("node", "tokens") MATCH SIMPLE ON UPDATE CASCADE;
 
 ALTER TABLE "qti"."tolerance_token" ADD CONSTRAINT "__tolerance_token_fk_node_pred_at_pieces_was_qh7utka7gs" FOREIGN KEY ("node", "__pred_at_xktcobhsti", "pieces_was") REFERENCES "qti"."tolerance_token" ("node", "at", "pieces_after") MATCH SIMPLE;
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_fk_node_package_path_scope_lnwkngi5dm" FOREIGN KEY ("node", "package", "path", "scope") REFERENCES "qti"."resource_href" ("node", "package", "path", "scope") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_fk_node_package_type_gldlri3znj" FOREIGN KEY ("node", "package", "type") REFERENCES "qti"."resource_typed" ("node", "package", "type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_fk_package_path_type_copy_names_2hojezczbd" FOREIGN KEY ("package", "path", "type", "__copy_names_aw7ejgwhxd") REFERENCES "qti"."named_href" ("package", "path", "type", "names") MATCH SIMPLE ON UPDATE CASCADE;
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_fk_package_path_type_predecessor_names_hnwdmabgls" FOREIGN KEY ("package", "path", "type", "__predecessor_names_u74s46r4zm") REFERENCES "qti"."typed_href" ("package", "path", "type", "__index_names_cgokmskmt6") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_fk_node_type_vmetaz6xx6" FOREIGN KEY ("__node_fid66jnndo", "__type_bo7oxqydo6") REFERENCES "qti"."lom_resource" ("node", "named") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_fk_package_path_d22b6dxbmf" FOREIGN KEY ("__package_tydw4wv6km", "__path_kcbijnm36h") REFERENCES "qti"."entry" ("package", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."typed_href" ADD CONSTRAINT "__typed_href_fk_package_path_type_wg6gqbljxz" FOREIGN KEY ("__package_tydw4wv6km", "__path_kcbijnm36h", "__type_izv7wmxts7") REFERENCES "qti"."document" ("package", "path", "resource_type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."usage_value" ADD CONSTRAINT "__usage_value_fk_node_7b5n43piu2" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_5dlrfnrtko") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

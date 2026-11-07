@@ -42,6 +42,7 @@ import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
+import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
 import { oracleLocate } from "#pantry/test/locate.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -1126,6 +1127,26 @@ describe.skipIf(!hasLease)(
             }
 
             yield* holdsVerdict(name, dir, { rule: verdict.rule, verdict: "refused" });
+          }),
+        );
+      }
+
+      for (const { edits, label, verdict } of resourceTypeCases) {
+        it.effect(`holds PostgreSQL to reading 93's verdict on ${label}`, () =>
+          // Oracle: the specification as a checker, spec readings 67 and 93 as the box states them
+          // (`resource-type-cases.ts`), whose verdicts the law oracle gives
+          // (`resource-types.oracle.test.ts`): a document has one type, and a resource's type that
+          // spells nothing is refused by AL1's value domain alone.
+          // Bound: {one type, two types, a type that spells nothing} × {one path, two paths}.
+          Effect.gen(function* resourceTypeVerdict() {
+            const simple = specOf("simple");
+            const dir = yield* materializeSpec({
+              ...simple,
+              edits: [...simple.edits, ...edits],
+              name: `resource-types-${label.replaceAll(/[^\da-z]+/giu, "-")}`,
+            });
+
+            yield* holdsVerdict(label, dir, verdict);
           }),
         );
       }

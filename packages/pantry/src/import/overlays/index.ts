@@ -274,7 +274,7 @@ export const overlayPartsOf = (
       tree: document.listed.tree,
     })),
     assembled,
-    built.flatMap(({ rows }) => [...rows.package.ResourceHref.values()]),
+    built.flatMap(({ rows }) => [...rows.package.TypedHref.values()]),
   );
   const named = new Map<string, NamedDocument>();
   for (const { document, rows } of built) {
