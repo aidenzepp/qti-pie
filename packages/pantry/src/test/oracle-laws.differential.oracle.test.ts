@@ -4,7 +4,8 @@
  * (`#pantry/test/gen/assembly.ts`).
  *
  * The oracle states `Branch target` and `Branch forward` over each document's folded rows, as
- * `src/qti/tests.ts`'s `branchLaws` judge the import's `BranchResolution` rows
+ * `src/qti/tests.ts`'s `branchLaws` and `shuffleLaws` judge the import's `BranchResolution`,
+ * `BranchTarget` and `BranchShuffle` rows
  * (`#pantry/test/oracle-laws/tests.ts`). R87's model (`modelVerdict`) restates reading 87's bullets
  * over the generator's own assembled test, sharing no code with either. Every package the box
  * exhausts and the swarm samples must get one verdict from both: accepted by the model exactly when

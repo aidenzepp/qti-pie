@@ -25,11 +25,13 @@
  * each instance carries one {@link InstanceName} per name of its document, and their projection
  * {@link AssembledName} holds each written element once per test, so a section document placed
  * twice names nothing twice, and the key on `(assembly, identifier)` is reading 86's one namespace.
- * Each branch rule of each instance resolves once ({@link BranchResolution}), to a target of its
- * kind in its own test part, in an instance that holds it, not inside a placement it is outside of,
- * never an item ref a replacement can repeat (`Branch_target`), and after its source's end unless
- * the section that orders the two shuffles (`Branch_forward`, reading 87). A section document no
- * test places resolves nothing.
+ * Each branch rule of each instance resolves once ({@link BranchResolution}), to its target
+ * ({@link BranchTarget}), the element its identifier names in an instance that holds the rule's
+ * (a rule whose target names none has no row, so the resolution's existence law refuses it):
+ * of its kind in its own test part, not inside a placement it is outside of, never an item ref a
+ * replacement can repeat (`Branch_target`), and after its source's end unless the section that
+ * orders the two shuffles (`Branch_forward`, reading 87), its shuffle a row of its own where it
+ * orders them ({@link BranchShuffle}). A section document no test places resolves nothing.
  *
  * Beside them: an item ref's variable mappings ({@link VariableMapping}, reading 97) and an item's
  * stimulus refs ({@link StimulusRef}), each keyed by its node with its law a key, and the item each
@@ -747,20 +749,17 @@ export const AssembledName = relation(
 );
 
 /**
- * One branch rule of one instance of a test's assembly, resolved, keyed by the instance and the
- * rule (reading 87).
+ * One branch rule of one instance of a test's assembly, keyed by the instance and the rule
+ * (reading 87): what the rule is wherever it is placed, whether or not its target names anything.
  *
- * - **the host's:** `instance` and `rule`; the rule's `target`, `owner` (its source) and `ownerKind`;
- *   the owner's place in the instance, `ownerStart`, `ownerEnd` and `ownerPart`; the target,
- *   `targetInstance` and `targetNode`, with that name's `targetKind`, `targetPart`,
- *   `targetReplaced`, `targetMixes`, `targetStart` and `targetEnd`, and its instance's
- *   `targetInstanceStart` and `targetInstanceEnd`; `via`, the child of the target's instance on the
- *   way down to the rule's (the rule's own instance where they are one), with its `viaParent`,
- *   `viaStart`, `viaEnd` and `viaSiteStart`; and `common`, the nearest element holding the source
- *   and the target in the target's document, and `branch`, its child that holds the target, each
- *   with the fields the ordering law reads (both the target where the law needs neither);
+ * - **the host's:** `instance` and `rule`; the rule's `target`, the identifier it names, `owner` (its
+ *   source) and `ownerKind`; and the owner's place in the instance, `ownerStart`, `ownerEnd` and
+ *   `ownerPart`;
  * - **accumulated** along {@link resolutionFamily}'s owner axis: `assembly`, `document` and
  *   `instanceStart`, the instance's.
+ *
+ * Its target is a row of its own, {@link BranchTarget}, which a rule whose target names nothing
+ * lacks: the existence law `BranchResolution ⊆ BranchTarget` is "Branch target".
  *
  * The instance's `end` is not copied. {@link instanceTree} draws it on leaving the instance, after
  * the instance's members, so grizzle's write filler refuses an owner-axis copy of it, and with it
@@ -773,18 +772,6 @@ export const BranchResolution = relation(
   "BranchResolution",
   {
     assembly: accumulated(uuid, nilUuid),
-    branch: uuid,
-    branchEnd: natural,
-    branchParent: uuid,
-    branchPart: uuid,
-    branchStart: natural,
-    common: uuid,
-    commonEnd: natural,
-    commonKind: closedId(NodeKind),
-    commonMixes: pg.boolean,
-    commonPart: uuid,
-    commonReplaced: pg.boolean,
-    commonStart: natural,
     document: accumulated(uuid, nilUuid),
     instance: uuid,
     instanceStart: accumulated(natural, 0n),
@@ -794,6 +781,39 @@ export const BranchResolution = relation(
     ownerPart: uuid,
     ownerStart: natural,
     rule: uuid,
+    target: keyText,
+  },
+  ["instance", "rule"],
+);
+
+/**
+ * The target a branch rule of one instance names, keyed by the instance and the rule (reading
+ * 87): the written element its identifier names in an instance that holds the rule's, the first
+ * in pre-order where several do. A rule whose target names no such element has no row.
+ *
+ * - **the resolution's copy** (back into {@link BranchResolution}): `assembly`, `instanceStart`,
+ *   `target` and the owner's `ownerKind`, `ownerStart`, `ownerEnd` and `ownerPart`, the fields the
+ *   laws read;
+ * - **the target's:** `targetInstance` and `targetNode`, with that name's `targetKind`, `targetPart`,
+ *   `targetReplaced`, `targetMixes`, `targetStart` and `targetEnd`, and its instance's
+ *   `targetInstanceStart` and `targetInstanceEnd`; and `via`, the child of the target's instance on
+ *   the way down to the rule's (the rule's own instance where they are one), with its `viaParent`,
+ *   `viaStart`, `viaEnd` and `viaSiteStart`;
+ * - **drawn:** `shuffles`, its {@link BranchShuffle} rows, 1 where the section that orders the source
+ *   and the target shuffles them and 0 where none does.
+ */
+export const BranchTarget = relation(
+  "BranchTarget",
+  {
+    assembly: uuid,
+    instance: uuid,
+    instanceStart: natural,
+    ownerEnd: natural,
+    ownerKind: closedId(NodeKind),
+    ownerPart: uuid,
+    ownerStart: natural,
+    rule: uuid,
+    shuffles: drawn(natural),
     target: keyText,
     targetEnd: natural,
     targetInstance: uuid,
@@ -810,6 +830,40 @@ export const BranchResolution = relation(
     viaParent: uuid,
     viaSiteStart: natural,
     viaStart: natural,
+  },
+  ["instance", "rule"],
+);
+
+/**
+ * The shuffle that orders a branch rule's source and target, keyed by the instance and the rule
+ * (reading 87, information model §5.98): `common`, the nearest element of the target's document
+ * holding the source's point and the target, whose children's order is drawn at delivery, and
+ * `branch`, its child that holds the target and not the source, each with the fields the law
+ * reads, beside its {@link BranchTarget}'s copy (`assembly`, `targetInstance`, `ownerStart`,
+ * `targetStart`, `viaSiteStart`). A rule whose source and target no shuffle orders has no row.
+ */
+export const BranchShuffle = relation(
+  "BranchShuffle",
+  {
+    assembly: uuid,
+    branch: uuid,
+    branchEnd: natural,
+    branchParent: uuid,
+    branchPart: uuid,
+    branchStart: natural,
+    common: uuid,
+    commonEnd: natural,
+    commonKind: closedId(NodeKind),
+    commonMixes: pg.boolean,
+    commonPart: uuid,
+    commonReplaced: pg.boolean,
+    commonStart: natural,
+    instance: uuid,
+    ownerStart: natural,
+    rule: uuid,
+    targetInstance: uuid,
+    targetStart: natural,
+    viaSiteStart: natural,
   },
   ["instance", "rule"],
 );
@@ -907,6 +961,8 @@ export const testRelations = {
   AssembledName,
   BranchResolution,
   BranchRule,
+  BranchShuffle,
+  BranchTarget,
   Inclusion,
   Instance,
   InstanceName,
@@ -1020,6 +1076,15 @@ export const assembledNameFamily = counted(
  * Each instance's resolved branch rules, counted by `Instance.rules`.
  */
 export const resolutionFamily = counted(on(BranchResolution, "instance"), fin(Instance, "rules"));
+
+/**
+ * Each target's shuffle, counted by `BranchTarget.shuffles`: one where a shuffle orders its rule's
+ * source and target, none where none does.
+ */
+export const shuffleFamily = counted(
+  on(BranchShuffle, "instance", "rule"),
+  fin(BranchTarget, "shuffles"),
+);
 
 /**
  * The includes the information model reads as Include (spec reading 114): each `xi:include` under
@@ -1304,40 +1369,65 @@ const placedScope = (i: InstanceRow) =>
   );
 
 /**
- * A `BranchResolution` row as a row check reads it.
+ * A `BranchTarget` row as a row check reads it.
  */
-type ResolutionRow = RowScalars<typeof BranchResolution>;
+type TargetRow = RowScalars<typeof BranchTarget>;
 
 /**
- * State that a resolution's target lies in its own instance.
+ * A `BranchShuffle` row as a row check reads it.
+ */
+type ShuffleRow = RowScalars<typeof BranchShuffle>;
+
+/**
+ * State that a target lies in its rule's own instance.
  *
  * @param b - The row.
  * @returns The predicate.
  */
-const sameInstance = (b: ResolutionRow) => b.eq(b.targetInstance, b.instance);
+const sameInstance = (b: TargetRow | ShuffleRow) => b.eq(b.targetInstance, b.instance);
 
 /**
- * State that a resolution's target lies after its source's end (reading 87): in its own instance,
- * at or after the owner's end; in an instance above, after the site its own instance descends
- * through.
+ * State that a target is of a kind its source may name, in the source's test part, and no item
+ * ref a replacement can repeat (reading 87): `Branch_target`'s judgment of the name, apart from
+ * where it is placed.
  *
  * @param b - The row.
  * @returns The predicate.
  */
-const forward = (b: ResolutionRow) =>
+const targetAdmitted = (b: TargetRow) =>
+  b.and(
+    b.or(
+      b.and(b.eq(b.ownerKind, partKind), b.eq(b.targetKind, partKind)),
+      b.and(
+        b.ne(b.ownerKind, partKind),
+        b.in(b.targetKind, sectionTargets),
+        b.eq(b.targetPart, b.ownerPart),
+      ),
+    ),
+    b.not(b.and(b.eq(b.targetKind, itemRefKind), b.eq(b.targetReplaced, true))),
+  );
+
+/**
+ * State that a target lies after its source's end (reading 87): in its own instance, at or after
+ * the owner's end; in an instance above, after the site its own instance descends through.
+ *
+ * @param b - The row.
+ * @returns The predicate.
+ */
+const forward = (b: TargetRow) =>
   b.or(
     b.and(sameInstance(b), b.ge(b.targetStart, b.ownerEnd)),
     b.and(b.not(sameInstance(b)), b.gt(b.targetStart, b.viaSiteStart)),
   );
 
 /**
- * State that a resolution's target holds its source's point: the owner's start in its own
- * instance, the site's in an instance above.
+ * State that a target holds its source's point: the owner's start in its own instance, the site's
+ * in an instance above.
  *
  * @param b - The row.
  * @returns The predicate.
  */
-const targetHoldsSource = (b: ResolutionRow) =>
+const targetHoldsSource = (b: TargetRow) =>
   b.or(
     b.and(sameInstance(b), b.le(b.targetStart, b.ownerStart), b.lt(b.ownerStart, b.targetEnd)),
     b.and(
@@ -1348,13 +1438,13 @@ const targetHoldsSource = (b: ResolutionRow) =>
   );
 
 /**
- * State that a resolution's `common` holds its source's point, as {@link targetHoldsSource} reads
- * the point.
+ * State that a shuffle's `common` holds its source's point, as {@link targetHoldsSource} reads the
+ * point.
  *
  * @param b - The row.
  * @returns The predicate.
  */
-const commonHoldsSource = (b: ResolutionRow) =>
+const commonHoldsSource = (b: ShuffleRow) =>
   b.or(
     b.and(sameInstance(b), b.le(b.commonStart, b.ownerStart), b.lt(b.ownerStart, b.commonEnd)),
     b.and(
@@ -1365,13 +1455,13 @@ const commonHoldsSource = (b: ResolutionRow) =>
   );
 
 /**
- * State that a resolution's `branch` holds its source's point, as {@link targetHoldsSource} reads
- * the point.
+ * State that a shuffle's `branch` holds its source's point, as {@link targetHoldsSource} reads the
+ * point.
  *
  * @param b - The row.
  * @returns The predicate.
  */
-const branchHoldsSource = (b: ResolutionRow) =>
+const branchHoldsSource = (b: ShuffleRow) =>
   b.or(
     b.and(sameInstance(b), b.le(b.branchStart, b.ownerStart), b.lt(b.ownerStart, b.branchEnd)),
     b.and(
@@ -1382,27 +1472,27 @@ const branchHoldsSource = (b: ResolutionRow) =>
   );
 
 /**
- * State that a resolution's source and target nest: the target holds the source's point, or, in
- * one instance, the owner holds the target. No shuffle reorders such a pair.
+ * State that a target and its source nest: the target holds the source's point, or, in one
+ * instance, the owner holds the target. No shuffle reorders such a pair.
  *
  * @param b - The row.
  * @returns The predicate.
  */
-const nested = (b: ResolutionRow) =>
+const nested = (b: TargetRow) =>
   b.or(
     targetHoldsSource(b),
     b.and(sameInstance(b), b.le(b.ownerStart, b.targetStart), b.lt(b.targetStart, b.ownerEnd)),
   );
 
 /**
- * State that `common` is the nearest element holding the source and the target in the target's
- * document, and that its children's order is drawn at delivery: it holds the source's point, its
- * child `branch` holds the target and not the source's point, and it mixes.
+ * State that a shuffle orders its rule's source and target: `common` holds the source's point, its
+ * child `branch` holds the target and not the source's point, and its children's order is drawn
+ * at delivery.
  *
  * @param b - The row.
  * @returns The predicate.
  */
-const shuffled = (b: ResolutionRow) =>
+const shuffled = (b: ShuffleRow) =>
   b.and(
     commonHoldsSource(b),
     b.eq(b.branchParent, b.common),
@@ -1470,7 +1560,8 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   site, so an inclusion cycle has no finite tree (reading 85);
  * - **the namespace** ({@link InstanceName}, {@link AssembledName}): `Test_name_key`, each written
  *   element once per test, and the key `(assembly, identifier)` (reading 86);
- * - **the jumps** ({@link BranchResolution}): `Branch_target` and `Branch_forward` (reading 87);
+ * - **the jumps** ({@link BranchResolution}, {@link BranchTarget}, {@link BranchShuffle}): each
+ *   resolution's target, `Branch_target` and `Branch_forward` (reading 87);
  * - **the items** ({@link ItemRefTarget}, {@link ItemRefDocument}): each item ref's href names an
  *   item document of the package or an LTI link (B2, B3, "Item ref target").
  *
@@ -1504,11 +1595,17 @@ const flagCopies = flagCarriers.map(flagCopy);
  * an identifier. Its `E1_derived` derives each name's scope in the assembly.
  *
  * The statements of reading 87's law, "Branch target": each instance of a test's assembly
- * resolves each of its document's branch rules that names a target once, each resolution copies
- * its rule, its source, its target and the names the ordering law reads. `Branch_target` judges
- * its target's kind, part and replacement and that its instance holds the rule's, and
- * `Branch_forward` that it lies after its source's end, unless the section that orders the two
- * shuffles.
+ * resolves each of its document's branch rules that names a target once, each resolution copying
+ * its rule and its source, and each has its target, the element its identifier names in an
+ * instance that holds the rule's, which a rule whose target names nothing lacks. The target
+ * copies the names the ordering law reads. `Branch_target` judges its kind, part and replacement
+ * and that its instance holds the rule's.
+ *
+ * The statements of reading 87's law, "Branch forward": `Branch_forward` on a target, that a
+ * target `Branch_target` admits by its name lies after its source's end, unless a shuffle orders
+ * the two, so each bad target breaks one law; and the shuffle that orders a rule's source and
+ * target (information model §5.98), each counted by its target, each copying its target's names
+ * and the two elements it reads, its own `Branch_forward` that it orders the two.
  *
  * The statements of B2's and B3's law, "Item ref target": each item ref has one
  * {@link ItemRefTarget}, its href's path, named by a resource of the package of the item type or an
@@ -1517,9 +1614,68 @@ const flagCopies = flagCarriers.map(flagCopy);
  */
 export const testLawsByName = {
   "Branch forward": [
-    check("Branch_forward", BranchResolution, (b) =>
-      b.or(forward(b), b.and(b.ne(b.ownerKind, partKind), b.not(nested(b)), shuffled(b))),
+    check("Branch_forward", BranchTarget, (b) =>
+      b.or(
+        b.not(targetAdmitted(b)),
+        forward(b),
+        b.and(b.ne(b.ownerKind, partKind), b.not(nested(b)), b.eq(b.shuffles, 1n)),
+      ),
     ),
+    shuffleFamily,
+    contained(
+      on(
+        BranchShuffle,
+        "instance",
+        "rule",
+        "assembly",
+        "ownerStart",
+        "targetInstance",
+        "targetStart",
+        "viaSiteStart",
+      ),
+      on(
+        BranchTarget,
+        "instance",
+        "rule",
+        "assembly",
+        "ownerStart",
+        "targetInstance",
+        "targetStart",
+        "viaSiteStart",
+      ),
+    ),
+    contained(
+      on(BranchShuffle, "targetInstance", "branch", "branchEnd", "branchPart", "branchStart"),
+      on(InstanceName, "instance", "node", "end", "part", "start"),
+    ),
+    contained(on(BranchShuffle, "branch", "branchParent"), on(Named, "node", "parent")),
+    contained(
+      on(
+        BranchShuffle,
+        "targetInstance",
+        "common",
+        "assembly",
+        "commonEnd",
+        "commonKind",
+        "commonMixes",
+        "commonPart",
+        "commonReplaced",
+        "commonStart",
+      ),
+      on(
+        InstanceName,
+        "instance",
+        "node",
+        "assembly",
+        "end",
+        "kind",
+        "mixes",
+        "part",
+        "replaced",
+        "start",
+      ),
+    ),
+    check("Branch_forward", BranchShuffle, shuffled),
   ],
   "Branch target": [
     contained(on(testInstances, "document", "rules"), on(TestDocument, "node", "rules")),
@@ -1540,18 +1696,40 @@ export const testLawsByName = {
       on(BranchResolution, "instance", "owner", "ownerEnd", "ownerPart", "ownerStart"),
       on(InstanceName, "instance", "node", "end", "part", "start"),
     ),
+    contained(on(BranchResolution, "instance", "rule"), on(BranchTarget, "instance", "rule")),
     contained(
-      on(BranchResolution, "targetInstance", "branch", "branchEnd", "branchPart", "branchStart"),
-      on(InstanceName, "instance", "node", "end", "part", "start"),
+      on(
+        BranchTarget,
+        "instance",
+        "rule",
+        "assembly",
+        "instanceStart",
+        "ownerEnd",
+        "ownerKind",
+        "ownerPart",
+        "ownerStart",
+        "target",
+      ),
+      on(
+        BranchResolution,
+        "instance",
+        "rule",
+        "assembly",
+        "instanceStart",
+        "ownerEnd",
+        "ownerKind",
+        "ownerPart",
+        "ownerStart",
+        "target",
+      ),
     ),
-    contained(on(BranchResolution, "branch", "branchParent"), on(Named, "node", "parent")),
     contained(
-      on(BranchResolution, "targetInstance", "targetNode", "target"),
+      on(BranchTarget, "targetInstance", "targetNode", "target"),
       on(InstanceName, "instance", "node", "identifier"),
     ),
     contained(
       on(
-        BranchResolution,
+        BranchTarget,
         "targetInstance",
         "targetNode",
         "assembly",
@@ -1576,50 +1754,16 @@ export const testLawsByName = {
       ),
     ),
     contained(
-      on(
-        BranchResolution,
-        "targetInstance",
-        "common",
-        "assembly",
-        "commonEnd",
-        "commonKind",
-        "commonMixes",
-        "commonPart",
-        "commonReplaced",
-        "commonStart",
-      ),
-      on(
-        InstanceName,
-        "instance",
-        "node",
-        "assembly",
-        "end",
-        "kind",
-        "mixes",
-        "part",
-        "replaced",
-        "start",
-      ),
-    ),
-    contained(
-      on(BranchResolution, "targetInstance", "targetInstanceEnd", "targetInstanceStart"),
+      on(BranchTarget, "targetInstance", "targetInstanceEnd", "targetInstanceStart"),
       on(Instance, "id", "end", "start"),
     ),
     contained(
-      on(BranchResolution, "via", "viaEnd", "viaParent", "viaSiteStart", "viaStart"),
+      on(BranchTarget, "via", "viaEnd", "viaParent", "viaSiteStart", "viaStart"),
       on(Instance, "id", "end", "parent", "siteStart", "start"),
     ),
-    check("Branch_target", BranchResolution, (b) =>
+    check("Branch_target", BranchTarget, (b) =>
       b.and(
-        b.or(
-          b.and(b.eq(b.ownerKind, partKind), b.eq(b.targetKind, partKind)),
-          b.and(
-            b.ne(b.ownerKind, partKind),
-            b.in(b.targetKind, sectionTargets),
-            b.eq(b.targetPart, b.ownerPart),
-          ),
-        ),
-        b.not(b.and(b.eq(b.targetKind, itemRefKind), b.eq(b.targetReplaced, true))),
+        targetAdmitted(b),
         b.le(b.targetInstanceStart, b.instanceStart),
         b.lt(b.instanceStart, b.targetInstanceEnd),
         b.or(

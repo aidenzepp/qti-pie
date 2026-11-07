@@ -30,18 +30,19 @@ import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import type { BranchResolution } from "#pantry/qti/tests.ts";
+import type { BranchTarget } from "#pantry/qti/tests.ts";
 import {
   assemblyLiteral,
   assemblyPackage,
   classOf,
   modelVerdict,
   placementsOf,
+  ruleFaultOf,
   sampledBounds,
   smallAssembly,
   swarmedAssembly,
 } from "#pantry/test/gen/assembly.ts";
-import type { Assembly, TargetClass } from "#pantry/test/gen/assembly.ts";
+import type { Assembly, RuleFault, TargetClass } from "#pantry/test/gen/assembly.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
@@ -141,54 +142,149 @@ const instanceStarts = (inputs: PackageInputs): ReadonlyMap<string, InstanceStar
 };
 
 /**
- * State `Branch_target` and `Branch_forward` on the host over one resolution, as
- * `#pantry/qti/tests.ts` states them, with its instance's start, which grizzle copies onto it. No
- * generated package shuffles, so `Branch_forward` is its first arm.
- *
- * @param b - The resolution.
- * @param instanceStart - Its instance's start.
- * @returns Whether both laws accept it.
+ * The kinds a rule of an item ref or a section branches to.
  */
-const lawAccepts = (b: Addition<typeof BranchResolution>, instanceStart: bigint): boolean => {
-  const sectionTargets = new Set([
-    "qti-assessment-item-ref",
-    "qti-assessment-section",
-    "qti-assessment-section-ref",
-  ]);
-  const kind =
-    b.ownerKind === "qti-test-part"
-      ? b.targetKind === "qti-test-part"
-      : sectionTargets.has(b.targetKind) && b.targetPart === b.ownerPart;
-  const above = b.targetInstanceStart <= instanceStart && instanceStart < b.targetInstanceEnd;
+const sectionTargets: ReadonlySet<string> = new Set([
+  "qti-assessment-item-ref",
+  "qti-assessment-section",
+  "qti-assessment-section-ref",
+]);
+
+/**
+ * State `Branch_target`'s judgment of a target's name on the host: its kind and part, and no
+ * repeatable item ref, as `#pantry/qti/tests.ts` states it.
+ *
+ * @param b - The target.
+ * @returns Whether the name is admitted.
+ */
+const admitted = (b: Addition<typeof BranchTarget>): boolean =>
+  (b.ownerKind === "qti-test-part"
+    ? b.targetKind === "qti-test-part"
+    : sectionTargets.has(b.targetKind) && b.targetPart === b.ownerPart) &&
+  !(b.targetKind === "qti-assessment-item-ref" && b.targetReplaced);
+
+/**
+ * State `Branch_target` on the host over one target, with its instance's start, which grizzle
+ * copies onto its resolution: the name admitted, and its instance holding the rule's through
+ * `via`.
+ *
+ * @param b - The target.
+ * @returns Whether the law accepts it.
+ */
+const targetAccepts = (b: Addition<typeof BranchTarget>): boolean => {
+  const above = b.targetInstanceStart <= b.instanceStart && b.instanceStart < b.targetInstanceEnd;
   const same = b.targetInstance === b.instance;
   const through = same
     ? b.via === b.instance
-    : b.viaParent === b.targetInstance && b.viaStart <= instanceStart && instanceStart < b.viaEnd;
-  const forward = same ? b.targetStart >= b.ownerEnd : b.targetStart > b.viaSiteStart;
+    : b.viaParent === b.targetInstance &&
+      b.viaStart <= b.instanceStart &&
+      b.instanceStart < b.viaEnd;
 
-  return kind && !b.targetReplaced && above && through && forward;
+  return admitted(b) && above && through;
 };
 
 /**
- * Judge a package's import rows by the schema's laws on its branch rules, restated on the host:
- * each instance of a test's assembly holds one resolution per branch rule of its document that
- * names no exit, and each resolution meets `Branch_target` and `Branch_forward` at its instance's
- * start. A target that resolves nowhere has no resolution, so its instance holds one too few.
+ * State `Branch_forward` on the host over one target: a name `Branch_target` does not admit is
+ * that law's alone, and any other lies after its source's end. No generated package shuffles, so
+ * no target has a shuffle and the law has no other arm.
+ *
+ * @param b - The target.
+ * @returns Whether the law accepts it.
+ */
+const forwardAccepts = (b: Addition<typeof BranchTarget>): boolean =>
+  !admitted(b) ||
+  (b.targetInstance === b.instance ? b.targetStart >= b.ownerEnd : b.targetStart > b.viaSiteStart);
+
+/**
+ * The rule PostgreSQL refuses a resolution under, by the schema's laws restated on the host: a
+ * resolution with no target breaks its existence law, "Branch target"; a target breaks
+ * `Branch_target` or `Branch_forward`, and never both, since `Branch_forward` judges only a name
+ * `Branch_target` admits.
+ *
+ * @param target - The resolution's target, none where its import wrote none.
+ * @param literal - The package's literal, for the assertions' messages.
+ * @returns The rule, or none where every law accepts it.
+ */
+const rowRule = (
+  target: Addition<typeof BranchTarget> | undefined,
+  literal: string,
+): "branch-forward" | "branch-target" | undefined => {
+  if (target === undefined) {
+    return "branch-target";
+  }
+
+  const targeted = targetAccepts(target);
+  const forwarded = forwardAccepts(target);
+  assert.isTrue(targeted || forwarded, `${literal}: a target breaks both branch laws`);
+
+  if (!targeted) {
+    return "branch-target";
+  }
+
+  return forwarded ? undefined : "branch-forward";
+};
+
+/**
+ * The rule a fault of reading 87's model is refused under: a target that resolves nowhere, or to
+ * a name of the wrong kind or part, "Branch target"; one that is not after its source,
+ * "Branch forward".
+ *
+ * @param fault - The fault.
+ * @returns The rule.
+ */
+const ruleOfFault = (fault: RuleFault): "branch-forward" | "branch-target" =>
+  fault === "forward" ? "branch-forward" : "branch-target";
+
+/**
+ * Judge a package's import rows by the schema's laws on its branch rules, restated on the host,
+ * placement by placement against reading 87's model: each instance of a test's assembly holds one
+ * resolution per branch rule of its document that names no exit; a resolution has a target exactly
+ * where the model resolves one, every target naming an `InstanceName` and an `Instance` of the
+ * import, so no stand-in; and each resolution is refused under exactly the rule of its
+ * placement's fault, or accepted where the model finds none.
  *
  * @param inputs - The package's import inputs.
+ * @param assembly - The package.
  * @param literal - The package's literal, for the assertions' messages.
- * @returns The verdict the database would give on these laws.
+ * @returns The rules the database refuses the rows under, none where it accepts them.
  */
-const rowsVerdict = (inputs: PackageInputs, literal: string): "accepted" | "refused" => {
+const rowsRules = (
+  inputs: PackageInputs,
+  assembly: Assembly,
+  literal: string,
+): ReadonlySet<string> => {
   const starts = instanceStarts(inputs);
+  const placed = placementsOf(assembly);
   const rules = [...inputs.BranchRule.values()];
   const resolutions = [...inputs.BranchResolution.values()];
-  for (const resolution of resolutions) {
-    assert.strictEqual(
-      resolution.targetInstanceStart,
-      starts.get(resolution.targetInstance)?.start,
-      `${literal}: the host's start of instance ${resolution.targetInstance} is not its pre-order start`,
+  const named = new Map([...inputs.Named.values()].map((row) => [row.node, row.identifier]));
+  const names = new Set(
+    [...inputs.InstanceName.values()].map(({ identifier, instance, node }) =>
+      JSON.stringify([instance, node, identifier]),
+    ),
+  );
+  const targetOf = new Map(
+    [...inputs.BranchTarget.values()].map((row) => [JSON.stringify([row.instance, row.rule]), row]),
+  );
+  assert.strictEqual(inputs.BranchShuffle.size, 0, `${literal}: no generated package shuffles`);
+  assert.strictEqual(
+    targetOf.size,
+    inputs.BranchTarget.size,
+    `${literal}: one target per resolution`,
+  );
+
+  for (const target of targetOf.values()) {
+    assert.isTrue(
+      names.has(JSON.stringify([target.targetInstance, target.targetNode, target.target])),
+      `${literal}: a target names no InstanceName of its identifier`,
     );
+    assert.strictEqual(
+      target.targetInstanceStart,
+      starts.get(target.targetInstance)?.start,
+      `${literal}: the host's start of instance ${target.targetInstance} is not its pre-order start`,
+    );
+    assert.strictEqual(target.instanceStart, starts.get(target.instance)?.start);
+    assert.isTrue(starts.has(target.via), `${literal}: a target's via is no instance`);
   }
 
   const counted = [...starts].every(
@@ -197,11 +293,39 @@ const rowsVerdict = (inputs: PackageInputs, literal: string): "accepted" | "refu
       resolutions.filter(({ instance }) => instance === id).length ===
         rules.filter((rule) => rule.document === document).length,
   );
-  const lawful = resolutions.every((resolution) =>
-    lawAccepts(resolution, starts.get(resolution.instance)?.start ?? -1n),
-  );
+  assert.isTrue(counted, `${literal}: an instance holds a resolution per branch rule`);
 
-  return counted && lawful ? "accepted" : "refused";
+  const refused = new Set<string>();
+  for (const resolution of resolutions) {
+    const at = JSON.stringify([resolution.instance, resolution.rule]);
+    const target = targetOf.get(at);
+    const start = starts.get(resolution.instance)?.start;
+    const owner = placed.placements.find(
+      ({ id, instance }) => id === named.get(resolution.owner) && BigInt(instance) === start,
+    );
+    assert.isDefined(owner, `${literal}: a resolution's owner is no placement of the model`);
+    if (owner === undefined) {
+      continue;
+    }
+
+    const fault = ruleFaultOf(placed, owner, resolution.target);
+    const rule = rowRule(target, literal);
+    assert.strictEqual(
+      target === undefined,
+      fault === "unresolved",
+      `${literal}: ${owner.id}'s rule to ${resolution.target} at instance ${String(start)} ${target === undefined ? "has no target" : "has a target"}, and the model finds ${fault ?? "no fault"}`,
+    );
+    assert.strictEqual(
+      rule,
+      fault === undefined ? undefined : ruleOfFault(fault),
+      `${literal}: ${owner.id}'s rule to ${resolution.target} at instance ${String(start)}`,
+    );
+    if (rule !== undefined) {
+      refused.add(rule);
+    }
+  }
+
+  return refused;
 };
 
 /**
@@ -219,17 +343,26 @@ const judge = (assembly: Assembly, c: Case<Situation>) =>
     const verdict = yield* oracleVerdict(yield* readPackage(dir));
     const predicted = modelVerdict(assembly);
     const program = yield* readProgram(dir);
-    const byLaws = rowsVerdict(program.inputs, literal);
+    const byLaws = rowsRules(program.inputs, assembly, literal);
+    const modelled = new Set(
+      predicted.kind === "refused" ? [...predicted.faults].map(ruleOfFault) : [],
+    );
+    const oracled = new Set(verdict.kind === "refused" ? verdict.rules : []);
 
     c.noteAll(situationsOf(assembly, predicted.kind === "accepted"));
-    assert.strictEqual(
+    assert.deepStrictEqual(
       byLaws,
-      predicted.kind,
-      `${literal}: its rows are ${byLaws} by the laws, and reading 87's model ${predicted.kind === "refused" ? `refuses it (${[...predicted.faults].join(", ")})` : "accepts it"}; its import writes ${String(program.inputs.BranchRule.size)} branch rules and ${String(program.inputs.BranchResolution.size)} resolutions`,
+      modelled,
+      `${literal}: its rows are refused under {${[...byLaws].join(", ")}} by the laws, and reading 87's model ${predicted.kind === "refused" ? `refuses it (${[...predicted.faults].join(", ")})` : "accepts it"}; its import writes ${String(program.inputs.BranchRule.size)} branch rules, ${String(program.inputs.BranchResolution.size)} resolutions and ${String(program.inputs.BranchTarget.size)} targets`,
+    );
+    assert.deepStrictEqual(
+      oracled,
+      byLaws,
+      `${literal}: the law oracle refuses it under {${[...oracled].join(", ")}}, and its rows under {${[...byLaws].join(", ")}}`,
     );
     assert.isTrue(
-      verdict.kind === "accepted" || [...verdict.rules].every((rule) => branchRules.has(rule)),
-      `${literal}: the law oracle refuses it under ${verdict.kind === "refused" ? [...verdict.rules].join(", ") : ""}`,
+      [...oracled].every((rule) => branchRules.has(rule)),
+      `${literal}: the law oracle refuses it under ${[...oracled].join(", ")}`,
     );
   }).pipe(Effect.scoped);
 

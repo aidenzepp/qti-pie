@@ -99,7 +99,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
-import { Option } from "effect";
+import { Option, pipe, Record as Rec } from "effect";
 import {
   AttributeName,
   BaseType,
@@ -1903,6 +1903,129 @@ const sectionPlacements = select(Instance, (i) =>
 );
 
 /**
+ * The content references, each under the law that resolves it: `check`, the law's check; `own`,
+ * the relation of an item's or a test's references, resolved in its own document's declarations;
+ * `names`, the relation of a section document's or a fragment's names; and `placed`, the relation
+ * that resolves those names under each placement, in its assembly's declarations.
+ */
+const contentReferences = {
+  "Context variable reference": {
+    check: "Context_variable_reference",
+    names: SectionContextName,
+    own: ContextRef,
+    placed: SectionContextRef,
+  },
+  "Feedback reference": {
+    check: "Feedback_reference",
+    names: SectionFeedbackName,
+    own: FeedbackRef,
+    placed: SectionFeedbackRef,
+  },
+  "Printed variable reference": {
+    check: "Printed_variable_reference",
+    names: SectionPrintedName,
+    own: PrintedVariableRef,
+    placed: SectionPrintedRef,
+  },
+  "Template reference": {
+    check: "Template_reference",
+    names: SectionTemplateName,
+    own: TemplateRef,
+    placed: SectionTemplateRef,
+  },
+} as const;
+
+/**
+ * A content reference of {@link contentReferences}.
+ */
+type ContentReferenceOf = (typeof contentReferences)[keyof typeof contentReferences];
+
+/**
+ * The declaration kinds `ContentReference` allows for each referring kind and attribute.
+ */
+const allowedDeclarationKinds = on(ContentReference, "kind", "attribute", "declaration");
+
+/**
+ * A content reference's row as a row check reads it: the fields every content reference relation
+ * holds, of any of them.
+ */
+type ReferenceRow = RowScalars<{ readonly heading: typeof referenceFields; readonly name: string }>;
+
+/**
+ * Whether a reference names no built-in variable.
+ *
+ * @param r - The reference's row.
+ * @returns The predicate.
+ */
+const namesNoBuiltIn = (r: ReferenceRow) => r.not(r.in(r.identifier, builtInNames));
+
+/**
+ * Whether a reference resolves as a built-in stands, if it names one: under the nil declaration,
+ * as the built-in's declaration kind, base type and cardinality.
+ *
+ * @param r - The reference's row.
+ * @returns The predicate.
+ */
+const resolvesBuiltIn = (r: ReferenceRow) =>
+  r.or(
+    namesNoBuiltIn(r),
+    ...builtIns.map((builtIn) =>
+      r.and(
+        r.eq(r.identifier, builtIn.variable),
+        r.eq(r.declaration, nilUuid),
+        r.eq(r.declarationKind, builtIn.declaration),
+        r.eq(r.baseType, builtIn.baseType),
+        r.eq(r.cardinality, builtIn.cardinality),
+      ),
+    ),
+  );
+
+/**
+ * State one content reference's law over both its relations: an own reference's declaration kind
+ * is one `ContentReference` allows, a name that is no built-in's is a declaration's of its
+ * document, through `declarationRef`, and a built-in's resolves to the built-in; and a placed
+ * reference is one of its document's names, resolved the same way among its assembly's
+ * declarations.
+ *
+ * @param reference - The content reference.
+ * @returns The law's statements.
+ */
+const contentReferenceLaws = ({ check: rule, names, own, placed }: ContentReferenceOf) => [
+  contained(on(own, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
+  contained(
+    on(
+      select(own, namesNoBuiltIn),
+      "declaration",
+      "document",
+      "identifier",
+      "declarationKind",
+      "baseType",
+      "cardinality",
+    ),
+    declarationRef,
+  ),
+  check(rule, own, resolvesBuiltIn),
+  contained(
+    on(placed, "node", "attribute", "kind", "document", "identifier"),
+    on(names, "node", "attribute", "kind", "document", "identifier"),
+  ),
+  contained(on(placed, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
+  contained(
+    on(
+      select(placed, namesNoBuiltIn),
+      "declaration",
+      "assembly",
+      "identifier",
+      "declarationKind",
+      "baseType",
+      "cardinality",
+    ),
+    declarationRef,
+  ),
+  check(rule, placed, resolvesBuiltIn),
+];
+
+/**
  * Every statement over the O3 overlays, each `check` named by its oracle law:
  *
  * - **the read attributes:** one copy from `Attribute` with the key that serves it, and the copy's
@@ -1965,6 +2088,7 @@ const sectionPlacements = select(Instance, (i) =>
  *   multiple, a portable custom interaction's free).
  */
 export const interactionLawsByName = {
+  ...pipe(contentReferences, Rec.map(contentReferenceLaws)),
   "Adaptive feedback": [
     contained(
       on(
@@ -2149,72 +2273,6 @@ export const interactionLawsByName = {
     key(on(PlacedHottext, "assembly", "identifier")),
   ],
   "Choice not variable": [check("Choice_not_variable", ChoiceVariableName, choiceNotVariable)],
-  "Context variable reference": [
-    contained(
-      on(ContextRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(ContextRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Context_variable_reference", ContextRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
-          ),
-        ),
-      ),
-    ),
-    contained(
-      on(SectionContextRef, "node", "attribute", "kind", "document", "identifier"),
-      on(SectionContextName, "node", "attribute", "kind", "document", "identifier"),
-    ),
-    contained(
-      on(SectionContextRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(SectionContextRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "assembly",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Context_variable_reference", SectionContextRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
-          ),
-        ),
-      ),
-    ),
-  ],
   "Custom interaction version": [
     check("Custom_interaction_version", Interaction, (i) =>
       i.or(i.ne(i.kind, customKind), i.ne(i.version, "3.0.0")),
@@ -2662,72 +2720,6 @@ export const interactionLawsByName = {
       r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
     ),
   ],
-  "Feedback reference": [
-    contained(
-      on(FeedbackRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(FeedbackRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Feedback_reference", FeedbackRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
-          ),
-        ),
-      ),
-    ),
-    contained(
-      on(SectionFeedbackRef, "node", "attribute", "kind", "document", "identifier"),
-      on(SectionFeedbackName, "node", "attribute", "kind", "document", "identifier"),
-    ),
-    contained(
-      on(SectionFeedbackRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(SectionFeedbackRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "assembly",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Feedback_reference", SectionFeedbackRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
-          ),
-        ),
-      ),
-    ),
-  ],
   "Graphic gap match default hotspot": [
     check("Graphic_gap_match_default_hotspot", Hotspot, (h) =>
       h.or(
@@ -2797,72 +2789,6 @@ export const interactionLawsByName = {
       i.or(i.ne(i.kind, pciKind), i.gt(i.moduleForms, 0n)),
     ),
   ],
-  "Printed variable reference": [
-    contained(
-      on(PrintedVariableRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(PrintedVariableRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Printed_variable_reference", PrintedVariableRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
-          ),
-        ),
-      ),
-    ),
-    contained(
-      on(SectionPrintedRef, "node", "attribute", "kind", "document", "identifier"),
-      on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
-    ),
-    contained(
-      on(SectionPrintedRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(SectionPrintedRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "assembly",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Printed_variable_reference", SectionPrintedRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
-          ),
-        ),
-      ),
-    ),
-  ],
   RecordBindingFit: [
     contained(
       on(
@@ -2906,72 +2832,6 @@ export const interactionLawsByName = {
             Compute.matches(s.upper, doubleForm),
             (upper) => Compute.cast(upper, pg["double precision"]),
             Number.POSITIVE_INFINITY,
-          ),
-        ),
-      ),
-    ),
-  ],
-  "Template reference": [
-    contained(
-      on(TemplateRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(TemplateRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Template_reference", TemplateRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
-          ),
-        ),
-      ),
-    ),
-    contained(
-      on(SectionTemplateRef, "node", "attribute", "kind", "document", "identifier"),
-      on(SectionTemplateName, "node", "attribute", "kind", "document", "identifier"),
-    ),
-    contained(
-      on(SectionTemplateRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(SectionTemplateRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "assembly",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Template_reference", SectionTemplateRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
           ),
         ),
       ),

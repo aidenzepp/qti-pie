@@ -26,18 +26,24 @@
  * - A branch rule on an item ref naming the item ref after it is accepted; one naming the item ref
  *   before it is refused by `Branch_forward` unless their section's `qti-ordering` shuffles, and
  *   one naming its own owner or its section is refused by `Branch_forward` either way; one naming
- *   an item ref under a selection with replacement is refused by `Branch_target`;
+ *   an item ref under a selection with replacement is refused by `Branch_target`; one naming
+ *   nothing has no `BranchTarget` and is refused by `BranchResolution(instance, rule) →
+ *   BranchTarget(instance, rule)` (Branch target) alone (`src/test/gen/assembly.db.test.ts`);
  * - An item ref whose href names no entry is refused by `ReferencePath(package, path) →
  *   Entry(package, path)`, and a section ref whose href names an item document by the site's
  *   containment into the section documents;
  * - A section holding three parts, two of them required, under a selection of `select="1"` is refused
  *   by `Selection_required`, and under `select="2"` accepted.
+ *
+ * A branch rule's target is judged here row by row: a `BranchTarget` the family's owner (its
+ * `shuffles` its own column, which the case states), whose `Branch_target` and `Branch_forward`
+ * never both refuse it.
  */
 import { layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { Section, SectionSelection, TestFlag, TestToken } from "#pantry/qti/tests.ts";
+import { BranchTarget, Section, SectionSelection, TestFlag, TestToken } from "#pantry/qti/tests.ts";
 import { assertVerdict, judged, loginSession, statedInserts } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
@@ -278,6 +284,82 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
                 "",
                 false,
                 `a section of ${String(members)} parts`,
+              );
+            }
+          }).pipe(Effect.scoped),
+      );
+
+      it.effect(
+        "refuses each bad branch target under one rule: a name of the wrong kind, part or replacement by Branch_target alone, and an admitted name before its source by Branch_forward unless a shuffle orders the two",
+        () =>
+          // Oracle: reading 87's bullets over the row (information model §5.23 and §5.98), the
+          // law oracle's precedence (`#pantry/test/oracle-laws/tests.ts` `branchLawsOf`: a target
+          // of the wrong kind breaks Branch target alone), against PostgreSQL's two CHECKs, which
+          // a row breaking both would report as `branch_forward`, the name that sorts first.
+          // Bound: an item ref's rule in one instance naming a later item ref, an earlier one with
+          // and without a shuffle, an earlier test part, an earlier item ref of another part, and
+          // an earlier repeatable item ref.
+          Effect.gen(function* branchTargets() {
+            const client = yield* loginSession;
+            const part = "00000000-0000-4000-8000-0000000013a0";
+            const instance = "00000000-0000-4000-8000-0000000013b0";
+            const target = {
+              assembly: stray.document,
+              instance,
+              instanceStart: 0n,
+              ownerEnd: 6n,
+              ownerKind: "qti-assessment-item-ref",
+              ownerPart: part,
+              ownerStart: 5n,
+              rule: stray.node,
+              shuffles: 0n,
+              target: "next",
+              targetEnd: 8n,
+              targetInstance: instance,
+              targetInstanceEnd: 9n,
+              targetInstanceStart: 0n,
+              targetKind: "qti-assessment-item-ref",
+              targetMixes: false,
+              targetNode: stray.parent,
+              targetPart: part,
+              targetReplaced: false,
+              targetStart: 7n,
+              via: instance,
+              viaEnd: 9n,
+              viaParent: instance,
+              viaSiteStart: 0n,
+              viaStart: 0n,
+            } satisfies Stated["fact"];
+            const before = { ...target, target: "earlier", targetEnd: 3n, targetStart: 2n };
+            for (const [label, fact, constraint] of [
+              ["an item ref after the source", target, ""],
+              ["an item ref before the source, no shuffle", before, "branch_forward"],
+              [
+                "an item ref before the source, a shuffle ordering the two",
+                { ...before, shuffles: 1n },
+                "",
+              ],
+              [
+                "a test part, holding the source, from an item ref",
+                { ...before, targetEnd: 9n, targetKind: "qti-test-part", targetStart: 0n },
+                "branch_target",
+              ],
+              [
+                "an item ref before the source in another part",
+                { ...before, targetPart: stray.parent },
+                "branch_target",
+              ],
+              [
+                "an item ref before the source that a replacement can repeat",
+                { ...before, targetReplaced: true },
+                "branch_target",
+              ],
+            ] as const) {
+              assertVerdict(
+                yield* judged(client, statedInserts([{ fact, relation: BranchTarget }])),
+                constraint,
+                constraint !== "",
+                label,
               );
             }
           }).pipe(Effect.scoped),

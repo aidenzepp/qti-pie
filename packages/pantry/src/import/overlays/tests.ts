@@ -60,6 +60,8 @@ import type {
   AssembledName,
   BranchResolution,
   BranchRule,
+  BranchShuffle,
+  BranchTarget,
   FlagName,
   Inclusion,
   Instance,
@@ -1075,6 +1077,8 @@ export type InstanceRoot = Omit<Addition<typeof Instance>, "parent"> & {
 export interface AssembledRows {
   readonly AssembledName: ReadonlyMap<string, Addition<typeof AssembledName>>;
   readonly BranchResolution: ReadonlyMap<string, Addition<typeof BranchResolution>>;
+  readonly BranchShuffle: ReadonlyMap<string, Addition<typeof BranchShuffle>>;
+  readonly BranchTarget: ReadonlyMap<string, Addition<typeof BranchTarget>>;
   readonly Instance: ReadonlyMap<string, InstanceRoot>;
   readonly InstanceName: ReadonlyMap<string, Addition<typeof InstanceName>>;
 }
@@ -1265,29 +1269,11 @@ const commonOf = (
 };
 
 /**
- * The fields a resolution copies of a name, where it names none: the rule's own node, which no
- * `InstanceName` row holds, so the resolution's containments refuse it.
- *
- * @param rule - The rule.
- * @returns The stand-in name.
- */
-const unresolvedOf = (rule: Addition<typeof BranchRule>) =>
-  ({
-    end: 0n,
-    kind: "document",
-    mixes: false,
-    node: rule.node,
-    part: rule.document,
-    replaced: false,
-    start: 0n,
-  }) as const;
-
-/**
  * Find the child of the target's instance that a rule's instance descends through, or the rule's
- * instance itself where the two are one or the target's does not hold it.
+ * instance itself where the two are one.
  *
  * @param instance - The rule's instance.
- * @param targetInstance - The target's instance.
+ * @param targetInstance - The target's instance, one that holds the rule's.
  * @returns The child.
  */
 const viaOf = (instance: Walked, targetInstance: Walked): Walked => {
@@ -1300,84 +1286,148 @@ const viaOf = (instance: Walked, targetInstance: Walked): Walked => {
 };
 
 /**
- * Resolve one branch rule of one instance: its target among the names that spell it, the one in
- * an instance holding the rule's where there is one; the child of the target's instance its own
- * descends through; and the nearest name holding the two.
+ * Whether an instance holds another: the other's start lies in its pre-order interval.
+ *
+ * @param holder - The instance that may hold.
+ * @param held - The instance that may be held.
+ * @returns Whether it does.
+ */
+const holdsInstance = (holder: Walked, held: Walked): boolean =>
+  holder.start <= held.start && held.start < holder.end;
+
+/**
+ * Whether a name's pre-order interval holds a point.
+ *
+ * @param name - The name.
+ * @param point - The point.
+ * @returns Whether it does.
+ */
+const holdsPoint = (name: Addition<typeof InstanceName>, point: bigint): boolean =>
+  name.start <= point && point < name.end;
+
+/**
+ * One branch rule of one instance, resolved: the rule and its source, its target where its
+ * identifier names an element of an instance holding the rule's, and the shuffle that orders the
+ * two where one does.
+ */
+interface Resolved {
+  readonly resolution: Addition<typeof BranchResolution>;
+  readonly shuffle: Option.Option<Addition<typeof BranchShuffle>>;
+  readonly target: Option.Option<Addition<typeof BranchTarget>>;
+}
+
+/**
+ * Resolve one branch rule of one instance (reading 87): its target, the element its identifier
+ * names in an instance holding the rule's, the first in pre-order where several do; the child of
+ * the target's instance its own descends through; and the shuffle that orders the two, the nearest
+ * name holding both, where its children's order is drawn and its child that holds the target does
+ * not hold the source. A rule whose owner is no name of its instance resolves nothing, and its
+ * instance's count of resolutions refuses it; one whose target names nothing has no target, and the
+ * resolution's existence law refuses it ("Branch target").
  *
  * @param walk - The assembly's walk.
  * @param names - The assembly's names by `[instance, node]`.
  * @param instance - The rule's instance.
  * @param rule - The rule.
- * @returns The resolution as its writer writes it.
+ * @returns The resolution, its target and its shuffle, each as its writer writes it, or none.
  */
 const resolutionOf = (
   walk: Walk,
   names: ReadonlyMap<string, Addition<typeof InstanceName>>,
   instance: Walked,
   rule: Addition<typeof BranchRule>,
-): Addition<typeof BranchResolution> => {
-  const owner = names.get(keyOf([instance.id, rule.parent])) ?? unresolvedOf(rule);
-  const candidates = walk.walked.flatMap((holder) =>
-    [...(walk.byDocument.get(holder.document)?.Named.values() ?? [])]
-      .filter(({ identifier }) => identifier === rule.target)
-      .map(({ node }) => ({ holder, node })),
-  );
-  const chosen =
-    candidates.find(
-      ({ holder }) => holder.start <= instance.start && instance.start < holder.end,
-    ) ?? candidates[0];
-  const targetInstance = chosen?.holder ?? instance;
-  const target =
-    chosen === undefined ? undefined : names.get(keyOf([targetInstance.id, chosen.node]));
-  const via = viaOf(instance, targetInstance);
-  const point = targetInstance === instance ? owner.start : via.siteStart;
-  const found =
-    target === undefined
-      ? Option.none<Common>()
-      : commonOf(walk, names, targetInstance, target, point);
-  const t = target ?? unresolvedOf(rule);
-  const c = Option.match(found, { onNone: () => t, onSome: ({ common }) => common });
-  const b = Option.match(found, { onNone: () => t, onSome: ({ branch }) => branch });
+): Option.Option<Resolved> =>
+  Option.map(Option.fromNullishOr(names.get(keyOf([instance.id, rule.parent]))), (owner) => {
+    const resolution: Addition<typeof BranchResolution> = {
+      instance: instance.id,
+      owner: rule.parent,
+      ownerEnd: owner.end,
+      ownerKind: rule.parentKind,
+      ownerPart: owner.part,
+      ownerStart: owner.start,
+      rule: rule.node,
+      target: rule.target,
+    };
+    const placed = Option.fromNullishOr(
+      walk.walked
+        .filter((holder) => holdsInstance(holder, instance))
+        .flatMap((holder) =>
+          [...(walk.byDocument.get(holder.document)?.Named.values() ?? [])]
+            .filter(({ identifier }) => identifier === rule.target)
+            .flatMap(({ node }) => {
+              const name = names.get(keyOf([holder.id, node]));
 
-  return {
-    branch: b.node,
-    branchEnd: b.end,
-    branchParent:
-      walk.byDocument.get(targetInstance.document)?.Named.get(b.node)?.parent ?? rule.parent,
-    branchPart: b.part,
-    branchStart: b.start,
-    common: c.node,
-    commonEnd: c.end,
-    commonKind: c.kind,
-    commonMixes: c.mixes,
-    commonPart: c.part,
-    commonReplaced: c.replaced,
-    commonStart: c.start,
-    instance: instance.id,
-    owner: rule.parent,
-    ownerEnd: owner.end,
-    ownerKind: rule.parentKind,
-    ownerPart: owner.part,
-    ownerStart: owner.start,
-    rule: rule.node,
-    target: rule.target,
-    targetEnd: t.end,
-    targetInstance: targetInstance.id,
-    targetInstanceEnd: BigInt(targetInstance.end),
-    targetInstanceStart: BigInt(targetInstance.start),
-    targetKind: t.kind,
-    targetMixes: t.mixes,
-    targetNode: t.node,
-    targetPart: t.part,
-    targetReplaced: t.replaced,
-    targetStart: t.start,
-    via: via.id,
-    viaEnd: BigInt(via.end),
-    viaParent: via.parent?.id ?? via.id,
-    viaSiteStart: via.siteStart,
-    viaStart: BigInt(via.start),
-  };
-};
+              return name === undefined ? [] : [{ holder, name }];
+            }),
+        )[0],
+    );
+    const target = placed.pipe(
+      Option.map(({ holder, name }) => {
+        const via = viaOf(instance, holder);
+
+        return {
+          assembly: name.assembly,
+          instance: instance.id,
+          instanceStart: BigInt(instance.start),
+          ownerEnd: owner.end,
+          ownerKind: rule.parentKind,
+          ownerPart: owner.part,
+          ownerStart: owner.start,
+          rule: rule.node,
+          target: rule.target,
+          targetEnd: name.end,
+          targetInstance: holder.id,
+          targetInstanceEnd: BigInt(holder.end),
+          targetInstanceStart: BigInt(holder.start),
+          targetKind: name.kind,
+          targetMixes: name.mixes,
+          targetNode: name.node,
+          targetPart: name.part,
+          targetReplaced: name.replaced,
+          targetStart: name.start,
+          via: via.id,
+          viaEnd: BigInt(via.end),
+          viaParent: via.parent?.id ?? via.id,
+          viaSiteStart: via.siteStart,
+          viaStart: BigInt(via.start),
+        } satisfies Addition<typeof BranchTarget>;
+      }),
+    );
+    const shuffle = placed.pipe(
+      Option.flatMap(({ holder, name }) => {
+        const via = viaOf(instance, holder);
+        const point = holder === instance ? owner.start : via.siteStart;
+
+        return Option.flatMap(commonOf(walk, names, holder, name, point), ({ branch, common }) =>
+          common.mixes && !holdsPoint(branch, point)
+            ? Option.some({
+                assembly: name.assembly,
+                branch: branch.node,
+                branchEnd: branch.end,
+                branchParent: common.node,
+                branchPart: branch.part,
+                branchStart: branch.start,
+                common: common.node,
+                commonEnd: common.end,
+                commonKind: common.kind,
+                commonMixes: common.mixes,
+                commonPart: common.part,
+                commonReplaced: common.replaced,
+                commonStart: common.start,
+                instance: instance.id,
+                ownerStart: owner.start,
+                rule: rule.node,
+                targetInstance: holder.id,
+                targetStart: name.start,
+                viaSiteStart: via.siteStart,
+              } satisfies Addition<typeof BranchShuffle>)
+            : Option.none(),
+        );
+      }),
+    );
+
+    return { resolution, shuffle, target };
+  });
 
 /**
  * Build a package's assemblies from its documents' rows: one tree per document that heads one, and,
@@ -1411,6 +1461,8 @@ export const assembledRowsOf = (
   const names = new Map<string, Addition<typeof InstanceName>>();
   const assembled = new Map<string, Addition<typeof AssembledName>>();
   const resolutions = new Map<string, Addition<typeof BranchResolution>>();
+  const targets = new Map<string, Addition<typeof BranchTarget>>();
+  const shuffles = new Map<string, Addition<typeof BranchShuffle>>();
 
   for (const head of heads) {
     const walk: Walk = { assemblyKind: head.rootKind, byDocument, newId, walked: [] };
@@ -1441,10 +1493,18 @@ export const assembledRowsOf = (
       }
       for (const instance of walk.walked) {
         for (const rule of byDocument.get(instance.document)?.BranchRule.values() ?? []) {
-          resolutions.set(
-            keyOf([instance.id, rule.node]),
+          const at = keyOf([instance.id, rule.node]);
+          for (const resolved of Option.toArray(
             resolutionOf(walk, written.names, instance, rule),
-          );
+          )) {
+            resolutions.set(at, resolved.resolution);
+            for (const target of Option.toArray(resolved.target)) {
+              targets.set(at, target);
+            }
+            for (const shuffle of Option.toArray(resolved.shuffle)) {
+              shuffles.set(at, shuffle);
+            }
+          }
         }
       }
     }
@@ -1453,6 +1513,8 @@ export const assembledRowsOf = (
   return {
     AssembledName: assembled,
     BranchResolution: resolutions,
+    BranchShuffle: shuffles,
+    BranchTarget: targets,
     Instance: roots,
     InstanceName: names,
   };

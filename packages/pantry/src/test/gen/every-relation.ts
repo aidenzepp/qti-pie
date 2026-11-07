@@ -475,10 +475,11 @@ const section = [
 ].join("\n");
 
 /**
- * The test: one linear part of two sections, the first holding a branch rule forward to a sibling
- * item ref, a variable mapping and a template default, the second selecting one of an item ref and
- * the section document's placement; and outcome processing that reads `ref1.SCORE` and the first
- * section's item scores.
+ * The test: one linear part of two sections, the first shuffling its item refs and holding a
+ * branch rule forward to a sibling item ref, one back from that sibling, which the shuffle orders
+ * (reading 87's `BranchShuffle`), a variable mapping and a template default, the second selecting
+ * one of an item ref and the section document's placement; and outcome processing that reads
+ * `ref1.SCORE` and the first section's item scores.
  */
 const test = [
   declaration,
@@ -494,12 +495,15 @@ const test = [
   '  <qti-outcome-declaration identifier="VERDICT" cardinality="single" base-type="identifier"/>',
   '  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">',
   '    <qti-assessment-section identifier="first" title="First" visible="true">',
+  '      <qti-ordering shuffle="true"/>',
   `      <qti-assessment-item-ref identifier="ref1" href="${paths.item}">`,
   '        <qti-branch-rule target="ref2"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule>',
   '        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>',
   '        <qti-template-default template-identifier="N"><qti-base-value base-type="integer">7</qti-base-value></qti-template-default>',
   "      </qti-assessment-item-ref>",
-  `      <qti-assessment-item-ref identifier="ref2" href="${paths.templated}"/>`,
+  `      <qti-assessment-item-ref identifier="ref2" href="${paths.templated}">`,
+  '        <qti-branch-rule target="ref1"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule>',
+  "      </qti-assessment-item-ref>",
   "    </qti-assessment-section>",
   '    <qti-assessment-section identifier="second" title="Second" visible="true">',
   '      <qti-selection select="1"/>',

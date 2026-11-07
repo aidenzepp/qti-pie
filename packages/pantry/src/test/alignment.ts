@@ -421,8 +421,8 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     87,
     {
       owner:
-        "Q5.13's branch targets over `Instance`: `Branch_target` and `Branch_forward` over each instance's `BranchResolution`, a rule placed in its own instance by `instanceStart` (`branchLaws`, `src/qti/tests.ts`), held by `src/test/gen/assembly.test.ts`; the oracle's Branch target and Branch forward (`src/test/oracle-laws/tests.ts`, `branchLaws`), held by `oracle-laws.differential.oracle.test.ts`",
-      status: "G",
+        "Q5.13's branch resolutions over `Instance`, each target and shuffle a row of its own (`BranchTarget`, `BranchShuffle`): `Branch_target` and `Branch_forward` in `testLawsByName` (`src/qti/tests.ts`), a rule placed in its own instance by `instanceStart`, held by `src/test/gen/assembly.test.ts`; the oracle's Branch target and Branch forward (`src/test/oracle-laws/tests.ts`, `branchLawsOf`), held by `oracle-laws.differential.oracle.test.ts`",
+      status: "P",
     },
   ],
   [

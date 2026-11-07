@@ -153,12 +153,13 @@ const packageOf = (drawn: IdCase): PackageEntries => {
   const ids = idsOf(drawn);
   const fragment = `<?xml version="1.0" encoding="UTF-8"?>\n<p xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" id="${ids.fragment}">Included.</p>\n`;
   const steps: readonly ((entries: PackageEntries) => PackageEntries)[] = [
+    // A section's rubric blocks follow its qti-ordering, so the test's rubric goes after it.
     (entries) =>
       replaced(
         entries,
         "test.xml",
-        '<qti-assessment-section identifier="first" title="First" visible="true">\n',
-        `<qti-assessment-section identifier="first" title="First" visible="true">\n      <qti-rubric-block use="instructions" view="candidate"><qti-content-body><p id="${ids.test}"${drawn.reference === "test names section" ? ` aria-labelledby="${ids.section}"` : ""}>Test.</p></qti-content-body></qti-rubric-block>\n`,
+        '<qti-assessment-section identifier="first" title="First" visible="true">\n      <qti-ordering shuffle="true"/>\n',
+        `<qti-assessment-section identifier="first" title="First" visible="true">\n      <qti-ordering shuffle="true"/>\n      <qti-rubric-block use="instructions" view="candidate"><qti-content-body><p id="${ids.test}"${drawn.reference === "test names section" ? ` aria-labelledby="${ids.section}"` : ""}>Test.</p></qti-content-body></qti-rubric-block>\n`,
       ),
     (entries) =>
       drawn.sections === 1
