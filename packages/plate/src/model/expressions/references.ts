@@ -132,7 +132,7 @@ const mapResponsePointRule: KindRule = {
 };
 
 /**
- * The references family's kind rules by kind: M1's five, `qti-default` and `qti-null`, and the
+ * The references family's kind rules by kind: the rule of each of its seven landed kinds, and the
  * unlanded rule for each kind the family has not landed.
  */
 export const referencesRules: FamilyRules<
@@ -289,8 +289,8 @@ const baseValueReader: ReaderSpec<"base-value"> = {
 const unlanded: UnlandedReader = { _tag: "unlanded" };
 
 /**
- * The references family's reader specs by kind: M1's five, `qti-default` and `qti-null`, and the
- * stub for each kind the family has not landed.
+ * The references family's reader specs by kind: the spec of each of its seven landed kinds, and
+ * the stub for each kind the family has not landed.
  */
 export const referencesReaders: FamilyReaders<
   | "base-value"

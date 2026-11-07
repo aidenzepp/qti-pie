@@ -168,8 +168,8 @@ const integerOrName = (written: string): LiteralOrRef<bigint> => {
  * R4). The reader and the validator both classify through it, so they never split a value
  * differently.
  *
- * The range of an attribute such as `figures` is the structure check's (reading 46), not this
- * function's.
+ * The range of an attribute such as `figures` (reading 46), and its least value (P10), are the
+ * structure check's, not this function's.
  *
  * @param written The attribute's value as written.
  * @returns The literal or the reference it holds.
@@ -319,9 +319,8 @@ interface TestFilters {
  * mode (`exact`), tolerance (none) and bounds (both included) do, and one with no default as an
  * `Option`, as `variable`'s `weightIdentifier` is, which an item reads and never evaluates. An
  * attribute that may name a variable holds a literal or a reference ({@link IntegerOrRef},
- * {@link FloatOrRef}, {@link StringOrRef}, {@link IntOrIdentifier}). The reader builds an `equal`
- * only in its `exact` mode, the one mode the engine runs; one in `absolute` or `relative` mode is
- * marked, as is every kind whose family has not landed.
+ * {@link FloatOrRef}, {@link StringOrRef}, {@link IntOrIdentifier}). The reader builds no variant
+ * of a kind whose family has not landed: it marks the element instead.
  */
 export type Expression =
   | { readonly kind: "match"; readonly operands: readonly [Expression, Expression] }
@@ -455,8 +454,9 @@ export type Expression =
     }
   | {
       /**
-       * The area's `coords`, in written order. A coordinate written with `%` holds its number
-       * without the sign; the reader marks that one was, as it does an area mapping's.
+       * The area's `coords`, in written order. The reader builds no `inside` with a coordinate
+       * written with `%`, a percentage of a size the item does not give: it marks the element
+       * `area-coords-percent` instead.
        */
       readonly coords: readonly number[];
       readonly kind: "inside";

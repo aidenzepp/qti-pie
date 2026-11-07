@@ -583,8 +583,8 @@ export interface Item {
 }
 
 /**
- * What one item build reads and collects: the walk, the response declarations, and the unsupported
- * features found so far, in document order.
+ * What one item build reads and collects: the walk, the response declarations, the names of the
+ * variables the item holds, and the unsupported features found so far, in document order.
  */
 interface Build extends ModelWalk {
   /**
@@ -1707,9 +1707,9 @@ const readingOf = (build: Build): ExpressionReading => ({
  *
  * @param build The build.
  * @param element The expression element.
- * @returns The expression, none when it holds an element the engine does not run, or the refusal
- *   `value-type` for a `qti-base-value` outside its lexical space. A document the validator would
- *   refuse can also fail with `attribute-type` for a `tolerance-mode` outside its three values.
+ * @returns The expression, none when it holds anything the engine does not run, or the refusal
+ *   an attribute gives: `value-type` for a `qti-base-value` outside its lexical space, and, in a
+ *   document the validator refuses first, the refusal of any attribute outside its type.
  */
 const expression = (
   build: Build,

@@ -364,7 +364,8 @@ const containerSizeReader: ReaderSpec<"container-size"> = {
 /**
  * The reader spec of `qti-index`: its one operand, and its required `n`, an `xs:int` literal or the
  * name of a variable, read as `qti-repeat`'s `number-repeats` is. A literal below 1 is held as
- * written; the engine gives NULL for it (9.20).
+ * written: the structure check refuses it (P11), and the engine gives NULL for an `n` below 1
+ * (9.20).
  *
  * Its read fails with `missing-attribute` for an absent `n`, as a document the validator refuses
  * first would.

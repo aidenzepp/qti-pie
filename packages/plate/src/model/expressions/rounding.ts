@@ -107,8 +107,8 @@ const truncateReader: ReaderSpec<"truncate"> = {
  * written (its XSD type restricts `xs:string`), and its required `figures`, an `xs:integer`
  * literal, exact at any size, or the name of a variable, as `integerOrRefOf` classifies it. A
  * name is held as a reference here, whatever it names: the validator and the walks judge it
- * through the kind's reference facet. The range of a literal is the structure check's (reading
- * 46).
+ * through the kind's reference facet. A literal's range (reading 46) and its least value under the
+ * rounding mode (P10) are the structure check's.
  *
  * Its read fails, as a document the validator refuses first would, with `missing-attribute` for
  * an absent `rounding-mode` or `figures` and `attribute-type` for a `rounding-mode` outside its two
