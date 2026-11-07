@@ -17,6 +17,8 @@ import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { evaluateExpression, runRules } from "#plate/engine/evaluate.ts";
 import type { EngineFailure, Evaluate, Scope, Variables } from "#plate/engine/evaluate.ts";
+import { drawStream } from "#plate/engine/random.ts";
+import type { Draw } from "#plate/engine/random.ts";
 import type {
   Expression,
   ExpressionKind,
@@ -38,13 +40,19 @@ import { tables } from "#plate/validate/tables.ts";
 export const processingLocation = "items/processing.xml";
 
 /**
- * Construct the evaluator's context for an item and the variables of an attempt.
+ * Construct the evaluator's context for an item, the variables of an attempt and a stream.
  *
  * @param item The item, whose declarations the evaluators read.
  * @param variables The variables of the attempt.
+ * @param draw The stream its random kinds draw from; `drawStream("", "test")`, fresh, when none is
+ *   given.
  * @returns The scope.
  */
-export const scopeOf = (item: Item, variables: Variables): Scope => ({ item, variables });
+export const scopeOf = (item: Item, variables: Variables, draw?: Draw): Scope => ({
+  draw: draw ?? drawStream("", "test"),
+  item,
+  variables,
+});
 
 /**
  * Give the value of an expression in a scope through the engine's dispatcher, as the `evaluate` an
@@ -55,7 +63,7 @@ export const scopeOf = (item: Item, variables: Variables): Scope => ({ item, var
  * @returns The expression's value, or the first failure of its evaluation.
  */
 export const evaluateIn: Evaluate = (expression, scope) =>
-  evaluateExpression(expression, scope.item, scope.variables);
+  evaluateExpression(expression, scope.item, scope.variables, scope.draw);
 
 /**
  * Construct the `qti-base-value` operand that gives a value, so a family test passes any value,

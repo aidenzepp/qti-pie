@@ -15,14 +15,18 @@ import type {
   ExtendedTextInteraction,
   InlineChoiceInteraction,
   Item,
+  PrintedVariable,
   ResponseDeclaration,
+  TemplateContent,
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { brandRedacted } from "#plate/payload.ts";
 import type { Redacted, RedactedFields } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
+import { acceptedOf, openCorpus, recordStates, templated } from "#plate/test/sweep.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
@@ -113,6 +117,8 @@ const itemOf = (
   outcomes: new Map(),
   processing: Option.none(),
   responses: new Map(responses.map((response) => [response.identifier, response])),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: identifier,
   unsupported,
 });
@@ -126,9 +132,9 @@ const choice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "multiple",
   choices: [
-    { content: [words("2")], fixed: false, identifier: "TWO" },
-    { content: [words("3")], fixed: false, identifier: "THREE" },
-    { content: [words("4")], fixed: false, identifier: "FOUR" },
+    { content: [words("2")], fixed: false, identifier: "TWO", templateVisibility: Option.none() },
+    { content: [words("3")], fixed: false, identifier: "THREE", templateVisibility: Option.none() },
+    { content: [words("4")], fixed: false, identifier: "FOUR", templateVisibility: Option.none() },
   ],
   class: "",
   kind: "choice",
@@ -214,7 +220,7 @@ const colour: InlineChoiceInteraction = {
   ariaLabel: Option.some("Colour"),
   ariaLabelledby: Option.some("colour-hint"),
   choices: [
-    { content: [words("red")], fixed: false, identifier: "RED" },
+    { content: [words("red")], fixed: false, identifier: "RED", templateVisibility: Option.none() },
     {
       content: [
         {
@@ -227,8 +233,14 @@ const colour: InlineChoiceInteraction = {
       ],
       fixed: true,
       identifier: "GREEN",
+      templateVisibility: Option.none(),
     },
-    { content: [words("blue")], fixed: false, identifier: "BLUE" },
+    {
+      content: [words("blue")],
+      fixed: false,
+      identifier: "BLUE",
+      templateVisibility: Option.none(),
+    },
   ],
   class: "wide",
   kind: "inline-choice",
@@ -399,7 +411,6 @@ const nestedSpans = (levels: number): RedactedJson => {
       attributes: [],
       children: [node],
       kind: "element",
-      path: "qti-assessment-item/qti-item-body/span",
       tag: "span",
     };
   }
@@ -442,7 +453,6 @@ const yearJson: BodyNodeJson = {
   baseType: "integer",
   class: "",
   kind: "text-entry",
-  path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
   response: "YEAR",
 };
 
@@ -457,7 +467,6 @@ const elementJson = (tag: string, children: readonly BodyNodeJson[]): BodyNodeJs
   attributes: [],
   children,
   kind: "element",
-  path: `qti-assessment-item/qti-item-body/${tag}`,
   tag,
 });
 
@@ -530,6 +539,129 @@ const spanChain = (spans: number, innermost: readonly BodyNodeJson[]): BodyNodeJ
   return node;
 };
 
+/**
+ * Give body nodes with every path `""`, at any depth: an element's children, a Prompt, a Label, a
+ * choice's content and a template block's or inline's content included, as `decodeRedacted` gives
+ * them, since the JSON form holds no path (review P2-6).
+ *
+ * @param nodes The body nodes, with their paths.
+ * @returns The same nodes, each path `""`.
+ */
+const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
+  nodes.map((node): BodyNode => {
+    switch (node.kind) {
+      case "element": {
+        return { ...node, children: withoutPaths(node.children), path: "" };
+      }
+      case "choice": {
+        return {
+          ...node,
+          choices: node.choices.map((simple) => ({
+            ...simple,
+            content: withoutPaths(simple.content),
+          })),
+          path: "",
+          prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
+        };
+      }
+      case "inline-choice": {
+        return {
+          ...node,
+          choices: node.choices.map((simple) => ({
+            ...simple,
+            content: withoutPaths(simple.content),
+          })),
+          label: node.label.pipe(Option.map((label) => withoutPaths(label))),
+          path: "",
+        };
+      }
+      case "extended-text": {
+        return {
+          ...node,
+          path: "",
+          prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
+        };
+      }
+      case "template-block":
+      case "template-inline": {
+        return { ...node, content: withoutPaths(node.content), path: "" };
+      }
+      case "printed-variable":
+      case "text-entry":
+      case "unsupported": {
+        return { ...node, path: "" };
+      }
+      case "text": {
+        return node;
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  });
+
+/**
+ * Give a redacted item as its JSON form decodes: every body node's path `""`, and `unprinted`'s.
+ *
+ * @param redacted The item `redact` gave.
+ * @returns The same item, each path in its body, and `unprinted`'s, `""`.
+ */
+const pathless = (redacted: Redacted): Redacted =>
+  brandRedacted({
+    ...redacted,
+    body: withoutPaths(redacted.body),
+    unprinted: redacted.unprinted.pipe(Option.map((unprinted) => ({ ...unprinted, path: "" }))),
+  });
+
+/**
+ * Collect the path of every body node that has one, at any depth, in document order: an element's
+ * children, a Prompt, a Label, a choice's content and a template block's or inline's content
+ * included.
+ *
+ * @param nodes The body nodes.
+ * @returns Their paths.
+ */
+const pathsOf = (nodes: readonly BodyNode[]): readonly string[] =>
+  nodes.flatMap((node): readonly string[] => {
+    switch (node.kind) {
+      case "element": {
+        return [node.path, ...pathsOf(node.children)];
+      }
+      case "choice": {
+        return [
+          node.path,
+          ...Option.toArray(node.prompt).flatMap((prompt) => pathsOf(prompt)),
+          ...node.choices.flatMap((simple) => pathsOf(simple.content)),
+        ];
+      }
+      case "inline-choice": {
+        return [
+          node.path,
+          ...Option.toArray(node.label).flatMap((label) => pathsOf(label)),
+          ...node.choices.flatMap((simple) => pathsOf(simple.content)),
+        ];
+      }
+      case "extended-text": {
+        return [node.path, ...Option.toArray(node.prompt).flatMap((prompt) => pathsOf(prompt))];
+      }
+      case "template-block":
+      case "template-inline": {
+        return [node.path, ...pathsOf(node.content)];
+      }
+      case "printed-variable":
+      case "text-entry":
+      case "unsupported": {
+        return [node.path];
+      }
+      case "text": {
+        return [];
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  });
+
 describe("the Schema and the model", () => {
   it("agree on the body nodes and the redacted fields", () => {
     assert.isTrue(bodyPinned);
@@ -548,7 +680,7 @@ describe("encodeRedacted and decodeRedacted", () => {
 
   for (const [name, item] of items) {
     it.effect(
-      `round-trip the ${name} item through JSON text to an equal Redacted that renders the same HTML`,
+      `round-trip the ${name} item through JSON text to the equal Redacted with every path "", which renders the same HTML`,
       () =>
         Effect.gen(function* roundTrip() {
           const redacted = redact(acceptForTest(item));
@@ -559,7 +691,7 @@ describe("encodeRedacted and decodeRedacted", () => {
           const decoded = Result.getOrThrow(decodeRedacted(handedOver));
           const configuration = yield* defaults;
 
-          assert.deepStrictEqual(decoded, redacted);
+          assert.deepStrictEqual(decoded, pathless(redacted));
           assert.strictEqual(
             Result.getOrThrow(render(decoded, configuration, { instance })).html,
             Result.getOrThrow(render(redacted, configuration, { instance })).html,
@@ -580,8 +712,8 @@ describe("encodeRedacted and decodeRedacted", () => {
         const decoded = Result.getOrThrow(decodeRedacted(handedOver));
         const configuration = yield* defaults;
 
-        assert.deepStrictEqual(decoded.body, colourItem.body);
-        assert.deepStrictEqual(decoded, redacted);
+        assert.deepStrictEqual(decoded.body, withoutPaths(colourItem.body));
+        assert.deepStrictEqual(decoded, pathless(redacted));
         assert.strictEqual(
           Result.getOrThrow(render(decoded, configuration, { instance })).html,
           Result.getOrThrow(render(redacted, configuration, { instance })).html,
@@ -618,8 +750,8 @@ const textItemBytes = (body: string, cardinality = "single"): Uint8Array =>
 
 /**
  * Open an item document, assert it is accepted naming exactly the unsupported features given, and
- * assert its redaction round-trips through JSON text to an equal `Redacted` that renders the same
- * HTML.
+ * assert its redaction round-trips through JSON text to the equal `Redacted` with every path `""`
+ * that renders the same HTML.
  *
  * @param name The case, which a failure names.
  * @param bytes The document's bytes.
@@ -653,7 +785,7 @@ const acceptedAndRoundTripped = Effect.fnUntraced(function* acceptedAndRoundTrip
   const decoded = Result.getOrThrow(decodeRedacted(handedOver));
   const configuration = yield* defaults;
 
-  assert.deepStrictEqual(decoded, redacted);
+  assert.deepStrictEqual(decoded, pathless(redacted));
   assert.strictEqual(
     Result.getOrThrow(render(decoded, configuration, { instance })).html,
     Result.getOrThrow(render(redacted, configuration, { instance })).html,
@@ -776,6 +908,455 @@ describe("decodeRedacted", () => {
   );
 });
 
+/**
+ * The path the printed variable built by hand in the printed-variable cases sits at; the JSON
+ * form holds no path.
+ */
+const printedPath = "qti-assessment-item/qti-item-body/p/qti-printed-variable";
+
+/**
+ * A printed variable as the JSON form would write one if it held any; it holds none.
+ */
+interface PrintedVariableJson {
+  readonly base: { readonly _tag: "literal"; readonly value: string };
+  readonly delimiter: string;
+  readonly identifier: string;
+  readonly kind: "printed-variable";
+  readonly mappingIndicator: string;
+  readonly powerForm: boolean;
+}
+
+/**
+ * A template block or inline as the JSON form would write one if it held any; it holds none.
+ */
+interface TemplateContentJson {
+  readonly content: readonly BodyNodeJson[];
+  readonly identifier: string;
+  readonly kind: "template-block" | "template-inline";
+  readonly templateVisibility: {
+    readonly showHide: "hide" | "show";
+    readonly templateIdentifier: string;
+  };
+}
+
+/**
+ * A body node the JSON form never holds, which decoding must refuse.
+ */
+type UnredactedJson = PrintedVariableJson | TemplateContentJson;
+
+/**
+ * A paragraph in the JSON form whose children may hold a printed variable or a template block or
+ * inline.
+ */
+interface HoldingJson {
+  readonly attributes: Extract<BodyNodeJson, { readonly kind: "element" }>["attributes"];
+  readonly children: readonly (BodyNodeJson | UnredactedJson)[];
+  readonly kind: "element";
+  readonly tag: string;
+}
+
+/**
+ * The JSON form with a body that may hold a printed variable or a template block or inline, at the
+ * top or in a paragraph.
+ */
+type PrintingJson = Omit<RedactedJson, "body"> & {
+  readonly body: readonly (BodyNodeJson | HoldingJson | UnredactedJson)[];
+};
+
+/**
+ * A printed variable in the JSON form, which decoding must refuse.
+ */
+const printedJson: PrintedVariableJson = {
+  base: { _tag: "literal", value: "10" },
+  delimiter: ";",
+  identifier: "SCORE",
+  kind: "printed-variable",
+  mappingIndicator: "=",
+  powerForm: false,
+};
+
+/**
+ * Put a node at the end of the choice item's JSON body, inside a paragraph or beside it.
+ *
+ * @param node The node.
+ * @param nested Whether a paragraph holds it.
+ * @returns The JSON form, the node added.
+ */
+const withNode = (node: BodyNodeJson | UnredactedJson, nested: boolean): PrintingJson => {
+  const json = Result.getOrThrow(encodeRedacted(redact(acceptForTest(choiceItem))));
+
+  return {
+    ...json,
+    body: [
+      ...json.body,
+      nested
+        ? {
+            attributes: [],
+            children: [node],
+            kind: "element",
+            tag: "p",
+          }
+        : node,
+    ],
+  };
+};
+
+describe("the codec on a printed variable (OD-P8-14)", () => {
+  for (const nested of [false, true]) {
+    it.effect(
+      `[I-5] decodeRedacted refuses a body that holds a printed variable${nested ? " inside a paragraph" : ""}: InvalidRedacted at stage decode, where its notice decodes`,
+      () =>
+        Effect.gen(function* refusesPrintedVariable() {
+          const error = yield* failureOf(decodeRedacted(withNode(printedJson, nested)));
+          const notice = decodeRedacted(
+            withNode({ feature: "qti-printed-variable", kind: "unsupported" }, nested),
+          );
+
+          assert.strictEqual(error._tag, "InvalidRedacted");
+          assert.strictEqual(error.stage, "decode");
+          assert.isTrue(Result.isSuccess(notice));
+        }),
+    );
+  }
+
+  it.effect(
+    "[I-5] encodeRedacted refuses a body built by hand that holds a printed variable: InvalidRedacted at stage encode",
+    () =>
+      Effect.gen(function* refusesPrintedVariableOut() {
+        const node: PrintedVariable = {
+          base: { _tag: "literal", value: 10n },
+          delimiter: ";",
+          field: Option.none(),
+          format: Option.none(),
+          identifier: "SCORE",
+          index: Option.none(),
+          kind: "printed-variable",
+          mappingIndicator: "=",
+          path: printedPath,
+          powerForm: false,
+        };
+        const redacted = redact(acceptForTest(choiceItem));
+        const error = yield* failureOf(
+          encodeRedacted(brandRedacted({ ...redacted, body: [...redacted.body, node] })),
+        );
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "encode");
+      }),
+  );
+});
+
+/**
+ * The path each template block or inline built by hand in the template cases sits at; the JSON
+ * form holds no path.
+ */
+const templatePath = (kind: TemplateContent["kind"]): string =>
+  `qti-assessment-item/qti-item-body/p/qti-${kind}`;
+
+describe("the codec on a template block or inline (OD-P8-14)", () => {
+  for (const kind of ["template-block", "template-inline"] as const) {
+    for (const nested of [false, true]) {
+      it.effect(
+        `[I-5] decodeRedacted refuses a body that holds a ${kind}${nested ? " inside a paragraph" : ""}: InvalidRedacted at stage decode, where its notice decodes`,
+        () =>
+          Effect.gen(function* refusesTemplateContent() {
+            const error = yield* failureOf(
+              decodeRedacted(
+                withNode(
+                  {
+                    content: [{ kind: "text", text: "Shown by a template value" }],
+                    identifier: "SHOWN",
+                    kind,
+                    templateVisibility: { showHide: "show", templateIdentifier: "VISIBLE" },
+                  },
+                  nested,
+                ),
+              ),
+            );
+            const notice = decodeRedacted(
+              withNode({ feature: `qti-${kind}`, kind: "unsupported" }, nested),
+            );
+
+            assert.strictEqual(error._tag, "InvalidRedacted");
+            assert.strictEqual(error.stage, "decode");
+            assert.isTrue(Result.isSuccess(notice));
+          }),
+      );
+    }
+
+    it.effect(
+      `[I-5] encodeRedacted refuses a body built by hand that holds a ${kind}: InvalidRedacted at stage encode`,
+      () =>
+        Effect.gen(function* refusesTemplateContentOut() {
+          const node: TemplateContent = {
+            content: [{ kind: "text", text: "Shown by a template value" }],
+            identifier: "SHOWN",
+            kind,
+            path: templatePath(kind),
+            responses: [],
+            templateVisibility: { showHide: "show", templateIdentifier: "VISIBLE" },
+          };
+          const redacted = redact(acceptForTest(choiceItem));
+          const error = yield* failureOf(
+            encodeRedacted(brandRedacted({ ...redacted, body: [...redacted.body, node] })),
+          );
+
+          assert.strictEqual(error._tag, "InvalidRedacted");
+          assert.strictEqual(error.stage, "encode");
+        }),
+    );
+  }
+});
+
+/**
+ * Review P2-6's shape, built by hand: two template blocks and a Choice whose second choice has a
+ * template visibility, each shown when the template variable `VISIBLE` contains its identifier.
+ */
+const pathsBytes = new TextEncoder().encode(
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="paths" title="Paths" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-template-declaration identifier="VISIBLE" cardinality="multiple" base-type="identifier"/><qti-item-body><qti-template-block identifier="BLOCK1" template-identifier="VISIBLE" show-hide="show"><qti-content-body><p>Hidden block text</p></qti-content-body></qti-template-block><qti-template-block identifier="BLOCK2" template-identifier="VISIBLE" show-hide="show"><qti-content-body><p>Shown block text</p></qti-content-body></qti-template-block><qti-choice-interaction response-identifier="RESPONSE" max-choices="1"><qti-simple-choice identifier="A"><span>Ant</span></qti-simple-choice><qti-simple-choice identifier="B" template-identifier="VISIBLE" show-hide="show"><span>Bee</span></qti-simple-choice><qti-simple-choice identifier="C"><span>Cat</span></qti-simple-choice></qti-choice-interaction></qti-item-body></qti-assessment-item>',
+);
+
+/**
+ * The template values that show the second template block, `BLOCK2`, and hide the first block and
+ * the Choice's second choice, `B`.
+ */
+const pathsRecord: RedactRecord = {
+  outcomes: {},
+  templates: {
+    VISIBLE: {
+      baseType: "identifier",
+      cardinality: "multiple",
+      values: [{ baseType: "identifier", value: "BLOCK2" }],
+    },
+  },
+};
+
+/**
+ * The paths item, opened and redacted by {@link pathsRecord}.
+ */
+const pathsRedacted = Effect.gen(function* pathsRedacted() {
+  const verdict = yield* open("items/paths.xml", pathsBytes);
+  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`The paths item is ${verdict.verdict}, not accepted.`),
+  );
+
+  return redact(accepted, pathsRecord);
+});
+
+describe("the codec and source paths (review P2-6)", () => {
+  it.effect(
+    '[I-5] the JSON of a shown template block beside a hidden one and of a Choice whose second choice is hidden holds no "path" key, no qti-template-block and no qti-simple-choice[, where the redacted item keeps its paths',
+    () =>
+      Effect.gen(function* noPathInJson() {
+        const redacted = yield* pathsRedacted;
+        const text = JSON.stringify(Result.getOrThrow(encodeRedacted(redacted)));
+        const kept = pathsOf(redacted.body);
+
+        assert.isTrue(
+          kept.some((path) => path.includes("/qti-template-block[2]/qti-content-body/")),
+        );
+        assert.isTrue(kept.some((path) => path.includes("/qti-simple-choice[3]/")));
+        assert.notInclude(text, '"path"');
+        assert.notInclude(text, "qti-template-block");
+        assert.notInclude(text, "qti-simple-choice[");
+      }),
+  );
+
+  it.effect(
+    '[I-5] decoding the JSON gives every body node the path "", and so does decoding JSON that holds path keys, as JSON written before the change does',
+    () =>
+      Effect.gen(function* decodesEmptyPaths() {
+        const redacted = yield* pathsRedacted;
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(
+          JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+        );
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const placed = Result.getOrThrow(
+          decodeRedacted({
+            ...jsonOf(noticeItem),
+            body: [
+              {
+                attributes: [],
+                children: [{ kind: "text", text: "Find the capital." }],
+                kind: "element",
+                path: "qti-assessment-item/qti-item-body/p",
+                tag: "p",
+              },
+              {
+                feature: "qti-hotspot-interaction",
+                kind: "unsupported",
+                path: "qti-assessment-item/qti-item-body/qti-hotspot-interaction",
+              },
+            ],
+          }),
+        );
+
+        assert.isNotEmpty(pathsOf(decoded.body));
+        assert.deepStrictEqual(new Set(pathsOf(decoded.body)), new Set([""]));
+        assert.deepStrictEqual(placed.body, [
+          {
+            attributes: [],
+            children: [{ kind: "text", text: "Find the capital." }],
+            kind: "element",
+            path: "",
+            tag: "p",
+          },
+          { feature: "qti-hotspot-interaction", kind: "unsupported", path: "" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    '[I-5] the JSON round-trips through JSON text to the redacted item with every path "", which renders the same HTML',
+    () =>
+      Effect.gen(function* roundTripsPathless() {
+        const redacted = yield* pathsRedacted;
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(
+          JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+        );
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const configuration = yield* defaults;
+
+        assert.deepStrictEqual(decoded, pathless(redacted));
+        assert.strictEqual(
+          Result.getOrThrow(render(decoded, configuration, { instance })).html,
+          Result.getOrThrow(render(redacted, configuration, { instance })).html,
+        );
+      }),
+  );
+});
+
+/**
+ * An item with no template processing whose paragraph prints the string template variable `S`,
+ * declared with a default of 1,000,001 characters, one past the bound a printed text keeps to.
+ */
+const lengthyBytes = new TextEncoder().encode(
+  `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="lengthy" title="Lengthy" time-dependent="false"><qti-template-declaration identifier="S" cardinality="single" base-type="string"><qti-default-value><qti-value>${"y".repeat(1_000_001)}</qti-value></qti-default-value></qti-template-declaration><qti-item-body><p>Value: <qti-printed-variable identifier="S"/></p></qti-item-body></qti-assessment-item>`,
+);
+
+describe("the codec on a printed text past its bound", () => {
+  it.effect(
+    "[I-5] round-trips unprinted through JSON text, its bound and identifier kept and no path written, so render of the decoded item fails OutputTooLarge naming them",
+    () =>
+      Effect.gen(function* roundTripsUnprinted() {
+        const verdict = yield* open("items/lengthy.xml", lengthyBytes);
+        const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The lengthy item is ${verdict.verdict}, not accepted.`),
+        );
+        const redacted = redact(accepted);
+        const json = Result.getOrThrow(encodeRedacted(redacted));
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(JSON.stringify(json));
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const failed = render(decoded, yield* defaults, { instance });
+
+        assert.deepStrictEqual(
+          redacted.unprinted,
+          Option.some({
+            bound: 1_000_000,
+            identifier: "S",
+            path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
+          }),
+        );
+        assert.deepStrictEqual(json.unprinted, { bound: 1_000_000, identifier: "S" });
+        assert.deepStrictEqual(decoded, pathless(redacted));
+        assert.deepStrictEqual(
+          decoded.unprinted,
+          Option.some({ bound: 1_000_000, identifier: "S", path: "" }),
+        );
+        assert.deepStrictEqual(
+          Result.getFailure(failed).pipe(
+            Option.map((failure) =>
+              failure._tag === "OutputTooLarge" ? failure.printed : failure._tag,
+            ),
+          ),
+          Option.some(Option.some({ bound: 1_000_000, identifier: "S" })),
+        );
+      }),
+  );
+
+  it("[I-5] writes no unprinted key for an item whose every text fits, and decodes its absence as none", () => {
+    const redacted = redact(acceptForTest(choiceItem));
+    const json = Result.getOrThrow(encodeRedacted(redacted));
+    const decoded = Result.getOrThrow(decodeRedacted(json));
+
+    assert.isTrue(Option.isNone(redacted.unprinted));
+    assert.notProperty(json, "unprinted");
+    assert.isTrue(Option.isNone(decoded.unprinted));
+  });
+
+  it.effect(
+    "[I-5] refuses an unprinted bound that is not a whole number of at least 1: InvalidRedacted at stage decode",
+    () =>
+      Effect.gen(function* refusesBadBound() {
+        const json = Result.getOrThrow(encodeRedacted(redact(acceptForTest(choiceItem))));
+
+        for (const bound of [0, 1.5, "1000000"]) {
+          const error = yield* failureOf(
+            decodeRedacted({ ...json, unprinted: { bound, identifier: "S" } }),
+          );
+
+          assert.strictEqual(error.stage, "decode", String(bound));
+        }
+
+        assert.isTrue(
+          Result.isSuccess(
+            decodeRedacted({ ...json, unprinted: { bound: 1_000_000, identifier: "S" } }),
+          ),
+        );
+      }),
+  );
+});
+
+/**
+ * Opening the corpus (about 800 members) and redacting each templated item in three states runs in
+ * seconds here; the bound leaves room for a slow machine without letting a hung run stall the
+ * suite.
+ */
+const corpusTimeoutMs = 600_000;
+
+describe("the codec on the templated corpus items", () => {
+  it.effect(
+    '[I-5] the JSON of each templated corpus item, redacted under two seeds and with no record, round-trips through JSON text to the equal Redacted with every path ""',
+    () =>
+      Effect.gen(function* templatedRoundTrip() {
+        const members = yield* openCorpus;
+        const swept = members.flatMap((member) =>
+          Option.toArray(acceptedOf(member))
+            .filter(templated)
+            .map((accepted) => ({
+              accepted,
+              location: member.location,
+            })),
+        );
+        const redactions = swept.flatMap(({ accepted, location }) =>
+          Result.getOrThrow(recordStates(accepted)).map((state) => ({
+            name: `${location} (${state.name})`,
+            redacted: redact(accepted, Option.getOrUndefined(state.record)),
+          })),
+        );
+
+        assert.isNotEmpty(swept, "no accepted corpus item has template processing");
+        assert.lengthOf(redactions, swept.length * 3);
+        for (const { name, redacted } of redactions) {
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+          const handedOver: unknown = JSON.parse(
+            JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+          );
+
+          assert.deepStrictEqual(
+            Result.getOrThrow(decodeRedacted(handedOver)),
+            pathless(redacted),
+            name,
+          );
+        }
+      }),
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
+  );
+});
+
 describe("decodeRedacted on a deeply nested body", () => {
   for (const levels of [1000, 10_000]) {
     it.effect(
@@ -826,7 +1407,7 @@ describe("decodeRedacted on a deeply nested body", () => {
             : pastReader.verdict,
           [Option.some("element-depth")],
         );
-        assert.deepStrictEqual(Result.getOrThrow(decodeRedacted(handedOver)), redacted);
+        assert.deepStrictEqual(Result.getOrThrow(decodeRedacted(handedOver)), pathless(redacted));
       }),
   );
 });
@@ -1040,6 +1621,7 @@ describe("render", () => {
       notices: redacted.notices,
       responses: redacted.responses,
       title: redacted.title,
+      unprinted: redacted.unprinted,
     };
     /**
      * The calls `tsc` judges. They never run: `render` reads `Option`s a `RedactedJson` does not

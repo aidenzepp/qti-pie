@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { begin } from "#plate/begin.ts";
 import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
 import { encodeSession } from "#plate/codec/session.ts";
@@ -11,11 +12,12 @@ import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
+import { firstAttempt } from "#plate/engine/attempt.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { InlineChoiceInteraction } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
+import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
@@ -65,7 +67,7 @@ const instance = "sit-1";
 /**
  * The hand-built sessions' seed, which keys a shuffled Choice's order.
  */
-const seed = 7;
+const seed = "7";
 
 /**
  * When the hand-built sessions started and last changed: 123.45 seconds apart.
@@ -295,6 +297,79 @@ const reportedDeclaration = [
 ].join("");
 
 /**
+ * An item written for this test whose template processing sets the default of its single
+ * identifier response `RESPONSE`, which declares none, to `B`.
+ */
+const defaultingXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="defaulting"',
+  ' title="Defaulting" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+  "<qti-template-processing>",
+  '<qti-set-default-value identifier="RESPONSE">',
+  '<qti-base-value base-type="identifier">B</qti-base-value>',
+  "</qti-set-default-value>",
+  "</qti-template-processing>",
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Yes</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">No</qti-simple-choice>',
+  "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * An item written for this test whose template processing sets `HIDDEN` to `B` and `BLOCK` to `Y`.
+ * Its shuffled Choice bound to `RESPONSE` holds `A` to `D`, `B` hidden while `HIDDEN` holds `B`;
+ * its template block `X`, shown only while `BLOCK` holds `X`, holds a shuffled Choice bound to
+ * `INNER`. So the page shows three of `RESPONSE`'s choices and no `INNER` at all.
+ */
+const hidingXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="hiding"',
+  ' title="Hiding" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+  '<qti-response-declaration identifier="INNER" cardinality="single" base-type="identifier"/>',
+  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+  '<qti-template-declaration identifier="HIDDEN" cardinality="single" base-type="identifier"/>',
+  '<qti-template-declaration identifier="BLOCK" cardinality="single" base-type="identifier"/>',
+  "<qti-template-processing>",
+  '<qti-set-template-value identifier="HIDDEN">',
+  '<qti-base-value base-type="identifier">B</qti-base-value>',
+  "</qti-set-template-value>",
+  '<qti-set-template-value identifier="BLOCK">',
+  '<qti-base-value base-type="identifier">Y</qti-base-value>',
+  "</qti-set-template-value>",
+  "</qti-template-processing>",
+  "<qti-item-body>",
+  '<qti-choice-interaction response-identifier="RESPONSE" max-choices="1" shuffle="true">',
+  '<qti-simple-choice identifier="A">Alpha</qti-simple-choice>',
+  '<qti-simple-choice identifier="B" template-identifier="HIDDEN" show-hide="hide">Bravo</qti-simple-choice>',
+  '<qti-simple-choice identifier="C">Charlie</qti-simple-choice>',
+  '<qti-simple-choice identifier="D">Delta</qti-simple-choice>',
+  "</qti-choice-interaction>",
+  '<qti-template-block identifier="X" template-identifier="BLOCK" show-hide="show">',
+  "<qti-content-body><div>",
+  '<qti-choice-interaction response-identifier="INNER" max-choices="1" shuffle="true">',
+  '<qti-simple-choice identifier="P">Papa</qti-simple-choice>',
+  '<qti-simple-choice identifier="Q">Quebec</qti-simple-choice>',
+  '<qti-simple-choice identifier="R">Romeo</qti-simple-choice>',
+  "</qti-choice-interaction>",
+  "</div></qti-content-body></qti-template-block>",
+  "</qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * The `templateVariable` of {@link hidingXml}'s single identifier template variable, its values
+ * aside.
+ *
+ * @param identifier The template variable's identifier.
+ * @returns Its attributes as written.
+ */
+const hidingTemplate = (identifier: string) =>
+  ({
+    baseType: "identifier",
+    cardinality: "single",
+    identifier,
+  }) satisfies Readonly<Record<string, string>>;
+
+/**
  * A shuffled Inline Choice of five tones bound to the single identifier response `RESPONSE`, whose
  * last choice is fixed, so it keeps the last place in every order.
  */
@@ -305,6 +380,7 @@ const tones: InlineChoiceInteraction = {
     content: [{ kind: "text", text: `Tone ${identifier}` }],
     fixed: identifier === "E",
     identifier,
+    templateVisibility: Option.none(),
   })),
   class: "",
   kind: "inline-choice",
@@ -351,6 +427,8 @@ const tonesItem = acceptForTest({
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Tones",
   unsupported: [],
 });
@@ -443,7 +521,7 @@ const storedSession = (
       kind: "test",
       parts,
       position: 0,
-      seed: Option.some(seed),
+      seed,
       started,
       status: "closed",
       test: test.test.identifier,
@@ -461,12 +539,15 @@ interface WrittenVariable {
 }
 
 /**
- * An item or test result as written: its attributes, and its variables by identifier.
+ * An item or test result as written: its attributes, its variables by identifier, and each
+ * variable's element name and identifier in document order.
  */
 interface Written {
   readonly attributes: Readonly<Record<string, string>>;
+  readonly order: readonly (readonly [string, string])[];
   readonly outcomes: Readonly<Record<string, WrittenVariable>>;
   readonly responses: Readonly<Record<string, WrittenVariable>>;
+  readonly templates: Readonly<Record<string, WrittenVariable>>;
 }
 
 /**
@@ -513,6 +594,11 @@ const valuesOf = (element: SourceElement): readonly string[] =>
  */
 const writtenOf = (element: SourceElement): Written => ({
   attributes: attributesOf(element),
+  order: element.children.flatMap((child) =>
+    child.kind === "element" && child.local.endsWith("Variable")
+      ? [[child.local, attributesOf(child)["identifier"] ?? ""] as const]
+      : [],
+  ),
   outcomes: Object.fromEntries(
     childrenNamed(element, "outcomeVariable").map((variable) => [
       attributesOf(variable)["identifier"] ?? "",
@@ -526,6 +612,12 @@ const writtenOf = (element: SourceElement): Written => ({
         attributes: attributesOf(variable),
         values: childrenNamed(variable, "candidateResponse").flatMap(valuesOf),
       },
+    ]),
+  ),
+  templates: Object.fromEntries(
+    childrenNamed(element, "templateVariable").map((variable) => [
+      attributesOf(variable)["identifier"] ?? "",
+      { attributes: attributesOf(variable), values: valuesOf(variable) },
     ]),
   ),
 });
@@ -599,15 +691,17 @@ const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
  * @param accepted The item.
  * @param response The Choice's response.
  * @param token The instance it is rendered under.
+ * @param record The record the item is redacted under, none for none.
  * @returns Each Control's value, in emitted order.
  */
 const renderedOrder = Effect.fnUntraced(function* renderedOrder(
   accepted: Accepted,
   response: string,
   token: string,
+  record?: RedactRecord,
 ) {
   const rendered = yield* Effect.fromResult(
-    render(redact(accepted), yield* configure({ seed }), { instance: token }),
+    render(redact(accepted, record), yield* configure({ seed }), { instance: token }),
   );
 
   return elementsOf(parseHtml(rendered.html))
@@ -931,6 +1025,232 @@ describe("results", () => {
   );
 
   it.effect(
+    "[I-5] writes a shuffled Choice's choiceSequence in the order the page renders under the record, without the choice its template hides, none for a Choice a hidden template block holds, and the template variables between the responses and the outcomes",
+    () =>
+      Effect.gen(function* hiddenChoice() {
+        const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));
+        const test = yield* acceptTest("hiding", [
+          part("P1", individual, [ref("hiding", "hiding.xml")]),
+        ]);
+        const token = `${instance}.1`;
+        const record = yield* Effect.fromResult(
+          firstAttempt(hiding.item, { instance: token, seed }),
+        );
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["hiding", hiding]]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(hiding, "hiding", 1, { duration: 2, presented: true, record }),
+          ]),
+          test,
+        });
+
+        yield* assertValid(xml);
+
+        const order = yield* renderedOrder(hiding, "RESPONSE", token, record);
+        assert.deepStrictEqual(order.toSorted(), ["A", "C", "D"]);
+        assert.deepStrictEqual(yield* renderedOrder(hiding, "INNER", token, record), []);
+
+        const written = itemOf(report, "hiding");
+        assert.strictEqual(
+          written.responses["RESPONSE"]?.attributes["choiceSequence"],
+          order.join(" "),
+        );
+        assert.isUndefined(written.responses["INNER"]?.attributes["choiceSequence"]);
+        assert.deepStrictEqual(written.templates, {
+          BLOCK: { attributes: hidingTemplate("BLOCK"), values: ["Y"] },
+          HIDDEN: { attributes: hidingTemplate("HIDDEN"), values: ["B"] },
+        });
+        assert.deepStrictEqual(written.order, [
+          ["responseVariable", "numAttempts"],
+          ["responseVariable", "duration"],
+          ["outcomeVariable", "completionStatus"],
+          ["responseVariable", "RESPONSE"],
+          ["responseVariable", "INNER"],
+          ["templateVariable", "HIDDEN"],
+          ["templateVariable", "BLOCK"],
+          ["outcomeVariable", "SCORE"],
+        ]);
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[I-5] writes the template variables of a templated item never presented with no value, its record holding none",
+    () =>
+      Effect.gen(function* unseenTemplates() {
+        const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));
+        const test = yield* acceptTest("unseen", [
+          part("P1", individual, [ref("hiding", "hiding.xml")]),
+        ]);
+        const unseen = sessionItem(hiding, "hiding", 1);
+        assert.strictEqual(unseen.record.seed, "");
+        assert.deepStrictEqual(unseen.record.templates, {});
+
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["hiding", hiding]]),
+          kind: "test",
+          session: storedSession(test, [unseen]),
+          test,
+        });
+
+        yield* assertValid(xml);
+
+        const written = itemOf(report, "hiding");
+        assert.strictEqual(written.attributes["sessionStatus"], "initial");
+        assert.isUndefined(written.responses["RESPONSE"]?.attributes["choiceSequence"]);
+        assert.deepStrictEqual(written.templates, {
+          BLOCK: { attributes: hidingTemplate("BLOCK"), values: [] },
+          HIDDEN: { attributes: hidingTemplate("HIDDEN"), values: [] },
+        });
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[I-5] writes an item delivered alone's template variables from the record begin started",
+    () =>
+      Effect.gen(function* itemTemplates() {
+        const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));
+        const record = yield* Effect.fromResult(begin(hiding, { instance, seed }));
+        const { report, xml } = yield* reported({
+          context,
+          datestamp: new Date(updated),
+          document: hiding,
+          kind: "item",
+          record,
+        });
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(itemOf(report, "hiding").templates, {
+          BLOCK: { attributes: hidingTemplate("BLOCK"), values: ["Y"] },
+          HIDDEN: { attributes: hidingTemplate("HIDDEN"), values: ["B"] },
+        });
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[I-5] gives the answeredStatus against the default template processing set: presented for a response left at it, in a session and alone, answered for another value",
+    () =>
+      Effect.gen(function* templateDefaultAnswered() {
+        const defaulting = yield* acceptItem(
+          "items/defaulting.xml",
+          new TextEncoder().encode(defaultingXml),
+        );
+        const test = yield* acceptTest("defaulting", [
+          part("P1", individual, [
+            ref("untouched", "defaulting.xml"),
+            ref("answered", "defaulting.xml"),
+          ]),
+        ]);
+        const untouched = yield* Effect.fromResult(
+          firstAttempt(defaulting.item, { instance: `${instance}.1`, seed }),
+        );
+        const answering = yield* Effect.fromResult(
+          firstAttempt(defaulting.item, { instance: `${instance}.2`, seed }),
+        );
+        assert.deepStrictEqual(untouched.defaults["RESPONSE"], identifiers("B"));
+        assert.deepStrictEqual(untouched.responses["RESPONSE"], identifiers("B"));
+
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([
+            ["untouched", defaulting],
+            ["answered", defaulting],
+          ]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(defaulting, "untouched", 1, { presented: true, record: untouched }),
+            sessionItem(defaulting, "answered", 2, {
+              ...saving({ RESPONSE: identifiers("A") }),
+              record: answering,
+            }),
+          ]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(
+          ["untouched", "answered"].map((identifier) => {
+            const response = itemOf(report, identifier).responses["RESPONSE"];
+
+            return [response?.attributes["answeredStatus"], response?.values];
+          }),
+          [
+            ["presented", ["B"]],
+            ["answered", ["A"]],
+          ],
+        );
+
+        const begun = yield* Effect.fromResult(begin(defaulting, { instance, seed }));
+        const aloneStatus = Effect.fnUntraced(function* aloneStatus(responses: Responses) {
+          const record = yield* Effect.fromResult(score(defaulting, responses, begun));
+          const written = yield* reported({
+            context,
+            datestamp: new Date(updated),
+            document: defaulting,
+            kind: "item",
+            record,
+          });
+
+          return itemOf(written.report, "defaulting").responses["RESPONSE"]?.attributes[
+            "answeredStatus"
+          ];
+        });
+        assert.deepStrictEqual(
+          [yield* aloneStatus({}), yield* aloneStatus({ RESPONSE: identifiers("A") })],
+          ["presented", "answered"],
+        );
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[I-5] reports the record's value, not the saved one, for a response only a template block the record hides binds, as score keeps it, and a shown response's saved value",
+    () =>
+      Effect.gen(function* savedHidden() {
+        const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));
+        const test = yield* acceptTest("saved-hidden", [
+          part("P1", individual, [ref("hiding", "hiding.xml")]),
+        ]);
+        const record = yield* Effect.fromResult(
+          firstAttempt(hiding.item, { instance: `${instance}.1`, seed }),
+        );
+        const posted = { INNER: identifiers("P"), RESPONSE: identifiers("A") };
+        const kept = yield* scored(hiding, record, posted);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["hiding", hiding]]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(hiding, "hiding", 1, { ...saving(posted), record }),
+          ]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(kept.responses["INNER"], record.responses["INNER"]);
+
+        const written = itemOf(report, "hiding");
+        assert.deepStrictEqual(
+          ["INNER", "RESPONSE"].map((identifier) => {
+            const response = written.responses[identifier];
+
+            return [response?.attributes["answeredStatus"], response?.values];
+          }),
+          [
+            ["presented", []],
+            ["answered", ["A"]],
+          ],
+        );
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
     "writes no test outcome for a test with outcome processing",
     () =>
       Effect.gen(function* processedTest() {
@@ -1023,6 +1343,52 @@ describe("results", () => {
             ...reportingWritten,
           },
           values: ["0.5"],
+        });
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[I-9a] writes a test's SCORE and MAXSCORE of the base types they declare, a string and an integer, which the information model types in an item only, at their defaults",
+    () =>
+      Effect.gen(function* untypedTestScores() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("untyped", [
+          '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="string">',
+          "<qti-default-value><qti-value>high</qti-value></qti-default-value>",
+          "</qti-outcome-declaration>",
+          '<qti-outcome-declaration identifier="MAXSCORE" cardinality="single" base-type="integer">',
+          "<qti-default-value><qti-value>7</qti-value></qti-default-value>",
+          "</qti-outcome-declaration>",
+          '<qti-outcome-declaration identifier="LEVEL" cardinality="single" base-type="identifier">',
+          "<qti-default-value><qti-value>gold</qti-value></qti-default-value>",
+          "</qti-outcome-declaration>",
+          part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["one", single]]),
+          kind: "test",
+          session: storedSession(test, [sessionItem(single, "one", 1)]),
+          test,
+        });
+
+        yield* assertValid(xml);
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(written.outcomes, {
+          LEVEL: {
+            attributes: { baseType: "identifier", cardinality: "single", identifier: "LEVEL" },
+            values: ["gold"],
+          },
+          MAXSCORE: {
+            attributes: { baseType: "integer", cardinality: "single", identifier: "MAXSCORE" },
+            values: ["7"],
+          },
+          SCORE: {
+            attributes: { baseType: "string", cardinality: "single", identifier: "SCORE" },
+            values: ["high"],
+          },
         });
       }),
     { tags: ["qti-xsd"] },

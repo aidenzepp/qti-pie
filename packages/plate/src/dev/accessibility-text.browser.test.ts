@@ -40,30 +40,27 @@ import {
   textEntryOf,
   treesRead,
 } from "#plate/test/playground-page.ts";
+import { xhtmlItem } from "#scripts/walk-corpus.ts";
 
 /**
  * The corpus items whose text Controls the tests read: BG010's one Text Entry, in a line of a
- * quotation and named by no author; BG011's one Extended Text, with no Prompt; and the postcard's
- * ten Extended Texts, each named by its Prompt, in the `plain` and `xhtml` formats.
+ * quotation and named by no author; and BG011's one Extended Text, with no Prompt.
  */
 const corpusItems = [
   { label: "BG010", path: "QTI3_BPIG_Examples/items/BG010.xml", tags: "[Q-20]" },
   { label: "BG011", path: "QTI3_BeginnersGuide_Examples/items/BG011.xml", tags: "[Q-5]" },
-  {
-    label: "the postcard",
-    path: "qtiv3-examples/items/shared-vocabulary/Items/Item_QTI3_WritingPostcard_02/extended_text_qti3.xml",
-    tags: "[Q-5]",
-  },
 ] as const;
 
 /**
  * The walk corpus's text items: `ordered.xml`, an Extended Text bound to an `ordered` response
- * with `max-strings="3"` under a Prompt, so a group of three Controls; and `pattern.xml`, a Text
- * Entry with a `pattern-mask` and the author's `data-patternmask-message`.
+ * with `max-strings="3"` under a Prompt, so a group of three Controls; `pattern.xml`, a Text Entry
+ * with a `pattern-mask` and the author's `data-patternmask-message`; and `xhtml.xml`'s five
+ * Extended Texts, each named by its Prompt, in the `plain` and `xhtml` formats.
  */
 const walkItems = [
   { label: "ordered.xml", path: "ordered.xml", tags: "[Q-5]" },
   { label: "pattern.xml", path: "pattern.xml", tags: "[Q-20]" },
+  { label: "xhtml.xml", path: xhtmlItem, tags: "[Q-5]" },
 ] as const;
 
 /**

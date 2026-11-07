@@ -14,10 +14,12 @@ import type { Element, Node } from "#plate/emit/node.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { encodeIntent, intentName } from "#plate/form/intent.ts";
+import { begin, configure, redact, render, restore } from "#plate/index.ts";
 import type { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
+import type { Value } from "#plate/model/values.ts";
 import { checkTree, nameOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
@@ -114,7 +116,7 @@ const scriptPath = "items/<script>.xml";
  * The text of {@link scriptPath}.
  */
 const scriptItem = `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="script" title="script" adaptive="false" time-dependent="false">
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="integer">
+  <qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="integer">
     <qti-default-value><qti-value>&lt;script&gt;</qti-value></qti-default-value>
   </qti-outcome-declaration>
   <qti-item-body><p>x</p></qti-item-body>
@@ -2018,12 +2020,15 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
             test: fixtureTest.title,
           }),
         );
-        assert.strictEqual(results.response.status, 200);
         assert.strictEqual(
-          results.response.headers.get("content-type"),
-          "application/xml; charset=utf-8",
+          results.response.status,
+          404,
+          "an open session's results are not served",
         );
-        assert.include(results.html, location.slice("/sessions/".length));
+        for (const [name, value] of Object.entries(pageHeaders)) {
+          assert.strictEqual(results.response.headers.get(name), value, name);
+        }
+        assert.notInclude(results.html, "assessmentResult");
         assert.strictEqual(review.response.status, 404, "an open item is not reviewed");
         assert.strictEqual(startGet.response.status, 405, "a Start is a POST");
         assert.strictEqual(startGet.response.headers.get("allow"), "POST");
@@ -2096,6 +2101,193 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
         }
         assert.lengthOf(linksTo(packaged.html, guideTest.packagePage), 1);
         assert.lengthOf(linksTo(loose.html, "/packages"), 1);
+      }),
+    corpusTimeoutMs,
+  );
+});
+
+/**
+ * The corpus path of `template_digging`, an item whose template processing draws the numbers its
+ * printed variables show and sets its correct response from them.
+ */
+const templateDigging = "QTI3_BPIG_Examples/items/template_digging.xml";
+
+/**
+ * The instance token the template cases' playgrounds open every item under, so a sitting's values
+ * follow from its seed alone.
+ */
+const sittingInstance = "sitting";
+
+/**
+ * Two seeds under which {@link templateDigging}, opened under {@link sittingInstance}, draws a
+ * different value for every template variable and a different correct response, picked under the
+ * HMAC-SHA-256 stream (`p8-16a`), so "two sittings show different numbers" cannot fail by chance.
+ */
+const seeds = { first: "sitting-seed-a", second: "sitting-seed-d" } as const;
+
+/**
+ * Construct a playground over {@link verdicts} that opens every item under
+ * {@link sittingInstance} and begins each sitting's record under a fixed seed.
+ *
+ * @param seed The seed.
+ * @returns The handler.
+ */
+const seeded = (seed: string): Handler =>
+  createHandler({ newInstance: () => sittingInstance, seed, verdicts });
+
+/**
+ * The accepted document of {@link templateDigging}.
+ */
+const templateDiggingItem = Effect.gen(function* templateDiggingItem() {
+  return acceptedOf(
+    Option.getOrElse(yield* verdicts.verdictOf(templateDigging), () =>
+      assert.fail(`${templateDigging} is not a member`),
+    ),
+  );
+});
+
+/**
+ * Give the record `begin` starts for a sitting of an item under {@link sittingInstance} and a
+ * seed, decoded through `restore`.
+ *
+ * @param accepted The item.
+ * @param seed The seed.
+ * @returns The decoded record.
+ */
+const begunUnder = Effect.fnUntraced(function* begunUnder(accepted: Accepted, seed: string) {
+  const stored = yield* Effect.fromResult(begin(accepted, { instance: sittingInstance, seed }));
+
+  return (yield* Effect.fromResult(restore(accepted, stored))).record;
+});
+
+/**
+ * Write a value's members as text, for comparing two template values.
+ *
+ * @param value The value, none when the record holds none.
+ * @returns Its members' values, each through `String`, space-separated.
+ */
+const written = (value: Value | undefined): string =>
+  (value?.values ?? []).map((member) => String(member.value)).join(" ");
+
+/**
+ * Give the Notice parts of a page, each a `role="note"` element.
+ *
+ * @param html The page.
+ * @returns The notes, in document order.
+ */
+const notesOf = (html: string): readonly Element[] =>
+  elementsOf(parseHtml(html)).filter((element) => element.attrs["role"] === "note");
+
+/**
+ * Give the text of a page's item region.
+ *
+ * @param html The page.
+ * @returns The region's text, whitespace collapsed.
+ */
+const itemText = (html: string): string =>
+  textOf(find(html, (element) => element.attrs["id"] === "playground-item").children);
+
+describe("dev/page.ts: template processing", { tags: ["corpus"] }, () => {
+  it.effect(
+    "[I-5] two playgrounds built with two pinned seeds each begin template_digging's sitting under its seed: the page holds the item redacted with begin's record, with no notice and no seed, and the two show different numbers",
+    () =>
+      Effect.gen(function* twoSittings() {
+        const accepted = yield* templateDiggingItem;
+        const configuration = yield* configure({});
+        const sittings = yield* Effect.forEach([seeds.first, seeds.second], (seed) =>
+          Effect.gen(function* sittingUnder() {
+            const record = yield* begunUnder(accepted, seed);
+            const opened = yield* get(seeded(seed), itemTarget(templateDigging));
+            const expected = yield* Effect.fromResult(
+              render(redact(accepted, record), configuration, {
+                assetBase: "/assets/QTI3_BPIG_Examples/items/",
+                disabled: false,
+                instance: sittingInstance,
+              }),
+            );
+
+            return { expected: expected.html, opened, record, seed };
+          }),
+        );
+        const [first, second] = sittings;
+
+        for (const { expected, opened, record, seed } of sittings) {
+          assert.strictEqual(opened.response.status, 200, seed);
+          assert.strictEqual(instanceOf(opened.html), sittingInstance);
+          assert.isNotEmpty(Object.keys(record.templates), "begin drew no template value");
+          assert.include(opened.html, expected, `the page under ${seed} is not begin's record`);
+          assert.deepStrictEqual(notesOf(opened.html), [], `a notice under ${seed}`);
+          assert.notInclude(opened.html, seed, "the page holds the seed");
+        }
+        assert.deepStrictEqual(
+          Object.keys(first?.record.templates ?? {}).filter(
+            (identifier) =>
+              written(first?.record.templates[identifier]) ===
+              written(second?.record.templates[identifier]),
+          ),
+          [],
+          "a template variable holds the same value under both seeds",
+        );
+        assert.notStrictEqual(
+          itemText(first?.opened.html ?? ""),
+          itemText(second?.opened.html ?? ""),
+        );
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "[I-5] a post scores against its sitting's stored record: the correct response template processing set under the sitting's seed scores 1, and in the other seed's sitting 0",
+    () =>
+      Effect.gen(function* scoresAgainstRecord() {
+        const accepted = yield* templateDiggingItem;
+        const own = yield* begunUnder(accepted, seeds.first);
+        const other = yield* begunUnder(accepted, seeds.second);
+        const [single] = own.correct["RESPONSE"]?.values ?? [];
+        const correct =
+          single?.baseType === "float"
+            ? String(single.value)
+            : assert.fail("begin set no float correct response for RESPONSE");
+        const answers = yield* Effect.forEach([seeds.first, seeds.second], (seed) =>
+          Effect.gen(function* answerUnder() {
+            const handle = seeded(seed);
+            const opened = yield* get(handle, itemTarget(templateDigging));
+
+            return yield* post(handle, actionOf(opened.html), [
+              [entryName(sittingInstance, "RESPONSE"), correct],
+            ]);
+          }),
+        );
+        const scores = answers.map((answered) =>
+          textOf(find(answered.html, (element) => element.attrs["role"] === "status").children),
+        );
+
+        assert.notDeepEqual(other.correct["RESPONSE"], own.correct["RESPONSE"]);
+        assert.include(scores[0], message("en", "score", { score: "1" }));
+        assert.include(scores[1], message("en", "score", { score: "0" }));
+        for (const answered of answers) {
+          assertAfterSubmit(answered, "scored", accepted.item.title.trim());
+        }
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "[I-5] with no seed set, a sitting begins under the seed begin draws, which its stored record keeps: the page shows its numbers and no seed, and a post scores against the record",
+    () =>
+      Effect.gen(function* drawnSeed() {
+        const accepted = yield* templateDiggingItem;
+        const handle = playground();
+        const opened = yield* get(handle, itemTarget(templateDigging));
+        const answered = yield* post(handle, actionOf(opened.html), [
+          [entryName(instanceOf(opened.html), "RESPONSE"), "15"],
+        ]);
+
+        assert.strictEqual(opened.response.status, 200);
+        assert.deepStrictEqual(notesOf(opened.html), []);
+        assert.notMatch(opened.html, /[\da-f]{32}/u, "the page holds a drawn seed");
+        assert.strictEqual(answered.response.status, 200);
+        assertAfterSubmit(answered, "scored", accepted.item.title.trim());
       }),
     corpusTimeoutMs,
   );

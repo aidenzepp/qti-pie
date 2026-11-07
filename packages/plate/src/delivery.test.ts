@@ -75,13 +75,13 @@ const instance = "4c7e1a2b-9d3f-4e8a-b6c5-0f1e2d3c4b5a";
 /**
  * The seed the host's configuration carries, which a session keeps.
  */
-const hostSeed = 3;
+const hostSeed = "3";
 
 /**
  * The seed a host that restores a session passes instead, so a restored page that read the host's
  * seed rather than the stored one would present fixture P1's shuffled Choice in another order.
  */
-const otherSeed = 5;
+const otherSeed = "5";
 
 /**
  * When every sitting starts.

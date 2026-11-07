@@ -689,15 +689,131 @@ const codeOf = (source: string): string => {
 };
 
 /**
- * The `Math` members a module's code names.
+ * What {@link mathMembers} gives for a reach into `Math` whose member the code does not name: a
+ * computed member, a computed, quoted or rest key of a destructuring, or `Math` read as a value
+ * (an alias, or an argument such as `Reflect.get`'s), which can reach every member.
+ */
+const unnamedMember = "[unnamed]";
+
+/**
+ * Split a list's code at its top-level commas, so a default's call or a nested pattern stays one
+ * entry.
+ *
+ * @param list The code between a list's brackets.
+ * @returns Each entry, as written.
+ */
+const topLevelEntries = (list: string): readonly string[] => {
+  const entries: string[] = [];
+  let depth = 0;
+  let entry = "";
+
+  for (const character of list) {
+    if (character === "," && depth === 0) {
+      entries.push(entry);
+      entry = "";
+    } else {
+      if ("{[(".includes(character)) {
+        depth += 1;
+      } else if ("}])".includes(character)) {
+        depth -= 1;
+      }
+
+      entry += character;
+    }
+  }
+
+  return [...entries, entry];
+};
+
+/**
+ * The index of the `{` that a `}` closes.
+ *
+ * @param code The code.
+ * @param close The index of the `}`.
+ * @returns The index of its `{`, or -1 when none opens it.
+ */
+const openingBrace = (code: string, close: number): number => {
+  let depth = 0;
+
+  for (let index = close; index >= 0; index -= 1) {
+    if (code.charAt(index) === "}") {
+      depth += 1;
+    } else if (code.charAt(index) === "{") {
+      depth -= 1;
+
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+};
+
+/**
+ * The keys an object destructuring pattern takes, {@link unnamedMember} for each it does not name.
+ *
+ * @param pattern The pattern's code between its braces.
+ * @returns Each key, in order.
+ */
+const patternKeys = (pattern: string): readonly string[] =>
+  topLevelEntries(pattern)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "")
+    .map(
+      (entry) =>
+        /^(?<key>[\p{ID_Start}$_][\p{ID_Continue}$]*)\s*(?::|=|$)/u.exec(entry)?.groups?.["key"] ??
+        unnamedMember,
+    );
+
+/**
+ * The `Math` members a module's code reaches: through `Math.` or `Math?.`, or by the keys of a
+ * destructuring of `Math`; every other reach gives {@link unnamedMember}. `Math` is the identifier
+ * alone, so `Mathematics` is not a reach, and `globalThis.Math.sin` is.
  *
  * @param code The module's code, as {@link codeOf} leaves it.
- * @returns Each member named, in order.
+ * @returns Each member reached, in order.
  */
 const mathMembers = (code: string): readonly string[] =>
-  [...code.matchAll(/\bMath\s*(?:\.\s*(?<member>[\p{ID_Start}$_][\p{ID_Continue}$]*)|\[)/gu)].map(
-    (match) => match.groups?.["member"] ?? "[",
-  );
+  [
+    ...code.matchAll(
+      /(?<![\p{ID_Continue}$])Math(?![\p{ID_Continue}$])(?:\s*\??\.\s*(?<member>[\p{ID_Start}$_][\p{ID_Continue}$]*))?/gu,
+    ),
+  ].flatMap((match) => {
+    const member = match.groups?.["member"];
+
+    if (member !== undefined) {
+      return [member];
+    }
+
+    const destructured = /\}\s*=\s*$/u.exec(code.slice(0, match.index));
+    const open = destructured === null ? -1 : openingBrace(code, destructured.index);
+
+    return destructured === null || open === -1
+      ? [unnamedMember]
+      : patternKeys(code.slice(open + 1, destructured.index));
+  });
+
+/**
+ * A `bigint` literal at the end of the code before an operator: decimal, hexadecimal, octal or
+ * binary, its separators included.
+ */
+const bigintLiteralBefore =
+  /(?<![\p{ID_Continue}$.])(?:0[xX][\da-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|\d[\d_]*)n\s*$/u;
+
+/**
+ * The lines of a module's code that hold `**` (or `**=`) on anything but a `bigint` literal.
+ * ECMA-262 leaves `**` on numbers implementation-approximated, as it leaves `Math.pow`; a `bigint`
+ * power is exact, and only a literal left operand shows by its spelling that it is one.
+ *
+ * @param code The module's code, as {@link codeOf} leaves it.
+ * @returns The line of each such `**`, counted from 1, in order.
+ */
+const numberPowers = (code: string): readonly number[] =>
+  [...code.matchAll(/\*\*/gu)]
+    .map((match) => code.slice(0, match.index))
+    .filter((before) => !bigintLiteralBefore.test(before))
+    .map((before) => before.split("\n").length);
 
 /**
  * The number of significant digits of a decimal literal: its digits before the exponent, without
@@ -742,6 +858,55 @@ const engineCode: ReadonlyMap<string, string> = new Map(
  */
 const codeAt = (path: string): string => engineCode.get(path) ?? "";
 
+/**
+ * What the source guard refuses in a module's code: each approximated `Math` member it reaches and
+ * each reach whose member it does not name, then each `**` whose left operand is not a `bigint`
+ * literal, by line.
+ *
+ * @param code The module's code, as {@link codeOf} leaves it.
+ * @returns Each refusal, in order.
+ */
+const refusedIn = (code: string): readonly string[] => [
+  ...mathMembers(code)
+    .filter((member) => member === unnamedMember || approximated.has(member))
+    .map((member) => `Math.${member}`),
+  ...numberPowers(code).map((line) => `** at line ${String(line)}`),
+];
+
+/**
+ * Sources the source guard refuses, by the rule each seeds, with what it refuses in each: the
+ * reaches into `Math` other than `Math.` and `Math[`, and `**` on a number.
+ */
+const refusedSources: readonly (readonly [string, string, readonly string[]])[] = [
+  ["** on a number literal", "const half = 2 ** -1;", ["** at line 1"]],
+  [
+    "** on a bigint that is not a literal",
+    "const square = (base: bigint): bigint => base ** 2n;",
+    ["** at line 1"],
+  ],
+  ["**= on a number", "let scale = 1;\nscale **= 2;", ["** at line 2"]],
+  ["destructuring", "const { abs, sin, cos: cosine } = Math;", ["Math.sin", "Math.cos"]],
+  ["destructuring with a rest element", "const { abs, ...rest } = Math;", ["Math.[unnamed]"]],
+  ["an alias", "const M = Math;\nconst y = M.sin(x);", ["Math.[unnamed]"]],
+  ["optional chaining", "const y = Math?.sin(x);", ["Math.sin"]],
+  ["optional chaining to a computed member", 'const y = Math?.["sin"](x);', ["Math.[unnamed]"]],
+  ["Reflect.get", 'const sine = Reflect.get(Math, "sin");', ["Math.[unnamed]"]],
+];
+
+/**
+ * Sources the source guard admits, one beside each rule {@link refusedSources} seeds.
+ */
+const admittedSources: readonly (readonly [string, string])[] = [
+  [
+    "** on a bigint literal",
+    "const top = 2n ** 494n;\nconst ten = 10n ** e;\nconst word = 0x1_0000n ** 2n;\nconst shifted = numerator * 2n ** (shift - 1n);",
+  ],
+  ["destructuring of exact members", "const { abs, floor } = Math;"],
+  ["an identifier that starts with Math", "const M = Mathematics;\nconst y = M.sin(x);"],
+  ["optional chaining to an exact member", "const y = Math?.abs(x);"],
+  ["Reflect.get on another object", 'const sine = Reflect.get(table, "sin");'],
+];
+
 describe("math: the source guard", () => {
   it("finds code, not comments, strings or regular expressions", () => {
     const code = codeOf(
@@ -760,17 +925,25 @@ describe("math: the source guard", () => {
     );
   });
 
-  it("no non-test engine file names an approximated Math member", () => {
-    const named = [...engineCode]
+  for (const [rule, source, refusals] of refusedSources) {
+    it(`refuses ${rule}`, () => {
+      assert.deepStrictEqual(refusedIn(codeOf(source)), refusals);
+    });
+  }
+
+  for (const [rule, source] of admittedSources) {
+    it(`admits ${rule}`, () => {
+      assert.deepStrictEqual(refusedIn(codeOf(source)), []);
+    });
+  }
+
+  it("no non-test engine file reaches an approximated Math member or holds ** on a number", () => {
+    const refused = [...engineCode]
       .filter(([path]) => !path.endsWith(".test.ts"))
-      .flatMap(([path, code]) =>
-        mathMembers(code)
-          .filter((member) => member === "[" || approximated.has(member))
-          .map((member) => `${path}: Math.${member}`),
-      );
+      .flatMap(([path, code]) => refusedIn(code).map((refusal) => `${path}: ${refusal}`));
 
     assert.isAbove(engineCode.size, 10);
-    assert.deepStrictEqual(named, []);
+    assert.deepStrictEqual(refused, []);
   });
 
   it("math.ts names no Math member outside the exact ones", () => {

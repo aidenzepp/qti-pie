@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
 import {
   attr,
   doc,
@@ -21,6 +21,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import { tables as generatedTables } from "#plate/validate/tables.ts";
@@ -393,7 +394,7 @@ const mapped = (base: string, entry: readonly SourceAttribute[]) =>
 const matched = (base: string, target: string) =>
   el(
     "qti-outcome-declaration",
-    [attr("identifier", "SCORE"), attr("cardinality", "single"), attr("base-type", base)],
+    [attr("identifier", "TOTAL"), attr("cardinality", "single"), attr("base-type", base)],
     [
       el(
         "qti-match-table",
@@ -1118,6 +1119,138 @@ const declaredAs = (name: string, identifier: string): SourceDocument =>
  */
 const tolerated = (tolerance: string): SourceDocument =>
   literal("qti-equal", attr("tolerance-mode", "absolute"), attr("tolerance", tolerance));
+
+/**
+ * Construct a document whose root is a `qti-printed-variable` with the given `format`.
+ *
+ * @param format The `format`, as written.
+ * @returns The document.
+ */
+const printed = (format: string): SourceDocument =>
+  literal("qti-printed-variable", attr("identifier", "SCORE"), attr("format", format));
+
+/**
+ * The detail of a refused printed variable's `format` (pantry R38).
+ *
+ * @param format The `format`, as written.
+ * @returns The detail.
+ */
+const formatDetail = (format: string) => ({
+  attribute: "format",
+  check: "printf-format",
+  element: "qti-printed-variable",
+  expected:
+    "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
+  pantry: "R38",
+  source: "info.txt:70323",
+  value: format,
+});
+
+/**
+ * The printed variable's `format` pattern as it stood before review `079e8c44` P2-13, kept as the
+ * oracle the check must agree with. Its flags and its width both match `0`, so a refused `%`, a run
+ * of zeros and a letter that is no code backtracks over every split of the run: quadratic time.
+ */
+const quadraticPrintfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx]$/u;
+
+/**
+ * The characters the `format` agreement check builds its strings from: the percent sign, every
+ * flag, the digits that start a width with and without a zero, the point, two codes and `d`, which
+ * is no code.
+ */
+const formatAlphabet = ["%", "#", "0", " ", "+", "-", "1", "9", ".", "f", "i", "d"] as const;
+
+/**
+ * List every string of at most `length` characters over an alphabet, shortest first.
+ *
+ * @param alphabet The characters.
+ * @param length The longest string's length.
+ * @returns The strings, the empty one first.
+ */
+const stringsUpTo = (alphabet: readonly string[], length: number): readonly string[] => {
+  const strings: string[] = [""];
+  let shorter: readonly string[] = [""];
+  for (let size = 1; size <= length; size += 1) {
+    shorter = shorter.flatMap((prefix) => alphabet.map((character) => `${prefix}${character}`));
+    for (const string of shorter) {
+      strings.push(string);
+    }
+  }
+
+  return strings;
+};
+
+/**
+ * The zeros in the larger `format` the growth check refuses; the smaller holds
+ * {@link growthFactor} times fewer.
+ */
+const formatZeros = 64_000;
+
+/**
+ * The `format` growth check refuses the larger format once and times each size three times. The
+ * quadratic pattern took about 3.5 s on 64,000 zeros, so a failing check runs past vitest's default
+ * of 5 s, and it should report its ratio, not a timeout.
+ */
+const formatGrowthTimeoutMs = 60_000;
+
+/**
+ * The `format` equivalence check judges 271,453 strings. It takes about 0.75 s alone and took
+ * 6.9 s on a loaded machine, past vitest's default of 5 s, so it is given room to finish there.
+ */
+const formatEquivalenceTimeoutMs = 60_000;
+
+/**
+ * Each outcome the information model types, with the base type it must have and the line that says
+ * so: SCORE and MAXSCORE are floats, PASSED is a boolean.
+ */
+const typedOutcomes = [
+  ["SCORE", "float", "info.txt:8478"],
+  ["MAXSCORE", "float", "info.txt:8480"],
+  ["PASSED", "boolean", "info.txt:8482"],
+] as const;
+
+/**
+ * Construct a document whose root is an outcome declaration.
+ *
+ * @param identifier Its `identifier`, as written.
+ * @param base Its `base-type`.
+ * @param cardinality Its `cardinality`, `single` by default.
+ * @returns The document.
+ */
+const outcomeAs = (identifier: string, base: string, cardinality = "single"): SourceDocument =>
+  literal(
+    "qti-outcome-declaration",
+    attr("identifier", identifier),
+    attr("cardinality", cardinality),
+    attr("base-type", base),
+  );
+
+/**
+ * Construct a single outcome declaration, to place inside a document.
+ *
+ * @param identifier Its `identifier`.
+ * @param base Its `base-type`.
+ * @returns The declaration.
+ */
+const outcomeOf = (identifier: string, base: string): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("identifier", identifier),
+    attr("cardinality", "single"),
+    attr("base-type", base),
+  ]);
+
+/**
+ * Construct a test, a document whose root is `qti-assessment-test`, that holds only outcome
+ * declarations.
+ *
+ * @param outcomes Its outcome declarations, in document order.
+ * @returns The document.
+ */
+const testDeclaring = (outcomes: readonly SourceElement[]): SourceDocument =>
+  doc(
+    location,
+    el("qti-assessment-test", [attr("identifier", "test"), attr("title", "Test")], outcomes),
+  );
 
 /**
  * The `attribute-type` refusals of a document checked against the generated tables, by
@@ -2375,7 +2508,7 @@ describe("checkStructure", () => {
     it("[I-9a] admits a declaration with any other identifier, a built-in's name in another case and QTI_CONTEXT among them", () => {
       for (const [name] of reservations) {
         for (const identifier of [
-          "SCORE",
+          "TOTAL",
           "Duration",
           "completionstatus",
           "numAttempts2",
@@ -2414,6 +2547,148 @@ describe("checkStructure", () => {
         ),
         [at("qti-assessment-test/qti-outcome-declaration/@identifier")],
       );
+    });
+
+    it("[I-9a] refuses an outcome named SCORE or MAXSCORE that is not a float, and one named PASSED that is not a boolean, as attribute-type at its base-type (pantry ReservedOutcomeTypes; info.txt:8478, :8480, :8482)", () => {
+      for (const [identifier, fixed, line] of typedOutcomes) {
+        for (const written of [identifier, ` ${identifier} `]) {
+          for (const wrong of ["integer", "string", "identifier", "float", "boolean"]) {
+            if (wrong === fixed) {
+              continue;
+            }
+
+            const source = outcomeAs(written, wrong);
+            const label = `${written} ${wrong}`;
+
+            assert.deepStrictEqual(
+              found(source, generatedTables),
+              [["attribute-type", at("qti-outcome-declaration/@base-type")]],
+              label,
+            );
+            assert.deepStrictEqual(
+              first(source, generatedTables)?.detail,
+              {
+                attribute: "base-type",
+                baseType: fixed,
+                check: "reserved-outcome-type",
+                element: "qti-outcome-declaration",
+                expected: `${fixed}, the base type of an outcome named ${identifier}`,
+                identifier,
+                pantry: "ReservedOutcomeTypes",
+                source: line,
+                value: wrong,
+              },
+              label,
+            );
+          }
+        }
+      }
+    });
+
+    it("[I-9a] admits SCORE and MAXSCORE as floats and PASSED as a boolean, single, multiple or ordered, and every other outcome of any base type", () => {
+      for (const [identifier, fixed] of typedOutcomes) {
+        for (const cardinality of ["single", "multiple", "ordered"]) {
+          assert.deepStrictEqual(
+            found(outcomeAs(identifier, fixed, cardinality), generatedTables),
+            [],
+            `${identifier} ${cardinality}`,
+          );
+        }
+      }
+      for (const [identifier, fixed] of [
+        ["TOTAL", "integer"],
+        ["Score", "integer"],
+        ["MAXSCORE2", "string"],
+        ["passed", "integer"],
+      ] as const) {
+        assert.deepStrictEqual(
+          found(outcomeAs(identifier, fixed), generatedTables),
+          [],
+          identifier,
+        );
+      }
+    });
+
+    it("[I-9a] admits SCORE, MAXSCORE and PASSED of any base type on a response or template declaration, and on a record outcome, which pantry's ReservedOutcomeTypes does not read (G-R2, pending)", () => {
+      for (const [identifier] of typedOutcomes) {
+        for (const name of ["qti-response-declaration", "qti-template-declaration"]) {
+          assert.deepStrictEqual(
+            found(
+              literal(
+                name,
+                attr("identifier", identifier),
+                attr("cardinality", "single"),
+                attr("base-type", "integer"),
+              ),
+              generatedTables,
+            ),
+            [],
+            `${name} ${identifier}`,
+          );
+        }
+        assert.deepStrictEqual(
+          found(outcomeAs(identifier, "integer", "record"), generatedTables),
+          [],
+          `record ${identifier}`,
+        );
+      }
+    });
+
+    it("[I-9a] refuses a mistyped SCORE inside an item and a mistyped PASSED inside a test (pantry ReservedOutcomeTypes)", () => {
+      const score = el("qti-outcome-declaration", [
+        attr("identifier", "SCORE"),
+        attr("cardinality", "single"),
+        attr("base-type", "integer"),
+      ]);
+      const passed = el("qti-outcome-declaration", [
+        attr("identifier", "PASSED"),
+        attr("cardinality", "single"),
+        attr("base-type", "integer"),
+      ]);
+
+      assert.deepStrictEqual(mistyped(item([score])), [
+        at("qti-assessment-item/qti-outcome-declaration/@base-type"),
+      ]);
+      assert.deepStrictEqual(
+        mistyped(
+          doc(
+            location,
+            el(
+              "qti-assessment-test",
+              [attr("identifier", "test"), attr("title", "Test")],
+              [passed],
+            ),
+          ),
+        ),
+        [at("qti-assessment-test/qti-outcome-declaration/@base-type")],
+      );
+    });
+
+    it("[I-9a] admits a test's SCORE and MAXSCORE of every base type, which the information model types in an item only (info.txt:8478, :8480), while an item's SCORE and a test's PASSED stay typed", () => {
+      for (const base of [
+        "boolean",
+        "directedPair",
+        "duration",
+        "file",
+        "identifier",
+        "integer",
+        "pair",
+        "point",
+        "string",
+        "uri",
+      ]) {
+        assert.deepStrictEqual(
+          mistyped(testDeclaring([outcomeOf("SCORE", base), outcomeOf("MAXSCORE", base)])),
+          [],
+          base,
+        );
+      }
+      assert.deepStrictEqual(mistyped(item([outcomeOf("SCORE", "integer")])), [
+        at("qti-assessment-item/qti-outcome-declaration/@base-type"),
+      ]);
+      assert.deepStrictEqual(mistyped(testDeclaring([outcomeOf("PASSED", "integer")])), [
+        at("qti-assessment-test/qti-outcome-declaration/@base-type"),
+      ]);
     });
 
     it("[I-9a] refuses a qti-equal tolerance token that is neither an xs:double nor an NCName, such as 1,5, as attribute-type (pantry P6, info.txt:24946)", () => {
@@ -2466,6 +2741,149 @@ describe("checkStructure", () => {
         assert.deepStrictEqual(found(tolerated(tolerance), generatedTables), [], tolerance);
       }
     });
+  });
+
+  describe("a printed variable's format (pantry R38)", () => {
+    it("[I-5] refuses a format that is not one whole printf conversion, %d, %u and Score: %.1f among them, as attribute-type at format (pantry R38, info.txt:70323)", () => {
+      for (const format of [
+        "%d",
+        "%u",
+        "Score: %.1f",
+        "%i of %i",
+        "%.1f%%",
+        "%%",
+        "%q",
+        "%5.2",
+        "2f",
+        "%",
+        "",
+      ]) {
+        const source = printed(format);
+
+        assert.deepStrictEqual(
+          found(source, generatedTables),
+          [["attribute-type", at("qti-printed-variable/@format")]],
+          format,
+        );
+        assert.deepStrictEqual(
+          first(source, generatedTables)?.detail,
+          formatDetail(format),
+          format,
+        );
+      }
+    });
+
+    it("[I-5] refuses a format padded at either end, which pantry R38 reads as xs:normalizedString does, without trimming", () => {
+      for (const format of [" %.1f", "%.1f ", "\t%i", "%i\n"]) {
+        const source = printed(format);
+
+        assert.deepStrictEqual(
+          found(source, generatedTables),
+          [["attribute-type", at("qti-printed-variable/@format")]],
+          JSON.stringify(format),
+        );
+        assert.deepStrictEqual(first(source, generatedTables)?.detail, formatDetail(format));
+      }
+    });
+
+    it("[I-5] admits a precision of a point and no digit, %.f and %#8.E among them, which the information model's syntax admits (info.txt:8686) and pantry R38 refuses", () => {
+      for (const format of ["%.f", "%#8.E", "%.i"]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], format);
+      }
+    });
+
+    it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (pantry R38)", () => {
+      for (const format of [
+        "%.1f",
+        "%i",
+        "%08.3e",
+        "%-8X",
+        "% .1f",
+        "%#o",
+        "%+.2E",
+        "%g",
+        "%10G",
+        "%.0r",
+        "%R",
+        "%x",
+        "%\t.1f",
+      ]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], JSON.stringify(format));
+      }
+      assert.deepStrictEqual(
+        found(literal("qti-printed-variable", attr("identifier", "SCORE")), generatedTables),
+        [],
+      );
+    });
+
+    it("[I-5] refuses %d at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (pantry R38)", () => {
+      const source = item([
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                el("qti-printed-variable", [attr("identifier", "SCORE"), attr("format", "%d")]),
+                el("qti-text-entry-interaction", [
+                  attr("response-identifier", "RESPONSE"),
+                  attr("format", "%d"),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ]);
+
+      assert.deepStrictEqual(mistyped(source), [
+        at("qti-assessment-item/qti-item-body/p/qti-printed-variable/@format"),
+      ]);
+    });
+
+    it(
+      "[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i and d (review 079e8c44 P2-13)",
+      () => {
+        const strings = stringsUpTo(formatAlphabet, 5);
+        const disagreeing = strings.filter(
+          (format) =>
+            quadraticPrintfFormat.test(format) !==
+            (found(printed(format), generatedTables).length === 0),
+        );
+
+        assert.strictEqual(strings.length, 271_453);
+        assert.deepStrictEqual(disagreeing, []);
+      },
+      formatEquivalenceTimeoutMs,
+    );
+
+    it.effect(
+      "[I-5] refuses a format of %, 64,000 zeros and d as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
+      () =>
+        Effect.gen(function* checksFormatInLinearTime() {
+          const fewer = printed(`%${"0".repeat(formatZeros / growthFactor)}d`);
+          const more = printed(`%${"0".repeat(formatZeros)}d`);
+          assert.deepStrictEqual(found(more, generatedTables), [
+            ["attribute-type", at("qti-printed-variable/@format")],
+          ]);
+
+          const growth = yield* growthRatio(
+            () => {
+              checkStructure(fewer, generatedTables);
+            },
+            () => {
+              checkStructure(more, generatedTables);
+            },
+          );
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the zeros took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      formatGrowthTimeoutMs,
+    );
   });
 
   describe("the XSD instance attributes", () => {

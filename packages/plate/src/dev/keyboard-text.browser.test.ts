@@ -31,17 +31,15 @@ import {
   tabUntil,
   textEntryOf,
 } from "#plate/test/playground-page.ts";
+import { xhtmlItem } from "#scripts/walk-corpus.ts";
 
 /**
  * The example corpus's text items the keys answer: BG010's Text Entry, scored by `map_response`
- * with York mapped to 1, BG011's single Extended Text, and the postcard's ten Extended Texts, some
- * `format="xhtml"`; none of the Extended Text items has response processing.
+ * with York mapped to 1, and BG011's single Extended Text, which has no response processing.
  */
 const items = {
   bg010: "QTI3_BPIG_Examples/items/BG010.xml",
   bg011: "QTI3_BeginnersGuide_Examples/items/BG011.xml",
-  postcard:
-    "qtiv3-examples/items/shared-vocabulary/Items/Item_QTI3_WritingPostcard_02/extended_text_qti3.xml",
 } as const;
 
 /**
@@ -65,8 +63,8 @@ const lines = ["First line", "Second line"] as const;
 const planets = ["Mercury", "Venus"] as const;
 
 /**
- * An essay the keys answer: its corpus path, and whether the textarea typed into is the first one
- * marked `format="xhtml"` rather than the item form's first.
+ * An essay the keys answer: its path in the playground's document set, and whether the textarea
+ * typed into is the first one marked `format="xhtml"` rather than the item form's first.
  */
 interface Essay {
   readonly item: string;
@@ -75,13 +73,15 @@ interface Essay {
 }
 
 /**
- * The essays: BG011's one textarea, and the postcard's first `xhtml` one, which the session lists
- * the postcard for.
+ * The example corpus's essays: BG011's one textarea.
  */
-const essays: readonly Essay[] = [
-  { item: items.bg011, label: "BG011", xhtml: false },
-  { item: items.postcard, label: "the postcard", xhtml: true },
-];
+const essays: readonly Essay[] = [{ item: items.bg011, label: "BG011", xhtml: false }];
+
+/**
+ * The walk corpus's xhtml essay: the first `format="xhtml"` textarea of `xhtml.xml`'s five
+ * Extended Texts, which the session lists the item for. The item has no response processing.
+ */
+const xhtmlEssay: Essay = { item: xhtmlItem, label: "xhtml.xml", xhtml: true };
 
 /**
  * A `pattern-mask` probe of the walk corpus and the two entries typed into it, each a valid
@@ -203,6 +203,41 @@ const tabOrderOf = Effect.fn("tabOrderOf")(function* tabOrderOf(page: Page, corp
 });
 
 /**
+ * Answer an essay by keys: press the next-control key to its textarea, type a line, Enter and a
+ * second line, then press on to Submit and Enter, and check that the response is recorded and the
+ * restored textarea holds both lines.
+ *
+ * @param page The page, fresh: the key is probed on it first.
+ * @param essay The essay.
+ * @returns Once every assertion has held.
+ */
+const answerEssay = Effect.fn("answerEssay")(function* answerEssay(page: Page, essay: Essay) {
+  const key = yield* nextControlKey(page);
+  const tree = yield* openItem(page, essay.item);
+  const chosen =
+    textareasOf(tree).find(
+      (textarea) => !essay.xhtml || attribute(textarea, "data-format") === "xhtml",
+    ) ?? assert.fail(`${essay.label}'s item form has the textarea to type into`);
+  const textarea = page.locator(`textarea[name="${attribute(chosen, "name") ?? ""}"]`);
+  const most = 2 * tabOrder(tree).length;
+
+  assert.strictEqual(yield* count(textarea), 1);
+
+  yield* tabUntil(page, key, textarea, most);
+  yield* type(page, lines[0]);
+  yield* press(page, "Enter");
+  yield* type(page, lines[1]);
+
+  assert.isTrue(yield* isFocused(page, textarea), "Enter stays in the textarea");
+
+  yield* tabUntil(page, key, submitButton(page), most);
+  yield* submitBy(page, "Enter");
+
+  assert.strictEqual(yield* statusHeadings(page, "responseRecorded"), 1);
+  assert.strictEqual(yield* valueOf(textarea), lines.join("\n"));
+});
+
+/**
  * Describe what the presses did beside the compared order, for a test's annotation.
  *
  * @param seen What {@link tabOrderOf} returned.
@@ -228,7 +263,6 @@ eachEngine((it, name) => {
     for (const [label, corpusPath, tag] of [
       ["BG010", items.bg010, "[Q-20]"],
       ["BG011", items.bg011, "[Q-5]"],
-      ["the postcard", items.postcard, "[Q-5]"],
     ] as const) {
       keys.effect(
         `${tag} [keyboard] Tab order: ${label}'s item form, from its first control to its Submit, is the Node walk's tabOrder`,
@@ -269,34 +303,7 @@ eachEngine((it, name) => {
     for (const essay of essays) {
       keys.effect(
         `[Q-5] [keyboard] ${essay.label} answered by keys: a line, Enter, a second line, Tab to Submit and Enter record the response, and the restored textarea holds both lines`,
-        () =>
-          withPage({ javaScriptEnabled: false }, (page) =>
-            Effect.gen(function* answerEssay() {
-              const key = yield* nextControlKey(page);
-              const tree = yield* openItem(page, essay.item);
-              const chosen =
-                textareasOf(tree).find(
-                  (textarea) => !essay.xhtml || attribute(textarea, "data-format") === "xhtml",
-                ) ?? assert.fail(`${essay.label}'s item form has the textarea to type into`);
-              const textarea = page.locator(`textarea[name="${attribute(chosen, "name") ?? ""}"]`);
-              const most = 2 * tabOrder(tree).length;
-
-              assert.strictEqual(yield* count(textarea), 1);
-
-              yield* tabUntil(page, key, textarea, most);
-              yield* type(page, lines[0]);
-              yield* press(page, "Enter");
-              yield* type(page, lines[1]);
-
-              assert.isTrue(yield* isFocused(page, textarea), "Enter stays in the textarea");
-
-              yield* tabUntil(page, key, submitButton(page), most);
-              yield* submitBy(page, "Enter");
-
-              assert.strictEqual(yield* statusHeadings(page, "responseRecorded"), 1);
-              assert.strictEqual(yield* valueOf(textarea), lines.join("\n"));
-            }),
-          ),
+        () => withPage({ javaScriptEnabled: false }, (page) => answerEssay(page, essay)),
       );
     }
   });
@@ -362,6 +369,25 @@ eachEngine((it, name) => {
             );
           }),
         ),
+    );
+
+    walk.effect(
+      "[Q-5] [keyboard] Tab order: xhtml.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
+      (context) =>
+        withPage({ javaScriptEnabled: false }, (page) =>
+          Effect.gen(function* xhtmlTabOrder() {
+            const seen = yield* tabOrderOf(page, xhtmlEssay.item);
+
+            yield* Effect.promise(() =>
+              context.annotate(`${name}, ${observed(seen, xhtmlEssay.label)}`),
+            );
+          }),
+        ),
+    );
+
+    walk.effect(
+      "[Q-5] [keyboard] xhtml.xml answered by keys: a line, Enter, a second line, Tab to Submit and Enter record the response, and the restored textarea holds both lines",
+      () => withPage({ javaScriptEnabled: false }, (page) => answerEssay(page, xhtmlEssay)),
     );
 
     for (const probe of patternProbes) {

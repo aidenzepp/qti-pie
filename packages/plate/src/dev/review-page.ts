@@ -2,16 +2,18 @@
  * The dev playground's read-only views of a test session: an item in review at
  * `/sessions/<sid>/review/<n>`, an item with its correct responses at
  * `/sessions/<sid>/solution/<n>`, the session's Results Reporting document at
- * `/sessions/<sid>/results.xml`, and the closed test's summary page, which links them.
+ * `/sessions/<sid>/results.xml` once the test has closed, and the closed test's summary page,
+ * which links them.
  *
  * A review or solution page is served only while `permits` allows it for item `n`, and is rendered
- * with `itemView`'s instance and configuration for that item, so a shuffled Choice shows the order
- * the candidate saw. Review shows the candidate's values; solution shows the values `solution`
- * gives, which the author passes to `render` as `values`, the only place a correct response
- * reaches a page (T-k under A; the solution page is the part a ruling of B drops). The summary is
- * a page builder, {@link summaryPage}: the session page shows it once the test has closed, and it
- * is not routed here. The results document reports the session under the store's `s-` id, which
- * the Results XSD takes as an NCName.
+ * with `itemView`'s instance, configuration and record for that item, so a shuffled Choice shows
+ * the order the candidate saw and a templated item the values its template processing drew. Review
+ * shows the candidate's values; solution shows the values `solution` gives from the item's record,
+ * its template-set correct responses among them, which the author passes to `render` as `values`,
+ * the only place a correct response reaches a page (T-k under A; the solution page is the part a
+ * ruling of B drops). The summary is a page builder, {@link summaryPage}: the session page shows it
+ * once the test has closed, and it is not routed here. The results document reports the session
+ * under the store's `s-` id, which the Results XSD takes as an NCName.
  *
  * The route returns the frame's {@link Page} for every HTML answer, so the playground's handler
  * writes it with the stylesheets, the theme box and the page headers, and a `Response` only for the
@@ -122,7 +124,8 @@ export const reviewPath = (pathname: string): boolean => Option.isSome(targetOf(
 
 /**
  * Construct the 404 page every refused review path answers with: an unknown session, an item the
- * session lacks, and an item its session control does not show in the asked mode.
+ * session lacks, an item its session control does not show in the asked mode, and the results of a
+ * session whose test is still open.
  *
  * @returns The 404 page.
  */
@@ -165,11 +168,11 @@ const itemTitle = (
  * an open test is shown.
  *
  * The page is served only when `permits` allows the mode for the item; otherwise, and for an `n`
- * the session lacks, it is the 404. The item is rendered with `itemView`'s instance and
- * configuration, so its ids and a shuffled Choice's order are the ones the candidate saw, and
- * without `disabled`: the mode alone makes it read-only, so a Choice's controls are disabled and a
- * text Control is `readonly`, still a tab stop. Review shows the candidate's values; solution shows
- * `solution(document)`.
+ * the session lacks, it is the 404. The item is rendered with `itemView`'s instance, configuration
+ * and record, so its ids, a shuffled Choice's order and a templated item's values are the ones the
+ * candidate saw, and without `disabled`: the mode alone makes it read-only, so a Choice's controls
+ * are disabled and a text Control is `readonly`, still a tab stop. Review shows the candidate's
+ * values; solution shows `solution(document, view.record)`.
  *
  * @param playground The playground, whose configuration the item is read with.
  * @param sitting The session and its test.
@@ -203,12 +206,16 @@ const itemPage = (
         { heading: mode, instance: view.instance },
         view.configuration,
       );
-      const item = yield* render(redact(document), view.configuration, {
-        assetBase: itemAssetBase(sitting, document),
-        instance: view.instance,
-        mode,
-        values: mode === "review" ? view.values : solution(document),
-      });
+      const item = yield* render(
+        redact(document, view.record, view.configuration),
+        view.configuration,
+        {
+          assetBase: itemAssetBase(sitting, document),
+          instance: view.instance,
+          mode,
+          values: mode === "review" ? view.values : solution(document, view.record),
+        },
+      );
       const { locale } = view.configuration;
 
       return page(
@@ -239,7 +246,11 @@ const itemPage = (
  * and the items it was started with, under the store's `s-` id as the session identifier and the
  * playground's origin as the system that issued it, as an XML download.
  *
- * @param sitting The session and its test.
+ * {@link routeReview} calls it only for a closed session: the document reports each presented
+ * item's template variables, which can give an answer away, so a candidate who types the address
+ * mid-test gets the 404 instead.
+ *
+ * @param sitting The session and its test, which has closed.
  * @param origin The playground's origin, such as `http://127.0.0.1:5190`.
  * @returns The document's response, or a developer error's page when `results` refuses the input.
  */
@@ -260,9 +271,13 @@ const resultsAnswer = (sitting: Sitting, origin: string): Page | Response =>
 
 /**
  * Route one request for a session's read-only views: `GET /sessions/<sid>/review/<n>` and
- * `/solution/<n>`, each only while `permits` allows it, and `GET /sessions/<sid>/results.xml`.
- * Another method there is a 405 whose `Allow` names GET; any other path, a session the store does
- * not hold, an `n` the session lacks and a view its item's session control forbids are 404s.
+ * `/solution/<n>`, each only while `permits` allows it, and `GET /sessions/<sid>/results.xml`,
+ * only once the session's test has closed. Another method there is a 405 whose `Allow` names GET;
+ * any other path, a session the store does not hold, an `n` the session lacks, a view its item's
+ * session control forbids and the results of an open session are 404s.
+ *
+ * An open session's results are refused because the document reports each presented item's
+ * template variables, which can give an answer away while the candidate is still answering.
  *
  * @example
  *   const outcome = await Effect.runPromise(
@@ -302,10 +317,13 @@ export const routeReview = (
     Effect.map((sitting) =>
       Result.match(sitting, {
         onFailure: (answered): Page | Response => answered,
-        onSuccess: (found) =>
-          asked.kind === "results"
-            ? resultsAnswer(found, url.origin)
-            : itemPage(playground, found, asked.mode, asked.n),
+        onSuccess: (found) => {
+          if (asked.kind === "item") {
+            return itemPage(playground, found, asked.mode, asked.n);
+          }
+
+          return found.session.status === "closed" ? resultsAnswer(found, url.origin) : notFound();
+        },
       }),
     ),
   );

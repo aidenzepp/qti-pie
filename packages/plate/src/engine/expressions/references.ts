@@ -1,8 +1,8 @@
 /**
  * The references family of the engine: the evaluators of the expressions that read a variable, a
  * declaration or a literal, `qti-variable`, `qti-correct`, `qti-base-value`, `qti-map-response`,
- * `qti-map-response-point`, `qti-default` and `qti-null`, and the stub markers of the two kinds the
- * family has not landed (`qti-random-integer` and `qti-random-float`).
+ * `qti-map-response-point`, `qti-default` and `qti-null`, and of the two that draw from the scope's
+ * stream, `qti-random-integer` and `qti-random-float`.
  *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option`, `Array`
  * and `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
@@ -15,8 +15,26 @@ import type { Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.t
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
-import { floatValue, toFloat } from "#plate/engine/numbers.ts";
-import { builtInType, own, variableValue } from "#plate/engine/refs.ts";
+import {
+  bitLengthOf,
+  floatNull,
+  floatValue,
+  integerBitBound,
+  integerNull,
+  integerValue,
+  numberOf,
+  toFloat,
+} from "#plate/engine/numbers.ts";
+import { drawBelow, drawFloat } from "#plate/engine/random.ts";
+import type { Draw } from "#plate/engine/random.ts";
+import {
+  builtInType,
+  own,
+  referenceInteger,
+  referenceValue,
+  variableValue,
+} from "#plate/engine/refs.ts";
+import type { FloatOrRef } from "#plate/model/expression.ts";
 import type {
   AreaMapping,
   Item,
@@ -24,7 +42,7 @@ import type {
   Mapping,
   ResponseDeclaration,
 } from "#plate/model/item.ts";
-import { format, match, nullOf } from "#plate/model/values.ts";
+import { format, nullOf, sameSingle } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
 /**
@@ -46,29 +64,15 @@ const responseOf = (
   );
 
 /**
- * Report whether two singles are equal, as `match` compares single values: the same base type,
- * numbers by value, strings and identifiers by code point, and a `pair` in either order.
- *
- * @param left One single.
- * @param right The other.
- * @returns Whether they are equal.
- */
-const equal = (left: Single, right: Single): boolean =>
-  match(
-    { baseType: left.baseType, cardinality: "single", values: [left] },
-    { baseType: right.baseType, cardinality: "single", values: [right] },
-  );
-
-/**
  * Give the key {@link distinct} tells a value apart by: its base type and its value as `format`
- * writes it, so two values share a key exactly when {@link equal} finds them equal, however each
- * was written (`+5` and `05` are one integer, `1.0` and `1e0` one float).
+ * writes it, so two values share a key exactly when {@link sameSingle} finds them equal, however
+ * each was written (`+5` and `05` are one integer, `1.0` and `1e0` one float).
  *
- * Where `equal` and `format` part, the key follows `equal`: a `pair`'s identifiers are written in
- * code-unit order, as `equal` matches a pair in either order, and a float's `-0` is written as `0`,
- * as `equal` compares floats with `===`. That `===` makes a NaN equal to no value, itself included,
- * so a NaN has no key. A base type holds no space, and neither does an identifier or a coordinate,
- * so one space between the parts keeps two keys apart.
+ * Where `sameSingle` and `format` part, the key follows `sameSingle`: a `pair`'s identifiers are
+ * written in code-unit order, as `sameSingle` matches a pair in either order, and a float's `-0` is
+ * written as `0`, as `sameSingle` compares floats with `===`. That `===` makes a NaN equal to no
+ * value, itself included, so a NaN has no key. A base type holds no space, and neither does an
+ * identifier or a coordinate, so one space between the parts keeps two keys apart.
  *
  * @param single The value.
  * @returns Its key; none for a NaN.
@@ -94,12 +98,12 @@ const distinctKey = (single: Single): Option.Option<string> => {
 
 /**
  * Drop a response's repeated values: each value is kept at its first occurrence, in order, and a
- * later value {@link equal} finds equal to it is dropped.
+ * later value {@link sameSingle} finds equal to it is dropped.
  *
  * A `Set` of each value's {@link distinctKey} finds the repeats, so the time is linear in the
  * number of values: a candidate's post of many members costs what its length costs, where comparing
- * every pair would cost its square. A NaN has no key and is always kept, as `equal` finds it equal
- * to nothing.
+ * every pair would cost its square. A NaN has no key and is always kept, as `sameSingle` finds it
+ * equal to nothing.
  *
  * @param values The response's values.
  * @returns The values no earlier value equals, in order.
@@ -141,7 +145,7 @@ const comparesExactly = (entry: MapEntry): boolean =>
 const keyMatches = (entry: MapEntry, single: Single): boolean =>
   !comparesExactly(entry) && entry.key.baseType === "string" && single.baseType === "string"
     ? foldCase(entry.key.value) === foldCase(single.value)
-    : equal(entry.key, single);
+    : sameSingle(entry.key, single);
 
 /**
  * Give the value a mapping maps one response value to: the value of the first entry in document
@@ -312,8 +316,8 @@ const mapResponsePoint = (
   });
 
 /**
- * Give the value of a `qti-variable`: the response's or the outcome's current value, else the
- * built-in variable's, as {@link variableValue} reads it.
+ * Give the value of a `qti-variable`: the response's, the outcome's or the template variable's
+ * current value, else the built-in variable's, as {@link variableValue} reads it.
  *
  * @param expression The `qti-variable`.
  * @param scope The item and the variables of the attempt.
@@ -324,18 +328,23 @@ const evaluateVariable: Evaluator<"variable"> = (expression, scope) =>
   variableValue(scope.variables, expression.identifier);
 
 /**
- * Give the value of a `qti-correct`: the response's correct response, else NULL of its declared
- * type.
+ * Give the value of a `qti-correct`: the correct response template processing set for the response
+ * (`Variables.correct`), else its declaration's correct response, else NULL of its declared type.
+ *
+ * The response must be declared either way, so an override map never makes an undeclared name
+ * readable; `qti-set-correct-response` names only a declared response on a checked item.
  *
  * @param expression The `qti-correct`.
- * @param scope The item, whose declaration gives the correct response, and the variables.
+ * @param scope The item, whose declaration gives the correct response, and the variables, whose
+ *   override comes first.
  * @returns The correct response, or an {@link UnknownIdentifierError} when the item declares no
  *   modelled response by that name.
  */
 const evaluateCorrect: Evaluator<"correct"> = (expression, scope) =>
   Result.map(responseOf(scope.item, expression.identifier), (declaration) =>
-    Option.getOrElse(declaration.correct, () =>
-      nullOf(declaration.baseType, declaration.cardinality),
+    Option.getOrElse(
+      Option.orElse(own(scope.variables.correct, expression.identifier), () => declaration.correct),
+      () => nullOf(declaration.baseType, declaration.cardinality),
     ),
   );
 
@@ -370,35 +379,44 @@ const evaluateMapResponsePoint: Evaluator<"map-response-point"> = (expression, s
   mapResponsePoint(scope.item, scope.variables, expression.identifier);
 
 /**
- * Give the value of a `qti-default`: the default value declared for the variable it names, else
- * NULL of that variable's type, as the information model says: it "returns the associated
- * defaultValue or NULL if no default value was declared".
+ * Give the value of a `qti-default`: the default template processing set for the variable it names
+ * (`Variables.defaults`), else the default value declared for it, else NULL of that variable's
+ * type, as the information model says: it "returns the associated defaultValue or NULL if no
+ * default value was declared".
  *
- * It reads the declaration, never the attempt's value. A response or an outcome with no
- * `qti-default-value` gives NULL of its base type and cardinality, a single integer or float
- * outcome included: the 0 an attempt starts such an outcome at is not a declared default. A
- * declared variable wins over a built-in of the same name, as `qti-variable` reads it. A built-in
- * the engine holds, `numAttempts` or `completionStatus`, has no declaration and so no declared
- * default: it gives NULL of the built-in's own type ({@link builtInType}), a single integer or a
- * single identifier, whatever the attempt holds of it. Template processing, whose
- * `qti-set-default-value` could change a default, never runs first: the item model runs no
- * response processing of an item that has it.
+ * It reads the defaults and the declaration, never the attempt's value. A response, an outcome or
+ * a template variable with no `qti-default-value` and no default set gives NULL of its base type
+ * and cardinality, a single integer or float outcome included: the 0 an attempt starts such an
+ * outcome at is not a declared default, and a template variable's current value is not its default
+ * either. The variable must be declared for a set default to be read, so an override map never
+ * makes an undeclared name readable; `qti-set-default-value` names only a declared response or
+ * outcome on a checked item. A declared variable wins over a built-in of the same name, as
+ * `qti-variable` reads it. A built-in the engine holds, `numAttempts` or `completionStatus`, has no
+ * declaration and so no declared default: it gives NULL of the built-in's own type
+ * ({@link builtInType}), a single integer or a single identifier, whatever the attempt holds of it.
  *
  * @param expression The `qti-default`.
- * @param scope The item, whose declarations give the defaults.
- * @returns The declared default or the NULL, or an {@link UnknownIdentifierError} when the item
- *   declares no modelled response or outcome by that name and it names no built-in the engine
- *   holds. The item model marks such a name, so a checked item never reaches that failure.
+ * @param scope The item, whose declarations give the defaults, and the variables, whose set
+ *   defaults come first.
+ * @returns The set or declared default or the NULL, or an {@link UnknownIdentifierError} when the
+ *   item declares no modelled response, outcome or template variable by that name and it names no
+ *   built-in the engine holds. The item model marks such a name, so a checked item never reaches
+ *   that failure.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpDefault
  */
 const evaluateDefault: Evaluator<"default"> = (expression, scope) => {
   const declaration =
     scope.item.responses.get(expression.identifier) ??
-    scope.item.outcomes.get(expression.identifier);
+    scope.item.outcomes.get(expression.identifier) ??
+    scope.item.templates.get(expression.identifier);
   if (declaration !== undefined) {
     return Result.succeed(
-      Option.getOrElse(declaration.defaultValue, () =>
-        nullOf(declaration.baseType, declaration.cardinality),
+      Option.getOrElse(
+        Option.orElse(
+          own(scope.variables.defaults, expression.identifier),
+          () => declaration.defaultValue,
+        ),
+        () => nullOf(declaration.baseType, declaration.cardinality),
       ),
     );
   }
@@ -431,9 +449,141 @@ const evaluateDefault: Evaluator<"default"> = (expression, scope) => {
 const evaluateNull: Evaluator<"null"> = () => Result.succeed(nullOf("string", "single"));
 
 /**
- * The references family's evaluators by kind: M1's five, `qti-default` and `qti-null` landed, and
- * the stub marker for each kind the family has not landed (ruling R2), which the dispatcher in
- * `#plate/engine/evaluate.ts` never reaches on a checked item.
+ * Draw a `qti-random-integer`'s value from its resolved attributes: `min + step × j`, with `j`
+ * drawn by `drawBelow` among the `⌊(max − min) / step⌋ + 1` values the range holds, so with `min`
+ * 2, `max` 11 and `step` 3 the values 2, 5, 8 and 11 are equally likely.
+ *
+ * Every NULL is settled before the first draw, so a NULL draws nothing and leaves the stream where
+ * it was for every later draw:
+ *
+ * - `max` below `min`, or a `step` of 0 or below: "the range holds no value and the result is NULL"
+ *   (G-R1 draft 148).
+ * - `min` or `max` of more than {@link integerBitBound} bits (1,000,000): the drawn integer is a
+ *   computed result, held to that bound by the operator's ruling `afb7e648`, and within the bound
+ *   every value the range holds is too, so the draw is never past it (G-R2, pending).
+ *
+ * A range of one value, `step` beyond `max − min` among them, draws nothing and gives `min`.
+ *
+ * @param draw The scope's stream.
+ * @param min The least value.
+ * @param max The greatest value.
+ * @param step The step between values.
+ * @returns The single integer, or NULL of a single integer.
+ */
+const integerDraw = (draw: Draw, min: bigint, max: bigint, step: bigint): Value => {
+  if (
+    max < min ||
+    step <= 0n ||
+    bitLengthOf(min) > integerBitBound ||
+    bitLengthOf(max) > integerBitBound
+  ) {
+    return integerNull;
+  }
+
+  return integerValue(min + step * drawBelow(draw, (max - min) / step + 1n));
+};
+
+/**
+ * Give the value of a `qti-random-integer`: a single integer drawn from its range
+ * ({@link integerDraw}).
+ *
+ * Its `min`, `max` and `step` are resolved first, in that order, each its literal or the value of
+ * the variable it names ({@link referenceInteger}); a NULL there gives NULL, before any draw.
+ *
+ * @param expression The `qti-random-integer`.
+ * @param scope The variables of the attempt and the stream it draws from.
+ * @returns The single integer or its NULL, or an {@link UnknownIdentifierError} when an attribute
+ *   names a variable the variables hold no value of, which a checked item never reaches.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-random-integer
+ */
+const evaluateRandomInteger: Evaluator<"random-integer"> = (expression, scope) =>
+  Result.gen(function* drawRandomInteger() {
+    const min = yield* referenceInteger(scope.variables, expression.min);
+    const max = yield* referenceInteger(scope.variables, expression.max);
+    const step = yield* referenceInteger(scope.variables, expression.step);
+
+    return Option.match(Option.all([min, max, step]), {
+      onNone: () => integerNull,
+      onSome: ([least, greatest, by]) => integerDraw(scope.draw, least, greatest, by),
+    });
+  });
+
+/**
+ * Give the float a `qti-random-float`'s `min` or `max` stands for: its literal, or the value of the
+ * float variable it names, through `referenceValue` with the kind's checked float facet.
+ *
+ * @param variables The variables of the attempt.
+ * @param reference The attribute's value.
+ * @returns The float; none when the named variable holds NULL or a value that is not a single
+ *   float, which the validator refuses (P24) on a checked item; or an
+ *   {@link UnknownIdentifierError} when it names a variable the variables hold no value of.
+ */
+const referenceFloat = (
+  variables: Variables,
+  reference: FloatOrRef,
+): Result.Result<Option.Option<number>, UnknownIdentifierError> =>
+  Result.map(referenceValue(variables, { baseType: "float", checked: true, reference }), (value) =>
+    Option.flatMap(numberOf(value), (single) =>
+      single.baseType === "float" ? Option.some(single.value) : Option.none(),
+    ),
+  );
+
+/**
+ * Draw a `qti-random-float`'s value from its resolved bounds, with `u` the stream's next float in
+ * [0, 1) (`drawFloat`, two draws): `min + u × (max − min)`, or `min × (1 − u) + max × u` when
+ * `max − min` is not finite, so a range across the whole double line gives a finite float; the
+ * result is then clamped to `[min, max]`, which a rounding of either form can step past.
+ *
+ * A bound that is NaN or infinite, or a `max` below `min`, gives NULL before the draw, so it draws
+ * nothing (G-R2, pending). Each operation is one IEEE 754 addition, subtraction or multiplication,
+ * correctly rounded, so every engine gives the same float for the same draws.
+ *
+ * @param draw The scope's stream.
+ * @param min The least value.
+ * @param max The greatest value.
+ * @returns The single float, or NULL of a single float.
+ */
+const floatDraw = (draw: Draw, min: number, max: number): Value => {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) {
+    return floatNull;
+  }
+
+  const u = drawFloat(draw);
+  const span = max - min;
+  const drawn = Number.isFinite(span) ? min + u * span : min * (1 - u) + max * u;
+  if (drawn < min) {
+    return floatValue(min);
+  }
+
+  return floatValue(drawn > max ? max : drawn);
+};
+
+/**
+ * Give the value of a `qti-random-float`: a single float drawn from `[min, max]`
+ * ({@link floatDraw}).
+ *
+ * Its `min` and `max` are resolved first, in that order, each its literal or the value of the
+ * variable it names ({@link referenceFloat}); a NULL there gives NULL, before any draw.
+ *
+ * @param expression The `qti-random-float`.
+ * @param scope The variables of the attempt and the stream it draws from.
+ * @returns The single float or its NULL, or an {@link UnknownIdentifierError} when a bound names a
+ *   variable the variables hold no value of, which a checked item never reaches.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-random-float
+ */
+const evaluateRandomFloat: Evaluator<"random-float"> = (expression, scope) =>
+  Result.gen(function* drawRandomFloat() {
+    const min = yield* referenceFloat(scope.variables, expression.min);
+    const max = yield* referenceFloat(scope.variables, expression.max);
+
+    return Option.match(Option.all([min, max]), {
+      onNone: () => floatNull,
+      onSome: ([least, greatest]) => floatDraw(scope.draw, least, greatest),
+    });
+  });
+
+/**
+ * The references family's evaluators by kind.
  */
 export const referencesEvaluators: FamilyTable<
   | "base-value"
@@ -452,7 +602,7 @@ export const referencesEvaluators: FamilyTable<
   "map-response": evaluateMapResponse,
   "map-response-point": evaluateMapResponsePoint,
   null: evaluateNull,
-  "random-float": "unlanded",
-  "random-integer": "unlanded",
+  "random-float": evaluateRandomFloat,
+  "random-integer": evaluateRandomInteger,
   variable: evaluateVariable,
 };

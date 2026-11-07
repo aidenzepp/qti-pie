@@ -650,8 +650,8 @@ const legendChoice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Red")], fixed: false, identifier: "A" },
-    { content: [words("Blue")], fixed: false, identifier: "B" },
+    { content: [words("Red")], fixed: false, identifier: "A", templateVisibility: Option.none() },
+    { content: [words("Blue")], fixed: false, identifier: "B", templateVisibility: Option.none() },
   ],
   class: "swatches",
   kind: "choice",
@@ -762,8 +762,8 @@ const labelledInlineChoice: InlineChoiceInteraction = {
   ariaLabel: Option.none(),
   ariaLabelledby: Option.none(),
   choices: [
-    { content: [words("red")], fixed: false, identifier: "R" },
-    { content: [words("blue")], fixed: false, identifier: "B" },
+    { content: [words("red")], fixed: false, identifier: "R", templateVisibility: Option.none() },
+    { content: [words("blue")], fixed: false, identifier: "B", templateVisibility: Option.none() },
   ],
   class: "colour",
   kind: "inline-choice",
@@ -904,6 +904,8 @@ const itemOf = (interaction: Interaction): Item => ({
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Merged",
   unsupported: [],
 });

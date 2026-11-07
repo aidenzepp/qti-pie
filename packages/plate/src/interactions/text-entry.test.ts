@@ -159,6 +159,8 @@ const itemOf = (
       },
     ]),
   ),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Capitals",
   unsupported: [],
 });

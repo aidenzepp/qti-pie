@@ -469,15 +469,15 @@ export const format = (single: Single): string => {
 };
 
 /**
- * Report whether two values are equal.
+ * Report whether two singles are equal, as {@link match} compares two single values.
  *
- * @param left One value.
- * @param right The other value.
+ * @param left One single.
+ * @param right The other single.
  * @returns Whether they share a base type and are equal: a `pair` in either order, a
  *   `directedPair` in order, a `point` when both coordinates are equal, integers and floats by
  *   value (`===` compares two bigints by value) and strings by code point.
  */
-const sameSingle = (left: Single, right: Single): boolean => {
+export const sameSingle = (left: Single, right: Single): boolean => {
   if (left.baseType === "pair" && right.baseType === "pair") {
     const [a, b] = left.value;
     const [c, d] = right.value;

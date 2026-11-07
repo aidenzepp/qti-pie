@@ -130,7 +130,7 @@ const hostConfiguration = configure({
   allowSkipping: false,
   headingLevel: 3,
   maxAttempts: 5,
-  seed: 7,
+  seed: "7",
   showFeedback: true,
   showSolution: true,
   validateResponses: true,

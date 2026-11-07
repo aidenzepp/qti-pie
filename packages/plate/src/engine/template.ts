@@ -1,0 +1,378 @@
+/**
+ * The template interpreter: an item's template processing, run from the item's declared state as a
+ * pure function of the item, its template rules and one stream of draws.
+ *
+ * {@link runTemplates} gives the value of each template variable and the correct responses and
+ * defaults the rules set, by identifier. The rules run in order, each seeing what the rules before
+ * it left, and every expression goes through the evaluator (`evaluateExpression` in
+ * `#plate/engine/evaluate.ts`) with the one stream the caller passes, so a seed in gives the same
+ * values out. Template processing may read only template variables (`info.txt:65111`), so the
+ * evaluator sees the template values and no response or outcome value. A failure of what the
+ * caller passed is an {@link EngineFailure} returned in a `Result`, as the evaluator returns it;
+ * the first one ends the run.
+ *
+ * Value imports point one way: `#plate/engine/attempt.ts` to here, and here to the evaluator.
+ *
+ * @module
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_TemplateProcessing
+ */
+import { Option, Result } from "effect";
+import {
+  evaluateExpression,
+  isTrue,
+  OutcomeMismatchError,
+  UnknownIdentifierError,
+} from "#plate/engine/evaluate.ts";
+import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import type { Draw } from "#plate/engine/random.ts";
+import type { TemplateRule } from "#plate/model/expression.ts";
+import type { Expression, Item, TemplateDeclaration } from "#plate/model/item.ts";
+import { isNull, nullOf } from "#plate/model/values.ts";
+import type { Value } from "#plate/model/values.ts";
+
+/**
+ * What template processing leaves, each map by identifier: the value of every template variable,
+ * and the correct responses and defaults its rules set.
+ *
+ * `templates` holds every template variable the item declares. `correct` and `defaults` hold only
+ * the variables a `qti-set-correct-response` or a `qti-set-default-value` set; the item's own
+ * declarations are never changed, so a variable the rules did not set keeps its declared correct
+ * response or default, which the evaluator reads behind these maps (`Variables.correct` and
+ * `Variables.defaults` in `#plate/engine/evaluate.ts`). Every value is of its target's declared
+ * base type and cardinality, a NULL included.
+ */
+export interface TemplateValues {
+  readonly correct: Readonly<Record<string, Value>>;
+  readonly defaults: Readonly<Record<string, Value>>;
+  readonly templates: Readonly<Record<string, Value>>;
+}
+
+/**
+ * The number of restarts one run of template processing may take, shared by all its
+ * `qti-template-constraint`s, so it runs its rules at most 101 times.
+ *
+ * QTI requires "a finite maximum number of iterations" and assumes 100 (`info.txt:45736`). The
+ * budget is G-R2, pending: one shared budget of 100 restarts per run; when it runs out, a failing
+ * constraint applies the declared state and processing continues after it.
+ */
+const restartBudget = 100;
+
+/**
+ * A template rule that sets a variable: a `qti-set-template-value`, a `qti-set-correct-response`
+ * or a `qti-set-default-value`.
+ */
+type SetRule = Extract<TemplateRule, { readonly identifier: string }>;
+
+/**
+ * The map of {@link TemplateValues} each setting rule writes.
+ */
+const setMaps = {
+  "set-correct-response": "correct",
+  "set-default-value": "defaults",
+  "set-template-value": "templates",
+} as const satisfies Readonly<Record<SetRule["kind"], keyof TemplateValues>>;
+
+/**
+ * One run of the rules: the item, the stream, the declared state a restart returns to, and whether
+ * the run's restarts are spent.
+ */
+interface Pass {
+  readonly declared: TemplateValues;
+  readonly draw: Draw;
+  readonly item: Item;
+  /**
+   * Whether the budget's restarts are all taken, so a failing constraint applies the declared state
+   * and processing continues after it instead of restarting.
+   */
+  readonly spent: boolean;
+}
+
+/**
+ * How a sequence of rules ended: on its last rule (`next`, so the rules after it run) or at a
+ * `qti-exit-template` (`exit`), each with what the rules left; or at a failing constraint that
+ * restarts the run (`restart`), which keeps nothing.
+ */
+type Step =
+  | { readonly kind: "exit" | "next"; readonly values: TemplateValues }
+  | { readonly kind: "restart" };
+
+/**
+ * Give the state template processing starts from: each template variable at its declared default,
+ * else NULL of its declared base type and cardinality, and no correct response or default set.
+ *
+ * @param item The item, whose template declarations give each variable's type and default.
+ * @returns The declared state.
+ */
+const declaredState = (item: Item): TemplateValues => ({
+  correct: {},
+  defaults: {},
+  templates: Object.fromEntries(
+    Array.from(item.templates, ([identifier, declaration]) => [
+      identifier,
+      Option.getOrElse(declaration.defaultValue, () =>
+        nullOf(declaration.baseType, declaration.cardinality),
+      ),
+    ]),
+  ),
+});
+
+/**
+ * Give the value of an expression of template processing: through the evaluator, with the run's
+ * stream and the template values the rules have left, and no response or outcome value, because
+ * template processing "may only refer to the values of the template variables" (`info.txt:65111`).
+ *
+ * So a `qti-variable` of a response or an outcome is the record's gap, and a `qti-equal` whose
+ * `tolerance` names an outcome is NULL; the validator refuses the first (P26), and the second
+ * stays NULL (OD-P8-20).
+ *
+ * @param expression The expression.
+ * @param pass The run.
+ * @param values What the rules before it left.
+ * @returns The expression's value, or the evaluator's first failure.
+ */
+const evaluateIn = (
+  expression: Expression,
+  pass: Pass,
+  values: TemplateValues,
+): Result.Result<Value, EngineFailure> =>
+  evaluateExpression(
+    expression,
+    pass.item,
+    { outcomes: {}, responses: {}, templates: values.templates },
+    pass.draw,
+  );
+
+/**
+ * Give the declaration of the variable a setting rule sets: a template variable for
+ * `qti-set-template-value`, a response for `qti-set-correct-response`, and a response or an
+ * outcome for `qti-set-default-value`, as the information model names their targets and the
+ * validator holds them (`templateTarget` in `#plate/validate/rules.ts`).
+ *
+ * @param item The item.
+ * @param rule The setting rule.
+ * @returns The target's base type and cardinality, or an {@link UnknownIdentifierError} when the
+ *   item declares no variable of that kind by that name.
+ */
+const targetOf = (
+  item: Item,
+  rule: SetRule,
+): Result.Result<Pick<TemplateDeclaration, "baseType" | "cardinality">, UnknownIdentifierError> => {
+  const found = {
+    "set-correct-response": () => item.responses.get(rule.identifier),
+    "set-default-value": () =>
+      item.responses.get(rule.identifier) ?? item.outcomes.get(rule.identifier),
+    "set-template-value": () => item.templates.get(rule.identifier),
+  }[rule.kind]();
+
+  return Result.fromOption(
+    Option.fromUndefinedOr(found),
+    () =>
+      new UnknownIdentifierError({
+        holder: "item",
+        identifier: rule.identifier,
+        role: rule.kind === "set-correct-response" ? "response" : "variable",
+      }),
+  );
+};
+
+/**
+ * Set the variable a setting rule names to a value, in the map the rule writes ({@link setMaps}).
+ *
+ * QTI assigns without conversion, as `qti-set-outcome-value` does (`setOutcome` in
+ * `#plate/engine/evaluate.ts`): a value of another base type or cardinality fails, and a NULL,
+ * which has no type to differ, is stored as the target's own NULL. So every value the maps hold is
+ * of its target's declared type.
+ *
+ * @param item The item, whose declaration gives the target's type.
+ * @param values What the rules before it left.
+ * @param rule The setting rule.
+ * @param value The expression's value.
+ * @returns What the rules leave with the variable set; or an {@link UnknownIdentifierError} when
+ *   the item declares no variable of the rule's kind by that name, or an
+ *   {@link OutcomeMismatchError} when the value is not NULL and its type differs from the target's.
+ */
+const assign = (
+  item: Item,
+  values: TemplateValues,
+  rule: SetRule,
+  value: Value,
+): Result.Result<TemplateValues, OutcomeMismatchError | UnknownIdentifierError> =>
+  Result.gen(function* assignOneVariable() {
+    const target = yield* targetOf(item, rule);
+    if (
+      !isNull(value) &&
+      (value.baseType !== target.baseType || value.cardinality !== target.cardinality)
+    ) {
+      return yield* Result.fail(
+        new OutcomeMismatchError({
+          actual: `${value.baseType} ${value.cardinality}`,
+          expected: `${target.baseType} ${target.cardinality}`,
+          identifier: rule.identifier,
+        }),
+      );
+    }
+
+    const stored = isNull(value) ? nullOf(target.baseType, target.cardinality) : value;
+    const map = setMaps[rule.kind];
+
+    return { ...values, [map]: { ...values[map], [rule.identifier]: stored } };
+  });
+
+/**
+ * Choose the rules a `qti-template-condition` runs: those of its first branch whose condition is
+ * true, else its `otherwise`, else none. Branch conditions are evaluated in order, and none after
+ * the chosen branch or a failing one, so a branch after it draws nothing.
+ *
+ * @param condition The `qti-template-condition`.
+ * @param pass The run.
+ * @param values What the rules before it left.
+ * @returns The chosen rules, or the first failure of a branch condition.
+ */
+const chosenRules = (
+  condition: Extract<TemplateRule, { readonly kind: "template-condition" }>,
+  pass: Pass,
+  values: TemplateValues,
+): Result.Result<readonly TemplateRule[], EngineFailure> =>
+  Result.gen(function* chooseTemplateBranch() {
+    for (const branch of condition.branches) {
+      if (isTrue(yield* evaluateIn(branch.when, pass, values))) {
+        return branch.then;
+      }
+    }
+
+    return Option.getOrElse(condition.otherwise, () => []);
+  });
+
+/**
+ * Run one template rule.
+ *
+ * A setting rule sets its variable ({@link assign}); a condition runs the rules it chooses
+ * ({@link chosenRules}); a `qti-exit-template` ends the run, at any depth, keeping what is set. A
+ * `qti-template-constraint` whose condition is true lets the rules after it run; one that is false
+ * or NULL restarts the run, or, once the run's restarts are spent, applies the declared state and
+ * lets the rules after it run.
+ *
+ * @param rule The rule.
+ * @param pass The run.
+ * @param values What the rules before it left.
+ * @returns How the rule ended, or its first failure.
+ */
+const runRule = (
+  rule: TemplateRule,
+  pass: Pass,
+  values: TemplateValues,
+): Result.Result<Step, EngineFailure> =>
+  Result.gen(function* runOneTemplateRule() {
+    switch (rule.kind) {
+      case "exit-template": {
+        return { kind: "exit", values };
+      }
+      case "template-condition": {
+        const then = yield* chosenRules(rule, pass, values);
+
+        // oxlint-disable-next-line eslint/no-use-before-define -- `runRule` and `runSequence` are mutually recursive, as conditions nest; the call runs only after both are defined.
+        return yield* runSequence(then, pass, values);
+      }
+      case "template-constraint": {
+        if (isTrue(yield* evaluateIn(rule.expression, pass, values))) {
+          return { kind: "next", values };
+        }
+
+        return pass.spent ? { kind: "next", values: pass.declared } : { kind: "restart" };
+      }
+      case "set-correct-response":
+      case "set-default-value":
+      case "set-template-value": {
+        const value = yield* evaluateIn(rule.expression, pass, values);
+
+        return { kind: "next", values: yield* assign(pass.item, values, rule, value) };
+      }
+      default: {
+        return rule satisfies never;
+      }
+    }
+  });
+
+/**
+ * Run template rules in order until one exits or restarts, each seeing what the rules before it
+ * left.
+ *
+ * @param rules The rules.
+ * @param pass The run.
+ * @param values What the rules before them left.
+ * @returns How the sequence ended, or the first failure.
+ */
+const runSequence = (
+  rules: readonly TemplateRule[],
+  pass: Pass,
+  values: TemplateValues,
+): Result.Result<Step, EngineFailure> =>
+  Result.gen(function* runTemplateRulesInOrder() {
+    let current = values;
+    for (const rule of rules) {
+      const step = yield* runRule(rule, pass, current);
+      if (step.kind !== "next") {
+        return step;
+      }
+
+      current = step.values;
+    }
+
+    return { kind: "next", values: current };
+  });
+
+/**
+ * Run an item's template processing.
+ *
+ * The run starts from the declared state: each template variable at its declared default, else
+ * NULL of its type, and no correct response or default set. The rules run in order, each seeing
+ * what the rules before it left; `qti-set-template-value` sets its template variable, and
+ * `qti-set-correct-response` and `qti-set-default-value` write the result's `correct` and
+ * `defaults`, never the item. A `qti-template-condition` runs its first branch whose condition is
+ * a single boolean `true`, else its `qti-template-else`; a `qti-exit-template` ends the run,
+ * nested or not, keeping what is set.
+ *
+ * A `qti-template-constraint` that is false or NULL restarts the run from the declared state, both
+ * override maps emptied, "repeatedly until the expression is 'true' or the maximum number of
+ * iterations is reached" (`info.txt:45736`). The run's constraints share one budget of 100
+ * restarts (G-R2, pending). When it runs out, the declared state applies and processing continues
+ * after the constraint, and a later failing constraint applies it again and continues. The stream
+ * is never reset, so each restart draws new values.
+ *
+ * Every expression reads the template values and no response or outcome value, as template
+ * processing "may only refer to the values of the template variables" (`info.txt:65111`).
+ *
+ * @param item The item, whose declarations give each variable's type and default.
+ * @param rules The item's template rules, as the item model built them (`Item.templateProcessing`).
+ * @param draw The one stream every random kind of the run draws from, in the order the rules
+ *   evaluate them, restarts included: the caller's, keyed by the record's seed under the item's
+ *   template label (`templateLabel` in `#plate/engine/random.ts`).
+ * @returns The template values and the correct responses and defaults set; or the first failure,
+ *   after which no rule runs: an {@link UnknownIdentifierError} when an expression reads a variable
+ *   template processing holds no value of, or a rule sets a variable the item does not declare in
+ *   the kind the rule sets, an {@link OutcomeMismatchError} when a rule sets a variable to a value
+ *   of another type that is not NULL, or any other failure of the evaluator.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_TemplateConstraint
+ */
+export const runTemplates = (
+  item: Item,
+  rules: readonly TemplateRule[],
+  draw: Draw,
+): Result.Result<TemplateValues, EngineFailure> => {
+  const declared = declaredState(item);
+
+  return Result.gen(function* runFromDeclaredState() {
+    let restarts = 0;
+    let step = yield* runSequence(rules, { declared, draw, item, spent: false }, declared);
+    while (step.kind === "restart") {
+      restarts += 1;
+      step = yield* runSequence(
+        rules,
+        { declared, draw, item, spent: restarts === restartBudget },
+        declared,
+      );
+    }
+
+    return step.values;
+  });
+};

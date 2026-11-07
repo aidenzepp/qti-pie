@@ -108,6 +108,33 @@ describe("variableValue", () => {
     assert.deepStrictEqual(Result.getOrThrow(variableValue(held, "completionStatus")), status);
   });
 
+  it("[I-5] reads a template value", () => {
+    assert.deepStrictEqual(
+      Result.getOrThrow(variableValue({ ...variables, templates: { T: count } }, "T")),
+      count,
+    );
+  });
+
+  it("[I-5] reads a template variable named numAttempts before the attempt count, as a declared variable", () => {
+    const declared: Variables = {
+      ...variables,
+      numAttempts: 3n,
+      templates: { numAttempts: count },
+    };
+
+    assert.deepStrictEqual(Result.getOrThrow(variableValue(declared, "numAttempts")), count);
+  });
+
+  it("[I-5] fails for a template variable when the variables hold no template values, the record's gap", () => {
+    const failure = failureOf(variableValue(variables, "T"));
+
+    assert.instanceOf(failure, UnknownIdentifierError);
+    assert.deepStrictEqual(
+      { _tag: failure._tag, holder: failure.holder, role: failure.role },
+      { _tag: "UnknownIdentifierError", holder: "record", role: "variable" },
+    );
+  });
+
   for (const identifier of ["MISSING", "numAttempts", "completionStatus", "constructor"]) {
     it(`fails for ${identifier}, which the record holds no value of`, () => {
       const failure = failureOf(variableValue(variables, identifier));
@@ -256,6 +283,40 @@ describe("referenceValue", () => {
         ),
       ),
       [nullOf("float", "single"), nullOf("float", "single"), score],
+    );
+  });
+
+  it("[I-5] gives a checked reference the template variable's value", () => {
+    assert.deepStrictEqual(
+      Result.getOrThrow(
+        referenceValue(
+          { ...referenced, templates: { STEP: count } },
+          { baseType: "integer", checked: true, reference: { _tag: "ref", identifier: "STEP" } },
+        ),
+      ),
+      count,
+    );
+  });
+
+  it("[I-5] gives a tolerance naming a template variable its value at the unchecked site, as 9.11 allows a template or outcome variable there", () => {
+    const tolerance: Value = {
+      baseType: "float",
+      cardinality: "single",
+      values: [{ baseType: "float", value: 0.01 }],
+    };
+
+    assert.deepStrictEqual(
+      Result.getOrThrow(
+        referenceValue(
+          { ...referenced, templates: { TOLERANCE: tolerance } },
+          {
+            baseType: "float",
+            checked: false,
+            reference: { _tag: "ref", identifier: "TOLERANCE" },
+          },
+        ),
+      ),
+      tolerance,
     );
   });
 

@@ -111,9 +111,14 @@ const textSafeElements = [
 ] as const;
 
 /**
- * The declarations whose `base-type` and `cardinality` the model reads.
+ * The declarations whose `base-type` and `cardinality` the model reads: the response, outcome and
+ * template declarations.
  */
-const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
+const declarations = [
+  "qti-response-declaration",
+  "qti-outcome-declaration",
+  "qti-template-declaration",
+] as const;
 
 /**
  * The response rules of the engine: `qti-response-condition` with its three branches,
@@ -136,6 +141,31 @@ const engine = [
   "qti-lookup-outcome-value",
   "qti-exit-response",
   "qti-response-processing-fragment",
+] as const;
+
+/**
+ * The template rules: the six rule elements a `qti-template-processing`, a `qti-template-if`, a
+ * `qti-template-else-if` and a `qti-template-else` hold (`qti-set-template-value`,
+ * `qti-set-correct-response`, `qti-set-default-value`, `qti-template-condition`,
+ * `qti-template-constraint` and `qti-exit-template`), and the three parts of a
+ * `qti-template-condition`. The expression kinds they hold are the registry's landed kinds, as for
+ * {@link engine}.
+ *
+ * The item model reads template processing through these (`templateRules` in
+ * `#plate/model/template.ts`): template processing that holds any other element, or an expression
+ * kind the registry has not landed, is none, and that element is a mark keyed by its name. This is
+ * the one list of these names.
+ */
+const templateRules = [
+  "qti-set-template-value",
+  "qti-set-correct-response",
+  "qti-set-default-value",
+  "qti-template-condition",
+  "qti-template-if",
+  "qti-template-else-if",
+  "qti-template-else",
+  "qti-template-constraint",
+  "qti-exit-template",
 ] as const;
 
 /**
@@ -223,8 +253,11 @@ export interface Renders {
    */
   readonly controlNotices: readonly FeatureRule[];
   /**
-   * The `qti-*` elements plate renders or reads, the engine's response rules included. The item
-   * model also reads the element of each expression kind the registry has landed (`landedKinds` in
+   * The `qti-*` elements plate renders or reads. They include the engine's response rules, the
+   * template declarations, the template processing and its template rules, and
+   * `qti-printed-variable`, `qti-template-block` (whose content is its `qti-content-body`'s) and
+   * `qti-template-inline`, which the item model holds as body nodes. The item model also reads the
+   * element of each expression kind the registry has landed (`landedKinds` in
    * `#plate/model/expressions/read.ts`). Every element in the QTI namespace without the `qti-`
    * prefix is HTML and renders as itself.
    */
@@ -252,6 +285,11 @@ export interface Renders {
    * interactions (Q-31, Q-32): accepted, not launched.
    */
   readonly notices: readonly FeatureRule[];
+  /**
+   * The template rules the item model reads template processing through. The expression kinds
+   * they hold are the registry's landed kinds, as for `engine`.
+   */
+  readonly templateRules: readonly string[];
 }
 
 /**
@@ -303,7 +341,14 @@ export const renders = {
     "qti-simple-choice",
     "qti-inline-choice",
     "qti-label",
+    "qti-printed-variable",
+    "qti-template-block",
+    "qti-content-body",
+    "qti-template-inline",
     ...engine,
+    "qti-template-declaration",
+    "qti-template-processing",
+    ...templateRules,
   ],
   engine,
   marks: [
@@ -316,11 +361,6 @@ export const renders = {
       feature: 'adaptive="true"',
       on: ["qti-assessment-item"],
       when: { kind: "attribute-true", name: "adaptive" },
-    },
-    {
-      feature: "qti-template-declaration",
-      on: ["qti-template-declaration"],
-      when: { kind: "element" },
     },
     {
       feature: 'base-type="duration"',
@@ -374,6 +414,7 @@ export const renders = {
       when: { elements: textSafeElements, kind: "not-text-safe" },
     },
   ],
+  templateRules,
 } as const satisfies Renders;
 
 /**

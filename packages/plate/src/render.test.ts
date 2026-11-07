@@ -14,11 +14,13 @@ import type {
   ChoiceInteraction,
   InlineChoiceInteraction,
   Item,
+  TemplateDeclaration,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
-import { InvalidInstance, redact, render, renderStatus } from "#plate/render.ts";
+import { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
 import type { Options, Rendered } from "#plate/render.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
@@ -86,9 +88,9 @@ const choice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Paris")], fixed: false, identifier: "A" },
-    { content: [words("Lyon")], fixed: false, identifier: "B" },
-    { content: [words("Nice")], fixed: false, identifier: "C" },
+    { content: [words("Paris")], fixed: false, identifier: "A", templateVisibility: Option.none() },
+    { content: [words("Lyon")], fixed: false, identifier: "B", templateVisibility: Option.none() },
+    { content: [words("Nice")], fixed: false, identifier: "C", templateVisibility: Option.none() },
   ],
   class: "",
   kind: "choice",
@@ -237,6 +239,8 @@ const item: Item = {
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "The capital",
   unsupported: [],
 };
@@ -281,6 +285,7 @@ const planets: ChoiceInteraction = {
     content: [words(planet)],
     fixed: false,
     identifier: `P${String(index)}`,
+    templateVisibility: Option.none(),
   })),
   prompt: Option.some([words("Which planet is the largest?")]),
   response: "PLANET",
@@ -320,9 +325,9 @@ const colours: InlineChoiceInteraction = {
   ariaLabel: Option.none(),
   ariaLabelledby: Option.none(),
   choices: [
-    { content: [words("red")], fixed: false, identifier: "R" },
-    { content: [words("green")], fixed: false, identifier: "G" },
-    { content: [words("blue")], fixed: false, identifier: "B" },
+    { content: [words("red")], fixed: false, identifier: "R", templateVisibility: Option.none() },
+    { content: [words("green")], fixed: false, identifier: "G", templateVisibility: Option.none() },
+    { content: [words("blue")], fixed: false, identifier: "B", templateVisibility: Option.none() },
   ],
   class: "",
   kind: "inline-choice",
@@ -929,7 +934,7 @@ describe("render, the mode", () => {
 describe("render, a shuffled Choice", () => {
   it.effect("[Q-2] gives byte-equal HTML for two renders with the same instance and seed", () =>
     Effect.gen(function* seededTwice() {
-      const configuration = yield* configure({ seed: 7 });
+      const configuration = yield* configure({ seed: "7" });
       const first = yield* Effect.fromResult(render(shuffled, configuration, { instance }));
       const second = yield* Effect.fromResult(render(shuffled, configuration, { instance }));
 
@@ -939,7 +944,7 @@ describe("render, a shuffled Choice", () => {
   );
 
   it.effect(
-    "[Q-2] keys the order by the instance alone when no seed is set, and seed 7 presents another",
+    '[Q-2] keys the order by the instance alone when no seed is set, and seed "7" presents another',
     () =>
       Effect.gen(function* unseededOrder() {
         const unseeded = yield* configure({});
@@ -950,7 +955,7 @@ describe("render, a shuffled Choice", () => {
         assert.strictEqual(first.html, second.html);
 
         const seeded = yield* Effect.fromResult(
-          render(shuffled, yield* configure({ seed: 7 }), { instance }),
+          render(shuffled, yield* configure({ seed: "7" }), { instance }),
         );
         assert.deepStrictEqual(presentedIn(first), ["P3", "P1", "P0", "P4", "P2"]);
         assert.deepStrictEqual(presentedIn(seeded), ["P2", "P4", "P3", "P1", "P0"]);
@@ -963,7 +968,7 @@ describe("render, a shuffled Choice", () => {
     () =>
       Effect.gen(function* shuffledWalk() {
         const rendered = yield* Effect.fromResult(
-          render(shuffled, yield* configure({ seed: 7 }), { instance }),
+          render(shuffled, yield* configure({ seed: "7" }), { instance }),
         );
         const [root] = parseHtml(rendered.html);
         const page = h("div", { lang: "en" }, [
@@ -1071,6 +1076,531 @@ describe("render, the instance token", () => {
       const passed = yield* Effect.fromResult(render(redacted, configuration, { instance: "q1" }));
       assert.strictEqual(passed.instance, "q1");
     }),
+  );
+});
+
+/**
+ * An item whose template processing runs, with a paragraph that prints the template variable `N`,
+ * declared with the default 3, and no response processing.
+ */
+const counting: Item = {
+  ...item,
+  body: [
+    {
+      attributes: [],
+      children: [
+        words("There are "),
+        {
+          base: { _tag: "literal", value: 10n },
+          delimiter: ";",
+          field: Option.none(),
+          format: Option.none(),
+          identifier: "N",
+          index: Option.none(),
+          kind: "printed-variable",
+          mappingIndicator: "=",
+          path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
+          powerForm: false,
+        },
+        words(" cities."),
+      ],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  processing: Option.none(),
+  templateProcessing: Option.some([]),
+  templates: new Map([
+    [
+      "N",
+      {
+        baseType: "integer",
+        cardinality: "single",
+        defaultValue: Option.some(one({ baseType: "integer", value: 3n })),
+        identifier: "N",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+};
+
+/**
+ * Give the texts of the Notice parts a render shows, in document order.
+ *
+ * @param rendered The render.
+ * @returns Each Notice's text.
+ */
+const noticesIn = (rendered: Rendered): readonly string[] =>
+  elementsIn(rendered)
+    .filter((element) => element.attrs["data-slot"] === rowFor("item", "notice").slot)
+    .map(textOf);
+
+describe("redact, a printed variable", () => {
+  it.effect("[I-5] prints the value the record holds, which render writes as text", () =>
+    Effect.gen(function* printsRecorded() {
+      const configuration = yield* defaults;
+      const recorded = redact(acceptForTest(counting), {
+        outcomes: {},
+        templates: { N: one({ baseType: "integer", value: 7n }) },
+      });
+      const rendered = yield* Effect.fromResult(render(recorded, configuration, { instance }));
+
+      assert.include(textOf(rootOf(rendered)), "There are 7 cities.");
+      assert.deepStrictEqual(noticesIn(rendered), []);
+    }),
+  );
+
+  it.effect(
+    "[I-5] shows a templated item's printed variable as its notice when no record is passed (H3)",
+    () =>
+      Effect.gen(function* withholdsUnrecorded() {
+        const configuration = yield* defaults;
+        const rendered = yield* Effect.fromResult(
+          render(redact(acceptForTest(counting)), configuration, { instance }),
+        );
+
+        assert.deepStrictEqual(noticesIn(rendered), [
+          message(configuration.locale, "notice", { feature: "qti-printed-variable" }),
+        ]);
+        assert.notInclude(textOf(rootOf(rendered)), "There are 3");
+      }),
+  );
+
+  it.effect(
+    "[I-5] prints the declared default of an item without template processing when no record is passed (H3)",
+    () =>
+      Effect.gen(function* printsDeclared() {
+        const configuration = yield* defaults;
+        const declared = redact(acceptForTest({ ...counting, templateProcessing: Option.none() }));
+        const rendered = yield* Effect.fromResult(render(declared, configuration, { instance }));
+
+        assert.include(textOf(rootOf(rendered)), "There are 3 cities.");
+        assert.deepStrictEqual(noticesIn(rendered), []);
+      }),
+  );
+});
+
+/**
+ * The length of the string {@link sprawling} prints at each slot: one short of the whole-text
+ * bound a printed variable's text keeps to, so no slot is withheld and only the page passes the
+ * budget.
+ */
+const sprawlingLength = 999_999;
+
+/**
+ * Construct a paragraph that prints the string template variable `S` at a number of slots, each in
+ * its default form.
+ *
+ * @param count How many slots it holds.
+ * @returns The paragraph.
+ */
+const slotsOfS = (count: number): BodyNode => ({
+  attributes: [],
+  children: Array.from({ length: count }, (): BodyNode => ({
+    base: { _tag: "literal", value: 10n },
+    delimiter: ";",
+    field: Option.none(),
+    format: Option.none(),
+    identifier: "S",
+    index: Option.none(),
+    kind: "printed-variable",
+    mappingIndicator: "=",
+    path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
+    powerForm: false,
+  })),
+  kind: "element",
+  path: "qti-assessment-item/qti-item-body/p",
+  tag: "p",
+});
+
+/**
+ * An item whose paragraph prints the string template variable `S` at 40 slots, so a record holding
+ * a {@link sprawlingLength}-character `S` prints about 40,000,000 characters, past the default
+ * output budget of 16,777,216.
+ */
+const sprawling: Item = {
+  ...counting,
+  body: [slotsOfS(40)],
+  identifier: "sprawling",
+  templates: new Map([
+    [
+      "S",
+      {
+        baseType: "string",
+        cardinality: "single",
+        defaultValue: Option.none(),
+        identifier: "S",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+};
+
+/**
+ * The fields of an {@link OutputTooLarge}.
+ */
+interface TooLarge {
+  readonly budget: number;
+  readonly item: string;
+  readonly printed: Option.Option<{ readonly bound: number; readonly identifier: string }>;
+}
+
+/**
+ * Give the fields of an {@link OutputTooLarge} a render failed with.
+ *
+ * @param result The result of a render.
+ * @returns The failure's budget, item and printed variable when it is an `OutputTooLarge`, its tag
+ *   when it is another failure, and none when the render succeeded.
+ */
+const budgetFailure = (
+  result: Result.Result<Rendered, { readonly _tag: string }>,
+): Option.Option<string | TooLarge> =>
+  Option.map(failureOf(result), (failure) =>
+    failure instanceof OutputTooLarge
+      ? { budget: failure.budget, item: failure.item, printed: failure.printed }
+      : failure._tag,
+  );
+
+describe("render, the output budget", () => {
+  /**
+   * A record whose `S` is {@link sprawlingLength} characters long.
+   */
+  const sprawlingRecord: RedactRecord = {
+    outcomes: {},
+    templates: { S: one({ baseType: "string", value: "y".repeat(sprawlingLength) }) },
+  };
+
+  it.effect(
+    "[I-5] fails OutputTooLarge through the redaction's record, naming the default budget, the item and S, when 40 printed variables of 999,999 characters pass it",
+    () =>
+      Effect.gen(function* failsPastDefault() {
+        const configuration = yield* defaults;
+        const sprawled = redact(acceptForTest(sprawling), sprawlingRecord);
+
+        assert.strictEqual(configuration.outputBudget, 16_777_216);
+        assert.deepStrictEqual(
+          budgetFailure(render(sprawled, configuration, { instance })),
+          Option.some({
+            budget: 16_777_216,
+            item: "sprawling",
+            printed: Option.some({ bound: 16_777_216, identifier: "S" }),
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] renders the same item once the host raises the budget to 50,000,000 and passes that configuration to redact and render",
+    () =>
+      Effect.gen(function* rendersUnderRaised() {
+        const configuration = yield* configure({ outputBudget: 50_000_000 });
+        const sprawled = redact(acceptForTest(sprawling), sprawlingRecord, configuration);
+        const rendered = yield* Effect.fromResult(render(sprawled, configuration, { instance }));
+
+        assert.isTrue(Option.isNone(sprawled.unprinted));
+        assert.isAbove(rendered.html.length, 40 * sprawlingLength);
+        assert.isAtMost(rendered.html.length, 50_000_000);
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge naming S and the bound 10,000 when an item of 4,500 slots of 100 characters is redacted and rendered under outputBudget 10,000",
+    () =>
+      Effect.gen(function* failsPastRedactBudget() {
+        const configuration = yield* configure({ outputBudget: 10_000 });
+        const slotted = acceptForTest({
+          ...sprawling,
+          body: [slotsOfS(4500)],
+          identifier: "slotted",
+        });
+        const record: RedactRecord = {
+          outcomes: {},
+          templates: { S: one({ baseType: "string", value: "y".repeat(100) }) },
+        };
+        const shown = redact(slotted, record, configuration);
+
+        assert.deepStrictEqual(
+          budgetFailure(render(shown, configuration, { instance })),
+          Option.some({
+            budget: 10_000,
+            item: "slotted",
+            printed: Option.some({ bound: 10_000, identifier: "S" }),
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] renders an item whose HTML is exactly the budget, and fails OutputTooLarge one character under it",
+    () =>
+      Effect.gen(function* boundsExactly() {
+        const { length } = (yield* Effect.fromResult(
+          render(redacted, yield* defaults, { instance }),
+        )).html;
+        const exact = yield* Effect.fromResult(
+          render(redacted, yield* configure({ outputBudget: length }), { instance }),
+        );
+        const under = render(redacted, yield* configure({ outputBudget: length - 1 }), {
+          instance,
+        });
+
+        assert.strictEqual(exact.html.length, length);
+        assert.deepStrictEqual(
+          budgetFailure(under),
+          Option.some({ budget: length - 1, item: "capital", printed: Option.none() }),
+        );
+      }),
+  );
+});
+
+/**
+ * The path of the printed variable {@link printingParagraph} holds.
+ */
+const printedPath = "qti-assessment-item/qti-item-body/p/qti-printed-variable";
+
+/**
+ * Construct a paragraph that prints one variable after the text `Value: `.
+ *
+ * @param identifier The variable it prints.
+ * @param format Its `format`, none to print in the default form.
+ * @returns The paragraph.
+ */
+const printingParagraph = (identifier: string, format: Option.Option<string>): BodyNode => ({
+  attributes: [],
+  children: [
+    words("Value: "),
+    {
+      base: { _tag: "literal", value: 10n },
+      delimiter: ";",
+      field: Option.none(),
+      format,
+      identifier,
+      index: Option.none(),
+      kind: "printed-variable",
+      mappingIndicator: "=",
+      path: printedPath,
+      powerForm: false,
+    },
+  ],
+  kind: "element",
+  path: "qti-assessment-item/qti-item-body/p",
+  tag: "p",
+});
+
+/**
+ * Construct a single string template declaration with no default, as an item's map holds it.
+ *
+ * @param identifier The variable's identifier.
+ * @param paramVariable Whether it is declared `param-variable="true"`.
+ * @returns The map entry: the identifier and the declaration.
+ */
+const stringTemplate = (
+  identifier: string,
+  paramVariable: boolean,
+): readonly [string, TemplateDeclaration] => [
+  identifier,
+  {
+    baseType: "string",
+    cardinality: "single",
+    defaultValue: Option.none(),
+    identifier,
+    mathVariable: false,
+    paramVariable,
+  },
+];
+
+/**
+ * An item that prints the integer template variable `N` under `%1000001i`, a field width past the
+ * 1,000,000 characters one conversion may write.
+ */
+const widened: Item = {
+  ...counting,
+  body: [printingParagraph("N", Option.some("%1000001i"))],
+  identifier: "widened",
+};
+
+/**
+ * An item that prints the string template variable `S` once, in the default form.
+ */
+const lengthy: Item = {
+  ...counting,
+  body: [printingParagraph("S", Option.none())],
+  identifier: "lengthy",
+  templates: new Map([stringTemplate("S", false)]),
+};
+
+/**
+ * An item whose `object` passes the string `param-variable` template variable `P` as a parameter.
+ */
+const passing: Item = {
+  ...counting,
+  body: [
+    {
+      attributes: [
+        { name: "data", value: "applet.html" },
+        { name: "type", value: "text/html" },
+      ],
+      children: [
+        {
+          attributes: [
+            { name: "name", value: "text" },
+            { name: "value", value: "P" },
+            { name: "valuetype", value: "DATA" },
+          ],
+          children: [],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/object/param",
+          tag: "param",
+        },
+      ],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/object",
+      tag: "object",
+    },
+  ],
+  identifier: "passing",
+  templates: new Map([stringTemplate("P", true)]),
+};
+
+/**
+ * An item whose template block, shown when `VISIBLE` holds `X`, prints the string template
+ * variable `S`.
+ */
+const hiding: Item = {
+  ...counting,
+  body: [
+    {
+      content: [printingParagraph("S", Option.none())],
+      identifier: "X",
+      kind: "template-block",
+      path: "qti-assessment-item/qti-item-body/qti-template-block",
+      responses: [],
+      templateVisibility: { showHide: "show", templateIdentifier: "VISIBLE" },
+    },
+  ],
+  identifier: "hiding",
+  templates: new Map([
+    stringTemplate("S", false),
+    [
+      "VISIBLE",
+      {
+        baseType: "identifier",
+        cardinality: "single",
+        defaultValue: Option.none(),
+        identifier: "VISIBLE",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+};
+
+/**
+ * Construct a record whose only values are template values, each a single string.
+ *
+ * @param templates The strings, by template variable.
+ * @returns The record.
+ */
+const strings = (templates: Readonly<Record<string, string>>): RedactRecord => ({
+  outcomes: {},
+  templates: Object.fromEntries(
+    Object.entries(templates).map(([identifier, value]) => [
+      identifier,
+      one({ baseType: "string", value }),
+    ]),
+  ),
+});
+
+describe("render, a printed text past its bound", () => {
+  it.effect(
+    "[I-5] fails OutputTooLarge, naming the bound 1,000,000, the item and the printed variable, for a conversion wider than 1,000,000 characters, where the slot printed blank before",
+    () =>
+      Effect.gen(function* failsPastWidth() {
+        const configuration = yield* defaults;
+        const shown = redact(acceptForTest(widened), {
+          outcomes: {},
+          templates: { N: one({ baseType: "integer", value: 5n }) },
+        });
+
+        assert.deepStrictEqual(
+          budgetFailure(render(shown, configuration, { instance })),
+          Option.some({
+            budget: 16_777_216,
+            item: "widened",
+            printed: Option.some({ bound: 1_000_000, identifier: "N" }),
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge, naming the bound 1,000,000 and the printed variable, for a printed variable whose whole text passes 1,000,000 characters",
+    () =>
+      Effect.gen(function* failsPastText() {
+        const configuration = yield* defaults;
+        const shown = redact(acceptForTest(lengthy), strings({ S: "y".repeat(1_000_001) }));
+
+        assert.deepStrictEqual(
+          budgetFailure(render(shown, configuration, { instance })),
+          Option.some({
+            budget: 16_777_216,
+            item: "lengthy",
+            printed: Option.some({ bound: 1_000_000, identifier: "S" }),
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge, naming the bound 1,000,000 and the template variable, for a param-variable parameter whose value text passes 1,000,000 characters",
+    () =>
+      Effect.gen(function* failsPastParameter() {
+        const configuration = yield* defaults;
+        const shown = redact(acceptForTest(passing), strings({ P: "y".repeat(1_000_001) }));
+
+        assert.deepStrictEqual(
+          budgetFailure(render(shown, configuration, { instance })),
+          Option.some({
+            budget: 16_777_216,
+            item: "passing",
+            printed: Option.some({ bound: 1_000_000, identifier: "P" }),
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] renders an item whose printed text is exactly 1,000,000 characters, and one whose over-bound printed variable sits in a template block the record hides",
+    () =>
+      Effect.gen(function* rendersWithinBound() {
+        const configuration = yield* defaults;
+        const longest = yield* Effect.fromResult(
+          render(
+            redact(acceptForTest(lengthy), strings({ S: "y".repeat(1_000_000) })),
+            configuration,
+            { instance },
+          ),
+        );
+        const hidden = yield* Effect.fromResult(
+          render(
+            redact(acceptForTest(hiding), {
+              outcomes: {},
+              templates: {
+                S: one({ baseType: "string", value: "y".repeat(1_000_001) }),
+                VISIBLE: one({ baseType: "identifier", value: "OTHER" }),
+              },
+            }),
+            configuration,
+            { instance },
+          ),
+        );
+
+        assert.include(textOf(rootOf(longest)), `Value: ${"y".repeat(1_000_000)}`);
+        assert.notInclude(hidden.html, "yyy");
+      }),
   );
 });
 

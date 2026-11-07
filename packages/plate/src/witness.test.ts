@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
-import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
+import { readCorpusFile } from "#plate/document/corpus.ts";
 import {
   checkResponses,
   configure,
@@ -32,11 +32,11 @@ import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
+import { xhtmlItem, xhtmlProbe } from "#scripts/walk-corpus.ts";
 
 /**
- * A case reads at most a few corpus documents, and the Extended Text case lists the corpus once,
- * which takes well under a second here; the bound leaves room for a slow machine without letting a
- * hung read stall the suite.
+ * A case reads at most a few corpus documents, which takes well under a second here; the bound
+ * leaves room for a slow machine without letting a hung read stall the suite.
  */
 const corpusTimeoutMs = 60_000;
 
@@ -107,18 +107,12 @@ const fixedItem = "qtiv3-examples/packaging/items/choice_fixed.xml";
  * `ChoiceC`, `ChoiceA`, `ChoiceB`, then the fixed `ChoiceD`, so its correct choice is not where the
  * document puts it.
  */
-const seed = 3;
+const seed = "3";
 
 /**
  * The six elements each Choice of {@link limitedItem} offers, in document order.
  */
 const elements = ["H", "He", "C", "O", "N", "Cl"];
-
-/**
- * The end of the corpus path of `Item_QTI3_WritingPostcard_02`, which the document set holds once
- * per copy of its package.
- */
-const postcardPath = "/Item_QTI3_WritingPostcard_02/extended_text_qti3.xml";
 
 /**
  * An item `open` accepted, and its redaction, the one input `render` takes.
@@ -484,49 +478,44 @@ describe("the M1-R witness: each feature through the composition an author build
   );
 
   it.effect(
-    "[Q-5] [keyboard] Item_QTI3_WritingPostcard_02 posts the text typed into each xhtml Extended Text, as typed",
+    "[Q-5] [keyboard] xhtml.xml posts the text typed into each xhtml Extended Text, as typed",
     () =>
-      Effect.gen(function* writingPostcard() {
+      Effect.gen(function* xhtmlExtendedText() {
         const configuration = yield* configure({});
-        const members = (yield* corpusDocuments).filter((member) => member.endsWith(postcardPath));
+        const opened = yield* openAccepted(xhtmlItem, new TextEncoder().encode(xhtmlProbe));
         const typed = "Dear Sam,\nMy town is <b>small</b> & quiet.";
-        const xhtml = ["RESPONSE4", "RESPONSE5", "RESPONSE6", "RESPONSE9", "RESPONSE10"];
+        const xhtml = ["RESPONSE2", "RESPONSE4", "RESPONSE5"];
+        const page = yield* firstPage(opened, configuration);
+        const formatted = elementsOf([page]).filter(
+          (element) => attribute(element, "data-format") === "xhtml",
+        );
 
-        assert.isNotEmpty(members, "the document set holds Item_QTI3_WritingPostcard_02");
-        for (const location of members) {
-          const opened = yield* openCorpus(location);
-          const page = yield* firstPage(opened, configuration);
-          const formatted = elementsOf([page]).filter(
-            (element) => attribute(element, "data-format") === "xhtml",
-          );
+        assert.deepStrictEqual(
+          formatted.map((control) => attribute(control, "name")),
+          xhtml.map((response) => entryName(instance, response)),
+          "the xhtml Controls",
+        );
 
-          assert.deepStrictEqual(
-            formatted.map((control) => attribute(control, "name")),
-            xhtml.map((response) => entryName(instance, response)),
-            `${location}: the xhtml Controls`,
-          );
-
-          const record = yield* scored(
+        const record = yield* scored(
+          opened,
+          configuration,
+          submit(
             opened,
             configuration,
-            submit(
-              opened,
-              configuration,
-              page,
-              walkThrough(page, (stop) => (formatted.includes(stop) ? [{ type: typed }] : [])),
-            ),
-          );
+            page,
+            walkThrough(page, (stop) => (formatted.includes(stop) ? [{ type: typed }] : [])),
+          ),
+        );
 
-          for (const { identifier } of opened.redacted.responses) {
-            assert.deepStrictEqual(
-              valuesOf(record.responses, identifier),
-              xhtml.includes(identifier) ? [typed] : [],
-              `${location}: ${identifier}`,
-            );
-          }
+        assert.lengthOf(opened.redacted.responses, 5, "the item declares five responses");
+        for (const { identifier } of opened.redacted.responses) {
+          assert.deepStrictEqual(
+            valuesOf(record.responses, identifier),
+            xhtml.includes(identifier) ? [typed] : [],
+            identifier,
+          );
         }
       }),
-    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(

@@ -17,19 +17,11 @@
 import { Option, Result } from "effect";
 import type { Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { booleanOf, floatOf, numberOf, sameNumber } from "#plate/engine/numbers.ts";
+import { booleanNull, booleanOf, floatOf, numberOf, sameNumber } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
 import { referenceValue } from "#plate/engine/refs.ts";
 import type { Expression, FloatOrRef } from "#plate/model/expression.ts";
-import { isNull, match, nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
-
-/**
- * Give the single boolean NULL, the value of a comparison whose operand or tolerance is not known.
- *
- * @returns The NULL.
- */
-const unknown = (): Value => nullOf("boolean", "single");
+import { isNull, match } from "#plate/model/values.ts";
 
 /**
  * Give the value of a `qti-match`: a single boolean, whether the operands match by `match` of the
@@ -51,7 +43,7 @@ const evaluateMatch: Evaluator<"match"> = (expression, scope, evaluate) => {
     const rightValue = yield* evaluate(right, scope);
 
     return isNull(leftValue) || isNull(rightValue)
-      ? unknown()
+      ? booleanNull
       : booleanOf(match(leftValue, rightValue));
   });
 };
@@ -176,7 +168,7 @@ const comparing =
       const leftValue = yield* evaluate(left, scope);
       const rightValue = yield* evaluate(right, scope);
       if (isNull(leftValue) || isNull(rightValue)) {
-        return unknown();
+        return booleanNull;
       }
 
       return booleanOf(
@@ -509,7 +501,7 @@ const evaluateEqual: Evaluator<"equal"> = (expression, scope, evaluate) => {
     const leftValue = yield* evaluate(left, scope);
     const rightValue = yield* evaluate(right, scope);
     if (isNull(leftValue) || isNull(rightValue)) {
-      return unknown();
+      return booleanNull;
     }
 
     const numbers = Option.all([numberOf(leftValue), numberOf(rightValue)]);
@@ -518,7 +510,7 @@ const evaluateEqual: Evaluator<"equal"> = (expression, scope, evaluate) => {
     }
 
     return Option.match(tolerance, {
-      onNone: unknown,
+      onNone: () => booleanNull,
       onSome: (pair) =>
         booleanOf(Option.exists(numbers, ([x, y]) => withinTolerance(expression, x, y, pair))),
     });

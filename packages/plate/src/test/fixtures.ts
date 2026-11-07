@@ -127,6 +127,8 @@ export const bg007Item: Item = {
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "BG true false example ",
   unsupported: [
     {

@@ -4,12 +4,13 @@
  *
  * Nothing new is stored for a result. The built-in `numAttempts` and `sessionStatus` are derived
  * from whether an item was presented, its record's count of processed attempts and its effective
- * attempt limit; `answeredStatus` from its values, its declarations and `checkResponses`. The
+ * attempt limit; `answeredStatus` from its values, its defaults and `checkResponses`. The
  * built-in `completionStatus` is the record's once an attempt is processed, and derived like the
  * others before. Every value is written in the lexical form `#plate/results/values.ts`
- * fixes, and no `correctResponse` is written. A result names its item's or test's outcomes, so a
- * page that writes one holds the candidate's scores. A test result resolves every item's session
- * control in one walk of the test, so it takes time linear in the test's item refs.
+ * fixes, and no `correctResponse` is written. A result names its item's or test's outcomes and
+ * each item's template values, so a page that writes one holds the candidate's scores and the
+ * values that can give its answers away. A test result resolves every item's session control in
+ * one walk of the test, so it takes time linear in the test's item refs.
  *
  * @module
  */
@@ -24,7 +25,13 @@ import { xmlnsNamespace } from "#plate/document/source.ts";
 import { writeDocument } from "#plate/document/write.ts";
 import { isXmlText } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
-import type { Interaction, Item, OutcomeDeclaration, OutcomeReporting } from "#plate/model/item.ts";
+import type {
+  Interaction,
+  Item,
+  OutcomeDeclaration,
+  OutcomeReporting,
+  TemplateDeclaration,
+} from "#plate/model/item.ts";
 import {
   completionStatus,
   completionValue,
@@ -34,11 +41,12 @@ import {
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
-import { choiceOrder } from "#plate/payload.ts";
+import { choiceOrder, hiddenOnlyResponses, redactStructure } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
 import type { ResultSingle } from "#plate/results/values.ts";
-import { fitting, RecordMismatch } from "#plate/score.ts";
+import { belonging, fitting } from "#plate/score.ts";
+import type { RecordMismatch } from "#plate/score.ts";
 import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
@@ -168,6 +176,7 @@ const judging: Configuration = {
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,
+  outputBudget: 16_777_216,
   showFeedback: false,
   showSolution: false,
   validateResponses: true,
@@ -190,6 +199,11 @@ interface ItemReport {
   readonly answers: ItemRecord["responses"];
   readonly datestamp: string;
   /**
+   * The defaults the item's template processing set, by identifier: its record's, and none for an
+   * item never presented in a test, whose record no attempt started.
+   */
+  readonly defaults: ItemRecord["defaults"];
+  /**
    * Its built-in `duration` in seconds, none when it is not known.
    */
   readonly duration: Option.Option<number>;
@@ -210,6 +224,11 @@ interface ItemReport {
   readonly sequences: ReadonlyMap<string, string>;
   readonly sequenceIndex: Option.Option<number>;
   readonly session: Attempts;
+  /**
+   * The template values of the item's record, by identifier: the ones its first attempt produced,
+   * and none for an item never presented in a test, whose record no attempt started.
+   */
+  readonly templates: ItemRecord["templates"];
 }
 
 /**
@@ -375,6 +394,34 @@ const outcomeVariables = (
   );
 
 /**
+ * Write the template variables of some declarations.
+ *
+ * Each is written with its declaration's identifier, cardinality and base type, and the value the
+ * record holds for it. One the record holds no value of is written with no `value`, which the
+ * Results XSD admits (`ContextTemplateVariableDType` holds zero or more): nobody computed it, as
+ * for an item never presented in a test, or one whose template processing the engine does not
+ * run, and no value is filled in from its declaration.
+ *
+ * @param declarations The template declarations, in document order.
+ * @param values The template values the record holds, by identifier.
+ * @returns One `templateVariable` per declaration, in order.
+ */
+const templateVariables = (
+  declarations: ReadonlyMap<string, TemplateDeclaration>,
+  values: ItemRecord["templates"],
+): readonly Element[] =>
+  Array.from(declarations.values(), (template) =>
+    element(
+      "templateVariable",
+      declared(template.identifier, template.cardinality, template.baseType),
+      Option.match(own(values, template.identifier), {
+        onNone: () => [],
+        onSome: (value) => resultValues(value).map(valueElement),
+      }),
+    ),
+  );
+
+/**
  * Derive an item session's built-in attempt count and status, with nothing stored for either.
  *
  * An attempt starts at the item's first presentation, and again at once after each submission
@@ -401,15 +448,20 @@ const attemptsOf = (presented: boolean, processed: number, limit: number): Attem
 /**
  * Give a response's answered status by Results Reporting 2.7.1's criteria.
  *
- * @param declaredDefault The response's declared default, if any.
+ * A response at its default is skipped, as `allow-skipping` reads it ("all responses submitted
+ * with their default value or NULL", `info.txt:68904`), so its default is the one the attempt
+ * starts it with (D4-11): the one the item's template processing set, else its declared one.
+ *
+ * @param responseDefault The response's default, if any: the one template processing set, else
+ *   its declared one.
  * @param value The value reported.
  * @param presented Whether the candidate was shown the item.
  * @param invalid Whether the item's interaction refuses the value, on any limit of either tier.
- * @returns `notpresented` for an item never shown; `presented` for NULL or the declared default,
+ * @returns `notpresented` for an item never shown; `presented` for NULL or the response's default,
  *   which is skipping it; `attempted` for a value the interaction refuses; else `answered`.
  */
 const answeredStatusOf = (
-  declaredDefault: Option.Option<Value>,
+  responseDefault: Option.Option<Value>,
   value: Value,
   presented: boolean,
   invalid: boolean,
@@ -418,7 +470,7 @@ const answeredStatusOf = (
     return "notpresented";
   }
 
-  if (isNull(value) || Option.exists(declaredDefault, (fallback) => match(value, fallback))) {
+  if (isNull(value) || Option.exists(responseDefault, (fallback) => match(value, fallback))) {
     return "presented";
   }
 
@@ -455,7 +507,11 @@ const completionOf = (report: ItemReport): Value => {
  *
  * The built-ins come first: `numAttempts`, `duration` when it is known and `completionStatus`
  * ({@link completionOf}). Then one response variable per declared response with its answered
- * status, and one outcome variable per declared outcome.
+ * status, one template variable per declared template variable ({@link templateVariables}), and
+ * one outcome variable per declared outcome, in the order the Results XSD lists the three. An
+ * answered status judges only the interactions the page showed under the record's template values,
+ * as `checkResponses` does, and reads a response's default as the record's template processing set
+ * it, else as declared ({@link answeredStatusOf}).
  *
  * @param report What the result says about the item.
  * @returns The `itemResult`.
@@ -463,14 +519,16 @@ const completionOf = (report: ItemReport): Value => {
 const itemResult = (report: ItemReport): Element => {
   const { item } = report.item;
   const invalid = new Set(
-    checkResponses(report.item, report.answers, judging).map((message) => message.response),
+    checkResponses(report.item, report.answers, judging, { templates: report.templates }).map(
+      (message) => message.response,
+    ),
   );
   const responses = Array.from(item.responses.values(), (declaration) => {
     const value = Option.getOrElse(own(report.answers, declaration.identifier), () =>
       nullOf(declaration.baseType, declaration.cardinality),
     );
     const answered = answeredStatusOf(
-      declaration.defaultValue,
+      Option.orElse(own(report.defaults, declaration.identifier), () => declaration.defaultValue),
       value,
       report.presented,
       invalid.has(declaration.identifier),
@@ -513,6 +571,7 @@ const itemResult = (report: ItemReport): Element => {
         resultValues(completionOf(report)).map(valueElement),
       ),
       ...responses,
+      ...templateVariables(item.templates, report.templates),
       ...outcomeVariables(item.outcomes, report.outcomes),
     ],
   );
@@ -598,35 +657,13 @@ const documentOf = (children: readonly Element[]): string =>
   );
 
 /**
- * Check that a record belongs to the item it is reported for, as `score` does.
- *
- * @param document The item.
- * @param record The record.
- * @returns The record, or {@link RecordMismatch} when it names another item or document.
- */
-const belonging = (
-  document: Accepted,
-  record: ItemRecord,
-): Result.Result<ItemRecord, RecordMismatch> =>
-  record.item === document.item.identifier && record.document === document.item.document
-    ? Result.succeed(record)
-    : Result.fail(
-        new RecordMismatch({
-          document: document.item.document,
-          item: document.item.identifier,
-          recordDocument: record.document,
-          recordItem: record.item,
-        }),
-      );
-
-/**
  * Write the result of an item delivered alone.
  *
  * The host holds the item's presentation and its attempt limit, so the result reads the record
- * alone: each processed attempt is one started and finished, a record with none is an item not
- * yet presented, its outcomes are the record's, and its duration is not known. No
- * `choiceSequence` is written, since the record's instance need not be the one the item was
- * rendered with.
+ * alone: each processed attempt is one started and finished, a record with none is an item not yet
+ * presented, its outcomes, template values and defaults are the record's, and its duration is not
+ * known. No `choiceSequence` is written, since the record's instance need not be the one the item
+ * was rendered with.
  *
  * @param input The item, its record, when it last changed and the context.
  * @returns The document's text, or the failure of its context, its datestamp or its record: a
@@ -649,7 +686,7 @@ const itemResults = (
 
     const record = yield* fitting(
       input.document.item,
-      yield* belonging(input.document, yield* decodeRecord(input.record)),
+      yield* belonging(input.document.item, yield* decodeRecord(input.record)),
     );
     const presented = record.numAttempts > 0;
 
@@ -658,6 +695,7 @@ const itemResults = (
       itemResult({
         answers: record.responses,
         datestamp: input.datestamp.toISOString(),
+        defaults: record.defaults,
         duration: Option.none(),
         identifier: input.document.item.identifier,
         item: input.document,
@@ -667,6 +705,7 @@ const itemResults = (
         sequenceIndex: Option.none(),
         sequences: new Map(),
         session: attemptsOf(presented, record.numAttempts, 1),
+        templates: record.templates,
       }),
     ]);
   });
@@ -727,21 +766,21 @@ const secondsBetween = (from: string, to: string): number =>
  * presents it ({@link choiceOrder}), and none for any other interaction: a Choice or an Inline
  * Choice not shuffled keeps document order, and a Text Entry or an Extended Text has no choices.
  *
- * @param interaction The interaction.
+ * @param interaction The interaction as the page showed it, holding only the choices shown.
  * @param seed The session's seed.
  * @param instance The item instance it was rendered under.
  * @returns The choice identifiers, space-separated, or none.
  */
 const choiceSequence = (
   interaction: Interaction,
-  seed: Option.Option<number>,
+  seed: string,
   instance: string,
 ): Option.Option<string> => {
   switch (interaction.kind) {
     case "choice":
     case "inline-choice": {
       return interaction.shuffle
-        ? Option.some(choiceOrder(interaction, seed, instance).join(" "))
+        ? Option.some(choiceOrder(interaction, Option.some(seed), instance).join(" "))
         : Option.none();
     }
     case "extended-text":
@@ -755,21 +794,30 @@ const choiceSequence = (
 };
 
 /**
- * Give the order each shuffled Choice and each shuffled Inline Choice of an item was presented
+ * Give the order each shuffled Choice and each shuffled Inline Choice the page showed was presented
  * in, as `render` presents it.
  *
+ * The interactions are the item's as `redactItem` shows it under the record's template values, the
+ * redaction the page is built from, as `checkResponses` finds them, read through `redactStructure`,
+ * which decides the same and prints no text. So a choice its template hides, or withholds because
+ * the record holds no value of its template variable, is not listed, and the choices shown are
+ * listed in the order `choiceOrder` gives them, which shuffles only those. An interaction a hidden
+ * or withheld template block, inline or choice holds reports no order.
+ *
  * @param item The item.
+ * @param templates The template values of the record the page was shown under.
  * @param seed The session's seed.
  * @param instance The item instance it was rendered under.
  * @returns The choice identifiers, space-separated, by the interaction's response identifier.
  */
 const choiceSequences = (
   item: Item,
-  seed: Option.Option<number>,
+  templates: ItemRecord["templates"],
+  seed: string,
   instance: string,
 ): ReadonlyMap<string, string> =>
   new Map(
-    interactionsIn(item.body).flatMap((interaction) =>
+    interactionsIn(redactStructure(item, { outcomes: {}, templates }).body).flatMap((interaction) =>
       Option.match(choiceSequence(interaction, seed, instance), {
         onNone: () => [],
         onSome: (sequence) => [[interaction.response, sequence] as const],
@@ -801,7 +849,7 @@ const deliveredItem = (
       Option.fromUndefinedOr(items.get(entry.ref)),
       () => new ResultItemMissing({ document: entry.record.document, ref: entry.ref }),
     );
-    yield* belonging(document, entry.record);
+    yield* belonging(document.item, entry.record);
 
     const place = `its item ${String(entry.sequenceIndex)}, of the item ref ${JSON.stringify(entry.ref)}`;
     const record = yield* Result.mapError(
@@ -831,12 +879,16 @@ const deliveredItem = (
 /**
  * Report one item of a test session.
  *
- * The values reported are the responses saved and not yet processed, else the record's. Its
- * outcomes are the first processed attempt's when its effective limit is 0, since a delivery
- * engine that does not limit attempts reports only the first outcomes of a non-adaptive item, and
- * the record's otherwise: the last processed, or the starting values before any. A presented
- * shuffled Choice or Inline Choice carries the order it was presented in, under the session's seed
- * and the item's instance `<session instance>.<sequenceIndex>`.
+ * The values reported are the responses saved and not yet processed, else the record's; a response
+ * bound only by content the page does not see under the record ({@link hiddenOnlyResponses})
+ * reports the record's value and never the saved one, as `score` keeps it, so its answered status
+ * is judged on that value. Its outcomes are the first processed attempt's when its effective limit
+ * is 0, since a delivery engine that does not limit attempts reports only the first outcomes of a
+ * non-adaptive item, and the record's otherwise: the last processed, or the starting values before
+ * any. A presented shuffled Choice or Inline Choice carries the order it was presented in, under
+ * the session's seed and the item's instance `<session instance>.<sequenceIndex>`, listing only the
+ * choices the record's template values showed. Its template values, and the defaults its answered
+ * status reads, are its record's.
  *
  * @param test The test.
  * @param controls The session control of each of the test's item refs, by identifier, as
@@ -866,11 +918,14 @@ const sessionItemReport = (
     const document = yield* deliveredItem(items, entry);
     const limit = itemConfiguration(judging, control).maxAttempts;
     const saved = Option.getOrElse(entry.saved, () => ({}));
+    const hidden = hiddenOnlyResponses(document.item, entry.record);
     const answers = Object.fromEntries(
       [...document.item.responses.keys()].flatMap((identifier) =>
         Option.toArray(
           Option.map(
-            Option.orElse(own(saved, identifier), () => own(entry.record.responses, identifier)),
+            Option.orElse(hidden.has(identifier) ? Option.none() : own(saved, identifier), () =>
+              own(entry.record.responses, identifier),
+            ),
             (value) => [identifier, value] as const,
           ),
         ),
@@ -880,6 +935,7 @@ const sessionItemReport = (
     return {
       answers,
       datestamp: entry.datestamp,
+      defaults: entry.record.defaults,
       duration: Option.some(entry.duration),
       identifier: entry.ref,
       item: document,
@@ -893,11 +949,13 @@ const sessionItemReport = (
       sequences: entry.presented
         ? choiceSequences(
             document.item,
+            entry.record.templates,
             session.seed,
             `${session.instance}.${String(entry.sequenceIndex)}`,
           )
         : new Map(),
       session: attemptsOf(entry.presented, entry.record.numAttempts, limit),
+      templates: entry.record.templates,
     };
   });
 
@@ -959,9 +1017,10 @@ const testResults = (
  * A test result holds a `testResult` and one `itemResult` per session item, in sequence order; an
  * item result holds the item's `itemResult`. Each item result reports the built-ins
  * `numAttempts`, `duration` (in a test) and `completionStatus`, the session status, every
- * declared response with its answered status and every declared outcome, never a correct
- * response. In a test, a presented shuffled Choice's or Inline Choice's response carries the order
- * it was presented in as `choiceSequence`.
+ * declared response with its answered status, every declared template variable with the value its
+ * record holds (none where it holds none) and every declared outcome, never a correct response. In
+ * a test, a presented shuffled Choice's or Inline Choice's response carries the order it was
+ * presented in as `choiceSequence`, the choices its template values hid left out.
  *
  * @example
  *   results({ context: { sourcedId: "candidate-1" }, datestamp: new Date(), document, kind: "item", record });

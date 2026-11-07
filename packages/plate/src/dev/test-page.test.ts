@@ -7,7 +7,7 @@ import { configure } from "#plate/configuration.ts";
 import { pageHeaders, pageHtml } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
 import { openDirectory, packageCache, testField } from "#plate/dev/packages.ts";
-import type { PackageCache, PackageOpener } from "#plate/dev/packages.ts";
+import type { PackageCache, PackageOpener, PackageSource } from "#plate/dev/packages.ts";
 import { sessionStore } from "#plate/dev/store.ts";
 import { routeSessions, sessionPath } from "#plate/dev/test-page.ts";
 import type { SessionPlayground } from "#plate/dev/test-page.ts";
@@ -18,6 +18,7 @@ import type { PartOf } from "#plate/emit/parts.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 import { message } from "#plate/messages.ts";
+import type { Value } from "#plate/model/values.ts";
 import { navigationState, renderNavigation } from "#plate/navigation.ts";
 import { openPackage } from "#plate/package/open.ts";
 import type { Intent } from "#plate/session/session.ts";
@@ -118,6 +119,34 @@ const validatingTest = (bytes: Uint8Array): Uint8Array => {
 };
 
 /**
+ * Open a package as `openDirectory` does, with one of its files replaced in memory.
+ *
+ * @param source The package.
+ * @param replaced The replaced file's path from the package's root.
+ * @param replace The replacement, given the bytes the directory holds.
+ * @returns Its verdict.
+ */
+const openReplacing = (
+  source: PackageSource,
+  replaced: string,
+  replace: (bytes: Uint8Array) => Uint8Array,
+) =>
+  Effect.gen(function* replacingPackage() {
+    const entries = yield* Effect.promise(() =>
+      readdir(source.root, { recursive: true, withFileTypes: true }),
+    );
+    const files = new Map<string, Uint8Array>();
+    for (const entry of entries.filter((each) => each.isFile())) {
+      const full = path.join(entry.parentPath, entry.name);
+      const file = path.relative(source.root, full).split(path.sep).join("/");
+      const bytes = yield* Effect.promise(() => readFile(full));
+      files.set(file, file === replaced ? replace(bytes) : bytes);
+    }
+
+    return yield* openPackage(source.location, files);
+  });
+
+/**
  * Open a package as `openDirectory` does, with the Beginner's Guide test patched by
  * {@link validatingTest}.
  *
@@ -126,31 +155,77 @@ const validatingTest = (bytes: Uint8Array): Uint8Array => {
  */
 const validatingOpener: PackageOpener = (source) =>
   source.id === guide.id
-    ? Effect.gen(function* validatingPackage() {
-        const entries = yield* Effect.promise(() =>
-          readdir(source.root, { recursive: true, withFileTypes: true }),
-        );
-        const files = new Map<string, Uint8Array>();
-        for (const entry of entries.filter((each) => each.isFile())) {
-          const full = path.join(entry.parentPath, entry.name);
-          const file = path.relative(source.root, full).split(path.sep).join("/");
-          const bytes = yield* Effect.promise(() => readFile(full));
-          files.set(file, file === guide.test ? validatingTest(bytes) : bytes);
-        }
+    ? openReplacing(source, guide.test, validatingTest)
+    : openDirectory(source);
 
-        return yield* openPackage(source.location, files);
-      })
+/**
+ * A hand-built templated item in place of the M2 fixture's item 1, with its identifier: template
+ * processing draws the single integer template variable `T` from 1 to 10^9 and sets `RESPONSE`'s
+ * correct response to `C`, which overrides the declared `B`, and the body prints `T` before a
+ * Choice over `A` to `D`.
+ */
+const templatedItem = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="p1-single-choice" title="Drawn number" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+  "<qti-correct-response><qti-value>B</qti-value></qti-correct-response></qti-response-declaration>",
+  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">',
+  "<qti-default-value><qti-value>0</qti-value></qti-default-value></qti-outcome-declaration>",
+  '<qti-template-declaration identifier="T" cardinality="single" base-type="integer"/>',
+  "<qti-template-processing>",
+  '<qti-set-template-value identifier="T"><qti-random-integer min="1" max="1000000000"/></qti-set-template-value>',
+  '<qti-set-correct-response identifier="RESPONSE"><qti-base-value base-type="identifier">C</qti-base-value></qti-set-correct-response>',
+  "</qti-template-processing><qti-item-body>",
+  '<p>The drawn number is <qti-printed-variable identifier="T"/>.</p>',
+  '<qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  "<qti-prompt>Which choice is correct?</qti-prompt>",
+  ...["A", "B", "C", "D"].map(
+    (choice) => `<qti-simple-choice identifier="${choice}">Choice ${choice}</qti-simple-choice>`,
+  ),
+  "</qti-choice-interaction></qti-item-body>",
+  '<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>',
+  "</qti-assessment-item>",
+].join("");
+
+/**
+ * Open a package as `openDirectory` does, with the M2 fixture's item 1 replaced by
+ * {@link templatedItem}.
+ *
+ * @param source The package.
+ * @returns Its verdict.
+ */
+const templatedOpener: PackageOpener = (source) =>
+  source.id === fixture.id
+    ? openReplacing(source, "items/p1-single-choice.xml", () =>
+        new TextEncoder().encode(templatedItem),
+      )
     : openDirectory(source);
 
 /**
  * The package caches the tests share, so each package is opened once for the file: the fixture's
- * over the fixtures directory, and the corpus's as it is and with the patched test.
+ * over the fixtures directory, as it is and with item 1 templated, and the corpus's as it is and
+ * with the patched test.
  */
 const caches = {
   fixture: Effect.runSync(packageCache()),
   guide: Effect.runSync(packageCache()),
+  templated: Effect.runSync(packageCache(templatedOpener)),
   validating: Effect.runSync(packageCache(validatingOpener)),
 } as const;
+
+/**
+ * Give the text a single integer value prints in its default form.
+ *
+ * @param value The value.
+ * @returns Its integer, written in decimal.
+ */
+const printedInteger = (value: Value | undefined): string => {
+  const [single, ...rest] = value?.values ?? [];
+  assert.lengthOf(rest, 0, "The value is not single.");
+
+  return single?.baseType === "integer"
+    ? String(single.value)
+    : assert.fail("The value holds no integer.");
+};
 
 /**
  * A playground the tests post to: its sessions, the sitting it starts, and how its package reads
@@ -174,7 +249,7 @@ interface Bench {
  * @returns The bench.
  */
 const benchOf = (packages: PackageCache, sitting: Sitting, root?: string) =>
-  Effect.map(configure({ seed: 7 }), (configuration): Bench => ({
+  Effect.map(configure({ seed: "7" }), (configuration): Bench => ({
     playground: { configuration, packages, sessions: sessionStore() },
     provide: (effect) =>
       root === undefined
@@ -635,6 +710,23 @@ describe("routeSessions", () => {
         assert.strictEqual(statusAt(startGet), 405);
         assert.deepStrictEqual(shown(bench, startGet, "/packages").page.headers, { allow: "POST" });
         assert.strictEqual(bench.playground.sessions.size, 1);
+      }),
+  );
+
+  it.effect(
+    "[I-5] shows a templated item's printed variable from the record its session item holds, with no notice",
+    () =>
+      Effect.gen(function* templatedPage() {
+        const bench = yield* benchOf(caches.templated, fixture, fixturesRoot);
+        const id = yield* start(bench);
+        const page = yield* open(bench, id);
+        const { session } = yield* storedSession(bench, id);
+        const drawn = printedInteger(session.items[0]?.record.templates["T"]);
+        const pageText = parseHtml(page.html).map(textOf).join("");
+
+        assert.strictEqual(page.page.status, 200);
+        assert.include(pageText, `The drawn number is ${drawn}.`);
+        assert.notInclude(pageText, message("en", "notice", { feature: "qti-printed-variable" }));
       }),
   );
 

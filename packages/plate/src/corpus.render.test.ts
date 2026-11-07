@@ -4,16 +4,36 @@ import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { configure } from "#plate/index.ts";
 import type { Accepted, Configuration, Element, Node, Verdict } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
-import type { BodyNode, InlineChoiceInteraction } from "#plate/model/item.ts";
+import type {
+  BodyElement,
+  BodyNode,
+  InlineChoiceInteraction,
+  Item,
+  PrintedVariable,
+  TemplateVisibility,
+} from "#plate/model/item.ts";
+import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
+import { nullOf } from "#plate/model/values.ts";
+import { templateShows } from "#plate/payload.ts";
 import { refusalRules } from "#plate/validate/refusal.ts";
 import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
-import { acceptedOf, openCorpus, sweepInstance, threeStates } from "#plate/test/sweep.ts";
-import type { Member } from "#plate/test/sweep.ts";
+import {
+  acceptedOf,
+  openCorpus,
+  recordStates,
+  sweepInstance,
+  sweepSeeds,
+  templated,
+  threeStates,
+} from "#plate/test/sweep.ts";
+import type { Member, RecordState, RenderState } from "#plate/test/sweep.ts";
 
 /**
- * Opening the corpus (about 800 members) and rendering every accepted item in three states runs
- * in seconds here; the bound leaves room for a slow machine without letting a hung run stall the
+ * Opening the corpus (about 800 members) and rendering every accepted item in three states, an
+ * item whose template processing runs under each sweep seed's record and with none, runs in
+ * seconds here; the bound leaves room for a slow machine without letting a hung run stall the
  * suite.
  */
 const sweepTimeoutMs = 600_000;
@@ -106,7 +126,172 @@ const rootOf = (html: string): Option.Option<Element> => {
 };
 
 /**
- * One accepted member's render: its three states, or the error `render` gave.
+ * The feature the notices name once when a choice is withheld: the attribute that gives a choice
+ * its template visibility. A withheld choice is absent from its interaction, so no body node
+ * carries this notice and the HTML shows none for it; the redaction sweep
+ * (`src/corpus.redact.test.ts`) checks that the redacted item's notices name it.
+ */
+const choiceNotice = "template-identifier";
+
+/**
+ * Give the values a redaction shows an item by, as the sweep passes them: the record state's
+ * record for an item whose template processing runs, none with no record; and, for any other
+ * item, rendered with no record, the values its first attempt starts with (H3): each template
+ * variable at its declared default, else NULL, none where its template processing does not run,
+ * and each outcome at its starting value.
+ *
+ * @param item The item.
+ * @param state The record state, for an item whose template processing runs; none for any other.
+ * @returns The values, or none for an item whose template processing runs and no record.
+ */
+const valuesOf = (item: Item, state: Option.Option<RecordState>): Option.Option<RedactRecord> =>
+  Option.match(state, {
+    onNone: () =>
+      Option.some({
+        outcomes: outcomeDefaults(item),
+        templates: unrunTemplateProcessing(item)
+          ? {}
+          : Object.fromEntries(
+              Array.from(item.templates, ([identifier, declaration]) => [
+                identifier,
+                Option.getOrElse(declaration.defaultValue, () =>
+                  nullOf(declaration.baseType, declaration.cardinality),
+                ),
+              ]),
+            ),
+      }),
+    onSome: (found) => found.record,
+  });
+
+/**
+ * Give the variables a printed variable needs a value of: the one it prints, and any its `base` or
+ * `index` names.
+ *
+ * @param node The printed variable.
+ * @returns Their identifiers.
+ */
+const printedNames = (node: PrintedVariable): readonly string[] => [
+  node.identifier,
+  ...[node.base, ...Option.toArray(node.index)].flatMap((written) =>
+    written._tag === "ref" ? [written.identifier] : [],
+  ),
+];
+
+/**
+ * Report whether a body element is a `param` that stands in for a template variable: its `value`
+ * names a template variable declared `param-variable="true"` (the information model's Param
+ * `value`, `info.txt:69978`).
+ *
+ * @param item The item, whose template declarations the `value` is looked up among.
+ * @param node The body element.
+ * @returns The template variable's identifier, or none for any other element.
+ */
+const parameterOf = (item: Item, node: BodyElement): Option.Option<string> =>
+  node.tag === "param"
+    ? Option.fromUndefinedOr(node.attributes.find((written) => written.name === "value")).pipe(
+        Option.filter(({ value }) => item.templates.get(value)?.paramVariable === true),
+        Option.map(({ value }) => value),
+      )
+    : Option.none();
+
+/**
+ * Give the notices a redaction must put in the place of the template parts on content the page
+ * sees, decided from the item and the values alone, never read from `redact`: a printed variable
+ * whose variable, or a variable its `base` or `index` names, the values hold no value of; a
+ * template block or inline, and a `param-variable` parameter, whose template variable they hold no
+ * value of; and `template-identifier` once when they hold no value of the template variable of
+ * some choice with a template visibility. With no values, every such part is withheld. A part
+ * inside content the page does not see (a block or inline the values hide or withhold, a withheld
+ * `param`, or a choice they hide or withhold) gives none, since the page shows none of it.
+ *
+ * @param item The item.
+ * @param values The values the item is shown by.
+ * @returns The withheld parts' notices, in document order.
+ */
+const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly string[] => {
+  const holdsTemplate = (identifier: string): boolean =>
+    Option.exists(values, (record) => Object.hasOwn(record.templates, identifier));
+  const holds = (identifier: string): boolean =>
+    holdsTemplate(identifier) ||
+    Option.exists(values, (record) => Object.hasOwn(record.outcomes, identifier));
+  const shown = (visibility: TemplateVisibility, identifier: string): Option.Option<boolean> =>
+    values.pipe(
+      Option.filter(() => holdsTemplate(visibility.templateIdentifier)),
+      Option.map((record) => templateShows(visibility, identifier, record.templates)),
+    );
+  let choiceWithheld = false;
+  const walk = (nodes: readonly BodyNode[]): readonly string[] =>
+    nodes.flatMap((node): readonly string[] => {
+      switch (node.kind) {
+        case "element": {
+          return Option.match(parameterOf(item, node), {
+            onNone: () => walk(node.children),
+            onSome: (identifier) => (holdsTemplate(identifier) ? walk(node.children) : ["param"]),
+          });
+        }
+        case "printed-variable": {
+          return printedNames(node).every(holds) ? [] : ["qti-printed-variable"];
+        }
+        case "template-block":
+        case "template-inline": {
+          return Option.match(shown(node.templateVisibility, node.identifier), {
+            onNone: () => [`qti-${node.kind}`],
+            onSome: (visible) => (visible ? walk(node.content) : []),
+          });
+        }
+        case "choice":
+        case "inline-choice": {
+          const lead = walk(
+            Option.getOrElse(node.kind === "choice" ? node.prompt : node.label, () => []),
+          );
+
+          return [
+            ...lead,
+            ...node.choices.flatMap((choice): readonly string[] => {
+              const visible = Option.match(choice.templateVisibility, {
+                onNone: () => Option.some(true),
+                onSome: (visibility) => shown(visibility, choice.identifier),
+              });
+              const notice = Option.isNone(visible) && !choiceWithheld ? [choiceNotice] : [];
+              if (Option.isNone(visible)) {
+                choiceWithheld = true;
+              }
+
+              return [
+                ...notice,
+                ...(Option.getOrElse(visible, () => false) ? walk(choice.content) : []),
+              ];
+            }),
+          ];
+        }
+        case "extended-text": {
+          return walk(Option.getOrElse(node.prompt, () => []));
+        }
+        case "text":
+        case "text-entry":
+        case "unsupported": {
+          return [];
+        }
+        default: {
+          return node satisfies never;
+        }
+      }
+    });
+
+  return walk(item.body);
+};
+
+/**
+ * What can fail one render: `begin` starting a templated item's record or its decoding, or
+ * `render`.
+ */
+type RenderFailure =
+  | Result.Result.Failure<ReturnType<typeof recordStates>>
+  | Result.Result.Failure<ReturnType<typeof threeStates>>;
+
+/**
+ * One accepted member's render under one record state: its three states, or the error that failed
+ * them.
  */
 interface Rendering {
   readonly accepted: Accepted;
@@ -115,15 +300,60 @@ interface Rendering {
    */
   readonly locale: Configuration["locale"];
   readonly location: string;
-  readonly states: ReturnType<typeof threeStates>;
+  /**
+   * The record state an item whose template processing runs rendered in: `begin`'s record under a
+   * sweep seed, or no record. None for any other item, which renders with no record.
+   */
+  readonly state: Option.Option<RecordState>;
+  /**
+   * The notices the redaction must give in place of the template parts the values withhold, which
+   * the verdict names none of: {@link withheldOf}, decided from the item and the state, never read
+   * from `redact`.
+   */
+  readonly withheld: readonly string[];
+  readonly states: Result.Result<readonly RenderState[], RenderFailure>;
 }
 
 /**
- * Render every accepted member in its three states.
+ * The state named when `begin` cannot start a templated item's records, or one does not decode.
+ */
+const unbegun: RecordState = { name: "begun under the sweep seeds", record: Option.none() };
+
+/**
+ * Render an accepted item in its three states, under a record state's record where it has one.
+ *
+ * @param accepted The accepted item.
+ * @param location Its corpus path.
+ * @param configuration The configuration every state renders with.
+ * @param state The record state, for an item whose template processing runs; none for any other.
+ * @returns The item's render.
+ */
+const renderingOf = (
+  accepted: Accepted,
+  location: string,
+  configuration: Configuration,
+  state: Option.Option<RecordState>,
+): Rendering => {
+  const record = Option.getOrUndefined(state.pipe(Option.flatMap((found) => found.record)));
+
+  return {
+    accepted,
+    locale: configuration.locale,
+    location,
+    state,
+    states: threeStates(accepted, configuration, record),
+    withheld: withheldOf(accepted.item, valuesOf(accepted.item, state)),
+  };
+};
+
+/**
+ * Render every accepted member in its three states: an item whose template processing runs under
+ * the record `begin` starts under each sweep seed and with no record, every other item with no
+ * record.
  *
  * @param members The opened members.
  * @param configuration The configuration every state renders with.
- * @returns Each accepted member's render, in the set's order.
+ * @returns Each accepted member's renders, in the set's order.
  */
 const renderingsOf = (
   members: readonly Member[],
@@ -131,17 +361,41 @@ const renderingsOf = (
 ): readonly Rendering[] =>
   members.flatMap((member) =>
     Option.match(acceptedOf(member), {
-      onNone: () => [],
-      onSome: (accepted) => [
-        {
-          accepted,
-          locale: configuration.locale,
-          location: member.location,
-          states: threeStates(accepted, configuration),
-        },
-      ],
+      onNone: (): readonly Rendering[] => [],
+      onSome: (accepted) =>
+        templated(accepted)
+          ? Result.match(recordStates(accepted), {
+              onFailure: (error): readonly Rendering[] => [
+                {
+                  accepted,
+                  locale: configuration.locale,
+                  location: member.location,
+                  state: Option.some(unbegun),
+                  states: Result.fail(error),
+                  withheld: [],
+                },
+              ],
+              onSuccess: (states) =>
+                states.map((state) =>
+                  renderingOf(accepted, member.location, configuration, Option.some(state)),
+                ),
+            })
+          : [renderingOf(accepted, member.location, configuration, Option.none())],
     }),
   );
+
+/**
+ * Name a render as a failure names it: its corpus path, and its record state where it has one, so
+ * the run repeats.
+ *
+ * @param rendering The render.
+ * @returns Its name.
+ */
+const placeOf = (rendering: Rendering): string =>
+  Option.match(rendering.state, {
+    onNone: () => rendering.location,
+    onSome: (state) => `${rendering.location} (${state.name})`,
+  });
 
 /**
  * Collect the problems one check finds in every state of every render, naming the member and the
@@ -157,12 +411,10 @@ const statesProblems = (
 ): readonly string[] =>
   renderings.flatMap((rendering) =>
     Result.match(rendering.states, {
-      onFailure: (error) => [
-        `${rendering.location}: render failed: ${error._tag}: ${error.message}`,
-      ],
+      onFailure: (error) => [`${placeOf(rendering)}: failed: ${error._tag}: ${error.message}`],
       onSuccess: (states) =>
         states.flatMap((state) => {
-          const where = `${rendering.location}, ${state.name}`;
+          const where = `${placeOf(rendering)}, ${state.name}`;
 
           return Option.match(rootOf(state.html), {
             onNone: () => [`${where}: the HTML is not exactly one element`],
@@ -174,8 +426,9 @@ const statesProblems = (
 
 /**
  * Check one state against the round trip and R1: its HTML round-trips, shows a notice for exactly
- * the verdict's notice-shown features, and shows none for the features the verdict marks, which
- * render nowhere.
+ * the verdict's notice-shown features and the template parts the state withholds
+ * ({@link withheldOf}; a withheld choice shows none, being absent), and shows none for the features
+ * the verdict marks, which render nowhere.
  *
  * @param rendering The render, with its accepted document.
  * @param where The member and state, which every problem names.
@@ -184,10 +437,10 @@ const statesProblems = (
  */
 const r1Problems = (rendering: Rendering, where: string, root: Element): readonly string[] => {
   const { unsupported } = rendering.accepted;
+  const withheld = rendering.withheld.filter((feature) => feature !== choiceNotice);
   const featureOf = new Map(
-    unsupported.map(
-      (entry) =>
-        [message(rendering.locale, "notice", { feature: entry.feature }), entry.feature] as const,
+    [...unsupported.map((entry) => entry.feature), ...withheld].map(
+      (feature) => [message(rendering.locale, "notice", { feature }), feature] as const,
     ),
   );
   const shown = elementsOf([root])
@@ -198,10 +451,10 @@ const r1Problems = (rendering: Rendering, where: string, root: Element): readonl
       return featureOf.get(text) ?? `(a notice no feature gives: ${JSON.stringify(text)})`;
     })
     .toSorted();
-  const noticed = unsupported
-    .filter((entry) => entry.shown === "notice")
-    .map((entry) => entry.feature)
-    .toSorted();
+  const noticed = [
+    ...unsupported.filter((entry) => entry.shown === "notice").map((entry) => entry.feature),
+    ...withheld,
+  ].toSorted();
   const marked = unsupported
     .filter((entry) => entry.shown === "mark")
     .map((entry) => entry.feature)
@@ -244,7 +497,8 @@ const treeProblems = (_rendering: Rendering, where: string, root: Element): read
 
 /**
  * Collect the Inline Choices an item's body renders, in document order: those in its body and its
- * body elements. An interaction inside a Prompt or a choice's content is not counted.
+ * body elements. An interaction inside a Prompt or a choice's content is not counted, nor one
+ * inside a template block or inline, which renders only where a template value shows it.
  *
  * @param nodes The body nodes.
  * @returns The Inline Choices.
@@ -260,6 +514,9 @@ const inlineChoicesOf = (nodes: readonly BodyNode[]): readonly InlineChoiceInter
       }
       case "choice":
       case "extended-text":
+      case "printed-variable":
+      case "template-block":
+      case "template-inline":
       case "text":
       case "text-entry":
       case "unsupported": {
@@ -411,8 +668,13 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
         const counted = verdictsOf(members).filter(
           ([, verdict]) => verdict.kind === "item" && acceptingVerdicts.has(verdict.verdict),
         );
+        const rendered = new Set(renderings.map((rendering) => rendering.location));
 
-        assert.lengthOf(renderings, counted.length, "every item's accepting verdict is rendered");
+        assert.strictEqual(
+          rendered.size,
+          counted.length,
+          "every item's accepting verdict is rendered",
+        );
         assert.deepStrictEqual(statesProblems(renderings, r1Problems), []);
       }),
     sweepTimeoutMs,
@@ -439,6 +701,44 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
 
         assert.isNotEmpty(renderings, "no accepted corpus item renders an Inline Choice");
         assert.deepStrictEqual(statesProblems(renderings, inlineChoiceProblems), []);
+      }),
+    sweepTimeoutMs,
+  );
+
+  it.effect(
+    "[I-5] each item whose template processing runs renders in three states under begin's record for each sweep seed and with no record, round-trips, shows exactly its notice-shown features as notices, passes checkTree at base level 2, and under a record shows none of its printed variables, template blocks and template inlines as a notice",
+    () =>
+      Effect.gen(function* templatedRenders() {
+        const renderings = renderingsOf(yield* openCorpus, yield* configure({})).filter(
+          (rendering) => templated(rendering.accepted),
+        );
+        const files = new Set(renderings.map((rendering) => rendering.location));
+        const uncounted = [...files].flatMap((location) => {
+          const states = renderings.filter((rendering) => rendering.location === location).length;
+
+          return states === sweepSeeds.length + 1
+            ? []
+            : [`${location}: rendered in ${String(states)} record states`];
+        });
+        const notices = renderings.flatMap((rendering) =>
+          Option.exists(rendering.state, (state) => Option.isSome(state.record)) &&
+          rendering.withheld.length > 0
+            ? [
+                `${placeOf(rendering)}: its record withholds the parts noticed as ${JSON.stringify(rendering.withheld)}`,
+              ]
+            : [],
+        );
+
+        assert.isNotEmpty(files, "no accepted corpus item's template processing runs");
+        assert.deepStrictEqual(
+          [
+            ...uncounted,
+            ...notices,
+            ...statesProblems(renderings, r1Problems),
+            ...statesProblems(renderings, treeProblems),
+          ],
+          [],
+        );
       }),
     sweepTimeoutMs,
   );
