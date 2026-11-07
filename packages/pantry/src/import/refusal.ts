@@ -145,6 +145,8 @@ import {
   Item,
   LookupValue,
   MapKeyDirectedPair,
+  MapKeyFloat,
+  MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
   mappingLawsByName,
@@ -813,6 +815,17 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "Mapping overlay",
       ] as const,
   ),
+  // A typed map key's generated fields read its own split, by concatenation and conditionals, or a
+  // float key's cast, which `floatKeyPattern`'s law above holds to the language the cast reads
+  // total. No term reads a closed relation, so none is NULL and no row breaks these.
+  [generatedOf(MapKeyInteger, "negative"), "E1 derived"],
+  [generatedOf(MapKeyInteger, "value"), "E1 derived"],
+  [generatedOf(MapKeyFloat, "value"), "E1 derived"],
+  [generatedOf(MapKeyPoint, "value"), "E1 derived"],
+  [generatedOf(MapKeyPoint, "xNegative"), "E1 derived"],
+  [generatedOf(MapKeyPoint, "yNegative"), "E1 derived"],
+  [generatedOf(MapKeyPair, "value"), "E1 derived"],
+  [generatedOf(MapKeyDirectedPair, "value"), "E1 derived"],
   ...[
     AssembledReference,
     DeclarationTable,

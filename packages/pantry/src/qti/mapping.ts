@@ -17,7 +17,8 @@
  * - {@link MapKeyInteger}, {@link MapKeyFloat}, {@link MapKeyPoint}, {@link MapKeyPair} and
  *   {@link MapKeyDirectedPair} hold a map key's typed value where it differs from its lexical form,
  *   each a row of its own relation keyed by the entry's node and mirrored with the map keys of its
- *   base type (the addendum's `MapKeyInteger` pattern);
+ *   base type (the addendum's `MapKeyInteger` pattern), its `value` a field PostgreSQL generates
+ *   from the key's text;
  * - {@link LookupValue} copies each table entry's `target-value` and each table's `default-value`
  *   beside its table's base type.
  *
@@ -48,6 +49,7 @@ import {
   closedId,
   Compute,
   contained,
+  generated,
   key,
   mirrors,
   natural,
@@ -225,30 +227,34 @@ export const Item = str.regex("^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-
 
 /**
  * An integer map key's typed value, keyed by its entry's node: its key split into `sign`, `zeros`
- * and `digits`, and `value`, the canonical form XML Schema gives `xs:integer` (no `+`, no leading
- * zero, `0` unsigned), `negative ‖ digits`.
+ * and `digits`, which the host writes and `E1_derived` proves, and two fields PostgreSQL generates
+ * from them: `negative`, `-` for a negative integer and empty otherwise, and `value`, the canonical
+ * form XML Schema gives `xs:integer` (no `+`, no leading zero, `0` unsigned), `negative ‖ digits`.
  *
  * Two keys name one integer exactly when their canonical forms are equal, so `key(mapping, value)`
  * is uniqueness by typed value at any length the key text holds (reading 45: an integer has no
- * largest value). A cast would bound it: grizzle's lexical form of `numeric(p, 0)` holds at most
- * 256 digits (`scalar/lexical.ts` `decimalWritable`, `regexMaxRepeat`). Every field is the host's,
- * and `E1_derived` proves the split and the form.
+ * largest value), compared by the write's own statement at the value PostgreSQL stores. A cast
+ * would bound it: grizzle's lexical form of `numeric(p, 0)` holds at most 256 digits
+ * (`scalar/lexical.ts` `decimalWritable`, `regexMaxRepeat`).
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#integer | XML Schema Part 2, §3.3.13 integer}
  */
-export const MapKeyInteger = relation(
+export const MapKeyInteger = relation.generated(
   "MapKeyInteger",
-  {
-    digits: Digits,
-    key: keyText,
-    mapping: uuid,
-    negative: Negative,
-    node: uuid,
-    sign: Sign,
-    value: keyText,
-    zeros: Zeros,
-  },
+  { digits: Digits, key: keyText, mapping: uuid, node: uuid, sign: Sign, zeros: Zeros },
   ["node"],
+  (r) => {
+    const negative = Compute.cond(
+      Compute.and(Compute.eq(r.sign, "-"), Compute.ne(r.digits, "0")),
+      Compute.literal(Negative, "-"),
+      "",
+    );
+
+    return {
+      negative: generated(Negative, negative),
+      value: generated(keyText, Compute.concat(negative, r.digits)),
+    };
+  },
 );
 
 /**
@@ -259,104 +265,121 @@ const FloatKey = str.regex(floatKeyPattern);
 
 /**
  * A float map key's typed value, keyed by its entry's node: `value`, the `double precision` its
- * key names, which the host writes and `E1_derived` proves equal to PostgreSQL's cast of the key.
- * The cast rounds the decimal once to the nearest double, as XML Schema's lexical mapping does
- * (reading 56), so `1`, `1.0` and `10e-1` are one value.
- *
- * The host writes `value` rather than PostgreSQL generating it, because grizzle refuses every
- * addition to a relation one of whose keys reads a generated field: no fact carries the field, so
- * neither its same-key check nor a statement's probe can meet the key
- * (`write/frontend/compile.ts` `refuseGeneratedUnique`; `docs/grizzle-findings.md`, R87). The
- * check holds `value` to the very term the generated column was, so `key(mapping, value)` judges
- * the same values.
+ * key names, which PostgreSQL generates by casting the key. The cast rounds the decimal once to
+ * the nearest double, as XML Schema's lexical mapping does (reading 56), so `1`, `1.0` and `10e-1`
+ * are one value.
  *
  * Only a key of grizzle's form has one: at most 15 significant digits on each side of the point
  * (`DBL_DIG`) and an exponent of at most 293, so the value is finite and nonzero unless it is
  * zero (`scalar/lexical.ts` `doubleForm`), with each run of padding zeros at most
- * {@link floatKeyZeros}. A key outside it, such as reading 56's `1e400`, is distinct from the
- * others by its lexical form alone, a stated limit of grizzle's form and of its automata.
+ * {@link floatKeyZeros}. A key outside it, such as reading 56's `1e400`, `1e294` or
+ * `1.2345678901234567`, has no row here and is distinct from the others by its lexical form alone:
+ * grizzle's cast reads its double form only, and qti-pie's upstream ask #8 to grizzle, a total
+ * xs:double parse, is what lifts the limit.
  */
-export const MapKeyFloat = relation(
+export const MapKeyFloat = relation.generated(
   "MapKeyFloat",
-  { key: FloatKey, mapping: uuid, node: uuid, value: pg["double precision"] },
+  { key: FloatKey, mapping: uuid, node: uuid },
   ["node"],
+  (r) => ({
+    value: generated(pg["double precision"], Compute.cast(r.key, pg["double precision"])),
+  }),
 );
 
 /**
  * A point map key's typed value, keyed by its entry's node: its key split into its two integers'
- * parts, as {@link MapKeyInteger} splits one, and the whitespace between them, and `value`, the
- * two canonical integers with one space between, `xNegative ‖ xDigits ‖ " " ‖ yNegative ‖ yDigits`.
+ * parts, as {@link MapKeyInteger} splits one, and the whitespace between them, which the host
+ * writes and `E1_derived` proves, and three fields PostgreSQL generates from them: `xNegative` and
+ * `yNegative`, each integer's canonical sign, and `value`, the two canonical integers with one
+ * space between, `xNegative ‖ xDigits ‖ " " ‖ yNegative ‖ yDigits`.
  *
  * A point is "an integer tuple" (information model §8.13), so two keys name one point exactly when
  * their canonical forms are equal, and `key(mapping, value)` is uniqueness by typed value: `1 2`,
- * `01 +2` and `1`, a tab, `2` are one point. Every field is the host's, and `E1_derived` proves the
- * split.
+ * `01 +2` and `1`, a tab, `2` are one point.
  */
-export const MapKeyPoint = relation(
+export const MapKeyPoint = relation.generated(
   "MapKeyPoint",
   {
     gap: Gap,
     key: keyText,
     mapping: uuid,
     node: uuid,
-    value: keyText,
     xDigits: Digits,
-    xNegative: Negative,
     xSign: Sign,
     xZeros: Zeros,
     yDigits: Digits,
-    yNegative: Negative,
     ySign: Sign,
     yZeros: Zeros,
   },
   ["node"],
+  (r) => {
+    const xNegative = Compute.cond(
+      Compute.and(Compute.eq(r.xSign, "-"), Compute.ne(r.xDigits, "0")),
+      Compute.literal(Negative, "-"),
+      "",
+    );
+    const yNegative = Compute.cond(
+      Compute.and(Compute.eq(r.ySign, "-"), Compute.ne(r.yDigits, "0")),
+      Compute.literal(Negative, "-"),
+      "",
+    );
+
+    return {
+      value: generated(
+        keyText,
+        Compute.concat(
+          Compute.concat(Compute.concat(Compute.concat(xNegative, r.xDigits), " "), yNegative),
+          r.yDigits,
+        ),
+      ),
+      xNegative: generated(Negative, xNegative),
+      yNegative: generated(Negative, yNegative),
+    };
+  },
 );
 
 /**
  * A pair map key's typed value, keyed by its entry's node: its key split into its two identifiers
- * and the whitespace between them, and `value`, the two in code-point order with one space between.
+ * and the whitespace between them, which the host writes and `E1_derived` proves, and `value`,
+ * which PostgreSQL generates from them: the two in code-point order with one space between.
  *
  * A pair's association "is undirected so (A,B) and (B,A) are equivalent" (information model §8.13),
  * so `key(mapping, value)` is uniqueness by typed value: `A B`, `B A` and `A`, a tab, `B` are one
- * pair. Text compares by code point here, its collation `pg_c_utf8`. Every field is the host's, and
- * `E1_derived` proves the split and the order.
+ * pair. Text compares by code point here, its collation `pg_c_utf8`.
  */
-export const MapKeyPair = relation(
+export const MapKeyPair = relation.generated(
   "MapKeyPair",
-  {
-    first: Item,
-    gap: Gap,
-    key: keyText,
-    mapping: uuid,
-    node: uuid,
-    second: Item,
-    value: keyText,
-  },
+  { first: Item, gap: Gap, key: keyText, mapping: uuid, node: uuid, second: Item },
   ["node"],
+  (r) => ({
+    value: generated(
+      keyText,
+      Compute.cond(
+        Compute.le(r.first, r.second),
+        Compute.concat(Compute.concat(r.first, " "), r.second),
+        Compute.concat(Compute.concat(r.second, " "), r.first),
+      ),
+    ),
+  }),
 );
 
 /**
  * A directed pair map key's typed value, keyed by its entry's node: its key split into its source
- * and target identifiers and the whitespace between them, and `value`, the two in order with one
- * space between.
+ * and target identifiers and the whitespace between them, which the host writes and `E1_derived`
+ * proves, and `value`, which PostgreSQL generates from them: the two in order with one space
+ * between.
  *
  * A directed pair's association "is directed so (A,B) and (B,A) are not equivalent" (information
  * model §8.13), so its value keeps the order and reads its whitespace as one space: `A B` and `A`,
- * a tab, `B` are one directed pair, and `B A` another. Every field is the host's, and `E1_derived`
- * proves the split.
+ * a tab, `B` are one directed pair, and `B A` another.
  */
-export const MapKeyDirectedPair = relation(
+export const MapKeyDirectedPair = relation.generated(
   "MapKeyDirectedPair",
-  {
-    gap: Gap,
-    key: keyText,
-    mapping: uuid,
-    node: uuid,
-    source: Item,
-    target: Item,
-    value: keyText,
-  },
+  { gap: Gap, key: keyText, mapping: uuid, node: uuid, source: Item, target: Item },
   ["node"],
+  (r) => ({
+    value: generated(keyText, Compute.concat(Compute.concat(r.source, " "), r.target)),
+  }),
 );
 
 /**
@@ -541,8 +564,8 @@ const lookupAttributes = select(Attribute, (a) =>
  *   declaration's `declarationRef` tuple;
  * - **`mapping-base-type`:** the containment into `MappableBaseType`, and `AreaMapping_base_type`;
  * - **map keys:** the entry's mapping's base type, its `map-key` copy, the lexical key, each typed
- *   relation mirrored with its keys, `E1_derived` its split or its cast, and its typed key, and
- *   `Typed_attribute_value` its lexical form;
+ *   relation mirrored with its keys, `E1_derived` its split, and its typed key over the value
+ *   PostgreSQL generates, and `Typed_attribute_value` its lexical form;
  * - **`Lookup_table_cardinality`:** a match or interpolation table's outcome is single;
  * - **lookup values:** each copies its node's tuple and its attribute, holds its table's base type,
  *   and `Typed_attribute_value` judges it.
@@ -554,73 +577,28 @@ export const mappingLawsByName = {
   "DocumentId key": [key(on(mapKeyAttributes, "node")), key(on(lookupAttributes, "node"))],
   "E1 derived": [
     check("E1_derived", MapKeyInteger, (m) =>
-      m.and(
-        m.eq(m.key, Compute.concat(Compute.concat(m.sign, m.zeros), m.digits)),
-        m.eq(m.value, Compute.concat(m.negative, m.digits)),
-        m.or(
-          m.and(m.eq(m.sign, "-"), m.ne(m.digits, "0"), m.eq(m.negative, "-")),
-          m.and(m.or(m.ne(m.sign, "-"), m.eq(m.digits, "0")), m.eq(m.negative, "")),
-        ),
-      ),
-    ),
-    check("E1_derived", MapKeyFloat, (m) =>
-      m.eq(m.value, Compute.cast(m.key, pg["double precision"])),
+      m.eq(m.key, Compute.concat(Compute.concat(m.sign, m.zeros), m.digits)),
     ),
     check("E1_derived", MapKeyPoint, (m) =>
-      m.and(
-        m.eq(
-          m.key,
+      m.eq(
+        m.key,
+        Compute.concat(
           Compute.concat(
             Compute.concat(
-              Compute.concat(
-                Compute.concat(Compute.concat(Compute.concat(m.xSign, m.xZeros), m.xDigits), m.gap),
-                m.ySign,
-              ),
-              m.yZeros,
+              Compute.concat(Compute.concat(Compute.concat(m.xSign, m.xZeros), m.xDigits), m.gap),
+              m.ySign,
             ),
-            m.yDigits,
+            m.yZeros,
           ),
-        ),
-        m.eq(
-          m.value,
-          Compute.concat(
-            Compute.concat(
-              Compute.concat(Compute.concat(m.xNegative, m.xDigits), " "),
-              m.yNegative,
-            ),
-            m.yDigits,
-          ),
-        ),
-        m.or(
-          m.and(m.eq(m.xSign, "-"), m.ne(m.xDigits, "0"), m.eq(m.xNegative, "-")),
-          m.and(m.or(m.ne(m.xSign, "-"), m.eq(m.xDigits, "0")), m.eq(m.xNegative, "")),
-        ),
-        m.or(
-          m.and(m.eq(m.ySign, "-"), m.ne(m.yDigits, "0"), m.eq(m.yNegative, "-")),
-          m.and(m.or(m.ne(m.ySign, "-"), m.eq(m.yDigits, "0")), m.eq(m.yNegative, "")),
+          m.yDigits,
         ),
       ),
     ),
     check("E1_derived", MapKeyPair, (m) =>
-      m.and(
-        m.eq(m.key, Compute.concat(Compute.concat(m.first, m.gap), m.second)),
-        m.or(
-          m.and(
-            m.le(m.first, m.second),
-            m.eq(m.value, Compute.concat(Compute.concat(m.first, " "), m.second)),
-          ),
-          m.and(
-            m.gt(m.first, m.second),
-            m.eq(m.value, Compute.concat(Compute.concat(m.second, " "), m.first)),
-          ),
-        ),
-      ),
+      m.eq(m.key, Compute.concat(Compute.concat(m.first, m.gap), m.second)),
     ),
     check("E1_derived", MapKeyDirectedPair, (m) =>
-      m.and(
-        m.eq(m.key, Compute.concat(Compute.concat(m.source, m.gap), m.target)),
-        m.eq(m.value, Compute.concat(Compute.concat(m.source, " "), m.target)),
-      ),
+      m.eq(m.key, Compute.concat(Compute.concat(m.source, m.gap), m.target)),
     ),
   ],
   "Lookup table cardinality": [

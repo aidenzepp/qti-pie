@@ -52,6 +52,13 @@ const rootCopy =
   "a tree root's copy along its own axis is the field's start value, which grizzle keeps in the field's builder and exports no reader of";
 
 /**
+ * Why a typed map key's value is absent: PostgreSQL generates it from the map key's text
+ * (`#pantry/qti/mapping.ts`), and the write's own statement compares the key over it.
+ */
+const typedKeyValue =
+  "a field PostgreSQL generates from the map key's text, which the write's own statement compares";
+
+/**
  * Every value the host does not restore that a law over the every-relation package's rows reads,
  * as `Relation.field` or `Relation: a <kind> term`, with why.
  */
@@ -72,7 +79,11 @@ const unjudged = {
   "Idref: a base term": unreadTerm("base"),
   "LeastCount: a base term": unreadTerm("base"),
   "LeastCount: a when term": unreadTerm("when"),
-  "MapKeyFloat: a cast term": unreadTerm("cast"),
+  "MapKeyDirectedPair.value": typedKeyValue,
+  "MapKeyFloat.value": typedKeyValue,
+  "MapKeyInteger.value": typedKeyValue,
+  "MapKeyPair.value": typedKeyValue,
+  "MapKeyPoint.value": typedKeyValue,
   "MostCount: a base term": unreadTerm("base"),
   "MostCount: a when term": unreadTerm("when"),
   "Node.elements":
