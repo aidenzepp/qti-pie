@@ -1135,24 +1135,31 @@ describe("verdictOf", () => {
 });
 
 /**
- * Shred and fold the base item, as the oracle does.
+ * Shred and fold a document, as the oracle does.
  *
+ * @param text - The document, read as a 3.0.1 item.
  * @returns Its folded rows.
  */
-const foldedItem = Effect.gen(function* foldedItem() {
-  const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(item)));
-  const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
+const foldedText = (text: string) =>
+  Effect.gen(function* folded() {
+    const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(text)));
+    const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
 
-  return yield* Effect.orDie(
-    Effect.fromResult(
-      fold(
-        tree,
-        (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
-        foldGrammarOf(grammar),
+    return yield* Effect.orDie(
+      Effect.fromResult(
+        fold(
+          tree,
+          (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+          foldGrammarOf(grammar),
+        ),
       ),
-    ),
-  );
-});
+    );
+  });
+
+/**
+ * Shred and fold the base item, as the oracle does.
+ */
+const foldedItem = foldedText(item);
 
 /**
  * Replace the node rows that a test tampers with, keeping every other row.
@@ -1330,6 +1337,63 @@ describe("the foreign namespace classes, every class against every URI", () => {
         }
       }
     }),
+  );
+
+  it.effect(
+    "an open attribute's data- name breaks its law exactly where reading 13's language refuses it: every class and host against every name",
+    () =>
+      // Oracle: the specification as a checker, reading 13: a `data-*` name is `data-` and one or
+      // more name characters with no ASCII upper-case letter (HTML's custom data attribute rule
+      // read in XML), and a no-namespace name beginning `data-` on an element that is not foreign
+      // is never `no-namespace`; on a foreign element it is.
+      // Bound: 2 classes, 2 hosts and 9 names, 36 rows.
+      Effect.gen(function* dataName() {
+        const rows = yield* foldedText(edit(item, `<p id="intro">`, `<p data-x="1" id="intro">`));
+        const target = rows.attributes.find((attribute) => attribute.name === "data-*");
+        const host = rows.nodes.find(({ id }) => id === target?.node);
+        const language = /^data-[^A-Z:]+$/u;
+        const names = [
+          "data-x",
+          "data-é",
+          "data-x·y",
+          "data-1",
+          "data-A",
+          "data-xY",
+          "data-éA",
+          "data-",
+          "x-data",
+        ] as const;
+
+        assert.isDefined(target, "the item carries a data-* attribute");
+        assert.isDefined(host, "the data-* attribute has a host");
+        for (const name of ["data-*", "no-namespace"] as const) {
+          for (const kind of [host?.kind ?? "div", "foreign-element"] as const) {
+            for (const local of names) {
+              const tampered: FoldedRows<Composed> = {
+                ...tamperNodes(
+                  tamperAttributes(rows, (attribute) =>
+                    attribute === target ? { ...attribute, name } : attribute,
+                  ),
+                  (node) => (node === host ? { ...node, kind } : node),
+                ),
+                openNames: rows.openNames.map((open) =>
+                  open.attribute === target?.id ? { ...open, local } : open,
+                ),
+              };
+              const expected =
+                name === "data-*"
+                  ? !language.test(local)
+                  : kind !== "foreign-element" && local.startsWith("data-");
+
+              assert.strictEqual(
+                lawsBroken(tampered).includes("AL4 data name"),
+                expected,
+                `${name} ${local} on ${kind}`,
+              );
+            }
+          }
+        }
+      }),
   );
 });
 

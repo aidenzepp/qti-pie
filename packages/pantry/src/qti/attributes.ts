@@ -41,7 +41,9 @@
  * - **AL4** (C14): an open-class attribute has exactly one `OpenAttributeName`, a closed one none
  *   (`AL4_open_names`); open names are distinct by expanded name on an element (`key(node, uri,
  *   local)`); and `Foreign_attribute_class` holds each open name's stored namespace to its class
- *   against its element's namespace (XML Schema 1.0 Part 1 §3.10.4).
+ *   against its element's namespace (XML Schema 1.0 Part 1 §3.10.4); and `AL4_data_name` holds a
+ *   `data-*` name to reading 13's language (`dataName` of `#pantry/vocab/open.ts`, matched by its
+ *   source) and a no-namespace name of an element that is not foreign to not begin `data-`.
  * - **The prefix** (`Attribute_prefix`, C54): every attribute keeps the prefix its name is written
  *   with, so the export writes it back byte for byte (spec reading 47), and the prefix agrees with
  *   the namespace its name is in: none for a name in no namespace, `xml` for the XML namespace's,
@@ -115,6 +117,7 @@ import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
 import { keyText, localNameBytes, namespaceText } from "#pantry/qti/limits.ts";
 import { charsPattern, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
+import { dataName } from "#pantry/vocab/open.ts";
 
 /**
  * XML 1.0's `Char` less its whitespace `S`, as the body of a character class.
@@ -547,6 +550,16 @@ export const attributeLaws = [
       o.or(
         o.in(o.kind, openElementClasses),
         o.eq(o.elementNamespace, KindNamespace.at("namespace", o.kind)),
+      ),
+    ),
+  ),
+  check("AL4_data_name", OpenAttributeName, (o) =>
+    o.and(
+      o.or(o.ne(o.class, "data-*"), Compute.matches(o.local, dataName.source)),
+      o.or(
+        o.ne(o.class, "no-namespace"),
+        o.in(o.kind, openElementClasses),
+        o.eq(Compute.startsWith(o.local, "data-"), false),
       ),
     ),
   ),

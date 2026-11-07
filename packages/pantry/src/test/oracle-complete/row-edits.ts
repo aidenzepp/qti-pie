@@ -115,6 +115,25 @@ export const rowEdits = {
       ),
     );
   }),
+  // AL4 data name (AL4): a `data-*` attribute's name outside reading 13's language: an upper-case
+  // letter in it, or nothing after the prefix.
+  "AL4 data name": editingRows(item, (rows) => (source) => {
+    const data = new Set(
+      rows.attributes.filter(({ name }) => name === "data-*").map(({ id }) => id),
+    );
+    const names = rows.openNames.filter(({ attribute }) => data.has(attribute));
+    const target = names[source.draw(int(0, names.length - 1))];
+    if (target === undefined) {
+      throw new Error("the base's rows hold no data-* attribute");
+    }
+
+    const local = source.draw(element(["data-A", "data-xY", "data-"] as const));
+
+    return {
+      ...rows,
+      openNames: rows.openNames.map((open) => (open === target ? { ...open, local } : open)),
+    };
+  }),
   // AL4 open name key (AL4): a second row of an open-class attribute's exact name on its element.
   "AL4 open name key": editingRows(item, (rows) => (source) => {
     const open = rows.openNames[source.draw(int(0, rows.openNames.length - 1))];
