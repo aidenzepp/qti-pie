@@ -1226,6 +1226,33 @@ const outcomeAs = (identifier: string, base: string, cardinality = "single"): So
   );
 
 /**
+ * Construct a single outcome declaration, to place inside a document.
+ *
+ * @param identifier Its `identifier`.
+ * @param base Its `base-type`.
+ * @returns The declaration.
+ */
+const outcomeOf = (identifier: string, base: string): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("identifier", identifier),
+    attr("cardinality", "single"),
+    attr("base-type", base),
+  ]);
+
+/**
+ * Construct a test, a document whose root is `qti-assessment-test`, that holds only outcome
+ * declarations.
+ *
+ * @param outcomes Its outcome declarations, in document order.
+ * @returns The document.
+ */
+const testDeclaring = (outcomes: readonly SourceElement[]): SourceDocument =>
+  doc(
+    location,
+    el("qti-assessment-test", [attr("identifier", "test"), attr("title", "Test")], outcomes),
+  );
+
+/**
  * The `attribute-type` refusals of a document checked against the generated tables, by
  * location.
  *
@@ -2635,6 +2662,33 @@ describe("checkStructure", () => {
         ),
         [at("qti-assessment-test/qti-outcome-declaration/@base-type")],
       );
+    });
+
+    it("[I-9a] admits a test's SCORE and MAXSCORE of every base type, which the information model types in an item only (info.txt:8478, :8480), while an item's SCORE and a test's PASSED stay typed", () => {
+      for (const base of [
+        "boolean",
+        "directedPair",
+        "duration",
+        "file",
+        "identifier",
+        "integer",
+        "pair",
+        "point",
+        "string",
+        "uri",
+      ]) {
+        assert.deepStrictEqual(
+          mistyped(testDeclaring([outcomeOf("SCORE", base), outcomeOf("MAXSCORE", base)])),
+          [],
+          base,
+        );
+      }
+      assert.deepStrictEqual(mistyped(item([outcomeOf("SCORE", "integer")])), [
+        at("qti-assessment-item/qti-outcome-declaration/@base-type"),
+      ]);
+      assert.deepStrictEqual(mistyped(testDeclaring([outcomeOf("PASSED", "integer")])), [
+        at("qti-assessment-test/qti-outcome-declaration/@base-type"),
+      ]);
     });
 
     it("[I-9a] refuses a qti-equal tolerance token that is neither an xs:double nor an NCName, such as 1,5, as attribute-type (pantry P6, info.txt:24946)", () => {

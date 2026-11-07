@@ -11,6 +11,7 @@ import type { Value } from "#plate/model/values.ts";
 import { openPackage } from "#plate/package/open.ts";
 import { manifestFile } from "#plate/package/store.ts";
 import { redact, render } from "#plate/render.ts";
+import { advance } from "#plate/session/advance.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import {
   current,
@@ -228,16 +229,22 @@ const contextReadingXml = (identifier: string): string =>
   ].join("");
 
 /**
- * Write the text of a hand-built test: one nonlinear, individual part with one section that holds
- * each item ref.
+ * Write the text of a hand-built test: its outcome declarations, then one nonlinear, individual
+ * part with one section that holds each item ref.
  *
  * @param identifier The test's identifier.
  * @param refs Each item ref's identifier with its `href`, in document order.
+ * @param declarations The test's outcome declarations' text, in document order, none by default.
  * @returns The test's text.
  */
-const testXml = (identifier: string, refs: readonly (readonly [string, string])[]): string =>
+const testXml = (
+  identifier: string,
+  refs: readonly (readonly [string, string])[],
+  declarations: readonly string[] = [],
+): string =>
   [
     `<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}">`,
+    ...declarations,
     '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
     '<qti-assessment-section identifier="section" title="Section" visible="true">',
     ...refs.map(([ref, href]) => `<qti-assessment-item-ref identifier="${ref}" href="${href}"/>`),
@@ -250,11 +257,13 @@ const testXml = (identifier: string, refs: readonly (readonly [string, string])[
  *
  * @param identifier The test's identifier.
  * @param items Each item ref's identifier with its item's text.
+ * @param declarations The test's outcome declarations' text, none by default.
  * @returns The test and its items.
  */
 const builtDelivery = Effect.fnUntraced(function* builtDelivery(
   identifier: string,
   items: readonly (readonly [string, string])[],
+  declarations: readonly string[] = [],
 ) {
   const encoder = new TextEncoder();
   const test = yield* openTest(
@@ -263,6 +272,7 @@ const builtDelivery = Effect.fnUntraced(function* builtDelivery(
       testXml(
         identifier,
         items.map(([ref]) => [ref, `${ref}.xml`] as const),
+        declarations,
       ),
     ),
   );
@@ -1099,6 +1109,60 @@ describe("a templated item in a session", () => {
         );
 
         assert.propertyVal(thrown, "_tag", "FirstAttemptDefect");
+      }),
+  );
+});
+
+describe("a test whose SCORE and MAXSCORE are not floats", () => {
+  it.effect(
+    "[I-9a] opens a test declaring a string SCORE with a default and a point MAXSCORE, which the information model types in an item only, and starts it, shows its item and submits it",
+    () =>
+      Effect.gen(function* untypedScores() {
+        const delivery = yield* builtDelivery(
+          "untyped",
+          [
+            [
+              "first",
+              itemXml("first", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+            ],
+          ],
+          [
+            '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="string">',
+            "<qti-default-value><qti-value>high</qti-value></qti-default-value>",
+            "</qti-outcome-declaration>",
+            '<qti-outcome-declaration identifier="MAXSCORE" cardinality="single" base-type="point"/>',
+          ],
+        );
+        assert.deepStrictEqual(delivery.test.unsupported, []);
+        assert.deepStrictEqual(
+          [...delivery.test.test.outcomes.values()].map((outcome) => [
+            outcome.identifier,
+            outcome.baseType,
+          ]),
+          [
+            ["SCORE", "string"],
+            ["MAXSCORE", "point"],
+          ],
+        );
+
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        assert.strictEqual(viewAt(delivery, session, configuration, 1).sequenceIndex, 1);
+
+        const submitted = Result.getOrElse(
+          advance(
+            delivery.test,
+            delivery.items,
+            session,
+            { intent: { kind: "submit-item" }, responses: { RESPONSE: choiceB } },
+            configuration,
+            { now: after(1) },
+          ),
+          (failure) => assert.fail(`advance refused: ${failure.message}`),
+        );
+        const [first] = submitted.items;
+        assert.strictEqual(first?.record.numAttempts, 1);
+        assert.deepStrictEqual(first?.record.responses["RESPONSE"], choiceB);
       }),
   );
 });
