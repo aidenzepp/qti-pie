@@ -46,7 +46,7 @@ import {
   Expression,
   ExpressionAttribute,
   ItemTiming,
-  Literal,
+  LiteralTyped,
   MappingSourceDeclaration,
   Operand,
   ProcessingTemplate,
@@ -685,13 +685,9 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               parent: strayNode,
               written: true,
             };
-            const literal: Addition<typeof Literal> = {
+            const literal: Addition<typeof LiteralTyped> = {
               baseType: "integer",
-              cardinality: "single",
-              kind: "qti-base-value",
-              language: "response",
               node,
-              parent: strayNode,
               text: "abc",
               typeCode: "integer",
             };
@@ -708,7 +704,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             };
             const outcomes = {
               keptLiteral: yield* db.apply(
-                ChangeSet.empty(Author).insert(Literal, [{ ...literal, text: " 42 " }]),
+                ChangeSet.empty(Author).insert(LiteralTyped, [{ ...literal, text: " 42 " }]),
                 {},
               ),
               keptTemplate: yield* db.apply(
@@ -730,7 +726,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 ]),
                 {},
               ),
-              literal: yield* db.apply(ChangeSet.empty(Author).insert(Literal, [literal]), {}),
+              literal: yield* db.apply(ChangeSet.empty(Author).insert(LiteralTyped, [literal]), {}),
               template: yield* db.apply(
                 ChangeSet.empty(Author).insert(ProcessingTemplate, [template]),
                 {},
@@ -744,8 +740,8 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
 
             assert.isTrue(names(outcomes.weighted, "ExpressionAttribute", "Weighted_base"));
             assert.isFalse(names(outcomes.keptWeighted, "ExpressionAttribute", "Weighted_base"));
-            assert.isTrue(names(outcomes.literal, "Literal", "Literal_lexical"));
-            assert.isFalse(names(outcomes.keptLiteral, "Literal", "Literal_lexical"));
+            assert.isTrue(names(outcomes.literal, "LiteralTyped", "Literal_lexical"));
+            assert.isFalse(names(outcomes.keptLiteral, "LiteralTyped", "Literal_lexical"));
             assert.isTrue(names(outcomes.template, "ProcessingTemplate", "E1_derived"));
             assert.isFalse(names(outcomes.keptTemplate, "ProcessingTemplate", "E1_derived"));
             assert.isTrue(names(outcomes.timing, "ItemTiming", "E1_derived"));

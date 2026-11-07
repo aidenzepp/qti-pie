@@ -230,6 +230,16 @@ const oneCardinality: ReadonlySet<string> = new Set(oneCardinalityKinds);
 const silent: ReadonlySet<string> = new Set(["any", "unknown"]);
 
 /**
+ * The kinds whose type an attribute of their own gives, whose `unknown` base type `ResultBase`
+ * does not judge: the type of one whose attribute spells no base.
+ */
+const attributeTyped: ReadonlySet<string> = new Set([
+  "qti-base-value",
+  "qti-math-operator",
+  "qti-test-variables",
+]);
+
+/**
  * The (kind, declaration kind) pairs a reference by `identifier` may name, as the information
  * model's definitions state them (`referenceDeclarations`, each row cited).
  */
@@ -335,7 +345,8 @@ const resultHolds = (e: Folded): boolean => {
     e.tailCardinalities.size === 0 ? "unknown" : ([...e.tailCardinalities][0] ?? "unknown");
 
   return (
-    (resultBases.get(kind)?.has(e.row.baseType) ?? false) &&
+    ((attributeTyped.has(kind) && e.row.baseType === "unknown") ||
+      (resultBases.get(kind)?.has(e.row.baseType) ?? false)) &&
     (resultCardinalities.get(kind)?.has(e.row.cardinality) ?? false) &&
     (!new Set(numericKinds).has(kind) || e.row.baseType === numericOf(e.all)) &&
     (!new Set(containerKinds).has(kind) ||
@@ -575,7 +586,9 @@ const attributeDerives = (
   }
 
   if (x.attribute === "base-type") {
-    return forms.get(x.baseType)?.test(x.lexical) ?? false;
+    return x.baseType === "unknown"
+      ? ![...forms.values()].some((form) => form.test(x.lexical))
+      : (forms.get(x.baseType)?.test(x.lexical) ?? false);
   }
 
   if (x.attribute === "name") {
@@ -586,8 +599,25 @@ const attributeDerives = (
 };
 
 /**
+ * The laws a base value's typed rows break: `LiteralTyped`'s `E1_derived`, its code the one its
+ * base type is, never `unknown`, and its `Literal_lexical`, its text a form of that code.
+ *
+ * @param rows - The rows.
+ * @returns The laws broken, once each per row.
+ */
+const literalBreaches = (rows: ExpressionRows): readonly Law[] =>
+  [...rows.LiteralTyped.values()].flatMap((l): readonly Law[] => [
+    ...(l.baseType === "unknown" || valueBaseOf.get(l.typeCode) !== l.baseType
+      ? (["E1_derived"] as const)
+      : []),
+    ...((literalPatterns.get(l.typeCode)?.test(l.text) ?? false)
+      ? []
+      : (["Literal_lexical"] as const)),
+  ]);
+
+/**
  * The laws the rows of the smaller overlays break: `Processing`'s language, `ExpressionAttribute`'s
- * derivation and weight, `Literal`'s code and text, and `ProcessingTemplate`'s template.
+ * derivation and weight, `LiteralTyped`'s code and text, and `ProcessingTemplate`'s template.
  *
  * @param rows - The rows.
  * @returns The laws broken, each once.
@@ -613,14 +643,8 @@ const overlayBreaches = (rows: ExpressionRows): ReadonlySet<Law> => {
     }
   }
 
-  for (const l of rows.Literal.values()) {
-    if (valueBaseOf.get(l.typeCode) !== l.baseType) {
-      broken.add("E1_derived");
-    }
-
-    if (!(literalPatterns.get(l.typeCode)?.test(l.text) ?? false)) {
-      broken.add("Literal_lexical");
-    }
+  for (const law of literalBreaches(rows)) {
+    broken.add(law);
   }
 
   for (const t of rows.ItemTiming.values()) {
@@ -846,6 +870,53 @@ describe("import/overlays/expressions.ts, a braced pattern that names no variabl
           ["Variable_declared"],
           "an unresolved bare reference",
         );
+      }),
+  );
+});
+
+describe("import/overlays/expressions.ts, a base value's base-type", () => {
+  it.effect(
+    "types a base value by the base its base-type spells, unknown with no LiteralTyped where it spells none, and breaks no expression law either way",
+    () =>
+      // Oracle: the specification as a checker, the information model's BaseTypeEnum (§8.13), an
+      // `xs:string` enumeration whose whiteSpace is preserve (XSD 1.1 Part 2, §4.3.6), so a form
+      // outside it, padded included, spells no base; and the schema's `E1_derived` and `ResultBase`
+      // as `breachesOf` states them on the host. Bound: each of the eleven bases written exactly,
+      // and fourteen forms that spell none.
+      Effect.gen(function* baseValueTypes() {
+        const spelled: readonly string[] = [...forms.keys()];
+        const unspelled = [
+          "",
+          " integer",
+          "integer ",
+          "Integer",
+          "INTEGER",
+          "0.0",
+          "+0",
+          "-INF",
+          "URI",
+          "int",
+          "floats",
+          "directed-pair",
+          "identifier\t",
+          "none",
+        ];
+        for (const form of [...spelled, ...unspelled]) {
+          const xml = yield* readXml(
+            new TextEncoder().encode(
+              `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="I" title="I" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="${form}">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
+            ),
+          );
+          const rows = rowsOf(yield* shred(xml, "3.0.0", shredGrammarOf(grammar)), { idOf });
+          const value = [...rows.Expression.values()].find(({ kind }) => kind === "qti-base-value");
+          const known = spelled.includes(form);
+          const where = JSON.stringify(form);
+
+          assert.strictEqual(value?.baseType, known ? form : "unknown", where);
+          assert.strictEqual(rows.Literal.size, 1, where);
+          assert.strictEqual(rows.LiteralTyped.size, known ? 1 : 0, where);
+          assert.isFalse(breachesOf(rows).has("E1_derived"), where);
+        }
       }),
   );
 });

@@ -262,6 +262,16 @@ export const ValueBaseForm = closed.relation(
 );
 
 /**
+ * The lexical forms of a `base-type` attribute that spell any of QTI's eleven base types, the
+ * forms {@link ValueBaseForm}'s rows match, as one pattern: a form that matches it spells a base,
+ * and one that does not spells none (C17), so its expression's base type is `unknown`. Each base is
+ * a word of letters, which a pattern reads as written.
+ */
+export const spelledBasesPattern = `^(?:${valueBases
+  .filter((base) => base !== "any" && base !== "unknown")
+  .join("|")})$`;
+
+/**
  * An NCName's first character: XML 1.0's `NameStartChar` without the colon, as a pattern's class
  * body.
  *

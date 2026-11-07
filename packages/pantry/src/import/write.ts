@@ -811,7 +811,7 @@ type AnyRow = RowOf<keyof PackageInputs>;
  */
 export const patternInputs = {
   ExpressionAttribute: ["attribute", "baseType"],
-  Literal: ["typeCode"],
+  LiteralTyped: ["typeCode"],
   UsageValue: ["baseType"],
   Value: ["baseType"],
 } as const satisfies Partial<Readonly<Record<keyof PackageInputs, readonly string[]>>>;
@@ -847,7 +847,7 @@ const patternOrdered = (inputs: PackageInputs) =>
       inputs.ExpressionAttribute.values(),
       patternInputs.ExpressionAttribute,
     ),
-    Literal: domainOrdered(inputs.Literal.values(), patternInputs.Literal),
+    LiteralTyped: domainOrdered(inputs.LiteralTyped.values(), patternInputs.LiteralTyped),
     UsageValue: domainOrdered(inputs.UsageValue.values(), patternInputs.UsageValue),
     Value: domainOrdered(inputs.Value.values(), patternInputs.Value),
   }) satisfies { readonly [Name in keyof typeof patternInputs]: readonly RowOf<Name>[] };
