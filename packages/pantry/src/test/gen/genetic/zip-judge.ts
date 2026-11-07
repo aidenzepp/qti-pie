@@ -93,28 +93,47 @@ for path in sys.argv[1:]:
  * What Python read of one entry: its central record's fields and its data, or the error reading
  * it raised.
  */
-export interface PythonInfo {
-  readonly crc: number;
-  readonly csize: number;
-  readonly date: readonly number[];
-  readonly dir: boolean;
-  readonly external: number;
-  readonly extract: number;
-  readonly flags: number;
-  readonly method: number;
-  readonly name: string;
-  readonly offset: number;
-  readonly read: { readonly length: number; readonly sha: string } | { readonly error: string };
-  readonly size: number;
-  readonly system: number;
-}
+const PythonInfoSchema = Schema.Struct({
+  crc: Schema.Number,
+  csize: Schema.Number,
+  date: Schema.Array(Schema.Number),
+  dir: Schema.Boolean,
+  external: Schema.Number,
+  extract: Schema.Number,
+  flags: Schema.Number,
+  method: Schema.Number,
+  name: Schema.String,
+  offset: Schema.Number,
+  read: Schema.Union([
+    Schema.Struct({ length: Schema.Number, sha: Schema.String }),
+    Schema.Struct({ error: Schema.String }),
+  ]),
+  size: Schema.Number,
+  system: Schema.Number,
+});
+
+/**
+ * {@link PythonInfoSchema}'s type.
+ */
+export type PythonInfo = typeof PythonInfoSchema.Type;
 
 /**
  * What Python read of one archive: its entries, or the error opening it raised.
  */
-export type PythonView =
-  | { readonly infos: readonly PythonInfo[]; readonly ok: true }
-  | { readonly error: string; readonly ok: false };
+const PythonViewSchema = Schema.Union([
+  Schema.Struct({ infos: Schema.Array(PythonInfoSchema), ok: Schema.Literal(true) }),
+  Schema.Struct({ error: Schema.String, ok: Schema.Literal(false) }),
+]);
+
+/**
+ * {@link PythonViewSchema}'s type.
+ */
+export type PythonView = typeof PythonViewSchema.Type;
+
+/**
+ * Decode one line of the script's report as the view it writes.
+ */
+const decodeView = Schema.decodeUnknownEffect(Schema.fromJsonString(PythonViewSchema));
 
 /**
  * Read archives with Python's `zipfile`, one process for all of them.
@@ -156,11 +175,7 @@ export const pythonRead = Effect.fn("test.geneticZip.pythonRead")(function* pyth
 
   return yield* Effect.forEach(
     lines,
-    (line) =>
-      Effect.try({
-        catch: () => new PythonUnreadable({ report: line }),
-        try: (): PythonView => JSON.parse(line),
-      }),
+    (line) => decodeView(line).pipe(Effect.mapError(() => new PythonUnreadable({ report: line }))),
     { concurrency: 1 },
   );
 });
