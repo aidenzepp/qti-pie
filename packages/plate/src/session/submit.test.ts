@@ -472,12 +472,13 @@ const blockShownByT = (identifier: string, content: string): string =>
  * @param parts What the item holds besides.
  * @param parts.body The item body's content.
  * @param parts.declarations The response declarations it adds after `RESPONSE`'s, when it adds any.
+ * @param parts.rules The template rules it adds after setting `T`, when it adds any.
  * @returns The item's text.
  */
 const templatedItemXml = (
   identifier: string,
   value: string,
-  parts: { readonly body: string; readonly declarations?: string },
+  parts: { readonly body: string; readonly declarations?: string; readonly rules?: string },
 ): string =>
   [
     `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
@@ -489,6 +490,7 @@ const templatedItemXml = (
     '<qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/>',
     "<qti-template-processing>",
     `<qti-set-template-value identifier="T"><qti-base-value base-type="identifier">${value}</qti-base-value></qti-set-template-value>`,
+    parts.rules ?? "",
     "</qti-template-processing>",
     `<qti-item-body>${parts.body}</qti-item-body>`,
     '<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>',
@@ -983,6 +985,60 @@ describe("submitItem", () => {
           ),
           "skipping-not-allowed",
         );
+
+        const answered = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            begun,
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            configuration,
+            { now: after(6) },
+          ),
+        );
+
+        assert.strictEqual(itemAt(answered, 1).record.numAttempts, 1);
+        assert.deepStrictEqual(scoreOf(itemAt(answered, 1).record), scored(1));
+      }),
+  );
+
+  it.effect(
+    "[I-5] under allow-skipping false reads the default template processing sets: an empty submit and a submit of that default are skipping-not-allowed, and another value is accepted",
+    () =>
+      Effect.gen(function* templateDefaultSkipped() {
+        const delivery = yield* builtDelivery(
+          "drawn",
+          [partOf("part", ["drawn"], { control: 'allow-skipping="false"' })],
+          [
+            [
+              "drawn",
+              templatedItemXml("drawn", "X", {
+                body: choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join("")),
+                rules:
+                  '<qti-set-default-value identifier="RESPONSE"><qti-base-value base-type="identifier">B</qti-base-value></qti-set-default-value>',
+              }),
+            ],
+          ],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+
+        assert.deepStrictEqual(itemAt(begun, 1).record.defaults["RESPONSE"], chosen("B"));
+        assert.deepStrictEqual(itemAt(begun, 1).record.responses["RESPONSE"], chosen("B"));
+
+        for (const step of [
+          stepOf("submit-item"),
+          stepOf("submit-item", { RESPONSE: chosen("B") }),
+        ]) {
+          assert.strictEqual(
+            refusedRule(
+              submitItem(delivery.test, delivery.items, begun, step, configuration, {
+                now: after(5),
+              }),
+            ),
+            "skipping-not-allowed",
+          );
+        }
 
         const answered = accepted(
           submitItem(
