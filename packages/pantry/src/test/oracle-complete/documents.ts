@@ -422,18 +422,33 @@ export const documentMutations = {
         };
       }
 
-      return edit === "encoding"
-        ? {
-            ...rows,
-            document: { ...rows.document, encoding: source.draw(element(["8bit", "utf 8", "-x"])) },
-          }
-        : {
-            ...rows,
-            document: {
-              ...rows.document,
-              xmlVersion: source.draw(element(["1.-1", "1.1e5", "1.1.1"] as const)),
-            },
-          };
+      if (edit === "encoding") {
+        const encoding = source.draw(element(["8bit", "utf 8", "-x"]));
+
+        return {
+          ...rows,
+          encodingDecls: source.draw(
+            changeDrawn(
+              rows.encodingDecls,
+              () => true,
+              (row) => ({ ...row, encoding }),
+            ),
+          ),
+        };
+      }
+
+      const version = source.draw(element(["1.-1", "1.1e5", "1.1.1"] as const));
+
+      return {
+        ...rows,
+        xmlDecls: source.draw(
+          changeDrawn(
+            rows.xmlDecls,
+            () => true,
+            (row) => ({ ...row, version }),
+          ),
+        ),
+      };
     },
     over: "rows",
   },

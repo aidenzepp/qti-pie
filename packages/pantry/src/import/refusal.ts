@@ -74,7 +74,6 @@ import {
 import {
   chardataLawsByName,
   CommentText,
-  DeclaredEncoding,
   DoctypeText,
   EncName,
   EntryPath,
@@ -597,7 +596,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     [PiData, "XML production"],
     [DoctypeText, "XML production"],
     [EncName, "XML production"],
-    [DeclaredEncoding, "XML production"],
     [XmlVersion, "XML production"],
     [NcName, "XML production"],
     [EntityName, "XML production"],
@@ -624,6 +622,9 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       ["Pi", "pi arm"],
       ["Doctype", "doctype arm"],
       ["Document", "Document"],
+      ["XmlDecl", "Document"],
+      ["EncodingDecl", "Document"],
+      ["SdDecl", "Document"],
     ] as const
   ).map(([relation, name]) => [primaryKeyOf(relation, "node"), name] as const),
   [primaryKeyOf("Namespace", "node", "at"), "Namespace family"],

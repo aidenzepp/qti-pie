@@ -34,7 +34,7 @@
  */
 import { Array as Arr, Option, Order, Record, Result, Schema } from "effect";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
-import { flatten, none } from "#pantry/model/xdm.ts";
+import { flatten } from "#pantry/model/xdm.ts";
 import type { OpenName } from "#pantry/vocab/open.ts";
 import type {
   AttributeEntityRow,
@@ -82,6 +82,9 @@ const rowLists = [
   "pis",
   "entityRefs",
   "doctypes",
+  "xmlDecls",
+  "encodingDecls",
+  "sdDecls",
 ] as const satisfies readonly RowList[];
 
 /**
@@ -259,6 +262,7 @@ const relations = {
   },
   comments: { fields: characterFields, key: byNode },
   doctypes: { fields: characterFields, key: byNode },
+  encodingDecls: { fields: { encoding: true, node: true }, key: byNode },
   entityRefs: { fields: { name: true, node: true }, key: byNode },
   namespaces: {
     fields: { at: true, node: true, prefix: true, uri: true },
@@ -284,22 +288,17 @@ const relations = {
     key: ({ attribute }) => attribute,
   },
   pis: { fields: { data: true, node: true, target: true }, key: byNode },
+  sdDecls: { fields: { node: true, standalone: true }, key: byNode },
   texts: { fields: characterFields, key: byNode },
   whitespace: { fields: characterFields, key: byNode },
+  xmlDecls: { fields: { node: true, version: true }, key: byNode },
 } as const satisfies { readonly [K in RowList]: Relation<FlatRows<XdmVocabulary>[K][number]> };
 
 /**
  * The document row's relation, keyed by its node.
  */
 const documentRelation = {
-  fields: {
-    charset: true,
-    encoding: true,
-    exportCharset: true,
-    node: true,
-    standalone: true,
-    xmlVersion: true,
-  },
+  fields: { charset: true, exportCharset: true, node: true },
   key: byNode,
 } as const satisfies Relation<DocumentRow>;
 
@@ -351,6 +350,7 @@ const keyedOf = (rows: FlatRows<XdmVocabulary>): Result.Result<Keyed, RowsOutsid
       attributes: yield* keyedIn("attributes", rows.attributes, relations.attributes),
       comments: yield* keyedIn("comments", rows.comments, relations.comments),
       doctypes: yield* keyedIn("doctypes", rows.doctypes, relations.doctypes),
+      encodingDecls: yield* keyedIn("encodingDecls", rows.encodingDecls, relations.encodingDecls),
       entityRefs: yield* keyedIn("entityRefs", rows.entityRefs, relations.entityRefs),
       namespaces: yield* keyedIn("namespaces", rows.namespaces, relations.namespaces),
       nodes: yield* keyedIn("nodes", rows.nodes, relations.nodes),
@@ -361,8 +361,10 @@ const keyedOf = (rows: FlatRows<XdmVocabulary>): Result.Result<Keyed, RowsOutsid
       ),
       openNames: yield* keyedIn("openNames", rows.openNames, relations.openNames),
       pis: yield* keyedIn("pis", rows.pis, relations.pis),
+      sdDecls: yield* keyedIn("sdDecls", rows.sdDecls, relations.sdDecls),
       texts: yield* keyedIn("texts", rows.texts, relations.texts),
       whitespace: yield* keyedIn("whitespace", rows.whitespace, relations.whitespace),
+      xmlDecls: yield* keyedIn("xmlDecls", rows.xmlDecls, relations.xmlDecls),
     };
   });
 
@@ -453,6 +455,9 @@ const outsideImage = (
     outsideIn("pis", keyed.pis, image.pis, relations.pis),
     outsideIn("entityRefs", keyed.entityRefs, image.entityRefs, relations.entityRefs),
     outsideIn("doctypes", keyed.doctypes, image.doctypes, relations.doctypes),
+    outsideIn("xmlDecls", keyed.xmlDecls, image.xmlDecls, relations.xmlDecls),
+    outsideIn("encodingDecls", keyed.encodingDecls, image.encodingDecls, relations.encodingDecls),
+    outsideIn("sdDecls", keyed.sdDecls, image.sdDecls, relations.sdDecls),
   ]);
 
 /**
@@ -841,19 +846,27 @@ const placeInDocument = <V extends XdmVocabulary>(
 };
 
 /**
- * Read the document row's declaration fields back from their null objects.
+ * Read the document node's XML declaration back from its rows: its `XmlDecl` row, and its
+ * `EncodingDecl` and `SdDecl` rows, each keyed by the document node. A part's row at another key
+ * is left for the image to refuse.
  *
- * @param row - The document row.
- * @returns The declaration, none when `xmlVersion` is {@link none}.
+ * @param rows - The document's rows.
+ * @param node - The document node's id.
+ * @returns The declaration, none when the rows hold no `XmlDecl` row at the node.
  */
-const declarationOf = (row: DocumentRow): Option.Option<XdmDeclaration> =>
-  row.xmlVersion === none
-    ? Option.none()
-    : Option.some({
-        encoding: row.encoding === "" ? Option.none() : Option.some(row.encoding),
-        standalone: row.standalone === none ? Option.none() : Option.some(row.standalone),
-        version: row.xmlVersion,
-      });
+const declarationOf = (
+  rows: Pick<FlatRows<XdmVocabulary>, "encodingDecls" | "sdDecls" | "xmlDecls">,
+  node: NodeId,
+): Option.Option<XdmDeclaration> => {
+  const at = <Row extends { readonly node: NodeId }>(list: readonly Row[]): Option.Option<Row> =>
+    Arr.findFirst(list, (row) => row.node === node);
+
+  return Option.map(at(rows.xmlDecls), ({ version }) => ({
+    encoding: Option.map(at(rows.encodingDecls), ({ encoding }) => encoding),
+    standalone: Option.map(at(rows.sdDecls), ({ standalone }) => standalone),
+    version,
+  }));
+};
 
 /**
  * A node whose interval the read holds open: its row, and how a child is placed in it, by its
@@ -927,7 +940,7 @@ const readOf = <V extends XdmVocabulary>(
       document: {
         _tag: "document",
         charset: document.charset,
-        declaration: declarationOf(document),
+        declaration: declarationOf(rows, self),
         doctype: parsed.doctype,
         epilog: parsed.epilog,
         exportCharset: document.exportCharset,

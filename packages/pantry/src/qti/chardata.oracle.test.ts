@@ -41,13 +41,16 @@ import {
   Comment,
   Doctype,
   Document,
+  EncodingDecl,
   EntryPath,
   entityRefChars,
   Namespace,
   OpenElementName,
   Pi,
+  SdDecl,
   textChars,
   whitespaceChars,
+  XmlDecl,
   XmlStandalone,
 } from "#pantry/qti/chardata.ts";
 import { keyTextBytes, namespaceBytes, prefixBytes, utf8Length } from "#pantry/qti/limits.ts";
@@ -600,6 +603,7 @@ describe("qti/chardata.ts", () => {
         Comment,
         Doctype,
         Document,
+        EncodingDecl,
         Flag,
         HeldRootsUnder,
         KindByNameUnder,
@@ -612,9 +616,11 @@ describe("qti/chardata.ts", () => {
         Position,
         ResourceType,
         SchemaVersion,
+        SdDecl,
         StrictlyHeld,
         TypeAvailable,
         TypeName,
+        XmlDecl,
         XmlStandalone,
       },
       [nodeTree, ...chardataLaws],
@@ -720,13 +726,36 @@ describe("qti/chardata.ts", () => {
               assert.strictEqual(kindOf.get(row.node), "document");
               assert.match(row.charset, patternOf(Document.fields.charset));
               assert.match(row.exportCharset, patternOf(Document.fields.exportCharset));
-              assert.match(row.encoding, patternOf(Document.fields.encoding));
-              assert.match(row.xmlVersion, patternOf(Document.fields.xmlVersion));
-              assert.include(XmlStandalone.handles, row.standalone);
-              assert.isTrue(
-                row.xmlVersion !== "none" || (row.encoding === "" && row.standalone === "none"),
-                "no declaration writes no encoding and no standalone",
+
+              const declared = Option.isSome(document.declaration);
+              const encoding = document.declaration.pipe(Option.flatMap((held) => held.encoding));
+              const standalone = document.declaration.pipe(
+                Option.flatMap((held) => held.standalone),
               );
+              assert.deepStrictEqual(
+                rows.xmlDecls.map(({ node }) => node),
+                declared ? [row.node] : [],
+                "an XmlDecl row exactly where the document writes a declaration",
+              );
+              assert.deepStrictEqual(
+                rows.encodingDecls.map(({ node }) => node),
+                Option.isSome(encoding) ? [row.node] : [],
+                "an EncodingDecl row exactly where the declaration writes an encoding",
+              );
+              assert.deepStrictEqual(
+                rows.sdDecls.map(({ node }) => node),
+                Option.isSome(standalone) ? [row.node] : [],
+                "an SdDecl row exactly where the declaration writes a standalone",
+              );
+              for (const { version } of rows.xmlDecls) {
+                assert.match(version, patternOf(XmlDecl.fields.version));
+              }
+              for (const { encoding: written } of rows.encodingDecls) {
+                assert.match(written, patternOf(EncodingDecl.fields.encoding));
+              }
+              for (const { standalone: written } of rows.sdDecls) {
+                assert.include(XmlStandalone.handles, written);
+              }
 
               const roots = rows.nodes.filter(
                 ({ id, kind, parent }) =>

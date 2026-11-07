@@ -376,7 +376,6 @@ const strayDocument = {
   charset: "UTF-8",
   contextNearest: stray,
   contextNearestKind: "document",
-  encoding: "",
   exportCharset: "UTF-8",
   node: stray,
   nodeChildren: 1n,
@@ -389,9 +388,7 @@ const strayDocument = {
   path: manifestPath,
   resourceType: "none",
   rootKind: "qti-assessment-item",
-  standalone: "none",
   version: "3.0.1",
-  xmlVersion: "none",
 } as const satisfies Addition<typeof Document>;
 
 /**

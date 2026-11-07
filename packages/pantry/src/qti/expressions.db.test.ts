@@ -180,7 +180,6 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
   charset: "UTF-8",
   contextNearest: reference.document,
   contextNearestKind: "document",
-  encoding: "",
   exportCharset: "UTF-8",
   node: reference.document,
   nodeChildren: 1n,
@@ -193,9 +192,7 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
   path: manifestPath,
   resourceType: "none",
   rootKind: reference.rootKind,
-  standalone: "none",
   version: "3.0.0",
-  xmlVersion: "none",
 });
 
 /**

@@ -388,16 +388,17 @@ const charNoDash =
  * (`#pantry/qti/chardata.ts`, `#pantry/qti/attributes.ts`): XML 1.0 §2.2 `Char*` for a text, a
  * whitespace run and an attribute's lexical form; §2.5 a comment's text, no `--` and no final `-`;
  * §2.6 a processing instruction's target, an NCName but `xml` in any case, and its data, no `?>`
- * and no leading space; §2.8 a doctype's text; §4.3.3 an encoding name; §2.8 a version number;
- * Namespaces in XML 1.0 §3 an entity's name, an NCName.
+ * and no leading space; §2.8 a doctype's text; §4.3.3 an encoding name, where a declaration writes
+ * one; §2.8 a version number, where a document writes a declaration; Namespaces in XML 1.0 §3 an
+ * entity's name, an NCName.
  */
 const productions = {
   char: new RegExp(`^[${xmlChar}]*$`, "u"),
   comment: new RegExp(`^(?:[${charNoDash}]|-[${charNoDash}])*$`, "u"),
   doctype: new RegExp(`^<!DOCTYPE[ \\t\\n\\r][${xmlChar}]*>$`, "u"),
-  encoding: /^(?:[A-Za-z][A-Za-z0-9._-]*)?$/u,
+  encoding: /^[A-Za-z][A-Za-z0-9._-]*$/u,
   piData: new RegExp(`^(?:(?!\\?>)[^\\t\\n\\r ](?:(?!\\?>)[${xmlChar}])*)?$`, "u"),
-  version: /^(?:none|1\.[0-9]+)$/u,
+  version: /^1\.[0-9]+$/u,
 } as const;
 
 /**
@@ -445,8 +446,12 @@ const productionLawsOf = (rows: View): readonly Breach[] => {
     ...folded.entityRefs.flatMap(({ name, node }) =>
       ncNameForm.test(name) ? [] : at(node, "entity name", name),
     ),
-    ...checked(folded.document.node, "encoding", productions.encoding, folded.document.encoding),
-    ...checked(folded.document.node, "version", productions.version, folded.document.xmlVersion),
+    ...folded.xmlDecls.flatMap(({ node, version }) =>
+      checked(node, "version", productions.version, version),
+    ),
+    ...folded.encodingDecls.flatMap(({ encoding, node }) =>
+      checked(node, "encoding", productions.encoding, encoding),
+    ),
   ];
 };
 

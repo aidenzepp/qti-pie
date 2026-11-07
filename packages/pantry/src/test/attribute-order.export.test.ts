@@ -90,14 +90,17 @@ const shuffledRows =
       comments: shuffle(rows.comments),
       doctypes: shuffle(rows.doctypes),
       document: rows.document,
+      encodingDecls: shuffle(rows.encodingDecls),
       entityRefs: shuffle(rows.entityRefs),
       namespaces: shuffle(rows.namespaces),
       nodes: shuffle(rows.nodes),
       openElementNames: shuffle(rows.openElementNames),
       openNames: shuffle(rows.openNames),
       pis: shuffle(rows.pis),
+      sdDecls: shuffle(rows.sdDecls),
       texts: shuffle(rows.texts),
       whitespace: shuffle(rows.whitespace),
+      xmlDecls: shuffle(rows.xmlDecls),
     };
   };
 

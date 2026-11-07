@@ -1314,7 +1314,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 context: root["ancestry"] ?? "",
                 contextNearest: root["nearest"] ?? "",
                 contextNearestKind: root["nearestKind"] ?? "",
-                encoding: "",
                 exportCharset: utf8Label,
                 node: root["id"] ?? "",
                 nodeChildren: root["children"] ?? 0n,
@@ -1327,9 +1326,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 path: "item.xml",
                 resourceType: "imsqti_item_xmlv3p0",
                 rootKind: "qti-assessment-item",
-                standalone: "none",
                 version: root["version"] ?? "",
-                xmlVersion: "none",
               },
               relation: Document,
             };

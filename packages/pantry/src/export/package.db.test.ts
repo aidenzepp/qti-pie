@@ -58,12 +58,14 @@ const accepted = [
 /**
  * The statements one page of `documentScan` runs in its flight: one for the `Node` rows, one for
  * each of the seven attachments on a node (comment, instruction, doctype, foreign element name,
- * `Document` row, attributes, namespace declarations), and one for each of the two on an attribute
- * (entity references, open name). An attachment over exact parents is pipelined, its own statement
- * in the parent's flight and snapshot (the engine's `lower/shapes/attach/index.ts`,
- * `chooseAttachment`), so the count is the scan's shape and no row's.
+ * `Document` row, attributes, namespace declarations), one for the XML declaration on the
+ * `Document` row, one for each of the two on the declaration (encoding, standalone), and one for
+ * each of the two on an attribute (entity references, open name). An attachment over exact parents
+ * is pipelined, its own statement in the parent's flight and snapshot (the engine's
+ * `lower/shapes/attach/index.ts`, `chooseAttachment`), so the count is the scan's shape and no
+ * row's.
  */
-const scanStatements = 10;
+const scanStatements = 13;
 
 /**
  * The plan node types that make a statement recursive: a recursive CTE's union and its working

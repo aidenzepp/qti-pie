@@ -97,9 +97,12 @@ import {
   chardataLaws,
   Doctype,
   Document,
+  EncodingDecl,
   Namespace,
   OpenElementName,
   Pi,
+  SdDecl,
+  XmlDecl,
   XmlStandalone,
 } from "#pantry/qti/chardata.ts";
 import {
@@ -295,9 +298,12 @@ const chardataRelations = {
   Comment,
   Doctype,
   Document,
+  EncodingDecl,
   Namespace,
   OpenElementName,
   Pi,
+  SdDecl,
+  XmlDecl,
   XmlStandalone,
 };
 

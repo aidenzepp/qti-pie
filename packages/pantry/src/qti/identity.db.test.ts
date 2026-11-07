@@ -176,7 +176,6 @@ const documentOf = (document: string): Stated => ({
     context: bitsText(Flag, []),
     contextNearest: document,
     contextNearestKind: "document",
-    encoding: "",
     exportCharset: "UTF-8",
     node: document,
     nodeChildren: 1n,
@@ -189,9 +188,7 @@ const documentOf = (document: string): Stated => ({
     path: `${document}.xml`,
     resourceType: "imsqti_item_xmlv3p0",
     rootKind: "qti-assessment-item",
-    standalone: "none",
     version: "3.0.1",
-    xmlVersion: "none",
   },
   relation: Document,
 });

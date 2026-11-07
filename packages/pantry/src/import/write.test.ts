@@ -204,14 +204,13 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
     doctypes: [...flat.Doctype.values()],
     document: {
       charset: document.charset,
-      encoding: document.encoding,
       exportCharset: document.exportCharset,
       node: document.node,
-      standalone: document.standalone,
-      // SAFETY: the Document row's `xmlVersion` is `rows.document.xmlVersion` of `flatten` itself, `none` or a `1.<digits>` version, which `XmlVersion`'s pattern spells.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-      xmlVersion: document.xmlVersion as FlatRows<Composed>["document"]["xmlVersion"],
     },
+    encodingDecls: [...flat.EncodingDecl.values()].map(({ encoding, node }) => ({
+      encoding,
+      node,
+    })),
     entityRefs,
     namespaces,
     nodes,
@@ -222,8 +221,10 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
     })),
     openNames,
     pis: [...flat.Pi.values()].map(({ data, node, target }) => ({ data, node, target })),
+    sdDecls: [...flat.SdDecl.values()].map(({ node, standalone }) => ({ node, standalone })),
     texts,
     whitespace,
+    xmlDecls: [...flat.XmlDecl.values()].map(({ node, version }) => ({ node, version })),
   };
 };
 

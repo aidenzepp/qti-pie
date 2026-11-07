@@ -312,7 +312,8 @@ export const lawTable = {
   },
   Document: {
     rule: "reachability",
-    source: "the XDM document node as the Document row (plan §1.4, fin.md D7)",
+    source:
+      "the XDM document node as the Document row (plan §1.4), and its XML declaration as rows of their own, written where the document writes each part: XmlDecl where it writes a declaration, EncodingDecl and SdDecl where the declaration writes an encoding or a standalone, each a declaration's (https://www.w3.org/TR/xml/#NT-XMLDecl, XML 1.0 §2.8: \"XMLDecl ::= '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'\") (chardata.ts)",
   },
   "Document entry": {
     rule: "entry-kind",

@@ -8,10 +8,10 @@
  * because their bare words name current things too:
  *
  * - `Declared…` and the old seeded relations' names are erased as the names of stored relations,
- *   `relation("…")`. `DeclaredText` and `DeclaredTypeText` (`grammar/attributes.ts`),
- *   `DeclaredEncoding` (`qti/chardata.ts`) and `DeclaredVariable`
- *   (`import/overlays/interactions.ts`) are other things, and `closed.relation("OperatorArity", …)`
- *   and its neighbours are the closed relations that replace the seeded ones.
+ *   `relation("…")`. `DeclaredText` and `DeclaredTypeText` (`grammar/attributes.ts`) and
+ *   `DeclaredVariable` (`import/overlays/interactions.ts`) are other things, and
+ *   `closed.relation("OperatorArity", …)` and its neighbours are the closed relations that replace
+ *   the seeded ones.
  * - `within` and `ref` are erased as grizzle's old API, a name imported from `@bjornpagen/grizzle`.
  *   `ref(` is the vocabulary IR's type-reference helper (`vocab/inventory/attributes.ts`, which
  *   `vocab/derive/declarations.ts` emits), `within(` is a facets test's own helper, and
@@ -143,7 +143,6 @@ const erasures: readonly Erasure[] = [
     kept: [
       "export interface DeclaredText {",
       "readonly typeTexts: readonly DeclaredTypeText[];",
-      'export const DeclaredEncoding = str.regex("^x$");',
       "interface DeclaredVariable {",
     ],
     pattern: "\\bDeclared[A-Z]\\w*",

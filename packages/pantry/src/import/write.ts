@@ -894,9 +894,10 @@ export const rootInsertOf = (
 };
 
 /**
- * Write a document's flat rows of the document layer: its `Document` row, each comment's,
- * instruction's and doctype's row, and each foreign element's `OpenElementName` row with its
- * node's tuple (C18) and its parent's kind and namespace name, the document node's none.
+ * Write a document's flat rows of the document layer: its `Document` row, its XML declaration's
+ * `XmlDecl`, `EncodingDecl` and `SdDecl` rows where it writes each, each comment's, instruction's
+ * and doctype's row, and each foreign element's `OpenElementName` row with its node's tuple (C18)
+ * and its parent's kind and namespace name, the document node's none.
  *
  * @param document - The document as the importer lists it.
  * @param ids - The ids its rows are written under, whether it is in an assembly, and the context
@@ -949,6 +950,7 @@ export const documentRowsOf = (
         },
       ],
     ]),
+    EncodingDecl: new Map(rows.encodingDecls.map((row) => [row.node, row] as const)),
     OpenElementName: new Map(
       rows.openElementNames.map(({ local, namespace, node }) => {
         const row = ownerIn(byId, node, "an open element name");
@@ -974,6 +976,8 @@ export const documentRowsOf = (
       }),
     ),
     Pi: new Map(rows.pis.map(({ data, node, target }) => [node, { data, node, target }] as const)),
+    SdDecl: new Map(rows.sdDecls.map((row) => [row.node, row] as const)),
+    XmlDecl: new Map(rows.xmlDecls.map((row) => [row.node, row] as const)),
   };
 };
 

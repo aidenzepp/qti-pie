@@ -7,7 +7,7 @@
  * (`Attribute`, `Namespace`, `Entry` and the like) are written nested at their owner's count field,
  * and grizzle refuses a direct insert of one. Every other stored relation of `Qti` is one keyed set
  * of a package's inputs (`PackageInputs` of `#pantry/import/write.ts`): the two roots, `Node` and
- * `Package`, each with its tree or record nested; the document layer's five relations, which
+ * `Package`, each with its tree or record nested; the document layer's relations, which
  * `documentRowsOf` writes; and every overlay's.
  *
  * `roster.test.ts` holds each list to the inputs a real import gives, so a name derived here and
@@ -16,15 +16,34 @@
 import { Option, Schema } from "effect";
 import type { OverlayRows } from "#pantry/import/overlays/index.ts";
 import type { DocumentLayerRows, PackageInputs } from "#pantry/import/write.ts";
-import { Comment, Doctype, Document, OpenElementName, Pi } from "#pantry/qti/chardata.ts";
+import {
+  Comment,
+  Doctype,
+  Document,
+  EncodingDecl,
+  OpenElementName,
+  Pi,
+  SdDecl,
+  XmlDecl,
+} from "#pantry/qti/chardata.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The document layer's relations, which `documentRowsOf` of `#pantry/import/write.ts` writes for
- * each document: its `Document` row, its comments', instructions' and doctypes' rows, and its
- * foreign elements' expanded names. `DocumentLayerRows` is read from this record.
+ * each document: its `Document` row, its XML declaration's rows where it writes one, its comments',
+ * instructions' and doctypes' rows, and its foreign elements' expanded names. `DocumentLayerRows`
+ * is read from this record.
  */
-export const documentLayer = { Comment, Doctype, Document, OpenElementName, Pi };
+export const documentLayer = {
+  Comment,
+  Doctype,
+  Document,
+  EncodingDecl,
+  OpenElementName,
+  Pi,
+  SdDecl,
+  XmlDecl,
+};
 
 /**
  * The relation an ordered family's members belong to, as a statement value names it: the family's

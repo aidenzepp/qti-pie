@@ -142,7 +142,6 @@ const documentSqlRow = (
     context: bitsText(Flag, []),
     contextNearest: stray,
     contextNearestKind: "document",
-    encoding: "",
     exportCharset: "UTF-8",
     hottexts: 0n,
     idrefTargets: 0n,
@@ -156,11 +155,9 @@ const documentSqlRow = (
     nodeParentKind: "document",
     nodeStart: 0n,
     package: stray,
-    standalone: "none",
     targetedBy: 0n,
     variables: 0n,
     version: "3.0.1",
-    xmlVersion: "none",
     ...fields,
   });
 
@@ -344,7 +341,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               charset: "UTF-8",
               contextNearest: stray,
               contextNearestKind: "document",
-              encoding: "",
               exportCharset: "UTF-8",
               node: stray,
               nodeChildren: 1n,
@@ -354,9 +350,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               nodeParentKind: "document",
               nodeStart: 0n,
               package: stray,
-              standalone: "none",
               version: "3.0.0",
-              xmlVersion: "none",
             } as const;
             for (const row of [
               {

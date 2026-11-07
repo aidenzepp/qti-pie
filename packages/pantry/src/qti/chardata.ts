@@ -237,17 +237,7 @@ export const DoctypeText = str.regex(`^<!DOCTYPE[ \\t\\n\\r][${xmlChar}]*>$`);
 export const EncName = str.regex("^[A-Za-z][A-Za-z0-9._\\-]*$");
 
 /**
- * The XML declaration's `encoding` as `Document` holds it: an encoding name, or the empty label
- * when the declaration writes none. `none` is itself a legal encoding name, so the empty label,
- * which `EncName`'s leading letter excludes, is the null object (spec reading of q1.02).
- *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
- */
-export const DeclaredEncoding = str.regex("^(?:[A-Za-z][A-Za-z0-9._\\-]*)?$");
-
-/**
- * The XML declaration's `version` as `Document` holds it: a `VersionNum`, or `none` when the
- * document writes no declaration (D7).
+ * The XML declaration's `version`, a `VersionNum`, as {@link XmlDecl} holds it.
  *
  * The version is text, not a roster, because `VersionNum` is open: any `1.` and digits is XML 1.0
  * (XML 1.0 §2.8), so a list of versions would refuse a well-formed document.
@@ -256,16 +246,15 @@ export const DeclaredEncoding = str.regex("^(?:[A-Za-z][A-Za-z0-9._\\-]*)?$");
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
  */
-export const XmlVersion = str.regex("^(?:none|1\\.[0-9]+)$");
+export const XmlVersion = str.regex("^1\\.[0-9]+$");
 
 /**
- * The XML declaration's `standalone` as `Document` holds it: `yes` or `no` as written, and the null
- * object `none` where the document writes no declaration or the declaration no `standalone` (D7).
+ * The values an XML declaration's `standalone` is written with, as {@link SdDecl} holds them.
  * `Qti` lists this roster beside its relations.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-SDDecl | XML 1.0, SDDecl}
  */
-export const XmlStandalone = closed("XmlStandalone", ["none", "yes", "no"]);
+export const XmlStandalone = closed("XmlStandalone", ["yes", "no"]);
 
 /**
  * A package entry's path, relative to the package root, as the package reader gives it: no leading
@@ -349,13 +338,13 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
 
 /**
  * The document row, one per document node, keyed by the node (plan §1.4): the entry it was read
- * from, the charset it was decoded under and the one it is written back in, the XML declaration's
- * fields through their null objects (D7), its root element's kind, and the type of the resource
- * that lists it.
+ * from, the charset it was decoded under and the one it is written back in, its root element's
+ * kind, and the type of the resource that lists it. Its XML declaration is no field of it: the
+ * declaration is optional, and so are its encoding and standalone parts (XML 1.0 §2.8), so each is
+ * a row of its own, {@link XmlDecl}, {@link EncodingDecl} and {@link SdDecl}, written only where
+ * the document writes it.
  *
  * - `package` and `path` are its `Entry`'s, which Q5.06's P3 states, with the key over them.
- * - `xmlVersion` is `none` when the document writes no declaration, and then `encoding` is empty and
- *   `standalone` is `none` (the `Document` check).
  * - `rootKind` is a `NodeKind` handle, the root element's kind, which a containment from the root
  *   element proves. `RootOfType`'s payload is over `NodeKind` too, so P2 compares them directly.
  * - `resourceType` is the type of the resource that lists the document, `none` for the manifest,
@@ -393,7 +382,6 @@ export const Document = relation(
     context: accumulated(bits(Flag), Bits.of(Flag, [])),
     contextNearest: uuid,
     contextNearestKind: closedId(NodeKind),
-    encoding: DeclaredEncoding,
     exportCharset: EncName,
     hottexts: drawn(natural),
     idrefTargets: drawn(natural),
@@ -411,14 +399,40 @@ export const Document = relation(
     resourceType: closedId(ResourceType),
     rootKind: closedId(NodeKind),
     spliced: accumulated(natural, 0n),
-    standalone: closedId(XmlStandalone),
     targetedBy: drawn(natural),
     variables: drawn(natural),
     version: closedId(SchemaVersion),
-    xmlVersion: XmlVersion,
   },
   ["node"],
 );
+
+/**
+ * A document's XML declaration, keyed by its document node, where the document writes one: the
+ * `version` its `VersionInfo` writes, which every declaration writes (XML 1.0 §2.8, `XMLDecl ::=
+ * '<?xml' VersionInfo EncodingDecl? SDDecl? S? '?>'`). A document that writes none has no row.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-XMLDecl | XML 1.0, XMLDecl}
+ */
+export const XmlDecl = relation("XmlDecl", { node: uuid, version: XmlVersion }, ["node"]);
+
+/**
+ * The `encoding` an XML declaration writes, keyed by its document node, where the declaration
+ * writes one (`EncodingDecl?`), as written: an encoding name. A declaration that writes none has
+ * no row.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-EncodingDecl | XML 1.0, EncodingDecl}
+ */
+export const EncodingDecl = relation("EncodingDecl", { encoding: EncName, node: uuid }, ["node"]);
+
+/**
+ * The `standalone` an XML declaration writes, keyed by its document node, where the declaration
+ * writes one (`SDDecl?`): `yes` or `no`, as written. A declaration that writes none has no row.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-SDDecl | XML 1.0, SDDecl}
+ */
+export const SdDecl = relation("SdDecl", { node: uuid, standalone: closedId(XmlStandalone) }, [
+  "node",
+]);
 
 /**
  * A namespace declaration on an element, at its slot among the element's declarations in source
@@ -487,8 +501,9 @@ const rootElements = select(Node, (n) =>
  *   its pattern's characters, and `Node`'s own `E1_derived` empties every other node's; a comment,
  *   an instruction and a doctype are each one arm row of their node, and their node is of their
  *   kind.
- * - **"Document":** one row per document node, both ways; its root kind is its root element's; and no
- *   declaration means no `encoding` and no `standalone` (q1.02's hand-off).
+ * - **"Document":** one row per document node, both ways; its root kind is its root element's; its
+ *   XML declaration, where it writes one, is a document's; and an `encoding` or a `standalone` is a
+ *   declaration's, since neither is written outside one (XML 1.0 §2.8, `XMLDecl`).
  * - **its context** (spec reading 117): its document node's ancestry and nearest interaction are its
  *   `context`, `contextNearest` and `contextNearestKind`, through {@link nodeContext}; and
  *   (`E1_derived`) the nearest is the document node itself, unless sites name the document from
@@ -535,9 +550,9 @@ export const chardataLawsByName = {
       ),
     ),
     contained(on(rootElements, "document", "kind"), on(Document, "node", "rootKind")),
-    check("Document", Document, (d) =>
-      d.or(d.ne(d.xmlVersion, "none"), d.and(d.eq(d.encoding, ""), d.eq(d.standalone, "none"))),
-    ),
+    contained(on(XmlDecl, "node"), on(Document, "node")),
+    contained(on(EncodingDecl, "node"), on(XmlDecl, "node")),
+    contained(on(SdDecl, "node"), on(XmlDecl, "node")),
   ],
   "E1 derived": [
     contained(
