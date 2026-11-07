@@ -77,58 +77,6 @@ const declaredIn: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 ]);
 
 /**
- * XML 1.0's `NameChar` less the colon, as inclusive code-point ranges: the independent statement of
- * the alphabet after `data-` (reading 13), written as numbers where `dataName` writes escapes.
- */
-const nameCharRanges: readonly (readonly [number, number])[] = [
-  [0x2d, 0x2e],
-  [0x30, 0x39],
-  [0x41, 0x5a],
-  [0x5f, 0x5f],
-  [0x61, 0x7a],
-  [0xb7, 0xb7],
-  [0xc0, 0xd6],
-  [0xd8, 0xf6],
-  [0xf8, 0x2_ff],
-  [0x3_00, 0x3_7d],
-  [0x3_7f, 0x1f_ff],
-  [0x20_0c, 0x20_0d],
-  [0x20_3f, 0x20_40],
-  [0x20_70, 0x21_8f],
-  [0x2c_00, 0x2f_ef],
-  [0x30_01, 0xd7_ff],
-  [0xf9_00, 0xfd_cf],
-  [0xfd_f0, 0xff_fd],
-  [0x1_00_00, 0xe_ff_ff],
-];
-
-/**
- * Whether a local name is HTML's custom data attribute name read in XML (reading 13): `data-`, then
- * one or more `NameChar`s without the colon, none of them an ASCII upper-case letter.
- *
- * @param local - The local name.
- * @returns Whether it is a valid `data-*` name.
- */
-const isDataName = (local: string): boolean => {
-  if (!local.startsWith("data-") || local.length === 5) {
-    return false;
-  }
-
-  for (const char of local.slice(5)) {
-    const code = char.codePointAt(0) ?? -1;
-
-    if (
-      (code >= 0x41 && code <= 0x5a) ||
-      !nameCharRanges.some(([low, high]) => code >= low && code <= high)
-    ) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-/**
  * What spec reading 13, D2 and XML Schema Part 1, 3.2.7, say an attribute name no closed handle
  * names is, by its namespace and spelling and its element's namespace: written out as their
  * decision table, apart from `openClassOf`.
@@ -155,7 +103,7 @@ const specified = (
     return "no-namespace";
   }
 
-  return isDataName(local) ? "data-*" : "refused data-name";
+  return /^data-[a-z0-9_.-]+$/u.test(local) ? "data-*" : "refused data-name";
 };
 
 /**
@@ -165,8 +113,8 @@ const specified = (
 const plainLetters = ["a", "Z", "0", "-", "_", ".", "é", "x"] as const;
 
 /**
- * The letters after `data-` in the box: those reading 13 admits (`a`, `0`, `-`, `_`, `.`, `é`) and
- * the one it refuses (`Z`).
+ * The letters after `data-` in the box: those reading 13's pattern admits (`a`, `0`, `-`, `_`, `.`)
+ * and those it refuses (`Z`, `é`).
  */
 const dataLetters = ["a", "Z", "0", "-", "_", ".", "é"] as const;
 
@@ -320,12 +268,20 @@ describe("vocab/open.ts", () => {
       }),
   );
 
-  it("reads a data- name by HTML's rule: any name character but the colon and ASCII upper case", () => {
-    for (const local of ["data-é", "data-x·y", "data-a.b-c", "data-0", "data--", "data-_"]) {
+  it("reads a data- name by the information model's pattern and prose: lower-case ASCII letters, digits, `_`, `.` and `-`", () => {
+    for (const local of ["data-a.b-c", "data-0", "data--", "data-_"]) {
       assert.strictEqual(readAs(local), "data-*", local);
     }
 
-    for (const local of ["data-A", "data-", "data-éA", "data-a:b", "data-a b"]) {
+    for (const local of [
+      "data-A",
+      "data-",
+      "data-é",
+      "data-x·y",
+      "data-éA",
+      "data-a:b",
+      "data-a b",
+    ]) {
       assert.strictEqual(readAs(local), "refused data-name", local);
     }
   });

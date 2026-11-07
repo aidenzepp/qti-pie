@@ -251,17 +251,17 @@ against it. A reading that is not an information-model-over-XSD case says which 
     information model write them in lowercase (`basic`, `qti-rule-system-si`, `qti-increment-us`). This follows the
     information model and the XSD, which agree, and sets aside the guide's examples, which are invalid against both.
     (2026-11-04.)
-13. **A `data-*` attribute name is `data-` followed by one or more name characters, with no ASCII upper-case letter and
-    no namespace.** The HTML Standard's custom data attribute is "an attribute in no namespace whose name starts with
-    the string "data-", has at least one character after the hyphen, is a valid attribute local name, and contains no
-    ASCII upper alphas". In XML a valid attribute local name is an NCName, so `data-é` and `data-x·y` are valid and
-    `data-A`, `data-` and `data-éA` are not. The information model's prose says the same: the name is in no namespace
-    and contains no uppercase ASCII letters. The pattern the information model gives for the same name,
-    `(data-)[a-zA-Z0-9_\-\.]+`, bars characters the prose admits and admits upper case the prose bars, the XSD admits
-    any attribute from any namespace, and the Schematron checks only the `data-` prefix. This follows HTML's rule and
-    the information model's prose, which agree, and sets aside its own pattern, the XSD and the Schematron, because the
-    prose states the rule and the other three are looser or stricter than it. (2026-11-04; narrowed 2026-11-06,
-    decision 324.) Pantry holds this over its stored rows, not only when it reads a document: an attribute stored as a
+13. **A `data-*` attribute name is `data-[a-z0-9_.-]+`, with no namespace.** The information model states the name
+    twice, both normatively (section 7.11, DataHTML5Extension): its prose says the name "starts with the string
+    'data-', has at least one character after the hyphen, is XML-compatible, and contains no uppercase ASCII letters",
+    and its `pattern`, "the regular expression for the name of the attrubute", is `(data-)[a-zA-Z0-9_\-\.]+`. The prose
+    bars upper case, which the pattern admits, and the pattern bars every character outside ASCII letters, digits, `_`,
+    `-` and `.`, such as `é` and `·`, which "XML-compatible" and HTML's custom data attribute rule admit. Where two
+    normative sources differ the stricter is the rule (readings 16 and 17), and each is the stricter on one point, so a
+    name holds to both: `data-x`, `data-a.b-c` and `data-_` are valid, and `data-A`, `data-`, `data-é` and `data-x·y` are
+    not. The XSD admits any attribute from any namespace and the Schematron checks only the `data-` prefix, both looser,
+    and both are set aside. (2026-11-04; narrowed 2026-11-06, decision 324; restored 2026-11-07 by the Mind on audit
+    b61b8f14's A4, the information model's pattern being normative: `data-é` and `data-x·y` are refused again.) Pantry holds this over its stored rows, not only when it reads a document: an attribute stored as a
     `data-*` attribute has a name in this form, an attribute in no namespace stored under no other class on an element
     that is not foreign does not begin `data-`, and a `data-` name an element's type declares as its own attribute
     (`data-catalog-idref`, `data-ssml` and the other seven of the ASI XSDs) is that attribute there and never a `data-*`
