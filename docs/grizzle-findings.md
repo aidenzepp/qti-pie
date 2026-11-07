@@ -1335,9 +1335,12 @@ inserts and none refused.
   `keyTextBytes([...widestTextKey, keyText])` still leaves a byte, with no `proves` needed, because `a2ff5eb`'s bound
   analysis reads `octetLength` off the predicate. A containment cannot copy a text into a contract field, though (the
   entry after next), so the contract is set aside. Instead `keyText` becomes a `str.bytes` refinement bounded by
-  `keyTextBytes`, which grizzle added in `27c4cd2` as `str.bytes(n, pattern)` (repin `984453d7`). The flip of
-  `src/qti/limits.ts` alone is lane S-ORACLE's, in progress, and until it lands `keyText` stays the 646-code-point
-  pattern.
+  `keyTextBytes`, which grizzle added in `27c4cd2` as `str.bytes(n, pattern)` (repin `984453d7`). Lane S-ORACLE made
+  that flip in `96df0183`, with no sweep: `src/qti/limits.ts` and its users' bound declarations (`chardata.ts`,
+  `attributes.ts` and `node.ts`'s prefix), the oracle's one measure (`utf8Length`), and one `_init` regenerated from
+  zero. `keyText` is `str.bytes(keyTextBytes(widestTextKey), any text)`, 2,587 bytes, and every other bounded name is
+  bounded likewise. The 646-code-point pattern is gone. `grizzle check` gives
+  `Qti: ok (1 migration, snapshot 2c825ffc…)`.
 
 ### `keyTextBytes` leaves out a tree axis's null bitmap (grizzle defect, open at `f66c05b`, fixed in `fce1088`)
 
@@ -1363,7 +1366,8 @@ inserts and none refused.
 - **Classification:** a grizzle defect, confirmed by the grizzle session and fixed before beta.1, in `fce1088`; nothing
   to file. The grizzle session took it in its lane K: `keyTextBytes(fields)` will promise the worst case over every
   index grizzle plans over those fields, the null bitmap and hidden columns included, under a generated test that holds
-  the bound admitted and tight. qti-pie's 646 interim is `e0fcddbf`.
+  the bound admitted and tight. qti-pie's 646 interim was `e0fcddbf`, and `96df0183` replaced it with the byte bound
+  itself, 2,587 bytes, so no code-point bound remains.
 - **Fixed in `fce1088` (`fce10882b08165ebb44125fc0c9ddac6572c6495`),** pushed to grizzle `main` with its gate green, and
   checked at `fce1088`, which `git ls-remote` showed as `origin/main` on 2026-11-06: "keyTextBytes leaves room for an
   index tuple's null bitmap, so a text at its result fits every index planned over its fields, a key over a selection
@@ -1392,10 +1396,11 @@ inserts and none refused.
   plain and pattern-refined text in containments, and N comes from `keyTextBytes(fields)`. The reproduction above
   becomes one of grizzle's kept cases. Nothing to file.
 - **Closed in `27c4cd2` (`27c4cd20ec4db4171b1743dd275420fb9f7164d6`):** grizzle added the bound as
-  `str.bytes(n, pattern)`, text of the pattern's language of at most n UTF-8 bytes. Its CHECK sits beside the
-  pattern's, n is read exactly, it meets plain and pattern text in containments, and `keyTextBytes` feeds n directly.
-  qti-pie repinned to it in `984453d7` (lane S-ORACLE). `keyText`'s flip to bytes is S-ORACLE's, in progress, and until
-  it lands `keyText` stays the 646-code-point pattern held to `keyTextBytes` (`e0fcddbf`).
+  `str.bytes(n, pattern)`, text of the pattern's language of at most n UTF-8 bytes. Its CHECK sits beside the pattern's,
+  n is read exactly, it meets plain and pattern text in containments, and `keyTextBytes` feeds n directly. qti-pie
+  repinned to it in `984453d7` (lane S-ORACLE) and flipped `keyText` to it in `96df0183`: `keyText` is
+  `str.bytes(keyTextBytes(widestTextKey), any text)`, 2,587 bytes, and every other bounded name is bounded likewise. The
+  workaround, the 646-code-point pattern of `e0fcddbf`, is gone.
 
 ### A containment's reverse index refuses a source column of no byte bound (defect, fixed in `4b155e8`)
 
