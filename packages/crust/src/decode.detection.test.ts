@@ -3,16 +3,23 @@
  * `decode` held to XML 1.0's own account of which encoding a document is in: section 4.3.3 and
  * Appendix F.1, read independently by `#crust/test/appendix-f.ts`, with the platform's fatal
  * `TextDecoder` as the second implementation of each decoding, and crust's write-and-read cycle
- * held to the same account.
+ * held to the same account. Two boxes exhaust the table's openings; a search draws the rest, and
+ * tells a past defect, kept as the table it decoded by, apart from `decode`.
  */
 import { assert, describe, it } from "@effect/vitest";
-import { exhaust } from "@grizzle/testing/explore";
-import { requiredInSpace } from "@grizzle/testing/features";
-import { element, int } from "@grizzle/testing/gen";
+import { drawn, exhaust, explore } from "@grizzle/testing/explore";
+import { required, requiredInSpace } from "@grizzle/testing/features";
+import { array, boolean, element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { keep, swarm, swarmChoice } from "@grizzle/testing/swarm";
+import type { Swarm } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter, Result } from "effect";
-import { decode } from "#crust/decode.ts";
+import type { Decoded } from "#crust/decode.ts";
+import { appendixRows, decode, decodeBy } from "#crust/decode.ts";
+import type { ReaderRefusal } from "#crust/errors.ts";
 import { encode } from "#crust/encode.ts";
 import { readXml } from "#crust/read.ts";
 import { appendixF, knownLabels, readingOf, rowOf } from "#crust/test/appendix-f.ts";
@@ -299,18 +306,316 @@ const nearDocument = (nearby: Near): Uint8Array => {
 };
 
 /**
- * What `decode` made of a document, in the oracle's terms.
+ * A decoder of a document's bytes, as `decode` is.
+ */
+type Decoder = (bytes: Uint8Array) => Effect.Effect<Decoded, ReaderRefusal>;
+
+/**
+ * What a decoder made of a document, in the oracle's terms.
  *
  * @param bytes - The document.
+ * @param decoder - The decoder, `decode` unless a planted one is judged.
  * @returns The reading.
  */
-const decoded = (bytes: Uint8Array): Effect.Effect<Reading> =>
-  decode(bytes).pipe(
+const decoded = (bytes: Uint8Array, decoder: Decoder = decode): Effect.Effect<Reading> =>
+  decoder(bytes).pipe(
     Effect.match({
       onFailure: ({ rule }): Reading => ({ _tag: "refused", rule }),
       onSuccess: ({ label, text }): Reading => ({ _tag: "read", label, text }),
     }),
   );
+
+/**
+ * The rows of the table whose documents open with a UTF-16 byte order mark.
+ */
+const utf16Marks = appendixRows.filter((row) => row._tag === "Decodable" && row.mark === 2);
+
+/**
+ * The planted bugs, each `decode` with its table changed as one past defect or plausible slip had
+ * it, which the search must tell apart from `decode`. 9c54f934^ had no row for `<?` in UTF-16
+ * without a byte order mark: it read `3C 00 3F 00` and `00 3C 00 3F` as UTF-8, found no
+ * declaration, and refused the document for the U+0000 its bytes hold. The other tries the UTF-16
+ * marks before UCS-4's, so `FF FE 00 00`, little-endian UCS-4's mark, reads as UTF-16 (the rows'
+ * own order, `#crust/decode.ts`).
+ */
+const planted = {
+  "9c54f934^, no row for UTF-16 without a mark": decodeBy(
+    appendixRows.filter((row) => row._tag === "Unsupported" || row.mark > 0),
+  ),
+  "the UTF-16 marks tried before UCS-4's": decodeBy([
+    ...utf16Marks,
+    ...appendixRows.filter((row) => !utf16Marks.includes(row)),
+  ]),
+} as const satisfies Readonly<Record<string, Decoder>>;
+
+/**
+ * One planted bug's name.
+ */
+type PlantedName = keyof typeof planted;
+
+/**
+ * The planted bugs' names, in a list.
+ */
+const PLANTED_LIST = [
+  "9c54f934^, no row for UTF-16 without a mark",
+  "the UTF-16 marks tried before UCS-4's",
+] as const satisfies readonly PlantedName[];
+
+/**
+ * What a search case's swarm turns on or off: an XML declaration, its parts and spellings, the
+ * kinds of character in the body, and damage to the written bytes.
+ */
+type Feature =
+  | "ASCII"
+  | "C1 control"
+  | "astral"
+  | "beyond ASCII"
+  | "byte damage"
+  | "declaration"
+  | "label case"
+  | "lone surrogate"
+  | "nul"
+  | "single quotes"
+  | "standalone"
+  | "white space";
+
+/**
+ * Every feature, the swarm's order.
+ */
+const FEATURES = [
+  "declaration",
+  "label case",
+  "single quotes",
+  "standalone",
+  "white space",
+  "ASCII",
+  "beyond ASCII",
+  "C1 control",
+  "astral",
+  "lone surrogate",
+  "nul",
+  "byte damage",
+] as const satisfies readonly Feature[];
+
+/**
+ * The kinds of character a body draws, ASCII first, the floor a swarm that turns every kind off
+ * falls to.
+ */
+const characterKinds = [
+  "ASCII",
+  "beyond ASCII",
+  "C1 control",
+  "astral",
+  "lone surrogate",
+  "nul",
+] as const satisfies readonly Feature[];
+
+/**
+ * The characters of each kind: markup and white space among ASCII's; Latin-1 letters, the euro
+ * sign windows-1252 holds at 0x80, a letter beyond Latin-1, U+FEFF and the noncharacter U+FFFE;
+ * C1 controls, which ISO-8859-1 holds and windows-1252 reads otherwise; the edges of the
+ * supplementary planes; each edge of each surrogate range, written alone; and U+0000.
+ */
+const charactersOf: Readonly<
+  Record<(typeof characterKinds)[number], readonly [string, ...string[]]>
+> = {
+  ASCII: ["a", "<", "&", " ", "\n"],
+  "C1 control": ["\u0080", "\u0085", "\u009F"],
+  astral: ["\u{10000}", "😀", "\u{10FFFF}"],
+  "beyond ASCII": ["é", "ÿ", "€", "日", "\uFEFF", "\uFFFE"],
+  "lone surrogate": ["\uD800", "\uDBFF", "\uDC00", "\uDFFF"],
+  nul: ["\0"],
+};
+
+/**
+ * The bytes damage writes: U+0000's, a byte no UTF-8 sequence opens with, the openings of a
+ * two-byte sequence, of a surrogate's encoding and of the last plane's, and a byte no UTF-8 holds.
+ */
+const damageBytes = [0x00, 0x80, 0xc3, 0xed, 0xf4, 0xff] as const;
+
+/**
+ * Damage to a document's bytes: none, its last byte dropped, a byte appended, or one of the bytes
+ * after the root's start tag replaced, so the declaration names a label the oracle's table holds.
+ */
+type Damage =
+  | { readonly kind: "appended"; readonly value: number }
+  | { readonly kind: "dropped" }
+  | { readonly kind: "none" }
+  | { readonly kind: "replaced"; readonly place: number; readonly value: number };
+
+/**
+ * One search case: how the document is written, its XML declaration as text, its body and the
+ * damage done to its bytes.
+ */
+interface Drawn {
+  readonly body: string;
+  readonly damage: Damage;
+  readonly opening: Opening;
+  readonly prolog: string;
+}
+
+/**
+ * Spell a label in letter cases the draw picks, one per letter.
+ *
+ * @param label - The label.
+ * @returns The generator.
+ */
+const recased =
+  (label: string): Gen<string> =>
+  (source) =>
+    label.replaceAll(/[A-Za-z]/gu, (letter) =>
+      source.draw(boolean) ? letter.toUpperCase() : letter.toLowerCase(),
+    );
+
+/**
+ * Draw an XML declaration under a swarm, as text: none when the swarm leaves it out; else
+ * [23] XMLDecl with [24] VersionInfo, perhaps [80] EncodingDecl naming a label the oracle knows,
+ * perhaps in other letter cases, and perhaps [32] SDDecl, its [3] S and [25] Eq spaced and its
+ * values quoted as the swarm turns on.
+ *
+ * @param on - The swarm.
+ * @returns The generator.
+ */
+const prologUnder =
+  (on: Swarm<Feature>): Gen<string> =>
+  (source) => {
+    if (!source.draw(keep(on, "declaration"))) {
+      return "";
+    }
+
+    const spaced = source.draw(keep(on, "white space"));
+    const space = (): string => (spaced ? source.draw(element([" ", "\t", "\r\n", "\n  "])) : " ");
+    const eq = (): string => (spaced ? source.draw(element(["=", " = ", "\t=\n"])) : "=");
+    const quote = (): string =>
+      source.draw(keep(on, "single quotes")) ? source.draw(element(['"', "'"])) : '"';
+    const quoted = (value: string): string => {
+      const mark = quote();
+
+      return `${mark}${value}${mark}`;
+    };
+    const label = source.draw(element(knownLabels));
+    const encoding = source.draw(boolean)
+      ? `${space()}encoding${eq()}${quoted(source.draw(keep(on, "label case")) ? source.draw(recased(label)) : label)}`
+      : "";
+    const standalone = source.draw(keep(on, "standalone"))
+      ? `${space()}standalone${eq()}${quoted(source.draw(element(["yes", "no"])))}`
+      : "";
+
+    return `<?xml${space()}version${eq()}${quoted(source.draw(element(["1.0", "1.1"])))}${encoding}${standalone}${spaced ? source.draw(element(["", " "])) : ""}?>`;
+  };
+
+/**
+ * Draw damage under a swarm: none when the swarm leaves it out.
+ *
+ * @param on - The swarm.
+ * @returns The generator.
+ */
+const damageUnder =
+  (on: Swarm<Feature>): Gen<Damage> =>
+  (source) => {
+    if (!source.draw(keep(on, "byte damage"))) {
+      return { kind: "none" };
+    }
+
+    const kind = source.draw(element(["appended", "dropped", "replaced"] as const));
+    if (kind === "dropped") {
+      return { kind };
+    }
+
+    const value = source.draw(element([...damageBytes, ...tableBytes]));
+
+    return kind === "appended" ? { kind, value } : { kind, place: source.draw(int(0, 63)), value };
+  };
+
+/**
+ * Draw one character of a body under a swarm: a kind it turns on, then a character of that kind.
+ *
+ * @param on - The swarm.
+ * @returns The generator.
+ */
+const characterUnder =
+  (on: Swarm<Feature>): Gen<string> =>
+  (source) =>
+    source.draw(element(charactersOf[source.draw(swarmChoice(on, characterKinds))]));
+
+/**
+ * Draw a search case under its own swarm: the swarm first, so each case explores a corner where
+ * some features are absent and the rest combine.
+ */
+const searchCase: Gen<Drawn> = (source) => {
+  const on = source.draw(swarm(FEATURES));
+
+  return {
+    body: source.draw(array(characterUnder(on), { max: 6, min: 0 })).join(""),
+    damage: source.draw(damageUnder(on)),
+    opening: source.draw(element(openingNames)),
+    prolog: source.draw(prologUnder(on)),
+  };
+};
+
+/**
+ * Write a search case's document: its opening, the declaration, `<a>`, the body and `</a>`, then
+ * the damage done.
+ *
+ * @param drawnCase - The case.
+ * @returns The bytes.
+ */
+const searchDocument = (drawnCase: Drawn): Uint8Array => {
+  const writing = openings[drawnCase.opening];
+  const head = [...writing.opening, ...writing.units(`${drawnCase.prolog}<a>`)];
+  const bytes = [...head, ...writing.units(`${drawnCase.body}</a>`)];
+  const { damage } = drawnCase;
+  switch (damage.kind) {
+    case "appended": {
+      return Uint8Array.from([...bytes, damage.value]);
+    }
+    case "dropped": {
+      return Uint8Array.from(bytes.slice(0, -1));
+    }
+    case "none": {
+      return Uint8Array.from(bytes);
+    }
+    case "replaced": {
+      const place = head.length + (damage.place % (bytes.length - head.length));
+
+      return Uint8Array.from(bytes, (byte, at) => (at === place ? damage.value : byte));
+    }
+    default: {
+      return damage satisfies never;
+    }
+  }
+};
+
+/**
+ * A situation a search case notes: how the oracle reads it, the row of the table it is in, and
+ * each planted bug told apart.
+ */
+type Situation = `caught: ${PlantedName}` | Pattern | "Other" | "read" | ReaderRefusal["rule"];
+
+/**
+ * Every situation the search requires: each reading and refusal `decode` gives, each row of the
+ * table it reads, and each planted bug told apart.
+ */
+const situations: readonly [Situation, ...Situation[]] = [
+  "read",
+  "decode",
+  "encoding-mismatch",
+  "nul",
+  "unsupported-encoding",
+  "00 3C 00 3F",
+  "3C 00 3F 00",
+  "3C 3F 78 6D",
+  "EF BB BF",
+  "FE FF ## ##",
+  "FF FE ## ##",
+  "Other",
+  ...PLANTED_LIST.map((name): Situation => `caught: ${name}`),
+];
+
+/**
+ * How many cases the search draws.
+ */
+const SEARCHED = 3000;
 
 describe("decode reads the encoding XML 1.0 section 4.3.3 and Appendix F give a document", () => {
   it.effect(
@@ -443,6 +748,55 @@ describe("decode reads the encoding XML 1.0 section 4.3.3 and Appendix F give a 
           Effect.sync(() => {
             assert.strictEqual(done.cases, NEARS);
           }),
+        ),
+      ),
+    GENERATED_TIMEOUT_MS,
+  );
+
+  it.effect(
+    `for ${String(SEARCHED)} documents drawn under a swarm, each read as the oracle reads it, and each planted bug told apart`,
+    (ctx) =>
+      // Oracle: Appendix F.1 transcribed as printed (`#crust/test/appendix-f.ts`), section 4.3.3 and
+      // the fatal TextDecoder, as above. Bound: 3,000 documents, each in one of the 16 writings,
+      // perhaps opening with an XML declaration naming one of 13 labels in any letter case, its
+      // white space, quotes and standalone drawn, around a body of up to 6 characters of 6 kinds
+      // (astral and lone surrogates among them), perhaps with one byte dropped, appended or
+      // replaced.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required<Situation>(situations, { cases: 600, sense: notesOnly }),
+            draw: drawn(searchCase),
+            kept: [],
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML 1.0 (Fifth Edition) Appendix F.1 as printed, section 4.3.3, and the fatal TextDecoder",
+            },
+            runs: SEARCHED,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "crust/decode/search",
+          },
+          (drawnCase, c) =>
+            Effect.gen(function* readsAsTheOracleSays() {
+              const bytes = searchDocument(drawnCase);
+              const expected = readingOf(bytes);
+              c.note(expected._tag === "read" ? "read" : expected.rule);
+              c.note(rowOf(bytes)?.pattern ?? "Other");
+
+              assert.deepStrictEqual(yield* decoded(bytes), expected, Formatter.format(drawnCase));
+
+              for (const name of PLANTED_LIST) {
+                const slipped = yield* decoded(bytes, planted[name]);
+                if (Formatter.format(slipped) !== Formatter.format(expected)) {
+                  c.note(`caught: ${name}`);
+                }
+              }
+            }),
         ),
       ),
     GENERATED_TIMEOUT_MS,
