@@ -51,6 +51,7 @@ import type {
   KindRule,
   ResultAttributes,
   Rule,
+  TemplateRule,
 } from "#plate/model/expression.ts";
 import { kindRules, landedKinds, readExpression } from "#plate/model/expressions/read.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
@@ -302,6 +303,31 @@ export type OutcomeReporting = Pick<
   | "normalMinimum"
   | "view"
 >;
+
+/**
+ * A `qti-template-declaration` of a modelled base type and cardinality: a template variable, which
+ * only template processing sets, and which the item body and response processing may read (the
+ * information model's TemplateDeclaration, `info.txt:45765`).
+ */
+export interface TemplateDeclaration {
+  readonly baseType: ModelledBaseType;
+  readonly cardinality: Value["cardinality"];
+  /**
+   * The `qti-default-value`, when the declaration has one.
+   */
+  readonly defaultValue: Option.Option<Value>;
+  readonly identifier: string;
+  /**
+   * `math-variable`, an `xs:boolean`, false when absent: whether the variable's value stands in
+   * for a MathML `mi` or `ci` that matches its identifier.
+   */
+  readonly mathVariable: boolean;
+  /**
+   * `param-variable`, an `xs:boolean`, false when absent: whether the variable's value stands in
+   * for an object parameter's value that matches its identifier.
+   */
+  readonly paramVariable: boolean;
+}
 
 /**
  * An attribute of a body element as written, `xml:lang` under the name `xml:lang`.
@@ -557,12 +583,12 @@ export type BodyNode =
 /**
  * A valid `qti-assessment-item` as plate models it.
  *
- * `responses` and `outcomes` hold the declarations of modelled base types and cardinalities, in
- * document order; every other declaration is a mark. `processing` is none when the item has no
- * response processing, or when plate cannot run it, which `unsupported` then marks. Plate cannot
- * run it on an item with template processing, which plate does not run and which may set a value
- * response processing reads, such as a correct response. `unsupported` lists every feature
- * not rendered, in document order, each once per feature and path.
+ * `responses`, `outcomes` and `templates` hold the declarations of modelled base types and
+ * cardinalities, in document order; every other declaration is a mark. `processing` is none when
+ * the item has no response processing, or when plate cannot run it, which `unsupported` then marks.
+ * Plate cannot run it on an item with template processing, which plate does not run and which may
+ * set a value response processing reads, such as a correct response. `unsupported` lists every
+ * feature not rendered, in document order, each once per feature and path.
  */
 export interface Item {
   readonly body: readonly BodyNode[];
@@ -578,6 +604,15 @@ export interface Item {
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   readonly processing: Option.Option<readonly Rule[]>;
   readonly responses: ReadonlyMap<string, ResponseDeclaration>;
+  /**
+   * The template processing's rules in document order: none when the item has no
+   * `qti-template-processing`, so template processing runs exactly when this is some.
+   */
+  readonly templateProcessing: Option.Option<readonly TemplateRule[]>;
+  /**
+   * The item's template variables, keyed by identifier.
+   */
+  readonly templates: ReadonlyMap<string, TemplateDeclaration>;
   readonly title: string;
   readonly unsupported: readonly UnsupportedFeature[];
 }
@@ -2883,6 +2918,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       outcomes,
       processing: templated ? Option.none() : runs,
       responses,
+      templateProcessing: Option.none(),
+      templates: new Map(),
       title,
       unsupported: build.unsupported,
     };

@@ -904,6 +904,8 @@ const itemOf = (interaction: Interaction): Item => ({
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Merged",
   unsupported: [],
 });

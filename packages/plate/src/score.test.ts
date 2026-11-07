@@ -200,6 +200,8 @@ const item: Item = {
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Scored",
   unsupported: [],
 };

@@ -1403,6 +1403,8 @@ describe("acceptForTest", () => {
       outcomes: new Map(),
       processing: Option.none(),
       responses: new Map(),
+      templateProcessing: Option.none(),
+      templates: new Map(),
       title: "Hand",
       unsupported: [{ feature: "xml:base", path: root, shown: "mark" }],
     };

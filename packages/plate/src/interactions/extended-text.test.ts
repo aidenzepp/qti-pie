@@ -148,6 +148,8 @@ const itemOf = (...interactions: readonly ExtendedTextInteraction[]): Item => ({
       },
     ]),
   ),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Essay",
   unsupported: [],
 });

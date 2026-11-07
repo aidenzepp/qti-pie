@@ -1259,6 +1259,8 @@ const fruitItem: Item = {
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Fruit",
   unsupported: [],
 };
@@ -1433,6 +1435,8 @@ const essayItem: Item = {
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Essay",
   unsupported: [],
 };

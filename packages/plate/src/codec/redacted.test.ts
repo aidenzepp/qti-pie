@@ -113,6 +113,8 @@ const itemOf = (
   outcomes: new Map(),
   processing: Option.none(),
   responses: new Map(responses.map((response) => [response.identifier, response])),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: identifier,
   unsupported,
 });

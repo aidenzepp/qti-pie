@@ -351,6 +351,8 @@ const tonesItem = acceptForTest({
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Tones",
   unsupported: [],
 });

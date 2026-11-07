@@ -332,6 +332,8 @@ const item: Item = {
         ] as const,
     ),
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Capitals",
   unsupported: [
     {
