@@ -560,6 +560,10 @@ const mergedOf = (
       "MathQualifier",
       parts.map(({ MathQualifier: rows }) => rows),
     ),
+    MathRank: unionOf(
+      "MathRank",
+      parts.map(({ MathRank: rows }) => rows),
+    ),
     NameLookup: unionOf(
       "NameLookup",
       parts.map(({ NameLookup: rows }) => rows),
@@ -747,6 +751,10 @@ const mergedOf = (
     ShareFragment: unionOf(
       "ShareFragment",
       parts.map(({ ShareFragment: rows }) => rows),
+    ),
+    ShareTarget: unionOf(
+      "ShareTarget",
+      parts.map(({ ShareTarget: rows }) => rows),
     ),
     Site: unionOf(
       "Site",
