@@ -2348,7 +2348,11 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
     assert.strictEqual(rows.together.TemplateDefaultTarget.size, 0);
     // The mapping's item ref names the link, which leaves it unchecked (reading 110).
     assert.deepStrictEqual(
-      [...rows.together.MappingItemRef.values()].map(({ type }) => type),
+      [...rows.together.MappingItemRef.values()].map(({ itemRef }) => itemRef),
+      [...rows.together.MappingItemRefType.values()].map(({ itemRef }) => itemRef),
+    );
+    assert.deepStrictEqual(
+      [...rows.together.MappingItemRefType.values()].map(({ type }) => type),
       ["imslti_xmlv1p1"],
     );
     assert.deepStrictEqual(

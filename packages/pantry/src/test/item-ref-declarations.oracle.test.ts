@@ -11,7 +11,7 @@
  * - **The schema's laws, restated on the host** over the import's rows (`readProgram`): the existence
  *   of each template default's `TemplateDefaultTarget` and each mapping's
  *   `MappingSourceDeclaration`, but a mapping's under an LTI item ref, which with a reading through
- *   it is accepted unchecked (reading 110, its `MappingItemRef`), their containments into
+ *   it is accepted unchecked (reading 110, its `MappingItemRefType`), their containments into
  *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
  *   mapping's source's), `MappingLookup`'s forced and justified rows, `VariableMapping`'s key and
  *   session check, and what each item ref names: its `ItemRefTarget` and `ItemRefDocument`, each a
@@ -287,7 +287,15 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   ],
   [
     {
-      from: ["MappingItemRef", "itemRef", "type"],
+      from: ["MappingItemRefType", "node", "itemRef"],
+      kind: "contained",
+      to: ["MappingItemRef", "node", "itemRef"],
+    },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["MappingItemRefType", "itemRef", "type"],
       kind: "contained",
       to: ["ItemRefTarget", "node", "type"],
     },
@@ -296,6 +304,14 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   [
     {
       from: ["MappingItemRef", "node"],
+      kind: "contained",
+      to: ["MappingSourceDeclaration", "node"],
+    },
+    "Variable mapping source",
+  ],
+  [
+    {
+      from: ["MappingItemRefType", "node"],
       kind: "contained",
       to: ["MappingSourceDeclaration", "node"],
     },
@@ -762,20 +778,24 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     ),
     ...[...inputs.TemplateDefaultTarget.values()].flatMap((target) => targetBreaches(rows, target)),
     // A mapping's item ref and what that names hang on the item ref's target, so they are refused
-    // with it under "Item ref target", by the empty name the oracle keys that law by.
+    // with it under "Item ref target", by the empty name the oracle keys that law by: each mapping
+    // has its item ref, and a type row only where the item ref has a target, its type copied.
     ...rows.mappings.flatMap((mapping) => {
       const itemRef = inputs.MappingItemRef.get(mapping.node);
+      const typed = inputs.MappingItemRefType.get(mapping.node);
       const target = inputs.ItemRefTarget.get(mapping.parent);
 
       return unless(
-        itemRef?.itemRef === mapping.parent && target !== undefined && itemRef.type === target.type,
+        itemRef?.itemRef === mapping.parent &&
+          (typed === undefined ||
+            (typed.itemRef === mapping.parent && typed.type === target?.type)),
         "Item ref target",
         "",
       );
     }),
     ...rows.mappings.flatMap((mapping) => [
       ...unless(
-        linkTypes.has(inputs.MappingItemRef.get(mapping.node)?.type ?? "none") ||
+        linkTypes.has(inputs.MappingItemRefType.get(mapping.node)?.type ?? "") ||
           inputs.MappingSourceDeclaration.has(mapping.node),
         "Variable mapping source",
         mapping.source,
@@ -916,6 +936,12 @@ const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal:
   assert.isFalse(
     [...inputs.ItemRefTarget.values()].some(({ type }) => type === "none"),
     `${literal}: an item ref's target stands for a resource the package lacks`,
+  );
+  assert.isFalse(
+    [...inputs.MappingItemRef.values(), ...inputs.MappingItemRefType.values()].some((row) =>
+      Object.values<unknown>(row).includes("none"),
+    ),
+    `${literal}: a mapping's item ref names a resource the package lacks`,
   );
   assert.deepStrictEqual(orphansOf(inputs), [], `${literal}: a family member has no owner`);
   assert.isFalse(

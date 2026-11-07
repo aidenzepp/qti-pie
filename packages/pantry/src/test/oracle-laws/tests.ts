@@ -351,7 +351,7 @@ const itemRefLawsOf = (
           : [breachAt(rows, node, "Item ref target", { path })],
     });
     // An item ref that names an LTI link names no item: a mapping under it is accepted unchecked
-    // (reading 110), as the schema's `heldMappings` leaves out a mapping whose `MappingItemRef`
+    // (reading 110), as the schema's `heldMappings` leaves out a mapping whose `MappingItemRefType`
     // names an LTI link.
     const linked = Option.exists(target, ({ type }) => Option.exists(type, isLinkType));
     const declared = item.pipe(Option.map((listed) => declarationsOf(listed.rows, grammar)));

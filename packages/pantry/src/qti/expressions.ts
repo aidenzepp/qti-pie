@@ -35,7 +35,8 @@
  *   ({@link MappingLookup}); exactly one reading resolves (M3). Beside them, a template default's
  *   and a variable mapping's declarations in the item their item ref names
  *   ({@link TemplateDefaultTarget}, {@link MappingSourceDeclaration}), what a mapping's item ref
- *   names ({@link MappingItemRef}), and a `section-identifier`'s name ({@link SectionIdentifier}).
+ *   names ({@link MappingItemRef}, {@link MappingItemRefType}), and a `section-identifier`'s name
+ *   ({@link SectionIdentifier}).
  *
  * The laws, each named by its oracle law with spaces written as underscores, and the rule each
  * keeps: `Arity` (P2); `Operand_fit` and `One_base` (P23); `Condition_type` (P21); `Set_type`
@@ -679,19 +680,41 @@ export const MappingSourceDeclaration = relation(
 );
 
 /**
- * What a variable mapping's item ref names, keyed by the mapping's node (spec reading 110): its
- * item ref (`itemRef`, `VariableMapping`'s `parent`) and `type`, its `ItemRefTarget`'s, or `none`,
- * `ResourceType`'s null object, where the item ref has no target: it writes no href, which AL3
- * alone refuses (spec reading 155), or its href names no resource, which "Item ref target" refuses
- * over the item ref (`#pantry/qti/tests.ts`). Every mapping has one. A
- * mapping whose item ref names an LTI link has no item, so no source declaration, and is accepted
- * unchecked; every other, one under an item ref that writes no href among them, must have its
- * {@link MappingSourceDeclaration} ("Variable mapping source").
+ * A variable mapping's item ref, keyed by the mapping's node (spec reading 110): `itemRef`,
+ * `VariableMapping`'s `parent`, and `types`, drawn: its count of {@link MappingItemRefType} rows, 1
+ * where the item ref has a target and 0 where it has none: it writes no href, which AL3 alone
+ * refuses (spec reading 155), or its href names no resource, which "Item ref target" refuses over
+ * the item ref (`#pantry/qti/tests.ts`). Every mapping has one. A mapping whose item ref names an
+ * LTI link has no item, so no source declaration, and is accepted unchecked; every other, one
+ * under an item ref with no target among them, must have its {@link MappingSourceDeclaration}
+ * ("Variable mapping source").
  */
 export const MappingItemRef = relation(
   "MappingItemRef",
+  { itemRef: uuid, node: uuid, types: drawn(natural) },
+  ["node"],
+);
+
+/**
+ * What a variable mapping's item ref names, keyed by the mapping's node, where the item ref has a
+ * target, a counted member of its {@link MappingItemRef}: its item ref (`itemRef`) and `type`, its
+ * `ItemRefTarget`'s, copied from it. A mapping under an item ref with no target has no row, so no
+ * type stands for it (decision 428, as `DeclarationBaseType` holds a declaration's base type only
+ * where it has one).
+ */
+export const MappingItemRefType = relation(
+  "MappingItemRefType",
   { itemRef: uuid, node: uuid, type: closedId(ResourceType) },
   ["node"],
+);
+
+/**
+ * Each mapping's item ref's type, counted by `MappingItemRef.types`: one row or none, a mapping's
+ * under an item ref with no target.
+ */
+export const mappingItemRefTypeFamily = counted(
+  on(MappingItemRefType, "node"),
+  fin(MappingItemRef, "types"),
 );
 
 /**
@@ -950,6 +973,7 @@ export const referenceRelations = {
   DeclarationTable,
   HeldType,
   MappingItemRef,
+  MappingItemRefType,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -1613,22 +1637,21 @@ const resolves = (r: ReadingRow) =>
   );
 
 /**
- * The variable mappings whose item ref names no LTI link: a mapping under an LTI item ref has no
- * item, so no source declaration, and is accepted unchecked (spec reading 110). A mapping under an
- * item ref that names an item, a missing document or nothing the package lists, or that writes no
- * href (`none`, spec reading 155), must have its source's declaration. Only an LTI type is
- * exempt, and it is copied from `ItemRefTarget`, so a row's `none` can add a judgment but never
- * spare one.
+ * The variable mappings whose item ref has no target, held as decision 428 has it: it writes no
+ * href (spec reading 155) or its href names nothing the package lists, so it names no LTI link,
+ * and the mapping must have its source's declaration. Its {@link MappingItemRef} has no
+ * {@link MappingItemRefType}, `types` 0.
  */
-const heldMappings = select(MappingItemRef, (m) => m.not(m.in(m.type, linkResourceTypes)));
+const untargetedMappings = select(MappingItemRef, (m) => m.eq(m.types, 0n));
 
 /**
- * The variable mappings whose item ref names a resource of the package, the ones whose
- * {@link MappingItemRef} copies its `ItemRefTarget`'s type: every one but a mapping under an item
- * ref with no target, whose type is `none` (spec reading 155), as {@link targetedItemRefs} leaves
- * out a lookup whose type is `none`.
+ * The variable mappings whose item ref names a resource of the package other than an LTI link: a
+ * mapping under an LTI item ref has no item, so no source declaration, and is accepted unchecked
+ * (spec reading 110). A mapping under an item ref that names an item or a missing document must
+ * have its source's declaration. Only an LTI type is exempt, and it is copied from
+ * `ItemRefTarget`, so it spares only a mapping whose item ref names a link.
  */
-const targetedMappings = select(MappingItemRef, (m) => m.ne(m.type, "none"));
+const heldMappings = select(MappingItemRefType, (m) => m.not(m.in(m.type, linkResourceTypes)));
 
 /**
  * The readings that resolve: a key over them by their reference is "at most one", and the
@@ -2254,13 +2277,16 @@ export const referenceLawsByName = {
     // lacks is refused here under the law that refuses the item ref itself.
     contained(on(targetedItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
     contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
-    // MappingItemRef: each mapping's item ref and what that names (reading 110). One whose item ref
-    // has no target names `none` and copies none (reading 155): AL3 refuses an unwritten href and
-    // "Item ref target" one that names nothing, over the item ref alone, and "Variable mapping
-    // source" judges the mapping, as it judges every mapping but an LTI one.
+    // MappingItemRef: each mapping's item ref (reading 110), and MappingItemRefType what that names,
+    // a row only where the item ref has a target, its type copied from it. One whose item ref has
+    // no target has no type row (decision 428): AL3 refuses an unwritten href and "Item ref target"
+    // one that names nothing, over the item ref alone, and "Variable mapping source" judges the
+    // mapping, as it judges every mapping but an LTI one.
     contained(on(VariableMapping, "node", "parent"), on(MappingItemRef, "node", "itemRef")),
     contained(on(MappingItemRef, "node", "itemRef"), on(VariableMapping, "node", "parent")),
-    contained(on(targetedMappings, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
+    mappingItemRefTypeFamily,
+    contained(on(MappingItemRefType, "node", "itemRef"), on(MappingItemRef, "node", "itemRef")),
+    contained(on(MappingItemRefType, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
   ],
   "Prefixed reference": [
     key(on(resolvingReadings, "assembly", "node", "attribute")),
@@ -2405,7 +2431,9 @@ export const referenceLawsByName = {
     ),
   ],
   "Variable mapping source": [
-    // Every mapping has its source's declaration, but one under an LTI item ref (reading 110).
+    // Every mapping has its source's declaration, but one under an LTI item ref (reading 110): one
+    // whose item ref has no target, and one whose item ref names anything but a link.
+    contained(on(untargetedMappings, "node"), on(MappingSourceDeclaration, "node")),
     contained(on(heldMappings, "node"), on(MappingSourceDeclaration, "node")),
     contained(
       on(MappingSourceDeclaration, "itemRef", "itemDocument"),

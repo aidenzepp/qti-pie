@@ -724,14 +724,49 @@ describe("qti/expressions.ts, an LTI item ref", () => {
 
   it("judges a variable mapping's source in an item, not in an LTI link's none", () => {
     // Oracle: reading 110: a variable mapping under an LTI item ref names no declaration of an
-    // item (its MappingItemRef names the link, and it has no MappingSourceDeclaration), and is
+    // item (its MappingItemRefType names the link, and it has no MappingSourceDeclaration), and is
     // accepted unchecked, as is a reading through it; a mapping under an item ref that names an
-    // item, a missing document or nothing the package lists must still have its source's
-    // declaration.
+    // item or a missing document, or one with no target (no href, or nothing the package lists,
+    // so no MappingItemRefType, decision 428), must still have its source's declaration.
     assert.isDefined(lti, "an LTI resource type");
 
+    // A mapping with no target is selected by its count of type rows, a bigint the shared
+    // evaluator does not read, so its one containment is decoded here whole.
+    const untargeted = expressionLaws.flatMap((statement) =>
+      Option.toArray(
+        Schema.decodeUnknownOption(
+          Schema.Struct({
+            kind: Schema.Literal("contained"),
+            left: Schema.Struct({
+              source: Schema.Struct({
+                desc: Schema.Struct({
+                  predicate: Schema.Struct({
+                    kind: Schema.String,
+                    left: Schema.Struct({ field: Schema.String }),
+                    op: Schema.String,
+                    right: Schema.Struct({ value: Schema.BigInt }),
+                  }),
+                }),
+                relation: Schema.Struct({ name: Schema.Literal("MappingItemRef") }),
+              }),
+              terms: Schema.Tuple([Schema.Literal("node")]),
+            }),
+            right: Schema.Struct({
+              source: Schema.Struct({ name: Schema.Literal("MappingSourceDeclaration") }),
+              terms: Schema.Tuple([Schema.Literal("node")]),
+            }),
+          }),
+        )(statement),
+      ).map(({ left }) => left.source.desc.predicate),
+    );
+    assert.deepStrictEqual(
+      untargeted.map(({ kind, left, op, right }) => [kind, op, left.field, right.value]),
+      [["compare", "eq", "types", 0n]],
+      "a mapping with no target, no type row, must have its source's declaration",
+    );
+
     const [held, ...moreHeld] = containmentsOf(
-      ["MappingItemRef", "node"],
+      ["MappingItemRefType", "node"],
       ["MappingSourceDeclaration", "node"],
     );
     assert.isDefined(held, "the mapping's source declaration");
@@ -739,7 +774,6 @@ describe("qti/expressions.ts, an LTI item ref", () => {
     if (held !== undefined) {
       assert.isFalse(selects(held.left, { type: lti ?? "none" }), "an LTI link's mapping");
       assert.isTrue(selects(held.left, { type: "imsqti_item_xmlv3p0" }), "an item's mapping");
-      assert.isTrue(selects(held.left, { type: "none" }), "a mapping under an unlisted path");
     }
 
     const [mappedReading, ...moreReadings] = containmentsOf(
