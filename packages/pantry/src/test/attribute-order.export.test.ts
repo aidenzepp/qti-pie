@@ -30,6 +30,7 @@ import { encode } from "@qti-pie/crust/encode.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { composed } from "#pantry/grammar/compose.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { rootInsertOf } from "#pantry/import/write.ts";
 import type { NodeMember } from "#pantry/import/write.ts";
 import { assemble } from "#pantry/model/assemble.ts";
@@ -164,7 +165,11 @@ const exported = Effect.fn("test.attributeOrder.exported")(function* exportedOf(
   label: string,
 ) {
   const tree: XdmDocument<Composed> = yield* Effect.orDie(shred(source, version, shredGrammar));
-  const insert = rootInsertOf(tree, { documentType: "imsqti_item_xmlv3p0", idOf: scan.ids });
+  const insert = rootInsertOf(tree, {
+    context: ownContext(scan.ids(0)),
+    documentType: "imsqti_item_xmlv3p0",
+    idOf: scan.ids,
+  });
   const root = insert.children.filter(({ kind }) => kind === tree.root.kind).slice(0, 1);
 
   for (const [held, nested] of familiesOf([tree.root], root)) {
