@@ -2899,3 +2899,22 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
+150. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+     first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
+     and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
+     nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or
+     `imsqti_itemv3p0p1_v1p0.xsd`), and `case-sensitive` is "Used to control whether or not a qti-map-entry string is
+     matched case sensitively" (section 7.21.3), which governs how a response is matched, not what a key is. Section
+     5.88 says each entry "maps a single value from the source set onto a single float", which describes each entry,
+     not a rule that no two may overlap. The standard already lets entries overlap: the official example BG010 writes
+     `York` with `case-sensitive="true"` beside `york` with the default, and the response `York` matches both. Where
+     QTI states a tie-break it is order: AreaMapping's areas are checked with "those listed first taking priority"
+     (section 5.115). Mapping states none, so the same rule applies to it: the first listed entry that matches gives
+     the value. Two string entries are one key only when they are written identically and matched the same way (both
+     case-folded, or both by code points); `York` and `york` are two keys, and `york` written twice is a repeat. This
+     narrows reading 98's string clause: its sentence that `York` and `york` repeat in a string mapping whose entries
+     leave `case-sensitive` at its default no longer holds, and everything else in reading 98 stands, including the
+     refusal of an exact repeat and of `1` and `01` in an integer mapping. A reader that picks among several matching
+     entries, plate's score included, takes the lowest start (the first listed) and invents no other policy. This binds
+     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision
+     425, delegated by the operator in mail 69fd02ec; register row B11.)

@@ -450,9 +450,15 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
             type: "float",
           },
           {
-            breaks: ["Map key"],
+            breaks: [],
             keys: ["York", "york"],
-            name: "string folded by the default",
+            name: "string keys differing only by case, both matched by the default (reading 150)",
+            type: "string",
+          },
+          {
+            breaks: ["Map key"],
+            keys: ["york", "york"],
+            name: "one string key written twice",
             type: "string",
           },
           { breaks: ["Map key"], keys: ["A B", "B A"], name: "pair undirected", type: "pair" },
@@ -485,6 +491,15 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
           mappedItem("string", ["York", "york"], "7", ["true"]),
         );
         assert.deepStrictEqual(kinds, [], "a case-sensitive York beside a default york");
+
+        const sameWay = yield* mappingBreachesOf(
+          mappedItem("string", ["york", "york"], "7", ["true", "true"]),
+        );
+        assert.deepStrictEqual(
+          sameWay.map((breach) => breach.split(" {")[0]),
+          ["Map key"],
+          "one case-sensitive key written twice",
+        );
 
         const target = yield* mappingBreachesOf(mappedItem("string", ["a"], "x"));
         assert.deepStrictEqual(
