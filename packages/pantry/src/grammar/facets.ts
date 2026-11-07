@@ -115,11 +115,22 @@ const particle = (
 });
 
 /**
+ * The template block kinds, of an item's body and of its rubric block's content: the kinds under
+ * which no interaction sits at any depth (spec reading 143). The information model says "A
+ * qti-template-block must not contain any interactions, either directly or indirectly" (§5.145,
+ * TemplateBlock, in both versions), stricter than the class tables and the XSD, which reach an
+ * interaction through the HTML of its content body. It says no such thing of a template inline,
+ * whose own content holds no interaction (§5.155 and §6.27, InlineStaticGroup; the XSD's
+ * `TemplateInlineDType`), which the content model refuses, and whose HTML may hold one (§5.64,
+ * HTMLText, of `inlineGroup`, §6.26), as the XSD's `HTMLTextDType` does.
+ */
+const templateBlockKinds = ["qti-template-block", "qti-template-block.rubric"] as const;
+
+/**
  * The template kinds, block and inline, each of an item's body and of its rubric block's content.
  */
 const templateKinds = [
-  "qti-template-block",
-  "qti-template-block.rubric",
+  ...templateBlockKinds,
   "qti-template-inline",
   "qti-template-inline.rubric",
 ] as const;
@@ -283,7 +294,7 @@ export const asi: Facets = {
       },
       { flags: ["htx"], kinds: ["qti-hottext"] },
       { flags: ["rubric"], kinds: ["qti-rubric-block"] },
-      { flags: ["tmpl"], kinds: templateKinds },
+      { flags: ["tmpl"], kinds: templateBlockKinds },
       { flags: ["modal"], kinds: ["qti-modal-feedback"] },
       {
         flags: ["fb"],

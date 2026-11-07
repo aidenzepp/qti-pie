@@ -236,14 +236,6 @@ const knownDisagreements: readonly Known[] = [
     owner: "GEN-B, fixing forward with a libxml2 record",
     why: "CRUST's run (TEST_SEED=2420825299): the same skip, below a foreign element whose xsi:type names no type at all; its no-namespace child's xsi:type names xs:unsignedShort, which its text is not",
   },
-  {
-    class: "content",
-    detail:
-      /^N6 ancestry at (?:(?!\/qti-template-block)\S)*\/qti-template-inline(?:\.rubric)?\[\d+\]\/\S+: \S+ sits in \{[^}]*\btmpl\b[^}]*\}: Banned holds \{[^}]*\btmpl\b/u,
-    direction: "oracle-only",
-    owner: "VD, schema slot 7",
-    why: "VD's ruling of 2026-11-07: an interaction a template inline's HTML holds is valid, and only a template block refuses one at any depth (§5.145); the grammar bans it under every template (ancestry.ts interactionBans `tmpl`)",
-  },
 ];
 
 /**
@@ -407,9 +399,9 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
 
 /**
  * The documents the replay judges as written: the reduced cases a ruling or a record settled, each
- * of which both oracles must judge alike from then on. The template inline's is VD's ruling of
- * 2026-11-07 (an interaction its HTML holds is valid; only a template block refuses one at any
- * depth, §5.145), which disagrees until the grammar's ban comes off the inline. The padded
+ * of which both oracles must judge alike from then on. The template inline's and the template
+ * block's are VD's ruling of 2026-11-07 (spec reading 143: an interaction a template inline's
+ * HTML holds is valid; only a template block refuses one at any depth, §5.145). The padded
  * `xsi:type`'s is libxml2's on both sides (`paddedTypeRecord`, `paddedTypeLaw`): a lawful-seed run
  * bred it from a drawn seed, `xsitype:ENTITY ` on a lax foreign element. The item lacking its
  * required attributes beside a nested item of its name is VD's run's (TEST_SEED=3143817330, drawn

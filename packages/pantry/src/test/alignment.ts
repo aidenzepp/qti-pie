@@ -823,6 +823,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    143,
+    {
+      owner:
+        "the grammar's `tmpl` flag (`src/grammar/facets.ts` `templateBlockKinds`), held by `src/test/template-interactions.oracle.test.ts` and `src/grammar/ancestry.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

@@ -2497,3 +2497,18 @@ against it. A reading that is not an information-model-over-XSD case says which 
      alike, which read through crust. This is not a case of documents in conflict. (Decided 2026-11-07 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from RV seat CRUST (`daed3e96`), on GEN-B/codec's
      finding N2.)
+143. **An interaction is banned at any depth of a template block, and in a template inline only as its own content model
+     bans it, so the four inline interactions are admitted inside a template inline's HTML.** The information model says
+     "A qti-template-block must not contain any interactions, either directly or indirectly" (section 5.145,
+     TemplateBlock, in both versions). That is stricter than its own class tables and the XSD, which reach the four
+     inline interactions through the HTML of a template block's content body (sections 5.147, 6.10, 6.14 and 5.64
+     HTMLText, whose children are inlineGroup, section 6.26; the XSD's HTMLTextDType), so the stricter source is the
+     rule (readings 16 and 17). The information model states no such rule of a template inline (section 5.155). Its own
+     content, InlineStaticGroup (section 6.27), holds no interaction, and neither does the XSD's TemplateInlineDType, so
+     the content model refuses an interaction as its child. Its HTML, span and its kin of HTMLText (section 6.25), holds
+     inlineGroup's four interactions, which are admitted there. So the grammar's `tmpl` ancestry flag, which carries the
+     ban, is entered under the template block and its rubric variant alone (`templateBlockKinds`), and every other
+     template facet still reads all four template kinds. Lane GEN-B's XSD search found the grammar refusing an XSD-valid
+     interaction inside a template inline's span. This is a case of documents in conflict: the information model's prose
+     against its tables and the XSD, for the template block. (Decided 2026-11-07 by the coordinator, under the
+     operator's standing ruling of 2026-11-05, from seat FIX-TMPL, on lane VD's ruling.)
