@@ -31,8 +31,7 @@
  */
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { Config, Effect, FileSystem, Option, Result, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { Effect, FileSystem, Option, Result } from "effect";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { encode } from "@qti-pie/crust/encode.ts";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
@@ -57,6 +56,7 @@ import {
 import type { CodecGenome, Declaration, Piece } from "#pantry/test/gen/genetic/codec-genome.ts";
 import type { Judgment } from "#pantry/test/gen/genetic/engine.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { xmllintRun } from "#pantry/xml/oracle.ts";
 
 /**
  * Which oracle a disagreement breaks.
@@ -98,46 +98,13 @@ interface Found {
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 /**
- * The `xmllint` executable: `XMLLINT` when set, else `xmllint` on `PATH`.
- */
-const xmllintPath = Config.String("XMLLINT").pipe(Config.withDefault("xmllint"));
-
-/**
- * What one `xmllint` run gave: its exit status, its standard output and its standard error.
- */
-interface Ran {
-  readonly code: number;
-  readonly stderr: string;
-  readonly stdout: Uint8Array;
-}
-
-/**
- * Run `xmllint` with the given arguments, standard input closed.
+ * Run `xmllint` through the oracle's one runner; an `xmllint` that does not start is a defect of
+ * the machine, not of a document, and dies.
  *
  * @param args - The arguments, the file last.
- * @returns What it gave; an `xmllint` that does not start is a defect of the machine, not of a
- *   document, and dies.
+ * @returns Its exit status, standard output and standard error.
  */
-const xmllint = Effect.fnUntraced(function* xmllint(args: readonly string[]) {
-  const executable = yield* Effect.orDie(xmllintPath);
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const ran: Ran = yield* Effect.scoped(
-    Effect.gen(function* collected() {
-      const handle = yield* spawner.spawn(ChildProcess.make(executable, args, { stdin: "ignore" }));
-
-      return yield* Effect.all(
-        {
-          code: handle.exitCode.pipe(Effect.map(Number)),
-          stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
-          stdout: Stream.mkUint8Array(handle.stdout),
-        },
-        { concurrency: "unbounded" },
-      );
-    }),
-  ).pipe(Effect.orDie);
-
-  return ran;
-});
+const xmllint = (args: readonly string[]) => xmllintRun(args).pipe(Effect.orDie);
 
 /**
  * Blank one `xmllint` error line's names and numbers, so one rule of libxml2's is one class however
