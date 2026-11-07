@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Result } from "effect";
+import { Option, Result } from "effect";
 import type { Variables } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
-import { referenceValue, variableValue } from "#plate/engine/refs.ts";
+import { builtInType, referenceValue, variableValue } from "#plate/engine/refs.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
@@ -124,6 +124,23 @@ describe("variableValue", () => {
       );
     });
   }
+});
+
+describe("builtInType", () => {
+  it("[I-9a] names the type of each built-in the engine holds: completionStatus a single identifier, numAttempts a single integer", () => {
+    assert.deepStrictEqual(
+      ["completionStatus", "numAttempts", "duration", "QTI_CONTEXT", "constructor"].map((name) =>
+        builtInType(name),
+      ),
+      [
+        Option.some({ baseType: "identifier", cardinality: "single" }),
+        Option.some({ baseType: "integer", cardinality: "single" }),
+        Option.none(),
+        Option.none(),
+        Option.none(),
+      ],
+    );
+  });
 });
 
 describe("referenceValue", () => {

@@ -1,13 +1,14 @@
 /**
  * The engine's references to variables: the value a `qti-variable` reads ({@link variableValue}),
  * from the responses and outcomes the record holds ({@link own}) or from a built-in variable
- * ({@link builtInValue}), and the run-time resolver of an attribute that holds a literal or names a
- * variable ({@link referenceValue}, and {@link referenceInteger} for an integer one).
+ * ({@link builtInValue}), the type of each built-in the engine holds ({@link builtInType}), and the
+ * run-time resolver of an attribute that holds a literal or names a variable
+ * ({@link referenceValue}, and {@link referenceInteger} for an integer one).
  *
  * It value-imports only `effect`'s `Option` and `Result`, `#plate/engine/failures.ts`,
- * `#plate/engine/numbers.ts` and `#plate/model/values.ts`, and reads `Variables` from
- * `#plate/engine/evaluate.ts` and the reference types from `#plate/model/expression.ts` as types,
- * so every expression family may import it.
+ * `#plate/engine/numbers.ts`, `#plate/model/record.ts` and `#plate/model/values.ts`, and reads
+ * `Variables` from `#plate/engine/evaluate.ts` and the reference types from
+ * `#plate/model/expression.ts` as types, so every expression family may import it.
  *
  * @module
  */
@@ -21,6 +22,7 @@ import type {
   IntegerOrRef,
   StringOrRef,
 } from "#plate/model/expression.ts";
+import { completionStatus, completionStatusType } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -57,6 +59,37 @@ export const builtInValue = (variables: Variables, identifier: string): Option.O
   identifier === "numAttempts"
     ? Option.map(Option.fromUndefinedOr(variables.numAttempts), integerValue)
     : Option.none();
+
+/**
+ * The type of each built-in variable the engine holds: the built-in outcome `completionStatus` a
+ * single identifier ({@link completionStatusType}), and `numAttempts` a single integer.
+ *
+ * `duration` is not among them: the engine holds no value of it, and the item model marks a rule
+ * that reads it.
+ */
+const builtInTypes: ReadonlyMap<string, Pick<Value, "baseType" | "cardinality">> = new Map<
+  string,
+  Pick<Value, "baseType" | "cardinality">
+>([
+  [completionStatus, completionStatusType],
+  ["numAttempts", { baseType: "integer", cardinality: "single" }],
+]);
+
+/**
+ * Give the type of a built-in variable the engine holds, from {@link builtInTypes} and never from
+ * the attempt, so a built-in's type does not depend on what the attempt holds of it.
+ *
+ * It is the type a `qti-default` of the built-in gives NULL of: a built-in has no declaration, so
+ * no declared default.
+ *
+ * @param identifier The variable's identifier.
+ * @returns Its base type and cardinality, or none for an identifier that names no built-in the
+ *   engine holds.
+ */
+export const builtInType = (
+  identifier: string,
+): Option.Option<Pick<Value, "baseType" | "cardinality">> =>
+  Option.fromUndefinedOr(builtInTypes.get(identifier));
 
 /**
  * Give the value of a `qti-variable`: the response or the outcome of that identifier, the built-in

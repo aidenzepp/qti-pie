@@ -19,7 +19,8 @@ import { render } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { fitting, score, tierA } from "#plate/score.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
-import { acceptForTest } from "#plate/validate/verdict.ts";
+import { open } from "#plate/validate/open.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * Construct a value of identifiers.
@@ -291,6 +292,29 @@ const failureOf = <A, E>(result: Result.Result<A, E>): Option.Option<E> => {
  */
 const outcomeOf = (stored: StoredRecord, identifier: string): readonly unknown[] =>
   stored.outcomes[identifier]?.values.map((single) => single.value) ?? [];
+
+/**
+ * A hand-built item document whose response processing sets the boolean `STATUS_NULL` to whether
+ * the `qti-default` of the built-in `completionStatus` is NULL, and `ATTEMPTS_NULL` to whether the
+ * `qti-default` of the built-in `numAttempts` is. Neither built-in has a declaration, so each
+ * default is NULL of the built-in's type and both outcomes are true.
+ */
+const builtInDefaults = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="built-in-defaults" title="Built-in defaults" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>
+  <qti-outcome-declaration identifier="STATUS_NULL" cardinality="single" base-type="boolean"/>
+  <qti-outcome-declaration identifier="ATTEMPTS_NULL" cardinality="single" base-type="boolean"/>
+  <qti-item-body><p>Built-in defaults</p></qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="STATUS_NULL">
+      <qti-is-null><qti-default identifier="completionStatus"/></qti-is-null>
+    </qti-set-outcome-value>
+    <qti-set-outcome-value identifier="ATTEMPTS_NULL">
+      <qti-is-null><qti-default identifier="numAttempts"/></qti-is-null>
+    </qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
 
 /**
  * Hand `score` and `checkResponses` a hand-built item, which their types refuse: the type tests
@@ -570,6 +594,29 @@ describe("score", () => {
         assert.isFalse(Object.hasOwn(lacking.outcomes, "completionStatus"));
         assert.deepStrictEqual(outcomeOf(after, "SCORE"), [1]);
         assert.deepStrictEqual(outcomeOf(after, "completionStatus"), ["unknown"]);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] opens and scores an item whose processing reads qti-default of the built-in completionStatus through qti-is-null, beside numAttempts",
+    () =>
+      Effect.gen(function* scoresBuiltInDefaults() {
+        const verdict = yield* open(
+          "items/built-in-defaults.xml",
+          new TextEncoder().encode(builtInDefaults),
+        );
+        const opened = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+        );
+
+        assert.strictEqual(verdict.verdict, "accepted");
+        assert.deepStrictEqual(opened.item.unsupported, []);
+        assert.isTrue(Option.isSome(opened.item.processing), "the processing runs");
+
+        const stored = yield* Effect.fromResult(score(opened, {}));
+
+        assert.deepStrictEqual(outcomeOf(stored, "STATUS_NULL"), [true]);
+        assert.deepStrictEqual(outcomeOf(stored, "ATTEMPTS_NULL"), [true]);
       }),
   );
 
