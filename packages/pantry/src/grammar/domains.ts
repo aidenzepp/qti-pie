@@ -3628,16 +3628,6 @@ const hidesIdentity = (domain: Domain): boolean =>
 export type Reading = "exact" | "xsd";
 
 /**
- * The compiled domains of the definitions compiled so far, by definition and reading. The leaf
- * states each distinct definition once and its declarations share it, so most declarations find
- * their domain here.
- */
-const compiledCache = new WeakMap<
-  Domain,
-  Map<Reading, Result.Result<CompiledDomain, CompileError>>
->();
-
-/**
  * The detail of {@link UnreadDefinition} for a definition whose lexical space is empty, which no
  * pattern grizzle admits spells (it refuses a `Compute.matches` pattern no text matches): the
  * attribute grammar reads such a definition as an empty domain, one with no pattern.
@@ -3654,13 +3644,16 @@ export const isEmptyDefinition = (failure: CompileError): boolean =>
   failure._tag === "UnreadDefinition" && failure.detail === emptyDefinition;
 
 /**
- * Compile a definition, uncached ({@link compile}).
+ * Compile a resolved definition into its value domain.
  *
- * @param domain - The definition.
+ * Each call compiles: the attribute grammar compiles each distinct definition once
+ * (`#pantry/grammar/attributes.ts`, `domainReader`), and no caller compiles one definition twice.
+ *
+ * @param domain - The definition, as the leaf resolves it.
  * @param reading - How its whitespace is read.
  * @returns The compiled domain, or why it has none.
  */
-const compileUncached = (
+export const compile = (
   domain: Domain,
   reading: Reading,
 ): Result.Result<CompiledDomain, CompileError> =>
@@ -3684,31 +3677,6 @@ const compileUncached = (
       primitive: domain._tag === "atomic" ? domain.primitive : domain._tag,
     };
   });
-
-/**
- * Compile a resolved definition into its value domain.
- *
- * @param domain - The definition, as the leaf resolves it.
- * @param reading - How its whitespace is read.
- * @returns The compiled domain, or why it has none.
- */
-export const compile = (
-  domain: Domain,
-  reading: Reading,
-): Result.Result<CompiledDomain, CompileError> => {
-  const byReading =
-    compiledCache.get(domain) ?? new Map<Reading, Result.Result<CompiledDomain, CompileError>>();
-  const known = byReading.get(reading);
-  if (known !== undefined) {
-    return known;
-  }
-
-  const compiled = compileUncached(domain, reading);
-  byReading.set(reading, compiled);
-  compiledCache.set(domain, byReading);
-
-  return compiled;
-};
 
 /**
  * The flags a compiled pattern is read with by a JavaScript host: `u`, so its `\u` escapes and

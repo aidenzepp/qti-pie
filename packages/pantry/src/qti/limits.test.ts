@@ -1,24 +1,26 @@
 /**
  * The key-text bounds against grizzle's own representability rule, `keyTextBytes(fields)`, which
- * measures a key's B-tree entry as the schema's compilation does: each bound fits beside its key's
- * other fields and one code point more does not, and every key of the composed `Qti` that holds a
- * text holds it at its kind's one bound and is representable.
+ * measures a key's B-tree entry as the schema's compilation does: each bound is the UTF-8 bytes it
+ * leaves beside its key's other fields, and every index of the composed `Qti` that holds a text of
+ * one of the bounded kinds holds it at its kind's one bound and is representable.
  */
-import { keyTextBytes, natural, uuid } from "@bjornpagen/grizzle";
+import { keyTextBytes, natural, str, uuid } from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Predicate, Result, Schema } from "effect";
 import { OpenLocal } from "#pantry/qti/attributes.ts";
+import { EntryPath, ForeignNamespace, NamespacePrefix } from "#pantry/qti/chardata.ts";
 import {
-  boundedTextPattern,
   keyText,
-  keyTextCodePoints,
-  keyTextPattern,
-  localNameCodePoints,
-  namespaceCodePoints,
-  namespaceTextPattern,
+  keyTextBytes as keyTextBound,
+  localNameBytes,
+  namespaceBytes,
+  namespaceText,
+  prefixBytes,
+  utf8Length,
   widestTextKey,
 } from "#pantry/qti/limits.ts";
+import { Node } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -65,17 +67,9 @@ const StatementSchema = Schema.Struct({
 });
 
 /**
- * A field as grizzle keeps it, the parts this test reads: its SQL type, and a text's pattern.
+ * A field as grizzle keeps it, the part this test reads: its SQL type.
  */
-const FieldSchema = Schema.Struct({
-  pattern: Schema.optional(Schema.Struct({ source: Schema.String })),
-  sql: Schema.String,
-});
-
-/**
- * A field as this test reads it.
- */
-type Field = typeof FieldSchema.Type;
+const FieldSchema = Schema.Struct({ sql: Schema.String });
 
 /**
  * A stored relation of the schema: its name, primary key and fields.
@@ -151,42 +145,6 @@ const statementKeys = (statement: typeof StatementSchema.Type): readonly Indexed
 };
 
 /**
- * One atom of a bounded pattern and its repetition: a class, `.`, an escape or one literal
- * character, then an optional `{0,n}` or `{n}`.
- */
-const boundedAtom =
-  /(?:\[(?:\\.|[^\]\\])*\]|\.|\\.|[^\\[\](){}|?*+^$])(?:\{(?:0,)?(?<count>\d+)\})?/uy;
-
-/**
- * Read the most code points a text field's pattern admits, where the pattern is an anchored run of
- * atoms each repeated a bounded number of times, the form every key text takes
- * (`boundedTextPattern`, `EntryPath`, a foreign namespace).
- *
- * @param field - The field.
- * @returns The bound, or none for any other pattern, which this test does not measure.
- */
-const textBound = (field: Field): number | undefined => {
-  const source = field.pattern?.source ?? "";
-  if (!source.startsWith("^") || !source.endsWith("$")) {
-    return undefined;
-  }
-
-  const body = source.slice(1, -1);
-  let bound = 0;
-  boundedAtom.lastIndex = 0;
-  while (boundedAtom.lastIndex < body.length) {
-    const match = boundedAtom.exec(body);
-    if (match === null) {
-      return undefined;
-    }
-
-    bound += Number(match.groups?.["count"] ?? "1");
-  }
-
-  return bound;
-};
-
-/**
  * Whether a value is a grizzle field descriptor, which carries its SQL type.
  *
  * @param value - A relation's field as grizzle keeps it.
@@ -227,12 +185,6 @@ const descriptors: ReadonlyMap<string, ReadonlyMap<string, FieldBase>> = new Map
 );
 
 /**
- * The most bytes UTF-8 takes for one code point (RFC 3629, §3), the bytes grizzle counts a
- * pattern's character at.
- */
-const utf8MaxBytes = 4;
-
-/**
  * Measure a key by grizzle's rule: the bytes a text could still hold beside all of its fields.
  *
  * @param fields - The key's fields.
@@ -254,90 +206,64 @@ const termText = (term: Side["terms"][number]): string =>
   Predicate.isString(term) ? term : `pred(${term.field})`;
 
 /**
- * The kinds of text that ride keys, each with its one bound: every key a kind rides leaves it the
- * same number of code points, so a value one relation holds is never refused by another.
+ * The text types that ride keys, each with its one byte bound: every key a kind rides leaves it the
+ * same bytes, so a value one relation holds is never refused by another.
  */
-const textKinds = {
-  "key text": keyTextCodePoints,
-  "local name": localNameCodePoints,
-  namespace: namespaceCodePoints,
-} as const;
+const textKinds: ReadonlyMap<FieldBase, { readonly bytes: number; readonly kind: string }> =
+  new Map<FieldBase, { readonly bytes: number; readonly kind: string }>([
+    [keyText, { bytes: keyTextBound, kind: "key text" }],
+    [EntryPath, { bytes: keyTextBound, kind: "key text (a path)" }],
+    [namespaceText, { bytes: namespaceBytes, kind: "namespace name" }],
+    [ForeignNamespace, { bytes: namespaceBytes, kind: "namespace name (a foreign element's)" }],
+    [OpenLocal, { bytes: localNameBytes, kind: "local name" }],
+    [NamespacePrefix, { bytes: prefixBytes, kind: "prefix" }],
+    [Node.fields.prefix, { bytes: prefixBytes, kind: "prefix (an element's)" }],
+  ]);
 
 /**
- * The kind of a text field a key holds: a field of type `keyText` or `namespaceText` by its
- * pattern, and every other keyed text field by its relation and name.
+ * Any text, line ends included: the language a probe of a byte bound cuts.
  */
-const kindOfField: ReadonlyMap<string, keyof typeof textKinds> = new Map<
-  string,
-  keyof typeof textKinds
->([
-  ["Document.path", "key text"],
-  ["Entry.path", "key text"],
-  ["OpenAttributeName.local", "local name"],
-  ["OpenElementName.namespace", "namespace"],
-  ["OpenElementName.parentNamespace", "namespace"],
-  ["TestDocument.path", "key text"],
-]);
-
-/**
- * Read the kind of a keyed text field.
- *
- * @param relation - The field's relation.
- * @param term - The field's name.
- * @param field - The field.
- * @returns Its kind, or none for a text field no kind names.
- */
-const kindOf = (
-  relation: string,
-  term: string,
-  field: Field,
-): keyof typeof textKinds | undefined => {
-  if (field.pattern?.source === keyTextPattern) {
-    return "key text";
-  }
-
-  return field.pattern?.source === namespaceTextPattern
-    ? "namespace"
-    : kindOfField.get(`${relation}.${term}`);
-};
+const anyText = str.regex("^.*$", "su");
 
 describe("qti/limits.ts", () => {
-  it("writes each bounded pattern as the literal of its bound, whose language is every text of that many code points", () => {
-    // Oracle: the pattern's language read by JavaScript's RegExp, whose grammar `str.regex` takes
-    // (ECMAScript under `su`): the bounded text the bound names, a newline and the empty text in.
-    assert.strictEqual(keyTextPattern, boundedTextPattern(keyTextCodePoints));
-    assert.strictEqual(namespaceTextPattern, boundedTextPattern(namespaceCodePoints));
-    assert.isTrue(
-      Predicate.hasProperty(keyText, "pattern") &&
-        Predicate.hasProperty(keyText.pattern, "source") &&
-        keyText.pattern.source === keyTextPattern,
-    );
-
-    const language = new RegExp(keyTextPattern, "su");
-    assert.isTrue(language.test("🀀".repeat(keyTextCodePoints)));
-    assert.isTrue(language.test("\n"));
-    assert.isTrue(language.test(""));
-    assert.isFalse(language.test("a".repeat(keyTextCodePoints + 1)));
-  });
-
-  it("bounds a key text and a namespace name by the most code points whose UTF-8 form fits what grizzle's keyTextBytes leaves beside their widest keys", () => {
+  it("states each bound as the UTF-8 bytes grizzle's keyTextBytes leaves beside its widest key's other fields", () => {
     // Oracle: grizzle's own rule (`keyTextBytes`, public/text.ts of the vendored engine), the
-    // measure the schema's compilation refuses an entry by, over the bytes UTF-8 takes at most for
-    // a code point (RFC 3629, §3), as grizzle counts a pattern's character: each bound's text fits
-    // in the bytes left beside its widest key's other fields, and one code point more does not.
-    // Bound: the key text beside `widestTextKey`, and the namespace name beside a uuid and a local
-    // name, `OpenAttributeName(node, uri, local)`.
-    const keyRoom = Result.getOrElse(roomBeside(widestTextKey), () => -1);
-    const namespaceRoom = Result.getOrElse(roomBeside([uuid, OpenLocal]), () => -1);
-
-    assert.isAtMost(utf8MaxBytes * keyTextCodePoints, keyRoom);
-    assert.isAbove(utf8MaxBytes * (keyTextCodePoints + 1), keyRoom);
-    assert.isAtMost(utf8MaxBytes * namespaceCodePoints, namespaceRoom);
-    assert.isAbove(utf8MaxBytes * (namespaceCodePoints + 1), namespaceRoom);
-    assert.strictEqual(localNameCodePoints, 255);
+    // measure the schema's compilation refuses an entry by, read over each kind's widest key: the
+    // key text beside `widestTextKey`, the namespace name beside a uuid and the local name's own
+    // type, `OpenAttributeName(node, uri, local)`, and the prefix beside a uuid, `Namespace(node,
+    // prefix)`; the local name and the namespace name share their entry evenly.
+    assert.strictEqual(keyTextBound, keyTextBytes(widestTextKey));
+    assert.strictEqual(namespaceBytes, keyTextBytes([uuid, OpenLocal]));
+    assert.strictEqual(prefixBytes, keyTextBytes([uuid]));
+    assert.isAtLeast(namespaceBytes, localNameBytes);
+    assert.isBelow(
+      keyTextBytes([uuid, str.bytes(localNameBytes + 1, anyText)]),
+      localNameBytes + 1,
+    );
+    assert.deepStrictEqual(
+      { keyTextBound, localNameBytes, namespaceBytes, prefixBytes },
+      { keyTextBound: 2587, localNameBytes: 1329, namespaceBytes: 1329, prefixBytes: 2665 },
+    );
   });
 
-  it("holds every text an index of the composed schema keys at its kind's one bound, in an entry grizzle represents", () => {
+  it("counts a text's bytes as UTF-8 does: one to four bytes a code point", () => {
+    // Oracle: the specification as a checker, RFC 3629 §3's table of byte sequences.
+    // Bound: the first and last code point of each of the four lengths.
+    for (const [text, bytes] of [
+      ["\u{0}", 1],
+      ["\u{7F}", 1],
+      ["\u{80}", 2],
+      ["\u{7FF}", 2],
+      ["\u{800}", 3],
+      ["\u{FFFF}", 3],
+      ["\u{10000}", 4],
+      ["\u{10FFFF}", 4],
+    ] as const) {
+      assert.strictEqual(utf8Length(text), bytes, text);
+    }
+  });
+
+  it("holds every text of a bounded kind an index of the composed schema keys in an entry grizzle represents", () => {
     // Oracle: grizzle's representability rule (`keyTextBytes`) over every index a statement of
     // `Qti` installs as `laws/model/plan.ts` lowers it: each key, each containment's two sides, and
     // each family's member and owner, a counted family's hidden index beside its terms. A slice
@@ -359,49 +285,30 @@ describe("qti/limits.ts", () => {
     ];
     const measured = new Set<string>();
     for (const { hidden, label, relation, terms } of keys) {
-      const fields = relations.get(relation)?.fields;
-      const named = terms.map((term) =>
-        Predicate.isString(term) && fields !== undefined ? fields[term] : undefined,
-      );
-      const texts = named.flatMap((field) => (field?.sql === "text" ? [field] : []));
-
-      if (texts.length === 0 || texts.map(textBound).includes(undefined)) {
-        continue;
-      }
-
-      const where = `${label} ${relation}(${terms.map(termText).join(", ")})`;
       const held = terms.map((term) =>
         Predicate.isString(term) ? descriptors.get(relation)?.get(term) : natural,
       );
-      for (const [at, field] of named.entries()) {
-        const term = terms[at];
-        if (field?.sql === "text" && Predicate.isString(term)) {
-          const kind = kindOf(relation, term, field);
-
-          assert.isDefined(kind, `${where}: ${term} is a text of a kind with one bound`);
-          assert.strictEqual(
-            textBound(field),
-            kind === undefined ? undefined : textKinds[kind],
-            `${where}: ${term} takes its kind's bound`,
-          );
-        }
+      const kinds = held.map((field) => (field === undefined ? undefined : textKinds.get(field)));
+      const last = kinds.findLastIndex((kind) => kind !== undefined);
+      const where = `${label} ${relation}(${terms.map(termText).join(", ")})`;
+      if (last === -1) {
+        continue;
       }
 
       assert.isFalse(held.includes(undefined), `${where}: every term a field of its relation`);
 
       // One text is measured against the bytes left beside the key's other fields, the rest of
       // its texts included as fields, as keyTextBytes reads "the other fields of a key".
-      const last = named.findLastIndex((field) => field?.sql === "text");
       const others = held.flatMap((field, at) =>
         field === undefined || at === last ? [] : [field],
       );
       assert.isAtMost(
-        utf8MaxBytes * (textBound(named[last] ?? { sql: "text" }) ?? 0),
+        kinds[last]?.bytes ?? Number.POSITIVE_INFINITY,
         Result.getOrElse(
           roomBeside([...others, ...Array.from({ length: hidden }, () => natural)]),
           () => -1,
         ),
-        `${where}: grizzle represents its entry`,
+        `${where}: grizzle represents its ${kinds[last]?.kind ?? "text"}`,
       );
       measured.add(`${relation}(${terms.map(termText).join(", ")})`);
     }
@@ -410,6 +317,7 @@ describe("qti/limits.ts", () => {
       "Document(package, path)",
       "OpenElementName(node, namespace)",
       "OpenAttributeName(node, uri, local)",
+      "Namespace(node, prefix)",
       "Resource(package, identifier)",
     ]) {
       assert.isTrue(measured.has(key), `measured ${key}`);

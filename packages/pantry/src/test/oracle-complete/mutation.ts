@@ -18,7 +18,7 @@
  */
 import { int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -288,6 +288,24 @@ export const changeDrawn =
   };
 
 /**
+ * Draw one row of a list and drop it, every other row as it is.
+ *
+ * @param rows - The rows.
+ * @returns A generator of the list without the drawn row. Throws when the list is empty.
+ */
+export const droppedDrawn =
+  <Row>(rows: readonly Row[]): Gen<readonly Row[]> =>
+  (source) => {
+    if (rows.length === 0) {
+      throw new Error("the base's rows hold no row the edit may drop");
+    }
+
+    const dropped = source.draw(int(0, rows.length - 1));
+
+    return rows.filter((_, index) => index !== dropped);
+  };
+
+/**
  * Replace a document's node rows by an edit of them, every other row kept.
  *
  * @param rows - The folded rows.
@@ -298,6 +316,29 @@ export const withNodes = (
   rows: FoldedRows<Composed>,
   nodes: readonly FoldedNode<Composed>[],
 ): FoldedRows<Composed> => ({ ...rows, nodes });
+
+/**
+ * A drawn edit of one listed document's folded rows, as a `rows` mutation.
+ *
+ * @param document - The document's path.
+ * @param edit - The drawn edit, of the rows and the grammar.
+ * @returns The mutation.
+ */
+export const editingRows = (
+  document: string,
+  edit: (rows: FoldedRows<Composed>, grammar: ComposedGrammar) => Gen<FoldedRows<Composed>>,
+): Mutation => ({ document, mutate: edit, over: "rows" });
+
+/**
+ * Whether a node row is an element's, by the grammar's `IsElement`: no document node, character
+ * run, comment, instruction, entity reference or doctype.
+ *
+ * @param grammar - The composed grammar.
+ * @param node - The node row.
+ * @returns Whether it is.
+ */
+export const isElementNode = (grammar: ComposedGrammar, node: FoldedNode<Composed>): boolean =>
+  Option.isSome(grammar.kinds.isElement.lookup({ kind: node.kind }));
 
 /**
  * Order two paths by UTF-16 code unit, the order `readPackage` lists entries in.

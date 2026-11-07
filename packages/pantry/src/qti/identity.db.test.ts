@@ -40,6 +40,7 @@ import {
   TypeName,
 } from "#pantry/grammar/install.ts";
 import { XmlStandalone } from "#pantry/qti/chardata.ts";
+import { bitsText } from "#pantry/test/bits.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -470,7 +471,7 @@ const documentRow = (
     bindings: 0,
     charset: "UTF-8",
     choices: 0,
-    context: "0".repeat(Flag.handles.length),
+    context: bitsText(Flag, []),
     context_nearest: document,
     context_nearest_kind: codeOf(NodeKind.handles, "document"),
     encoding: "",

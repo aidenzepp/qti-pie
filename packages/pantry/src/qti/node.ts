@@ -82,7 +82,7 @@ import {
   XsiType,
 } from "#pantry/grammar/install.ts";
 import type { ValueDomain } from "#pantry/grammar/install.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { keyText, prefixBytes } from "#pantry/qti/limits.ts";
 
 /**
  * The first characters of an XML Namespaces NCName: XML 1.0's NameStartChar without the colon,
@@ -98,10 +98,12 @@ const ncNameStart = "A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-�
 const ncNameContinuation = `${ncNameStart}\\-.0-9·̀-ͯ‿-⁀`;
 
 /**
- * An element's prefix as written: an NCName, or the empty string for an unprefixed name. The bound
- * of 256 characters is a key's byte bound, since a prefix may sit in a key.
+ * An element's prefix as written: an NCName, or the empty string for an unprefixed name.
+ * `Node.prefix` reads it at `prefixBytes` UTF-8 bytes (`#pantry/qti/limits.ts`), the bound of the
+ * namespace declaration's prefix, whose key `Namespace(node, prefix)` holds it, so one language
+ * holds both.
  */
-export const prefixPattern = `^(?:[${ncNameStart}][${ncNameContinuation}]{0,255})?$`;
+export const prefixPattern = `^(?:[${ncNameStart}][${ncNameContinuation}]*)?$`;
 
 /**
  * A node's characters: any run of XML 1.0's Char, tabs, line feeds and carriage returns included.
@@ -190,7 +192,7 @@ export const Node = relation(
     parentNearest: accumulated(uuid, nilUuid),
     parentNearestKind: accumulated(closedId(NodeKind), "document"),
     parentParentKind: accumulated(closedId(NodeKind), "document"),
-    prefix: str.regex(prefixPattern),
+    prefix: str.bytes(prefixBytes, str.regex(prefixPattern)),
     start: drawn(natural),
     state: closedId(Position),
     stringPiece: keyText,

@@ -441,7 +441,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     94,
     {
       owner:
-        "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference; a name a key holds is held to reading 133's key-text bound; an open attribute's local name to 255 (`OpenLocal`)",
+        "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference; a name a key holds is held to reading 133's key-text bound; an open attribute's local name to 1,329 bytes (`OpenLocal`) and a namespace prefix to 2,665",
       status: "G",
     },
   ],
@@ -745,7 +745,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     133,
     {
       owner:
-        "S-ORACLE's `keyText` (`src/qti/limits.ts`: `keyTextCodePoints` 646, held to grizzle's `keyTextBytes` by `limits.test.ts`), the oracle's Key text bound (rule `key-text-bound`) over the schema's key copies (`src/test/key-copies.ts`), held to the import's rows by `src/test/oracle.keys.test.ts`; in code points until grizzle beta.1's `str.bytes(N)`, then in bytes. The import writes every copy whatever its length, so the database refuses an over-long one under `key-text-bound`, the oracle's rule",
+        "S-ORACLE's `keyText` (`src/qti/limits.ts`: grizzle's `str.bytes(keyTextBytes, …)`, `keyTextBytes` 2,587, what grizzle's `keyTextBytes` leaves beside the widest key, held by `limits.test.ts`), the oracle's Key text bound (rule `key-text-bound`, measured in UTF-8 bytes) over the schema's key copies (`src/test/key-copies.ts`), held to the import's rows by `src/test/oracle.keys.test.ts`. The import writes every copy whatever its length, so the database refuses an over-long one under `key-text-bound`, the oracle's rule",
       status: "G",
     },
   ],

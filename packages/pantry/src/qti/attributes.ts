@@ -113,7 +113,7 @@ import {
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
-import { keyText, namespaceText } from "#pantry/qti/limits.ts";
+import { keyText, localNameBytes, namespaceText } from "#pantry/qti/limits.ts";
 import { charsPattern, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
 
 /**
@@ -161,12 +161,13 @@ export const Space = str.regex("^[\\t\\n\\r ]*$");
 const nonSpacePattern = `^[${xmlNonSpace}]+$`;
 
 /**
- * An open attribute's local name: an NCName of at most `localNameCodePoints` characters
- * (`#pantry/qti/limits.ts`), its start character and one counted repetition of the rest, the bound
- * `(node, uri, local)` reads it at; `attributes.test.ts` holds the literal to that bound.
- * Exported for `src/import/refusal.ts`, which names its pattern law.
+ * An open attribute's local name: an NCName of at most `localNameBytes` UTF-8 bytes
+ * (`#pantry/qti/limits.ts`), the bound `(node, uri, local)` reads it at. Its pattern is read under
+ * `su`, which reads an NCName exactly as `u` does (it holds no `.`), so its law, the byte bound's,
+ * is no other type's: {@link EntityName} writes the same NCName under `u`, and a refusal names each
+ * by its pattern. Exported for `src/import/refusal.ts`, which names its pattern law.
  */
-export const OpenLocal = str.regex(`^[${ncStart}][${ncChar}]{0,254}$`);
+export const OpenLocal = str.bytes(localNameBytes, str.regex(`^[${ncStart}][${ncChar}]*$`, "su"));
 
 /**
  * An entity's name inside an attribute's lexical form: an NCName, since no entity name holds a
