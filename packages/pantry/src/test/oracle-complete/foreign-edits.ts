@@ -48,8 +48,8 @@ type Node = FoldedNode<Composed>;
 type OpenElementName = Rows["openElementNames"][number];
 
 /**
- * The every-relation item, whose rows hold the package's foreign element, `w:widget` under the
- * custom interaction.
+ * The every-relation item, whose rows hold the package's foreign element, `w:widget` in the
+ * template of the item's portable custom interaction's markup.
  */
 const item = "items/item.xml";
 

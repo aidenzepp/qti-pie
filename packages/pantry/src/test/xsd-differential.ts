@@ -1145,6 +1145,17 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "pci-module-source",
   },
   {
+    class: "content",
+    direction: "oracle-only",
+    reason: {
+      _tag: "specification",
+      source:
+        "R10-b: https://www.imsglobal.org/spec/qti/v3p0/info#Data_PortableCustomInteraction (§5.106, 3.0.0: 'PCIs MUST be used instead of custom interactions (the latter have been deprecated)')",
+      why: "a 3.0.0 document holds no custom interaction, which the XSD still declares; a 3.0.1 document may",
+    },
+    rule: "admission",
+  },
+  {
     class: "beyond",
     direction: "beyond",
     reason: {
