@@ -56,6 +56,7 @@ import {
   collapsed,
   contentLawOf,
   elementsOf,
+  pathOf,
   typedOptionalOf,
   typedOr,
   typedValueOf,
@@ -160,6 +161,36 @@ const ncName = new RegExp(
 type Breach = LawBreach<TestLaw>;
 
 /**
+ * One item ref of a document, and how a breach of its laws names it: by the identifier it writes,
+ * or by its place where it writes none. Its laws over its href and its children judge it either
+ * way, since an item ref that names nothing (reading 147) still names its item (spec reading 155).
+ */
+interface ItemRef {
+  readonly itemRef: string;
+  readonly node: Row;
+}
+
+/**
+ * List a test or section document's item refs, named or not, in document order.
+ *
+ * @param document - The document.
+ * @returns Its item refs.
+ */
+const itemRefsOf = (document: TestDocument): readonly ItemRef[] => {
+  const { rows } = document.listed;
+
+  return rows.members
+    .filter(({ kind }) => kind === testKinds.itemRef)
+    .map((node) => ({
+      itemRef: Option.match(Option.fromUndefinedOr(document.namesByNode.get(node.id)), {
+        onNone: () => pathOf(rows, node.id),
+        onSome: ({ identifier }) => identifier,
+      }),
+      node,
+    }));
+};
+
+/**
  * The declarations of a document by collapsed identifier: each declaration element's kind.
  *
  * @param rows - The document.
@@ -184,7 +215,7 @@ const declarationsOf = (
 
 /**
  * Judge one test or section document's own laws: its names' key, its sections' parts and
- * selections, and its item refs' mappings' keys.
+ * selections, and every item ref's mappings' keys, named or not.
  *
  * @param document - The document.
  * @returns The breaches.
@@ -232,34 +263,32 @@ const documentLawsOf = (document: TestDocument): readonly Breach[] => {
 
     return selected;
   });
-  const mappings = document.names
-    .filter(({ node }) => node.kind === testKinds.itemRef)
-    .flatMap(({ node, identifier }): readonly Breach[] => {
-      const targets = elementsOf(rows, node.id)
-        .filter(({ kind }) => kind === "qti-variable-mapping")
-        .flatMap((mapping) =>
-          Option.toArray(typedOr(rows, mapping.id, "target-identifier", "")).map((target) => ({
-            mapping,
-            target,
-          })),
-        );
-      const byTarget = Map.groupBy(targets, ({ target }) => target);
+  const mappings = itemRefsOf(document).flatMap(({ itemRef, node }): readonly Breach[] => {
+    const targets = elementsOf(rows, node.id)
+      .filter(({ kind }) => kind === "qti-variable-mapping")
+      .flatMap((mapping) =>
+        Option.toArray(typedOr(rows, mapping.id, "target-identifier", "")).map((target) => ({
+          mapping,
+          target,
+        })),
+      );
+    const byTarget = Map.groupBy(targets, ({ target }) => target);
 
-      return [
-        ...[...byTarget].flatMap(([target, held]) =>
-          held
-            .slice(1)
-            .map(({ mapping }) =>
-              breachAt(rows, mapping, "Variable mapping target", { itemRef: identifier, target }),
-            ),
-        ),
-        ...targets
-          .filter(({ target }) => sessionVariables.has(target))
-          .map(({ mapping, target }) =>
-            breachAt(rows, mapping, "Variable mapping target", { itemRef: identifier, target }),
+    return [
+      ...[...byTarget].flatMap(([target, held]) =>
+        held
+          .slice(1)
+          .map(({ mapping }) =>
+            breachAt(rows, mapping, "Variable mapping target", { itemRef, target }),
           ),
-      ];
-    });
+      ),
+      ...targets
+        .filter(({ target }) => sessionVariables.has(target))
+        .map(({ mapping, target }) =>
+          breachAt(rows, mapping, "Variable mapping target", { itemRef, target }),
+        ),
+    ];
+  });
 
   return [...structure, ...sections, ...mappings];
 };
@@ -288,10 +317,11 @@ const stimulusRefKeyOf = (listed: ListedRows): readonly Breach[] => {
 };
 
 /**
- * Judge what each item ref of a test or section document names: its href names an item or an LTI
- * link of the package (B2, B3), each variable mapping's source an outcome its item declares and
- * its target no other variable of it (A34, reading 97), and each template default's template a
- * template its item declares (A37).
+ * Judge what each item ref of a test or section document names, whether or not it writes an
+ * identifier: its href, where it writes one, names an item or an LTI link of the package (B2, B3),
+ * and one that writes none names nothing, which AL3 alone refuses (spec reading 155); each variable
+ * mapping's source an outcome its item declares and its target no other variable of it (A34,
+ * reading 97); and each template default's template a template its item declares (A37).
  *
  * @param input - The package.
  * @param document - The document.
@@ -305,70 +335,68 @@ const itemRefLawsOf = (
 ): readonly Breach[] => {
   const { rows } = document.listed;
 
-  return document.names
-    .filter(({ node }) => node.kind === testKinds.itemRef)
-    .flatMap(({ identifier, node }): readonly Breach[] => {
-      const target = itemRefTargetOf(input, document.listed, node);
-      const item = itemRefDocument(input, document.listed, node);
-      // The href names an LTI link, or an item document the package holds: an item resource's
-      // href whose file is missing, or whose root is no item, names no item (§5.6.5).
-      const named = Option.match(target, {
-        onNone: () => [],
-        onSome: ({ path, type }) =>
-          Option.exists(type, isLinkType) || Option.isSome(item)
-            ? []
-            : [breachAt(rows, node, "Item ref target", { path })],
-      });
-      const declared = item.pipe(Option.map((listed) => declarationsOf(listed.rows, grammar)));
-      const kindsOf = (name: string): readonly string[] =>
-        Option.match(declared, { onNone: () => [], onSome: (held) => held.get(name) ?? [] });
-      const children = elementsOf(rows, node.id);
-      const mappings = children
-        .filter(({ kind }) => kind === "qti-variable-mapping")
-        .flatMap((mapping): readonly Breach[] => {
-          const source = Option.getOrElse(
-            typedValueOf(rows, mapping.id, "source-identifier"),
-            () => "",
-          );
-          const mapped = Option.getOrElse(
-            typedValueOf(rows, mapping.id, "target-identifier"),
-            () => "",
-          );
-          const sourced = kindsOf(source).includes("qti-outcome-declaration")
-            ? []
-            : [breachAt(rows, mapping, "Variable mapping source", { itemRef: identifier, source })];
-          const shadowed =
-            kindsOf(mapped).length > 0 && mapped !== source
-              ? [
-                  breachAt(rows, mapping, "Variable mapping target", {
-                    itemRef: identifier,
-                    target: mapped,
-                  }),
-                ]
-              : [];
-
-          return [...sourced, ...shadowed];
-        });
-      const defaults = children
-        .filter(({ kind }) => kind === "qti-template-default")
-        .flatMap((templated): readonly Breach[] => {
-          const template = Option.getOrElse(
-            typedValueOf(rows, templated.id, "template-identifier"),
-            () => "",
-          );
-
-          return kindsOf(template).includes("qti-template-declaration")
-            ? []
-            : [
-                breachAt(rows, templated, "Template default target", {
-                  itemRef: identifier,
-                  template,
-                }),
-              ];
-        });
-
-      return [...named, ...mappings, ...defaults];
+  return itemRefsOf(document).flatMap(({ itemRef, node }): readonly Breach[] => {
+    const target = itemRefTargetOf(input, document.listed, node);
+    const item = itemRefDocument(input, document.listed, node);
+    // The href names an LTI link, or an item document the package holds: an item resource's
+    // href whose file is missing, or whose root is no item, names no item (§5.6.5).
+    const named = Option.match(target, {
+      onNone: () => [],
+      onSome: ({ path, type }) =>
+        Option.exists(type, isLinkType) || Option.isSome(item)
+          ? []
+          : [breachAt(rows, node, "Item ref target", { path })],
     });
+    const declared = item.pipe(Option.map((listed) => declarationsOf(listed.rows, grammar)));
+    const kindsOf = (name: string): readonly string[] =>
+      Option.match(declared, { onNone: () => [], onSome: (held) => held.get(name) ?? [] });
+    const children = elementsOf(rows, node.id);
+    const mappings = children
+      .filter(({ kind }) => kind === "qti-variable-mapping")
+      .flatMap((mapping): readonly Breach[] => {
+        const source = Option.getOrElse(
+          typedValueOf(rows, mapping.id, "source-identifier"),
+          () => "",
+        );
+        const mapped = Option.getOrElse(
+          typedValueOf(rows, mapping.id, "target-identifier"),
+          () => "",
+        );
+        const sourced = kindsOf(source).includes("qti-outcome-declaration")
+          ? []
+          : [breachAt(rows, mapping, "Variable mapping source", { itemRef, source })];
+        const shadowed =
+          kindsOf(mapped).length > 0 && mapped !== source
+            ? [
+                breachAt(rows, mapping, "Variable mapping target", {
+                  itemRef,
+                  target: mapped,
+                }),
+              ]
+            : [];
+
+        return [...sourced, ...shadowed];
+      });
+    const defaults = children
+      .filter(({ kind }) => kind === "qti-template-default")
+      .flatMap((templated): readonly Breach[] => {
+        const template = Option.getOrElse(
+          typedValueOf(rows, templated.id, "template-identifier"),
+          () => "",
+        );
+
+        return kindsOf(template).includes("qti-template-declaration")
+          ? []
+          : [
+              breachAt(rows, templated, "Template default target", {
+                itemRef,
+                template,
+              }),
+            ];
+      });
+
+    return [...named, ...mappings, ...defaults];
+  });
 };
 
 /**

@@ -2771,3 +2771,23 @@ against it. A reading that is not an information-model-over-XSD case says which 
      accepted. The corpus holds no float mapping, so no verdict moves. This binds pantry and plate alike; plate's own
      reading of a double is the renderer team's follow-up. This is not a case of documents in conflict. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-FLOATKEY.)
+155. **An item ref that writes no `href` names nothing, so AL3 alone refuses it; and the laws over what an item ref
+     names judge every item ref, whether or not it, its sections or its test part write an `identifier`.** The ASI XSD
+     requires the href, with no default: `<xs:attribute name="href" use="required" type="xs:anyURI" />` in
+     `AssessmentItemRefDType` (`imsqti_asiv3p0_v1p0.xsd`), and the information model gives it multiplicity `[1]`: "The
+     URI used to refer to the item's file (e.g., elsewhere in the same content package)" (§5.6.5, info.txt:14761 to
+     :14764). An item ref that writes none refers to no file, so it has no `ReferencePath`, `ItemRefTarget` or
+     `ItemRefDocument`: the importer's laws require a target only of an item ref that writes an href ("Item ref target",
+     `src/qti/tests.ts`), and copy a target's type into an assembly's lookup only where the lookup names a resource
+     (`src/qti/expressions.ts`), so AL3 ("required-attribute") refuses the item ref under its own rule. An item ref
+     whose href names no item or LTI link of the package, an external or an empty URI included, breaks "Item ref
+     target", as before. Reading 147 takes an item ref that writes no identifier out of its document's namespace, not
+     out of its other laws: its href still names its item, and its variable mappings and template defaults still read
+     that item ("Item ref target", "Variable mapping source", "Variable mapping target", "Template default target"), as
+     the importer's rows, keyed by the item ref's node, judge them. This sets aside the importer's demand of a target
+     and a resolved href of every item ref, under which an item ref with no href broke "Item ref target" and "Test
+     overlay" beside AL3, and the law oracle's reading of an item ref's laws through its name (`itemRefLawsOf` and
+     `documentLawsOf`, `src/test/oracle-laws/tests.ts`), under which an item ref that writes no identifier escaped them.
+     The corpus moves no verdict: each of the 209 item refs of its 29 zips writes an href and an identifier, by a scan
+     of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ITEMREF.)

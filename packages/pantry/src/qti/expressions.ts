@@ -1604,10 +1604,13 @@ const digitSegments = select(ReferenceSegment, (s) => s.eq(s.digit, true));
 const foundNames = select(NameLookup, (n) => n.eq(n.found, true));
 
 /**
- * The item refs an assembly holds, with the type of what they name.
+ * The item refs an assembly holds that name a resource of the package, with its type. One whose
+ * lookup names `none`, NameLookup's null object for "no resource" (`representation-gaps.md` §4.3),
+ * has no target to copy: it writes no href, which AL3 alone refuses (spec reading 155), or its
+ * href names no resource, which "Item ref target" refuses over its target (`#pantry/qti/tests.ts`).
  */
-const foundItemRefs = select(NameLookup, (n) =>
-  n.and(n.eq(n.found, true), n.eq(n.kind, itemRefKind)),
+const targetedItemRefs = select(NameLookup, (n) =>
+  n.and(n.eq(n.found, true), n.eq(n.kind, itemRefKind), n.ne(n.resourceType, "none")),
 );
 
 /**
@@ -2161,9 +2164,9 @@ export const referenceLawsByName = {
   ],
   "Item ref target": [
     // A found item ref's target and item are its `ItemRefTarget`'s and `ItemRefDocument`'s, each a
-    // row only where the package holds one, so an item ref naming no resource of the package, or an
-    // item whose file it lacks, is refused here under the law that refuses the item ref itself.
-    contained(on(foundItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
+    // row only where the package holds one, so an item ref of the item type whose file the package
+    // lacks is refused here under the law that refuses the item ref itself.
+    contained(on(targetedItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
     contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
   ],
   "Prefixed reference": [
