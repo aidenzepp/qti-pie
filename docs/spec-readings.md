@@ -1991,10 +1991,25 @@ against it. A reading that is not an information-model-over-XSD case says which 
      specification: the information model says an included fragment's content "must satisfy the requirements of the
      specification in the context of the item in which it is being included" (section 2.12, reading 117), which a
      fragment pantry never reads cannot be checked against. What would lift it is a fetch of the resource, which an
-     importer of a package does not do (audit C B2). The corpus holds no external include, so no verdict moves. This
-     binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN under
-     the operator's standing ruling of 2026-11-05 that the spec wins; amended by the audit of PR #46, C B2.)
-     (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
+     importer of a package does not do (audit C B2). The corpus holds no external include, so no verdict moves. The
+     schema states it with one cause per fault. A site's href is a row of its own (`SitePath`), written only where the
+     href resolves to a path of the package, with `entry`, whether the package holds an entry there, and its target is
+     another row (`SiteTarget`):
+     - An href naming a path no entry holds breaks `SitePath`'s `File_exists` CHECK, which PostgreSQL meets as the row
+       is inserted, so it is refused under "File exists" alone, whether its site is an include or a section ref. The
+       include's and the section ref's document laws read only paths an entry holds.
+     - An include with no href or an empty one has no `SitePath`, and breaks "Include target" alone; an external one
+       has no `SitePath` either and is admitted (`Site.external`, above). So does an include whose path names an entry
+       the manifest lists as no document.
+     - A section ref, which must write an href (AL3 refuses one that doesn't), names a section document the package
+       lists. One that is external, or names an entry that is no section document, breaks "Document entry" alone.
+
+     This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN
+     under the operator's standing ruling of 2026-11-05 that the spec wins; amended by the audit of PR #46, C B2.
+     Amended 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from RV seat NIL
+     (`25d16460`), on the review of the import's sentinel values: the schema's statement recorded; nothing it refuses
+     changed.) (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
+
 116. **A fragment's root is read by its name at its document's root, so the three kinds the composition splits by
      context never root a fragment: a stated limit.** The composition gives three element names two kinds each, by the
      context the XSDs declare them in: `qti-template-block` and `qti-template-block.rubric`, `qti-template-inline` and
