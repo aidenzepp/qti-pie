@@ -799,6 +799,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    140,
+    {
+      owner:
+        "crust's DTD reader (`packages/crust/src/dtd.ts`): an attribute default referencing a general entity the subset declares after it is refused; WFC Entity Declared's scope decided at the internal subset's end, a parameter-entity reference taking a document out of it; held by `packages/crust/src/read.forward.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
