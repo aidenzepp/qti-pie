@@ -15,7 +15,7 @@ import type { Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.t
 import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
 import { floatValue, toFloat } from "#plate/engine/numbers.ts";
-import { builtInValue, own, variableValue } from "#plate/engine/refs.ts";
+import { builtInType, own, variableValue } from "#plate/engine/refs.ts";
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import type {
   AreaMapping,
@@ -377,17 +377,18 @@ const evaluateMapResponsePoint: Evaluator<"map-response-point"> = (expression, s
  * It reads the declaration, never the attempt's value. A response or an outcome with no
  * `qti-default-value` gives NULL of its base type and cardinality, a single integer or float
  * outcome included: the 0 an attempt starts such an outcome at is not a declared default. A
- * declared variable wins over a built-in of the same name, as `qti-variable` reads it. The built-in
- * `numAttempts`, which the variables carry, has no declaration and so no declared default: it gives
- * NULL of its type, a single integer. Template processing, whose `qti-set-default-value` could
- * change a default, never runs first: the item model runs no response processing of an item that
- * has it.
+ * declared variable wins over a built-in of the same name, as `qti-variable` reads it. A built-in
+ * the engine holds, `numAttempts` or `completionStatus`, has no declaration and so no declared
+ * default: it gives NULL of the built-in's own type (`builtInType` in `#plate/engine/refs.ts`), a
+ * single integer or a single identifier, whatever the attempt holds of it. Template processing,
+ * whose `qti-set-default-value` could change a default, never runs first: the item model runs no
+ * response processing of an item that has it.
  *
  * @param expression The `qti-default`.
- * @param scope The item, whose declarations give the defaults, and the variables.
+ * @param scope The item, whose declarations give the defaults.
  * @returns The declared default or the NULL, or an {@link UnknownIdentifierError} when the item
- *   declares no modelled response or outcome by that name and the variables carry no built-in of
- *   it. The item model marks such a name, so a checked item never reaches that failure.
+ *   declares no modelled response or outcome by that name and it names no built-in the engine
+ *   holds. The item model marks such a name, so a checked item never reaches that failure.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpDefault
  */
 const evaluateDefault: Evaluator<"default"> = (expression, scope) => {
@@ -403,8 +404,8 @@ const evaluateDefault: Evaluator<"default"> = (expression, scope) => {
   }
 
   return Result.fromOption(
-    Option.map(builtInValue(scope.variables, expression.identifier), (value) =>
-      nullOf(value.baseType, value.cardinality),
+    Option.map(builtInType(expression.identifier), (type) =>
+      nullOf(type.baseType, type.cardinality),
     ),
     () =>
       new UnknownIdentifierError({

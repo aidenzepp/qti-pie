@@ -173,6 +173,35 @@ describe("the references family's evaluators of qti-default and qti-null", () =>
   );
 
   it.effect(
+    "[I-9a] qti-default of a built-in gives NULL of the built-in's own type whatever the attempt holds: completionStatus a single identifier, numAttempts a single integer",
+    () =>
+      Effect.gen(function* readsBuiltInDefaults() {
+        const item = yield* declared();
+        const holding: Variables = {
+          ...changed,
+          outcomes: { ...changed.outcomes, completionStatus: identifier("completed") },
+        };
+        const holdingNothing: Variables = { outcomes: {}, responses: {} };
+        const cases: readonly (readonly [string, Value])[] = [
+          ["completionStatus", nullOf("identifier", "single")],
+          ["numAttempts", nullOf("integer", "single")],
+        ];
+
+        for (const [named, expected] of cases) {
+          for (const variables of [holding, holdingNothing]) {
+            const value = evaluated(defaultOf(named), item, variables);
+
+            assert.deepStrictEqual(value, expected, named);
+            assertKindType(value, "default", [], {
+              baseType: expected.baseType,
+              cardinality: expected.cardinality,
+            });
+          }
+        }
+      }),
+  );
+
+  it.effect(
     "[I-9a] qti-default of an identifier the item declares no variable by fails UnknownIdentifierError of the item",
     () =>
       Effect.gen(function* failsUndeclared() {
