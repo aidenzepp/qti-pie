@@ -22,6 +22,7 @@ import type {
   InvalidRecord,
   Options,
   PartSwapRefused,
+  StoredRecord,
   UnknownPart,
   Verdict,
 } from "#plate/index.ts";
@@ -213,8 +214,34 @@ export interface RecordState {
 export const noRecord: RecordState = { name: "no record", record: Option.none() };
 
 /**
- * Begin an accepted item's record under each of {@link sweepSeeds}, with the fixed instance
- * {@link sweepInstance}, and decode it as a host would read it back; then add {@link noRecord}.
+ * A record `begin` started under a sweep seed: the form the host stores, and the record decoded
+ * from it as a host reads it back.
+ */
+export interface BegunRecord {
+  readonly decoded: ItemRecord;
+  readonly stored: StoredRecord;
+}
+
+/**
+ * Begin an accepted item's record under a sweep seed, with the fixed instance
+ * {@link sweepInstance}, and decode it as a host would read it back.
+ *
+ * @param accepted The accepted document.
+ * @param seed The sweep seed.
+ * @returns The stored record and its decoding, or the first failure of `begin` or of
+ *   `decodeRecord`.
+ */
+export const begunUnder = (
+  accepted: Accepted,
+  seed: string,
+): Result.Result<BegunRecord, EngineFailure | InvalidRecord> =>
+  Result.flatMap(begin(accepted, { instance: sweepInstance, seed }), (stored) =>
+    Result.map(decodeRecord(stored), (decoded): BegunRecord => ({ decoded, stored })),
+  );
+
+/**
+ * Begin an accepted item's record under each of {@link sweepSeeds} ({@link begunUnder}); then add
+ * {@link noRecord}.
  *
  * @param accepted The accepted document.
  * @returns A state per seed, in {@link sweepSeeds}' order, then the state with no record; or the
@@ -226,13 +253,10 @@ export const recordStates = (
   Result.map(
     Result.all(
       sweepSeeds.map((seed) =>
-        Result.map(
-          Result.flatMap(begin(accepted, { instance: sweepInstance, seed }), decodeRecord),
-          (record): RecordState => ({
-            name: `seed ${JSON.stringify(seed)}`,
-            record: Option.some(record),
-          }),
-        ),
+        Result.map(begunUnder(accepted, seed), ({ decoded }): RecordState => ({
+          name: `seed ${JSON.stringify(seed)}`,
+          record: Option.some(decoded),
+        })),
       ),
     ),
     (begun): readonly RecordState[] => [...begun, noRecord],

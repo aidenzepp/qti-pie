@@ -34,7 +34,7 @@ import { referencesEvaluators } from "#plate/engine/expressions/references.ts";
 import { roundingEvaluators } from "#plate/engine/expressions/rounding.ts";
 import { testEvaluators } from "#plate/engine/expressions/test.ts";
 import { textEvaluators } from "#plate/engine/expressions/text.ts";
-import { numberOf, sameNumber } from "#plate/engine/numbers.ts";
+import { numberOf, sameNumber, singleValue } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
 import { drawStream } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
@@ -242,13 +242,14 @@ const evaluate: Evaluate = (expression, scope) => dispatch(expression.kind, expr
  * Report whether a condition's value is true.
  *
  * A response condition runs a branch only on a single boolean `true`: false or NULL counts as not
- * true, and so does a value of any other type.
+ * true, and so does a value of any other type. A template condition reads its branches, and a
+ * template constraint its condition, the same way (`#plate/engine/template.ts`).
  *
  * @param value The condition's value.
  * @returns Whether it is the single boolean `true`.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_ResponseCondition
  */
-const isTrue = (value: Value): boolean => {
+export const isTrue = (value: Value): boolean => {
   const [single] = value.values;
 
   return value.cardinality === "single" && single?.baseType === "boolean" && single.value;
@@ -450,11 +451,7 @@ const lookedUp = (item: Item, identifier: string, value: Value): Value => {
 
   return Option.match(target, {
     onNone: () => nullOf(value.baseType, value.cardinality),
-    onSome: (single): Value => ({
-      baseType: single.baseType,
-      cardinality: "single",
-      values: [single],
-    }),
+    onSome: singleValue,
   });
 };
 

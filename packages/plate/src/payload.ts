@@ -49,7 +49,7 @@ import type {
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
-import { outcomeDefaults } from "#plate/model/record.ts";
+import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
 import { format, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
@@ -1218,25 +1218,6 @@ const printedText = (node: PrintedVariable, record: RedactRecord): Option.Option
   Option.flatMap(heldValue(record, node.identifier), (value) =>
     Option.map(printOptionsOf(node, record), (options) => formatPrinted(value, options)),
   );
-
-/**
- * A path at or below the root's `qti-template-processing`: the root's step, then that element's
- * step, with its `[n]` where the walk writes one, then the end or a further step.
- */
-const templateProcessingPath = /^[^/]+\/qti-template-processing(?:\[\d+\])?(?:\/|$)/u;
-
-/**
- * Report whether an item has a `qti-template-processing` the engine does not run: the item model
- * holds no template rules and marks something at or below that element's path. Its first attempt
- * then holds no template value, since nothing computed one, as `firstAttempt` in
- * `#plate/engine/attempt.ts` reads it.
- *
- * @param item The item.
- * @returns Whether its template processing exists and does not run.
- */
-const unrunTemplateProcessing = (item: Item): boolean =>
-  Option.isNone(item.templateProcessing) &&
-  item.unsupported.some((entry) => templateProcessingPath.test(entry.path));
 
 /**
  * Give the values a redaction prints from: the record given; or, with none, for an item whose

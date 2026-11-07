@@ -19,6 +19,7 @@
 import { Option, Result } from "effect";
 import {
   evaluateExpression,
+  isTrue,
   OutcomeMismatchError,
   UnknownIdentifierError,
 } from "#plate/engine/evaluate.ts";
@@ -114,19 +115,6 @@ const declaredState = (item: Item): TemplateValues => ({
     ]),
   ),
 });
-
-/**
- * Report whether a condition's value is true: a single boolean `true`. False, NULL and a value of
- * any other type are not, as a response condition reads its branches.
- *
- * @param value The condition's value.
- * @returns Whether it is the single boolean `true`.
- */
-const isTrue = (value: Value): boolean => {
-  const [single] = value.values;
-
-  return value.cardinality === "single" && single?.baseType === "boolean" && single.value;
-};
 
 /**
  * Give the value of an expression of template processing: through the evaluator, with the run's

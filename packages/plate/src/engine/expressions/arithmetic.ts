@@ -25,19 +25,20 @@
  * @module
  */
 import { Array, Option, Result } from "effect";
-import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
-import type { EngineFailure } from "#plate/engine/failures.ts";
+import type { Evaluator, FamilyTable } from "#plate/engine/evaluate.ts";
 import {
   boundedInteger,
   boundedTimes,
   emptyProduct,
+  floatNull,
   floatOf,
   floatValue,
+  integerNull,
   integerValue,
   numberOf,
 } from "#plate/engine/numbers.ts";
 import type { PartialProduct } from "#plate/engine/numbers.ts";
-import type { Expression } from "#plate/model/expression.ts";
+import { operandValues } from "#plate/engine/operands.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
@@ -140,22 +141,6 @@ const fold = <A>(values: Array.NonEmptyReadonlyArray<A>, step: (held: A, next: A
 };
 
 /**
- * Evaluate every operand, left to right; the first failure is the result. An operator has no side
- * effects, so evaluating them all changes no value.
- *
- * @param operands The operands.
- * @param scope The item and the variables of the attempt.
- * @param evaluate The evaluator, which gives each operand's value.
- * @returns The operands' values, or the first operand's failure.
- */
-const valuesOf = (
-  operands: readonly Expression[],
-  scope: Scope,
-  evaluate: Evaluate,
-): Result.Result<readonly Value[], EngineFailure> =>
-  Result.all(operands.map((operand) => evaluate(operand, scope)));
-
-/**
  * Give the value an arithmetic kind combines its operands' values to: a single integer of the
  * integers when every number is one, else a single float of the floats, or NULL of the kind's type
  * when {@link membersOf} gives none or the integer is past the bound.
@@ -170,7 +155,7 @@ const combined = (values: readonly Value[], step: Step): Value =>
     onSome: (members) =>
       members._tag === "integer"
         ? Option.match(step.integer(members.values), {
-            onNone: () => nullOf("integer", "single"),
+            onNone: () => integerNull,
             onSome: integerValue,
           })
         : floatValue(fold(members.values, step.float)),
@@ -268,7 +253,9 @@ const greatest: Step = {
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpSum
  */
 const evaluateSum: Evaluator<"sum"> = (expression, scope, evaluate) =>
-  Result.map(valuesOf(expression.operands, scope, evaluate), (values) => combined(values, add));
+  Result.map(operandValues(expression.operands, scope, evaluate), (values) =>
+    combined(values, add),
+  );
 
 /**
  * Give the value of a `qti-product`: the product of every number its operands hold, a container's
@@ -283,7 +270,7 @@ const evaluateSum: Evaluator<"sum"> = (expression, scope, evaluate) =>
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpProduct
  */
 const evaluateProduct: Evaluator<"product"> = (expression, scope, evaluate) =>
-  Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
+  Result.map(operandValues(expression.operands, scope, evaluate), (values) =>
     combined(values, multiply),
   );
 
@@ -299,7 +286,7 @@ const evaluateProduct: Evaluator<"product"> = (expression, scope, evaluate) =>
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpSubcontract
  */
 const evaluateSubtract: Evaluator<"subtract"> = (expression, scope, evaluate) =>
-  Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
+  Result.map(operandValues(expression.operands, scope, evaluate), (values) =>
     values.every((value) => value.cardinality === "single")
       ? combined(values, takeAway)
       : nullOf(resultBaseOf(values), "single"),
@@ -343,7 +330,7 @@ const evaluateDivide: Evaluator<"divide"> = (expression, scope, evaluate) => {
         Option.flatMap(Option.all([numberOf(left), numberOf(right)]), ([over, under]) =>
           quotientOf(floatOf(over), floatOf(under)),
         ),
-        { onNone: () => nullOf("float", "single"), onSome: floatValue },
+        { onNone: () => floatNull, onSome: floatValue },
       ),
   );
 };
@@ -360,7 +347,9 @@ const evaluateDivide: Evaluator<"divide"> = (expression, scope, evaluate) => {
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMin
  */
 const evaluateMin: Evaluator<"min"> = (expression, scope, evaluate) =>
-  Result.map(valuesOf(expression.operands, scope, evaluate), (values) => combined(values, least));
+  Result.map(operandValues(expression.operands, scope, evaluate), (values) =>
+    combined(values, least),
+  );
 
 /**
  * Give the value of a `qti-max`: the greatest number its operands hold, a container's members each
@@ -374,7 +363,7 @@ const evaluateMin: Evaluator<"min"> = (expression, scope, evaluate) =>
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMax
  */
 const evaluateMax: Evaluator<"max"> = (expression, scope, evaluate) =>
-  Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
+  Result.map(operandValues(expression.operands, scope, evaluate), (values) =>
     combined(values, greatest),
   );
 

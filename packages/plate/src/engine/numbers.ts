@@ -1,11 +1,13 @@
 /**
  * The engine's numbers, a leaf the evaluator and the expression families share: the single values
- * a kind gives ({@link booleanOf}, {@link integerValue}, {@link floatValue}), the one conversion
- * from an integer to a float ({@link toFloat}, and {@link floatOf} for a single number), the one
- * number a single numeric value holds ({@link numberOf}, and {@link integerOf} for an integer),
- * exact equality of two numbers ({@link sameNumber}), and the bounds on what the engine computes
- * ({@link integerBitBound}, {@link containerSizeBound}), with the checks that hold a computed
- * integer, a product built one factor at a time ({@link boundedTimes}) and a container to them.
+ * a kind gives ({@link singleValue} for any single, {@link booleanOf}, {@link integerValue},
+ * {@link floatValue}) and the single NULLs ({@link booleanNull}, {@link integerNull},
+ * {@link floatNull}), the one conversion from an integer to a float ({@link toFloat}, and
+ * {@link floatOf} for a single number), the one number a single numeric value holds
+ * ({@link numberOf}, and {@link integerOf} for an integer), exact equality of two numbers
+ * ({@link sameNumber}), and the bounds on what the engine computes ({@link integerBitBound},
+ * {@link containerSizeBound}), with the checks that hold a computed integer, a product built one
+ * factor at a time ({@link boundedTimes}) and a container to them.
  *
  * Integers are exact `bigint`s (reading 45) and floats are 64-bit doubles, never infinite when made
  * from an integer. An integer and a float compare exactly, never through a lossy conversion. The
@@ -15,6 +17,18 @@
  */
 import { Option } from "effect";
 import type { Single, Value } from "#plate/model/values.ts";
+
+/**
+ * Construct the single value that holds one single, of the single's base type.
+ *
+ * @param single The single.
+ * @returns The value.
+ */
+export const singleValue = (single: Single): Value => ({
+  baseType: single.baseType,
+  cardinality: "single",
+  values: [single],
+});
 
 /**
  * Construct a single boolean value.
@@ -51,6 +65,22 @@ export const floatValue = (value: number): Value => ({
   cardinality: "single",
   values: [{ baseType: "float", value }],
 });
+
+/**
+ * The single boolean NULL: the value of a comparison, logic or text expression whose truth is not
+ * known.
+ */
+export const booleanNull: Value = { baseType: "boolean", cardinality: "single", values: [] };
+
+/**
+ * The single integer NULL: the value of an integer expression whose value is not defined.
+ */
+export const integerNull: Value = { baseType: "integer", cardinality: "single", values: [] };
+
+/**
+ * The single float NULL: the value of a float expression whose value is not defined.
+ */
+export const floatNull: Value = { baseType: "float", cardinality: "single", values: [] };
 
 /**
  * Convert an exact integer to a float: the nearest double, ties to even, and the largest finite

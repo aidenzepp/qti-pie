@@ -29,22 +29,17 @@ import type { EngineFailure } from "#plate/engine/failures.ts";
 import {
   boundedTimes,
   emptyProduct,
+  floatNull,
   floatValue,
+  integerNull,
   integerOf,
   integerValue,
   toFloat,
 } from "#plate/engine/numbers.ts";
 import type { PartialProduct } from "#plate/engine/numbers.ts";
+import { operandValues } from "#plate/engine/operands.ts";
 import type { Expression } from "#plate/model/expression.ts";
-import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-
-/**
- * Give the single integer NULL, the value of an integers expression whose value is not defined.
- *
- * @returns The NULL.
- */
-const unsetInteger = (): Value => nullOf("integer", "single");
 
 /**
  * Give every integer an operand of `qti-gcd` or `qti-lcm` holds: the one of a single, or each
@@ -110,8 +105,8 @@ const greatestCommonDivisor = (left: bigint, right: bigint): bigint => {
 };
 
 /**
- * Evaluate every operand, left to right, and give the integers each holds; the first failure is
- * the result.
+ * Evaluate every operand, left to right ({@link operandValues}), and give the integers each holds;
+ * the first failure is the result.
  *
  * @param operands The operands.
  * @param scope The item and the variables of the attempt.
@@ -124,7 +119,7 @@ const aggregateOf = (
   scope: Scope,
   evaluate: Evaluate,
 ): Result.Result<Option.Option<readonly bigint[]>, EngineFailure> =>
-  Result.map(Result.all(operands.map((operand) => evaluate(operand, scope))), (values) =>
+  Result.map(operandValues(operands, scope, evaluate), (values) =>
     Option.map(Option.all(values.map((value) => integersOf(value))), (lists): readonly bigint[] =>
       lists.flat(),
     ),
@@ -155,7 +150,7 @@ const dividedOf = (
           ([, y]) => y !== 0n,
         ),
         {
-          onNone: unsetInteger,
+          onNone: () => integerNull,
           onSome: ([x, y]) => integerValue(divided(x, y)),
         },
       ),
@@ -209,7 +204,7 @@ const evaluateIntegerToFloat: Evaluator<"integer-to-float"> = (expression, scope
 
   return Result.map(evaluate(operand, scope), (value) =>
     Option.match(integerOf(value), {
-      onNone: () => nullOf("float", "single"),
+      onNone: () => floatNull,
       onSome: (integer) => floatValue(toFloat(integer)),
     }),
   );
@@ -229,7 +224,7 @@ const evaluateIntegerToFloat: Evaluator<"integer-to-float"> = (expression, scope
 const evaluateGcd: Evaluator<"gcd"> = (expression, scope, evaluate) =>
   Result.map(aggregateOf(expression.operands, scope, evaluate), (held) =>
     Option.match(held, {
-      onNone: unsetInteger,
+      onNone: () => integerNull,
       onSome: (integers) => {
         let divisor = 0n;
         for (const integer of integers) {
@@ -285,12 +280,12 @@ const leastCommonMultiple = (integers: readonly bigint[]): Option.Option<bigint>
 const evaluateLcm: Evaluator<"lcm"> = (expression, scope, evaluate) =>
   Result.map(aggregateOf(expression.operands, scope, evaluate), (held) =>
     Option.match(held, {
-      onNone: unsetInteger,
+      onNone: () => integerNull,
       onSome: (integers) =>
         integers.includes(0n)
           ? integerValue(0n)
           : Option.match(leastCommonMultiple(integers), {
-              onNone: unsetInteger,
+              onNone: () => integerNull,
               onSome: integerValue,
             }),
     }),

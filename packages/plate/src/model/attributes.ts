@@ -224,16 +224,19 @@ export const typed = <A>(
 /**
  * Read the number a float value holds.
  *
+ * @param build The build that read the value, which a {@link BuildDefect} names: `buildTest`
+ *   reaches this through an outcome declaration too.
  * @param single A value that {@link parseLexical} gave for `float`.
  * @returns Its number.
+ * @throws {BuildDefect} When the value is not a float, which {@link parseLexical} never gives.
  */
-export const floatOf = (single: Single): number => {
+export const floatOf = (build: ModelWalk, single: Single): number => {
   if (single.baseType === "float") {
     return single.value;
   }
 
   throw new BuildDefect({
-    builder: "buildItem",
+    builder: build.builder,
     detail: `A ${single.baseType} value holds no float.`,
   });
 };
@@ -241,16 +244,19 @@ export const floatOf = (single: Single): number => {
 /**
  * Read the exact integer an integer value holds.
  *
+ * @param build The build that read the value, which a {@link BuildDefect} names: `buildTest`
+ *   reaches this through an outcome declaration too.
  * @param single A value that {@link parseLexical} gave for `integer`.
  * @returns Its integer.
+ * @throws {BuildDefect} When the value is not an integer, which {@link parseLexical} never gives.
  */
-export const integerOf = (single: Single): bigint => {
+export const integerOf = (build: ModelWalk, single: Single): bigint => {
   if (single.baseType === "integer") {
     return single.value;
   }
 
   throw new BuildDefect({
-    builder: "buildItem",
+    builder: build.builder,
     detail: `A ${single.baseType} value holds no integer.`,
   });
 };
@@ -415,7 +421,7 @@ const xsIntegerOf = (
       const lexical = trimXmlSpace(attribute.value);
 
       return typed(build, path, parseLexical("integer", lexical)).pipe(
-        Effect.map(integerOf),
+        Effect.map((single) => integerOf(build, single)),
         Effect.flatMap((value) =>
           Option.match(refuse(value, lexical), {
             onNone: () => Effect.succeed(value),
@@ -569,7 +575,7 @@ export const floatAttribute = (
         build,
         attributePath(pathOf(build, element), attribute),
         parseLexical("float", attribute.value),
-      ).pipe(Effect.map(floatOf)),
+      ).pipe(Effect.map((single) => floatOf(build, single))),
     ),
   );
 
@@ -605,7 +611,7 @@ export const coordsOf = (
           )
         : Effect.map(
             typed(build, path, parseLexical("float", digits)),
-            (single) => [floatOf(single), written.endsWith("%")] as const,
+            (single) => [floatOf(build, single), written.endsWith("%")] as const,
           );
     });
   });
@@ -615,12 +621,14 @@ export const coordsOf = (
  * then the literal reads in the double's lexical space, one beyond the largest finite double naming
  * that double.
  *
+ * @param build The build, which a {@link BuildDefect} names.
  * @param element The element.
  * @param name The attribute's name.
  * @param refuse The reader's refusal of an attribute.
  * @returns The number, none when absent, or the refusal `value-type` at the attribute.
  */
 export const doubleAttribute = (
+  build: ModelWalk,
   element: SourceElement,
   name: string,
   refuse: AttributeRefusal,
@@ -631,7 +639,7 @@ export const doubleAttribute = (
 
       return Effect.fromResult(parseLexical("float", lexical)).pipe(
         Effect.mapError(() => refuse(attribute, "value-type", { baseType: "xs:double", lexical })),
-        Effect.map(floatOf),
+        Effect.map((single) => floatOf(build, single)),
       );
     }),
   );

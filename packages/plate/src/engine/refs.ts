@@ -16,7 +16,7 @@
 import { Option, Result } from "effect";
 import type { Variables } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
-import { integerOf, integerValue } from "#plate/engine/numbers.ts";
+import { integerOf, integerValue, singleValue } from "#plate/engine/numbers.ts";
 import type {
   FloatOrRef,
   IntOrIdentifier,
@@ -25,7 +25,7 @@ import type {
 } from "#plate/model/expression.ts";
 import { completionStatus, completionStatusType } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import type { Value } from "#plate/model/values.ts";
 
 /**
  * Look up a variable by identifier among the record's own keys.
@@ -145,18 +145,6 @@ export type ReferenceSite =
   | { readonly baseType: "string"; readonly checked: boolean; readonly reference: StringOrRef };
 
 /**
- * Construct the single value that holds one single.
- *
- * @param single The single.
- * @returns The value, of the single's base type.
- */
-const singleOf = (single: Single): Value => ({
-  baseType: single.baseType,
-  cardinality: "single",
-  values: [single],
-});
-
-/**
  * Give the value an attribute that holds a literal or names a variable stands for when its
  * expression is evaluated.
  *
@@ -206,13 +194,13 @@ export const referenceValue = (
 
   switch (site.baseType) {
     case "float": {
-      return Result.succeed(singleOf({ baseType: "float", value: site.reference.value }));
+      return Result.succeed(singleValue({ baseType: "float", value: site.reference.value }));
     }
     case "integer": {
-      return Result.succeed(singleOf({ baseType: "integer", value: site.reference.value }));
+      return Result.succeed(singleValue({ baseType: "integer", value: site.reference.value }));
     }
     case "string": {
-      return Result.succeed(singleOf({ baseType: "string", value: site.reference.value }));
+      return Result.succeed(singleValue({ baseType: "string", value: site.reference.value }));
     }
     default: {
       return site satisfies never;
