@@ -40,6 +40,7 @@ import {
   unsupportedFeatures,
 } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest, RootSummary, Verdict } from "#plate/validate/verdict.ts";
+import { baseTypes } from "#plate/vocabulary.ts";
 
 /**
  * A `javascript:` URL, which every URL attribute drops.
@@ -730,8 +731,8 @@ describe("check, reading 47: xsi:type", () => {
         [attr("q", qtiNamespace, xmlnsNamespace)],
       ),
     );
-    // A qti-null is outside M1's engine, so the processing may earn its own marks; only the
-    // attribute marks are asserted.
+    // The case is about attribute marks only, so any other mark the processing earns is left
+    // out of the assertion.
     const unsupported =
       verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
         ? verdict.accepted.unsupported
@@ -917,6 +918,115 @@ describe("check, processing the model does not hold", () => {
       shown: "mark",
     });
     assert.isTrue(Option.isNone(accepted.item.processing));
+  });
+});
+
+/**
+ * Construct an item that declares one single variable, and a body.
+ *
+ * @param kind The declaration's local name.
+ * @param identifier Its `identifier`.
+ * @param baseType Its `base-type`.
+ * @returns The item.
+ */
+const declaring = (kind: string, identifier: string, baseType: string): SourceDocument =>
+  item([
+    el(kind, [
+      attr("base-type", baseType),
+      attr("cardinality", "single"),
+      attr("identifier", identifier),
+    ]),
+    body([el("p", [], [text("Hello")])]),
+  ]);
+
+/**
+ * Construct an item whose response processing sets `SCORE` when two floats are equal within an
+ * absolute tolerance.
+ *
+ * @param tolerance The `qti-equal`'s `tolerance`, as written.
+ * @returns The item.
+ */
+const tolerating = (tolerance: string): SourceDocument =>
+  item([
+    score(),
+    body([el("p", [], [text("Hello")])]),
+    el(
+      "qti-response-processing",
+      [],
+      [
+        el(
+          "qti-response-condition",
+          [],
+          [
+            el(
+              "qti-response-if",
+              [],
+              [
+                el(
+                  "qti-equal",
+                  [attr("tolerance", tolerance), attr("tolerance-mode", "absolute")],
+                  [
+                    el("qti-base-value", [attr("base-type", "float")], [text("1.0")]),
+                    el("qti-base-value", [attr("base-type", "float")], [text("1.5")]),
+                  ],
+                ),
+                el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", "SCORE")],
+                  [el("qti-base-value", [attr("base-type", "float")], [text("1")])],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ]);
+
+describe("check, the built-in variables' identifiers and qti-equal's tolerance tokens (pantry DeclarationNotReserved and P6)", () => {
+  it("[I-9a] refuses an item that declares a variable named completionStatus, numAttempts or duration as attribute-type at its identifier (pantry DeclarationNotReserved)", () => {
+    for (const [kind, identifier, baseType] of [
+      ["qti-outcome-declaration", "completionStatus", "identifier"],
+      ["qti-response-declaration", "numAttempts", "integer"],
+      ["qti-response-declaration", "duration", "float"],
+      ["qti-template-declaration", "duration", "float"],
+    ] as const) {
+      assert.deepStrictEqual(refusalsOf(verdictOf(declaring(kind, identifier, baseType))), [
+        { location: { kind: "path", path: `${root}/${kind}/@identifier` }, rule: "attribute-type" },
+      ]);
+    }
+  });
+
+  it("[I-9a] accepts an item that declares a variable with any other identifier", () => {
+    for (const [kind, identifier, baseType] of [
+      ["qti-outcome-declaration", "STATUS", "identifier"],
+      ["qti-response-declaration", "ATTEMPTS", "integer"],
+      ["qti-outcome-declaration", "Duration", "float"],
+    ] as const) {
+      assert.notStrictEqual(
+        verdictOf(declaring(kind, identifier, baseType)).verdict,
+        "refused",
+        identifier,
+      );
+    }
+  });
+
+  it("[I-9a] refuses an item whose qti-equal tolerance holds a token that is neither an xs:double nor an NCName, 1,5, as attribute-type (pantry P6)", () => {
+    assert.deepStrictEqual(refusalsOf(verdictOf(tolerating("1,5"))), [
+      {
+        location: {
+          kind: "path",
+          path: `${root}/qti-response-processing/qti-response-condition/qti-response-if/qti-equal/@tolerance`,
+        },
+        rule: "attribute-type",
+      },
+    ]);
+  });
+
+  it("[I-9a] accepts an item whose qti-equal tolerance is 0.5, 1 2, TOL (an NCName) or INF", () => {
+    for (const tolerance of ["0.5", "1 2", "TOL", "INF"]) {
+      assert.notStrictEqual(verdictOf(tolerating(tolerance)).verdict, "refused", tolerance);
+    }
   });
 });
 
@@ -1886,9 +1996,121 @@ describe("describeRefusal", () => {
     assert.include(schema, "`p` may not hold `b`; QTI 3.0's schema allows no such child there.");
   });
 
+  it("[I-9a] cites the information model's line for an attribute-type refusal no reading settles, and the reading where one does", () => {
+    const sourced = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "figures",
+        element: "qti-round-to",
+        expected: "an integer at least 1 when rounding-mode is significantFigures",
+        least: "1",
+        source: "info.txt:39732",
+        value: "0",
+        whenAttribute: "rounding-mode",
+        whenValue: "significantFigures",
+      }),
+    );
+    const read = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "min-choices",
+        element: "qti-order-interaction",
+        expected: "an integer at least 1",
+        reading: "18",
+        source: "info.txt:1",
+        value: "0",
+      }),
+    );
+
+    assert.include(
+      sourced,
+      "`qti-round-to`'s attribute `figures` is `0`, which is not an integer at least 1 when rounding-mode is significantFigures (info.txt:39732).",
+    );
+    assert.include(
+      sourced,
+      "To make it valid: write a value that is an integer at least 1 when rounding-mode is significantFigures.",
+    );
+    assert.include(read, "which is not an integer at least 1 (reading 18).");
+    assert.notInclude(read, "info.txt");
+  });
+
+  it("[I-9a] words a declaration that takes a built-in variable's identifier, citing the information model's line (pantry DeclarationNotReserved)", () => {
+    const sentence = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "identifier",
+        check: "reserved-identifier",
+        element: "qti-outcome-declaration",
+        expected:
+          "an identifier other than the built-in variables' completionStatus, numAttempts and duration",
+        pantry: "DeclarationNotReserved",
+        source: "info.txt:12006",
+        value: "completionStatus",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-outcome-declaration`'s attribute `identifier` is `completionStatus`, the identifier of a built-in variable, which no declaration may take (info.txt:12006).",
+    );
+    assert.include(sentence, "Rule `attribute-type`.");
+    assert.include(
+      sentence,
+      "To make it valid: give `qti-outcome-declaration` another identifier; the built-in variable needs no declaration.",
+    );
+  });
+
+  it("[I-9a] words a qti-equal tolerance whose token is neither a number nor a variable's name, citing the information model's line (pantry P6)", () => {
+    const sentence = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "tolerance",
+        check: "tolerance-token",
+        element: "qti-equal",
+        expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
+        pantry: "P6",
+        source: "info.txt:24946",
+        value: "1,5",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-equal`'s attribute `tolerance` is `1,5`, which holds a token that is neither a number (`xs:double`) nor a variable's name (an NCName) (info.txt:24946).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: write each token of `tolerance` as a number or a variable's name, one space apart.",
+    );
+  });
+
+  it("[I-9a] names the mode under which a qti-equal must carry a tolerance, and cites the information model's line", () => {
+    const sentence = describeRefusal(
+      refusalOf("missing-attribute", {
+        attribute: "tolerance",
+        element: "qti-equal",
+        source: "info.txt:24946",
+        whenAttribute: "tolerance-mode",
+        whenValue: "relative",
+      }),
+    );
+    const unconditional = describeRefusal(
+      refusalOf("missing-attribute", { attribute: "identifier", element: "qti-simple-choice" }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-equal` must carry the attribute `tolerance` when `tolerance-mode` is `relative`, and it has none (info.txt:24946).",
+    );
+    assert.include(sentence, "To make it valid: add `tolerance` to `qti-equal`.");
+    assert.include(
+      unconditional,
+      "`qti-simple-choice` must carry the attribute `identifier`, and it has none.",
+    );
+  });
+
   it("names which operand of a qti-equal is not a single integer or float", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
+        acceptsBaseTypes: "integer float",
+        acceptsCardinalities: "single",
+        check: "operand",
         element: "qti-equal",
         expressionBaseType: "string",
         expressionCardinality: "single",
@@ -1899,6 +2121,193 @@ describe("describeRefusal", () => {
     assert.include(sentence, "Operand 2 of `qti-equal` is a single `string` value");
     assert.include(sentence, "a single `integer` or `float`");
     assert.notInclude(sentence, "outcome");
+  });
+
+  it("names the condition of a qti-response-if that is not a single boolean", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        check: "condition",
+        element: "qti-response-if",
+        expressionBaseType: "integer",
+        expressionCardinality: "single",
+      }),
+    );
+
+    assert.include(sentence, "The condition of `qti-response-if` is a single `integer` value");
+    assert.include(sentence, "not a single `boolean`");
+    assert.notInclude(sentence, "outcome, to a");
+  });
+
+  it("names the operand of a qti-and that is not a single boolean, and what qti-and takes", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        acceptsBaseTypes: "boolean",
+        acceptsCardinalities: "single",
+        check: "operand",
+        element: "qti-and",
+        expressionBaseType: "integer",
+        expressionCardinality: "multiple",
+        operand: "3",
+      }),
+    );
+
+    assert.include(sentence, "Operand 3 of `qti-and` is a multiple `integer` value");
+    assert.include(sentence, "it takes a single `boolean` value");
+    assert.notInclude(sentence, "`float`");
+    assert.notInclude(sentence, "outcome, to a");
+  });
+
+  it("names the cardinalities a qti-container-size takes, of any base type, and no base type in a code span", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        acceptsBaseTypes: "any",
+        acceptsCardinalities: "multiple ordered",
+        check: "operand",
+        element: "qti-container-size",
+        expressionBaseType: "",
+        expressionCardinality: "record",
+        operand: "1",
+      }),
+    );
+    const { spans } = codeSpans(sentence);
+
+    assert.include(sentence, "Operand 1 of `qti-container-size` is a record untyped value");
+    assert.include(sentence, "a multiple or ordered value of any base type");
+    assert.notInclude(sentence, "outcome, to a");
+
+    for (const baseType of [...baseTypes, "any"]) {
+      assert.notInclude(spans, baseType, baseType);
+    }
+  });
+
+  it("names the attribute of a qti-any-n whose reference is not a single integer variable", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "min",
+        check: "reference",
+        element: "qti-any-n",
+        expectedBaseType: "integer",
+        identifier: "LABEL",
+      }),
+    );
+
+    assert.include(sentence, "`qti-any-n`'s attribute `min` names `LABEL`");
+    assert.include(sentence, "not a single template or outcome variable of base type `integer`");
+    assert.notInclude(sentence, "outcome, to a");
+  });
+
+  it("names the response variable a template rule reads", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        check: "template-read",
+        element: "qti-variable",
+        identifier: "RESPONSE",
+        variableKind: "response",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-variable` reads `RESPONSE`, a response variable, in template processing",
+    );
+    assert.include(sentence, "only template variables and correct or default values");
+    assert.notInclude(sentence, "outcome, to a");
+  });
+
+  it("names the base type of a weighted qti-test-variables that is not float", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        baseType: "integer",
+        check: "weight",
+        element: "qti-test-variables",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-test-variables` is weighted and has the base type `integer`, not `float`",
+    );
+    assert.notInclude(sentence, "outcome, to a");
+  });
+
+  it("names the built-in duration an item that is not time dependent reads, and the attribute that names it", () => {
+    const read = describeRefusal(
+      refusalOf("undeclared-variable", {
+        check: "untimed-duration",
+        element: "qti-variable",
+        identifier: "duration",
+      }),
+    );
+    const named = describeRefusal(
+      refusalOf("undeclared-variable", {
+        attribute: "min",
+        check: "untimed-duration",
+        element: "qti-any-n",
+        identifier: "duration",
+      }),
+    );
+
+    assert.include(
+      read,
+      "`qti-variable` reads the built-in `duration`, which an item that is not time dependent does not have",
+    );
+    assert.include(read, '`time-dependent="true"`');
+    assert.notInclude(read, "declares no");
+    assert.include(named, "`qti-any-n`'s attribute `min` names the built-in `duration`");
+    assert.notInclude(named, "declares no");
+  });
+
+  it("[I-9a] names the built-in a qti-lookup-outcome-value sets, which only a qti-set-outcome-value may set, and cites the information model's line", () => {
+    const sentence = describeRefusal(
+      refusalOf("undeclared-variable", {
+        check: "built-in-target",
+        element: "qti-lookup-outcome-value",
+        identifier: "completionStatus",
+        source: "info.txt:8488",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-lookup-outcome-value` sets the built-in `completionStatus`, which only a `qti-set-outcome-value` may set (info.txt:8488).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: set `completionStatus` with a `qti-set-outcome-value`, or name a declared outcome.",
+    );
+  });
+
+  it("names a dotted name that resolves to no item ref, test part or section variable (reading 48)", () => {
+    const sentence = describeRefusal(
+      refusalOf("undeclared-variable", {
+        check: "reading",
+        element: "qti-variable",
+        identifier: "part1.SCORE",
+        reading: "48",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-variable` names `part1.SCORE`, which resolves to no item ref, test part or section variable (reading 48).",
+    );
+    assert.notInclude(sentence, "declares no");
+  });
+
+  it("names the attribute that names an undeclared variable", () => {
+    const sentence = describeRefusal(
+      refusalOf("undeclared-variable", {
+        attribute: "min",
+        element: "qti-any-n",
+        expected: "variable",
+        identifier: "MIN",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-any-n`'s attribute `min` names `MIN`, and the item declares no variable `MIN`.",
+    );
   });
 
   it("names the qti-map-response that needs a mapping, not a template", () => {

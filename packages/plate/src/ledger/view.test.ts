@@ -509,7 +509,8 @@ describe("ledger/view.ts", () => {
 
   it("lists the limited rows again with their sources, under their own heading", () => {
     const tree = ledgerHtml(fixture);
-    const text = ledgerText(fixture);
+    const lines = ledgerText(fixture).split("\n");
+    const limitedAt = lines.indexOf("Limited rows");
     const [claim] = claims;
     assert.isDefined(claim);
 
@@ -523,9 +524,10 @@ describe("ledger/view.ts", () => {
       byTag(tree, "li").map(textOf),
       `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
     );
+    assert.isAtLeast(limitedAt, 0);
     assert.include(
-      text,
-      `Limited rows\nI-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
+      lines.slice(limitedAt + 1, lines.indexOf("", limitedAt)),
+      `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
     );
   });
 

@@ -131,6 +131,29 @@ const defaultedXml = [
 ].join("");
 
 /**
+ * An item written for this test whose response processing sets the built-in `completionStatus` to
+ * `completed` when its single identifier response is the correct `A`, and sets nothing otherwise.
+ */
+const completingXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="completing"',
+  ' title="Completing" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+  "<qti-correct-response><qti-value>A</qti-value></qti-correct-response>",
+  "</qti-response-declaration>",
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Yes</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">No</qti-simple-choice>',
+  "</qti-choice-interaction></qti-item-body>",
+  "<qti-response-processing><qti-response-condition><qti-response-if>",
+  '<qti-match><qti-variable identifier="RESPONSE"/><qti-correct identifier="RESPONSE"/></qti-match>',
+  '<qti-set-outcome-value identifier="completionStatus">',
+  '<qti-base-value base-type="identifier">completed</qti-base-value>',
+  "</qti-set-outcome-value>",
+  "</qti-response-if></qti-response-condition></qti-response-processing>",
+  "</qti-assessment-item>",
+].join("");
+
+/**
  * An item ref of a hand-built test.
  *
  * @param identifier The ref's identifier.
@@ -379,7 +402,8 @@ const sessionItem = (
 });
 
 /**
- * A record that counts `processed` attempts, with nothing else changed.
+ * A record that counts `processed` attempts, as attempts whose processing set nothing leave it:
+ * after one, the built-in `completionStatus` is `unknown`.
  *
  * @param item The session item whose record it is.
  * @param processed The attempts processed.
@@ -389,6 +413,10 @@ const processedRecord = (item: SessionItem, processed: number): ItemRecord => ({
   ...item.record,
   attempt: processed === 0 ? "none" : "submitted",
   numAttempts: processed,
+  outcomes:
+    processed === 0
+      ? item.record.outcomes
+      : { ...item.record.outcomes, completionStatus: identifiers("unknown") },
 });
 
 /**
@@ -705,6 +733,54 @@ describe("results", () => {
         );
       }),
     { tags: ["corpus", "qti-xsd"] },
+  );
+
+  it.effect(
+    "[I-9a] writes the completionStatus processing set, and the derived value where it set none, valid against the Results XSD",
+    () =>
+      Effect.gen(function* completionResult() {
+        const accepted = yield* acceptItem(
+          "items/completing.xml",
+          new TextEncoder().encode(completingXml),
+        );
+        const written = Effect.fnUntraced(function* written(record: StoredRecord) {
+          const { report, xml } = yield* reported({
+            context,
+            datestamp: new Date(updated),
+            document: accepted,
+            kind: "item",
+            record,
+          });
+          yield* assertValid(xml);
+
+          return itemOf(report, "completing").outcomes["completionStatus"];
+        });
+        const completed = yield* Effect.fromResult(score(accepted, { RESPONSE: identifiers("A") }));
+        const unset = yield* Effect.fromResult(score(accepted, { RESPONSE: identifiers("B") }));
+        const unattempted = yield* Effect.fromResult(encodeRecord(fresh(accepted.item, "")));
+        const lacking: StoredRecord = {
+          ...completed,
+          outcomes: Object.fromEntries(
+            Object.entries(completed.outcomes).filter(
+              ([identifier]) => identifier !== "completionStatus",
+            ),
+          ),
+        };
+
+        assert.isTrue(Option.isSome(accepted.item.processing));
+        assert.deepStrictEqual(yield* written(completed), {
+          attributes: {
+            baseType: "identifier",
+            cardinality: "single",
+            identifier: "completionStatus",
+          },
+          values: ["completed"],
+        });
+        assert.deepStrictEqual((yield* written(unset))?.values, ["unknown"]);
+        assert.deepStrictEqual((yield* written(unattempted))?.values, ["not_attempted"]);
+        assert.deepStrictEqual((yield* written(lacking))?.values, ["unknown"]);
+      }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect(

@@ -1174,6 +1174,23 @@ const citation = (refusal: Refusal): string =>
   });
 
 /**
+ * Cite what settles a refusal: the reading its detail names, or else the line of QTI's information
+ * model its `source` names, for a rule the information model states and no shared reading carries.
+ *
+ * @param refusal The refusal.
+ * @returns ` (reading <n>)`, ` (<source>)`, or nothing.
+ */
+const settled = (refusal: Refusal): string =>
+  Option.match(optionalFact(refusal, "reading"), {
+    onNone: () =>
+      Option.match(optionalFact(refusal, "source"), {
+        onNone: () => "",
+        onSome: (line) => ` (${line})`,
+      }),
+    onSome: (reading) => ` (reading ${reading})`,
+  });
+
+/**
  * Open a content refusal's sentence: the document and where in it, each name the document controls
  * in a code span.
  *
@@ -1241,44 +1258,6 @@ const variableKind = (expected: string): string =>
   expected === "response" || expected === "outcome" ? expected : "variable";
 
 /**
- * Word an `expression-type` refusal.
- *
- * @param refusal The refusal.
- * @returns The sentence: a `qti-equal`'s operand that is not a single integer or float, counted
- *   from 1; a lookup operand against its table (reading 28); or an expression against the outcome
- *   it sets.
- */
-const expressionType = (refusal: Refusal): string => {
-  const element = fact(refusal, "element", "the element");
-  const identifier = fact(refusal, "identifier", "the outcome");
-  const expression = `${fact(refusal, "expressionCardinality", "")} ${baseTypeText(fact(refusal, "expressionBaseType", ""))}`;
-  const operand = optionalFact(refusal, "operand");
-
-  if (Option.isSome(operand)) {
-    return sentence(
-      refusal,
-      `Operand ${operand.value} of ${code(element)} is a ${expression} value, not a single ${code("integer")} or ${code("float")}${citation(refusal)}.`,
-      `give operand ${operand.value} a single ${code("integer")} or ${code("float")} value`,
-    );
-  }
-
-  return Option.match(optionalFact(refusal, "table"), {
-    onNone: () =>
-      sentence(
-        refusal,
-        `${code(element)} sets ${code(identifier)}, a ${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))} outcome, to a ${expression} value${citation(refusal)}.`,
-        `give the expression the base type and cardinality of ${code(identifier)}, or change its declaration`,
-      ),
-    onSome: (table) =>
-      sentence(
-        refusal,
-        `${code(element)} looks ${code(identifier)} up in its ${code(table)} with a ${expression} value, which that table cannot read${citation(refusal)}.`,
-        `look up a value of the base type ${code(table)} reads, or use the other lookup table`,
-      ),
-  });
-};
-
-/**
  * Name the facts most refusals word: the element, the attribute and the reading cited.
  *
  * @param refusal The refusal.
@@ -1289,6 +1268,271 @@ const named = (refusal: Refusal) => ({
   cite: citation(refusal),
   element: fact(refusal, "element", "the element"),
 });
+
+/**
+ * Open a noun phrase with its indefinite article: `an` before a vowel, as in `an ordered`, and `a`
+ * otherwise. Every phrase it opens starts with a cardinality or a kind of variable, in prose.
+ *
+ * @param phrase The noun phrase.
+ * @returns The phrase after its article.
+ */
+const withArticle = (phrase: string): string =>
+  `${/^[aeiou]/u.test(phrase) ? "an" : "a"} ${phrase}`;
+
+/**
+ * Offer the words of a space-separated list as alternatives: `a`, `a or b`, `a, b or c`.
+ *
+ * @param list The words, separated by spaces, as a refusal's detail writes them.
+ * @param word How to write each word.
+ * @returns The words, joined.
+ */
+const alternatives = (list: string, word: (one: string) => string): string => {
+  const words = list
+    .split(" ")
+    .filter((one) => one !== "")
+    .map((one) => word(one));
+  const last = words.at(-1) ?? "";
+
+  return words.length < 2 ? last : `${words.slice(0, -1).join(", ")} or ${last}`;
+};
+
+/**
+ * Word an `expression-type` refusal of an operand the element does not take (`check: "operand"`,
+ * pantry's P23), counted from 1.
+ *
+ * The sentence names the type the operand has and what the element takes: the
+ * `acceptsCardinalities` and `acceptsBaseTypes` its rule names, in the rule's order, where
+ * `acceptsBaseTypes` of `any` is a kind that takes a value of any base type and names none. Every
+ * producer writes both accepts facts (`operandTypes` in `#plate/validate/rules.ts`).
+ *
+ * @param refusal The refusal.
+ * @param element The element's local name.
+ * @param expression The operand's cardinality and base type, as a sentence words them.
+ * @returns The sentence.
+ */
+const operandType = (refusal: Refusal, element: string, expression: string): string => {
+  const operand = fact(refusal, "operand", "");
+  const baseTypes = fact(refusal, "acceptsBaseTypes", "");
+  const cardinalities = fact(refusal, "acceptsCardinalities", "");
+  const taken = withArticle(
+    baseTypes === "any"
+      ? `${alternatives(cardinalities, String)} value of any base type`
+      : `${alternatives(cardinalities, String)} ${alternatives(baseTypes, code)} value`,
+  );
+
+  return sentence(
+    refusal,
+    `Operand ${operand} of ${code(element)} is ${withArticle(expression)} value, which ${code(element)} does not take; it takes ${taken}${citation(refusal)}.`,
+    `give operand ${operand} ${taken}`,
+  );
+};
+
+/**
+ * Word an `expression-type` refusal whose detail names no `check`: a lookup operand against its
+ * table (reading 28), or an expression against the outcome it sets.
+ *
+ * @param refusal The refusal.
+ * @param element The element's local name.
+ * @param expression The expression's cardinality and base type, as a sentence words them.
+ * @returns The sentence.
+ */
+const uncheckedType = (refusal: Refusal, element: string, expression: string): string => {
+  const identifier = fact(refusal, "identifier", "the outcome");
+
+  return Option.match(optionalFact(refusal, "table"), {
+    onNone: () =>
+      sentence(
+        refusal,
+        `${code(element)} sets ${code(identifier)}, ${withArticle(`${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))}`)} outcome, to ${withArticle(expression)} value${citation(refusal)}.`,
+        `give the expression the base type and cardinality of ${code(identifier)}, or change its declaration`,
+      ),
+    onSome: (table) =>
+      sentence(
+        refusal,
+        `${code(element)} looks ${code(identifier)} up in its ${code(table)} with ${withArticle(expression)} value, which that table cannot read${citation(refusal)}.`,
+        `look up a value of the base type ${code(table)} reads, or use the other lookup table`,
+      ),
+  });
+};
+
+/**
+ * Word an `expression-type` refusal, by the `check` its detail names.
+ *
+ * - `condition` (pantry's P21): the condition of a rule's branch is not a single `boolean`.
+ * - `operand` (P23): an operand the element does not take, and what it takes.
+ * - `reference` (P24): an attribute names a variable that is not a single template or outcome
+ *   variable of the base type the attribute holds.
+ * - `template-read` (P26): template processing reads a response or outcome variable.
+ * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`.
+ * - None: an expression against the outcome it sets, or a lookup operand against its table (see
+ *   {@link uncheckedType}).
+ *
+ * An `expressionBaseType` of `""`, a type with no base type of its own, is worded `untyped`.
+ *
+ * @param refusal The refusal.
+ * @returns The sentence.
+ */
+const expressionType = (refusal: Refusal): string => {
+  const element = fact(refusal, "element", "the element");
+  const expression = `${fact(refusal, "expressionCardinality", "")} ${baseTypeText(fact(refusal, "expressionBaseType", ""))}`;
+  const identifier = code(fact(refusal, "identifier", ""));
+  const cite = citation(refusal);
+
+  switch (fact(refusal, "check", "")) {
+    case "condition": {
+      return sentence(
+        refusal,
+        `The condition of ${code(element)} is ${withArticle(expression)} value, not a single ${code("boolean")}${cite}.`,
+        `change the condition to a single ${code("boolean")} expression`,
+      );
+    }
+    case "operand": {
+      return operandType(refusal, element, expression);
+    }
+    case "reference": {
+      const attribute = code(fact(refusal, "attribute", "the attribute"));
+      const expected = baseTypeText(fact(refusal, "expectedBaseType", ""));
+
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${attribute} names ${identifier}, which is not a single template or outcome variable of base type ${expected}${cite}.`,
+        `name a single template or outcome variable of base type ${expected} in ${attribute}, or write a value of that base type there`,
+      );
+    }
+    case "template-read": {
+      const variable = Option.match(optionalFact(refusal, "variableKind"), {
+        onNone: () => "a variable",
+        onSome: (kind) => `${withArticle(kind)} variable`,
+      });
+
+      return sentence(
+        refusal,
+        `${code(element)} reads ${identifier}, ${variable}, in template processing, which may read only template variables and correct or default values${cite}.`,
+        `read a template variable instead, or ${identifier}'s correct or default value through ${code("qti-correct")} or ${code("qti-default")}`,
+      );
+    }
+    case "weight": {
+      const baseType = baseTypeText(fact(refusal, "baseType", ""));
+
+      return sentence(
+        refusal,
+        `${code(element)} is weighted and has the base type ${baseType}, not ${code("float")}${cite}.`,
+        `give ${code(element)} the base type ${code("float")}, remove its ${code("base-type")}, or remove its ${code("weight-identifier")}`,
+      );
+    }
+    default: {
+      return uncheckedType(refusal, element, expression);
+    }
+  }
+};
+
+/**
+ * Word an `attribute-type` refusal, by the `check` its detail names.
+ *
+ * - `reserved-identifier` (pantry's `DeclarationNotReserved`): a declaration whose `identifier` is a
+ *   built-in variable's, `completionStatus`, `numAttempts` or `duration`.
+ * - `tolerance-token` (pantry's P6): a `qti-equal`'s `tolerance` holding a token that is neither an
+ *   `xs:double` nor an NCName.
+ * - None: a value outside the attribute's type, or outside what a reading or the information model
+ *   narrows it to, which the `expected` fact names.
+ *
+ * Each cites what settles it ({@link settled}).
+ *
+ * @param refusal The refusal.
+ * @returns The sentence.
+ */
+const attributeType = (refusal: Refusal): string => {
+  const { attribute, element } = named(refusal);
+  const value = code(fact(refusal, "value", ""));
+
+  switch (fact(refusal, "check", "")) {
+    case "reserved-identifier": {
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, the identifier of a built-in variable, which no declaration may take${settled(refusal)}.`,
+        `give ${code(element)} another identifier; the built-in variable needs no declaration`,
+      );
+    }
+    case "tolerance-token": {
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, which holds a token that is neither a number (${code("xs:double")}) nor a variable's name (an NCName)${settled(refusal)}.`,
+        `write each token of ${code(attribute)} as a number or a variable's name, one space apart`,
+      );
+    }
+    default: {
+      const expected = optionalFact(refusal, "expected");
+
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, which is not ${Option.getOrElse(expected, () => "a value its type allows")}${settled(refusal)}.`,
+        `write a value that is ${Option.getOrElse(expected, () => "of the attribute's type")}`,
+      );
+    }
+  }
+};
+
+/**
+ * Word an `undeclared-variable` refusal, by the `check` its detail names.
+ *
+ * - `untimed-duration` (pantry's `item-duration`): the built-in `duration`, read where the item is
+ *   not time dependent.
+ * - `reading` (pantry's `prefixed-ref`): a dotted name that resolves to no variable of an item ref,
+ *   test part or section (reading 48).
+ * - `built-in-target` (pantry's P9): a rule other than `qti-set-outcome-value` that sets a built-in,
+ *   citing the information model's line its `source` names.
+ * - None (P8): a name the item declares no variable for.
+ *
+ * Each names the element, or the element's attribute when a reference attribute names the
+ * variable.
+ *
+ * @param refusal The refusal.
+ * @returns The sentence.
+ */
+const undeclaredVariable = (refusal: Refusal): string => {
+  const element = code(named(refusal).element);
+  const identifier = code(fact(refusal, "identifier", ""));
+  const attribute = optionalFact(refusal, "attribute");
+  const subject = Option.match(attribute, {
+    onNone: () => element,
+    onSome: (name) => `${element}'s attribute ${code(name)}`,
+  });
+
+  switch (fact(refusal, "check", "")) {
+    case "untimed-duration": {
+      return sentence(
+        refusal,
+        `${subject} ${Option.isSome(attribute) ? "names" : "reads"} the built-in ${identifier}, which an item that is not time dependent does not have${citation(refusal)}.`,
+        `declare the item ${code('time-dependent="true"')}, or read another variable`,
+      );
+    }
+    case "reading": {
+      return sentence(
+        refusal,
+        `${subject} names ${identifier}, which resolves to no item ref, test part or section variable${citation(refusal)}.`,
+        `name a variable that an item ref, test part or section of the test declares`,
+      );
+    }
+    case "built-in-target": {
+      const setter = code("qti-set-outcome-value");
+
+      return sentence(
+        refusal,
+        `${subject} sets the built-in ${identifier}, which only a ${setter} may set${settled(refusal)}.`,
+        `set ${identifier} with a ${setter}, or name a declared outcome`,
+      );
+    }
+    default: {
+      const kind = variableKind(fact(refusal, "expected", "variable"));
+
+      return sentence(
+        refusal,
+        `${subject} names ${identifier}, and the item declares no ${kind} ${identifier}.`,
+        `declare ${identifier}, or name a declared ${kind}`,
+      );
+    }
+  }
+};
 
 /**
  * Word the `template-requirements` refusal: the declaration a standard template, an inline
@@ -1340,6 +1584,13 @@ const templateRequirements = (refusal: Refusal): string => {
  * and `secondPrefix` with `secondVariable`, and the `reading`; `resource-type-mismatch` the
  * declared `type`, the resource's `path`, the `root` its document has and, when known, the type
  * that root names, `expected`.
+ *
+ * `attribute-type` and `missing-attribute` cite the `reading` that settles them, or else the
+ * `source`, a line of QTI's information model, for the floor of a literal `figures` or `n`, the
+ * `tolerance` an absolute or relative `qti-equal` must carry, a declaration named after a built-in
+ * variable and a `tolerance` token that is neither a number nor a name; `attribute-type` words the
+ * last two by their `check` ({@link attributeType}). `missing-attribute` names the mode that
+ * requires the attribute, `whenAttribute` with `whenValue`, when one does.
  */
 const wordings = {
   "ambiguous-reference": (refusal) => {
@@ -1360,23 +1611,14 @@ const wordings = {
       `rename the identifier whose ${code(".")} lets ${reference} split two ways, so that only one reading names a variable`,
     );
   },
-  "attribute-type": (refusal) => {
-    const { attribute, cite, element } = named(refusal);
-    const expected = optionalFact(refusal, "expected");
-
-    return sentence(
-      refusal,
-      `${code(element)}'s attribute ${code(attribute)} is ${code(fact(refusal, "value", ""))}, which is not ${Option.getOrElse(expected, () => "a value its type allows")}${cite}.`,
-      `write a value that is ${Option.getOrElse(expected, () => "of the attribute's type")}`,
-    );
-  },
+  "attribute-type": attributeType,
   binding: (refusal) => {
     const interaction = fact(refusal, "interaction", "the interaction");
     const response = fact(refusal, "response", "");
 
     return sentence(
       refusal,
-      `${code(interaction)} cannot be bound to ${code(response)}, a ${fact(refusal, "cardinality", "")} response of base type ${baseTypeText(fact(refusal, "baseType", ""))}.`,
+      `${code(interaction)} cannot be bound to ${code(response)}, ${withArticle(`${fact(refusal, "cardinality", "")} response`)} of base type ${baseTypeText(fact(refusal, "baseType", ""))}.`,
       `bind ${code(interaction)} to a response of a base type and cardinality it accepts, or change the declaration of ${code(response)}`,
     );
   },
@@ -1509,10 +1751,14 @@ const wordings = {
   },
   "missing-attribute": (refusal) => {
     const { attribute, element } = named(refusal);
+    const when = Option.match(optionalFact(refusal, "whenAttribute"), {
+      onNone: () => "",
+      onSome: (mode) => ` when ${code(mode)} is ${code(fact(refusal, "whenValue", ""))}`,
+    });
 
     return sentence(
       refusal,
-      `${code(element)} must carry the attribute ${code(attribute)}, and it has none.`,
+      `${code(element)} must carry the attribute ${code(attribute)}${when}, and it has none${settled(refusal)}.`,
       `add ${code(attribute)} to ${code(element)}`,
     );
   },
@@ -1652,16 +1898,7 @@ const wordings = {
       `declare ${code(response)} in a \`qti-response-declaration\`, or bind the interaction to a declared response`,
     );
   },
-  "undeclared-variable": (refusal) => {
-    const identifier = fact(refusal, "identifier", "");
-    const kind = variableKind(fact(refusal, "expected", "variable"));
-
-    return sentence(
-      refusal,
-      `${code(named(refusal).element)} names ${code(identifier)}, and the item declares no ${kind} ${code(identifier)}.`,
-      `declare ${code(identifier)}, or name a declared ${kind}`,
-    );
-  },
+  "undeclared-variable": undeclaredVariable,
   "unknown-attribute": (refusal) => {
     const { attribute, cite, element } = named(refusal);
 

@@ -1,9 +1,15 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, doc, el, entity, text } from "#plate/document/source.ts";
-import type { SourceAttribute, SourceChild, SourceElement } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceChild,
+  SourceDocument,
+  SourceElement,
+} from "#plate/document/source.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
-import { checkRules } from "#plate/validate/rules.ts";
+import type { ReferenceEntry } from "#plate/model/expression.ts";
+import { checkRules, referenceRefusals } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 
 /**
@@ -32,6 +38,21 @@ const item = (
       [...declarations, el("qti-item-body", [], body), ...after],
     ),
   );
+
+/**
+ * Make a hand-built item time dependent: its root's `time-dependent`, `false` in every
+ * {@link item}, becomes `true`, so the item has the built-in `duration` to read.
+ *
+ * @param source The item.
+ * @returns The same item, time dependent.
+ */
+const timed = (source: SourceDocument): SourceDocument =>
+  doc(source.location, {
+    ...source.root,
+    attributes: source.root.attributes.map((attribute) =>
+      attribute.local === "time-dependent" ? attr("time-dependent", "true") : attribute,
+    ),
+  });
 
 /**
  * Construct a response declaration.
@@ -280,6 +301,16 @@ const equal = (...operands: readonly SourceElement[]): SourceElement =>
   el("qti-equal", [], operands);
 
 /**
+ * Construct a `qti-field-value` of a record operand: the last expression kind to land (M3.b-4), so
+ * it stays untyped through M3.b-1 and pins what an untyped expression does.
+ *
+ * @param operand The record it reads a field of.
+ * @returns The expression.
+ */
+const fieldValue = (operand: SourceElement): SourceElement =>
+  el("qti-field-value", [attr("field-identifier", "score")], [operand]);
+
+/**
  * Construct a `qti-map-response-point` of a response.
  *
  * @param identifier The response's identifier.
@@ -395,6 +426,20 @@ const settingScore = (expression: SourceElement) =>
   judged(item([outcome("SCORE")], [], [processing(undefined, [setScore(expression)])]));
 
 /**
+ * Construct an item, not time dependent, whose inline processing sets one outcome to an expression.
+ *
+ * @param declarations The item's declarations.
+ * @param target The identifier of the outcome the processing sets.
+ * @param expression The expression.
+ * @returns The item.
+ */
+const settingOutcome = (
+  declarations: readonly SourceElement[],
+  target: string,
+  expression: SourceElement,
+) => item(declarations, [], [processing(undefined, [setOutcome(target, expression)])]);
+
+/**
  * Check an item whose inline processing sets its float `SCORE` from a `qti-map-response-point` of
  * `RESPONSE`.
  *
@@ -423,6 +468,33 @@ const comparing = (...operands: readonly SourceElement[]) =>
       [response("RESPONSE", "multiple", "integer"), outcome("PASSED", "boolean")],
       [],
       [processing(undefined, [setOutcome("PASSED", equal(...operands))])],
+    ),
+  );
+
+/**
+ * Construct a branch of a response condition: its condition, then a rule that sets the
+ * float `SCORE`.
+ *
+ * @param local The branch's local name, `qti-response-if` or `qti-response-else-if`.
+ * @param condition Its condition.
+ * @returns The branch.
+ */
+const responseBranch = (local: string, condition: SourceElement): SourceElement =>
+  el(local, [], [condition, setScore(baseValue("float", "1"))]);
+
+/**
+ * Check an item whose inline processing holds one `qti-response-condition`, beside a single
+ * identifier `RESPONSE` a condition may read and a float `SCORE` each branch sets.
+ *
+ * @param branches The condition's branches, in document order.
+ * @returns The refusals, reduced.
+ */
+const branching = (...branches: readonly SourceElement[]) =>
+  judged(
+    item(
+      [response("RESPONSE", "single", "identifier"), outcome("SCORE")],
+      [],
+      [processing(undefined, [el("qti-response-condition", [], branches)])],
     ),
   );
 
@@ -1260,16 +1332,29 @@ describe("checkRules", () => {
       );
     });
 
-    it("accepts a qti-variable of the built-in duration and of a declared template variable", () => {
-      assert.deepStrictEqual(
-        judged(
-          item(
-            [outcome("SCORE"), declaration("qti-template-declaration", "T", "single", "float")],
-            [],
-            [processing(undefined, [setScore(variable("duration")), setScore(variable("T"))])],
-          ),
-        ),
+    it("[I-9a] accepts a qti-variable of the built-in duration in a time-dependent item and of a declared template variable, and refuses the duration in an item that is not (item-duration)", () => {
+      const reading = item(
+        [outcome("SCORE"), declaration("qti-template-declaration", "T", "single", "float")],
         [],
+        [processing(undefined, [setScore(variable("duration")), setScore(variable("T"))])],
+      );
+
+      assert.deepStrictEqual(
+        [judged(timed(reading)), judged(reading)],
+        [
+          [],
+          [
+            {
+              detail: {
+                check: "untimed-duration",
+                element: "qti-variable",
+                identifier: "duration",
+              },
+              path: `${rulePath}[1]/qti-variable`,
+              rule: "undeclared-variable",
+            },
+          ],
+        ],
       );
     });
 
@@ -1366,6 +1451,106 @@ describe("checkRules", () => {
         );
       });
     });
+
+    describe("the built-in duration, which only a time-dependent item has (item-duration)", () => {
+      /**
+       * A `qti-any-n` whose `min` names `duration`, a reference attribute of base type integer,
+       * over one boolean operand.
+       */
+      const anyN = el(
+        "qti-any-n",
+        [attr("min", "duration"), attr("max", "1")],
+        [baseValue("boolean", "true")],
+      );
+
+      /**
+       * The refusal of a `qti-variable` that reads `duration` in an item that is not time
+       * dependent.
+       */
+      const untimedRead = {
+        detail: { check: "untimed-duration", element: "qti-variable", identifier: "duration" },
+        path: `${rulePath}/qti-variable`,
+        rule: "undeclared-variable" as const,
+      };
+
+      /**
+       * The refusal of {@link anyN}'s `min`, which names `duration`, in an item that is not time
+       * dependent.
+       */
+      const untimedNamed = {
+        detail: {
+          attribute: "min",
+          check: "untimed-duration",
+          element: "qti-any-n",
+          identifier: "duration",
+        },
+        path: `${rulePath}/qti-any-n`,
+        rule: "undeclared-variable" as const,
+      };
+
+      /**
+       * The refusal of {@link anyN}'s `min`, which names a built-in, no template or outcome variable
+       * (P24), whether the item is time dependent or not.
+       */
+      const builtInNamed = {
+        detail: {
+          attribute: "min",
+          check: "reference",
+          element: "qti-any-n",
+          expectedBaseType: "integer",
+          identifier: "duration",
+        },
+        path: `${rulePath}/qti-any-n`,
+        rule: "expression-type" as const,
+      };
+
+      it("[I-9a] refuses a qti-variable of duration in an item that is not time dependent (item-duration)", () => {
+        assert.deepStrictEqual(
+          judged(settingOutcome([outcome("SCORE")], "SCORE", variable("duration"))),
+          [untimedRead],
+        );
+      });
+
+      it("[I-9a] refuses qti-any-n's min naming duration in an item that is not time dependent, and as no template or outcome variable (item-duration, P24)", () => {
+        assert.deepStrictEqual(
+          judged(settingOutcome([outcome("PASSED", "boolean")], "PASSED", anyN)),
+          [untimedNamed, builtInNamed],
+        );
+      });
+
+      it("[I-9a] accepts a qti-variable of duration in a time-dependent item", () => {
+        assert.deepStrictEqual(
+          judged(timed(settingOutcome([outcome("SCORE")], "SCORE", variable("duration")))),
+          [],
+        );
+      });
+
+      it("[I-9a] refuses qti-any-n's min naming duration in a time-dependent item only as no template or outcome variable (P24)", () => {
+        assert.deepStrictEqual(
+          judged(timed(settingOutcome([outcome("PASSED", "boolean")], "PASSED", anyN))),
+          [builtInNamed],
+        );
+      });
+
+      it("[I-9a] accepts a declared outcome named duration, read by a qti-variable and by qti-any-n's min, in an item timed or not", () => {
+        const declared = item(
+          [
+            outcome("duration", "integer"),
+            outcome("HITS", "integer"),
+            outcome("PASSED", "boolean"),
+          ],
+          [],
+          [
+            processing(undefined, [
+              setOutcome("HITS", variable("duration")),
+              setOutcome("PASSED", anyN),
+            ]),
+          ],
+        );
+
+        assert.deepStrictEqual([judged(timed(declared)), judged(declared)], [[], []]);
+      });
+    });
   });
 
   describe("expression-type", () => {
@@ -1402,15 +1587,34 @@ describe("checkRules", () => {
       assert.deepStrictEqual(settingScore(variable("numAttempts")), [scoreRefused("integer")]);
     });
 
-    it("accepts setting it from duration, a float in an item (reading 29)", () => {
-      assert.deepStrictEqual(settingScore(variable("duration")), []);
+    it("[I-9a] accepts setting it from duration, a float in a time-dependent item (reading 29), and refuses no type in an item that is not, only the read (item-duration)", () => {
+      const setting = item(
+        [outcome("SCORE")],
+        [],
+        [processing(undefined, [setScore(variable("duration"))])],
+      );
+
+      assert.deepStrictEqual(
+        [judged(timed(setting)), judged(setting)],
+        [
+          [],
+          [
+            {
+              detail: {
+                check: "untimed-duration",
+                element: "qti-variable",
+                identifier: "duration",
+              },
+              path: `${rulePath}/qti-variable`,
+              rule: "undeclared-variable",
+            },
+          ],
+        ],
+      );
     });
 
-    it("neither types nor refuses an expression that holds a qti-sum, outside the eight", () => {
-      assert.deepStrictEqual(
-        settingScore(el("qti-sum", [], [baseValue("integer", "1"), baseValue("integer", "2")])),
-        [],
-      );
+    it("neither types nor refuses an expression that holds a qti-field-value, not yet landed", () => {
+      assert.deepStrictEqual(settingScore(fieldValue(variable("QTI_CONTEXT"))), []);
     });
 
     describe("a qti-map-response-point, a single float", () => {
@@ -1493,6 +1697,9 @@ describe("checkRules", () => {
        */
       const operandRefused = (operand: string, baseType: string, cardinality: string) => ({
         detail: {
+          acceptsBaseTypes: "integer float",
+          acceptsCardinalities: "single",
+          check: "operand",
           element: "qti-equal",
           expressionBaseType: baseType,
           expressionCardinality: cardinality,
@@ -1518,12 +1725,62 @@ describe("checkRules", () => {
         assert.deepStrictEqual(comparing(baseValue("integer", "1"), baseValue("float", "1")), []);
       });
 
-      it("accepts an operand that holds a qti-sum, untyped", () => {
+      it("accepts an operand that holds a qti-field-value, untyped", () => {
         assert.deepStrictEqual(
-          comparing(el("qti-sum", [], [baseValue("string", "1")]), baseValue("integer", "1")),
+          comparing(fieldValue(variable("QTI_CONTEXT")), baseValue("integer", "1")),
           [],
         );
       });
+
+      it("refuses only the string operand beside an untyped one (ruling R3)", () => {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [outcome("LABEL", "string"), outcome("PASSED", "boolean")],
+              [],
+              [
+                processing(undefined, [
+                  setOutcome(
+                    "PASSED",
+                    equal(fieldValue(variable("QTI_CONTEXT")), variable("LABEL")),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+          [operandRefused("2", "string", "single")],
+        );
+      });
+
+      it("does not judge a string operand in template processing", () => {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [declaration("qti-template-declaration", "SAME", "single", "boolean")],
+              [],
+              [
+                templateProcessing(
+                  el(
+                    "qti-set-template-value",
+                    [attr("identifier", "SAME")],
+                    [equal(baseValue("integer", "1"), baseValue("string", "1"))],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          [],
+        );
+      });
+    });
+
+    it("does not type a qti-match that holds an untyped operand (ruling R3)", () => {
+      assert.deepStrictEqual(
+        settingScore(
+          el("qti-match", [], [fieldValue(variable("QTI_CONTEXT")), baseValue("string", "a")]),
+        ),
+        [],
+      );
     });
 
     it("compares a record outcome by cardinality alone", () => {
@@ -1645,14 +1902,70 @@ describe("checkRules", () => {
         );
       });
 
-      it("accepts an operand that holds a qti-sum, untyped", () => {
+      it("accepts an operand that holds a qti-field-value, untyped", () => {
         assert.deepStrictEqual(
-          judged(
-            lookupItem(
-              "qti-match-table",
-              el("qti-sum", [], [baseValue("float", "1"), baseValue("float", "2")]),
-            ),
+          judged(lookupItem("qti-match-table", fieldValue(variable("QTI_CONTEXT")))),
+          [],
+        );
+      });
+    });
+
+    describe("a response condition (P21)", () => {
+      const conditionPath = "qti-assessment-item/qti-response-processing/qti-response-condition";
+
+      /**
+       * A single boolean condition: `RESPONSE` matches the identifier `A`.
+       */
+      const matching = el("qti-match", [], [variable("RESPONSE"), baseValue("identifier", "A")]);
+
+      /**
+       * The refusal of a branch whose condition is a single value of another base type.
+       *
+       * @param local The branch's local name.
+       * @param baseType The condition's base type.
+       * @returns The refusal, reduced.
+       */
+      const conditionRefused = (local: string, baseType: string) => ({
+        detail: {
+          check: "condition",
+          element: local,
+          expressionBaseType: baseType,
+          expressionCardinality: "single",
+        },
+        path: `${conditionPath}/${local}`,
+        rule: "expression-type" as const,
+      });
+
+      it('[I-9a] refuses a qti-response-if whose condition is a qti-base-value of base-type="integer" (P21)', () => {
+        assert.deepStrictEqual(
+          branching(responseBranch("qti-response-if", baseValue("integer", "1"))),
+          [conditionRefused("qti-response-if", "integer")],
+        );
+      });
+
+      it('[I-9a] refuses a qti-response-else-if whose condition is a qti-base-value of base-type="integer" (P21)', () => {
+        assert.deepStrictEqual(
+          branching(
+            responseBranch("qti-response-if", matching),
+            responseBranch("qti-response-else-if", baseValue("integer", "1")),
           ),
+          [conditionRefused("qti-response-else-if", "integer")],
+        );
+      });
+
+      it("[I-9a] accepts a qti-match condition, a single boolean (P21)", () => {
+        assert.deepStrictEqual(
+          branching(
+            responseBranch("qti-response-if", matching),
+            responseBranch("qti-response-else-if", matching),
+          ),
+          [],
+        );
+      });
+
+      it("[I-9a] accepts a condition that holds a kind not yet landed, untyped (P21, ruling R3)", () => {
+        assert.deepStrictEqual(
+          branching(responseBranch("qti-response-if", fieldValue(variable("QTI_CONTEXT")))),
           [],
         );
       });
@@ -1716,13 +2029,38 @@ describe("checkRules", () => {
       );
     });
 
-    it("accepts a lookup that names the built-in completionStatus", () => {
+    it("[I-9a] refuses a lookup that targets the built-in completionStatus, which only a qti-set-outcome-value sets, as undeclared-variable (pantry P9, info.txt:8488)", () => {
       assert.deepStrictEqual(
         judged(
           item(
             [outcome("SCORE")],
             [],
             [processing(undefined, [lookup("completionStatus", baseValue("integer", "1"))])],
+          ),
+        ),
+        [
+          {
+            detail: {
+              check: "built-in-target",
+              element: "qti-lookup-outcome-value",
+              identifier: "completionStatus",
+              source: "info.txt:8488",
+            },
+            path: "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value",
+            rule: "undeclared-variable",
+          },
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              processing(undefined, [
+                setOutcome("completionStatus", baseValue("identifier", "completed")),
+              ]),
+            ],
           ),
         ),
         [],
@@ -1882,6 +2220,143 @@ describe("checkRules", () => {
         ],
       );
     });
+  });
+});
+
+/**
+ * A reference facet built for the producer's tests, by element: no landed kind declares a
+ * reference attribute yet, so each family's own entries arrive with its slice.
+ */
+const referenceFacets = {
+  "qti-equal": [
+    { attribute: "tolerance", baseType: "float", checked: false, field: "tolerance", list: true },
+  ],
+  "qti-pattern-match": [
+    { attribute: "pattern", baseType: "string", checked: true, field: "pattern", list: false },
+  ],
+  "qti-round-to": [
+    { attribute: "figures", baseType: "integer", checked: true, field: "figures", list: false },
+  ],
+} as const satisfies Record<string, readonly ReferenceEntry[]>;
+
+/**
+ * The declarations a reference attribute in the producer's tests may name, by identifier: a single
+ * integer response, a single string and a single integer outcome, and a single integer template
+ * variable.
+ */
+const referenced: ReadonlyMap<string, SourceElement> = new Map([
+  ["RESPONSE", response("RESPONSE", "single", "integer")],
+  ["LABEL", outcome("LABEL", "string")],
+  ["COUNT", outcome("COUNT", "integer")],
+  ["T", declaration("qti-template-declaration", "T", "single", "integer")],
+]);
+
+/**
+ * The path of the expression the producer's tests judge.
+ */
+const referringPath =
+  "qti-assessment-item/qti-response-processing/qti-set-outcome-value/expression";
+
+/**
+ * Judge one reference attribute of an expression with the test's reference facet, beside the
+ * declarations {@link referenced} lists.
+ *
+ * @param local The expression's local name, which picks its facet entries.
+ * @param attribute The attribute's name.
+ * @param value The attribute's value, as written.
+ * @returns The refusals, reduced to their rule and detail, each at the expression's path.
+ */
+const referring = (local: keyof typeof referenceFacets, attribute: string, value: string) =>
+  referenceRefusals(
+    item([...referenced.values()], []),
+    { element: el(local, [attr(attribute, value)]), parent: Option.none(), path: referringPath },
+    referenceFacets[local],
+    referenced,
+  ).map((refusal) => {
+    assert.deepStrictEqual(refusal.location, { kind: "path", path: referringPath });
+
+    return { detail: refusal.detail, rule: refusal.rule };
+  });
+
+/**
+ * The refusal of a reference attribute that names no variable (P8).
+ *
+ * @param attribute The attribute.
+ * @param identifier The name it holds.
+ * @returns The refusal, reduced.
+ */
+const undeclared = (attribute: string, identifier: string) => ({
+  detail: { attribute, element: "qti-round-to", expected: "variable", identifier },
+  rule: "undeclared-variable" as const,
+});
+
+/**
+ * The refusal of a reference attribute that names a variable of another kind or type (P24).
+ *
+ * @param element The expression's local name.
+ * @param attribute The attribute.
+ * @param expectedBaseType The base type the attribute holds.
+ * @param identifier The name it holds.
+ * @returns The refusal, reduced.
+ */
+const mistyped = (
+  element: string,
+  attribute: string,
+  expectedBaseType: string,
+  identifier: string,
+) => ({
+  detail: { attribute, check: "reference", element, expectedBaseType, identifier },
+  rule: "expression-type" as const,
+});
+
+describe("referenceRefusals", () => {
+  it("[I-9a] gives nothing for a literal", () => {
+    assert.deepStrictEqual(referring("qti-round-to", "figures", "3"), []);
+  });
+
+  it("[I-9a] refuses a name no variable has as undeclared-variable, with the attribute (P8)", () => {
+    assert.deepStrictEqual(referring("qti-round-to", "figures", "NOPE"), [
+      undeclared("figures", "NOPE"),
+    ]);
+  });
+
+  it("[I-9a] reads INF in an integer attribute as a name, refused when it names nothing (P8, ruling R4)", () => {
+    assert.deepStrictEqual(referring("qti-round-to", "figures", "INF"), [
+      undeclared("figures", "INF"),
+    ]);
+  });
+
+  it("[I-9a] refuses a string outcome named for an integer attribute (P24)", () => {
+    assert.deepStrictEqual(referring("qti-round-to", "figures", "LABEL"), [
+      mistyped("qti-round-to", "figures", "integer", "LABEL"),
+    ]);
+  });
+
+  it("[I-9a] refuses a response variable named for an integer attribute (P24)", () => {
+    assert.deepStrictEqual(referring("qti-round-to", "figures", "RESPONSE"), [
+      mistyped("qti-round-to", "figures", "integer", "RESPONSE"),
+    ]);
+  });
+
+  it("[I-9a] gives nothing for an integer outcome or an integer template variable", () => {
+    assert.deepStrictEqual(
+      [referring("qti-round-to", "figures", "COUNT"), referring("qti-round-to", "figures", "T")],
+      [[], []],
+    );
+  });
+
+  it("[I-9a] gives nothing for an unchecked attribute that names nothing", () => {
+    assert.deepStrictEqual(referring("qti-equal", "tolerance", "NOPE 0.1"), []);
+  });
+
+  it("[I-9a] reads a braced name that names nothing as literal text (ruling R1)", () => {
+    assert.deepStrictEqual(referring("qti-pattern-match", "pattern", "{NOPE}"), []);
+  });
+
+  it("[I-9a] refuses a braced name in a string attribute that names a response (P24)", () => {
+    assert.deepStrictEqual(referring("qti-pattern-match", "pattern", "{RESPONSE}"), [
+      mistyped("qti-pattern-match", "pattern", "string", "RESPONSE"),
+    ]);
   });
 });
 

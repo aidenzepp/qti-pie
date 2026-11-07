@@ -1,13 +1,25 @@
+/* oxlint-disable unicorn/text-encoding-identifier-case -- A document row spells its XML encoding labels (`UTF-8`) as crust's reader reports them and `Document` stores them. */
 /**
  * The expression and processing laws on the lease, PostgreSQL itself the judge (testing doctrine,
  * rule 3): each refused row is one the law's model refuses, named by the law it breaks.
  *
- * Every case writes rows through the author role (`db.apply`) whose nodes no stored document
- * holds, so every containment into `Node`, `Declaration` and the other overlays fails at commit;
- * each law under test is a row CHECK, judged as its row is inserted, before any of them. So a row
- * that breaks the law comes back `invariant-rejected` with the law among its `laws`, and a row that
+ * Most cases write rows through the author role (`db.apply`) whose nodes no stored document holds,
+ * so every containment into `Node`, `Declaration` and the other overlays fails at commit; each law
+ * under test is a row CHECK, judged as its row is inserted, before any of them. So a row that
+ * breaks the law comes back `invariant-rejected` with the law among its `laws`, and a row that
  * keeps it comes back rejected by its containments alone, the law absent (membership, since a
- * merged native names several, C22).
+ * merged native names several, C22). A family's member is written beside its owner, since an
+ * immutable owner's family is fixed when the owner is inserted (README, "Families"): a
+ * `VariableRef` beside its `Document`, the manifest's row, lawful on its own CHECKs.
+ *
+ * A `Reading`'s owner, its `AssembledReference`, is lawful only placed in an assembly
+ * (`E1_derived`: at least one `PlacedReference`), so its cases are judged by a direct SQL writer
+ * (`#pantry/test/direct-sql.ts`, README "Direct SQL access"): the reading with the three owners
+ * its non-deferrable foreign keys read (its `AssembledReference`, that one's `TestReference`, and
+ * that one's `ReferenceDocument`), each lawful on its own CHECKs, the rest deferred and rolled
+ * back unchecked. A refused case's verdict is the SQLSTATE and the constraint that states the
+ * law; a control's is no error. Each breach breaks the one law under test, so the constraint
+ * PostgreSQL names is that law's whatever order it checks them in.
  *
  * The whole-package cases, each fixture of `src/test/fixtures/processing/` imported and refused
  * under its rule or accepted, need the importer and arrive with it (Q5.15): every `broken`
@@ -16,7 +28,7 @@
  * N5's `Follow`, and every `valid` fixture is accepted.
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { Addition, ApplyOutcome, Law } from "@bjornpagen/grizzle";
+import type { Addition, ApplyOutcome, Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
@@ -24,7 +36,9 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { expressionTypings } from "#pantry/grammar/expression.ts";
 import { OperatorArity } from "#pantry/grammar/install.ts";
+import { Document } from "#pantry/qti/chardata.ts";
 import {
+  AssembledReference,
   Expression,
   ExpressionAttribute,
   ItemTiming,
@@ -33,12 +47,17 @@ import {
   Operand,
   ProcessingTemplate,
   Reading,
+  ReferenceDocument,
   TemplateDefault,
+  TestReference,
   VariableRef,
 } from "#pantry/qti/expressions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
+import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { assertVerdict, judged, loginSession, rowsOf, sqlRowOf } from "#pantry/test/direct-sql.ts";
+import type { Insert } from "#pantry/test/direct-sql.ts";
+import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * A node no stored row holds, the parent and document every case's rows name.
@@ -135,6 +154,49 @@ const referenceRow = (
   timeDependent: false,
   ...fields,
 });
+
+/**
+ * A reference's document as its owner in `Document.variables`: the manifest's row, lawful on its
+ * own CHECKs (`RootOfType` admits its `none` resource type at `imsmanifest.xml`, it writes no
+ * declaration, and its context is its own node), at the reference's root kind, which the family's
+ * owner axis copies.
+ *
+ * @param reference - The reference.
+ * @returns The document's row.
+ */
+const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Document> => ({
+  assembled: false,
+  charset: "UTF-8",
+  contextNearest: reference.document,
+  contextNearestKind: "document",
+  encoding: "",
+  exportCharset: "UTF-8",
+  node: reference.document,
+  nodeChildren: 1n,
+  nodeDocument: reference.document,
+  nodeGoverns: "none",
+  nodeKind: "document",
+  nodeParentKind: "document",
+  nodeStart: 0n,
+  package: strayNode,
+  path: manifestPath,
+  resourceType: "none",
+  rootKind: reference.rootKind,
+  standalone: "none",
+  version: "3.0.0",
+  xmlVersion: "none",
+});
+
+/**
+ * The change that writes a reference beside its document, the immutable owner of its family.
+ *
+ * @param reference - The reference.
+ * @returns The change.
+ */
+const referenceChange = (reference: Addition<typeof VariableRef>) =>
+  ChangeSet.empty(Author)
+    .insert(Document, [documentOf(reference)])
+    .insert(VariableRef, [reference]);
 
 /**
  * The type a kind's expression has over `count` operands of no known type, which every rule of
@@ -249,27 +311,94 @@ const throughItem = {
 } as const satisfies Partial<Addition<typeof Reading>>;
 
 /**
- * Whether an outcome names the key over a selection of a relation, by its terms in order.
- *
- * @param outcome - The apply's outcome.
- * @param relation - The relation.
- * @param fields - The key's terms.
- * @returns Whether it does.
+ * The test document whose one reference every reading case reads.
  */
-const namesSelectedKey = (
-  outcome: ApplyOutcome<unknown>,
-  relation: string,
-  fields: readonly string[],
-): boolean =>
-  outcome.kind === "invariant-rejected" &&
-  outcome.laws.some(
-    (law: Law) =>
-      law.kind === "key" &&
-      law.side.relation === relation &&
-      law.side.selection.conjuncts.length > 0 &&
-      law.side.terms.length === fields.length &&
-      law.side.terms.every((term, at) => term.kind === "field" && term.field === fields[at]),
-  );
+const referencingDocument = nodeOf(90);
+
+/**
+ * A segment of a name that is all digits, a reading 88 instance number where it follows a dot.
+ */
+const allDigits = /^[0-9]+$/u;
+
+/**
+ * A family's hidden columns for a member at a slot, by the comment grizzle installs on each.
+ *
+ * @param family - The family, `Owner.count`.
+ * @param index - The member's slot.
+ * @param count - The owner's count.
+ * @returns The hidden values.
+ */
+const slotOf = (family: string, index: number, count: number) => ({
+  [`the index of the family ${family}`]: index,
+  [`the owner's count of the family ${family}`]: count,
+});
+
+/**
+ * The rows a direct writer states for one reference's readings, owners first, each owner lawful on
+ * its own CHECKs:
+ *
+ * - The test document's `ReferenceDocument` row, owning the one reference;
+ * - The reference's `TestReference` row in a test, at slot 0 of 1 (`E1_derived`: a
+ *   `section-identifier` reads a section, every other attribute a variable);
+ * - Its `AssembledReference` row, placed once, with its name's counts (`E1_derived`: a variable's
+ *   name is its segments joined and is read once unsplit and once at each dot, a numbered segment
+ *   once less where it is the last; a section's has no segments and is read once);
+ * - The readings, at slots 0 to n − 1 of that count.
+ *
+ * Every other row they name (the segments, the placements, the lookups, the test's nodes) is
+ * absent, its foreign keys deferred and never checked before the rollback.
+ *
+ * @param readings - The reference's readings, one at least, all of one reference.
+ * @returns The rows, in the order the non-deferrable keys need.
+ */
+const readingInserts = (
+  readings: readonly [Addition<typeof Reading>, ...Addition<typeof Reading>[]],
+): readonly Insert[] => {
+  const [{ assembly, attribute, identifier, kind, node, role }] = readings;
+  const pieces = identifier.split(".");
+  const variable = role === "variable";
+  const digits = variable ? pieces.slice(1).filter((piece) => allDigits.test(piece)).length : 0;
+  const lastDigit = variable && pieces.length > 1 && allDigits.test(pieces.at(-1) ?? "");
+  const segments = variable ? pieces.length : 0;
+  const count = variable ? segments + digits - (lastDigit ? 1 : 0) : 1;
+  const reference: Fact<typeof TestReference> = {
+    attribute,
+    document: referencingDocument,
+    identifier,
+    kind,
+    node,
+    role,
+    rootKind: "qti-assessment-test",
+  };
+  const assembled: Fact<typeof AssembledReference> = {
+    ...reference,
+    assembly,
+    digits: BigInt(digits),
+    joined: variable ? identifier : "",
+    lastDigit,
+    placements: 1n,
+    readings: BigInt(count),
+    segments: BigInt(segments),
+  };
+
+  return [
+    {
+      row: sqlRowOf(ReferenceDocument, { document: referencingDocument, references: 1n }),
+      table: "reference_document",
+    },
+    {
+      hidden: slotOf("ReferenceDocument.references", 0, 1),
+      row: sqlRowOf(TestReference, reference),
+      table: "test_reference",
+    },
+    { row: sqlRowOf(AssembledReference, assembled), table: "assembled_reference" },
+    ...readings.map((reading, at) => ({
+      hidden: slotOf("AssembledReference.readings", at, count),
+      row: sqlRowOf(Reading, reading),
+      table: "reading",
+    })),
+  ];
+};
 
 /**
  * Whether an outcome names a containment of a relation's rows into `ReferenceDeclaration`, the
@@ -531,14 +660,8 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             },
           ] as const;
           for (const { broken, law, repaired } of cases) {
-            const refused = yield* db.apply(
-              ChangeSet.empty(Author).insert(VariableRef, [broken]),
-              {},
-            );
-            const kept = yield* db.apply(
-              ChangeSet.empty(Author).insert(VariableRef, [{ ...broken, ...repaired }]),
-              {},
-            );
+            const refused = yield* db.apply(referenceChange(broken), {});
+            const kept = yield* db.apply(referenceChange({ ...broken, ...repaired }), {});
 
             assert.isTrue(names(refused, "VariableRef", law), law);
             assert.isFalse(names(kept, "VariableRef", law), law);
@@ -634,81 +757,91 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           }),
       );
 
-      it.effect("refuses each reading law's breach by its law, and keeps its control", () =>
-        // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, the
-        // information model's §2.2.2.2 time-dependence sentence (A62), P24 (A66) and §7.27.1's
-        // `section-identifier` (A61).
-        // Bound: one breach of each law, beside the same row with the breach repaired.
-        Effect.gen(function* readingLaws() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          const undeclared = {
-            declBaseType: "none",
-            declCardinality: "single",
-            declaration: strayNode,
-            declarationKind: "qti-outcome-declaration",
-            declared: false,
-            source: "none",
-          } as const;
-          const cases = [
-            {
-              broken: readingRow({ ...throughItem, placements: 2n }),
-              law: "Prefixed_reference",
-              repaired: { placements: 1n },
-            },
-            {
-              broken: readingRow({ ...undeclared, identifier: "X", variable: "X" }),
-              law: "Variable_declared",
-              repaired: { identifier: "a.X", variable: "a.X" },
-            },
-            {
-              broken: readingRow({
-                ...throughItem,
-                ...undeclared,
-                declaration: nodeOf(70),
-                identifier: "a.duration",
-                source: "builtIn",
-                variable: "duration",
-              }),
-              law: "Item_duration",
-              repaired: { timeDependent: true },
-            },
-            {
-              broken: readingRow({ attribute: "max", kind: "qti-random-integer" }),
-              law: "Reference_type",
-              repaired: { declBaseType: "integer" },
-            },
-            {
-              broken: readingRow({
-                ...undeclared,
-                form: "name",
-                found: false,
-                identifier: "S",
-                namedKind: "document",
-                placements: 0n,
-                role: "section",
-                scope: "S",
-                variable: "",
-              }),
-              law: "Section_identifier_target",
-              repaired: {
-                found: true,
-                named: nodeOf(61),
-                namedKind: "qti-assessment-section",
-                placements: 1n,
+      it.effect(
+        "refuses each reading law's breach by its law, and keeps its control",
+        () =>
+          // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, the
+          // information model's §2.2.2.2 time-dependence sentence (A62), P24 (A66) and §7.27.1's
+          // `section-identifier` (A61), here a `qti-number-correct`'s, which reads a section.
+          // Bound: one breach of each law, beside the same row with the breach repaired, each
+          // with its reference's owners.
+          Effect.gen(function* readingLaws() {
+            const client = yield* loginSession;
+            const undeclared = {
+              declBaseType: "none",
+              declCardinality: "single",
+              declaration: strayNode,
+              declarationKind: "qti-outcome-declaration",
+              declared: false,
+              source: "none",
+            } as const;
+            const cases = [
+              {
+                broken: readingRow({ ...throughItem, placements: 2n }),
+                check: "prefixed_reference",
+                repaired: { placements: 1n },
               },
-            },
-          ] as const;
-          for (const { broken, law, repaired } of cases) {
-            const refused = yield* db.apply(ChangeSet.empty(Author).insert(Reading, [broken]), {});
-            const kept = yield* db.apply(
-              ChangeSet.empty(Author).insert(Reading, [{ ...broken, ...repaired }]),
-              {},
-            );
-
-            assert.isTrue(names(refused, "Reading", law), law);
-            assert.isFalse(names(kept, "Reading", law), law);
-          }
-        }),
+              {
+                broken: readingRow({ ...undeclared, identifier: "X", variable: "X" }),
+                check: "variable_declared",
+                repaired: { identifier: "a.X", variable: "a.X" },
+              },
+              {
+                broken: readingRow({
+                  ...throughItem,
+                  ...undeclared,
+                  declaration: nodeOf(70),
+                  identifier: "a.duration",
+                  source: "builtIn",
+                  variable: "duration",
+                }),
+                check: "item_duration",
+                repaired: { timeDependent: true },
+              },
+              {
+                broken: readingRow({ attribute: "max", kind: "qti-random-integer" }),
+                check: "reference_type",
+                repaired: { declBaseType: "integer" },
+              },
+              {
+                broken: readingRow({
+                  ...undeclared,
+                  attribute: "section-identifier",
+                  form: "name",
+                  found: false,
+                  identifier: "S",
+                  kind: "qti-number-correct",
+                  namedKind: "document",
+                  placements: 0n,
+                  role: "section",
+                  scope: "S",
+                  variable: "",
+                }),
+                check: "section_identifier_target",
+                repaired: {
+                  found: true,
+                  named: nodeOf(61),
+                  namedKind: "qti-assessment-section",
+                  placements: 1n,
+                },
+              },
+            ] as const;
+            for (const { broken, check, repaired } of cases) {
+              assertVerdict(
+                yield* judged(client, readingInserts([broken])),
+                check,
+                true,
+                `${check}, broken`,
+              );
+              assertVerdict(
+                yield* judged(client, readingInserts([{ ...broken, ...repaired }])),
+                check,
+                false,
+                `${check}, repaired`,
+              );
+            }
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
       );
 
       it.effect(
@@ -754,14 +887,8 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               },
             ] as const;
             for (const { broken, kept } of cases) {
-              const refused = yield* db.apply(
-                ChangeSet.empty(Author).insert(VariableRef, [broken]),
-                {},
-              );
-              const held = yield* db.apply(
-                ChangeSet.empty(Author).insert(VariableRef, [{ ...broken, ...kept }]),
-                {},
-              );
+              const refused = yield* db.apply(referenceChange(broken), {});
+              const held = yield* db.apply(referenceChange({ ...broken, ...kept }), {});
 
               assert.isTrue(namesVariableKind(refused, "VariableRef"), broken.kind);
               assert.isFalse(namesVariableKind(held, "VariableRef"), broken.kind);
@@ -774,10 +901,22 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, the key over `select(Reading, resolves)` by reference (M3's at
           // most one), against spec reading 48's own case: `a.b.SCORE` read as item ref `a.b`'s
-          // `SCORE` and as item ref `a`'s `b.SCORE`, both declared. Bound: the two readings
-          // resolving, beside the same two with the second's variable undeclared.
+          // `SCORE` and as item ref `a`'s `b.SCORE`, both declared. The key is the catalog's one
+          // UNIQUE over `Reading`'s selected (assembly, node, attribute), found by grizzle's
+          // comment on it. Bound: the two readings resolving, beside the same two with the
+          // second's variable undeclared, at slots 0 and 1 of the name's three readings.
           Effect.gen(function* twoReadings() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const client = yield* loginSession;
+            const keys = yield* rowsOf<{ readonly name: string }>(
+              client,
+              `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
+                WHERE c.conrelid = 'qti.reading'::regclass AND c.contype = 'u'
+                  AND pg_catalog.cardinality(c.conkey) = 3
+                  AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE 'key Reading(assembly where %'`,
+            );
+            assert.lengthOf(keys, 1, "one key over Reading's selected (assembly, node, attribute)");
+
+            const key = keys[0]?.name ?? "";
             const first = readingRow({
               ...throughItem,
               identifier: "a.b.SCORE",
@@ -791,27 +930,34 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               split: 1n,
               variable: "b.SCORE",
             });
-            const refused = yield* db.apply(
-              ChangeSet.empty(Author).insert(Reading, [first, second]),
-              {},
-            );
-            const kept = yield* db.apply(
-              ChangeSet.empty(Author).insert(Reading, [
-                first,
-                {
-                  ...second,
-                  declBaseType: "none",
-                  declaration: nodeOf(70),
-                  declared: false,
-                  source: "none",
-                },
-              ]),
-              {},
-            );
 
-            assert.isTrue(namesSelectedKey(refused, "Reading", ["assembly", "node", "attribute"]));
-            assert.isFalse(namesSelectedKey(kept, "Reading", ["assembly", "node", "attribute"]));
-          }),
+            assertVerdict(
+              yield* judged(client, readingInserts([first, second])),
+              key,
+              true,
+              "two resolving readings",
+              "23505",
+            );
+            assertVerdict(
+              yield* judged(
+                client,
+                readingInserts([
+                  first,
+                  {
+                    ...second,
+                    declBaseType: "none",
+                    declaration: nodeOf(70),
+                    declared: false,
+                    source: "none",
+                  },
+                ]),
+              ),
+              key,
+              false,
+              "one resolving reading",
+            );
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
       );
 
       it.effect(
@@ -819,7 +965,8 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, `Template_default_target` and `Template_default_type` (A37, A38,
           // spec reading 108) and `Variable_mapping_source` and `Variable_mapping_target` (A34,
-          // reading 97). Bound: one breach of each, beside its repair.
+          // reading 97). Bound: one breach of each, breaking that law alone, since PostgreSQL
+          // names the first CHECK a row breaks by name, beside its repair, which keeps all four.
           Effect.gen(function* itemRefLaws() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const templateDefault: Addition<typeof TemplateDefault> = {
@@ -841,7 +988,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               declBaseType: "float",
               declCardinality: "single",
               declaration: nodeOf(81),
-              declarationKind: "qti-response-declaration",
+              declarationKind: "qti-outcome-declaration",
               itemDocument: nodeOf(70),
               itemRef: nodeOf(60),
               node: nodeOf(2),
@@ -860,9 +1007,13 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 repaired: { ...templateDefault, heldBase: "integer" },
               },
               {
-                broken: { ...templateDefault, declarationKind: "qti-outcome-declaration" },
+                broken: {
+                  ...templateDefault,
+                  declarationKind: "qti-outcome-declaration",
+                  heldBase: "integer",
+                },
                 law: "Template_default_target",
-                repaired: templateDefault,
+                repaired: { ...templateDefault, heldBase: "integer" },
               },
             ];
             for (const { broken, law, repaired } of templateCases) {
@@ -880,18 +1031,28 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             }
 
             const mappingCases: readonly {
+              readonly broken: Addition<typeof MappingSource>;
               readonly law: string;
               readonly repaired: Addition<typeof MappingSource>;
             }[] = [
               {
+                broken: {
+                  ...mapping,
+                  declarationKind: "qti-response-declaration",
+                  targetDeclared: false,
+                },
                 law: "Variable_mapping_source",
-                repaired: { ...mapping, declarationKind: "qti-outcome-declaration" },
+                repaired: { ...mapping, targetDeclared: false },
               },
-              { law: "Variable_mapping_target", repaired: { ...mapping, targetDeclared: false } },
+              {
+                broken: mapping,
+                law: "Variable_mapping_target",
+                repaired: { ...mapping, targetDeclared: false },
+              },
             ];
-            for (const { law, repaired } of mappingCases) {
+            for (const { broken, law, repaired } of mappingCases) {
               const refused = yield* db.apply(
-                ChangeSet.empty(Author).insert(MappingSource, [mapping]),
+                ChangeSet.empty(Author).insert(MappingSource, [broken]),
                 {},
               );
               const kept = yield* db.apply(
