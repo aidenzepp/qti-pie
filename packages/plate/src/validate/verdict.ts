@@ -1586,7 +1586,9 @@ const attributeType = (refusal: Refusal): string => {
  *   citing the information model's line its `source` names.
  * - None (P8): a name the item declares no variable of the `expected` kind for. A template rule's
  *   target lists every kind the rule may set, space-separated, and the sentence offers them as
- *   alternatives (pantry's `DeclaredRefKind`).
+ *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable carries `declarer:
+ *   "test"`, and the sentence names the test as what declares no such variable (pantry's
+ *   `binding-declared` for a test).
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.
@@ -1629,10 +1631,11 @@ const undeclaredVariable = (refusal: Refusal): string => {
     }
     default: {
       const kind = alternatives(fact(refusal, "expected", "variable"), variableKind);
+      const declarer = fact(refusal, "declarer", "item") === "test" ? "test" : "item";
 
       return sentence(
         refusal,
-        `${subject} names ${identifier}, and the item declares no ${kind} ${identifier}.`,
+        `${subject} names ${identifier}, and the ${declarer} declares no ${kind} ${identifier}.`,
         `declare ${identifier}, or name a declared ${kind}`,
       );
     }

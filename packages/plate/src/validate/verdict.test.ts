@@ -1357,6 +1357,32 @@ describe("check, every QTI 3 root", () => {
     assert.strictEqual(verdict.kind, "test");
   });
 
+  it("[I-5] refuses a test whose rubric block prints a variable the test does not declare, naming the test in the sentence", () => {
+    const rubric = el(
+      "qti-rubric-block",
+      [attr("view", "candidate")],
+      [
+        el(
+          "qti-content-body",
+          [],
+          [el("p", [], [el("qti-printed-variable", [attr("identifier", "NOPE")])])],
+        ),
+      ],
+    );
+    const verdict = verdictOf(assessmentTest([rubric, itemRef("q1")]));
+    const path =
+      "qti-assessment-test/qti-test-part/qti-assessment-section/qti-rubric-block/qti-content-body/p/qti-printed-variable/@identifier";
+
+    assert.deepStrictEqual(refusalsOf(verdict), [
+      { location: { kind: "path", path }, rule: "undeclared-variable" },
+    ]);
+    assert.strictEqual(verdict.kind, "test");
+    assert.include(
+      verdict.verdict === "refused" ? verdict.refusals.map(describeRefusal).join("\n") : "",
+      "and the test declares no outcome `NOPE`.",
+    );
+  });
+
   it("leaves a qti-response-processing root unchecked, of kind response-processing", () => {
     const verdict = verdictOf(doc("match_correct.xml", matchCorrect));
 
@@ -2611,6 +2637,25 @@ describe("describeRefusal", () => {
       sentence,
       "`qti-any-n`'s attribute `min` names `MIN`, and the item declares no variable `MIN`.",
     );
+  });
+
+  it("[I-5] names the test, not an item, as what declares no outcome a test's printed variable names (pantry printed-variable-ref, binding-declared)", () => {
+    const sentence = describeRefusal(
+      refusalOf("undeclared-variable", {
+        attribute: "identifier",
+        declarer: "test",
+        element: "qti-printed-variable",
+        expected: "outcome",
+        identifier: "NOPE",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-printed-variable`'s attribute `identifier` names `NOPE`, and the test declares no outcome `NOPE`.",
+    );
+    assert.include(sentence, "To make it valid: declare `NOPE`, or name a declared outcome.");
+    assert.notInclude(sentence, "the item");
   });
 
   it("names the qti-map-response that needs a mapping, not a template", () => {
