@@ -6801,9 +6801,6 @@ const ownLaws = {
   "PCI module source": {
     explain: (keys) =>
       `the portable custom interaction ${field(keys, "node")} writes neither a module attribute nor a qti-interaction-modules child, so it names no module`,
-    rule: "pci-module-source",
-    source:
-      "R10-a: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_PortableCustomInteraction.Attr_module (§5.106.2: 'If this characteristic is provided the qti-interaction-modules child attribute is not required, if omitted then the modules child element is mandatory'): a portable custom interaction names its module by a module attribute, by a qti-interaction-modules child, or by both (interactions.ts PCI_module_source)",
   },
   "Picture source srcset": {
     explain: () =>
