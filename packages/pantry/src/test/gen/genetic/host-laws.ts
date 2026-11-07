@@ -170,6 +170,7 @@ type Term =
       readonly relation: string;
     }
   | { readonly args: readonly Term[]; readonly kind: "closedRow"; readonly relation: string }
+  | { readonly args: readonly Term[]; readonly kind: "closedHas"; readonly relation: string }
   | { readonly args: readonly Term[]; readonly fn: string; readonly kind: "compute" }
   | { readonly kind: "unread" };
 
@@ -250,6 +251,13 @@ const termReaders: ReadonlyMap<string, (stored: StoredTerm, read: TermReader) =>
       stored.relation === undefined
         ? unread
         : { args: operandsOf(stored, read), kind: "closedRow", relation: stored.relation },
+  ],
+  [
+    "closedHas",
+    (stored, read) =>
+      stored.relation === undefined
+        ? unread
+        : { args: operandsOf(stored, read), kind: "closedHas", relation: stored.relation },
   ],
   [
     "compute",
@@ -1001,6 +1009,19 @@ const closedRead = (
 };
 
 /**
+ * Read whether a closed relation holds a tuple at a whole key, as grizzle's `C.has(…)` does.
+ *
+ * @param relation - The relation's name.
+ * @param args - The key's values, in key order.
+ * @returns Whether a tuple is there, undefined for a name that is no closed relation.
+ */
+const closedHeld = (relation: string, args: readonly string[]): Datum | undefined => {
+  const facts = closedFacts.get(relation);
+
+  return facts === undefined ? undefined : rowsStarting(relation, facts, args).length > 0;
+};
+
+/**
  * Each pattern a `matches` reads, compiled once: grizzle's `str.regex` grammar under `u`.
  */
 const compiledPatterns = new Map<string, RegExp>();
@@ -1295,6 +1316,13 @@ const evaluate: Evaluate = (term, row) => {
     case "closedAt":
     case "closedRow": {
       return closedValue(term, row, evaluate);
+    }
+    case "closedHas": {
+      const values = operandValues(term.args, row, evaluate);
+
+      return values === undefined || values === null
+        ? values
+        : closedHeld(term.relation, values.map(datumText));
     }
     case "compute": {
       const values = operandValues(term.args, row, evaluate);
