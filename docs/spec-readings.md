@@ -368,13 +368,14 @@ against it. A reading that is not an information-model-over-XSD case says which 
     outrank. The rule is: if the standard does not ban it, do not refuse it. (Corrected 2026-11-04 by decision 214,
     replacing the earlier reading, which refused every `qti-` element beneath MathML.)
     (Refined 2026-11-04 by decision 217.)
-31. **A card holds at least one of an HTML content node or file hrefs, and may hold both.** The implementation guide
-    says a card holds a single `qti-html-content`, or any number of `qti-file-href` nodes, and that it must contain at
-    least some content. The XSD admits both together and neither. One of the guide's own examples has both. This follows
-    the guide's "at least some content" over the XSD's empty card, and the XSD and the guide's example over the guide's
-    "or", so both together is admitted. The same holds for each `qti-card-entry`. This is not an
+31. **A card holds an HTML content node, file hrefs, both, or nothing.** The implementation guide says a card holds a
+    single `qti-html-content`, or any number of `qti-file-href` nodes. The XSD admits both together and neither. One of
+    the guide's own examples has both. This follows the XSD and the guide's example over the guide's "or", so both
+    together is admitted, and the XSD's empty card is admitted too: the guide is not normative (decision 216), so its
+    sentence that a card must contain at least some content binds nothing. The same holds for each `qti-card-entry`. A
+    card or card entry may hold an HTML content node, file hrefs, both, or nothing, the XSD's model. This is not an
     information-model-over-XSD case: the guide's sentence and its example disagree, and the XSD settles one side each.
-    (2026-11-04.)
+    (2026-11-04.) (Amended 2026-11-06, decision 324.)
 32. **`qtiMetadata` is accepted as a `cp:metadata` child or inside `lom`.** The XSD places `qtiMetadata` as a child of
     `cp:metadata`. The metadata specification and the metadata binding place it inside `lom`. Both forms validate.
     Neither document outranks the other, so both are accepted and the form is recorded and exported as it was imported,
@@ -2457,3 +2458,27 @@ is a string value, not a reference: pantry stores it as written and does not che
 that matches a declared variable of the wrong kind or base type, one that is no template or outcome variable of base
 type string and single cardinality, is still refused (P24), as a name that resolves more than one way in a test is.
 This binds pantry and plate alike. (Label R15-k; proposed in phase 15, 2026-11-06, for the operator; decision 331.)
+
+R9-a. **The catalog sentences of the information model hold as written.** A catalog holds one card per support ("Use
+only one card for any particular named support in a catalog", section 5.26.1); a card holds at most one entry with
+`default` true ("Only one of the CardEntry instances can have a default designation", section 5.27.2); and a
+`data-catalog-idref` names a `qti-catalog` of its own document (section 5.28.1, "The unique identifier used to locate
+the catalog from a data-catalog-idref"; section 5.15.9, "The associated 'catalog' MUST be supplied in the same
+'assessmentItem' definition"). The XSD states none of them. `support` is compared by its collapsed value; `default`
+designates where its collapsed value is `true` or `1`. This is not a case of documents in conflict; it has the same
+shape as reading 92. (A proposal for the operator; numbered at integration.)
+
+R9-b. **Card files and resource icons are file references.** Reading 103's census reads attributes; section 6.6
+(CardSelection: "these files MUST be contained in the corresponding QTI content package") and section 5.80.4
+(`qti-resource-icon`: "This file MUST be contained within the correponding QTI content package") name two element-text
+references. A `qti-file-href` of a card or card entry, and a `qti-resource-icon`, are read as reading 102 reads an href
+and join the census. The ItemFileInfo `qti-file-href` of a calculator or digital material is left out (section 5.80.3
+says only "available at the location identified by a URI"). This amends reading 103 or stands beside it, as the operator
+prefers. (A proposal for the operator; numbered at integration.)
+
+R9-c. **R26 counts the metadata binding's elements, and catalog content is not among them.** The binding's section
+2.7.1.3 names "the associated assessmentItem, test or object bank and its 'bodyElements'". A catalog is dormant
+alternative content outside the body (section 5.28: "A container of content or resource references that is outside the
+content body node"), so the `xml:lang` of a `qti-card`, a `qti-card-entry`, a `qti-html-content` and everything they
+hold is not counted. This is decision 85's reading, restated on the new model. (A proposal for the operator; numbered
+at integration.)

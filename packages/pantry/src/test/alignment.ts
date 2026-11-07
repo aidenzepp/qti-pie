@@ -208,7 +208,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [30, { owner: "N5, shred", status: "G" }],
-  [31, { owner: "the automaton's model edit (`require`), Q1", status: "P" }],
+  [31, { owner: "the automaton (the XSD's card and card-entry models as written)", status: "G" }],
   [32, { owner: "N5", status: "G" }],
   [33, { owner: "P1 to P3 (Q5.06)", status: "G" }],
   [34, { owner: "Q5.08 O2", status: "P" }],
