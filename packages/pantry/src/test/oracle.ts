@@ -115,7 +115,7 @@ import type {
 import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
-import { keyTextCodePoints, localNameCodePoints, namespaceCodePoints } from "#pantry/qti/limits.ts";
+import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
@@ -591,7 +591,7 @@ export const lawSources = {
   "Item ref target":
     "the UP audit's B2: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_AssessmentItemRef.Attr_href (§5.6.5: 'The URI used to refer to the item's file (e.g., elsewhere in the same content package)', info.txt:14764): an item ref's href names a document of the package, and that document's root is an item (tests.ts ItemRefTarget)",
   "Key text bound":
-    "src/qti/limits.ts: a text a key, a containment or a family's hidden columns hold takes its kind's one bound, the least every key of the kind leaves it under grizzle's representability rule, derived from PostgreSQL's BTMaxItemSize (nbtree.h): a key text (keyText) at most keyTextCodePoints code points, a namespace name (namespaceText) at most namespaceCodePoints, a local name at most localNameCodePoints; a stated limit of the representation, not a law of the specification",
+    "src/qti/limits.ts: a text a key, a containment or a family's hidden columns hold takes its kind's one bound, the least every key of the kind leaves it under grizzle's representability rule, PostgreSQL's BTMaxItemSize (nbtree.h): a key text (keyText) at most keyTextBytes UTF-8 bytes, a namespace name (namespaceText) at most namespaceBytes, a local name at most localNameBytes, each what grizzle's keyTextBytes leaves beside its widest key's other fields; a stated limit of the representation, not a law of the specification",
   "LOM learning resource type":
     "reading 122: https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.5.1, Learning Resource Type: 'the LOM-defined values self assessment and exam are forbidden', normative by its §1.2): a learningResourceType of the LOM vocabulary holds neither, its term the LOM vocabulary's where its source is LOMv1.0, empty, or not written, which the loose binding defaults to LOMv1.0 (imsmd_loose_v1p3p2.xsd:1288); a term of another source is another vocabulary's, which the loose binding does not enforce (§3.6), and is not refused; source and value compared collapsed (metadata.ts LomResourceType, LomResourceTypeSource)",
   "Label tools":
@@ -2920,33 +2920,14 @@ const attributeBreaches = (view: View, laws: Laws): readonly Breach[] => {
 };
 
 /**
- * Measure a text against a key's bound, in the one unit every bound of {@link keyTexts} is stated
- * in: its code points, as PostgreSQL counts a text's characters and as `keyText`'s pattern bounds
- * it (`#pantry/qti/limits.ts`). A pair of surrogates is one, and no grapheme cluster is joined, so
- * `Intl.Segmenter` would count otherwise. Stating a bound in bytes changes this function and the
- * bounds, nothing else.
- *
- * @param value - The text.
- * @returns Its length in the bounds' unit.
- */
-const keyTextLength = (value: string): number => {
-  let count = 0;
-  for (let at = 0; at < value.length; at += (value.codePointAt(at) ?? 0) > 0xff_ff ? 2 : 1) {
-    count += 1;
-  }
-
-  return count;
-};
-
-/**
  * Whether a text is past the most a key text holds (`keyText`): a value the schema copies into a
  * key, a containment or a family's hidden columns refused by its type before any law of the
  * specification reads it.
  *
  * @param value - The text.
- * @returns Whether its length is past `keyTextCodePoints`.
+ * @returns Whether its UTF-8 bytes are past `keyTextBytes`.
  */
-const overKeyText = (value: string): boolean => keyTextLength(value) > keyTextCodePoints;
+const overKeyText = (value: string): boolean => utf8Length(value) > keyTextBytes;
 
 /**
  * Read the characters a node row holds, `Node.chars`: a text or whitespace node's, an entity
@@ -3081,10 +3062,10 @@ const keyTexts = (
   };
 
   return [
-    { bound: keyTextCodePoints, field: "Document.path", value: view.path },
+    { bound: keyTextBytes, field: "Document.path", value: view.path },
     ...keyCopies.flatMap((copy) =>
       copiedTexts(copy, rows).map(({ node, value }) => ({
-        bound: keyTextCodePoints,
+        bound: keyTextBytes,
         field: copy.field,
         node,
         value,
@@ -3097,7 +3078,7 @@ const keyTexts = (
               namespaceOf(view, laws.grammar, node),
             ),
           ).map((value) => ({
-            bound: namespaceCodePoints,
+            bound: namespaceBytes,
             field: "OpenAttributeName.elementNamespace",
             node: attribute.node,
             value,
@@ -3110,12 +3091,12 @@ const keyTexts = (
       return node === undefined
         ? []
         : [
-            { bound: namespaceCodePoints, field: "OpenAttributeName.uri", node, value: uri },
-            { bound: localNameCodePoints, field: "OpenAttributeName.local", node, value: local },
+            { bound: namespaceBytes, field: "OpenAttributeName.uri", node, value: uri },
+            { bound: localNameBytes, field: "OpenAttributeName.local", node, value: local },
           ];
     }),
     ...view.rows.openElementNames.map(({ namespace, node }) => ({
-      bound: namespaceCodePoints,
+      bound: namespaceBytes,
       field: "OpenElementName.namespace",
       node,
       value: namespace,
@@ -3180,9 +3161,16 @@ const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
         ? []
         : [breach(law, { nodes: String(nodes.size), rows: String(held.length) })];
     }),
-    ...(rows.document.node === view.self
+    // The Document row's node is the document node, the row at start 0. The view's own `self` is
+    // read from the Document row, so the law compares the row with the tree, never with itself.
+    ...(rows.nodes.some(({ id, start }) => start === 0n && id === rows.document.node)
       ? []
-      : [breach("Document", { documentRow: rows.document.node, self: view.self })]),
+      : [
+          breach("Document", {
+            documentRow: rows.document.node,
+            self: rows.nodes.find(({ start }) => start === 0n)?.id ?? "",
+          }),
+        ]),
     ...rows.attributes
       .filter(({ node }) => !laws.elements.has(view.byId.get(node)?.kind ?? "document"))
       .map(({ at, node }) =>
@@ -3293,11 +3281,11 @@ const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
         : [],
     ),
     ...keyTexts(view, laws)
-      .filter(({ bound, value }) => keyTextLength(value) > bound)
+      .filter(({ bound, value }) => utf8Length(value) > bound)
       .map(({ bound, field: held, node, value }) =>
         breach("Key text bound", {
           bound: String(bound),
-          codePoints: String(keyTextLength(value)),
+          bytes: String(utf8Length(value)),
           field: held,
           node: node === undefined ? "" : pathOf(view, node),
         }),
@@ -6327,7 +6315,7 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
   "Item ref target": (keys) =>
     `the item ref ${field(keys, "node")} names ${field(keys, "path")}, which is no item document of the package`,
   "Key text bound": (keys) =>
-    `its ${field(keys, "field")} holds ${field(keys, "codePoints")} code points, past the ${field(keys, "bound")} a key holds of its kind (#pantry/qti/limits.ts), a limit of the representation`,
+    `its ${field(keys, "field")} holds ${field(keys, "bytes")} UTF-8 bytes, past the ${field(keys, "bound")} a key holds of its kind (#pantry/qti/limits.ts), a limit of the representation`,
   "LOM learning resource type": (keys) =>
     `a learningResourceType of the LOM vocabulary (its source ${field(keys, "source") === "" ? "empty or not written, so the binding's default LOMv1.0" : JSON.stringify(field(keys, "source"))}) holds ${JSON.stringify(field(keys, "value"))}, which QTI 3.0 Metadata §2.7.5.1 forbids`,
   "Label tools": (keys) =>

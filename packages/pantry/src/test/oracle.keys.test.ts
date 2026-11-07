@@ -30,7 +30,7 @@ import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
 import { lawIdentity, lawRules, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { keyTextPattern } from "#pantry/qti/limits.ts";
+import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
@@ -356,10 +356,19 @@ interface Drawn {
 type Sketch = Readonly<Partial<Record<Site, Drawn>>>;
 
 /**
- * Whether the schema's type admits a text as a key text: `keyText`'s pattern, read as grizzle
- * installs it under the flags `su`.
+ * `keyText`'s pattern, read as grizzle installs it.
  */
-const keyTextType = new RegExp(keyTextPattern, "su");
+const keyTextPattern = new RegExp(keyText.pattern.source, keyText.pattern.flags);
+
+/**
+ * Decide whether the schema's type admits a text as a key text, as grizzle's `str.bytes` domain
+ * checks it: at most `keyTextBytes` UTF-8 bytes, then `keyText`'s pattern.
+ *
+ * @param text - The text.
+ * @returns Whether `keyText` admits it.
+ */
+const admitsKeyText = (text: string): boolean =>
+  utf8Length(text) <= keyTextBytes && keyTextPattern.test(text);
 
 /**
  * Write a drawn text: its place's letter, then its script's character, `count` characters in all.
@@ -383,7 +392,7 @@ const edgeOf = (script: Script): number => {
   let high = 16_384;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
-    if (keyTextType.test(textOf("a", { count: middle, script }))) {
+    if (admitsKeyText(textOf("a", { count: middle, script }))) {
       low = middle;
     } else {
       high = middle - 1;
@@ -581,14 +590,10 @@ const refusedFields = (inputs: PackageInputs): ReadonlySet<string> => {
             return Predicate.isString(added) ? added : "";
           })
           .join("");
-        if (fold !== undefined && !keyTextType.test(end)) {
+        if (fold !== undefined && !admitsKeyText(end)) {
           refused.add(`${relation}.${fold.end}`);
         }
-      } else if (
-        Predicate.isString(value) &&
-        isKeyText(relation, field) &&
-        !keyTextType.test(value)
-      ) {
+      } else if (Predicate.isString(value) && isKeyText(relation, field) && !admitsKeyText(value)) {
         refused.add(`${relation}.${field}`);
       }
     }
@@ -874,7 +879,7 @@ it("draws every edge from the schema's type: the edge admitted and one past it r
   // Oracle: the specification as a checker, `keyText`'s pattern itself.
   // Bound: the four scripts.
   for (const script of scripts) {
-    assert.isTrue(keyTextType.test(textOf("a", { count: edges[script], script })), script);
-    assert.isFalse(keyTextType.test(textOf("a", { count: edges[script] + 1, script })), script);
+    assert.isTrue(admitsKeyText(textOf("a", { count: edges[script], script })), script);
+    assert.isFalse(admitsKeyText(textOf("a", { count: edges[script] + 1, script })), script);
   }
 });

@@ -676,7 +676,7 @@ export const lawTable = {
   "Key text bound": {
     rule: "key-text-bound",
     source:
-      "src/qti/limits.ts: a text a key, a containment or a family's hidden columns hold takes its kind's one bound, the least every key of the kind leaves it under grizzle's representability rule, derived from PostgreSQL's BTMaxItemSize (nbtree.h): a key text (keyText) at most keyTextCodePoints code points, a namespace name (namespaceText) at most namespaceCodePoints, a local name at most localNameCodePoints; a stated limit of the representation, not a law of the specification",
+      "src/qti/limits.ts: a text a key, a containment or a family's hidden columns hold takes its kind's one bound, the least every key of the kind leaves it under grizzle's representability rule, PostgreSQL's BTMaxItemSize (nbtree.h): a key text (keyText) at most keyTextBytes UTF-8 bytes, a namespace name (namespaceText) at most namespaceBytes, a local name at most localNameBytes, each what grizzle's keyTextBytes leaves beside its widest key's other fields; a stated limit of the representation, not a law of the specification",
   },
   "LOM learning resource type": {
     rule: "lom-learning-resource-type",

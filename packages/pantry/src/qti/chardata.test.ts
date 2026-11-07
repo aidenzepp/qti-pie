@@ -50,7 +50,7 @@ import {
   whitespaceChars,
   XmlStandalone,
 } from "#pantry/qti/chardata.ts";
-import { keyTextCodePoints, namespaceCodePoints } from "#pantry/qti/limits.ts";
+import { keyTextBytes, namespaceBytes, prefixBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Node, nodeTree } from "#pantry/qti/node.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
@@ -436,24 +436,34 @@ interface BoundCase {
 }
 
 /**
- * The lengths the bounds box draws: the short ones, and each side of the 256 code points of a
- * prefix, the namespace bound of a foreign namespace (`namespaceCodePoints`) and the key-text bound
- * of a path (`keyTextCodePoints`).
+ * Write the code-point counts at which a text of one-byte or four-byte characters straddles a byte
+ * bound: each side of the bound over one byte a character and over four.
+ *
+ * @param bytes - The bound, in UTF-8 bytes.
+ * @returns The counts.
  */
-const boundLengths = [
+const straddling = (bytes: number): readonly number[] =>
+  [1, 4].flatMap((width) => {
+    const edge = Math.floor(bytes / width);
+
+    return [edge - 1, edge, edge + 1];
+  });
+
+/**
+ * The lengths the bounds box draws, in code points: the short ones, and each side of the byte
+ * bounds of a prefix (`prefixBytes`), of a foreign namespace (`namespaceBytes`) and of a path
+ * (`keyTextBytes`), over one-byte and four-byte characters.
+ */
+const boundLengths: readonly [number, ...number[]] = [
   0,
-  1,
-  2,
-  255,
-  256,
-  257,
-  namespaceCodePoints - 1,
-  namespaceCodePoints,
-  namespaceCodePoints + 1,
-  keyTextCodePoints - 1,
-  keyTextCodePoints,
-  keyTextCodePoints + 1,
-] as const;
+  ...new Set([
+    1,
+    2,
+    ...straddling(prefixBytes),
+    ...straddling(namespaceBytes),
+    ...straddling(keyTextBytes),
+  ]),
+];
 
 /**
  * The characters the bounds box draws: a letter, the path separator, a character of four UTF-8
@@ -861,21 +871,21 @@ describe("qti/chardata.ts", () => {
   );
 
   it.effect(
-    "bounds each keyed text field by code points, as its key's B-tree entry needs, and admits every value of its language within the bound",
+    "bounds each keyed text field by UTF-8 bytes, as its key's B-tree entry needs, and admits every value of its language within the bound",
     (ctx) =>
-      // Oracle: the specification as a checker, each field's contract counted in code points:
-      // `EntryPath` 1 to `keyTextCodePoints` of any character but a leading "/"; a foreign
-      // namespace 0 to `namespaceCodePoints` XML `Char`s; a namespace prefix empty or an NCName of
-      // 1 to 256.
-      // Bound: exhaustive over 12 lengths around the bounds × 5 first characters × 5 later
-      // characters, 300 cases.
+      // Oracle: the specification as a checker, each field's contract counted in UTF-8 bytes, which
+      // grizzle's `str.bytes` checks beside the pattern: `EntryPath` 1 code point and at most
+      // `keyTextBytes` bytes of any character but a leading "/"; a foreign namespace XML `Char`s of
+      // at most `namespaceBytes`; a namespace prefix empty or an NCName of at most `prefixBytes`.
+      // Bound: exhaustive over the lengths each side of the three bounds over one-byte and
+      // four-byte characters, × 5 first characters × 5 later characters.
       Effect.gen(function* bounds() {
         const limit = boundLengths.length * boundCharacters.length ** 2;
         const exhausted = yield* searched(
           ctx,
           exhaust(
             {
-              box: "lengths 0, 1, 2, 255 to 257 and each side of namespaceCodePoints and keyTextCodePoints over 5 characters",
+              box: "lengths 0, 1, 2 and each side of prefixBytes, namespaceBytes and keyTextBytes over one-byte and four-byte characters, over 5 characters",
               caseHang,
               coverage: requiredInSpace<"path admitted" | "path refused">([
                 "path admitted",
@@ -892,18 +902,24 @@ describe("qti/chardata.ts", () => {
                 const characters =
                   length === 0 ? [] : [first, ...Array.from({ length: length - 1 }, () => fill)];
                 const value = characters.join("");
-                const path = length >= 1 && length <= keyTextCodePoints && first !== "/";
+                const bytes = utf8Length(value);
+                const path = length >= 1 && bytes <= keyTextBytes && first !== "/";
                 c.note(path ? "path admitted" : "path refused");
 
-                assert.strictEqual(patternOf(EntryPath).test(value), path, "path");
                 assert.strictEqual(
-                  patternOf(OpenElementName.fields.namespace).test(value),
-                  length <= namespaceCodePoints && characters.every(isXmlChar),
+                  patternOf(EntryPath).test(value) && bytes <= keyTextBytes,
+                  path,
+                  "path",
+                );
+                assert.strictEqual(
+                  patternOf(OpenElementName.fields.namespace).test(value) &&
+                    bytes <= namespaceBytes,
+                  bytes <= namespaceBytes && characters.every(isXmlChar),
                   "foreign namespace",
                 );
                 assert.strictEqual(
-                  patternOf(Namespace.fields.prefix).test(value),
-                  length === 0 || (length <= 256 && characters.every(isBoxNameChar)),
+                  patternOf(Namespace.fields.prefix).test(value) && bytes <= prefixBytes,
+                  length === 0 || (bytes <= prefixBytes && characters.every(isBoxNameChar)),
                   "prefix",
                 );
               }),

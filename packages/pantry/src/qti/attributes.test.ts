@@ -32,13 +32,10 @@ import {
   attributeLaws,
   Idref,
   OpenAttributeName,
+  OpenLocal,
 } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
-import {
-  localNameCodePoints,
-  namespaceCodePoints,
-  namespaceTextPattern,
-} from "#pantry/qti/limits.ts";
+import { namespaceText } from "#pantry/qti/limits.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
@@ -125,21 +122,15 @@ describe("qti/attributes.ts, declared", () => {
     ]);
   });
 
-  it("writes each bounded pattern as the literal of its derived bound", () => {
+  it("types an open attribute's namespace names by the one namespace bound, and its local name by its own", () => {
     // Oracle: `#pantry/qti/limits.ts`, whose bounds `limits.test.ts` holds to grizzle's
-    // `keyTextBytes`: an open attribute's namespace takes the schema-wide namespace bound, what
-    // `(node, uri, local)` leaves beside a uuid and a local name, and its local name the one
-    // counted repetition of that bound.
-    assert.strictEqual(namespaceCodePoints, 409);
-    assert.strictEqual(OpenAttributeName.fields.uri.desc.source, namespaceTextPattern);
-    assert.strictEqual(OpenAttributeName.fields.elementNamespace.desc.source, namespaceTextPattern);
-    assert.match(OpenAttributeName.fields.local.desc.source, /\{0,(?<rest>\d+)\}\$$/u);
-    assert.strictEqual(
-      Number(
-        /\{0,(?<rest>\d+)\}\$$/u.exec(OpenAttributeName.fields.local.desc.source)?.groups?.["rest"],
-      ) + 1,
-      localNameCodePoints,
-    );
+    // `keyTextBytes`: an open attribute's namespace and its element's take the schema-wide
+    // namespace name type, what `(node, uri, local)` leaves beside a uuid and a local name, and its
+    // local name `OpenLocal`, an NCName of the local name's bytes with no counted repetition.
+    assert.strictEqual(OpenAttributeName.fields.uri, namespaceText);
+    assert.strictEqual(OpenAttributeName.fields.elementNamespace, namespaceText);
+    assert.strictEqual(OpenAttributeName.fields.local, OpenLocal);
+    assert.notMatch(OpenLocal.pattern.source, /\{\d*,\d+\}/u);
   });
 });
 

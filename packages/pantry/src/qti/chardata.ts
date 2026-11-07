@@ -61,6 +61,7 @@ import {
   TypeName,
   vocabularyNamespacePattern,
 } from "#pantry/grammar/install.ts";
+import { keyTextBytes, namespaceBytes, prefixBytes } from "#pantry/qti/limits.ts";
 import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
@@ -267,28 +268,27 @@ export const XmlStandalone = closed("XmlStandalone", ["none", "yes", "no"]);
 
 /**
  * A package entry's path, relative to the package root, as the package reader gives it: no leading
- * `/`, its segments `/`-separated, any other character allowed, at most `keyTextCodePoints` code
- * points (`#pantry/qti/limits.ts`).
+ * `/`, its segments `/`-separated, any other character allowed, at most `keyTextBytes` UTF-8 bytes
+ * (`#pantry/qti/limits.ts`).
  *
  * The reader refuses an absolute path, a backslash and a `..` segment (`#pantry/package/zip.ts`,
- * `#pantry/package/read.ts`); the pattern restates none of that and bounds the length alone.
- * `Entry.path` (Q5.06) and `Document.path` are both of this type, both sit in keys over
- * `(package, path)`, and a path meets the key texts a manifest's hrefs are copied into, so its
- * bound is the schema-wide key-text bound, derived from grizzle's B-tree rule in one place. The
- * pattern is the literal that bound gives, since `str.regex` reads a literal source; the bounds
- * box in `chardata.test.ts` holds it to `keyTextCodePoints`.
+ * `#pantry/package/read.ts`); the pattern restates none of that, and the byte bound bounds the
+ * length alone. `Entry.path` (Q5.06) and `Document.path` are both of this type, both sit in keys
+ * over `(package, path)`, and a path meets the key texts a manifest's hrefs are copied into, so its
+ * bound is the schema-wide key-text bound, read from grizzle's B-tree rule in one place.
  */
-export const EntryPath = str.regex("^[^/].{0,255}.{0,255}.{0,135}$", "su");
+export const EntryPath = str.bytes(keyTextBytes, str.regex("^[^/].*$", "su"));
 
 /**
  * A namespace declaration's prefix as written: an NCName, or empty for a default declaration
- * (`xmlns="…"`). It is keyed with its element, so its 256 characters are a key's byte bound.
+ * (`xmlns="…"`), of at most `prefixBytes` UTF-8 bytes (`#pantry/qti/limits.ts`), what the key
+ * `Namespace(node, prefix)` leaves it beside its element's id.
  *
  * @see {@link https://www.w3.org/TR/xml-names/#ns-decl | Namespaces in XML 1.0, §3 Declaring Namespaces}
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
  */
-export const NamespacePrefix = str.regex(`^(?:[${ncStart}][${ncChar}]{0,255})?$`);
+export const NamespacePrefix = str.bytes(prefixBytes, str.regex(`^(?:[${ncStart}][${ncChar}]*)?$`));
 
 /**
  * RFC 3986's `unreserved` as the body of a class: `ALPHA / DIGIT / "-" / "." / "_" / "~"`.
@@ -381,15 +381,15 @@ const uriReference = `(?:[A-Za-z][A-Za-z0-9+\\-.]*:(?:${uriNetworkPath}|${uriPat
 export const NamespaceUri = str.regex(`^${uriReference}$`);
 
 /**
- * A foreign element's namespace name, empty for none, at most `namespaceCodePoints` `Char`s
- * (`#pantry/qti/limits.ts`): the one bound every key a namespace name rides leaves it, so a name
- * one relation holds is never refused by another. A foreign parent's namespace is read through a
- * containment into `OpenElementName(node, namespace)`, and an open attribute's element namespace
- * through another. The bounds box in `chardata.test.ts` holds the literal to the bound.
+ * A foreign element's namespace name, empty for none, of XML `Char`s and at most `namespaceBytes`
+ * UTF-8 bytes (`#pantry/qti/limits.ts`): the one bound every key a namespace name rides leaves it,
+ * so a name one relation holds is never refused by another. A foreign parent's namespace is read
+ * through a containment into `OpenElementName(node, namespace)`, and an open attribute's element
+ * namespace through another.
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
  */
-export const ForeignNamespace = str.regex(`^[${xmlChar}]{0,255}[${xmlChar}]{0,154}$`);
+export const ForeignNamespace = str.bytes(namespaceBytes, str.regex(`^[${xmlChar}]*$`));
 
 /**
  * An NCName: a foreign element's local name.

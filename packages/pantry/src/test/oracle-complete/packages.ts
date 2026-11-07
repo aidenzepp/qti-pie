@@ -11,7 +11,7 @@
 import { element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { keyTextCodePoints } from "#pantry/qti/limits.ts";
+import { keyTextBytes } from "#pantry/qti/limits.ts";
 import {
   replaceDrawn,
   replaceOnce,
@@ -237,7 +237,8 @@ export const packageMutations = {
   "Inclusion cycle": at("section.xml", "</qti-assessment-section>", [
     '  <qti-assessment-section-ref identifier="itself" href="section.xml"/>\n</qti-assessment-section>',
   ]),
-  // Key text bound (the stated limit, keyText): an id longer than the bound a key holds.
+  // Key text bound (the stated limit, keyText): an id of more UTF-8 bytes than a key text holds,
+  // each character ASCII, one byte.
   "Key text bound": {
     mutate:
       ({ entries }) =>
@@ -248,7 +249,7 @@ export const packageMutations = {
           replaceOnce(
             textOf(entries, item),
             '<span id="caption">',
-            `<span id="caption"><span id="k${"x".repeat(keyTextCodePoints + source.draw(int(0, 40)))}">`,
+            `<span id="caption"><span id="k${"x".repeat(keyTextBytes + source.draw(int(0, 40)))}">`,
           ).replace("Look at the picture.</span>", "Look at the picture.</span></span>"),
         ),
     over: "package",

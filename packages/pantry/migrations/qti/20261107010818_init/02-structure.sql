@@ -4,7 +4,7 @@ CREATE TABLE "qti"."area_mapping" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -24,8 +24,8 @@ CREATE TABLE "qti"."aria_element" (
 );
 
 CREATE TABLE "qti"."aria_range" (
-  "max" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "min" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "max" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "min" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__aria_range_pk_ivon22r4v3" PRIMARY KEY ("node"),
   CONSTRAINT "aria_value_range" CHECK ((CASE WHEN "min" ~ '\A[\+\-]?(?:0*(?:[1-9][0-9]{0,255}|0)(?:\.(?:[0-9]{0,254}|[0-9]{255}0*))?|\.(?:[0-9]{1,254}|[0-9]{255}0*))\Z'::"pg_catalog"."text" THEN ("min"::numeric(511, 255))::numeric ELSE ('-Infinity'::numeric)::numeric END <= CASE WHEN "max" ~ '\A[\+\-]?(?:0*(?:[1-9][0-9]{0,255}|0)(?:\.(?:[0-9]{0,254}|[0-9]{255}0*))?|\.(?:[0-9]{1,254}|[0-9]{255}0*))\Z'::"pg_catalog"."text" THEN ("max"::numeric(511, 255))::numeric ELSE ('Infinity'::numeric)::numeric END) IS TRUE)
@@ -34,7 +34,7 @@ CREATE TABLE "qti"."aria_range" (
 CREATE TABLE "qti"."aria_value" (
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__aria_value_pk_kflmtnswsi" PRIMARY KEY ("node", "name"),
   CONSTRAINT "__aria_value_key_node_value_name_4imwgjejeb" UNIQUE NULLS DISTINCT ("node", "value", "name"),
   CONSTRAINT "__aria_value_key_node_name_value_6rqhq75fse" UNIQUE NULLS DISTINCT ("node", "name", "value")
@@ -44,7 +44,7 @@ CREATE TABLE "qti"."assembled_id" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "carriers" "qti"."__domain_gfw43vigph" NOT NULL,
   "copy" "pg_catalog"."uuid" NOT NULL,
-  "id" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "id" "qti"."__text_pwaizaq6lx" NOT NULL,
   "owner" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__assembled_id_pk_qwz2fcv4hr" PRIMARY KEY ("assembly", "id", "owner", "copy"),
   CONSTRAINT "__assembled_id_key_assembly_id_2kptp56i5e" UNIQUE NULLS DISTINCT ("assembly", "id"),
@@ -56,7 +56,7 @@ CREATE TABLE "qti"."assembled_lang" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "carriers" "qti"."__domain_gfw43vigph" NOT NULL,
   "generals" "qti"."__domain_gfw43vigph" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__assembled_lang_pk_wrc4evj6m4" PRIMARY KEY ("assembly", "lang"),
   CONSTRAINT "e_1_derived" CHECK (("carriers" > 0::bigint) IS TRUE),
   CONSTRAINT "__assembled_lang_key_assembly_lang_generals_irnixlbrkw" UNIQUE NULLS DISTINCT ("assembly", "lang", "generals"),
@@ -65,7 +65,7 @@ CREATE TABLE "qti"."assembled_lang" (
 
 CREATE TABLE "qti"."assembled_name" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "placements" "qti"."__domain_gfw43vigph" NOT NULL,
   CONSTRAINT "__assembled_name_pk_f7nyzd7n6t" PRIMARY KEY ("assembly", "node"),
@@ -80,8 +80,8 @@ CREATE TABLE "qti"."assembled_reference" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "digits" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "joined" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "joined" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "last_digit" boolean NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -101,20 +101,20 @@ CREATE TABLE "qti"."assembled_reference" (
 
 CREATE TABLE "qti"."assessment_object" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "identifier_lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "identifier_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "identifier_trail" "qti"."__text_7dfilirtp3" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "lang_tag" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "lang_tag" "qti"."__text_pwaizaq6lx" NOT NULL,
   "langs" "qti"."__domain_gfw43vigph" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "title" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "title_value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "title" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "title_value" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__assessment_object_pk_ngthpwygxy" PRIMARY KEY ("node"),
   CONSTRAINT "__assessment_object_key_document_mh5yzvwhvq" UNIQUE NULLS DISTINCT ("document"),
@@ -125,7 +125,7 @@ CREATE TABLE "qti"."assessment_object" (
   CONSTRAINT "__assessment_object_key_document_identifier_skdybq7ygm" UNIQUE NULLS DISTINCT ("document", "identifier"),
   CONSTRAINT "__assessment_object_key_document_lang_tag_k42ax3lghj" UNIQUE NULLS DISTINCT ("document", "lang_tag"),
   CONSTRAINT "__assessment_object_key_document_title_value_wn4bju2lh3" UNIQUE NULLS DISTINCT ("document", "title_value"),
-  CONSTRAINT "__assessment_object_key_node_langs_75gejw3sm5" UNIQUE NULLS DISTINCT ("node", "langs")
+  CONSTRAINT "__assessment_object_key_node_langs_lang_2ejz2f26ad" UNIQUE NULLS DISTINCT ("node", "langs", "lang")
 );
 
 CREATE TABLE "qti"."attribute" (
@@ -136,14 +136,14 @@ CREATE TABLE "qti"."attribute" (
   "entities" "qti"."__domain_gfw43vigph" NOT NULL,
   "governs" "qti"."type_name" NOT NULL,
   "id" "pg_catalog"."uuid" NOT NULL,
-  "idref_text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "idref_text" "qti"."__text_pwaizaq6lx" NOT NULL,
   "idrefs" "qti"."__domain_gfw43vigph" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "lexical" "qti"."__text_c6iptmtj2x" NOT NULL,
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "open_name" "qti"."__domain_gfw43vigph" NOT NULL,
-  "prefix" "qti"."__text_s6ixdygymv" NOT NULL,
+  "prefix" "qti"."__text_5xaumrdzw7" NOT NULL,
   "slot" "qti"."__attribute_slot_bits_112_aecznthxg5" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__attribute_pk_7dwyp2j4rn" PRIMARY KEY ("node", "id"),
@@ -174,7 +174,7 @@ CREATE TABLE "qti"."attribute_entity" (
 CREATE TABLE "qti"."binding" (
   "choices" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -192,7 +192,7 @@ CREATE TABLE "qti"."binding" (
 CREATE TABLE "qti"."binding_name" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__binding_name_pk_k6l2t2abun" PRIMARY KEY ("node", "attribute"),
@@ -208,7 +208,7 @@ CREATE TABLE "qti"."bound_variable" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__bound_variable_pk_iz45qegzkf" PRIMARY KEY ("node", "attribute"),
@@ -243,7 +243,7 @@ CREATE TABLE "qti"."branch_resolution" (
   "owner_part" "pg_catalog"."uuid" NOT NULL,
   "owner_start" "qti"."__domain_gfw43vigph" NOT NULL,
   "rule" "pg_catalog"."uuid" NOT NULL,
-  "target" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "target" "qti"."__text_pwaizaq6lx" NOT NULL,
   "target_end" "qti"."__domain_gfw43vigph" NOT NULL,
   "target_instance" "pg_catalog"."uuid" NOT NULL,
   "target_instance_end" "qti"."__domain_gfw43vigph" NOT NULL,
@@ -272,7 +272,7 @@ CREATE TABLE "qti"."branch_rule" (
   "parent" "pg_catalog"."uuid" NOT NULL,
   "parent_kind" "qti"."node_kind" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "target" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "target" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__branch_rule_pk_ee2mk7zphv" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK ((NOT "target" IN ('EXIT_SECTION'::"pg_catalog"."text", 'EXIT_TEST'::"pg_catalog"."text", 'EXIT_TESTPART'::"pg_catalog"."text") AND "parent_kind" IN (109::smallint, 300::smallint, 112::smallint) AND "kind" = 99::smallint) IS TRUE),
@@ -281,10 +281,10 @@ CREATE TABLE "qti"."branch_rule" (
 );
 
 CREATE TABLE "qti"."cell_headers" (
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "table" "pg_catalog"."uuid" NOT NULL,
-  "token_text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "token_text" "qti"."__text_pwaizaq6lx" NOT NULL,
   "tokens" "qti"."__domain_gfw43vigph" NOT NULL,
   CONSTRAINT "__cell_headers_pk_kjevq3pul6" PRIMARY KEY ("node"),
   CONSTRAINT "__cell_headers_check_cell_headers_tokens_concat_fold_6b7o4tsxdr" CHECK (("tokens" > 0::bigint OR "token_text" = ''::"pg_catalog"."text") IS TRUE),
@@ -295,7 +295,7 @@ CREATE TABLE "qti"."cell_headers" (
 
 CREATE TABLE "qti"."choice" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "interaction" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -314,7 +314,7 @@ CREATE TABLE "qti"."choice_variable_name" (
   "declarations" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "hottexts" "qti"."__domain_gfw43vigph" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "placed_choices" "qti"."__domain_gfw43vigph" NOT NULL,
   "placed_hottexts" "qti"."__domain_gfw43vigph" NOT NULL,
   "root_kind" "qti"."node_kind" NOT NULL,
@@ -341,7 +341,7 @@ CREATE TABLE "qti"."context_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__context_ref_pk_wtoqozrkb7" PRIMARY KEY ("node", "attribute"),
@@ -354,13 +354,13 @@ CREATE TABLE "qti"."count_bound" (
   "choices" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "least" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "least" "qti"."__text_pwaizaq6lx" NOT NULL,
   "least_value" bigint NOT NULL,
   "max_name" "qti"."attribute_name" NOT NULL,
   "max_written" boolean NOT NULL,
   "min_name" "qti"."attribute_name" NOT NULL,
   "min_written" boolean NOT NULL,
-  "most" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "most" "qti"."__text_pwaizaq6lx" NOT NULL,
   "most_value" bigint NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -378,14 +378,14 @@ CREATE TABLE "qti"."count_bound" (
 
 CREATE TABLE "qti"."declaration" (
   "base_type" "qti"."base_type" NOT NULL,
-  "base_type_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "base_type_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "cardinality" "qti"."cardinality" NOT NULL,
-  "cardinality_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "cardinality_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "identifier_lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "identifier_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "identifier_trail" "qti"."__text_7dfilirtp3" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
@@ -424,9 +424,9 @@ CREATE TABLE "qti"."dependency" (
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "ref" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "ref" "qti"."__text_pwaizaq6lx" NOT NULL,
   "resource" "pg_catalog"."uuid" NOT NULL,
-  "resource_identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "resource_identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__dependency_pk_d6a6ko4xiy" PRIMARY KEY ("node"),
@@ -462,7 +462,7 @@ CREATE TABLE "qti"."document" (
   "node_parent_kind" "qti"."node_kind" NOT NULL,
   "node_start" "qti"."__domain_gfw43vigph" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_v67sggqx7c" NOT NULL,
+  "path" "qti"."__text_ca4i7j77gp" NOT NULL,
   "resource_type" "qti"."resource_type" NOT NULL,
   "root_kind" "qti"."node_kind" NOT NULL,
   "standalone" "qti"."xml_standalone" NOT NULL,
@@ -509,8 +509,8 @@ CREATE TABLE "qti"."document_id" (
   "after" "qti"."__text_7dfilirtp3" NOT NULL,
   "before" "qti"."__text_7dfilirtp3" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "id" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "id" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "owner" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__document_id_pk_x7sxopulh7" PRIMARY KEY ("node"),
@@ -524,7 +524,7 @@ CREATE TABLE "qti"."document_lang" (
   "carriers" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "generals" "qti"."__domain_gfw43vigph" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__document_lang_pk_hws7ocndwj" PRIMARY KEY ("document", "lang"),
   CONSTRAINT "e_1_derived" CHECK (("carriers" > 0::bigint) IS TRUE),
   CONSTRAINT "__document_lang_key_document_lang_generals_z73meijj3t" UNIQUE NULLS DISTINCT ("document", "lang", "generals"),
@@ -535,7 +535,7 @@ CREATE TABLE "qti"."entry" (
   "at" "qti"."__domain_gfw43vigph" NOT NULL,
   "content" "qti"."__text_7lh2gkatwn" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_v67sggqx7c" NOT NULL,
+  "path" "qti"."__text_ca4i7j77gp" NOT NULL,
   CONSTRAINT "__entry_pk_pft7stbhq7" PRIMARY KEY ("package", "at"),
   CONSTRAINT "__entry_key_package_path_axr6pzomhu" UNIQUE NULLS DISTINCT ("package", "path")
 );
@@ -583,7 +583,7 @@ CREATE TABLE "qti"."expression_attribute" (
   "cardinality" "qti"."value_cardinality" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "language" "qti"."language" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "written" boolean NOT NULL,
@@ -600,7 +600,7 @@ CREATE TABLE "qti"."feedback_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__feedback_ref_pk_h56q5t5kv4" PRIMARY KEY ("node", "attribute"),
@@ -612,12 +612,12 @@ CREATE TABLE "qti"."feedback_ref" (
 
 CREATE TABLE "qti"."file" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "href" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "href" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "resource" "pg_catalog"."uuid" NOT NULL,
   "scope" "qti"."href_scope" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
@@ -631,7 +631,7 @@ CREATE TABLE "qti"."file" (
 CREATE TABLE "qti"."file_href" (
   "files" "qti"."__domain_gfw43vigph" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "scope" "qti"."href_scope" NOT NULL,
   CONSTRAINT "__file_href_pk_eecz74rso4" PRIMARY KEY ("package", "scope", "path"),
   CONSTRAINT "file_listed" CHECK (("files" > 0::bigint) IS TRUE),
@@ -642,7 +642,7 @@ CREATE TABLE "qti"."fragment_value" (
   "carriers" "qti"."__domain_gfw43vigph" NOT NULL,
   "fragment" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__fragment_value_pk_2ec3kmm6gj" PRIMARY KEY ("fragment", "kind", "value"),
   CONSTRAINT "e_1_derived" CHECK (("carriers" > 0::bigint) IS TRUE),
   CONSTRAINT "__fragment_value_key_fragment_kind_value_carriers_msf3lohrmb" UNIQUE NULLS DISTINCT ("fragment", "kind", "value", "carriers")
@@ -651,8 +651,8 @@ CREATE TABLE "qti"."fragment_value" (
 CREATE TABLE "qti"."general_lang" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "general" "pg_catalog"."uuid" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__general_lang_pk_5xgscvsoag" PRIMARY KEY ("general", "lang"),
   CONSTRAINT "e_1_derived" CHECK (("pg_catalog"."translate"("pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lang", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'::"pg_catalog"."text", 'abcdefghijklmnopqrstuvwxyz'::"pg_catalog"."text") = "value" AND "value" <> ''::"pg_catalog"."text") IS TRUE)
 );
@@ -679,11 +679,11 @@ CREATE TABLE "qti"."header_token" (
   "at" "qti"."__domain_gfw43vigph" NOT NULL,
   "before" "qti"."__text_7dfilirtp3" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "piece" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "pieces_after" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "pieces_was" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "piece" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "pieces_after" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "pieces_was" "qti"."__text_pwaizaq6lx" NOT NULL,
   "table" "pg_catalog"."uuid" NOT NULL,
-  "token" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "token" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__header_token_pk_ybyt5ap6zk" PRIMARY KEY ("node", "at"),
   CONSTRAINT "__header_token_key_node_token_nnzu4ysi7y" UNIQUE NULLS DISTINCT ("node", "token"),
   CONSTRAINT "__header_token_key_node_at_pieces_after_qbk3kkweyf" UNIQUE NULLS DISTINCT ("node", "at", "pieces_after"),
@@ -692,7 +692,7 @@ CREATE TABLE "qti"."header_token" (
 );
 
 CREATE TABLE "qti"."hotspot" (
-  "area" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "area" "qti"."__text_pwaizaq6lx" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "element_children" "qti"."__domain_gfw43vigph" NOT NULL,
   "elements" "qti"."__domain_gfw43vigph" NOT NULL,
@@ -714,7 +714,7 @@ CREATE TABLE "qti"."hotspot" (
 
 CREATE TABLE "qti"."hottext" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "nearest_kind" "qti"."node_kind" NOT NULL,
@@ -732,7 +732,7 @@ CREATE TABLE "qti"."hottext" (
 CREATE TABLE "qti"."id_binding" (
   "carriers" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "id" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "id" "qti"."__text_pwaizaq6lx" NOT NULL,
   "owner" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__id_binding_pk_mvuwkhlnz4" PRIMARY KEY ("document", "id", "owner"),
   CONSTRAINT "__id_binding_key_document_id_eia52xosro" UNIQUE NULLS DISTINCT ("document", "id"),
@@ -743,10 +743,10 @@ CREATE TABLE "qti"."id_binding" (
 CREATE TABLE "qti"."identity_text" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "governs" "qti"."type_name" NOT NULL,
-  "idref_text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "idref_text" "qti"."__text_pwaizaq6lx" NOT NULL,
   "idrefs" "qti"."__domain_gfw43vigph" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "owner" "pg_catalog"."uuid" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
@@ -764,10 +764,10 @@ CREATE TABLE "qti"."idref" (
   "before" "qti"."__text_7dfilirtp3" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "piece" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "pieces_after" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "pieces_was" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "token" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "piece" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "pieces_after" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "pieces_was" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "token" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__idref_pk_xqrlmnw437" PRIMARY KEY ("node", "attribute", "at"),
   CONSTRAINT "__idref_key_node_attribute_at_pieces_after_loetlz4ckz" UNIQUE NULLS DISTINCT ("node", "attribute", "at", "pieces_after"),
   CONSTRAINT "__idref_check_attribute_idrefs_concat_fold_vhb645bpcz" CHECK ((("at" > 0::bigint OR "pieces_was" = ''::"pg_catalog"."text") AND ("pg_catalog"."char_length"("pieces_after") = "pg_catalog"."char_length"("pieces_was")::bigint + "pg_catalog"."char_length"("piece")::bigint AND "pg_catalog"."starts_with"("pieces_after", "pieces_was") AND "pg_catalog"."right"("pieces_after", "pg_catalog"."char_length"("piece")) = "piece")) IS TRUE),
@@ -777,7 +777,7 @@ CREATE TABLE "qti"."idref" (
 CREATE TABLE "qti"."idref_target" (
   "assembled" boolean NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "id" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "id" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__idref_target_pk_jsj2m7b4kd" PRIMARY KEY ("document", "id")
 );
 
@@ -849,7 +849,7 @@ CREATE TABLE "qti"."instance_name" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "end" "qti"."__domain_gfw43vigph" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "instance_mixes" boolean NOT NULL,
   "instance_part" "pg_catalog"."uuid" NOT NULL,
@@ -876,12 +876,12 @@ CREATE TABLE "qti"."interaction_attribute" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "root_kind" "qti"."node_kind" NOT NULL,
   "trail" "qti"."__text_7dfilirtp3" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__interaction_attribute_pk_sbz3kmx43v" PRIMARY KEY ("node", "name"),
   CONSTRAINT "e_1_derived" CHECK (("value" ~ '\A[\u0001-\u0008\u000B\u000C\u000E-\u001F\!-\U0010FFFF]*\Z'::"pg_catalog"."text" AND ("trail" = ''::"pg_catalog"."text" OR "value" <> ''::"pg_catalog"."text") AND ("pg_catalog"."char_length"("lexical") = "pg_catalog"."char_length"("lead" || "value")::bigint + "pg_catalog"."char_length"("trail")::bigint AND "pg_catalog"."starts_with"("lexical", "lead" || "value") AND "pg_catalog"."right"("lexical", "pg_catalog"."char_length"("trail")) = "trail")) IS TRUE),
   CONSTRAINT "__interaction_attribute_key_node_name_value_qmwpye5d5l" UNIQUE NULLS DISTINCT ("node", "name", "value"),
@@ -895,7 +895,7 @@ CREATE TABLE "qti"."interpolation_table" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -918,7 +918,7 @@ CREATE TABLE "qti"."item_ref_document" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__item_ref_document_pk_ylsc7bhhax" PRIMARY KEY ("node"),
   CONSTRAINT "__item_ref_document_key_node_package_path_l66gnify5f" UNIQUE NULLS DISTINCT ("node", "package", "path"),
   CONSTRAINT "__item_ref_document_key_node_document_4q4k6bmhov" UNIQUE NULLS DISTINCT ("node", "document")
@@ -927,7 +927,7 @@ CREATE TABLE "qti"."item_ref_document" (
 CREATE TABLE "qti"."item_ref_target" (
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "type" "qti"."resource_type" NOT NULL,
   CONSTRAINT "__item_ref_target_pk_wnmrsqppcx" PRIMARY KEY ("node"),
   CONSTRAINT "item_ref_target" CHECK (("type" IN (11::smallint, 20::smallint, 21::smallint, 3::smallint)) IS TRUE),
@@ -937,7 +937,7 @@ CREATE TABLE "qti"."item_ref_target" (
 
 CREATE TABLE "qti"."item_timing" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "time_dependent" boolean NOT NULL,
   CONSTRAINT "__item_timing_pk_pi5fgqqm5q" PRIMARY KEY ("node"),
@@ -962,7 +962,7 @@ CREATE TABLE "qti"."literal" (
   "language" "qti"."language" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
-  "text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "text" "qti"."__text_pwaizaq6lx" NOT NULL,
   "type_code" "qti"."base_type" NOT NULL,
   CONSTRAINT "__literal_pk_aelubxdbzj" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (((NULLIF("pg_catalog"."substring"("qti"."__constant_wgtmrsic5c"(), "type_code" * 4 + 1, 4)::integer, 0) - 1)::smallint = "base_type") IS TRUE),
@@ -985,8 +985,8 @@ CREATE TABLE "qti"."lom_entry" (
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "text" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "token" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "text" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "token" "qti"."__text_pwaizaq6lx" NOT NULL,
   "trail" "qti"."__text_7dfilirtp3" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__lom_entry_pk_utl6k24z5h" PRIMARY KEY ("node"),
@@ -1013,9 +1013,9 @@ CREATE TABLE "qti"."lom_general" (
 
 CREATE TABLE "qti"."lom_language" (
   "general" "pg_catalog"."uuid" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "tag" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "tag" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__lom_language_pk_dyuesseefb" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("pg_catalog"."translate"("lang", 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'::"pg_catalog"."text", 'abcdefghijklmnopqrstuvwxyz'::"pg_catalog"."text") = "tag") IS TRUE),
   CONSTRAINT "__lom_language_key_node_general_lang_ovc3l4sl5o" UNIQUE NULLS DISTINCT ("node", "general", "lang")
@@ -1024,7 +1024,7 @@ CREATE TABLE "qti"."lom_language" (
 CREATE TABLE "qti"."lom_object" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "record" "pg_catalog"."uuid" NOT NULL,
   "resource" "pg_catalog"."uuid" NOT NULL,
   "type" "qti"."resource_type" NOT NULL,
@@ -1037,18 +1037,18 @@ CREATE TABLE "qti"."lom_object_identifier" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "entry" "pg_catalog"."uuid" NOT NULL,
   "general" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "record" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__lom_object_identifier_pk_yut5ma3dl7" PRIMARY KEY ("record")
 );
 
 CREATE TABLE "qti"."lom_object_title" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "object_lang" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "object_lang" "qti"."__text_pwaizaq6lx" NOT NULL,
   "record" "pg_catalog"."uuid" NOT NULL,
   "string" "pg_catalog"."uuid" NOT NULL,
-  "string_language" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "title" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "string_language" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "title" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__lom_object_title_pk_224q5nl6cj" PRIMARY KEY ("record"),
   CONSTRAINT "lom_object_title" CHECK (("object_lang" = "string_language" OR "object_lang" = ''::"pg_catalog"."text" OR "string_language" = ''::"pg_catalog"."text") IS TRUE)
 );
@@ -1087,7 +1087,7 @@ CREATE TABLE "qti"."lom_resource" (
 CREATE TABLE "qti"."lom_resource_type" (
   "node" "pg_catalog"."uuid" NOT NULL,
   "term" "pg_catalog"."uuid" NOT NULL,
-  "text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "text" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__lom_resource_type_pk_o4tsbio4jg" PRIMARY KEY ("node"),
   CONSTRAINT "__lom_resource_type_key_term_hy4vz34sau" UNIQUE NULLS DISTINCT ("term"),
   CONSTRAINT "__lom_resource_type_key_term_node_text_fhkv6wqdff" UNIQUE NULLS DISTINCT ("term", "node", "text")
@@ -1096,24 +1096,24 @@ CREATE TABLE "qti"."lom_resource_type" (
 CREATE TABLE "qti"."lom_resource_type_source" (
   "node" "pg_catalog"."uuid" NOT NULL,
   "term" "pg_catalog"."uuid" NOT NULL,
-  "text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "text" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__lom_resource_type_source_pk_tix3kepj2u" PRIMARY KEY ("node"),
   CONSTRAINT "__lom_resource_type_source_key_term_gv5bephjz7" UNIQUE NULLS DISTINCT ("term"),
   CONSTRAINT "__lom_resource_type_source_key_term_node_text_yez646bb7k" UNIQUE NULLS DISTINCT ("term", "node", "text")
 );
 
 CREATE TABLE "qti"."lom_string" (
-  "language" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "language" "qti"."__text_pwaizaq6lx" NOT NULL,
   "languages" "qti"."__domain_gfw43vigph" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__lom_string_pk_j6pxaair7j" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("language" = ''::"pg_catalog"."text" OR "languages" = 1::bigint) IS TRUE),
-  CONSTRAINT "__lom_string_key_node_language_7q3mu42lfi" UNIQUE NULLS DISTINCT ("node", "language"),
-  CONSTRAINT "__lom_string_key_node_languages_744lmleckw" UNIQUE NULLS DISTINCT ("node", "languages")
+  CONSTRAINT "__lom_string_key_node_languages_language_wfurt3o53w" UNIQUE NULLS DISTINCT ("node", "languages", "language"),
+  CONSTRAINT "__lom_string_key_node_language_7q3mu42lfi" UNIQUE NULLS DISTINCT ("node", "language")
 );
 
 CREATE TABLE "qti"."lom_string_language" (
-  "language" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "language" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__lom_string_language_pk_467ufc6ip4" PRIMARY KEY ("node"),
   CONSTRAINT "__lom_string_language_key_node_language_mlgkbfrbvw" UNIQUE NULLS DISTINCT ("node", "language")
@@ -1139,15 +1139,15 @@ CREATE TABLE "qti"."lom_title" (
 CREATE TABLE "qti"."lom_title_string" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "language" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "language_tag" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "language" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "language_tag" "qti"."__text_pwaizaq6lx" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "record" "pg_catalog"."uuid" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "text" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "text_value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "text" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "text_value" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__lom_title_string_pk_qb4riflfgi" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("pg_catalog"."translate"("language", 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'::"pg_catalog"."text", 'abcdefghijklmnopqrstuvwxyz'::"pg_catalog"."text") = "language_tag" AND "pg_catalog"."translate"("text", '	
@@ -1165,7 +1165,7 @@ CREATE TABLE "qti"."lookup_value" (
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__lookup_value_pk_dtzddogytm" PRIMARY KEY ("node"),
   CONSTRAINT "typed_attribute_value" CHECK ((("value" ~ '\A(?:[\!-\uFFFD\U00010000-\U0010FFFF](?:[\u0009\u000A\u000D -\uFFFD\U00010000-\U0010FFFF]*[\!-\uFFFD\U00010000-\U0010FFFF])?)?\Z'::"pg_catalog"."text" OR "base_type" = 3::smallint) AND "value" ~ CASE ("qti"."__constant_hh7nvhrixk"())[NULLIF("pg_catalog"."substring"("qti"."__constant_is3nwj326d"(), "base_type" * 4 + 1, 4)::integer, 0) - 1 + 1] WHEN '^(?:[\t\n\r -\uD7FF\uE000-\uFFFD𐀀-􏿿]*)$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D -\uFFFD\U00010000-\U0010FFFF]*\Z'::"pg_catalog"."text" WHEN '^(?:[\t\n\r ]*(?:(?:[A-Za-z][+\-.0-9A-Za-z]*:(?:[\t\n\r ]+|[!"$&-.0-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*|(?:[A-Za-z][+\-.0-9A-Za-z]*:)?(?:(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)+|//(?:(?:[\t\n\r -"$&-.0->A-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*(?:::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)?|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)(?::[0-9]{1,3}(?:\.[0-9]{1,3}){3})?|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,4})?::(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\](?::[0-9]*)?(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*)(?:\?(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)?|(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:\?(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)?)(?:#(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|#)|#(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|#|[A-Za-z][+\-.0-9A-Za-z]*:(?:[\t\n\r ]+|[!"$&-.0-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|[A-Za-z][+\-.0-9A-Za-z]*:(?:[!"$&-.0-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|(?:[A-Za-z][+\-.0-9A-Za-z]*:)?(?:(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)+|//(?:(?:[\t\n\r -"$&-.0->A-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*(?:::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)?|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)(?::[0-9]{1,3}(?:\.[0-9]{1,3}){3})?|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,4})?::(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\](?::[0-9]*)?(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*)(?:\?(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|\?)|(?:[A-Za-z][+\-.0-9A-Za-z]*:)?(?:(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|/)|//(?:(?:[\t\n\r -"$&-.0->A-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*(?:::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)?|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)(?::[0-9]{1,3}(?:\.[0-9]{1,3}){3})?|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,4})?::(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\](?::[0-9]*)?(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|/)|//(?:(?:[\t\n\r -"$&-.0->A-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*(?:::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)?|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)(?::[0-9]{1,3}(?:\.[0-9]{1,3}){3})?|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,4})?::(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\](?::[0-9]*)?)|(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:\?(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|\?)|(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|/)|(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})[\t\n\r ]*|[\t\n\r ]*)$'::"pg_catalog"."text" THEN '\A(?:[\u0009\u000A\u000D ]*|[\u0009\u000A\u000D ]*(?:(?:[A-Za-z][\+\-\.0-9A-Za-z]*\:)?(?:(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)+|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>A-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*\@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4}){0,4})?\:\:(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])|(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*(?:\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)?|\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)(?:\:[0-9]{1,3}(?:\.[0-9]{1,3}){3})?)\](?:\:[0-9]*)?(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*)(?:\?(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|\?)|(?:[A-Za-z][\+\-\.0-9A-Za-z]*\:)?(?:(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|\/)|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>A-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*\@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4}){0,4})?\:\:(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])|(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*(?:\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)?|\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)(?:\:[0-9]{1,3}(?:\.[0-9]{1,3}){3})?)\](?:\:[0-9]*)?(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|\/)|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>A-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*\@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4}){0,4})?\:\:(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])|(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*(?:\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)?|\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)(?:\:[0-9]{1,3}(?:\.[0-9]{1,3}){3})?)\](?:\:[0-9]*)?)|(?:(?:[A-Za-z][\+\-\.0-9A-Za-z]*\:)?(?:(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)+|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>A-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*\@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4}){0,4})?\:\:(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])|(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*(?:\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)?|\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)(?:\:[0-9]{1,3}(?:\.[0-9]{1,3}){3})?)\](?:\:[0-9]*)?(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*)(?:\?(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*)?|(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\?(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*)?|[A-Za-z][\+\-\.0-9A-Za-z]*\:(?:[\u0009\u000A\u000D ]+|\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*)(?:\#(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|\#)|(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|\/)|(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\?(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|\?)|\#(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|\%[0-9A-Fa-f]{2}|[A-Za-z][\+\-\.0-9A-Za-z]*\:(?:[\u0009\u000A\u000D ]+|\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|[A-Za-z][\+\-\.0-9A-Za-z]*\:(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|[\!-\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])[\u0009\u000A\u000D ]*)\Z'::"pg_catalog"."text" WHEN '^(?:[\t\n\r ]*(?:[+\-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+\-]?[0-9]+)?|-?INF|NaN)[\t\n\r ]*)$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*(?:[\+\-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][\+\-]?[0-9]+)?|\-?INF|NaN)[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^(?:[\t\n\r ]*(?:[+\-]?0+|\+?0*[1-9][0-9]*|-0*[1-9][0-9]*)[\t\n\r ]*)$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*(?:[\+\-]?0+|\+?0*[1-9][0-9]*|\-0*[1-9][0-9]*)[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^(?:[\t\n\r ]*[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-.0-9A-Z_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\t\n\r ]*)$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^[\t\n\r ]*(?:true|false)[\t\n\r ]*$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*(?:false|true)[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^[\t\n\r ]*[+\-]?[0-9]+[\t\n\r ][+\-]?[0-9]+[\t\n\r ]*$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*[\+\-]?[0-9]+[\u0009\u000A\u000D ][\+\-]?[0-9]+[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^[\t\n\r ]*[A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}][\-.0-9\u{B7}\u{300}-\u{36F}\u{203F}-\u{2040}A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}]*[\t\n\r ][A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}][\-.0-9\u{B7}\u{300}-\u{36F}\u{203F}-\u{2040}A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}]*[\t\n\r ]*$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*[\u0009\u000A\u000D ][A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" ELSE ("qti"."__constant_hh7nvhrixk"())[NULLIF("pg_catalog"."substring"("qti"."__constant_is3nwj326d"(), "base_type" * 4 + 1, 4)::integer, 0) - 1 + 1] END) IS TRUE),
@@ -1174,7 +1174,7 @@ CREATE TABLE "qti"."lookup_value" (
 
 CREATE TABLE "qti"."manifest_id" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -1191,7 +1191,7 @@ CREATE TABLE "qti"."manifest_id" (
 CREATE TABLE "qti"."map_key" (
   "base_type" "qti"."base_type" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "key" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "key" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "mapping" "pg_catalog"."uuid" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
@@ -1206,12 +1206,12 @@ CREATE TABLE "qti"."map_key" (
 
 CREATE TABLE "qti"."map_key_directed_pair" (
   "gap" "qti"."__text_qhjydx3ufb" NOT NULL,
-  "key" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "key" "qti"."__text_pwaizaq6lx" NOT NULL,
   "mapping" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "source" "qti"."__text_7nkeqry66t" NOT NULL,
   "target" "qti"."__text_7nkeqry66t" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__map_key_directed_pair_pk_273fk2vi2f" PRIMARY KEY ("node"),
   CONSTRAINT "__map_key_directed_pair_key_mapping_value_w6gtfs7yqb" UNIQUE NULLS DISTINCT ("mapping", "value"),
   CONSTRAINT "e_1_derived" CHECK ((("pg_catalog"."char_length"("key") = "pg_catalog"."char_length"("source" || "gap")::bigint + "pg_catalog"."char_length"("target")::bigint AND "pg_catalog"."starts_with"("key", "source" || "gap") AND "pg_catalog"."right"("key", "pg_catalog"."char_length"("target")) = "target") AND ("pg_catalog"."char_length"("value") = "pg_catalog"."char_length"("source" || ' '::"pg_catalog"."text")::bigint + "pg_catalog"."char_length"("target")::bigint AND "pg_catalog"."starts_with"("value", "source" || ' '::"pg_catalog"."text") AND "pg_catalog"."right"("value", "pg_catalog"."char_length"("target")) = "target")) IS TRUE),
@@ -1231,12 +1231,12 @@ CREATE TABLE "qti"."map_key_float" (
 
 CREATE TABLE "qti"."map_key_integer" (
   "digits" "qti"."__text_htajwmyatt" NOT NULL,
-  "key" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "key" "qti"."__text_pwaizaq6lx" NOT NULL,
   "mapping" "pg_catalog"."uuid" NOT NULL,
   "negative" "qti"."__text_qvake6vbfh" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "sign" "qti"."__text_n4nva7wrgk" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   "zeros" "qti"."__text_hdc6mvcrgm" NOT NULL,
   CONSTRAINT "__map_key_integer_pk_x5bfe7egxx" PRIMARY KEY ("node"),
   CONSTRAINT "__map_key_integer_key_mapping_value_hqdl4imvzw" UNIQUE NULLS DISTINCT ("mapping", "value"),
@@ -1247,11 +1247,11 @@ CREATE TABLE "qti"."map_key_integer" (
 CREATE TABLE "qti"."map_key_pair" (
   "first" "qti"."__text_7nkeqry66t" NOT NULL,
   "gap" "qti"."__text_qhjydx3ufb" NOT NULL,
-  "key" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "key" "qti"."__text_pwaizaq6lx" NOT NULL,
   "mapping" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "second" "qti"."__text_7nkeqry66t" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__map_key_pair_pk_6b7vea3xj2" PRIMARY KEY ("node"),
   CONSTRAINT "__map_key_pair_key_mapping_value_xzaehwla2l" UNIQUE NULLS DISTINCT ("mapping", "value"),
   CONSTRAINT "e_1_derived" CHECK (((("pg_catalog"."char_length"("value") = "pg_catalog"."char_length"("first" || ' '::"pg_catalog"."text")::bigint + "pg_catalog"."char_length"("second")::bigint AND "pg_catalog"."starts_with"("value", "first" || ' '::"pg_catalog"."text") AND "pg_catalog"."right"("value", "pg_catalog"."char_length"("second")) = "second") AND "first" <= "second" OR ("pg_catalog"."char_length"("value") = "pg_catalog"."char_length"("second" || ' '::"pg_catalog"."text")::bigint + "pg_catalog"."char_length"("first")::bigint AND "pg_catalog"."starts_with"("value", "second" || ' '::"pg_catalog"."text") AND "pg_catalog"."right"("value", "pg_catalog"."char_length"("first")) = "first") AND "second" < "first") AND ("pg_catalog"."char_length"("key") = "pg_catalog"."char_length"("first" || "gap")::bigint + "pg_catalog"."char_length"("second")::bigint AND "pg_catalog"."starts_with"("key", "first" || "gap") AND "pg_catalog"."right"("key", "pg_catalog"."char_length"("second")) = "second")) IS TRUE),
@@ -1260,10 +1260,10 @@ CREATE TABLE "qti"."map_key_pair" (
 
 CREATE TABLE "qti"."map_key_point" (
   "gap" "qti"."__text_qhjydx3ufb" NOT NULL,
-  "key" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "key" "qti"."__text_pwaizaq6lx" NOT NULL,
   "mapping" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   "x_digits" "qti"."__text_htajwmyatt" NOT NULL,
   "x_negative" "qti"."__text_qvake6vbfh" NOT NULL,
   "x_sign" "qti"."__text_n4nva7wrgk" NOT NULL,
@@ -1284,7 +1284,7 @@ CREATE TABLE "qti"."mapping" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -1304,7 +1304,7 @@ CREATE TABLE "qti"."mapping_lookup" (
   "item_ref" "pg_catalog"."uuid" NOT NULL,
   "mapped" boolean NOT NULL,
   "mapping" "pg_catalog"."uuid" NOT NULL,
-  "name" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "name" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__mapping_lookup_pk_cghgcxvb22" PRIMARY KEY ("item_ref", "name"),
   CONSTRAINT "e_1_derived" CHECK (("base_type" = 11::smallint AND "cardinality" = 0::smallint AND "declaration" = "item_ref" AND "declaration_kind" = 3::smallint AND "item_ref" = "mapping" AND "mapped" = false OR "item_ref" <> "mapping" AND "mapped" = true) IS TRUE),
   CONSTRAINT "__mapping_lookup_key_item_ref_name_mapping_ad2o63a3w4" UNIQUE NULLS DISTINCT ("item_ref", "name", "mapping", "declaration", "declaration_kind", "base_type", "cardinality"),
@@ -1320,8 +1320,8 @@ CREATE TABLE "qti"."mapping_source" (
   "item_document" "pg_catalog"."uuid" NOT NULL,
   "item_ref" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "source" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "target" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "source" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "target" "qti"."__text_pwaizaq6lx" NOT NULL,
   "target_declared" boolean NOT NULL,
   CONSTRAINT "__mapping_source_pk_wd6fat7otp" PRIMARY KEY ("node"),
   CONSTRAINT "__mapping_source_key_item_ref_target_mklz23f5nx" UNIQUE NULLS DISTINCT ("item_ref", "target"),
@@ -1336,7 +1336,7 @@ CREATE TABLE "qti"."match_table" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -1354,7 +1354,7 @@ CREATE TABLE "qti"."name_lookup" (
   "instance" "pg_catalog"."uuid" NOT NULL,
   "item_document" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "name" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "name" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "placements" "qti"."__domain_gfw43vigph" NOT NULL,
   "replaced" boolean NOT NULL,
@@ -1368,7 +1368,7 @@ CREATE TABLE "qti"."name_lookup" (
 CREATE TABLE "qti"."named" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "end" "qti"."__domain_gfw43vigph" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "loose_chain" boolean NOT NULL,
   "mixes" boolean NOT NULL,
@@ -1392,7 +1392,7 @@ CREATE TABLE "qti"."named" (
 CREATE TABLE "qti"."named_href" (
   "names" "qti"."__domain_gfw43vigph" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "type" "qti"."resource_type" NOT NULL,
   CONSTRAINT "__named_href_pk_2fzevuy7kb" PRIMARY KEY ("package", "path", "type"),
   CONSTRAINT "root_of_type" CHECK (("names" > 0::bigint) IS TRUE),
@@ -1402,7 +1402,7 @@ CREATE TABLE "qti"."named_href" (
 CREATE TABLE "qti"."namespace" (
   "at" "qti"."__domain_gfw43vigph" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "prefix" "qti"."__text_s6ixdygymv" NOT NULL,
+  "prefix" "qti"."__text_5xaumrdzw7" NOT NULL,
   "uri" "qti"."__text_zij47sgley" NOT NULL,
   CONSTRAINT "__namespace_pk_bossyr4mgg" PRIMARY KEY ("node", "at"),
   CONSTRAINT "__namespace_key_node_prefix_nqe75mqnhp" UNIQUE NULLS DISTINCT ("node", "prefix")
@@ -1415,8 +1415,8 @@ CREATE TABLE "qti"."node" (
   "attrs" "qti"."__attribute_slot_bits_112_aecznthxg5" NOT NULL,
   "barred_children" "qti"."__domain_gfw43vigph" NOT NULL,
   "chars" "qti"."__text_c6iptmtj2x" NOT NULL,
-  "chars_after" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "chars_was" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "chars_after" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "chars_was" "qti"."__text_pwaizaq6lx" NOT NULL,
   "children" "qti"."__domain_gfw43vigph" NOT NULL,
   "counted_children" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
@@ -1440,11 +1440,11 @@ CREATE TABLE "qti"."node" (
   "parent_nearest" "pg_catalog"."uuid" NOT NULL,
   "parent_nearest_kind" "qti"."node_kind" NOT NULL,
   "parent_parent_kind" "qti"."node_kind" NOT NULL,
-  "prefix" "qti"."__text_k5xl5rujta" NOT NULL,
+  "prefix" "qti"."__text_d7mwmflg4k" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "state" "qti"."position" NOT NULL,
-  "string_piece" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "string_value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "string_piece" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "string_value" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   "was" "qti"."position" NOT NULL,
   CONSTRAINT "__node_pk_3sd4cqvxbf" PRIMARY KEY ("id"),
@@ -1490,7 +1490,7 @@ CREATE TABLE "qti"."node" (
 );
 
 CREATE TABLE "qti"."object_lang" (
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__object_lang_pk_ml6j3e4frm" PRIMARY KEY ("node"),
   CONSTRAINT "__object_lang_key_node_lang_psghkmg2kd" UNIQUE NULLS DISTINCT ("node", "lang")
@@ -1500,11 +1500,11 @@ CREATE TABLE "qti"."open_attribute_name" (
   "at" "qti"."__domain_gfw43vigph" NOT NULL,
   "attribute" "pg_catalog"."uuid" NOT NULL,
   "class" "qti"."attribute_name" NOT NULL,
-  "element_namespace" "qti"."__text_gy22hkeabv" NOT NULL,
+  "element_namespace" "qti"."__text_piekqyt5fn" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "local" "qti"."__text_ncwbm6pqik" NOT NULL,
+  "local" "qti"."__text_mpc5fvfrbl" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "uri" "qti"."__text_gy22hkeabv" NOT NULL,
+  "uri" "qti"."__text_piekqyt5fn" NOT NULL,
   CONSTRAINT "__open_attribute_name_pk_gvooutta5y" PRIMARY KEY ("node", "attribute", "at"),
   CONSTRAINT "__open_attribute_name_key_node_uri_local_lzffxquu3a" UNIQUE NULLS DISTINCT ("node", "uri", "local"),
   CONSTRAINT "foreign_attribute_class" CHECK ((("kind" IN (2::smallint, 3::smallint, 4::smallint) OR ("qti"."__constant_6l2ttocydo"())[NULLIF("pg_catalog"."substring"("qti"."__constant_6pgyw625sv"(), "kind" * 4 + 1, 4)::integer, 0) - 1 + 1] = "element_namespace") AND ("class" IN (0::smallint, 2::smallint) AND "uri" = ''::"pg_catalog"."text" OR "class" = 1::smallint AND "element_namespace" <> "uri" AND "uri" <> ''::"pg_catalog"."text" OR "class" = 3::smallint AND "element_namespace" = "uri" AND "uri" <> ''::"pg_catalog"."text")) IS TRUE)
@@ -1515,12 +1515,12 @@ CREATE TABLE "qti"."open_element_name" (
   "governs" "qti"."type_name" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "local" "qti"."__text_xj3zno7u3h" NOT NULL,
-  "namespace" "qti"."__text_rwago34c3k" NOT NULL,
+  "namespace" "qti"."__text_fgve4r33vj" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "parent_kind" "qti"."node_kind" NOT NULL,
-  "parent_namespace" "qti"."__text_rwago34c3k" NOT NULL,
+  "parent_namespace" "qti"."__text_fgve4r33vj" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__open_element_name_pk_tvf7l2rxcw" PRIMARY KEY ("node"),
@@ -1547,10 +1547,10 @@ CREATE TABLE "qti"."operand" (
 );
 
 CREATE TABLE "qti"."outcome_range" (
-  "mastery_value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "mastery_value" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "normal_maximum" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "normal_minimum" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "normal_maximum" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "normal_minimum" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__outcome_range_pk_aec5d4c4xz" PRIMARY KEY ("node"),
   CONSTRAINT "mastery_range" CHECK ((("mastery_value" = 'NaN'::"pg_catalog"."text" OR "normal_maximum" = 'NaN'::"pg_catalog"."text" OR CASE WHEN "mastery_value" ~ '\A(?:[\+\-]?(?:0*(?:[1-9][0-9]{0,14}|0)(?:\.(?:[0-9]{0,14}|[0-9]{15}0*))?|\.(?:[0-9]{1,14}|[0-9]{15}0*))(?:[Ee][\+\-]?0*(?:1[0-9]{2}|[1-9][0-9]?|2[0-8][0-9]|29[0-2]|293|0))?|\-?INF|NaN)\Z'::"pg_catalog"."text" THEN "mastery_value"::double precision ELSE '-Infinity'::double precision END <= CASE WHEN "normal_maximum" ~ '\A(?:[\+\-]?(?:0*(?:[1-9][0-9]{0,14}|0)(?:\.(?:[0-9]{0,14}|[0-9]{15}0*))?|\.(?:[0-9]{1,14}|[0-9]{15}0*))(?:[Ee][\+\-]?0*(?:1[0-9]{2}|[1-9][0-9]?|2[0-8][0-9]|29[0-2]|293|0))?|\-?INF|NaN)\Z'::"pg_catalog"."text" THEN "normal_maximum"::double precision ELSE 'Infinity'::double precision END) AND ("mastery_value" = 'NaN'::"pg_catalog"."text" OR "normal_minimum" = 'NaN'::"pg_catalog"."text" OR CASE WHEN "normal_minimum" ~ '\A(?:[\+\-]?(?:0*(?:[1-9][0-9]{0,14}|0)(?:\.(?:[0-9]{0,14}|[0-9]{15}0*))?|\.(?:[0-9]{1,14}|[0-9]{15}0*))(?:[Ee][\+\-]?0*(?:1[0-9]{2}|[1-9][0-9]?|2[0-8][0-9]|29[0-2]|293|0))?|\-?INF|NaN)\Z'::"pg_catalog"."text" THEN "normal_minimum"::double precision ELSE '-Infinity'::double precision END <= CASE WHEN "mastery_value" ~ '\A(?:[\+\-]?(?:0*(?:[1-9][0-9]{0,14}|0)(?:\.(?:[0-9]{0,14}|[0-9]{15}0*))?|\.(?:[0-9]{1,14}|[0-9]{15}0*))(?:[Ee][\+\-]?0*(?:1[0-9]{2}|[1-9][0-9]?|2[0-8][0-9]|29[0-2]|293|0))?|\-?INF|NaN)\Z'::"pg_catalog"."text" THEN "mastery_value"::double precision ELSE 'Infinity'::double precision END)) IS TRUE),
   CONSTRAINT "__outcome_range_key_node_mastery_value_5h6vo7eeej" UNIQUE NULLS DISTINCT ("node", "mastery_value"),
@@ -1582,7 +1582,7 @@ CREATE TABLE "qti"."placed_binding" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -1597,7 +1597,7 @@ CREATE TABLE "qti"."placed_binding" (
 CREATE TABLE "qti"."placed_choice" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -1620,8 +1620,8 @@ CREATE TABLE "qti"."placed_document" (
 CREATE TABLE "qti"."placed_general_lang" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "general" "pg_catalog"."uuid" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__placed_general_lang_pk_6ovvuwt7ye" PRIMARY KEY ("general", "lang"),
   CONSTRAINT "e_1_derived" CHECK (("pg_catalog"."translate"("pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lang", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'::"pg_catalog"."text", 'abcdefghijklmnopqrstuvwxyz'::"pg_catalog"."text") = "value" AND "value" <> ''::"pg_catalog"."text") IS TRUE)
 );
@@ -1629,7 +1629,7 @@ CREATE TABLE "qti"."placed_general_lang" (
 CREATE TABLE "qti"."placed_hottext" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__placed_hottext_pk_6ecbggsuft" PRIMARY KEY ("instance", "node"),
@@ -1641,7 +1641,7 @@ CREATE TABLE "qti"."placed_id" (
   "assembly_kind" "qti"."node_kind" NOT NULL,
   "copy" "pg_catalog"."uuid" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "id" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "id" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "owner" "pg_catalog"."uuid" NOT NULL,
@@ -1652,7 +1652,7 @@ CREATE TABLE "qti"."placed_id" (
 CREATE TABLE "qti"."placed_idref" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "id" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "id" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__placed_idref_pk_457qtpabdq" PRIMARY KEY ("instance", "id")
 );
@@ -1674,7 +1674,7 @@ CREATE TABLE "qti"."placed_variable_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -1690,7 +1690,7 @@ CREATE TABLE "qti"."placed_xml_lang" (
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__placed_xml_lang_pk_4qybdb3rzq" PRIMARY KEY ("instance", "node")
 );
@@ -1702,7 +1702,7 @@ CREATE TABLE "qti"."printed_variable_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__printed_variable_ref_pk_4a3jyykasc" PRIMARY KEY ("node", "attribute"),
@@ -1729,7 +1729,7 @@ CREATE TABLE "qti"."processing" (
 CREATE TABLE "qti"."processing_template" (
   "node" "pg_catalog"."uuid" NOT NULL,
   "template" "qti"."rp_template" NOT NULL,
-  "uri" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "uri" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__processing_template_pk_rtwy6lzg2y" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK ((NOT "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)CC2\_map\_response(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND NOT "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)CC2\_match(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND NOT "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)CC2\_match\_basic(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND NOT "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)map\_response(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND NOT "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)map\_response\_point(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND NOT "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)match\_correct(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "template" = 0::smallint OR "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)CC2\_map\_response(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "template" = 6::smallint OR "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)CC2\_match(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "template" = 4::smallint OR "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)CC2\_match\_basic(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "template" = 5::smallint OR "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)map\_response(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "template" = 2::smallint OR "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)map\_response\_point(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "template" = 3::smallint OR "uri" ~ '\A[\u0009\u000A\u000D ]*(?:https\:\/\/purl\.imsglobal\.org\/spec\/qti\/v3p0\/rptemplates\/|https\:\/\/www\.imsglobal\.org\/question\/qti\_v3p0\/rptemplates\/)match\_correct(?:\.xml)?[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "template" = 1::smallint) IS TRUE),
   CONSTRAINT "__processing_template_key_node_uri_bjs4cad3ta" UNIQUE NULLS DISTINCT ("node", "uri")
@@ -1768,23 +1768,23 @@ CREATE TABLE "qti"."reading" (
   "declared" boolean NOT NULL,
   "form" "qti"."reading_form" NOT NULL,
   "found" boolean NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "lookup_document" "pg_catalog"."uuid" NOT NULL,
   "mapped" boolean NOT NULL,
   "named" "pg_catalog"."uuid" NOT NULL,
   "named_kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "number" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "number" "qti"."__text_pwaizaq6lx" NOT NULL,
   "placements" "qti"."__domain_gfw43vigph" NOT NULL,
   "replaced" boolean NOT NULL,
   "resource_type" "qti"."resource_type" NOT NULL,
   "role" "qti"."reference_role" NOT NULL,
-  "scope" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "scope" "qti"."__text_pwaizaq6lx" NOT NULL,
   "source" "qti"."reading_source" NOT NULL,
   "split" "qti"."__domain_gfw43vigph" NOT NULL,
   "time_dependent" boolean NOT NULL,
-  "variable" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "variable" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__reading_pk_u7lnbedobx" PRIMARY KEY ("assembly", "node", "attribute", "form", "split"),
   CONSTRAINT "e_1_derived" CHECK ((("source" IN (1::smallint, 2::smallint) OR (("named_kind" IN (300::smallint, 110::smallint, 112::smallint) AND "declaration_kind" = 0::smallint AND "form" = 1::smallint AND "variable" = 'QTI_CONTEXT'::"pg_catalog"."text" OR "named_kind" IN (300::smallint, 110::smallint, 112::smallint) AND "declaration_kind" = 1::smallint AND "form" = 1::smallint AND "variable" = 'duration'::"pg_catalog"."text" OR ("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) AND "declaration_kind" = 0::smallint AND "variable" = 'QTI_CONTEXT'::"pg_catalog"."text" OR ("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) AND "declaration_kind" = 3::smallint AND "variable" = 'completionStatus'::"pg_catalog"."text" OR ("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) AND "declaration_kind" = 1::smallint AND "variable" = 'duration'::"pg_catalog"."text" OR ("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) AND "declaration_kind" = 1::smallint AND "variable" = 'numAttempts'::"pg_catalog"."text" OR "declaration_kind" = 0::smallint AND "form" = 0::smallint AND "variable" = 'QTI_CONTEXT'::"pg_catalog"."text" OR "declaration_kind" = 1::smallint AND "form" = 0::smallint AND "variable" = 'duration'::"pg_catalog"."text") AND "source" = 3::smallint OR "declaration_kind" = 3::smallint AND "source" = 0::smallint) AND "decl_base_type" = 11::smallint AND "decl_cardinality" = 0::smallint AND "declaration" = "lookup_document") AND (NOT ("named_kind" IN (300::smallint, 110::smallint, 112::smallint) AND "form" = 1::smallint AND "found" = true AND "variable" = 'duration'::"pg_catalog"."text" OR "variable" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'completionStatus'::"pg_catalog"."text", 'duration'::"pg_catalog"."text", 'numAttempts'::"pg_catalog"."text") AND ("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) OR "variable" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'duration'::"pg_catalog"."text") AND "form" = 0::smallint) AND "declared" = false AND "mapped" = false AND "source" = 0::smallint OR ("named_kind" IN (300::smallint, 110::smallint, 112::smallint) AND "form" = 1::smallint AND "found" = true AND "variable" = 'duration'::"pg_catalog"."text" OR "variable" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'completionStatus'::"pg_catalog"."text", 'duration'::"pg_catalog"."text", 'numAttempts'::"pg_catalog"."text") AND ("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) OR "variable" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'duration'::"pg_catalog"."text") AND "form" = 0::smallint) AND "declared" = false AND "mapped" = false AND "source" = 3::smallint OR "declared" = false AND "mapped" = true AND "source" = 2::smallint OR "declared" = true AND "source" = 1::smallint) AND ("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint OR "mapped" = false) AND ((("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) AND "resource_type" = 3::smallint OR "form" = 0::smallint) OR "declared" = false) AND ((("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) AND "resource_type" = 3::smallint) AND "source" = 3::smallint AND "variable" = 'duration'::"pg_catalog"."text" OR "time_dependent" = false) AND ("number" ~ '\A[0-9]+\Z'::"pg_catalog"."text" AND ("pg_catalog"."char_length"("identifier") = "pg_catalog"."char_length"("scope" || '.'::"pg_catalog"."text" || "number" || '.'::"pg_catalog"."text")::bigint + "pg_catalog"."char_length"("variable")::bigint AND "pg_catalog"."starts_with"("identifier", "scope" || '.'::"pg_catalog"."text" || "number" || '.'::"pg_catalog"."text") AND "pg_catalog"."right"("identifier", "pg_catalog"."char_length"("variable")) = "variable") AND "form" = 2::smallint AND "role" = 0::smallint AND "split" > 0::bigint OR ("pg_catalog"."char_length"("identifier") = "pg_catalog"."char_length"("scope" || '.'::"pg_catalog"."text")::bigint + "pg_catalog"."char_length"("variable")::bigint AND "pg_catalog"."starts_with"("identifier", "scope" || '.'::"pg_catalog"."text") AND "pg_catalog"."right"("identifier", "pg_catalog"."char_length"("variable")) = "variable") AND "form" = 1::smallint AND "number" = ''::"pg_catalog"."text" AND "role" = 0::smallint AND "split" > 0::bigint OR "assembly" = "lookup_document" AND "assembly" = "named" AND "form" = 0::smallint AND "found" = true AND "identifier" = "variable" AND "named_kind" = 302::smallint AND "number" = ''::"pg_catalog"."text" AND "placements" = 1::bigint AND "replaced" = false AND "resource_type" = 0::smallint AND "role" = 0::smallint AND "scope" = ''::"pg_catalog"."text" AND "split" = 0::bigint OR "form" = 3::smallint AND "identifier" = "scope" AND "number" = ''::"pg_catalog"."text" AND "role" = 1::smallint AND "split" = 0::bigint AND "variable" = ''::"pg_catalog"."text")) IS TRUE),
   CONSTRAINT "item_duration" CHECK ((NOT ((("form" IN (2::smallint, 1::smallint) AND "found" = true AND "named_kind" = 109::smallint) AND "resource_type" = 3::smallint) AND "source" = 3::smallint AND "variable" = 'duration'::"pg_catalog"."text") OR "time_dependent" = true) IS TRUE),
@@ -1797,11 +1797,11 @@ CREATE TABLE "qti"."reading" (
 
 CREATE TABLE "qti"."record_field" (
   "base_type" "qti"."base_type" NOT NULL,
-  "base_type_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "base_type_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "identifier_lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "identifier_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "identifier_trail" "qti"."__text_7dfilirtp3" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
@@ -1821,12 +1821,12 @@ CREATE TABLE "qti"."reference" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "params" "qti"."__text_k5kwygzatl" NOT NULL,
   "scope" "qti"."href_scope" NOT NULL,
-  "target" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "target" "qti"."__text_pwaizaq6lx" NOT NULL,
   "trail" "qti"."__text_7dfilirtp3" NOT NULL,
   CONSTRAINT "__reference_pk_2o4vr3munh" PRIMARY KEY ("node", "name"),
   CONSTRAINT "e_1_derived" CHECK (((NOT "target" ~ '\A(?:[A-Za-z][\+\-\.0-9A-Za-z]*\:|\/)'::"pg_catalog"."text" OR "scope" = 1::smallint) AND "target" ~ '\A[\u0001-\"\$-\>\@-\U0010FFFF]*\Z'::"pg_catalog"."text" AND ("scope" <> 2::smallint OR "target" = ''::"pg_catalog"."text") AND ("pg_catalog"."char_length"("lexical") = "pg_catalog"."char_length"("lead" || "target" || "params")::bigint + "pg_catalog"."char_length"("trail")::bigint AND "pg_catalog"."starts_with"("lexical", "lead" || "target" || "params") AND "pg_catalog"."right"("lexical", "pg_catalog"."char_length"("trail")) = "trail")) IS TRUE),
@@ -1849,7 +1849,7 @@ CREATE TABLE "qti"."reference_path" (
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__reference_path_pk_p3zpayjgij" PRIMARY KEY ("node", "name"),
   CONSTRAINT "e_1_derived" CHECK (("path" ~ '\A(?:(?:[\u0001-\-0-\U0010FFFF][\u0001-\.0-\U0010FFFF]*|\.[\u0001-\-0-\U0010FFFF][\u0001-\.0-\U0010FFFF]*|\.\.[\u0001-\.0-\U0010FFFF]+)(?:\/(?:[\u0001-\-0-\U0010FFFF][\u0001-\.0-\U0010FFFF]*|\.[\u0001-\-0-\U0010FFFF][\u0001-\.0-\U0010FFFF]*|\.\.[\u0001-\.0-\U0010FFFF]+)?)*)?\Z'::"pg_catalog"."text") IS TRUE),
   CONSTRAINT "__reference_path_key_node_package_path_name_6se3gqffks" UNIQUE NULLS DISTINCT ("node", "package", "path", "name"),
@@ -1857,16 +1857,16 @@ CREATE TABLE "qti"."reference_path" (
 );
 
 CREATE TABLE "qti"."reference_segment" (
-  "after" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "after" "qti"."__text_pwaizaq6lx" NOT NULL,
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "at" "qti"."__domain_gfw43vigph" NOT NULL,
   "attribute" "qti"."attribute_name" NOT NULL,
-  "before" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "before" "qti"."__text_pwaizaq6lx" NOT NULL,
   "digit" boolean NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "piece" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "piece" "qti"."__text_pwaizaq6lx" NOT NULL,
   "separator" "qti"."__text_mqbstvk5ay" NOT NULL,
-  "token" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "token" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__reference_segment_pk_iwtjfmvehp" PRIMARY KEY ("assembly", "node", "attribute", "at"),
   CONSTRAINT "__reference_segment_check_assembled_reference_ckvuzy2vz5" CHECK ((("at" > 0::bigint OR "before" = ''::"pg_catalog"."text") AND ("pg_catalog"."char_length"("after") = "pg_catalog"."char_length"("before")::bigint + "pg_catalog"."char_length"("token")::bigint AND "pg_catalog"."starts_with"("after", "before") AND "pg_catalog"."right"("after", "pg_catalog"."char_length"("token")) = "token")) IS TRUE),
   CONSTRAINT "e_1_derived" CHECK ((((NOT "piece" ~ '\A[0-9]+\Z'::"pg_catalog"."text" AND "digit" = false OR "piece" ~ '\A[0-9]+\Z'::"pg_catalog"."text" AND "digit" = true) AND "at" > 0::bigint AND "separator" = '.'::"pg_catalog"."text" OR "at" = 0::bigint AND "digit" = false AND "separator" = ''::"pg_catalog"."text") AND "piece" ~ '\A[\u0001-\-\/-\U0010FFFF]*\Z'::"pg_catalog"."text" AND ("pg_catalog"."char_length"("token") = "pg_catalog"."char_length"("separator")::bigint + "pg_catalog"."char_length"("piece")::bigint AND "pg_catalog"."starts_with"("token", "separator") AND "pg_catalog"."right"("token", "pg_catalog"."char_length"("piece")) = "piece")) IS TRUE),
@@ -1890,16 +1890,16 @@ CREATE TABLE "qti"."referring_document" (
 
 CREATE TABLE "qti"."resource" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "manifest_identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "manifest_identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "type" "qti"."resource_type" NOT NULL,
-  "type_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "type_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__resource_pk_yrfq7dxmhs" PRIMARY KEY ("node"),
   CONSTRAINT "__resource_key_package_identifier_fsvcnui6cz" UNIQUE NULLS DISTINCT ("package", "identifier"),
@@ -1916,7 +1916,7 @@ CREATE TABLE "qti"."resource" (
 
 CREATE TABLE "qti"."resource_file" (
   "files" "qti"."__domain_gfw43vigph" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "resource" "pg_catalog"."uuid" NOT NULL,
   "scope" "qti"."href_scope" NOT NULL,
   CONSTRAINT "__resource_file_pk_mvgqsw777g" PRIMARY KEY ("resource", "scope", "path"),
@@ -1925,10 +1925,10 @@ CREATE TABLE "qti"."resource_file" (
 );
 
 CREATE TABLE "qti"."resource_href" (
-  "href" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "href" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "scope" "qti"."href_scope" NOT NULL,
   "type" "qti"."resource_type" NOT NULL,
   CONSTRAINT "__resource_href_pk_fzjlywz4ma" PRIMARY KEY ("node"),
@@ -1949,7 +1949,7 @@ CREATE TABLE "qti"."resource_lom_general" (
 CREATE TABLE "qti"."resource_lom_language_set" (
   "carriers" "qti"."__domain_gfw43vigph" NOT NULL,
   "general" "pg_catalog"."uuid" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__resource_lom_language_set_pk_shj4yzlqx6" PRIMARY KEY ("general", "lang"),
   CONSTRAINT "e_1_derived" CHECK (("carriers" > 0::bigint) IS TRUE),
   CONSTRAINT "__resource_lom_language_set_key_general_lang_lbylbuxh4e" UNIQUE NULLS DISTINCT ("general", "lang", "carriers")
@@ -1957,12 +1957,12 @@ CREATE TABLE "qti"."resource_lom_language_set" (
 
 CREATE TABLE "qti"."rounding" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "figures" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "figures_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "figures" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "figures_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "figures_value" bigint NOT NULL,
   "integer" boolean NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "mode" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "mode" "qti"."__text_pwaizaq6lx" NOT NULL,
   "mode_written" boolean NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -2014,7 +2014,7 @@ CREATE TABLE "qti"."section" (
 CREATE TABLE "qti"."section_context_name" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__section_context_name_pk_igjy57vlgf" PRIMARY KEY ("node", "attribute"),
@@ -2029,7 +2029,7 @@ CREATE TABLE "qti"."section_context_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -2041,7 +2041,7 @@ CREATE TABLE "qti"."section_context_ref" (
 CREATE TABLE "qti"."section_feedback_name" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__section_feedback_name_pk_o7nmu5xh6t" PRIMARY KEY ("node", "attribute"),
@@ -2056,7 +2056,7 @@ CREATE TABLE "qti"."section_feedback_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -2071,9 +2071,9 @@ CREATE TABLE "qti"."section_identifier" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "before" "qti"."__text_7dfilirtp3" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "root_kind" "qti"."node_kind" NOT NULL,
   CONSTRAINT "__section_identifier_pk_beudhag243" PRIMARY KEY ("node"),
@@ -2113,7 +2113,7 @@ CREATE TABLE "qti"."section_ordering" (
 CREATE TABLE "qti"."section_printed_name" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__section_printed_name_pk_7vxkv7soyl" PRIMARY KEY ("node", "attribute"),
@@ -2128,7 +2128,7 @@ CREATE TABLE "qti"."section_printed_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -2163,7 +2163,7 @@ CREATE TABLE "qti"."section_selection" (
   "required" "qti"."__domain_gfw43vigph" NOT NULL,
   "select_form" "qti"."__text_xisvziygi3" NOT NULL,
   "select_lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "select_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "select_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "select_trail" "qti"."__text_7dfilirtp3" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
@@ -2181,7 +2181,7 @@ CREATE TABLE "qti"."section_selection" (
 CREATE TABLE "qti"."section_template_name" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__section_template_name_pk_cq77acpsnw" PRIMARY KEY ("node", "attribute"),
@@ -2196,7 +2196,7 @@ CREATE TABLE "qti"."section_template_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "instance" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -2220,7 +2220,7 @@ CREATE TABLE "qti"."site" (
   "parent_loose_chain" boolean NOT NULL,
   "parent_mixes" boolean NOT NULL,
   "part" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "replaced" boolean NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "target" "pg_catalog"."uuid" NOT NULL,
@@ -2236,9 +2236,9 @@ CREATE TABLE "qti"."site" (
 );
 
 CREATE TABLE "qti"."slider" (
-  "lower" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lower" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "upper" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "upper" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__slider_pk_7wkhsy5z5i" PRIMARY KEY ("node"),
   CONSTRAINT "slider_bounds" CHECK (("lower" = 'NaN'::"pg_catalog"."text" OR "upper" = 'NaN'::"pg_catalog"."text" OR CASE WHEN "lower" ~ '\A(?:[\+\-]?(?:0*(?:[1-9][0-9]{0,14}|0)(?:\.(?:[0-9]{0,14}|[0-9]{15}0*))?|\.(?:[0-9]{1,14}|[0-9]{15}0*))(?:[Ee][\+\-]?0*(?:1[0-9]{2}|[1-9][0-9]?|2[0-8][0-9]|29[0-2]|293|0))?|\-?INF|NaN)\Z'::"pg_catalog"."text" THEN "lower"::double precision ELSE '-Infinity'::double precision END <= CASE WHEN "upper" ~ '\A(?:[\+\-]?(?:0*(?:[1-9][0-9]{0,14}|0)(?:\.(?:[0-9]{0,14}|[0-9]{15}0*))?|\.(?:[0-9]{1,14}|[0-9]{15}0*))(?:[Ee][\+\-]?0*(?:1[0-9]{2}|[1-9][0-9]?|2[0-8][0-9]|29[0-2]|293|0))?|\-?INF|NaN)\Z'::"pg_catalog"."text" THEN "upper"::double precision ELSE 'Infinity'::double precision END) IS TRUE),
   CONSTRAINT "__slider_key_node_lower_zht6c5qbar" UNIQUE NULLS DISTINCT ("node", "lower"),
@@ -2248,11 +2248,11 @@ CREATE TABLE "qti"."slider" (
 CREATE TABLE "qti"."ssml_attribute" (
   "fragment" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "refers" "qti"."node_kind" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__ssml_attribute_pk_j5zwdqvfvr" PRIMARY KEY ("node", "name"),
   CONSTRAINT "e_1_derived" CHECK ((("kind" IN (617::smallint, 632::smallint) AND "kind" = "refers" OR "kind" = 633::smallint AND "refers" = 617::smallint OR "kind" = 618::smallint AND "refers" = 632::smallint) AND "pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = "value") IS TRUE),
   CONSTRAINT "__ssml_attribute_key_node_name_kind_lexical_4byzgm55by" UNIQUE NULLS DISTINCT ("node", "name", "kind", "lexical")
@@ -2275,7 +2275,7 @@ CREATE TABLE "qti"."ssml_scope" (
 CREATE TABLE "qti"."statistic_date" (
   "day" "qti"."__text_psn65t7m7e" NOT NULL,
   "lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "trail" "qti"."__text_7dfilirtp3" NOT NULL,
   "date" "qti"."__domain_jov5z554io" GENERATED ALWAYS AS ("pg_catalog"."make_date"("pg_catalog"."substring"("day", 1, 4)::integer, "pg_catalog"."substring"("day", 6, 2)::integer, "pg_catalog"."substring"("day", 9, 2)::integer)::"qti"."__domain_jov5z554io") STORED NOT NULL,
@@ -2286,7 +2286,7 @@ CREATE TABLE "qti"."statistic_date" (
 
 CREATE TABLE "qti"."stimulus_ref" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -2299,7 +2299,7 @@ CREATE TABLE "qti"."stimulus_ref" (
 
 CREATE TABLE "qti"."table_header" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "id" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "id" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "owner" "pg_catalog"."uuid" NOT NULL,
   "table" "pg_catalog"."uuid" NOT NULL,
@@ -2332,9 +2332,9 @@ CREATE TABLE "qti"."template_default" (
   "item_document" "pg_catalog"."uuid" NOT NULL,
   "item_ref" "pg_catalog"."uuid" NOT NULL,
   "lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "template" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "template" "qti"."__text_pwaizaq6lx" NOT NULL,
   "trail" "qti"."__text_7dfilirtp3" NOT NULL,
   CONSTRAINT "__template_default_pk_iqt4z54xsd" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("template" ~ '\A[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*\Z'::"pg_catalog"."text" AND ("pg_catalog"."char_length"("lexical") = "pg_catalog"."char_length"("lead" || "template")::bigint + "pg_catalog"."char_length"("trail")::bigint AND "pg_catalog"."starts_with"("lexical", "lead" || "template") AND "pg_catalog"."right"("lexical", "pg_catalog"."char_length"("trail")) = "trail")) IS TRUE),
@@ -2351,7 +2351,7 @@ CREATE TABLE "qti"."template_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__template_ref_pk_by3fsxvspr" PRIMARY KEY ("node", "attribute"),
@@ -2364,7 +2364,7 @@ CREATE TABLE "qti"."test_document" (
   "names" "qti"."__domain_gfw43vigph" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_v67sggqx7c" NOT NULL,
+  "path" "qti"."__text_ca4i7j77gp" NOT NULL,
   "root_kind" "qti"."node_kind" NOT NULL,
   "rules" "qti"."__domain_gfw43vigph" NOT NULL,
   "sites" "qti"."__domain_gfw43vigph" NOT NULL,
@@ -2378,7 +2378,7 @@ CREATE TABLE "qti"."test_document" (
 
 CREATE TABLE "qti"."test_flag" (
   "kind" "qti"."node_kind" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent_kind" "qti"."node_kind" NOT NULL,
@@ -2393,7 +2393,7 @@ CREATE TABLE "qti"."test_flag" (
 CREATE TABLE "qti"."test_reference" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "role" "qti"."reference_role" NOT NULL,
@@ -2406,11 +2406,11 @@ CREATE TABLE "qti"."test_reference" (
 
 CREATE TABLE "qti"."test_token" (
   "lead" "qti"."__text_7dfilirtp3" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "name" "qti"."attribute_name" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "trail" "qti"."__text_7dfilirtp3" NOT NULL,
-  "value" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__test_token_pk_iq46t3wn7h" PRIMARY KEY ("node", "name"),
   CONSTRAINT "e_1_derived" CHECK (("value" ~ '\A(?:[\!-\uFFFD\U00010000-\U0010FFFF][\u0009\u000A\u000D -\uFFFD\U00010000-\U0010FFFF]*[\!-\uFFFD\U00010000-\U0010FFFF]|[\!-\uFFFD\U00010000-\U0010FFFF])\Z'::"pg_catalog"."text" AND ("pg_catalog"."char_length"("lexical") = "pg_catalog"."char_length"("lead" || "value")::bigint + "pg_catalog"."char_length"("trail")::bigint AND "pg_catalog"."starts_with"("lexical", "lead" || "value") AND "pg_catalog"."right"("lexical", "pg_catalog"."char_length"("trail")) = "trail")) IS TRUE),
   CONSTRAINT "__test_token_key_node_name_lexical_dzjp5dvfu4" UNIQUE NULLS DISTINCT ("node", "name", "lexical"),
@@ -2423,10 +2423,10 @@ CREATE TABLE "qti"."text_idref" (
   "before" "qti"."__text_7dfilirtp3" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "piece" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "pieces_after" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "pieces_was" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "token" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "piece" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "pieces_after" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "pieces_was" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "token" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__text_idref_pk_7k524ffk7d" PRIMARY KEY ("node", "at"),
   CONSTRAINT "__text_idref_key_node_at_pieces_after_oea6gb7ncz" UNIQUE NULLS DISTINCT ("node", "at", "pieces_after"),
   CONSTRAINT "__text_idref_check_identity_text_idrefs_concat_fold_dqvc7tlii7" CHECK ((("at" > 0::bigint OR "pieces_was" = ''::"pg_catalog"."text") AND ("pg_catalog"."char_length"("pieces_after") = "pg_catalog"."char_length"("pieces_was")::bigint + "pg_catalog"."char_length"("piece")::bigint AND "pg_catalog"."starts_with"("pieces_after", "pieces_was") AND "pg_catalog"."right"("pieces_after", "pg_catalog"."char_length"("piece")) = "piece")) IS TRUE),
@@ -2434,9 +2434,9 @@ CREATE TABLE "qti"."text_idref" (
 );
 
 CREATE TABLE "qti"."tolerance" (
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "token_text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "token_text" "qti"."__text_pwaizaq6lx" NOT NULL,
   "tokens" "qti"."__domain_gfw43vigph" NOT NULL,
   CONSTRAINT "__tolerance_pk_awo6y43rfn" PRIMARY KEY ("node"),
   CONSTRAINT "__tolerance_check_tolerance_tokens_concat_fold_ckdsh2xsd4" CHECK (("tokens" > 0::bigint OR "token_text" = ''::"pg_catalog"."text") IS TRUE),
@@ -2451,10 +2451,10 @@ CREATE TABLE "qti"."tolerance_token" (
   "at" "qti"."__domain_gfw43vigph" NOT NULL,
   "before" "qti"."__text_7dfilirtp3" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "piece" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "pieces_after" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "pieces_was" "qti"."__text_e7vshfjm6c" NOT NULL,
-  "token" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "piece" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "pieces_after" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "pieces_was" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "token" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__tolerance_token_pk_o33pihaiia" PRIMARY KEY ("node", "at"),
   CONSTRAINT "__tolerance_token_key_node_at_pieces_after_eplaoh4iut" UNIQUE NULLS DISTINCT ("node", "at", "pieces_after"),
   CONSTRAINT "__tolerance_token_check_tolerance_tokens_concat_fold_rqagnlj4gp" CHECK ((("at" > 0::bigint OR "pieces_was" = ''::"pg_catalog"."text") AND ("pg_catalog"."char_length"("pieces_after") = "pg_catalog"."char_length"("pieces_was")::bigint + "pg_catalog"."char_length"("piece")::bigint AND "pg_catalog"."starts_with"("pieces_after", "pieces_was") AND "pg_catalog"."right"("pieces_after", "pg_catalog"."char_length"("piece")) = "piece")) IS TRUE),
@@ -2464,9 +2464,9 @@ CREATE TABLE "qti"."tolerance_token" (
 
 CREATE TABLE "qti"."usage_value" (
   "base_type" "qti"."base_type" NOT NULL,
-  "base_type_lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "base_type_lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "text" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__usage_value_pk_i2ykr2qbnf" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK ((("qti"."__constant_wrlwssqvsp"())[NULLIF("pg_catalog"."substring"("qti"."__constant_axo5gsmdvj"(), "base_type" * 4 + 1, 4)::integer, 0) - 1 + 1] = "base_type_lexical" AND "base_type" <> 11::smallint) IS TRUE),
   CONSTRAINT "usage_typed_value" CHECK (("base_type" IN (10::smallint, 11::smallint, 3::smallint) OR "text" ~ CASE ("qti"."__constant_hh7nvhrixk"())[NULLIF("pg_catalog"."substring"("qti"."__constant_is3nwj326d"(), "base_type" * 4 + 1, 4)::integer, 0) - 1 + 1] WHEN '^(?:[\t\n\r -\uD7FF\uE000-\uFFFD𐀀-􏿿]*)$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D -\uFFFD\U00010000-\U0010FFFF]*\Z'::"pg_catalog"."text" WHEN '^(?:[\t\n\r ]*(?:(?:[A-Za-z][+\-.0-9A-Za-z]*:(?:[\t\n\r ]+|[!"$&-.0-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*|(?:[A-Za-z][+\-.0-9A-Za-z]*:)?(?:(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)+|//(?:(?:[\t\n\r -"$&-.0->A-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*(?:::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)?|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)(?::[0-9]{1,3}(?:\.[0-9]{1,3}){3})?|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,4})?::(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\](?::[0-9]*)?(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*)(?:\?(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)?|(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:\?(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)?)(?:#(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|#)|#(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|#|[A-Za-z][+\-.0-9A-Za-z]*:(?:[\t\n\r ]+|[!"$&-.0-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|[A-Za-z][+\-.0-9A-Za-z]*:(?:[!"$&-.0-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|(?:[A-Za-z][+\-.0-9A-Za-z]*:)?(?:(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)+|//(?:(?:[\t\n\r -"$&-.0->A-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*(?:::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)?|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)(?::[0-9]{1,3}(?:\.[0-9]{1,3}){3})?|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,4})?::(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\](?::[0-9]*)?(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*)(?:\?(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|\?)|(?:[A-Za-z][+\-.0-9A-Za-z]*:)?(?:(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|/)|//(?:(?:[\t\n\r -"$&-.0->A-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*(?:::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)?|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)(?::[0-9]{1,3}(?:\.[0-9]{1,3}){3})?|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,4})?::(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\](?::[0-9]*)?(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|/)|//(?:(?:[\t\n\r -"$&-.0->A-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*(?:::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)?|::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4})*)?)(?::[0-9]{1,3}(?:\.[0-9]{1,3}){3})?|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,4})?::(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\](?::[0-9]*)?)|(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:\?(?:[\t\n\r -"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|\?)|(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*)*(?:/(?:[\t\n\r -"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-.0->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|/)|(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})(?:[\t\n\r -"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})*(?:[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})|[!"$&-.0-9;->@-Z\\\^-\uD7FF\uE000-\uFFFD𐀀-􏿿]|%[0-9A-Fa-f]{2})[\t\n\r ]*|[\t\n\r ]*)$'::"pg_catalog"."text" THEN '\A(?:[\u0009\u000A\u000D ]*|[\u0009\u000A\u000D ]*(?:(?:[A-Za-z][\+\-\.0-9A-Za-z]*\:)?(?:(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)+|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>A-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*\@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4}){0,4})?\:\:(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])|(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*(?:\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)?|\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)(?:\:[0-9]{1,3}(?:\.[0-9]{1,3}){3})?)\](?:\:[0-9]*)?(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*)(?:\?(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|\?)|(?:[A-Za-z][\+\-\.0-9A-Za-z]*\:)?(?:(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|\/)|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>A-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*\@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4}){0,4})?\:\:(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])|(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*(?:\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)?|\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)(?:\:[0-9]{1,3}(?:\.[0-9]{1,3}){3})?)\](?:\:[0-9]*)?(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|\/)|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>A-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*\@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4}){0,4})?\:\:(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])|(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*(?:\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)?|\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)(?:\:[0-9]{1,3}(?:\.[0-9]{1,3}){3})?)\](?:\:[0-9]*)?)|(?:(?:[A-Za-z][\+\-\.0-9A-Za-z]*\:)?(?:(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)+|\/\/(?:(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>A-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*\@)?\[(?:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4}){0,4})?\:\:(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\.(?:[01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])|(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*(?:\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)?|\:\:(?:[0-9A-Fa-f]{1,4}(?:\:[0-9A-Fa-f]{1,4})*)?)(?:\:[0-9]{1,3}(?:\.[0-9]{1,3}){3})?)\](?:\:[0-9]*)?(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*)(?:\?(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*)?|(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\?(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*)?|[A-Za-z][\+\-\.0-9A-Za-z]*\:(?:[\u0009\u000A\u000D ]+|\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*)(?:\#(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|\#)|(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|\/)|(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*(?:\/(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\.0-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])*)*(?:\?(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|\?)|\#(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|\%[0-9A-Fa-f]{2}|[A-Za-z][\+\-\.0-9A-Za-z]*\:(?:[\u0009\u000A\u000D ]+|\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-Z\\\^-\uFFFD\U00010000-\U0010FFFF])(?:\%[0-9A-Fa-f]{2}|[\u0009\u000A\u000D -\"\$\&-\uFFFD\U00010000-\U0010FFFF])*(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\uFFFD\U00010000-\U0010FFFF])|[A-Za-z][\+\-\.0-9A-Za-z]*\:(?:\%[0-9A-Fa-f]{2}|[\!\"\$\&-\.0-Z\\\^-\uFFFD\U00010000-\U0010FFFF])|[\!-\$\&-\.0-9\;-\>\@-Z\\\^-\uFFFD\U00010000-\U0010FFFF])[\u0009\u000A\u000D ]*)\Z'::"pg_catalog"."text" WHEN '^(?:[\t\n\r ]*(?:[+\-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+\-]?[0-9]+)?|-?INF|NaN)[\t\n\r ]*)$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*(?:[\+\-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][\+\-]?[0-9]+)?|\-?INF|NaN)[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^(?:[\t\n\r ]*(?:[+\-]?0+|\+?0*[1-9][0-9]*|-0*[1-9][0-9]*)[\t\n\r ]*)$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*(?:[\+\-]?0+|\+?0*[1-9][0-9]*|\-0*[1-9][0-9]*)[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^(?:[\t\n\r ]*[A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-.0-9A-Z_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\t\n\r ]*)$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^[\t\n\r ]*(?:true|false)[\t\n\r ]*$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*(?:false|true)[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^[\t\n\r ]*[+\-]?[0-9]+[\t\n\r ][+\-]?[0-9]+[\t\n\r ]*$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*[\+\-]?[0-9]+[\u0009\u000A\u000D ][\+\-]?[0-9]+[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" WHEN '^[\t\n\r ]*[A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}][\-.0-9\u{B7}\u{300}-\u{36F}\u{203F}-\u{2040}A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}]*[\t\n\r ][A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}][\-.0-9\u{B7}\u{300}-\u{36F}\u{203F}-\u{2040}A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}]*[\t\n\r ]*$'::"pg_catalog"."text" THEN '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*[\u0009\u000A\u000D ][A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" ELSE ("qti"."__constant_hh7nvhrixk"())[NULLIF("pg_catalog"."substring"("qti"."__constant_is3nwj326d"(), "base_type" * 4 + 1, 4)::integer, 0) - 1 + 1] END) IS TRUE),
@@ -2482,7 +2482,7 @@ CREATE TABLE "qti"."value" (
   "parent" "pg_catalog"."uuid" NOT NULL,
   "set_base_type" "qti"."base_type" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "text" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "text" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__value_pk_ebpp4u5fvv" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("base_type" = "set_base_type" OR "set_base_type" = 11::smallint) IS TRUE),
@@ -2497,7 +2497,7 @@ CREATE TABLE "qti"."value_set" (
   "element_children" "qti"."__domain_gfw43vigph" NOT NULL,
   "elements" "qti"."__domain_gfw43vigph" NOT NULL,
   "fields" "qti"."__domain_gfw43vigph" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
@@ -2517,7 +2517,7 @@ CREATE TABLE "qti"."var_ref" (
   "declaration" "pg_catalog"."uuid" NOT NULL,
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__var_ref_pk_dx44gyeg2a" PRIMARY KEY ("node", "attribute"),
@@ -2533,7 +2533,7 @@ CREATE TABLE "qti"."variable_lookup" (
   "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "declared" boolean NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
-  "name" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "name" "qti"."__text_pwaizaq6lx" NOT NULL,
   CONSTRAINT "__variable_lookup_pk_7i6ghyoadx" PRIMARY KEY ("document", "name"),
   CONSTRAINT "e_1_derived" CHECK (("base_type" = 11::smallint AND "cardinality" = 0::smallint AND "declaration" = "document" AND "declaration_kind" = 3::smallint AND "declared" = false OR "declaration" <> "document" AND "declared" = true) IS TRUE),
   CONSTRAINT "__variable_lookup_key_document_name_declaration_ijt33fj4xq" UNIQUE NULLS DISTINCT ("document", "name", "declaration", "declaration_kind", "base_type", "cardinality"),
@@ -2546,9 +2546,9 @@ CREATE TABLE "qti"."variable_mapping" (
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
-  "source" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "source" "qti"."__text_pwaizaq6lx" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "target" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "target" "qti"."__text_pwaizaq6lx" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__variable_mapping_pk_6whxnfgvwi" PRIMARY KEY ("node"),
   CONSTRAINT "__variable_mapping_key_parent_target_prjfu4cap7" UNIQUE NULLS DISTINCT ("parent", "target"),
@@ -2572,10 +2572,10 @@ CREATE TABLE "qti"."variable_ref" (
   "element_cardinality" "qti"."value_cardinality" NOT NULL,
   "held_base" "qti"."value_base" NOT NULL,
   "held_cardinality" "qti"."value_cardinality" NOT NULL,
-  "identifier" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "language" "qti"."language" NOT NULL,
-  "lexical" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "resolution" "qti"."reference_resolution" NOT NULL,
@@ -2599,7 +2599,7 @@ CREATE TABLE "qti"."variable_ref" (
 
 CREATE TABLE "qti"."xml_lang" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "lang" "qti"."__text_e7vshfjm6c" NOT NULL,
+  "lang" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__xml_lang_pk_s4ras7seo3" PRIMARY KEY ("node"),
   CONSTRAINT "__xml_lang_key_node_document_lang_mxvinzmzpt" UNIQUE NULLS DISTINCT ("node", "document", "lang")
@@ -2654,10 +2654,6 @@ ALTER TABLE "qti"."assembled_reference" ADD COLUMN "__pred_placements_wtijf47h4h
 ALTER TABLE "qti"."assembled_reference" ADD COLUMN "__pred_readings_lijgqabw6j" bigint GENERATED ALWAYS AS (CASE WHEN "readings" > 0::bigint THEN "readings"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."assembled_reference" ADD COLUMN "__pred_segments_lgkpa2wrsx" bigint GENERATED ALWAYS AS (CASE WHEN "segments" > 0::bigint THEN "segments"::numeric - (1::bigint)::numeric END) STORED;
-
-ALTER TABLE "qti"."assessment_object" ADD COLUMN "__lang_vscshxypk3" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "langs" = 1::bigint THEN "lang" END) STORED;
-
-ALTER TABLE "qti"."assessment_object" ADD COLUMN "__node_6wcvqzkni5" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "langs" = 1::bigint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."assessment_object" ADD COLUMN "__pred_langs_yw2uicm4pt" bigint GENERATED ALWAYS AS (CASE WHEN "langs" > 0::bigint THEN "langs"::numeric - (1::bigint)::numeric END) STORED;
 
@@ -3572,10 +3568,6 @@ ALTER TABLE "qti"."lom_resource_type_source" ADD COLUMN "__tag_parent_kind_lom_l
 ALTER TABLE "qti"."lom_resource_type_source" ADD COLUMN "__node_jr3yepcmfz" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN NOT "pg_catalog"."btrim"("pg_catalog"."regexp_replace"("text", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) IN (''::"pg_catalog"."text", 'LOMv1.0'::"pg_catalog"."text") THEN "node" END) STORED;
 
 ALTER TABLE "qti"."lom_string" ADD COLUMN "__tag_kind_lom_string_y5pieaaf6y" smallint GENERATED ALWAYS AS (371::smallint) STORED NOT NULL;
-
-ALTER TABLE "qti"."lom_string" ADD COLUMN "__language_cbidl4nwet" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "languages" = 1::bigint THEN "language" END) STORED;
-
-ALTER TABLE "qti"."lom_string" ADD COLUMN "__node_najnjopqcl" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "languages" = 1::bigint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."lom_string" ADD COLUMN "__pred_languages_i7e7rxcgke" bigint GENERATED ALWAYS AS (CASE WHEN "languages" > 0::bigint THEN "languages"::numeric - (1::bigint)::numeric END) STORED;
 
@@ -5869,8 +5861,6 @@ ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_nod
 
 ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_node_pred_langs_ouoqrg6ecx" FOREIGN KEY ("node", "__pred_langs_yw2uicm4pt") REFERENCES "qti"."object_lang" ("node", "__index_langs_c35xn3ubfv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_node_lang_baxofpld5p" FOREIGN KEY ("__node_6wcvqzkni5", "__lang_vscshxypk3") REFERENCES "qti"."object_lang" ("node", "lang") MATCH SIMPLE;
-
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_entities_rssqiasrww" FOREIGN KEY ("node", "id", "__pred_entities_nvm5iwtucq") REFERENCES "qti"."attribute_entity" ("node", "attribute", "at") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_idrefs_idref_text_34746yzucj" FOREIGN KEY ("node", "id", "__pred_idrefs_2kinxrebfw", "idref_text") REFERENCES "qti"."idref" ("node", "attribute", "at", "pieces_after") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
@@ -6491,9 +6481,7 @@ ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_tag_kind_lom
 
 ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_pred_languages_fouwh2wpp7" FOREIGN KEY ("node", "__pred_languages_i7e7rxcgke") REFERENCES "qti"."lom_string_language" ("node", "__index_languages_ft2z7nkccu") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_language_cyf36v3gna" FOREIGN KEY ("__node_najnjopqcl", "__language_cbidl4nwet") REFERENCES "qti"."lom_string_language" ("node", "language") MATCH SIMPLE;
-
-ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_copy_languages_rwu7ldnfnv" FOREIGN KEY ("node", "__copy_languages_ck534uuvjr") REFERENCES "qti"."lom_string" ("node", "languages") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_copy_languages_cip5whzmz2" FOREIGN KEY ("node", "__copy_languages_ck534uuvjr", "language") REFERENCES "qti"."lom_string" ("node", "languages", "language") MATCH SIMPLE ON UPDATE CASCADE;
 
 ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_predecessor_languages_vftzduptkl" FOREIGN KEY ("node", "__predecessor_languages_7ndasyhqmc") REFERENCES "qti"."lom_string_language" ("node", "__index_languages_ft2z7nkccu") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6703,7 +6691,7 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_vmybur325b" FOREIGN KEY ("
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_parent_pred_at_chars_was_elements_was_jditgsexpp" FOREIGN KEY ("__parent_l4ckjnvwat", "__pred_at_xktcobhsti", "chars_was", "elements_was", "start", "was", "__before_children_0_nrqam5jjot", "__before_children_0_3b76aq6obl") REFERENCES "qti"."node" ("__parent_l4ckjnvwat", "at", "chars_after", "elements", "end", "state", "__after_children_0_7j24lewpcd", "__after_children_0_wmlhu3albc") MATCH SIMPLE;
 
-ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_copy_langs_c7xdvtdhmc" FOREIGN KEY ("node", "__copy_langs_75vki3mroy") REFERENCES "qti"."assessment_object" ("node", "langs") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_copy_langs_lang_thnqbzepbw" FOREIGN KEY ("node", "__copy_langs_75vki3mroy", "lang") REFERENCES "qti"."assessment_object" ("node", "langs", "lang") MATCH SIMPLE ON UPDATE CASCADE;
 
 ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_predecessor_langs_tooego3bwr" FOREIGN KEY ("node", "__predecessor_langs_ijqdbr2nj4") REFERENCES "qti"."object_lang" ("node", "__index_langs_c35xn3ubfv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
