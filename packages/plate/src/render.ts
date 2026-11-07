@@ -229,6 +229,11 @@ const checkedInstance = (
  * template value or an outcome value it does not print or pass, the record's seed or an override
  * template processing set. `redactItem` in `#plate/payload.ts` lists what it copies.
  *
+ * The redacted item's notices can name more than the record's, which `fresh` lists from the
+ * features the item marks: under a template processing the engine does not run, no template value
+ * is computed, so a printed variable that names a template variable shows the notice
+ * `qti-printed-variable`, which the redacted item's notices name and the record's do not.
+ *
  * It takes only `check`'s `Accepted` (rule `723e580c`), so a hand-built item, which may hold a
  * `javascript:` href or an `onclick` that `check` would strip, never reaches {@link render}. It
  * always gives a redacted item: what it cannot print shows as a notice.

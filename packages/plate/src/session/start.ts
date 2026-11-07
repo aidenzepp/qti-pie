@@ -29,6 +29,7 @@ import type { ItemRecord } from "#plate/model/record.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
 import type { Value } from "#plate/model/values.ts";
+import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { drawSeed } from "#plate/seed.ts";
 import { itemConfiguration, sessionControls, UnknownItemRef } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
@@ -1293,7 +1294,7 @@ export const readingBase: Configuration = {
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,
-  outputBudget: 16_777_216,
+  outputBudget: defaultOutputBudget,
   showFeedback: false,
   showSolution: false,
   validateResponses: false,

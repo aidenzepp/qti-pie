@@ -19,7 +19,7 @@ import { Option, Result } from "effect";
 import type { Variables } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import { integerOf, integerValue, singleValue } from "#plate/engine/numbers.ts";
-import { durationOf, itemName, prefixedVariable } from "#plate/engine/scope.ts";
+import { durationOf, itemName, occurrenceOf, prefixedVariable } from "#plate/engine/scope.ts";
 import type { ItemName, Reading, ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type {
   FloatOrRef,
@@ -148,19 +148,14 @@ export interface PrefixedName {
 }
 
 /**
- * The occurrence form of a prefixed name's rest, `N.VAR` (reading 4): `N` a decimal from 1, its
- * leading zeros allowed, as `#plate/engine/scope.ts` reads it, so `0.VAR` is no occurrence.
- */
-const occurrenceForm = /^(?<occurrence>0*[1-9]\d*)\.(?<variable>.+)$/su;
-
-/**
  * Read a prefixed name of a test's processing through its item ref: the one reading of the name
  * that resolves, by reading 48, as `prefixedVariable` in `#plate/engine/scope.ts` resolves it (a
  * name the test declares whole never split, a mapping target before the item's own declaration),
  * with what it names in the item.
  *
  * The item's identifier is unique among the test's item refs, so the name splits after it alone;
- * what follows names, directly or in the occurrence form `N.VAR`, what `itemName` resolves.
+ * what follows names, directly or in the occurrence form `N.VAR` ({@link occurrenceOf}), what
+ * `itemName` resolves.
  *
  * @param test The test scope.
  * @param name The name, as the test's processing writes it.
@@ -173,14 +168,11 @@ export const prefixedRead = (
   name: string,
 ): Result.Result<PrefixedName, UnknownIdentifierError> =>
   Result.flatMap(prefixedVariable(test, name), ({ item, reading }) => {
-    const rest = name.slice(item.ref.length + 1);
-    const groups = occurrenceForm.exec(rest)?.groups;
-    const variable = groups?.["variable"] ?? rest;
-    const first = BigInt(groups?.["occurrence"] ?? "1") === 1n;
+    const { occurrence, variable } = occurrenceOf(name.slice(item.ref.length + 1));
 
     return Result.fromOption(
       Option.map(itemName(item, variable), (named) => ({
-        first,
+        first: occurrence === 1n,
         item,
         named,
         value: readValue(reading),

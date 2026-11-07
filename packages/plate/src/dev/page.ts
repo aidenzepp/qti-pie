@@ -104,6 +104,7 @@ import { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { PackageTest } from "#plate/package/open.ts";
+import { drawInstance } from "#plate/seed.ts";
 import { current } from "#plate/session/start.ts";
 import { acceptedItem, describeRefusal } from "#plate/validate/verdict.ts";
 import type { AcceptedKind, Verdict } from "#plate/validate/verdict.ts";
@@ -122,16 +123,16 @@ export type Handler = (request: Request) => Promise<Response>;
  * processing, given to `startTest` as the context's `seed`, and when absent `startTest` draws one
  * for each session, while the configuration's `seed` orders shuffles only; `tests` is the store
  * that keeps the test sessions, a new one when absent, which a test passes to read a stored
- * session; `newInstance` draws the instance token of each item the playground opens, a random UUID
- * when absent, and must give a new token each call, since the playground holds each open item under
- * its token (a test gives a fixed one so a sitting's values follow from its seed alone); `provider`
- * is where `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME` and the ledger page reads
- * `PLATE_LEDGER_DIR`, the process environment when absent; `verdicts` is the cache that opens and
- * keeps the corpus's members, a new one over `openMember` when absent; `packages` is the cache that
- * opens and keeps the packages, a new one over `openDirectory` when absent. Handlers given one
- * cache share its opens, and a test counts them through the cache's opener; a cache reads the
- * corpus root of the first handler that asks, so share one only between handlers over the same
- * root.
+ * session; `newInstance` draws the instance token of each item the playground opens,
+ * `drawInstance`'s random UUID when absent, and must give a new token each call, since the
+ * playground holds each open item under its token (a test gives a fixed one so a sitting's values
+ * follow from its seed alone); `provider` is where `readCorpusFile` reads `PLATE_CORPUS_DIR` and
+ * `HOME` and the ledger page reads `PLATE_LEDGER_DIR`, the process environment when absent;
+ * `verdicts` is the cache that opens and keeps the corpus's members, a new one over `openMember`
+ * when absent; `packages` is the cache that opens and keeps the packages, a new one over
+ * `openDirectory` when absent. Handlers given one cache share its opens, and a test counts them
+ * through the cache's opener; a cache reads the corpus root of the first handler that asks, so
+ * share one only between handlers over the same root.
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
@@ -1631,7 +1632,7 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
         }),
       ),
     ),
-    newInstance: settings.newInstance ?? (() => crypto.randomUUID()),
+    newInstance: settings.newInstance ?? drawInstance,
     packages: settings.packages ?? Effect.runSync(packageCache()),
     seed: Option.fromUndefinedOr(settings.seed),
     sessions: boundedStore(),

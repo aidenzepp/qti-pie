@@ -209,6 +209,13 @@ export const outcomeDefaults = (item: Item): ItemRecord["outcomes"] => {
 /**
  * Start the session of an item that has not been attempted.
  *
+ * The record's notices are the features `item.unsupported` shows as notices, so they can name less
+ * than a redaction of the item does. Under a `qti-template-processing` the engine does not run
+ * ({@link unrunTemplateProcessing}), no template value is computed, so a printed variable that
+ * names a template variable has nothing to print and `redact` shows it as the notice
+ * `qti-printed-variable`: the redacted item's notices name it, and the record's do not, since the
+ * item marks no such feature.
+ *
  * @param item The item.
  * @param instance The host's name for this use of the item, which scopes its ids.
  * @returns The record: every response NULL, the outcomes at {@link outcomeDefaults}, the

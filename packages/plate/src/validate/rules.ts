@@ -858,7 +858,7 @@ const mapResponseRequirements = (
 /**
  * Give an element's `base-type` when the value model holds values of it.
  *
- * A base type the value model does not hold (`duration`, `file`) has no lexical check here (the
+ * A base type the value model does not hold (`file`) has no lexical check here (the
  * slice list's 0.11 item 3), so its values are not judged. A `point` is held, so a value that is
  * not two integers is refused, as the qti package refuses it (`value-lexical`, the `point` pattern
  * in `packages/pantry/src/import/refusal.ts`). A missing or out-of-vocabulary `base-type` is the

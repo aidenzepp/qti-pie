@@ -199,6 +199,32 @@ const ownValue = (
 const occurrenceForm = /^(?<occurrence>0*[1-9]\d*)\.(?<variable>.+)$/su;
 
 /**
+ * What the rest of a prefixed name names in its item: the occurrence, counted from 1, and the
+ * variable's name.
+ */
+export interface Occurrence {
+  readonly occurrence: bigint;
+  readonly variable: string;
+}
+
+/**
+ * Split the rest of a prefixed name, what follows its item ref, into the occurrence it names and
+ * the variable: `N.VAR` in the occurrence form (reading 4) names occurrence `N`, and any other rest
+ * names occurrence 1 and is the variable whole.
+ *
+ * @param rest The part of the name after the item ref and its dot.
+ * @returns The occurrence and the variable's name.
+ */
+export const occurrenceOf = (rest: string): Occurrence => {
+  const groups = occurrenceForm.exec(rest)?.groups;
+
+  return {
+    occurrence: BigInt(groups?.["occurrence"] ?? "1"),
+    variable: groups?.["variable"] ?? rest,
+  };
+};
+
+/**
  * Report whether an item ref's categories share one with a list (9.25; G-R3, pending: one shared
  * category is enough to include an item, and one to exclude it).
  *
@@ -449,9 +475,7 @@ const resolve = (scope: TestScope, prefix: string, rest: string): Option.Option<
       : Option.none();
   }
 
-  const groups = occurrenceForm.exec(rest)?.groups;
-  const variable = groups?.["variable"] ?? rest;
-  const occurrence = BigInt(groups?.["occurrence"] ?? "1");
+  const { occurrence, variable } = occurrenceOf(rest);
 
   return Option.map(itemName(item, variable), (named) => ({
     item,
