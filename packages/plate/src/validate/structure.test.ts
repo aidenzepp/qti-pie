@@ -1120,6 +1120,32 @@ const tolerated = (tolerance: string): SourceDocument =>
   literal("qti-equal", attr("tolerance-mode", "absolute"), attr("tolerance", tolerance));
 
 /**
+ * Construct a document whose root is a `qti-printed-variable` with the given `format`.
+ *
+ * @param format The `format`, as written.
+ * @returns The document.
+ */
+const printed = (format: string): SourceDocument =>
+  literal("qti-printed-variable", attr("identifier", "SCORE"), attr("format", format));
+
+/**
+ * The detail of a refused printed variable's `format` (pantry R38).
+ *
+ * @param format The `format`, as written.
+ * @returns The detail.
+ */
+const formatDetail = (format: string) => ({
+  attribute: "format",
+  check: "printf-format",
+  element: "qti-printed-variable",
+  expected:
+    "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and at least one digit, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
+  pantry: "R38",
+  source: "info.txt:70323",
+  value: format,
+});
+
+/**
  * The `attribute-type` refusals of a document checked against the generated tables, by
  * location.
  *
@@ -2465,6 +2491,104 @@ describe("checkStructure", () => {
       ]) {
         assert.deepStrictEqual(found(tolerated(tolerance), generatedTables), [], tolerance);
       }
+    });
+  });
+
+  describe("a printed variable's format (pantry R38)", () => {
+    it("[I-5] refuses a format that is not one whole printf conversion, %d, %u and Score: %.1f among them, as attribute-type at format (pantry R38, info.txt:70323)", () => {
+      for (const format of [
+        "%d",
+        "%u",
+        "Score: %.1f",
+        "%i of %i",
+        "%.1f%%",
+        "%%",
+        "%q",
+        "%5.2",
+        "2f",
+        "%",
+        "",
+      ]) {
+        const source = printed(format);
+
+        assert.deepStrictEqual(
+          found(source, generatedTables),
+          [["attribute-type", at("qti-printed-variable/@format")]],
+          format,
+        );
+        assert.deepStrictEqual(
+          first(source, generatedTables)?.detail,
+          formatDetail(format),
+          format,
+        );
+      }
+    });
+
+    it("[I-5] refuses a format padded at either end, which pantry R38 reads as xs:normalizedString does, without trimming", () => {
+      for (const format of [" %.1f", "%.1f ", "\t%i", "%i\n"]) {
+        const source = printed(format);
+
+        assert.deepStrictEqual(
+          found(source, generatedTables),
+          [["attribute-type", at("qti-printed-variable/@format")]],
+          JSON.stringify(format),
+        );
+        assert.deepStrictEqual(first(source, generatedTables)?.detail, formatDetail(format));
+      }
+    });
+
+    it("[I-5] refuses %.f, a precision with no digit, which the information model's syntax admits (info.txt:8686) and pantry R38 refuses", () => {
+      assert.deepStrictEqual(first(printed("%.f"), generatedTables)?.detail, formatDetail("%.f"));
+    });
+
+    it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (pantry R38)", () => {
+      for (const format of [
+        "%.1f",
+        "%i",
+        "%08.3e",
+        "%-8X",
+        "% .1f",
+        "%#o",
+        "%+.2E",
+        "%g",
+        "%10G",
+        "%.0r",
+        "%R",
+        "%x",
+        "%\t.1f",
+      ]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], JSON.stringify(format));
+      }
+      assert.deepStrictEqual(
+        found(literal("qti-printed-variable", attr("identifier", "SCORE")), generatedTables),
+        [],
+      );
+    });
+
+    it("[I-5] refuses %d at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (pantry R38)", () => {
+      const source = item([
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                el("qti-printed-variable", [attr("identifier", "SCORE"), attr("format", "%d")]),
+                el("qti-text-entry-interaction", [
+                  attr("response-identifier", "RESPONSE"),
+                  attr("format", "%d"),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ]);
+
+      assert.deepStrictEqual(mistyped(source), [
+        at("qti-assessment-item/qti-item-body/p/qti-printed-variable/@format"),
+      ]);
     });
   });
 

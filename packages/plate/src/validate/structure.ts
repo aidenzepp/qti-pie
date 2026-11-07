@@ -190,6 +190,15 @@ const collapse = (value: string): string => {
 };
 
 /**
+ * Replace a value's XML whitespace, as XSD's `whiteSpace="replace"` does: each tab and line break
+ * becomes a space, and nothing is removed.
+ *
+ * @param value The value as written.
+ * @returns The value with each tab and line break replaced.
+ */
+const replace = (value: string): string => value.replaceAll(/[\t\n\r]/gu, " ");
+
+/**
  * Apply a built-in's whitespace facet to a value: `string` keeps it, `normalizedString` replaces
  * each tab and line break with a space, and every other built-in collapses it.
  *
@@ -202,7 +211,7 @@ const whitespaced = (name: BuiltinName, value: string): string => {
     return value;
   }
 
-  return name === "normalizedString" ? value.replaceAll(/[\t\n\r]/gu, " ") : collapse(value);
+  return name === "normalizedString" ? replace(value) : collapse(value);
 };
 
 /**
@@ -318,8 +327,13 @@ type Narrowing =
 /**
  * A reading, or a sentence of the information model, that narrows an attribute: on the named
  * elements, or on every element whose table declares it, a value the XSD's own type admits must
- * also satisfy `holds`, which reads the value collapsed, or it is `attribute-type` with `expected`
- * as the values the row admits and the facts of `settled`.
+ * also satisfy `holds`, which reads the value under `whiteSpace`, or it is `attribute-type` with
+ * `expected` as the values the row admits and the facts of `settled`.
+ *
+ * `whiteSpace` is how `holds` reads the value: `collapse`d, or with each tab and line break
+ * `replace`d by a space and nothing trimmed, as XSD reads an `xs:normalizedString`. A row that
+ * agrees with a rule of the qti package reads the value as that rule does, so it refuses the
+ * padding the rule refuses, and no more.
  */
 interface NarrowedAttribute {
   readonly attribute: string;
@@ -328,6 +342,7 @@ interface NarrowedAttribute {
   readonly holds: (lexical: string) => boolean;
   readonly kind: "narrowed-attribute";
   readonly settled: Narrowing;
+  readonly whiteSpace: "collapse" | "replace";
 }
 
 /**
@@ -544,6 +559,17 @@ const toleranceTokens = (lexical: string): boolean =>
   lexical.split(" ").every((token) => doubleLexical.test(token) || isNcName(token));
 
 /**
+ * A printed variable's `format` as the qti package's `printfFormat` pattern admits it
+ * (`packages/pantry/src/schema/patterns.ts:343`, refused there as R38), over the whole attribute:
+ * one conversion, a percent sign, flags from `#`, `0`, space, `+` and `-`, a width, a precision of
+ * a point and at least one digit, and one of `E e f G g r R i o X x`, with nothing around it. The
+ * information model's syntax (info.txt:8686) also admits a precision with no digit, such as `%.f`,
+ * and does not address text around the conversion; the pattern refuses both, and this row refuses
+ * what the pattern refuses, so when the qti package narrows R38 this pattern follows it.
+ */
+const printfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]+)?[EefGgrRioXx]$/u;
+
+/**
  * The shared readings this module applies over the XSD's rules, one row each.
  *
  * Every refusal a row gives carries the row's reading in its detail, as `reading`, which the
@@ -574,6 +600,7 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => Option.exists(doubleValue(lexical), (read) => read > 0),
     kind: "narrowed-attribute",
     settled: { reading: "16" },
+    whiteSpace: "collapse",
   },
   // Reading 17 (spec-readings.md:120): a `view` list holds at least one view, where the XSD's list
   // admits none.
@@ -584,6 +611,7 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => lexical !== "",
     kind: "narrowed-attribute",
     settled: { reading: "17" },
+    whiteSpace: "collapse",
   },
   // Reading 18 (spec-readings.md:123): an order or graphic-order interaction's `min-choices` is at
   // least 1, where the XSD admits 0. `max-choices="0"` means unlimited, and no count is compared.
@@ -594,6 +622,7 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => integerLexical.test(lexical) && BigInt(lexical) >= 1n,
     kind: "narrowed-attribute",
     settled: { reading: "18" },
+    whiteSpace: "collapse",
   },
   // Reading 20 (spec-readings.md:132): a PCI holds exactly one `qti-interaction-markup`, which may
   // be empty.
@@ -786,6 +815,7 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => !reservedIdentifiers.has(lexical),
     kind: "narrowed-attribute",
     settled: { check: "reserved-identifier", pantry: "DeclarationNotReserved", source },
+    whiteSpace: "collapse",
   })),
   // The information model's `tolerance` (info.txt:24946) is two numbers, t0 and t1, or one for
   // both, and a token that is not a number names the variable that holds one. So each token is an
@@ -798,6 +828,22 @@ const readingRows: readonly ReadingRow[] = [
     holds: toleranceTokens,
     kind: "narrowed-attribute",
     settled: { check: "tolerance-token", pantry: "P6", source: "info.txt:24946" },
+    whiteSpace: "collapse",
+  },
+  // The information model's printed variable `format` is "The format conversion specifier"
+  // (info.txt:70323), whose syntax is a C `printf` conversion (info.txt:8686). Pantry's R38 admits
+  // one whole conversion, with codes `E e f G g r R i o X x`, so `%d`, `%u` and `Score: %.1f` are
+  // refused as there. Pantry reads the `xs:normalizedString` with its tabs and line breaks
+  // replaced, not trimmed, so a padded format is refused too.
+  {
+    attribute: "format",
+    elements: ["qti-printed-variable"],
+    expected:
+      "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and at least one digit, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
+    holds: (lexical) => printfFormat.test(lexical),
+    kind: "narrowed-attribute",
+    settled: { check: "printf-format", pantry: "R38", source: "info.txt:70323" },
+    whiteSpace: "replace",
   },
   // Single cardinality is "a single value" (info.txt:73049, the information model's
   // `CardinalityEnum`), so the default or correct value of a single declaration holds one
@@ -1594,13 +1640,14 @@ const checkValue = (
   }
 
   const lexical = collapse(attribute.value);
+  const replaced = replace(attribute.value);
   const narrowed = narrowedAttributes
     .filter(
       (row) =>
         local &&
         row.attribute === attribute.local &&
         (row.elements === "declaring" || row.elements.includes(element.local)) &&
-        !row.holds(lexical),
+        !row.holds(row.whiteSpace === "collapse" ? lexical : replaced),
     )
     .map((row) =>
       refuse(source, "attribute-type", at, { ...detail, expected: row.expected, ...row.settled }),
