@@ -134,6 +134,25 @@ export const rowEdits = {
       openNames: rows.openNames.map((open) => (open === target ? { ...open, local } : open)),
     };
   }),
+  // AL4 declared data name (AL4): a `data-*` attribute whose name is one its element declares: the
+  // item's own `data-*` attribute renamed to a declared name of a paragraph's governor.
+  "AL4 declared data name": editingRows(item, (rows) => (source) => {
+    const data = new Set(
+      rows.attributes.filter(({ name }) => name === "data-*").map(({ id }) => id),
+    );
+    const names = rows.openNames.filter(({ attribute }) => data.has(attribute));
+    const target = names[source.draw(int(0, names.length - 1))];
+    if (target === undefined) {
+      throw new Error("the base's rows hold no data-* attribute");
+    }
+
+    const local = source.draw(element(["data-catalog-idref", "data-ssml"] as const));
+
+    return {
+      ...rows,
+      openNames: rows.openNames.map((open) => (open === target ? { ...open, local } : open)),
+    };
+  }),
   // AL4 open name key (AL4): a second row of an open-class attribute's exact name on its element.
   "AL4 open name key": editingRows(item, (rows) => (source) => {
     const open = rows.openNames[source.draw(int(0, rows.openNames.length - 1))];

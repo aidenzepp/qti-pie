@@ -114,6 +114,7 @@ describe("qti/attributes.ts, declared", () => {
       "AL2 distinct",
       "AL3 required",
       "AL4 data name",
+      "AL4 declared data name",
       "AL4 open names",
       "Attribute prefix",
       "E1 derived",
@@ -664,6 +665,46 @@ describe("qti/attributes.ts, the data name (reading 13)", () => {
             lawsBroken(tampered).has("AL4 data name"),
             broken,
             `${name} ${local} on ${kind}`,
+          );
+        }
+      }),
+  );
+});
+
+describe("qti/attributes.ts, a declared data- name (goal part E)", () => {
+  it.effect(
+    "breaks law AL4 declared data name on a data-* attribute named for a data- name its element declares, and on no other data-* name or host",
+    () =>
+      // Oracle: the specification as a checker, goal part E: a data- name QTI declares on an
+      // element is that attribute, never a custom one; `p` declares `data-catalog-idref` and
+      // `qti-assessment-item` does not (the XSDs, read through `AttributeGrammar.rows`).
+      // Bound: the three cases of the brief, written out.
+      Effect.gen(function* declaredDataNameBox() {
+        const rows = yield* foldedOf(dataItem, "3.0.1");
+        const target =
+          rows.attributes.find(({ name }) => name === "data-*") ??
+          assert.fail("the paragraph carries its data-x");
+        const host =
+          rows.nodes.find(({ id }) => id === target.node) ?? assert.fail("the paragraph is a node");
+        const cases = [
+          { broken: true, kind: host.kind, local: "data-catalog-idref" },
+          { broken: false, kind: "qti-assessment-item", local: "data-catalog-idref" },
+          { broken: false, kind: host.kind, local: "data-x" },
+        ] as const;
+
+        for (const { broken, kind, local } of cases) {
+          const tampered: FoldedRows<Composed> = {
+            ...rows,
+            nodes: rows.nodes.map((node) => (node === host ? { ...node, kind } : node)),
+            openNames: rows.openNames.map((open) =>
+              open.attribute === target.id ? { ...open, local } : open,
+            ),
+          };
+
+          assert.strictEqual(
+            lawsBroken(tampered).has("AL4 declared data name"),
+            broken,
+            `${local} on ${kind}`,
           );
         }
       }),

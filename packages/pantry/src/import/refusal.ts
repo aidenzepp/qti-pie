@@ -428,6 +428,11 @@ export const lawTable = {
     source:
       "reading 13 of docs/spec-readings.md: HTML's custom data attribute rule read in XML (https://html.spec.whatwg.org/multipage/dom.html#custom-data-attribute: a name in no namespace that starts with data-, has at least one character after the hyphen, is a valid attribute local name and contains no ASCII upper alphas) and the information model's prose (dataExtension): a data-* attribute's name is in that language, and a no-namespace name of an element that is not foreign never begins data- (vocab/open.ts dataName, attributes.ts AL4_data_name)",
   },
+  "AL4 declared data name": {
+    rule: "attribute-admission",
+    source:
+      "goal part E: a data- name QTI declares is that attribute, never a custom one; reading 13",
+  },
   "AL4 open name key": {
     rule: "attribute-admission",
     source: "fin.md D2, an open-class attribute keeps its exact name; reading 13",
@@ -1721,8 +1726,8 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ],
   [
     containedIn(
-      sideOf("OpenAttributeName", "node", "attribute", "class", "kind"),
-      sideOf("Attribute", "node", "id", "name", "kind"),
+      sideOf("OpenAttributeName", "node", "attribute", "class", "kind", "version", "governs"),
+      sideOf("Attribute", "node", "id", "name", "kind", "version", "governs"),
     ),
     "AL1 owner",
   ],

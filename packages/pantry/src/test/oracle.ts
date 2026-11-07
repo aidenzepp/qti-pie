@@ -354,6 +354,7 @@ const lawRules = {
   "AL2 last slot": "attribute-admission",
   "AL3 required": "required-attribute",
   "AL4 data name": "attribute-admission",
+  "AL4 declared data name": "attribute-admission",
   "AL4 open name key": "attribute-admission",
   "AL4 open names": "attribute-admission",
   "AL5 attribute count": "attribute-count",
@@ -523,6 +524,8 @@ export const lawSources = {
     "the XSDs' use=\"required\", and reading 123: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BDO (§5.11: 'Authors must specify the dir attribute on this tag'), where the XSD declares bdo's dir optional (attributes.ts readingUses): AttributeAdmission's use side (Required)",
   "AL4 data name":
     "reading 13 of docs/spec-readings.md: HTML's custom data attribute rule read in XML (https://html.spec.whatwg.org/multipage/dom.html#custom-data-attribute: a name in no namespace that starts with data-, has at least one character after the hyphen, is a valid attribute local name and contains no ASCII upper alphas) and the information model's prose (dataExtension): a data-* attribute's name is in that language, and a no-namespace name of an element that is not foreign never begins data- (vocab/open.ts dataName, attributes.ts AL4_data_name)",
+  "AL4 declared data name":
+    "goal part E: a data- name QTI declares is that attribute, never a custom one; reading 13",
   "AL4 open name key": "fin.md D2, an open-class attribute keeps its exact name; reading 13",
   "AL4 open names": "fin.md D2, an open-class attribute keeps its exact name; reading 13",
   "AL5 attribute count":
@@ -1446,6 +1449,7 @@ export const otherLawNames = [
   "AL4 open names",
   "AL4 open name key",
   "AL4 data name",
+  "AL4 declared data name",
   "OpenElementName",
   "MathML foreign element",
   "OpenElementName canonical",
@@ -3701,6 +3705,23 @@ const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
           : named?.name === "no-namespace" && !isForeignKind(kind) && local.startsWith("data-");
 
       return broken ? [breach("AL4 data name", { class: named?.name ?? "", kind, local })] : [];
+    }),
+    ...rows.openNames.flatMap(({ attribute, local }) => {
+      const named = attributeById.get(attribute);
+      const owner = named === undefined ? undefined : view.byId.get(named.node);
+      const declared =
+        named?.name === "data-*" &&
+        owner !== undefined &&
+        Option.isSome(
+          governedAdmission(laws.grammar.attributes, {
+            governs: owner.governs,
+            kind: owner.kind,
+            name: local,
+            version: owner.version,
+          }),
+        );
+
+      return declared ? [breach("AL4 declared data name", { kind: owner.kind, local })] : [];
     }),
     ...(sameSet(foreign, new Set(rows.openElementNames.map(({ node }) => node))) &&
     rows.openElementNames.length === foreign.size
@@ -6883,6 +6904,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
   },
   "AL4 data name": (keys) =>
     `the ${field(keys, "class")} attribute ${field(keys, "local")} of ${field(keys, "kind")} is a name outside reading 13's data- language`,
+  "AL4 declared data name": (keys) =>
+    `the data-* attribute ${field(keys, "local")} of ${field(keys, "kind")} is a custom name for what the element declares`,
   "AL4 open name key": (keys) =>
     `${field(keys, "openNames")} open names, ${field(keys, "distinct")} distinct by (node, uri, local)`,
   "AL4 open names": (keys) =>
