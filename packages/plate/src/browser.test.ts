@@ -100,6 +100,7 @@ const roots = selectRoots([...modules.keys()]);
  * top-level module is a root or named here, so a new one is classified when it is added.
  */
 const notRoots = {
+  "src/begin.ts": "the Schema side: encodes the stored record through Schema, beside score",
   "src/configuration.ts": "value-imports Schema, Config and Effect to read the configuration",
   "src/control-cap.ts": "reached from the roots, so the scan checks it",
   "src/count-range.ts":

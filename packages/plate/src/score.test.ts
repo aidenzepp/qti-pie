@@ -774,6 +774,7 @@ describe("the public surface", () => {
         "acceptedItem",
         "advance",
         "allowedIntents",
+        "begin",
         "checkInstance",
         "checkResponses",
         "configure",
