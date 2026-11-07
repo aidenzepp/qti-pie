@@ -40,8 +40,9 @@
  * keeps: `Arity` (P2); `Operand_fit` and `One_base` (P23); `Condition_type` (P21); `Set_type`
  * (P20); `Lookup_type` (P22); `Reference_type` (P24); `Outcome_only` (P25); `Template_reads` (P26);
  * `Mapped_response` (P27); `Weighted_base` (P29); `Variable_declared` (P8, over an item's names
- * and a test's and a section's unprefixed ones); `Item_duration` (item-duration, in an item and
- * through an item ref); `Literal_lexical` (attribute-lexical); `Prefixed_reference` (prefixed-ref);
+ * and a test's and a section's unprefixed ones); "Item duration" (item-duration, in an item and
+ * through an item ref, a containment into the time-dependent items, `timedItems`);
+ * `Literal_lexical` (attribute-lexical); `Prefixed_reference` (prefixed-ref);
  * `Section_identifier_target`; `Template_default_target` and `Template_default_type` (P20);
  * `Variable_mapping_source` and `Variable_mapping_target`; and `E1_derived`, every code the host
  * writes proved from what it is derived from, among them each expression's result type and a
@@ -347,7 +348,6 @@ export const VariableRef = relation(
     resolution: closedId(ReferenceResolution),
     rootKind: closedId(NodeKind),
     table: closedId(ReferencedTable),
-    timeDependent: pg.boolean,
   },
   ["node", "attribute"],
 );
@@ -399,8 +399,10 @@ export const placedVariableFamily = counted(
 
 /**
  * An item's timing, keyed by its `qti-assessment-item` node: its document, its `time-dependent`'s
- * lexical form, and whether the item is time-dependent, the code a reference to the built-in
- * `duration` reads (C17; the UP audit's A62).
+ * lexical form, and whether the item is time-dependent (C17; the UP audit's A62). It exists exactly
+ * where the item writes `time-dependent`, which every item must (AL3), so a reference to the
+ * built-in `duration` reads its item among the time-dependent ones ({@link timedItems}), and an
+ * item that writes none is AL3's, and "Item duration"'s where it reads its `duration`.
  */
 export const ItemTiming = relation(
   "ItemTiming",
@@ -413,11 +415,12 @@ export const ItemTiming = relation(
  * base value's and a test variables' `base-type`, a test variables' `weight-identifier`, and a math
  * operator's `name`, with its lexical form and its element's `exprRef` tuple.
  *
- * `written` says whether the element writes it. The attribute that types each attribute-typed kind
- * (`base-type`, or a math operator's `name`) has a row on every such element, so an element that
- * omits it has one too, unwritten, with an empty lexical form: a test variables' that writes no
- * `base-type` is thereby proved `unknown` (M2, `representation-gaps.md` §1: absence as a keyed null
- * object, which the attribute's own copy refutes where it is written).
+ * `written` says whether the element writes it. A test variables' `base-type`, which it may omit
+ * ({@link optionallyTypedKinds}), has a row on every test variables, so one that omits it has one
+ * too, unwritten, with an empty lexical form: it is thereby proved `unknown` (M2,
+ * `representation-gaps.md` §1: absence as a keyed null object, which the attribute's own copy
+ * refutes where it is written). A base value's `base-type` and a math operator's `name` are
+ * required, so an element that omits one has no row, and AL3 refuses it alone.
  */
 export const ExpressionAttribute = relation(
   "ExpressionAttribute",
@@ -814,7 +817,7 @@ export const ReferenceSegment = relation(
  * - **the variable:** `declared`, read from {@link VariableLookup} in `lookupDocument` (the test's or
  *   the item's), `mapped`, from {@link MappingLookup} at the item ref, and `source`, which of the
  *   two or a built-in of the scope names it; `declaration` and its codes, the declared or mapped
- *   variable's; `timeDependent`, its item's, where it reads an item's `duration` (A62);
+ *   variable's;
  * - **the copy:** `identifier`, `kind`, `role`, its {@link AssembledReference}'s.
  *
  * A reading resolves when its variable is named and, numbered, its item ref can repeat and its
@@ -847,7 +850,6 @@ export const Reading = relation(
     scope: keyText,
     source: closedId(ReadingSource),
     split: natural,
-    timeDependent: pg.boolean,
     variable: keyText,
   },
   ["assembly", "node", "attribute", "form", "split"],
@@ -967,6 +969,22 @@ const itemTimes = select(Attribute, (a) =>
  * `1`; every other valid form is false.
  */
 const timeDependentForm = "^[\\t\\n\\r ]*(?:true|1)[\\t\\n\\r ]*$";
+
+/**
+ * The time-dependent items, by document: the only items whose `duration` an expression may read
+ * ("The value of duration for items that are not time dependent must not be used in any item or
+ * test-level expression", info §2.2.2.2). An item that writes no `time-dependent` has no
+ * {@link ItemTiming} row, so it is none of them.
+ */
+const timedItems = select(ItemTiming, (t) => t.eq(t.timeDependent, true));
+
+/**
+ * The references an item's own expressions make to its built-in `duration`, each of which its item
+ * must be time-dependent to make.
+ */
+const itemDurations = select(VariableRef, (v) =>
+  v.and(v.eq(v.rootKind, itemKind), v.eq(v.resolution, "builtIn"), v.eq(v.identifier, "duration")),
+);
 
 /**
  * The `template` of each response processing, `ProcessingTemplate`'s source.
@@ -1250,6 +1268,17 @@ const typeAttributes = select(ExpressionAttribute, (x) => x.in(x.attribute, ["ba
 const attributeTypedKinds = ["qti-base-value", "qti-math-operator", "qti-test-variables"] as const;
 
 /**
+ * The attribute-typed kinds whose typing attribute an element may omit, so that its absence types
+ * the element: a test variables' `base-type` (`TestVariablesDType`, `use="optional"`), whose
+ * absence matches every variable and types it `unknown`. A base value's `base-type` and a math
+ * operator's `name` are required (`BaseValueDType` and `MathOperatorDType`, `use="required"`), so
+ * an element that omits one is AL3's alone, and holds no typing row.
+ */
+export const optionallyTypedKinds = [
+  "qti-test-variables",
+] as const satisfies readonly (typeof attributeTypedKinds)[number][];
+
+/**
  * The expressions `ResultBase` judges: every one but an attribute-typed expression of an `unknown`
  * base type, the type of one whose typing attribute spells no base (`E1_derived` on
  * {@link ExpressionAttribute}), which AL1's value domain refuses alone. `ResultBase` is the
@@ -1495,7 +1524,7 @@ const declaredReadings = select(Reading, (r) => r.eq(r.source, "declared"));
 const mappedReadings = select(Reading, (r) => r.eq(r.source, "mapped"));
 
 /**
- * The readings of an item's `duration`, with its item's timing.
+ * The readings of an item's `duration`, each of which its item must be time-dependent to make.
  */
 const timedReadings = select(Reading, readsItemDuration);
 
@@ -1639,7 +1668,7 @@ export const readingFamily = counted(
  *   its readings exactly the readings of its name, exactly one of them resolving
  *   (`Prefixed_reference`, M3, the refusal naming both), none through a name two placements give
  *   (reading 86), an unsplit name declared (`Variable_declared`, P8), an item's `duration` only a
- *   time-dependent item's (`Item_duration`), a literal's stand-in typed (`Reference_type`, P24),
+ *   time-dependent item's ("Item duration"), a literal's stand-in typed (`Reference_type`, P24),
  *   and a `section-identifier` a section's (`Section_identifier_target`).
  */
 export const referenceLawsByName = {
@@ -2009,10 +2038,6 @@ export const referenceLawsByName = {
         "cardinality",
       ),
     ),
-    contained(
-      on(timedReadings, "lookupDocument", "timeDependent"),
-      on(ItemTiming, "document", "timeDependent"),
-    ),
     check("E1_derived", Reading, (r) =>
       r.and(
         r.or(
@@ -2090,15 +2115,10 @@ export const referenceLawsByName = {
             ),
           ),
         ),
-        r.or(readsItemDuration(r), r.eq(r.timeDependent, false)),
       ),
     ),
   ],
-  "Item duration": [
-    check("Item_duration", Reading, (r) =>
-      r.or(r.not(readsItemDuration(r)), r.eq(r.timeDependent, true)),
-    ),
-  ],
+  "Item duration": [contained(on(timedReadings, "lookupDocument"), on(timedItems, "document"))],
   "Item ref target": [
     // A found item ref's target and item are its `ItemRefTarget`'s and `ItemRefDocument`'s, each a
     // row only where the package holds one, so an item ref naming no resource of the package, or an
@@ -2584,14 +2604,6 @@ export const expressionLawsByName = {
         t.and(t.not(Compute.matches(t.lexical, timeDependentForm)), t.eq(t.timeDependent, false)),
       ),
     ),
-    contained(
-      on(
-        select(VariableRef, (v) => v.eq(v.rootKind, itemKind)),
-        "document",
-        "timeDependent",
-      ),
-      on(ItemTiming, "document", "timeDependent"),
-    ),
     // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
     key(on(typingAttributes, "node", "name")),
     contained(
@@ -2610,7 +2622,7 @@ export const expressionLawsByName = {
     key(on(typeAttributes, "node")),
     contained(
       on(
-        select(Expression, (e) => e.in(e.kind, attributeTypedKinds)),
+        select(Expression, (e) => e.in(e.kind, optionallyTypedKinds)),
         "node",
       ),
       on(typeAttributes, "node"),
@@ -2687,16 +2699,7 @@ export const expressionLawsByName = {
       ),
     ),
   ],
-  "Item duration": [
-    check("Item_duration", VariableRef, (v) =>
-      v.or(
-        v.ne(v.rootKind, itemKind),
-        v.ne(v.resolution, "builtIn"),
-        v.ne(v.identifier, "duration"),
-        v.eq(v.timeDependent, true),
-      ),
-    ),
-  ],
+  "Item duration": [contained(on(itemDurations, "document"), on(timedItems, "document"))],
   "Literal lexical": [
     check("Literal_lexical", LiteralTyped, (l) =>
       Compute.matches(l.text, BaseTypePattern.at("pattern", l.typeCode)),

@@ -164,7 +164,6 @@ const referenceRow = (
   resolution: "unresolved",
   rootKind: "qti-response-processing",
   table: "none",
-  timeDependent: false,
   ...fields,
 });
 
@@ -303,7 +302,6 @@ const readingRow = (fields: Partial<Addition<typeof Reading>>): Addition<typeof 
   scope: "",
   source: "declared",
   split: 0n,
-  timeDependent: false,
   variable: "OUT",
   ...fields,
 });
@@ -561,9 +559,8 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
 
       it.effect("refuses each reference row law's breach by its law, and keeps its control", () =>
         // Oracle: PostgreSQL, each CHECK of `VariableRef`, against the old checker's rules (P8,
-        // P20, P22, P24, P26, P27) and the UP audit's A62. An item's built-in `duration` is a
-        // response variable, the declaration kind `E1_derived` states of it, so its breach is
-        // lawful there and breaks `Item_duration` alone.
+        // P20, P22, P24, P26, P27). The UP audit's A62, "Item duration", is a containment into the
+        // time-dependent items, no CHECK of the row.
         // Bound: one breach of each law, beside the same row with the breach repaired.
         Effect.gen(function* referenceLaws() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -638,21 +635,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               }),
               law: "Mapped_response",
               repaired: { table: "qti-mapping" },
-            },
-            {
-              broken: referenceRow({
-                baseType: "float",
-                cardinality: "single",
-                declarationKind: "qti-response-declaration",
-                elementBase: "float",
-                elementCardinality: "single",
-                identifier: "duration",
-                lexical: "duration",
-                resolution: "builtIn",
-                rootKind: "qti-assessment-item",
-              }),
-              law: "Item_duration",
-              repaired: { timeDependent: true },
             },
           ] as const;
           for (const { broken, law, repaired } of cases) {
@@ -752,10 +734,10 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses each reading law's breach by its law, and keeps its control",
         () =>
-          // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, the
-          // information model's §2.2.2.2 time-dependence sentence (A62), P24 (A66) and §7.27.1's
-          // `section-identifier` (A61), here a `qti-number-correct`'s, which reads a section. An
-          // item's built-in `duration` reads as a response variable, as `E1_derived` states it.
+          // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, P24
+          // (A66) and §7.27.1's `section-identifier` (A61), here a `qti-number-correct`'s, which
+          // reads a section. The time-dependence sentence of §2.2.2.2 (A62), "Item duration", is a
+          // containment into the time-dependent items, no CHECK of the row.
           // Bound: one breach of each law, beside the same row with the breach repaired, each
           // with its reference's owners.
           Effect.gen(function* readingLaws() {
@@ -778,19 +760,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 broken: readingRow({ ...undeclared, identifier: "X", variable: "X" }),
                 check: "variable_declared",
                 repaired: { identifier: "a.X", variable: "a.X" },
-              },
-              {
-                broken: readingRow({
-                  ...throughItem,
-                  ...undeclared,
-                  declaration: nodeOf(70),
-                  declarationKind: "qti-response-declaration",
-                  identifier: "a.duration",
-                  source: "builtIn",
-                  variable: "duration",
-                }),
-                check: "item_duration",
-                repaired: { timeDependent: true },
               },
               {
                 broken: readingRow({ attribute: "max", kind: "qti-random-integer" }),

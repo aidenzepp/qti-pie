@@ -437,7 +437,7 @@ export const lawTable = {
   "Item duration": {
     rule: "item-duration",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'The value of duration for items that are not time dependent must not be used in any item or test-level expression', info.txt:8468) (expressions.ts Item_duration over ItemTiming; the UP audit's A62)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'The value of duration for items that are not time dependent must not be used in any item or test-level expression', info.txt:8468) (expressions.ts: each reference to an item's duration, and each reading of it through an item ref, contained in the time-dependent ItemTiming rows; the UP audit's A62)",
   },
   "Item ref target": {
     rule: "item-ref-target",
