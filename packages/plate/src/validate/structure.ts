@@ -30,9 +30,10 @@
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
  * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
  * placements, child counts and the range of the count attributes, and beside them the information
- * model's own sentences the XSD does not hold: the floor of a literal `figures` or `n`, and the
- * `tolerance` an absolute or relative `qti-equal` must carry. The XSD's own order and counts of
- * children are not checked.
+ * model's own sentences the XSD does not hold: the floor of a literal `figures` or `n`, the
+ * `tolerance` an absolute or relative `qti-equal` must carry, the identifiers the built-in
+ * variables keep from every declaration, and the tokens a `tolerance` may hold. The XSD's own order
+ * and counts of children are not checked.
  *
  * @module
  */
@@ -306,9 +307,19 @@ const meetsBound = (name: BuiltinName, value: string, bound: string): boolean =>
 };
 
 /**
- * A reading that narrows an attribute: on the named elements, or on every element whose table
- * declares it, a value the XSD's own type admits must also satisfy `holds`, which reads the value
- * collapsed, or it is `attribute-type` with `expected` as the values the reading admits.
+ * What settles a narrowed attribute, which its refusal's detail carries: a shared reading, or a
+ * line of the information model with the `check` that names the case and the qti package's rule
+ * that refuses the same, `pantry`.
+ */
+type Narrowing =
+  | { readonly reading: string }
+  | { readonly check: string; readonly pantry: string; readonly source: string };
+
+/**
+ * A reading, or a sentence of the information model, that narrows an attribute: on the named
+ * elements, or on every element whose table declares it, a value the XSD's own type admits must
+ * also satisfy `holds`, which reads the value collapsed, or it is `attribute-type` with `expected`
+ * as the values the row admits and the facts of `settled`.
  */
 interface NarrowedAttribute {
   readonly attribute: string;
@@ -316,7 +327,7 @@ interface NarrowedAttribute {
   readonly expected: string;
   readonly holds: (lexical: string) => boolean;
   readonly kind: "narrowed-attribute";
-  readonly reading: string;
+  readonly settled: Narrowing;
 }
 
 /**
@@ -492,11 +503,54 @@ const isSingleDeclaration = (parent: Option.Option<SourceElement>): boolean =>
   );
 
 /**
+ * The identifiers of the built-in session variables, which "are reserved" (info.txt:12006), so no
+ * declaration may take one: the qti package refuses a declaration of any kind that does as
+ * `DeclarationNotReserved` (`packages/pantry/src/schema/declaration.ts:278`). An identifier is an
+ * NCName, compared exactly after collapse, so `Duration` is another name.
+ */
+const reservedIdentifiers: ReadonlySet<string> = new Set([
+  "completionStatus",
+  "duration",
+  "numAttempts",
+]);
+
+/**
+ * Each declaration, with the line of the information model that keeps the built-in variables'
+ * identifiers from it. An outcome's, a response's and a template's `identifier` each say "The
+ * identifiers of the built-in session variables are reserved"; a context declaration's says "All
+ * item variables declared in an item share the same namespace", the namespace the built-in
+ * variables are in.
+ */
+const reservingDeclarations = [
+  ["qti-context-declaration", "info.txt:22603"],
+  ["qti-outcome-declaration", "info.txt:12006"],
+  ["qti-response-declaration", "info.txt:39226"],
+  ["qti-template-declaration", "info.txt:45843"],
+] as const;
+
+/**
+ * Report whether a collapsed `tolerance` holds only tokens the qti package's `toleranceList`
+ * pattern admits (`packages/pantry/src/schema/patterns.ts:401`, refused there as P6): each an
+ * `xs:double` or an NCName, one space apart, and the empty list too. The XSD's union of `xs:string`
+ * and `xs:double` admits any token, but a token that is not a number names the variable that holds
+ * one, and a variable's name is an NCName. The pattern bounds an NCName to 256 characters for the
+ * qti package's keys; that bound is its storage's, not the standard's, so no length is compared.
+ *
+ * @param lexical The `tolerance`, collapsed.
+ * @returns Whether every token is a number or a variable's name.
+ */
+const toleranceTokens = (lexical: string): boolean =>
+  lexical === "" ||
+  lexical.split(" ").every((token) => doubleLexical.test(token) || isNcName(token));
+
+/**
  * The shared readings this module applies over the XSD's rules, one row each.
  *
  * Every refusal a row gives carries the row's reading in its detail, as `reading`, which the
  * verdict's wording cites; a `child-count` refusal carries `source`, a reading or a specification
- * line, instead, and so does the refusal of an information-model row, its line of `info.txt`.
+ * line, instead, and so does the refusal of an information-model row, its line of `info.txt`. A
+ * narrowed attribute that the information model settles carries, beside `source`, the `check` that
+ * names its case and the qti package's rule, `pantry`.
  */
 const readingRows: readonly ReadingRow[] = [
   // Reading 8 (spec-readings.md:65): a match table entry's `target-value` is a value of the
@@ -519,7 +573,7 @@ const readingRows: readonly ReadingRow[] = [
     expected: "a double greater than 0",
     holds: (lexical) => Option.exists(doubleValue(lexical), (read) => read > 0),
     kind: "narrowed-attribute",
-    reading: "16",
+    settled: { reading: "16" },
   },
   // Reading 17 (spec-readings.md:120): a `view` list holds at least one view, where the XSD's list
   // admits none.
@@ -529,7 +583,7 @@ const readingRows: readonly ReadingRow[] = [
     expected: "a list of at least one view",
     holds: (lexical) => lexical !== "",
     kind: "narrowed-attribute",
-    reading: "17",
+    settled: { reading: "17" },
   },
   // Reading 18 (spec-readings.md:123): an order or graphic-order interaction's `min-choices` is at
   // least 1, where the XSD admits 0. `max-choices="0"` means unlimited, and no count is compared.
@@ -539,7 +593,7 @@ const readingRows: readonly ReadingRow[] = [
     expected: "an integer at least 1",
     holds: (lexical) => integerLexical.test(lexical) && BigInt(lexical) >= 1n,
     kind: "narrowed-attribute",
-    reading: "18",
+    settled: { reading: "18" },
   },
   // Reading 20 (spec-readings.md:132): a PCI holds exactly one `qti-interaction-markup`, which may
   // be empty.
@@ -719,6 +773,31 @@ const readingRows: readonly ReadingRow[] = [
     kind: "conditional-attribute",
     source: "info.txt:24946",
     when: { attribute: "tolerance-mode", value: "relative" },
+  },
+  // The information model reserves the built-in session variables' identifiers, `completionStatus`,
+  // `numAttempts` and `duration`, from every declaration (info.txt:12006, :22603, :39226, :45843),
+  // as pantry's `DeclarationNotReserved` refuses a declaration of any kind that takes one, in an
+  // item or a test. Admitted, such a declaration would shadow the built-in it names.
+  ...reservingDeclarations.map(([element, source]): NarrowedAttribute => ({
+    attribute: "identifier",
+    elements: [element],
+    expected:
+      "an identifier other than the built-in variables' completionStatus, numAttempts and duration",
+    holds: (lexical) => !reservedIdentifiers.has(lexical),
+    kind: "narrowed-attribute",
+    settled: { check: "reserved-identifier", pantry: "DeclarationNotReserved", source },
+  })),
+  // The information model's `tolerance` (info.txt:24946) is two numbers, t0 and t1, or one for
+  // both, and a token that is not a number names the variable that holds one. So each token is an
+  // `xs:double` or an NCName, as pantry's `toleranceList` pattern (P6) admits, where the XSD's
+  // `xs:string` member admits any token, such as `1,5`.
+  {
+    attribute: "tolerance",
+    elements: ["qti-equal"],
+    expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
+    holds: toleranceTokens,
+    kind: "narrowed-attribute",
+    settled: { check: "tolerance-token", pantry: "P6", source: "info.txt:24946" },
   },
   // Single cardinality is "a single value" (info.txt:73049, the information model's
   // `CardinalityEnum`), so the default or correct value of a single declaration holds one
@@ -1524,11 +1603,7 @@ const checkValue = (
         !row.holds(lexical),
     )
     .map((row) =>
-      refuse(source, "attribute-type", at, {
-        ...detail,
-        expected: row.expected,
-        reading: row.reading,
-      }),
+      refuse(source, "attribute-type", at, { ...detail, expected: row.expected, ...row.settled }),
     );
   const ranged = countRanges
     .filter(

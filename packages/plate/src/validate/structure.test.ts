@@ -1083,6 +1083,54 @@ const xBox = (...attributes: readonly SourceAttribute[]): SourceDocument =>
     ),
   );
 
+/**
+ * Each declaration element, with the line of the information model that keeps the built-in
+ * variables' identifiers from it: the session variables' identifiers are reserved, and all item
+ * variables share one namespace.
+ */
+const reservations = [
+  ["qti-context-declaration", "info.txt:22603"],
+  ["qti-outcome-declaration", "info.txt:12006"],
+  ["qti-response-declaration", "info.txt:39226"],
+  ["qti-template-declaration", "info.txt:45843"],
+] as const;
+
+/**
+ * Construct a document whose root is a single identifier declaration.
+ *
+ * @param name The declaration's local name.
+ * @param identifier Its `identifier`, as written.
+ * @returns The document.
+ */
+const declaredAs = (name: string, identifier: string): SourceDocument =>
+  literal(
+    name,
+    attr("identifier", identifier),
+    attr("cardinality", "single"),
+    attr("base-type", "identifier"),
+  );
+
+/**
+ * Construct a document whose root is an absolute `qti-equal` with the given tolerance.
+ *
+ * @param tolerance The `tolerance`, as written.
+ * @returns The document.
+ */
+const tolerated = (tolerance: string): SourceDocument =>
+  literal("qti-equal", attr("tolerance-mode", "absolute"), attr("tolerance", tolerance));
+
+/**
+ * The `attribute-type` refusals of a document checked against the generated tables, by
+ * location.
+ *
+ * @param source The document.
+ * @returns Each `attribute-type` refusal's location, in document order.
+ */
+const mistyped = (source: SourceDocument): readonly Location[] =>
+  checkStructure(source, generatedTables)
+    .filter((refusal) => refusal.rule === "attribute-type")
+    .map((refusal) => refusal.location);
+
 describe("checkStructure", () => {
   describe("the six rules", () => {
     it("[I-0] refuses an element its parent's table does not admit as unknown-element", () => {
@@ -2297,6 +2345,125 @@ describe("checkStructure", () => {
         literal("qti-equal"),
       ]) {
         assert.deepStrictEqual(found(tolerant, generatedTables), []);
+      }
+    });
+  });
+
+  describe("the built-in variables' reserved identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance tokens (pantry P6)", () => {
+    it("[I-9a] refuses a declaration named completionStatus, numAttempts or duration as attribute-type, on each of the four declarations (pantry DeclarationNotReserved; info.txt:12006, :22603, :39226, :45843)", () => {
+      for (const [name, line] of reservations) {
+        for (const identifier of ["completionStatus", "numAttempts", "duration", " duration "]) {
+          const source = declaredAs(name, identifier);
+
+          assert.deepStrictEqual(found(source, generatedTables), [
+            ["attribute-type", at(`${name}/@identifier`)],
+          ]);
+          assert.deepStrictEqual(first(source, generatedTables)?.detail, {
+            attribute: "identifier",
+            check: "reserved-identifier",
+            element: name,
+            expected:
+              "an identifier other than the built-in variables' completionStatus, numAttempts and duration",
+            pantry: "DeclarationNotReserved",
+            source: line,
+            value: identifier,
+          });
+        }
+      }
+    });
+
+    it("[I-9a] admits a declaration with any other identifier, a built-in's name in another case and QTI_CONTEXT among them", () => {
+      for (const [name] of reservations) {
+        for (const identifier of [
+          "SCORE",
+          "Duration",
+          "completionstatus",
+          "numAttempts2",
+          "QTI_CONTEXT",
+        ]) {
+          assert.deepStrictEqual(
+            found(declaredAs(name, identifier), generatedTables),
+            [],
+            identifier,
+          );
+        }
+      }
+    });
+
+    it("[I-9a] refuses a reserved identifier on a declaration inside an item and inside a test (pantry DeclarationNotReserved)", () => {
+      const status = el("qti-outcome-declaration", [
+        attr("identifier", "completionStatus"),
+        attr("cardinality", "single"),
+        attr("base-type", "identifier"),
+      ]);
+      const timed = el("qti-outcome-declaration", [
+        attr("identifier", "duration"),
+        attr("cardinality", "single"),
+        attr("base-type", "float"),
+      ]);
+
+      assert.deepStrictEqual(mistyped(item([status])), [
+        at("qti-assessment-item/qti-outcome-declaration/@identifier"),
+      ]);
+      assert.deepStrictEqual(
+        mistyped(
+          doc(
+            location,
+            el("qti-assessment-test", [attr("identifier", "test"), attr("title", "Test")], [timed]),
+          ),
+        ),
+        [at("qti-assessment-test/qti-outcome-declaration/@identifier")],
+      );
+    });
+
+    it("[I-9a] refuses a qti-equal tolerance token that is neither an xs:double nor an NCName, such as 1,5, as attribute-type (pantry P6, info.txt:24946)", () => {
+      for (const tolerance of [
+        "1,5",
+        "0.5 1,5",
+        "{TOL}",
+        "+INF",
+        "1.5.5",
+        "5%",
+        "-TOL",
+        "TOL 1e",
+      ]) {
+        const source = tolerated(tolerance);
+
+        assert.deepStrictEqual(
+          found(source, generatedTables),
+          [["attribute-type", at("qti-equal/@tolerance")]],
+          tolerance,
+        );
+        assert.deepStrictEqual(first(source, generatedTables)?.detail, {
+          attribute: "tolerance",
+          check: "tolerance-token",
+          element: "qti-equal",
+          expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
+          pantry: "P6",
+          source: "info.txt:24946",
+          value: tolerance,
+        });
+      }
+    });
+
+    it("[I-9a] admits tolerance tokens that are each an xs:double or an NCName, 0.5, 1 2, TOL and INF among them, and an empty tolerance, as pantry's toleranceList does", () => {
+      for (const tolerance of [
+        "0.5",
+        "1 2",
+        "TOL",
+        "INF",
+        "-INF",
+        "NaN",
+        "1e-3",
+        ".5",
+        "5.",
+        "+2",
+        "TOL 0.5",
+        "_low é",
+        " 0.5\t1\n",
+        "",
+      ]) {
+        assert.deepStrictEqual(found(tolerated(tolerance), generatedTables), [], tolerance);
       }
     });
   });

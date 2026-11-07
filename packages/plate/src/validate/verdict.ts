@@ -1427,6 +1427,52 @@ const expressionType = (refusal: Refusal): string => {
 };
 
 /**
+ * Word an `attribute-type` refusal, by the `check` its detail names.
+ *
+ * - `reserved-identifier` (pantry's `DeclarationNotReserved`): a declaration whose `identifier` is a
+ *   built-in variable's, `completionStatus`, `numAttempts` or `duration`.
+ * - `tolerance-token` (pantry's P6): a `qti-equal`'s `tolerance` holding a token that is neither an
+ *   `xs:double` nor an NCName.
+ * - None: a value outside the attribute's type, or outside what a reading or the information model
+ *   narrows it to, which the `expected` fact names.
+ *
+ * Each cites what settles it ({@link settled}).
+ *
+ * @param refusal The refusal.
+ * @returns The sentence.
+ */
+const attributeType = (refusal: Refusal): string => {
+  const { attribute, element } = named(refusal);
+  const value = code(fact(refusal, "value", ""));
+
+  switch (fact(refusal, "check", "")) {
+    case "reserved-identifier": {
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, the identifier of a built-in variable, which no declaration may take${settled(refusal)}.`,
+        `give ${code(element)} another identifier; the built-in variable needs no declaration`,
+      );
+    }
+    case "tolerance-token": {
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, which holds a token that is neither a number (${code("xs:double")}) nor a variable's name (an NCName)${settled(refusal)}.`,
+        `write each token of ${code(attribute)} as a number or a variable's name, one space apart`,
+      );
+    }
+    default: {
+      const expected = optionalFact(refusal, "expected");
+
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, which is not ${Option.getOrElse(expected, () => "a value its type allows")}${settled(refusal)}.`,
+        `write a value that is ${Option.getOrElse(expected, () => "of the attribute's type")}`,
+      );
+    }
+  }
+};
+
+/**
  * Word an `undeclared-variable` refusal, by the `check` its detail names.
  *
  * - `untimed-duration` (pantry's `item-duration`): the built-in `duration`, read where the item is
@@ -1540,9 +1586,11 @@ const templateRequirements = (refusal: Refusal): string => {
  * that root names, `expected`.
  *
  * `attribute-type` and `missing-attribute` cite the `reading` that settles them, or else the
- * `source`, a line of QTI's information model, for the floor of a literal `figures` or `n` and the
- * `tolerance` an absolute or relative `qti-equal` must carry. `missing-attribute` names the mode
- * that requires the attribute, `whenAttribute` with `whenValue`, when one does.
+ * `source`, a line of QTI's information model, for the floor of a literal `figures` or `n`, the
+ * `tolerance` an absolute or relative `qti-equal` must carry, a declaration named after a built-in
+ * variable and a `tolerance` token that is neither a number nor a name; `attribute-type` words the
+ * last two by their `check` ({@link attributeType}). `missing-attribute` names the mode that
+ * requires the attribute, `whenAttribute` with `whenValue`, when one does.
  */
 const wordings = {
   "ambiguous-reference": (refusal) => {
@@ -1563,16 +1611,7 @@ const wordings = {
       `rename the identifier whose ${code(".")} lets ${reference} split two ways, so that only one reading names a variable`,
     );
   },
-  "attribute-type": (refusal) => {
-    const { attribute, element } = named(refusal);
-    const expected = optionalFact(refusal, "expected");
-
-    return sentence(
-      refusal,
-      `${code(element)}'s attribute ${code(attribute)} is ${code(fact(refusal, "value", ""))}, which is not ${Option.getOrElse(expected, () => "a value its type allows")}${settled(refusal)}.`,
-      `write a value that is ${Option.getOrElse(expected, () => "of the attribute's type")}`,
-    );
-  },
+  "attribute-type": attributeType,
   binding: (refusal) => {
     const interaction = fact(refusal, "interaction", "the interaction");
     const response = fact(refusal, "response", "");
