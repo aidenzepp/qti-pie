@@ -52,12 +52,14 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
+import { Document } from "#pantry/qti/chardata.ts";
 import { LabelUse } from "#pantry/qti/identity.ts";
 import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   accumulatorOf,
+  assertVerdict,
   authorRole,
   constraintDescribed,
   judged,
@@ -89,6 +91,12 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
  * The MathML namespace.
  */
 const mathml = "http://www.w3.org/1998/Math/MathML";
+
+/**
+ * UTF-8's encoding label, as crust's reader reports it and `Document` stores it.
+ */
+// oxlint-disable-next-line unicorn/text-encoding-identifier-case -- the label as a document states it
+const utf8Label = "UTF-8";
 
 /**
  * The host law model, the oracle's tables over the grammar.
@@ -1038,12 +1046,11 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a shared kind's state outside Symbol or unfollowed, a junk accumulator at each fold's first slot, a wrong after, a leaked root ancestry, a wrong nearest, an end that is not its node's characters' and an xsi:type outside XsiType",
+        "refuses a shared kind's state outside Symbol or unfollowed, a junk accumulator at each fold's first slot, a wrong after, a wrong nearest, an end that is not its node's characters' and an xsi:type outside XsiType",
         () =>
           // Oracle: the specification as a checker: N5's Symbol and Follow (`m:mfrac`'s two `m:ci`,
           // their positions read from the closed relations), fin.md §4.3's first-slot pins and
-          // combine CHECKs, C10's root
-          // pin, N8, E1's ends (reading 127) and N12, each an edit of a lawful item's rows that
+          // combine CHECKs, N8, E1's ends (reading 127) and N12, each an edit of a lawful item's rows that
           // breaks the one law.
           // Bound: the two lawful items under each named edit.
           Effect.gen(function* rowLaws() {
@@ -1110,23 +1117,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               "item body",
             );
             const textLeaf = targetOf(lawful, (row) => row["kind"] === "text", "text node");
-            const flag =
-              Flag.handles.find(
-                (handle) =>
-                  !Banned.rows.some(
-                    (row) =>
-                      row.flag === handle && lawful.some(({ fact }) => fact["kind"] === row.kind),
-                  ),
-              ) ?? Flag.handles[0];
-            const leaked = new Set([flag]);
-            const leakedRows = nodeFactsOf({
-              ...lawfulRows,
-              nodes: lawfulRows.nodes.map((node) => ({
-                ...node,
-                derived: { ...node.derived, ancestry: new Set([...node.derived.ancestry, flag]) },
-                parentAncestry: new Set([...node.parentAncestry, flag]),
-              })),
-            });
             const cases: readonly {
               readonly codes: readonly string[];
               readonly name: string;
@@ -1203,19 +1193,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               },
               {
                 codes: ["23514"],
-                name: "a leaked root ancestry, carried consistently down the tree (C10)",
-                roles: ["N1 sentinel"],
-                rows: lawful.map((row, at) => ({
-                  ...row,
-                  fact: {
-                    ...row.fact,
-                    ancestry: leakedRows[at]?.fact["ancestry"] ?? "",
-                    parentAncestry: leakedRows[at]?.fact["parentAncestry"] ?? "",
-                  },
-                })),
-              },
-              {
-                codes: ["23514"],
                 name: "a nearest that is no interaction's",
                 roles: ["N8 nearest"],
                 rows: edited(lawful, textLeaf, { nearest: lawful[textLeaf]?.fact["parent"] ?? "" }),
@@ -1239,7 +1216,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 rows: edited(lawful, lastElement, { governs: "xs:anyType" }),
               },
             ];
-            assert.isTrue(leaked.size === 1);
             for (const { codes, name, roles, rows } of cases) {
               assertRefused(
                 constraints,
@@ -1249,6 +1225,93 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 name,
               );
             }
+          }),
+        leaseTestTimeoutMs,
+      );
+
+      it.effect(
+        "refuses a root ancestry its document's context does not state, carried consistently down the tree, by the root's context containment, and accepts the document's own (C10, spec reading 117)",
+        () =>
+          // Oracle: the specification as a checker, spec reading 117 and node.ts's N1: a document
+          // node's ancestry is its document's context, which its `Document` row states through
+          // `nodeContext`, the containment `Document(node, nodeChildren, context, …) to Node(id,
+          // children, ancestry, …)`, set immediate. N1 pins no ancestry, and a flag carried down
+          // the tree keeps E1 (ancestry is parentAncestry with Enters) and N6 (the flag is one no
+          // kind of the item bans), so the containment is the one law the edit breaks: 23503 on
+          // its key.
+          // Bound: the lawful item with its `Document` row of the empty context, and the same rows
+          // with one flag leaked into the root and carried down the tree.
+          Effect.gen(function* rootContext() {
+            const client = yield* loginSession;
+            const key = yield* constraintDescribed(
+              client,
+              "document",
+              "foreign key Document(node, nodeChildren, context, %) to Node(id, children, ancestry, %)",
+            );
+            const lawfulRows = yield* foldedOf(lawfulItem);
+            const lawful = nodeFactsOf(lawfulRows);
+            const flag = Flag.handles.find(
+              (handle) =>
+                !Banned.rows.some(
+                  (row) =>
+                    row.flag === handle && lawful.some(({ fact }) => fact["kind"] === row.kind),
+                ),
+            );
+            assert.isDefined(flag, "a flag no kind of the item bans");
+
+            const leaked = nodeFactsOf({
+              ...lawfulRows,
+              nodes: lawfulRows.nodes.map((node) => ({
+                ...node,
+                derived: {
+                  ...node.derived,
+                  ancestry: new Set([...node.derived.ancestry, flag ?? ""]),
+                },
+                parentAncestry: new Set([...node.parentAncestry, flag ?? ""]),
+              })),
+            });
+            const root = lawful.find(({ fact }) => fact["start"] === 0n)?.fact ?? {};
+            const document: Stated = {
+              fact: {
+                assembled: false,
+                charset: utf8Label,
+                context: root["ancestry"] ?? "",
+                contextNearest: root["nearest"] ?? "",
+                contextNearestKind: root["nearestKind"] ?? "",
+                encoding: "",
+                exportCharset: utf8Label,
+                node: root["id"] ?? "",
+                nodeChildren: root["children"] ?? 0n,
+                nodeDocument: root["document"] ?? "",
+                nodeGoverns: root["governs"] ?? "",
+                nodeKind: root["kind"] ?? "",
+                nodeParentKind: root["parentKind"] ?? "",
+                nodeStart: root["start"] ?? 0n,
+                package: "00000000-0000-4000-8000-0000000000ff",
+                path: "item.xml",
+                resourceType: "imsqti_item_xmlv3p0",
+                rootKind: "qti-assessment-item",
+                standalone: "none",
+                version: root["version"] ?? "",
+                xmlVersion: "none",
+              },
+              relation: Document,
+            };
+
+            assertVerdict(
+              yield* judged(client, statedInserts([...lawful, document]), [key]),
+              key,
+              false,
+              "the document's own context",
+              "23503",
+            );
+            assertVerdict(
+              yield* judged(client, statedInserts([...leaked, document]), [key]),
+              key,
+              true,
+              "a leaked root ancestry, carried consistently down the tree",
+              "23503",
+            );
           }),
         leaseTestTimeoutMs,
       );
