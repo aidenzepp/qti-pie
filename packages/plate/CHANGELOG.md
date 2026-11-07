@@ -51,6 +51,12 @@ and both of its entry points are unstable until M3.
     name (an NCName), such as `1,5` (P6).
 - Where QTI makes an integer a float, an integer beyond the largest finite float becomes the
   largest finite float of its sign (reading 45). Before, it became an infinity.
+- `qti-inside` and an area mapping decide exactly whether a `circle`, `ellipse` or `poly` area
+  holds a point, at any size. A point on the area's boundary is inside it (reading 52). For
+  example, the point (312, 305) is now inside the ellipse `300,300,13,13`, so an answer at that
+  point can score differently. Before, these tests rounded and could overflow. A point on the
+  boundary could fall outside, and a huge area could hold a point far outside it. A coordinate
+  beyond the largest finite float still reads as that float, as before.
 - The math functions run on plate's own port of FDLIBM 5.3, so they give the same result in Node,
   Chromium and WebKit. [`NOTICE`](NOTICE) holds Sun's notice for the ported routines.
 - `qti-sum`, `qti-subtract`, `qti-product` and `qti-lcm` give NULL for an integer result of more
