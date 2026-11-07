@@ -6,14 +6,15 @@
  * and `src/import/binding-fit.db.test.ts` against the database.
  *
  * A binding whose name a response declaration of its item holds has its `BindingDeclaration` (or
- * `PlacedBindingDeclaration`) row, and one whose name none holds has none, which "Binding
- * declared" refuses alone (`#pantry/qti/interactions.ts`; lane NIL's audit, B1 and B2: a missing
- * value is a row of its own relation, never a sentinel). The fit laws ("BindingFit",
- * "RecordBindingFit", "Binding cardinality" and `max-strings-required`) read the declaration rows,
- * and the law oracle judges them only where the declaration writes its `cardinality` as a
- * cardinality is spelled: one left unwritten is AL3's alone, and one written as no cardinality its
- * value domain's alone (the orchestrator's ruling of 2026-11-06: an absent attribute is no empty
- * one, and one cause is refused under one rule).
+ * `PlacedBindingDeclaration`) row, whatever the declaration's cardinality spells, and one whose
+ * name none holds has none, which "Binding declared" refuses alone (`#pantry/qti/interactions.ts`;
+ * lane NIL's audit, B1 and B2: a missing value is a row of its own relation, never a sentinel;
+ * spec reading 159). The fit laws ("BindingFit", "RecordBindingFit", "Binding cardinality" and
+ * `max-strings-required`) read the binding's `BindingCardinality` (or `PlacedBindingCardinality`)
+ * row, which it has only where the declaration writes its `cardinality` as a cardinality is
+ * spelled, and the law oracle judges them only there: one left unwritten is AL3's alone, and one
+ * written as no cardinality its value domain's alone (the orchestrator's ruling of 2026-11-06: an
+ * absent attribute is no empty one, and one cause is refused under one rule).
  */
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { editText, replaceOnce } from "#pantry/test/oracle-complete/mutation.ts";
@@ -201,10 +202,10 @@ const written: Readonly<Partial<Record<BindingState, string>>> = {
  */
 export interface BindingExpectation {
   /**
-   * The cardinality the bound declaration's `Declaration` row holds, the one it spells; none where
-   * no response declaration holds the name, or where its cardinality is unwritten or spells
-   * nothing, which leaves it no row (the declarations overlay's `typedDeclarationOf`; lane NIL's
-   * audit, B11).
+   * The cardinality the bound declaration's `DeclarationCardinality` row holds, the one it spells;
+   * none where no response declaration holds the name, or where its cardinality is unwritten or
+   * spells nothing, which leaves it no row (the declarations overlay's `typedDeclarationOf`; spec
+   * reading 158).
    */
   readonly held: string | undefined;
   /**

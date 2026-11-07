@@ -4,27 +4,33 @@
  * rows.
  *
  * A binding whose name a response declaration of its item holds has its `BindingDeclaration` (an
- * item's own) or `PlacedBindingDeclaration` (in place) row, and one whose name none holds has none,
- * which "Binding declared" refuses (`#pantry/qti/interactions.ts`; lane NIL's audit, B1 and B2: a
- * missing value is a row of its own relation, never a sentinel). The fit laws read the declaration
- * rows, so they judge only a declared variable. Before it, an item binding `RESP`, which no
- * declaration names, was written beside a nil declaration of no base type and cardinality
- * `single`, and refused by the database under BindingFit and by the oracle under "Binding
- * declared" (lane N2's tier at dadbbbd4, the `undeclared-response` fixture).
+ * item's own) or `PlacedBindingDeclaration` (in place) row, whatever the declaration's cardinality
+ * spells, and one whose name none holds has none, which "Binding declared" refuses
+ * (`#pantry/qti/interactions.ts`; lane NIL's audit, B1 and B2: a missing value is a row of its own
+ * relation, never a sentinel; spec reading 159). The fit laws read the binding's
+ * `BindingCardinality` or `PlacedBindingCardinality` row, which only a declaration whose
+ * cardinality spells a code gives it, so they judge only a variable of a cardinality. Before it, an
+ * item binding `RESP`, which no declaration names, was written beside a nil declaration of no base
+ * type and cardinality `single`, and refused by the database under BindingFit and by the oracle
+ * under "Binding declared" (lane N2's tier at dadbbbd4, the `undeclared-response` fixture).
  *
  * For every site and every state:
  *
  * - Every binding row of the site has exactly one declaration row where a response declaration holds
- *   its name and spells its cardinality, and none otherwise; each declaration row names that
- *   declaration, never the nil uuid, and carries the cardinality its `Declaration` row holds;
+ *   its name, and none otherwise; each declaration row names that declaration's
+ *   `DeclarationIdentifier`, never the nil uuid, and counts its cardinality, 1 where it spells
+ *   one;
+ * - Every declaration row has exactly one cardinality row where the declaration spells its
+ *   cardinality, carrying the cardinality its `DeclarationCardinality` row holds, and none
+ *   otherwise;
  * - The oracle raises "Binding declared" exactly when no response declaration holds the name;
  * - Over a declaration that spells its cardinality, the oracle raises each fit law the closed
- *   `BindingFit` and `RecordBindingFit` say the schema's statements refuse over the declaration
+ *   `BindingFit` and `RecordBindingFit` say the schema's statements refuse over the cardinality
  *   rows, and no other;
  * - Over one that writes none or none spelled, the oracle raises no fit law (the orchestrator's
- *   ruling of 2026-11-06), and the importer writes no `Declaration` row for it and no declaration
- *   row beside its bindings, so no law reads a cardinality it does not have (lane NIL's audit, B11:
- *   a missing value is a row of its own relation, never a sentinel).
+ *   ruling of 2026-11-06), and the importer writes no `DeclarationCardinality` row for it and no
+ *   cardinality row beside its bindings, so no law reads a cardinality it does not have (spec
+ *   readings 158 and 159: a missing value is a row of its own relation, never a sentinel).
  *
  * The database's own verdict over the same scope is `src/import/binding-fit.db.test.ts`'s.
  */
@@ -41,10 +47,12 @@ import { readProgram } from "#pantry/import/program.ts";
 import { anyTypeKinds } from "#pantry/qti/interactions.ts";
 import type {
   BindingBaseType,
+  BindingCardinality,
   BindingDeclaration,
   BoundVariable,
   PlacedBinding,
   PlacedBindingBaseType,
+  PlacedBindingCardinality,
   PlacedBindingDeclaration,
 } from "#pantry/qti/interactions.ts";
 import {
@@ -89,6 +97,13 @@ type DeclarationRow =
   | Addition<typeof PlacedBindingDeclaration>;
 
 /**
+ * A bound variable's cardinality row the importer writes, an item's own or one in place.
+ */
+type CardinalityRow =
+  | Addition<typeof BindingCardinality>
+  | Addition<typeof PlacedBindingCardinality>;
+
+/**
  * A bound variable's base type row the importer writes, an item's own or one in place.
  */
 type BaseTypeRow = Addition<typeof BindingBaseType> | Addition<typeof PlacedBindingBaseType>;
@@ -111,12 +126,12 @@ const fitLaws: ReadonlySet<LawName> = new Set([
  * base type other than string. A variable of no base type that is no record is judged by no fit
  * law over its base type: Declaration base type refuses it alone (lane NIL's audit, B12).
  *
- * @param row - The declaration row.
+ * @param row - The cardinality row.
  * @param baseType - Its `BindingBaseType` or `PlacedBindingBaseType` row's base type, none where
  *   it has none.
  * @returns The law, or none.
  */
-const misfitOf = (row: DeclarationRow, baseType: Option.Option<string>): LawName | undefined => {
+const misfitOf = (row: CardinalityRow, baseType: Option.Option<string>): LawName | undefined => {
   if (row.attribute === "string-identifier") {
     return row.cardinality === "record" || Option.exists(baseType, (held) => held !== "string")
       ? "BindingFit"
@@ -146,8 +161,8 @@ const misfitOf = (row: DeclarationRow, baseType: Option.Option<string>): LawName
 };
 
 /**
- * Hold one case: the importer's binding and declaration rows of the site, the schema's fit
- * relations over them and the oracle's breaches, to the case's expectation.
+ * Hold one case: the importer's binding, declaration and cardinality rows of the site, the
+ * schema's fit relations over them and the oracle's breaches, to the case's expectation.
  *
  * @param site - The site.
  * @param state - The state.
@@ -187,11 +202,24 @@ const holds = (site: BindingSite, state: BindingState) =>
     assert.isNotEmpty(bindings, `${label}: the importer writes no binding row`);
     assert.strictEqual(
       declarations.length,
-      expected.typed ? bindings.length : 0,
+      expected.declared ? bindings.length : 0,
       `${label}: ${String(declarations.length)} declaration rows beside ${String(bindings.length)} bindings`,
     );
 
-    const declared = [...program.inputs.DeclarationName.values()].find(
+    const bindingKey = (row: BaseTypeRow | CardinalityRow | DeclarationRow): string =>
+      JSON.stringify(["instance" in row ? row.instance : "", row.node, row.attribute]);
+    const declaredKeys = new Set(declarations.map(bindingKey));
+    const cardinalities: readonly CardinalityRow[] = [
+      ...program.inputs.BindingCardinality.values(),
+      ...program.inputs.PlacedBindingCardinality.values(),
+    ].filter((row) => declaredKeys.has(bindingKey(row)));
+    assert.strictEqual(
+      cardinalities.length,
+      expected.typed ? declarations.length : 0,
+      `${label}: ${String(cardinalities.length)} cardinality rows beside ${String(declarations.length)} declaration rows`,
+    );
+
+    const declared = [...program.inputs.DeclarationIdentifier.values()].find(
       ({ document, identifier, declarationKind }) =>
         document === item?.node &&
         identifier === expected.identifier &&
@@ -199,6 +227,18 @@ const holds = (site: BindingSite, state: BindingState) =>
     );
     for (const row of declarations) {
       assert.strictEqual(row.declaration, declared?.node, `${label}: the row's declaration`);
+      assert.strictEqual(
+        row.cardinalities,
+        expected.typed ? 1n : 0n,
+        `${label}: the row's count of cardinalities`,
+      );
+    }
+    for (const row of cardinalities) {
+      assert.strictEqual(
+        row.declaration,
+        declared?.node,
+        `${label}: the cardinality's declaration`,
+      );
       assert.strictEqual(row.cardinality, expected.held, `${label}: the row's cardinality`);
     }
 
@@ -218,8 +258,6 @@ const holds = (site: BindingSite, state: BindingState) =>
       `${label}: Binding declared, of the breaches:\n${shown}`,
     );
 
-    const bindingKey = (row: DeclarationRow | BaseTypeRow): string =>
-      JSON.stringify(["instance" in row ? row.instance : "", row.node, row.attribute]);
     const baseTypes = new Map(
       [
         ...program.inputs.BindingBaseType.values(),
@@ -227,7 +265,7 @@ const holds = (site: BindingSite, state: BindingState) =>
       ].map((row) => [bindingKey(row), row.baseType] as const),
     );
     const misfits = new Set(
-      declarations.flatMap(
+      cardinalities.flatMap(
         (row) => misfitOf(row, Option.fromUndefinedOr(baseTypes.get(bindingKey(row)))) ?? [],
       ),
     );
@@ -248,9 +286,11 @@ const holds = (site: BindingSite, state: BindingState) =>
       [],
       `${label}: a fit law judges an untyped binding:\n${shown}`,
     );
-    assert.isUndefined(
-      declared,
-      `${label}: a Declaration row stands for a declaration whose cardinality is unwritten or spells nothing`,
+    assert.isFalse(
+      [...program.inputs.DeclarationCardinality.values()].some(
+        ({ node }) => node === declared?.node,
+      ),
+      `${label}: a DeclarationCardinality row stands for a declaration whose cardinality is unwritten or spells nothing`,
     );
   });
 

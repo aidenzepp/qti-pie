@@ -38,6 +38,7 @@ import { Document } from "#pantry/qti/chardata.ts";
 import {
   AriaRange,
   BindingBaseType,
+  BindingCardinality,
   BindingDeclaration,
   boundKinds,
   BoundVariable,
@@ -157,14 +158,36 @@ const boundRow = (at: number, fields: Partial<Fact<typeof BoundVariable>> = {}) 
   }) satisfies Fact<typeof BoundVariable>;
 
 /**
- * The declaration row of {@link boundRow}'s binding: a stray single identifier response, its
+ * The declaration row of {@link boundRow}'s binding: a stray identifier response with a
+ * cardinality.
+ *
+ * @param at - The interaction's number.
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const declarationRow = (at: number, fields: Partial<Fact<typeof BindingDeclaration>> = {}) =>
+  ({
+    attribute: "response-identifier",
+    baseTypes: 1n,
+    cardinalities: 1n,
+    declaration: stray,
+    declarationKind: "qti-response-declaration",
+    document: stray,
+    identifier: "RESPONSE",
+    kind: "qti-choice-interaction",
+    node: strayNode(at),
+    ...fields,
+  }) satisfies Fact<typeof BindingDeclaration>;
+
+/**
+ * The cardinality row of {@link declarationRow}'s binding: a stray single identifier response, its
  * interaction's most a value wherever its kind has counts.
  *
  * @param at - The interaction's number.
  * @param fields - The fields the case sets.
  * @returns The row.
  */
-const declarationRow = (at: number, fields: Partial<Fact<typeof BindingDeclaration>> = {}) => {
+const cardinalityRow = (at: number, fields: Partial<Fact<typeof BindingCardinality>> = {}) => {
   const kind = fields.kind ?? "qti-choice-interaction";
 
   return {
@@ -172,14 +195,11 @@ const declarationRow = (at: number, fields: Partial<Fact<typeof BindingDeclarati
     baseTypes: 1n,
     cardinality: "single",
     declaration: stray,
-    declarationKind: "qti-response-declaration",
-    document: stray,
-    identifier: "RESPONSE",
     kind,
     mosts: boundKinds.includes(kind) ? 1n : 0n,
     node: strayNode(at),
     ...fields,
-  } satisfies Fact<typeof BindingDeclaration>;
+  } satisfies Fact<typeof BindingCardinality>;
 };
 
 /**
@@ -502,13 +522,13 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const recordCases = [
               {
                 label: "a choice bound to a record",
-                picks: containedIn("BindingDeclaration", "RecordBindingFit"),
-                row: declarationRow(0, { baseTypes: 0n, cardinality: "record" }),
+                picks: containedIn("BindingCardinality", "RecordBindingFit"),
+                row: cardinalityRow(0, { baseTypes: 0n, cardinality: "record" }),
               },
               {
                 label: "a string binding to a record",
-                picks: checkNamed("BindingDeclaration", "BindingFit"),
-                row: declarationRow(0, {
+                picks: checkNamed("BindingCardinality", "BindingFit"),
+                row: cardinalityRow(0, {
                   attribute: "string-identifier",
                   baseTypes: 0n,
                   cardinality: "record",
@@ -518,7 +538,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             ];
             for (const { label, picks, row } of recordCases) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(BindingDeclaration, [row]),
+                ChangeSet.empty(Author).insert(BindingCardinality, [row]),
                 {},
               );
 
@@ -532,7 +552,8 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, the foreign keys of "Binding declared" (reading 75; lane NIL's
           // audit, B1: a missing value is a row of its own relation, never a sentinel): every
-          // binding has its BindingDeclaration, and each BindingDeclaration names a Declaration.
+          // binding has its BindingDeclaration, and each BindingDeclaration names a named
+          // declaration, its DeclarationIdentifier, whatever its cardinality (reading 159).
           // 23503 on those keys alone.
           // Bound: a binding alone, refused; a binding with its declaration row, accepted by the
           // first key; and the old host's nil sentinel, the lawful declaration row with its
@@ -545,7 +566,11 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               "bound_variable",
               "binding_declaration",
             );
-            const named = yield* foreignKeysBetween(client, "binding_declaration", "declaration");
+            const named = yield* foreignKeysBetween(
+              client,
+              "binding_declaration",
+              "declaration_identifier",
+            );
             assert.isNotEmpty(existence);
             assert.isNotEmpty(named);
 
@@ -759,7 +784,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // accepted.
           Effect.gen(function* bindingCardinality() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeysBetween(client, "binding_declaration", "most_count");
+            const keys = yield* foreignKeysBetween(client, "binding_cardinality", "most_count");
             assert.isNotEmpty(keys);
 
             for (const [most, refusedExpected] of [
@@ -788,8 +813,8 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   client,
                   statedInserts([
                     {
-                      fact: declarationRow(0, { mosts: most === undefined ? 0n : 1n }),
-                      relation: BindingDeclaration,
+                      fact: cardinalityRow(0, { mosts: most === undefined ? 0n : 1n }),
+                      relation: BindingCardinality,
                     },
                     ...counted,
                   ]),
@@ -817,7 +842,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // Bound: a multiple binding with max-strings unwritten, refused, and written, accepted.
           Effect.gen(function* maxStrings() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeysBetween(client, "binding_declaration", "count_bound");
+            const keys = yield* foreignKeysBetween(client, "binding_cardinality", "count_bound");
             for (const written of [false, true]) {
               const mosts = written ? 1n : 0n;
               const refused = Option.getOrUndefined(
@@ -825,12 +850,12 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   client,
                   statedInserts([
                     {
-                      fact: declarationRow(0, {
+                      fact: cardinalityRow(0, {
                         cardinality: "multiple",
                         kind: "qti-extended-text-interaction",
                         mosts,
                       }),
-                      relation: BindingDeclaration,
+                      relation: BindingCardinality,
                     },
                     {
                       fact: boundOf({

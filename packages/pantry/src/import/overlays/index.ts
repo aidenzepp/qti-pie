@@ -333,8 +333,13 @@ export const overlayPartsOf = (
     placedBindingRowsOf({
       adaptive: built.flatMap(({ rows }) => [...rows.interactions.ItemMode.values()]),
       baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
+      cardinalities: built.flatMap(({ rows }) => [
+        ...rows.declarations.DeclarationCardinality.values(),
+      ]),
       choices: built.flatMap(({ rows }) => [...rows.interactions.Choice.values()]),
-      declarations: built.flatMap(({ rows }) => [...rows.declarations.DeclarationName.values()]),
+      declarations: built.flatMap(({ rows }) => [
+        ...rows.declarations.DeclarationIdentifier.values(),
+      ]),
       hottexts: built.flatMap(({ rows }) => [...rows.interactions.Hottext.values()]),
       instances: assembled.Instance.values(),
       mosts: built.flatMap(({ rows }) => [...rows.interactions.MostCount.values()]),

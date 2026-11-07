@@ -962,7 +962,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     159,
     {
       owner:
-        "`declarationIdentifierRef` (`src/qti/declarations.ts`), the one tuple a name resolves to, which `DeclarationName` copies; the bindings' resolution through it and their cardinality rows (seat FIX-BINDCARD), and the references' (seat FIX-REFCARD); the oracle's binding and reference laws, which resolve a name whatever the declaration's cardinality (`src/test/oracle.ts`)",
+        "`declarationIdentifierRef` (`src/qti/declarations.ts`), the one tuple a name resolves to, which `DeclarationName` copies; the bindings' resolution through it, `BindingDeclaration` and `PlacedBindingDeclaration`, with the cardinality rows the fit laws, Binding cardinality and Max strings required read, `BindingCardinality` and `PlacedBindingCardinality` (`src/qti/interactions.ts`; `namedOf`, `responseIn` and `namedVariablesOf`, `src/import/overlays/interactions.ts`), held by `src/import/overlays/untyped-bindings.oracle.test.ts`; the references' (seat FIX-REFCARD); the oracle's binding and reference laws, which resolve a name whatever the declaration's cardinality (`src/test/oracle.ts`)",
       status: "P",
     },
   ],

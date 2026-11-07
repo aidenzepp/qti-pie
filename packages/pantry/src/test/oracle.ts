@@ -2794,9 +2794,9 @@ const typeBreach = (
  * alone, and one written outside its value domain by that domain alone, never by a law over a type
  * the declaration does not have (the orchestrator's ruling of 2026-11-06: an absent attribute is no
  * empty one, and one cause is refused under one rule). The schema's fit laws read a binding's
- * `BindingDeclaration` (`#pantry/qti/interactions.ts`), which only a declared binding has, and that
- * row's cardinality is the `DeclarationName` row's, which such a declaration does not have (lane
- * NIL's audit, B11; spec reading 158). Its type enumerates a restriction of `xs:string`, whose
+ * `BindingCardinality` (`#pantry/qti/interactions.ts`), copied from the declaration's
+ * `DeclarationCardinality`, which such a declaration does not have, while its binding is still
+ * declared (spec readings 158 and 159). Its type enumerates a restriction of `xs:string`, whose
  * whiteSpace is `preserve`, so a padded form lies outside it (`imsqti_asiv3p0_v1p0.xsd`, each
  * declaration's `cardinality`).
  *
