@@ -18,10 +18,10 @@
  * - **`lom-title`** on `metaData`: its record's title string is `Metadata Example Item #1` and its
  *   item's title `Unattended Luggage`, so `LomObjectTitle`'s witness containment refuses it; with
  *   the string edited to the item's title, it holds.
- * - **`calendar`**: each `lastUpdated` of the usage-data fixtures `usage3`, `usage3-typed`,
- *   `usage3-padded` and `usage3-float-padded` is accepted by its row's laws, its generated `date`
- *   the day it names; `usage3-feb-30`'s and `usage3-bad-month`'s are refused by `day`'s domain,
- *   `lexicalForm(date)` (23514).
+ * - **the date** (`attribute-lexical`): each `lastUpdated` of the usage-data fixtures `usage3`,
+ *   `usage3-typed`, `usage3-padded` and `usage3-float-padded` is accepted by its row's laws, its
+ *   generated `date` the day it names; `usage3-feb-30`'s and `usage3-bad-month`'s are refused by
+ *   `day`'s domain, `lexicalForm(date)` (23514).
  * - **Usage typed value** (reading 105): each usage value that writes a `baseType` in `usage3-typed`
  *   and `usage3-float-padded` is accepted by its row's laws; `usage3-integer-float`'s float under
  *   `integer` is refused by the `usage_typed_value` CHECK (23514), and a code its lexical form does
@@ -30,7 +30,7 @@
  * Whole-package cases, every law at once through the importer, arrive with Q5.15: `metaData`
  * refused `lom-identifier` and `lom-title`, `simple` accepted, `identifier-mismatch` refused
  * `lom-identifier`, `title-mismatch` refused `lom-title`, and the usage-data fixtures accepted but
- * `usage3-feb-30` (refused `calendar` beside AL1's `attribute-lexical`).
+ * `usage3-feb-30` (refused `attribute-lexical`, by `day`'s domain or AL1's value domain).
  */
 import type { Addition, DbConnection } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeServices } from "@effect/platform-node";

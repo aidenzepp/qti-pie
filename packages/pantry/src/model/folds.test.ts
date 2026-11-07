@@ -732,7 +732,6 @@ const unconstructed = {
   "Binding cardinality": "a response binding, over identifiers drawn without reading",
   "Binding declared": "a response binding, over identifiers drawn without reading",
   BindingFit: "a response binding, over identifiers drawn without reading",
-  "Calendar date": "a usage statistic's date, a value drawn without reading",
   "Choice bounds": "an interaction's choice counts, values drawn without reading",
   "Choice identifier key": "a choice's identifier, a value drawn without reading",
   "Choice not variable":

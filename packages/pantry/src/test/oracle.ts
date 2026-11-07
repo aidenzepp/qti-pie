@@ -48,7 +48,7 @@
  * The laws R87 found the oracle declared and never raised, and the laws the schema states that it
  * had not declared, are stated by `#pantry/test/oracle-laws.ts` (lane OL): the declarations (O2),
  * the expressions (O4), the LOM title (O6), the tests and sections (O7), `Adaptive feedback`, `Max
- * strings required`, `Calendar date`, `Dependency target` and `XML production`. The oracle calls
+ * strings required`, `Dependency target` and `XML production`. The oracle calls
  * its document laws after its own over each document it judges and its package laws after its
  * own, and `src/test/oracle.complete.test.ts` holds every law the oracle declares to a package
  * drawn to break it. The overlays' other laws have no statement yet beyond the rule each replaces:
@@ -753,7 +753,7 @@ export const lawSources = {
   "pi arm": "the XDM processing instructions as rows (plan §1.4)",
   "text arm": "the XDM text nodes as rows (plan §1.4)",
   "value domain":
-    "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash)",
+    "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash); and a usage statistic's lastUpdated, the usage data's DateDType (usagedata/imsqti_usagedatav3p0_v1p0.xsd:127-131, xs:date restricted by the pattern [0-9]{4}-[0-9]{2}-[0-9]{2}), the month lengths and the leap rule included (XML Schema 1.1 Part 2 §3.3.9, Day-of-month Representations), which StatisticDate.day restates as grizzle's lexical(date), whose pattern makes the generated date's cast total (Q5.12)",
   "ws arm": "the XDM whitespace nodes as rows (plan §1.4)",
   ...addedLawSources,
 } as const satisfies Readonly<Record<LawName, string>>;

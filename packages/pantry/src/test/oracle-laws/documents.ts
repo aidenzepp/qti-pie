@@ -11,10 +11,9 @@
  *   names a document and has a general title holds a title string with the document's title, in its
  *   language.
  * - **The laws the oracle declares here** ({@link addedLawNames}): `Adaptive feedback` (§5.49,
- *   §5.52), `Max strings required` (§5.48.6), `Calendar date` (the usage data's `DateDType`),
- *   `Dependency target` (IMS Content Packaging 1.2) and `XML production` (XML 1.0's productions
- *   over the stored texts), each with the schema's rule and source (`#pantry/import/refusal.ts`
- *   `lawTable`), word for word.
+ *   §5.52), `Max strings required` (§5.48.6), `Dependency target` (IMS Content Packaging 1.2) and
+ *   `XML production` (XML 1.0's productions over the stored texts), each with the schema's rule and
+ *   source (`#pantry/import/refusal.ts` `lawTable`), word for word.
  */
 import { Option } from "effect";
 import { rowOf, step } from "#pantry/grammar/ancestry.ts";
@@ -44,7 +43,6 @@ export const documentLaws = [
   "LomObjectTitle",
   "Adaptive feedback",
   "Max strings required",
-  "Calendar date",
   "Dependency target",
   "XML production",
 ] as const;
@@ -67,7 +65,6 @@ type Breach = LawBreach<DocumentLaw>;
  */
 export const addedLawNames = [
   "Adaptive feedback",
-  "Calendar date",
   "Dependency target",
   "Max strings required",
   "XML production",
@@ -81,14 +78,13 @@ export type AddedLaw = (typeof addedLawNames)[number];
 /**
  * The rules {@link addedLawNames} name that the oracle's `oracleRules` did not hold.
  */
-export const addedRules = ["adaptive-feedback", "calendar", "max-strings-required"] as const;
+export const addedRules = ["adaptive-feedback", "max-strings-required"] as const;
 
 /**
  * The rule each added law's refusal is named by, the schema's (`lawTable`).
  */
 export const addedLawRules = {
   "Adaptive feedback": "adaptive-feedback",
-  "Calendar date": "calendar",
   "Dependency target": "idref-target",
   "Max strings required": "max-strings-required",
   "XML production": "well-formedness",
@@ -100,8 +96,6 @@ export const addedLawRules = {
 export const addedLawSources = {
   "Adaptive feedback":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_FeedbackBlock (§5.49, FeedbackBlock, and §5.52, FeedbackInline: 'A feedback element that forms part of a Non-adaptive Item must not contain an interaction object, either directly or indirectly'), plan §1.7 O3 (Q5.09): a non-adaptive item binds no response variable whose interaction stands inside feedback, select(BoundVariable, response, adaptive = false) contained in the interactions outside every feedback flag",
-  "Calendar date":
-    "the usage data XSD usagedata/imsqti_usagedatav3p0_v1p0.xsd:127-131 (DateDType, xs:date restricted by the pattern [0-9]{4}-[0-9]{2}-[0-9]{2}), the type of lastUpdated on CategorizedStatisticDType (:161) and OrdinaryStatisticDType (:198), with XML Schema 1.0 Part 2 §3.2.9.1's lexical space (no year 0000, the Gregorian month lengths and the leap rule) under whiteSpace collapse: exactly grizzle's lexical(date), 0001 to 9999 with no timezone, between XML whitespace (Q5.12)",
   "Dependency target":
     'IMS Content Packaging 1.2: a dependency\'s identifierref names a resource of its manifest, contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")) (Q5.06)',
   "Max strings required":
@@ -125,8 +119,6 @@ const field = (keys: Readonly<Record<string, string>>, name: string): string => 
 export const addedExplainers = {
   "Adaptive feedback": (keys: Readonly<Record<string, string>>) =>
     `${field(keys, "kind")} binds ${field(keys, "identifier")} inside feedback, which a non-adaptive item's feedback may not hold`,
-  "Calendar date": (keys: Readonly<Record<string, string>>) =>
-    `lastUpdated ${JSON.stringify(field(keys, "lexical"))} is no day of the Gregorian calendar from 0001-01-01 to 9999-12-31`,
   "Dependency target": (keys: Readonly<Record<string, string>>) =>
     `a dependency names ${field(keys, "identifier")}, which no resource of its manifest is`,
   "Max strings required": (keys: Readonly<Record<string, string>>) =>
@@ -399,57 +391,6 @@ const interactionLawsOf = (rows: Rows, grammar: ComposedGrammar): readonly Breac
 };
 
 /**
- * A day of `DateDType` (the usage data XSD, `[0-9]{4}-[0-9]{2}-[0-9]{2}`), its whitespace
- * collapsed.
- */
-const dayForm = /^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})$/u;
-
-/**
- * Decide whether a `lastUpdated` is a day of the Gregorian calendar, as grizzle's `lexical(date)`
- * reads it: `YYYY-MM-DD` between XML whitespace, the year from 0001 to 9999, the month's length and
- * February's leap rule kept (XML Schema 1.0 Part 2, §3.2.9.1).
- *
- * @param lexical - The attribute's lexical form.
- * @returns Whether it is one.
- */
-const isCalendarDay = (lexical: string): boolean => {
-  const groups = dayForm.exec(
-    lexical.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, ""),
-  )?.groups;
-  const year = Number(groups?.["year"] ?? "0");
-  const month = Number(groups?.["month"] ?? "0");
-  const day = Number(groups?.["day"] ?? "0");
-  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-  const lengths = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-  return year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= (lengths[month - 1] ?? 0);
-};
-
-/**
- * The usage statistics whose `lastUpdated` is a `DateDType` (the usage data XSD's
- * CategorizedStatisticDType and OrdinaryStatisticDType).
- */
-const statisticKinds: ReadonlySet<string> = new Set([
-  "ud:categorizedStatistic",
-  "ud:ordinaryStatistic",
-]);
-
-/**
- * Judge `Calendar date` over a document's usage statistics.
- *
- * @param rows - The document.
- * @returns The breaches.
- */
-const calendarLawsOf = (rows: Rows): readonly Breach[] =>
-  rows.members.flatMap((node) =>
-    statisticKinds.has(node.kind)
-      ? Option.toArray(valueOf(rows, node.id, "lastUpdated"))
-          .filter((lexical) => !isCalendarDay(lexical))
-          .map((lexical) => breachAt(rows, node, "Calendar date", { lexical }))
-      : [],
-  );
-
-/**
  * XML 1.0's `Char` (§2.2), as a class body.
  */
 const xmlChar = "\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}";
@@ -552,7 +493,6 @@ export const documentDocumentBreaches = (
         : [],
     ),
     ...interactionLawsOf(rows, grammar),
-    ...calendarLawsOf(rows),
     ...productionLawsOf(rows),
   ];
 };

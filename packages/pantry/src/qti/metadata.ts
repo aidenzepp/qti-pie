@@ -37,9 +37,10 @@
  *   (reading 1). So the law is an existential, as `lom-identifier`'s is: a forbidden value's type
  *   has a source of another vocabulary ({@link LomResourceTypeSource}), and a type that writes no
  *   source has no row there to name.
- * - **`calendar`** (G-parse): every `lastUpdated` of a usage statistic, a `DateDType`, is a day of
- *   the Gregorian calendar, its value the typed `date` PostgreSQL derives from it
- *   ({@link StatisticDate}).
+ * - **The date** (G-parse, `attribute-lexical`): every `lastUpdated` of a usage statistic, a
+ *   `DateDType`, is a day of the Gregorian calendar, its value the typed `date` PostgreSQL derives
+ *   from it ({@link StatisticDate}). The attribute's value domain states it; `day`'s type restates
+ *   it under the same law, so the cast is total (the orchestrator's ruling of 2026-11-06).
  * - **Usage typed value** (G-match, spec reading 105): a usage statistic's `ud:value` that writes a
  *   `baseType` holds a value of that base type ("A class that can represent a single value of any
  *   baseType", the usage data binding's Value class, §2.6.5), its text read as a `qti-value`'s is,
@@ -761,9 +762,9 @@ const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
  *   key over its `term`, so no row stands for a term the type does not hold ("E1 derived").
  * - **`lom-learning-resource-type`:** a type whose value collapses to `exam` or `self assessment` has
  *   a source that names another vocabulary ("LOM learning resource type").
- * - **`calendar`:** each statistic's `lastUpdated` is copied into its {@link StatisticDate}, and
- *   every such row has its attribute; its pieces concatenate to the lexical form, and `day`'s type
- *   is the calendar's.
+ * - **the date:** each statistic's `lastUpdated` is copied into its {@link StatisticDate}, and every
+ *   such row has its attribute; its pieces concatenate to the lexical form, and `day`'s type is the
+ *   language of the attribute's value domain ("value domain").
  * - **Usage typed value:** each usage value's `baseType` is copied into its {@link UsageValue}, and
  *   every such row has its attribute; its `text` is its node's string value; its code is the one
  *   its lexical form spells ("E1 derived"); and its text is a lexical form of that base type
