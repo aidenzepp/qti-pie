@@ -169,15 +169,24 @@ export const Mapping = relation(
 /**
  * A map entry's overlay, keyed by its `qti-map-entry` node: its {@link nodeRef} tuple, its
  * `mapping` the node's parent, its mapping's base type, and its `map-key` as written.
+ *
+ * It also holds how the key is matched (reading 98, §7.21.3): `caseText`, the entry's
+ * `case-sensitive` as written, empty where it is unwritten; `folded`, whether a response is matched
+ * to the key without regard to case, which is where the mapping's base type is `string` and the
+ * entry's `case-sensitive` is not true; and `matched`, the key a response meets, the key's ASCII
+ * lowercase where `folded` and the key as written otherwise.
  */
 export const MapKey = relation(
   "MapKey",
   {
     baseType: closedId(BaseType),
+    caseText: keyText,
     document: uuid,
+    folded: pg.boolean,
     key: keyText,
     kind: closedId(NodeKind),
     mapping: uuid,
+    matched: keyText,
     nearest: uuid,
     node: uuid,
     start: natural,
@@ -482,6 +491,20 @@ const mapKeyAttributes = select(Attribute, (a) =>
 );
 
 /**
+ * The `case-sensitive` of each `qti-map-entry`, the source of {@link MapKey}'s `caseText` copy,
+ * beside a key over the same selection whose UNIQUE serves the copy's reverse probe.
+ */
+const caseAttributes = select(Attribute, (a) =>
+  a.and(a.eq(a.name, "case-sensitive"), a.eq(a.kind, "qti-map-entry")),
+);
+
+/**
+ * The lexical forms of an `xs:boolean` true, collapsed: an entry so written is matched by code
+ * points.
+ */
+export const caseSensitiveTrue = ["true", "1"] as const;
+
+/**
  * The map keys of integer mappings: each has its {@link MapKeyInteger} row, and no other key does.
  */
 const integerKeys = select(MapKey, (k) =>
@@ -582,7 +605,28 @@ export const mappingLaws = [
   contained(on(MapKey, "mapping", "baseType"), on(Mapping, "node", "baseType")),
   key(on(mapKeyAttributes, "node")),
   contained(on(mapKeyAttributes, "node", "lexical"), on(MapKey, "node", "key")),
-  key(on(MapKey, "mapping", "key")),
+  key(on(caseAttributes, "node")),
+  contained(on(caseAttributes, "node", "lexical"), on(MapKey, "node", "caseText")),
+  contained(
+    on(
+      select(MapKey, (k) => k.ne(k.caseText, "")),
+      "node",
+      "caseText",
+    ),
+    on(caseAttributes, "node", "lexical"),
+  ),
+  check("E1_derived", MapKey, (k) => {
+    const matchedCase = k.and(
+      k.eq(k.baseType, "string"),
+      k.not(k.in(Compute.collapse(k.caseText), caseSensitiveTrue)),
+    );
+
+    return k.or(
+      k.and(k.eq(k.folded, true), matchedCase, k.eq(k.matched, Compute.lowerAscii(k.key))),
+      k.and(k.eq(k.folded, false), k.not(matchedCase), k.eq(k.matched, k.key)),
+    );
+  }),
+  key(on(MapKey, "mapping", "folded", "matched")),
 
   mirrors(on(integerKeys, "node", "mapping", "key"), on(MapKeyInteger, "node", "mapping", "key")),
   check("E1_derived", MapKeyInteger, (m) =>

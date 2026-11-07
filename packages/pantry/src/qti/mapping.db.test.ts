@@ -144,10 +144,13 @@ const mapKeyRow = (
   baseType: Fact<typeof MapKey>["baseType"] = "string",
 ): Fact<typeof MapKey> => ({
   baseType,
+  caseText: "",
   document: stray,
+  folded: baseType === "string",
   key,
   kind: "qti-map-entry",
   mapping: stray,
+  matched: baseType === "string" ? key.replaceAll(/[A-Z]/gu, (c) => c.toLowerCase()) : key,
   nearest: stray,
   node: strayNode(at),
   start: BigInt(5 + 2 * at),
@@ -204,9 +207,9 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses two map entries of one mapping with one key, identical entries included, by the key on (mapping, key)",
+        "refuses two map entries of one mapping with one key, identical entries included, by the key on (mapping, folded, matched)",
         () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKey, "mapping", "key")), or the host's
+          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKey, "mapping", "folded", "matched")), or the host's
           // key check before it; the two rows differ only by their node, as two identical
           // qti-map-entry elements do.
           // Bound: two entries, each spelling once identical and once a lone repeat among three.
@@ -218,7 +221,9 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
             ]) {
               const outcome = yield* db.apply(ChangeSet.empty(Author).insert(MapKey, rows), {});
 
-              assert.isTrue(rejectedBy(outcome, keyOver("MapKey", ["mapping", "key"])));
+              assert.isTrue(
+                rejectedBy(outcome, keyOver("MapKey", ["mapping", "folded", "matched"])),
+              );
             }
           }),
       );

@@ -74,6 +74,7 @@ const ids: MappingIds = { idOf };
  * One map entry of a generated mapping: its key and its mapped value, as written.
  */
 interface Entry {
+  readonly caseSensitive?: string;
   readonly key: string;
   readonly value: string;
 }
@@ -145,13 +146,19 @@ const elementOf = (
  */
 const treeOf = (input: MappingCase): XdmDocument<Composed> => {
   const ws: XdmChild<Composed> = { _tag: "ws", value: "\n" };
-  const entries = input.entries.flatMap(({ key, value }) => [
+  const entries = input.entries.flatMap(({ caseSensitive, key, value }) => [
     ws,
     elementOf(
       "qti-map-entry",
       [
         ["map-key", key],
         ["mapped-value", value],
+        ...(caseSensitive === undefined
+          ? []
+          : ([["case-sensitive", caseSensitive]] as const satisfies readonly (readonly [
+              ClosedName<Composed>,
+              string,
+            ])[])),
       ],
       [],
     ),
@@ -293,6 +300,52 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
         ),
       ),
   );
+});
+
+describe("import/overlays/mapping.ts, how a map key is matched", () => {
+  it("writes a string key folded unless its entry's case-sensitive is true, so only same-way entries share a matched key", () => {
+    // Oracle: reading 98 (decision 321 (6)): a string key is case-folded where its entry's
+    // `case-sensitive` is false, the default, and compared by code points where it is true;
+    // `xs:boolean`'s whiteSpace is collapse, so a padded true is true. An entry matched
+    // case-sensitively beside one matched case-insensitively is two keys.
+    // Bound: the one mapping each declared base type is written with, its entries named.
+    const rows = rowsOf(
+      treeOf({
+        baseType: "string",
+        entries: [
+          { caseSensitive: "true", key: "York", value: "1" },
+          { key: "york", value: "0.5" },
+          { key: "YORK", value: "0.5" },
+          { caseSensitive: " 1 ", key: "York", value: "1" },
+          { caseSensitive: "false", key: "Leeds", value: "1" },
+        ],
+      }),
+      ids,
+    );
+    const matches = [...rows.MapKey.values()].map((row) => [
+      row.key,
+      row.caseText,
+      row.folded,
+      row.matched,
+    ]);
+
+    assert.deepStrictEqual(matches, [
+      ["York", "true", false, "York"],
+      ["york", "", true, "york"],
+      ["YORK", "", true, "york"],
+      ["York", " 1 ", false, "York"],
+      ["Leeds", "false", true, "leeds"],
+    ]);
+
+    const identifiers = rowsOf(
+      treeOf({ baseType: "directedPair", entries: [{ key: "A B", value: "1" }] }),
+      ids,
+    );
+    assert.deepStrictEqual(
+      [...identifiers.MapKey.values()].map((row) => [row.folded, row.matched]),
+      [[false, "A B"]],
+    );
+  });
 });
 
 /**

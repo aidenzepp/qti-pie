@@ -16,6 +16,7 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import {
+  caseSensitiveTrue,
   floatKeyPattern,
   integerKeyPattern,
   pairKeyPattern,
@@ -179,6 +180,24 @@ type IntegerParts = Pick<
  * @returns It without its leading and trailing spaces, tabs and line ends.
  */
 const trimmed = (text: string): string => text.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "");
+
+/**
+ * Collapse XML whitespace as `xs:boolean`'s whiteSpace facet does: runs to one space, none at
+ * either end.
+ *
+ * @param text - The text.
+ * @returns The collapsed text.
+ */
+const collapsedOf = (text: string): string => trimmed(text).replaceAll(/[\t\n\r ]+/gu, " ");
+
+/**
+ * Fold ASCII case, as `Compute.lowerAscii` does.
+ *
+ * @param text - The text.
+ * @returns The text with `A` to `Z` lowercased.
+ */
+const lowerAscii = (text: string): string =>
+  text.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase());
 
 /**
  * Whether a text is a run of zeros, the language of `MapKeyInteger.zeros`.
@@ -486,6 +505,10 @@ const nearestOf = (
  * declaration, which the content model never admits, leaves a copy no `Declaration` row holds, and
  * the database refuses it.
  *
+ * A map entry's `MapKey` row also holds how its key is matched: its `case-sensitive` as written
+ * (empty where unwritten), `folded` where its mapping is of strings and the value is not true, and
+ * `matched`, the key's ASCII lowercase where `folded`.
+ *
  * A map entry with no `map-key` has no `MapKey` row, and AL3 refuses the element. A key past the
  * key-text bound keeps its `MapKey` row and its typed row, whose `keyText` fields alone refuse it
  * (their parts' types bound no length), so it is refused under "Key text bound" only; and a key its
@@ -581,7 +604,18 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     }
 
     const { baseType } = declarationOf(mapping);
-    mapKeys.set(node.id, { ...tupleOf(node), baseType, key, mapping: node.parent });
+    const caseText = valueOf(node.id, "case-sensitive") ?? "";
+    const folded =
+      baseType === "string" && !caseSensitiveTrue.some((form) => form === collapsedOf(caseText));
+    mapKeys.set(node.id, {
+      ...tupleOf(node),
+      baseType,
+      caseText,
+      folded,
+      key,
+      mapping: node.parent,
+      matched: folded ? lowerAscii(key) : key,
+    });
 
     addTypedKey(typed, baseType, { key, mapping: node.parent, node: node.id });
   }
