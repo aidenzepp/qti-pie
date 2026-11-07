@@ -106,6 +106,13 @@ const recorded: readonly Recorded[] = [
     why: "a ring of internal entities is a well-formedness error whether or not the body references it, as the constraint is on the entity; crust refuses the ring where it is declared (dtd.ts), libxml2 2.9.13 only on expanding it",
   },
   {
+    signature:
+      /^O1 crust accepts, libxml2 refuses: Entity '_' not defined \+ PEReference: %_; not found$/u,
+    source:
+      'XML 1.0 (Fifth Edition) section 4.1: WFC Entity Declared holds only in "a document with only an internal DTD subset which contains no parameter entity references" (or none, or standalone=\'yes\'); in "a document with an external subset or parameter entity references" the rule is VC Entity Declared',
+    why: "a subset that references a parameter entity it does not declare takes the document out of the WFC's scope, so a later default's reference to an undeclared entity is a validity error only; crust reads it, libxml2 2.9.13 refuses it with the unread reference",
+  },
+  {
     signature: /^O1 crust accepts, libxml2 refuses: PEReference: %_; not found$/u,
     source:
       'XML 1.0 (Fifth Edition) section 4.1: WFC Entity Declared holds only in "a document with only an internal DTD subset which contains no parameter entity references"; VC Entity Declared covers "a document with an external subset or parameter entity references"; section 5.1 has a non-validating processor stop reading declarations after a parameter entity it has not read',
@@ -199,14 +206,7 @@ const open: readonly Open[] = [
     signature: /^O\d encoding declared against the bytes: (?!crust refuses, libxml2 accepts$).+$/u,
     why: "XML 1.0 (Fifth Edition) section 4.3.3: \"it is a fatal error for an entity including an encoding declaration to be presented to the XML processor in an encoding other than that named in the declaration\"; crust decodes by the byte order mark or the Appendix F pattern and keeps or drops the label (decode.ts: a mark 'decides the encoding ... and the document's declaration is not consulted'; the utf16 decoder keeps 'the label as spelled even when it names the other order'), where it must refuse, and a UTF-8-marked document declaring UTF-16LE is then written without its mark and refused on reading; libxml2 refuses both (2.9.13 only once its input runs past its first buffer for the unmarked one)",
   },
-  {
-    finding:
-      "GEN-B/codec N6: after an unread parameter entity, the internal subset's declarations go unchecked",
-    kept: [{ charset: "UTF-8", text: '<!DOCTYPE r [%f;<!ATTLIST r a CDATA "<">]><r/>' }],
-    signature:
-      /^O1 crust accepts(?: after an unread parameter entity, libxml2 refuses$|, libxml2 refuses: (?=.+ \+ )(?:.+ \+ )?PEReference: %_; not found(?: \+ .+)?$)/u,
-    why: "XML 1.0 (Fifth Edition) section 5.1 has a non-validating processor stop processing entity and attribute-list declarations after a parameter entity it has not read, not stop checking them: each must still match its production ([10] AttValue admits no '<', [9] EntityValue no bare '&'); crust's subset lexer accepts '<!ATTLIST r a CDATA \"<\">' and '<!ENTITY e \"x&\">' after an unread '%f;' (dtd.ts), and refuses them before one; libxml2 refuses them",
-  },
+
   {
     finding: "GEN-B/codec N4: a UTF-16LE or UTF-16BE document is written with a byte order mark",
     kept: [{ charset: "UTF-16BE", text: '<?xml version="1.0" encoding="UTF-16BE"?><r/>' }],
@@ -230,6 +230,20 @@ interface Fixed {
  * The defects closed since the search found them.
  */
 const fixed: readonly Fixed[] = [
+  {
+    commit:
+      "the commit that lexes a declaration after an unread parameter entity without processing it",
+    finding:
+      "GEN-B/codec N6: after an unread parameter entity, the internal subset's declarations went unchecked",
+    kept: [
+      { charset: "UTF-8", text: '<!DOCTYPE r [%f;<!ATTLIST r a CDATA "<">]><r/>' },
+      { charset: "UTF-8", text: '<!DOCTYPE r [%f;<!ENTITY e "x&">]><r/>' },
+      {
+        charset: "UTF-8",
+        text: '<!DOCTYPE r SYSTEM "doc.dtd" [%f;<!ATTLIST r a IDREF "&#x1;">]><r/>',
+      },
+    ],
+  },
   {
     commit: "the commit that holds the subset's processing instructions to [16] and [17]",
     finding:

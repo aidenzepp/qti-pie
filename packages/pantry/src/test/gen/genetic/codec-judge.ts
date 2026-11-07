@@ -1674,31 +1674,6 @@ const defaultBeforeEntity = (genome: CodecGenome): boolean => {
 };
 
 /**
- * Whether a genome's internal subset references a parameter entity that no declaration before the
- * reference declares, which a non-validating processor does not read (XML 1.0 section 5.1).
- *
- * @param genome - The genome.
- * @returns Whether it does.
- */
-const hasUnreadParameter = (genome: CodecGenome): boolean => {
-  const declared = new Set<string>();
-  for (const declaration of genome.doctype.pipe(
-    Option.flatMap(({ subset }) => subset),
-    Option.getOrElse((): readonly Declaration[] => []),
-  )) {
-    if (declaration._tag === "peref" && !declared.has(declaration.name)) {
-      return true;
-    }
-
-    if (declaration._tag === "entity" && declaration.parameter) {
-      declared.add(declaration.name);
-    }
-  }
-
-  return false;
-};
-
-/**
  * Judge one genome: its own features, its bytes by every oracle, and O6 where crust and libxml2
  * both read it.
  *
@@ -1720,11 +1695,6 @@ const judgeOne = Effect.fnUntraced(function* judgeOne(
       ? yield* referenceDifferential(genome, read.success, `${file}.declared.xml`)
       : { disagreements: [], features: ["o6 unjudged"] };
 
-  // After a parameter entity it has not read, crust stops checking the subset's declarations, so a
-  // refusal libxml2 makes there is that one class, whatever its message, but for the refusal of
-  // the unread reference alone, which is libxml2's own class.
-  const unread = hasUnreadParameter(genome);
-
   return {
     disagreements: [
       ...judged.disagreements,
@@ -1742,16 +1712,6 @@ const judgeOne = Effect.fnUntraced(function* judgeOne(
         // section 4.1's last sentence, whatever else the document holds.
         defaultBeforeEntity(genome) && Result.isFailure(read) && !isClassed(held)
           ? classed(held, "default names an entity declared after it")
-          : held,
-      )
-      .map((held) =>
-        unread &&
-        held.signature.startsWith("O1 crust accepts, libxml2 refuses") &&
-        held.signature !== "O1 crust accepts, libxml2 refuses: PEReference: %_; not found"
-          ? {
-              ...held,
-              signature: "O1 crust accepts after an unread parameter entity, libxml2 refuses",
-            }
           : held,
       ),
     features: new Set([...genomeFeatures(genome), ...judged.features, ...references.features]),

@@ -1228,10 +1228,32 @@ const readDeclarationKeyword = Effect.fnUntraced(function* readSubsetDeclaration
 });
 
 /**
+ * Tables a declaration after the subset stopped is lexed into, so its literals are held to their
+ * productions (a default's `AttValue`, an `EntityValue`, the characters its references name) while
+ * nothing it declares binds: empty, apart from the subset's budget, and keeping every reference,
+ * since a document whose subset references a parameter entity is outside WFC Entity Declared's
+ * scope (XML 1.0 section 4.1).
+ *
+ * @param tables - The subset's tables.
+ * @returns The tables to drop.
+ */
+const unprocessed = (tables: Tables): Tables => ({
+  attlists: new Map(),
+  bound: new Set(),
+  budget: tables.budget,
+  entities: new Map(),
+  kept: [],
+  parameters: new Map(),
+  standalone: tables.standalone,
+  stopped: false,
+  undeclared: { _tag: "kept" },
+});
+
+/**
  * Read one comment, processing instruction or markup declaration of the internal subset.
  *
- * `ELEMENT` and `NOTATION` declarations are skipped, and so is every `ENTITY` and `ATTLIST`
- * declaration after the subset stopped (XML 1.0 section 5.1).
+ * `ELEMENT` and `NOTATION` declarations are skipped. An `ENTITY` or `ATTLIST` declaration after
+ * the subset stopped is lexed but not processed (XML 1.0 section 5.1).
  *
  * @param tables - The subset's declarations.
  * @param cursor - The read position, at a `<`.
@@ -1247,12 +1269,16 @@ const lexMarkup = Effect.fnUntraced(function* lexSubsetMarkup(
     yield* skipInstruction(cursor);
   } else {
     const keyword = yield* readDeclarationKeyword(cursor);
-    if (tables.stopped || keyword.endsWith("ELEMENT") || keyword.endsWith("NOTATION")) {
+    // After the subset stopped, an entity or attribute-list declaration is not processed (XML 1.0
+    // section 5.1) but is still held to its production: it is lexed into tables of its own, which
+    // are dropped.
+    const into = tables.stopped ? unprocessed(tables) : tables;
+    if (keyword.endsWith("ELEMENT") || keyword.endsWith("NOTATION")) {
       yield* skipDeclaration(cursor);
     } else if (keyword.endsWith("ENTITY")) {
-      yield* lexEntity(tables, cursor);
+      yield* lexEntity(into, cursor);
     } else {
-      yield* lexAttlist(tables, cursor);
+      yield* lexAttlist(into, cursor);
     }
   }
 });
