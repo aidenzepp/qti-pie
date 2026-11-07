@@ -2361,8 +2361,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ],
   [familyOf("counted", sideOf("Operand", "operator"), "Expression", "operands"), "Arity"],
   // An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of
-  // a set: ∅ where the diagonal holds no row (`any`, `unknown`), never NULL, so no row breaks
-  // either law. A field a closed relation determines is E1 derived.
+  // a set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds
+  // no row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
+  // (docs/grizzle-findings.md, lane DBT's). So no row breaks either law. A field a closed relation
+  // determines is E1 derived.
   [generatedOf(Operand, "baseTypeBit"), "E1 derived"],
   [generatedOf(Operand, "cardinalityBit"), "E1 derived"],
   [
