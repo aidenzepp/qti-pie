@@ -65,6 +65,7 @@ import { Attribute } from "#pantry/qti/attributes.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
+import { testKind } from "#pantry/qti/tests.ts";
 
 /**
  * XML whitespace `S`, possibly none: what an identifier's lexical form holds around its name.
@@ -488,7 +489,7 @@ const everyRootBaseTypes = reservedBaseTypes.filter(({ root }) => root === "any"
 /**
  * Each test's root element, the parent of the outcome declarations a test makes.
  */
-const testRoots = select(Node, (n) => n.eq(n.kind, "qti-assessment-test"));
+const testRoots = select(Node, (n) => n.eq(n.kind, testKind));
 
 /**
  * The typed-value patterns, stated once in `#pantry/qti/expression-types.ts` as `BaseTypePattern`'s

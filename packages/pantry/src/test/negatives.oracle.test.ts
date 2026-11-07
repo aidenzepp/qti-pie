@@ -46,7 +46,9 @@ export interface NegativeExpectation {
 /**
  * The oracle's prediction for each of {@link negativeNames}, keyed by name, for the leased import
  * of them to read. A negative whose `oracle` is `"accepted"` and that is not "(direct)" is a
- * finding: `section-ref-to-item`, whose `main` rule `section-ref-target` no longer exists.
+ * finding. `section-ref-to-item`, whose `main` rule `section-ref-target` no longer exists, was one
+ * until #46 (25d16460) stated "Document entry" for a section ref whose href names no section
+ * document: its section ref names an item.
  */
 export const expectations: Readonly<Record<(typeof negativeNames)[number], NegativeExpectation>> = {
   "branch-backward": { main: ["branch-forward"], oracle: ["branch-forward"] },
@@ -103,7 +105,7 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
   "section-printed-undeclared": { main: ["binding-declared"], oracle: ["P8", "prefixed-ref"] },
   "section-ref-cycle": { main: ["section-ref-cycle"], oracle: ["inclusion-cycle"] },
   "section-ref-identifier-clash": { main: ["structure-identifier"], oracle: ["test-name-key"] },
-  "section-ref-to-item": { main: ["section-ref-target"], oracle: "accepted" },
+  "section-ref-to-item": { main: ["section-ref-target"], oracle: ["entry-kind"] },
   "section-two-isc": { main: ["structure-count"], oracle: ["ordering"] },
   "section-unprefixed-undeclared": {
     main: ["P8", "binding-declared"],

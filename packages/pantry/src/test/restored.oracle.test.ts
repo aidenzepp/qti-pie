@@ -172,16 +172,23 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         }),
     );
 
-    judging.effect("an xi:include naming no listed entry still breaks Include target", () =>
-      Effect.gen(function* missingInclude() {
-        const breaches = breachesOf(yield* judged(packageOfInclude("f.xml")));
+    judging.effect(
+      "an xi:include naming no entry of the package still breaks a law: File exists alone, never Include target beside it (#46's SitePath)",
+      () =>
+        Effect.gen(function* missingInclude() {
+          const breaches = breachesOf(yield* judged(packageOfInclude("f.xml")));
 
-        assert.isAbove(
-          breaches.filter(({ law }) => law === "Include target").length,
-          0,
-          shown(breaches),
-        );
-      }),
+          assert.isAbove(
+            breaches.filter(({ law }) => law === "File exists").length,
+            0,
+            shown(breaches),
+          );
+          assert.deepStrictEqual(
+            breaches.filter(({ law }) => law === "Include target"),
+            [],
+            shown(breaches),
+          );
+        }),
     );
 
     judging.effect(

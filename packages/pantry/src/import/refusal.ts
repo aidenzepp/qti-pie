@@ -1729,8 +1729,9 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   // document there is its SiteTarget. An href naming a path no entry holds is refused by the
   // SitePath's File_exists check alone, and the laws below read only paths an entry holds: an
   // include with no such href, or whose path names no listed document, is refused here (reading
-  // 115); a section ref, which must write an href, by "Document entry" on its path; and the target
-  // is the document at its path.
+  // 115), but one whose href resolves outside the package, marked `external`, which is stored as
+  // written and never fetched; a section ref, which must write an href, by "Document entry" on its
+  // path; and the target is the document at its path.
   [containedIn(sideOf("SitePath", "node"), sideOf("SiteTarget", "node")), "Include target"],
   [
     containedIn(sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind")),

@@ -54,6 +54,7 @@ import type {
 import {
   breachAt,
   collapsed,
+  collapsedOf,
   elementsOf,
   typedOr,
   typedValueOf,
@@ -838,7 +839,7 @@ const feedbackTypeOf = (
   rows: View,
   node: Row,
 ): readonly Breach[] => {
-  const named = collapsedOf(rows, node.id, "outcome-identifier");
+  const named = typedValueOf(rows, node.id, "outcome-identifier");
   if (
     Option.isNone(named) ||
     !grammar.references.contentReference.rows.some(
@@ -873,7 +874,7 @@ const feedbackTypeOf = (
   const outcome = declared.members.find(
     ({ id, kind }) =>
       kind === "qti-outcome-declaration" &&
-      Option.contains(collapsedOf(declared, id, "identifier"), named.value),
+      Option.contains(typedValueOf(declared, id, "identifier"), named.value),
   );
   const written = Option.flatMap(Option.fromNullishOr(outcome), ({ id }) =>
     collapsedOf(declared, id, "cardinality"),

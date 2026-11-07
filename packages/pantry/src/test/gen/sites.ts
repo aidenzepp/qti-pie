@@ -165,9 +165,10 @@ export const sitePackage = (box: SiteBox): PackageEntries => {
 /**
  * The rule a site's case breaks, by reading 115 and information model §7.5, none for a listed
  * one: an href naming a file the package does not hold, "File exists", whatever its site; an
- * include naming no document of the package, by an entry it lists as none, a file outside it or
- * no href, "Include target"; a section ref naming no section document, "Document entry", and one
- * with no href, AL3's required attribute.
+ * include naming no document of the package, by an entry it lists as none or no href, "Include
+ * target", and none for one naming a file outside it, which is stored as written and never fetched
+ * (reading 115); a section ref naming no section document, "Document entry", and one with no
+ * href, AL3's required attribute.
  *
  * @param name - The site.
  * @param href - Its case.
@@ -183,11 +184,24 @@ export const ruleOfCase = (name: SiteName, href: HrefCase): string | undefined =
   }
 
   if (sites[name].kind === "xi:include") {
-    return "include-target";
+    return href === "external" ? undefined : "include-target";
   }
 
   return href === "missing" ? "required-attribute" : "entry-kind";
 };
+
+/**
+ * The rules a package of the box breaks outside the site laws: where the item body's include of
+ * `fragment.xml` names a file outside the package, it is stored as written and never fetched, so
+ * no include places the fragment, which is then judged as written, and its text entry's
+ * `response-identifier` and its context variable's `identifier` name declarations only the item
+ * holds ("Idref target"). The other sites' documents hold no such reference.
+ *
+ * @param box - The package.
+ * @returns The rules.
+ */
+export const outsideRulesOfBox = (box: SiteBox): ReadonlySet<string> =>
+  new Set(box.fragment === "external" ? ["idref-target"] : []);
 
 /**
  * The rules a package of the box breaks, one per site whose case breaks one.

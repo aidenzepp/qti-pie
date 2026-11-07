@@ -4162,7 +4162,7 @@ const overlayLaws: readonly ((
         ];
   },
   (node, overlay) => {
-    const named = collapsedOf(overlay, node, "template-identifier");
+    const named = typedValueOf(overlay.view, node.id, "template-identifier");
     if (
       !overlay.isItem ||
       node.kind === "qti-template-variable" ||

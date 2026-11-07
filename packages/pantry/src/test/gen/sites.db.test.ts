@@ -20,15 +20,22 @@ import { importPackage } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { rulesOfBox, siteBox, siteLiteral, sitePackage } from "#pantry/test/gen/sites.ts";
+import {
+  outsideRulesOfBox,
+  rulesOfBox,
+  siteBox,
+  siteLiteral,
+  sitePackage,
+} from "#pantry/test/gen/sites.ts";
 import type { SiteBox } from "#pantry/test/gen/sites.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
  * Import one package of the box and hold the database's verdict to the case table's
- * (`rulesOfBox`) and the law oracle's: accepted exactly where both accept; refused under a rule
- * of the table that the oracle names too, and where the table names one rule, that rule alone, so
+ * (`rulesOfBox`, with `outsideRulesOfBox`'s rules beside the site laws) and the law oracle's:
+ * accepted exactly where both accept; refused under a rule of the table that the oracle names too,
+ * and where the table names one rule, that rule alone, so
  * an href naming an absent file is refused under `file-exists` and an include with no href under
  * `include-target`, whatever order PostgreSQL's deferred keys run in.
  *
@@ -40,7 +47,7 @@ const importJudged = (box: SiteBox) =>
     const literal = siteLiteral(box);
     const dir = yield* scopedPackage(sitePackage(box));
     const verdict = yield* oracleVerdict(yield* readPackage(dir));
-    const rules = rulesOfBox(box);
+    const rules = new Set([...rulesOfBox(box), ...outsideRulesOfBox(box)]);
     const outcome = yield* Effect.result(importPackage(dir));
     if (Result.isSuccess(outcome)) {
       assert.strictEqual(rules.size, 0, `${literal} was accepted`);

@@ -491,8 +491,8 @@ export const SectionOrdering = relation(
  *   `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`; `external`,
  *   whether its href resolves outside the package, which its href's `Reference` row proves (an
  *   include's then is stored as written and never fetched); and the scope it is placed in, its
- *   parent's: `part`, `replaced` (its parent section's `replacing`),
- *   `parentMixes` and `parentLooseChain`.
+ *   parent's: `part`, `replaced` (its parent section's `replacing`), `parentMixes` and
+ *   `parentLooseChain`.
  *
  * Its `part` is the test part it sits in: its parent section's under a section, its parent under a
  * test part, and its own document under any other parent (an item's body or processing, a
@@ -534,10 +534,11 @@ export const Site = relation(
  * `entry`, whether the package holds an entry at that path. A row only where the site writes an
  * href that resolves to a path of the package.
  *
- * - An include may write none (XInclude 1.0 §3.1, the href "absent when parse="xml""), or one that is
- *   external or names its own document, and names no document of the package then, so it has no row
- *   and "Include target" refuses it alone (spec reading 115); a section ref must write one, and AL3
- *   refuses one that does not.
+ * - An include may write none (XInclude 1.0 §3.1, the href "absent when parse="xml""), or one that
+ *   names its own document, and names no document of the package then, so it has no row and
+ *   "Include target" refuses it alone (spec reading 115); one whose href resolves outside the
+ *   package has no row either, and its site is marked `external`, stored as written and never
+ *   fetched; a section ref must write one, and AL3 refuses one that does not.
  * - A path no entry holds is `entry` false, which `File_exists` refuses as the row is inserted,
  *   before any deferred key: an href naming an absent file is refused under "File exists" alone,
  *   whatever its site is, and the site's document laws read only paths an entry holds.

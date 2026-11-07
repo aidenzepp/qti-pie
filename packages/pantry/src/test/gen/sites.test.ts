@@ -31,6 +31,7 @@ import { checkOf, containmentsOf, datumText } from "#pantry/test/key-copies.ts";
 import type { Datum } from "#pantry/test/key-copies.ts";
 import {
   hrefCases,
+  outsideRulesOfBox,
   ruleOfCase,
   rulesOfBox,
   siteBox,
@@ -87,7 +88,9 @@ const siteOf = (inputs: PackageInputs, name: SiteName): Addition<typeof Site> =>
  * path its href's `ReferencePath` and `entry` exactly where an entry is there; each `SiteTarget` a
  * site's and its path's, exactly where that path is a listed document. The rules the rows break,
  * each site's one: `File_exists` where its path's `entry` is false, which PostgreSQL judges as the
- * row is inserted; otherwise, for an include with no target, "Include target"; for a section ref
+ * row is inserted; otherwise, for an include with no target whose href does not resolve outside the
+ * package, "Include target" (an external include, marked `external` exactly where its href's
+ * `Reference` is external, is stored as written and never fetched, reading 115); for a section ref
  * with no href, AL3, which PostgreSQL judges first, and with one that names no section document of
  * the package, "Document entry".
  *
@@ -103,6 +106,11 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
   );
   const hrefs = new Set(
     [...inputs.Reference.values()].flatMap(({ name, node }) => (name === "href" ? [node] : [])),
+  );
+  const externalHrefs = new Set(
+    [...inputs.Reference.values()].flatMap(({ name, node, scope }) =>
+      name === "href" && scope === "external" ? [node] : [],
+    ),
   );
   const entries = new Set(
     [...inputs.Package.values()].flatMap(({ entries: held }) => held.map(({ path }) => path)),
@@ -126,6 +134,11 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
     const site = siteOf(inputs, name);
     const path = pathOf.get(site.node);
     const target = targetOf.get(site.node);
+    assert.strictEqual(
+      site.external,
+      externalHrefs.has(site.node),
+      `${literal}: ${name}'s external mark`,
+    );
     if (path !== undefined) {
       assert.isTrue(
         hrefPaths.has(JSON.stringify([path.node, path.package, path.path])),
@@ -148,7 +161,7 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
     if (path?.entry === false) {
       broken.add("file-exists");
     } else if (sites[name].kind === "xi:include") {
-      if (target === undefined) {
+      if (target === undefined && !site.external) {
         broken.add("include-target");
       }
     } else if (path === undefined) {
@@ -198,6 +211,7 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
         entries.map(({ path }) => ({ package: id, path })),
       ),
     ],
+    ["Reference", [...inputs.Reference.values()]],
     ["ReferencePath", [...inputs.ReferencePath.values()]],
     ["Site", [...inputs.Site.values()]],
     ["SitePath", [...inputs.SitePath.values()]],
@@ -255,6 +269,7 @@ const judged = (box: SiteBox, c: Case<Situation>) =>
     const program = yield* readProgram(dir);
     const byRows = rowRules(program.inputs, literal);
     const byCases = rulesOfBox(box);
+    const outside = outsideRulesOfBox(box);
     const oracled = new Set(
       verdict.kind === "refused" ? [...verdict.rules].filter((rule) => siteRules.has(rule)) : [],
     );
@@ -272,9 +287,16 @@ const judged = (box: SiteBox, c: Case<Situation>) =>
     );
     assert.strictEqual(
       verdict.kind === "accepted",
-      byCases.size === 0,
+      byCases.size === 0 && outside.size === 0,
       `${literal}: the law oracle ${verdict.kind === "accepted" ? "accepts" : "refuses"} it`,
     );
+    if (byCases.size === 0 && verdict.kind === "refused") {
+      assert.deepStrictEqual(
+        verdict.rules,
+        outside,
+        `${literal}: the law oracle refuses it under {${[...verdict.rules].join(", ")}}, outside the site laws`,
+      );
+    }
   }).pipe(Effect.scoped);
 
 layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (it) => {

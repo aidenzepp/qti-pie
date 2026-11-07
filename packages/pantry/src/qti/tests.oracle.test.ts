@@ -326,7 +326,12 @@ describe("qti/tests.ts, an external include", () => {
     const external = { ...include, external: true };
     const sectionRef = { external: true, kind: "qti-assessment-section-ref" };
 
-    const [target, ...moreTargets] = containmentsOf(["Site", "node"], ["SiteTarget", "node"]);
+    // A site's href is its SitePath (#46's row of its own): "Include target" is an include's
+    // SitePath, and a section ref's "Document entry" its own, each then into its ReferencePath.
+    const [target, ...moreTargets] = containmentsOf(
+      ["Site", "node", "kind"],
+      ["SitePath", "node", "kind"],
+    );
     assert.isDefined(target, "Include target");
     assert.deepStrictEqual(moreTargets, []);
     if (target !== undefined) {
@@ -335,16 +340,24 @@ describe("qti/tests.ts, an external include", () => {
       assert.isFalse(selects(target.left, { ...include, kind: sectionRef.kind }), "a section ref");
     }
 
-    const [entry, ...moreEntries] = containmentsOf(
-      ["Site", "node", "package", "path"],
-      ["ReferencePath", "node", "package", "path"],
-    );
-    assert.isDefined(entry, "the site's entry path");
+    const [entry, ...moreEntries] = containmentsOf(["Site", "node"], ["SitePath", "node"]);
+    assert.isDefined(entry, "the section ref's entry path");
     assert.deepStrictEqual(moreEntries, []);
     if (entry !== undefined) {
-      assert.isTrue(selects(entry.left, include), "an in-package include has its entry path");
+      assert.isFalse(selects(entry.left, include), "an include is judged by Include target");
       assert.isFalse(selects(entry.left, external), "an external include has none");
       assert.isTrue(selects(entry.left, sectionRef), "a section ref has one wherever it resolves");
+    }
+
+    const [reached, ...moreReached] = containmentsOf(
+      ["SitePath", "node", "package", "path"],
+      ["ReferencePath", "node", "package", "path"],
+    );
+    assert.isDefined(reached, "the site's href path");
+    assert.deepStrictEqual(moreReached, []);
+    if (reached !== undefined) {
+      assert.isTrue(selects(reached.left, { entry: true, kind: include.kind }));
+      assert.isTrue(selects(reached.left, { entry: false, kind: sectionRef.kind }));
     }
 
     const [mark, ...moreMarks] = containmentsOf(["Site", "node"], ["Reference", "node"]);
