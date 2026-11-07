@@ -50,7 +50,7 @@ const opening = [
 const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
- * The README's sections: the eleven it had before M2 and the four M2 adds.
+ * The README's sections: the eleven it had before M2, the four M2 adds and the one M3.b-2 adds.
  */
 const headings = [
   "## Install",
@@ -61,6 +61,7 @@ const headings = [
   "## Results",
   "## Interactions",
   "## Scoring",
+  "## Template processing",
   "## Server and browser",
   "## Hosts",
   "## Styling",
@@ -433,6 +434,47 @@ describe("README.md", () => {
       assert.isTrue(
         lines.some((line) => line.includes(`\`${record}\``) && line.includes(version)),
         `${record} is named with ${version}`,
+      );
+    }
+  });
+
+  it("names begin and score as the writers of StoredRecord in the records table", () => {
+    const row =
+      sectionOf("## Records")
+        .split("\n")
+        .find((line) => line.startsWith("| `StoredRecord`")) ??
+      assert.fail("the records table has no StoredRecord row");
+    const writtenBy = row.split(" | ")[2] ?? "";
+
+    assert.include(writtenBy, "`begin`");
+    assert.include(writtenBy, "`score`");
+  });
+
+  it("says in Records that the record, ItemView and Restored are server data", () => {
+    const paragraphs = sectionOf("## Records")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("server data") &&
+          paragraph.includes("`ItemView`") &&
+          paragraph.includes("`Restored`"),
+      ),
+      "a paragraph of Records names ItemView and Restored as server data",
+    );
+  });
+
+  it("passes the session item's record to redact in Start's test and the server action", () => {
+    for (const heading of ["## Start", "### A plain server action"]) {
+      const scripts = codeBlocks(sectionOf(heading)).map(scriptOf);
+
+      assert.isTrue(
+        scripts.some((script) =>
+          /redact\(items\.get\(shown\.ref\)!, shown\.record\)/u.test(script),
+        ),
+        `${heading} passes shown.record to redact`,
       );
     }
   });
