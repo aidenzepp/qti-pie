@@ -1,28 +1,49 @@
 /**
- * The importer's front door (`#pantry/import/package.ts`): its retry schedule on the host, and on
- * the lease its verdicts, its retries and `CommitUnknown`'s resolution.
+ * The importer's front door (`#pantry/import/package.ts`): its retry schedule and the read-back
+ * that settles a `CommitUnknown` on the host, and on the lease its verdicts, its retries and
+ * `CommitUnknown`'s resolution.
  *
- * A verdict on the lease is judged against the law oracle (`#pantry/test/locate.ts`
+ * A verdict on the lease is judged against the law oracle (`#pantry/test/oracle-verdict.ts`
  * `oracleVerdict`, a second implementation): a package the oracle accepts commits, and one it
  * refuses is refused under one of the rules its breaches keep. A disagreement is a finding of the
  * schema or the oracle, never of the package.
  */
-import { CommitUnknown, Db, query, TransientFailure, uuid, v } from "@bjornpagen/grizzle";
-import type { SerializationFailure, ServerError, Uuid } from "@bjornpagen/grizzle";
+import {
+  CommitUnknown,
+  Db,
+  query,
+  ReadFailure,
+  StaleSnapshot,
+  TransientFailure,
+  uuid,
+  v,
+} from "@bjornpagen/grizzle";
+import type {
+  ReadError,
+  SerializationFailure,
+  ServerError,
+  StaleReason,
+  Uuid,
+} from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
-import { Clock, Effect, Fiber, Layer, Ref, Result, Schedule } from "effect";
+import { Clock, Effect, Fiber, Layer, Option, Ref, Result, Schedule } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage, retrySchedule } from "#pantry/import/package.ts";
+import {
+  CommitUnresolved,
+  importPackage,
+  retrySchedule,
+  settleCommitUnknown,
+} from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { importAgreesWithOracle } from "#pantry/test/locate.ts";
+import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -193,6 +214,118 @@ describe("import/package.test.ts, the retry budget", () => {
     // Oracle: the specification as a checker, `Schedule.recurs(2)`: three attempts in all.
     Effect.gen(function* gaveUp() {
       assert.strictEqual(yield* attemptsUnder(quickly, 3), 3);
+    }),
+  );
+});
+
+/**
+ * The id a settled `CommitUnknown` reads back, as the import gives it.
+ */
+const readBackId: Uuid = "00000000-0000-4000-8000-000000000001";
+
+const migratingReason = {
+  _tag: "Migrating",
+  message: "a migration is running or stopped part-way",
+};
+
+// SAFETY: Grizzle exports `StaleReason` as a type only (`adapter/public/errors.ts`), so no public
+// constructor builds a `Migrating`. The plain fields of the class at `adapter/errors/failures.ts`
+// stand for it: `StaleSnapshot` reads its reason only through `message`.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+const migratingReasonAsType = migratingReason as StaleReason;
+
+/**
+ * The snapshot a {@link StaleSnapshot} names.
+ */
+type Fingerprint = ConstructorParameters<typeof StaleSnapshot>[0]["snapshot"];
+
+// SAFETY: `SchemaFingerprint` is a branded string with no public parse; `StaleSnapshot` only
+// prints it, so any string stands for one.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+const fingerprintAsType = "fingerprint-of-another-snapshot" as Fingerprint;
+
+/**
+ * A failure of each kind grizzle's README gives a read ("Errors": `ReadFailure`, `TransientFailure`
+ * or `StaleSnapshot`), each built from the plain fields asserted above.
+ */
+const readFailures: readonly ReadError[] = [
+  new ReadFailure({ reason: serverReportAsType }),
+  serializationFailure,
+  new StaleSnapshot({
+    error: serverReportAsType,
+    reason: migratingReasonAsType,
+    snapshot: fingerprintAsType,
+  }),
+];
+
+/**
+ * What the read-back of a `CommitUnknown` can answer: the package row, no row, or a failure.
+ */
+type ReadBack =
+  | { readonly kind: "present" }
+  | { readonly kind: "absent" }
+  | { readonly failure: ReadError; readonly kind: "fails" };
+
+/**
+ * Every read-back: present, absent, and a failure of each kind a read has.
+ */
+const readBacks: readonly ReadBack[] = [
+  { kind: "present" },
+  { kind: "absent" },
+  ...readFailures.map((failure): ReadBack => ({ failure, kind: "fails" })),
+];
+
+/**
+ * The read a {@link ReadBack} stands for, as `db.get` of the package row would answer it.
+ *
+ * @param readBack - The read-back.
+ * @returns The stub of the read.
+ */
+const stubRead = (
+  readBack: ReadBack,
+): Effect.Effect<Option.Option<{ readonly id: Uuid }>, ReadError> =>
+  readBack.kind === "fails"
+    ? Effect.fail(readBack.failure)
+    : Effect.succeed(readBack.kind === "present" ? Option.some({ id: readBackId }) : Option.none());
+
+/**
+ * Name a {@link ReadBack}, for an assertion's message.
+ *
+ * @param readBack - The read-back.
+ * @returns Its kind, and a failure's tag.
+ */
+const readBackName = (readBack: ReadBack): string =>
+  readBack.kind === "fails" ? `fails with ${readBack.failure._tag}` : readBack.kind;
+
+describe("import/package.test.ts, the read-back that settles a CommitUnknown", () => {
+  plainIt.effect("answers by the read-back alone, and a failed read-back never as absent", () =>
+    // Oracle: the specification as a checker, grizzle's README on `CommitUnknown` ("The change may
+    // have committed: read back before you run it again"), over every read-back a read can give:
+    // a package read back committed; no package read back did not, and the `CommitUnknown` is the
+    // answer; a read-back that fails settles nothing, so the answer is `CommitUnresolved` carrying
+    // the `CommitUnknown` and the read's own failure, never the absent package's answer.
+    Effect.gen(function* everyReadBack() {
+      for (const readBack of readBacks) {
+        const name = readBackName(readBack);
+        const commit = new CommitUnknown();
+        const answer = yield* Effect.result(
+          settleCommitUnknown(commit, readBackId, stubRead(readBack)),
+        );
+
+        if (readBack.kind === "present") {
+          assert.deepStrictEqual(answer, Result.succeed({ kind: "committed" }), name);
+        } else if (readBack.kind === "absent") {
+          assert.deepStrictEqual(answer, Result.fail(commit), name);
+        } else {
+          const failure = Result.isFailure(answer) ? answer.failure : undefined;
+
+          assert.instanceOf(failure, CommitUnresolved, name);
+          assert.strictEqual(failure.commit, commit, name);
+          assert.strictEqual(failure.cause, readBack.failure, name);
+          assert.include(failure.message, readBackId, name);
+          assert.include(failure.message, readBack.failure.message, name);
+        }
+      }
     }),
   );
 });

@@ -1,11 +1,11 @@
 /**
- * A site names a document a resource names, never the manifest, which no resource names (spec
- * reading 115: "Fragments are packaged as separate resources"): an include whose href resolves to
- * `imsmanifest.xml` names no document, and is refused under "Include target" (`include-target`)
- * on the import's rows as in the law oracle, never under "Include root" as an include of a
- * `cp:manifest` root. GEN-A's differential found the import taking the manifest as the target
- * (`#pantry/import/write.ts` `targetAt`), so its rows broke "Include root", which the oracle does
- * not raise, and held "Include target", which it does.
+ * A site names a document a resource names, never the manifest, which is no resource's document
+ * (spec reading 115: "Fragments are packaged as separate resources"; reading 146): an include whose
+ * href resolves to `imsmanifest.xml` names no document, and is refused under "Include target"
+ * (`include-target`) on the import's rows as in the law oracle, never under "Include root" as an
+ * include of a `cp:manifest` root. GEN-A's differential found the import taking the manifest as the
+ * target (`#pantry/import/write.ts` `targetAt`), so its rows broke "Include root", which the oracle
+ * does not raise, and held "Include target", which it does.
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`).

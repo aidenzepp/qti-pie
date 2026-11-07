@@ -63,12 +63,14 @@ export interface LawDocument {
 
 /**
  * A package as the oracle hands it over: its manifest's rows, the documents it lists that folded,
- * in manifest order, and its entries' paths.
+ * in manifest order, its entries' paths, and each document's path with the paths of the documents
+ * its includes splice in place (spec reading 117).
  */
 export interface LawPackage {
   readonly documents: readonly LawDocument[];
   readonly entries: readonly string[];
   readonly manifest: { readonly path: string; readonly rows: FoldedRows<Composed> };
+  readonly spliced: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
@@ -118,6 +120,7 @@ export const lawPackageBreaches = (
     })),
     entries: new Set(input.entries),
     manifest: viewOf(input.manifest.path, input.manifest.rows, typed),
+    spliced: input.spliced,
   };
 
   return [

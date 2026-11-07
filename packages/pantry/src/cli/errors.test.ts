@@ -135,15 +135,14 @@ const exportDefects = {
 
 /**
  * One failure of every tag the import ends with on a defect of qti: grizzle's codec refusing a
- * built value, and the three the importer dies with, keyed by the import's tags as
- * {@link exportDefects} is by the export's. The three are matched by their tag alone, which
+ * built value, and the two the importer dies with, keyed by the import's tags as
+ * {@link exportDefects} is by the export's. The two are matched by their tag alone, which
  * `errors.ts` checks against their classes by type, so they are written as their tags here: the
  * modules that define them load the composed grammar and the author login, which this file does
  * not need.
  */
 const importDefects = {
   EncodingFailure: new EncodingFailure({ place: { _tag: "Fact" }, reason: { _tag: "textNul" } }),
-  LocateDisagreement: { _tag: "LocateDisagreement" },
   OverlayConflict: { _tag: "OverlayConflict" },
   UnownedLaws: { _tag: "UnownedLaws" },
 } as const satisfies { readonly [K in ImportDefectTag]: { readonly _tag: K } };
@@ -254,7 +253,7 @@ describe("describeFailure, a refused import", () => {
   // defines its class, loads the composed grammar.
   it("a refusal the database gave says where to look by the kind of its witness", () => {
     // Oracle: the witness kind the refusal's origin carries, read from its field and never from
-    // its detail: a key or a located row is named in the message, an unreported witness names
+    // its detail: a key or a row is named in the message, an unreported witness names
     // none. Bound: every kind of `WitnessKind`, exhausted; residual none.
     for (const witness of WitnessKind.literals) {
       const { exitCode, help, kind } = describeFailure({

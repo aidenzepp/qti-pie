@@ -143,6 +143,7 @@ import {
   ancestorsOf,
   field,
   collapsed,
+  contentLawOf,
   contentOf,
   integerOf,
   isOpenClass,
@@ -955,7 +956,7 @@ const cnPartsOf = (
  * `rtl`, `ltr` once the walk passes an `m:math` that writes neither. MathML 3 §2.2.1 says "the dir
  * attribute defaults to "ltr" on the math element (but inherits on all other elements which accept
  * the dir attribute)", and §3.1.5.1 sets a formula's direction by its `math` element, so an HTML
- * ancestor's `dir` above it is not read (reading 146).
+ * ancestor's `dir` above it is not read (reading 148).
  *
  * @param view - The document.
  * @param node - The element.
@@ -979,7 +980,7 @@ const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string =>
 /**
  * Tell whether an element writes a `dir` other than the one it inherits, so `mrow dir="ltr"` in a
  * left-to-right formula changes none (operator decision 321). A `dir` that spells neither `ltr` nor
- * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 146).
+ * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 148).
  *
  * @param view - The document.
  * @param node - The element.
@@ -2718,11 +2719,11 @@ const manifestEntry = "imsmanifest.xml";
 
 /**
  * The type of the resource that lists a document, as its nodes and attributes copy it
- * (`Node.documentType`): `none` for the package's manifest, its one `imsmanifest.xml`, which no
- * resource lists, and for every other document the type `RootOfType` pairs with its root's kind,
- * which is the type a resource lists it under wherever `RootOfType` holds: an external record
- * file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type pairs gives the empty
- * text, which is no type.
+ * (`Node.documentType`): `none` for the package's manifest, its one `imsmanifest.xml`, which is no
+ * resource's document (reading 146), and for every other document the type `RootOfType` pairs
+ * with its root's kind, which is the type a resource lists it under wherever `RootOfType` holds:
+ * an external record file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type pairs
+ * gives the empty text, which is no type.
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
@@ -3190,39 +3191,7 @@ const referenced: Readonly<Record<Spelling, (form: string) => Option.Option<stri
   braced: (form) => Option.fromNullishOr(braced.exec(form)?.groups?.["identifier"]),
 };
 
-/**
- * The law a content reference breaks, by the attribute that makes it: a feedback element's
- * outcome (`feedback-ref`), a template element's or choice's template variable (`template-ref`),
- * and what a printed variable prints or indexes by (`printed-variable-ref`).
- */
-export const contentLaws: ReadonlyMap<string, LawName> = new Map([
-  ["base", "Printed variable reference"],
-  ["identifier", "Printed variable reference"],
-  ["index", "Printed variable reference"],
-  ["outcome-identifier", "Feedback reference"],
-  ["template-identifier", "Template reference"],
-]);
-
-/**
- * The law a content reference breaks where its kind decides it rather than its attribute: a
- * portable custom interaction's context variable (`context-variable-ref`), whose `identifier` is
- * also a printed variable's attribute.
- */
-const contentKindLaws: ReadonlyMap<string, LawName> = new Map([
-  ["qti-context-variable", "Context variable reference"],
-]);
-
-/**
- * Name the law a content reference breaks: its kind's, else its attribute's.
- *
- * @param kind - The kind of the element that makes the reference.
- * @param attribute - The attribute it makes it by.
- * @returns The law, none for a reference no law reads.
- */
-export const contentLawOf = (kind: string, attribute: string): Option.Option<LawName> =>
-  Option.orElse(Option.fromNullishOr(contentKindLaws.get(kind)), () =>
-    Option.fromNullishOr(contentLaws.get(attribute)),
-  );
+export { contentLawOf } from "#pantry/test/oracle-view.ts";
 
 /**
  * Read an integer attribute as its type reads it: its form inside its value domain
@@ -5161,6 +5130,29 @@ const splicedTarget = (grammar: ComposedGrammar, site: SiteOf): Option.Option<Li
     : Option.none();
 
 /**
+ * Map each listed document to the documents its includes splice in place (reading 117,
+ * {@link splicedTarget}), the package-level producers' reading of the merged document: a test's
+ * references read every fragment the test or a section document it places splices.
+ *
+ * @param documents - The documents the manifest lists, read.
+ * @param grammar - The composed grammar.
+ * @returns Each splicing document's path, with its spliced documents' paths in site order.
+ */
+const splicedPathsOf = (
+  documents: readonly Listed[],
+  grammar: ComposedGrammar,
+): ReadonlyMap<string, readonly string[]> => {
+  const spliced = new Map<string, readonly string[]>();
+  for (const site of sitesOf(documents, grammar)) {
+    for (const target of Option.toArray(splicedTarget(grammar, site))) {
+      spliced.set(site.document.path, [...(spliced.get(site.document.path) ?? []), target.path]);
+    }
+  }
+
+  return spliced;
+};
+
+/**
  * Write a breach at a site, in its including document.
  *
  * @param site - The site.
@@ -5621,7 +5613,9 @@ const packageBreaches = (
     Option.exists(resource.handle, (type) =>
       grammar.package.rootOfType.rows.some((row) => row.type === type),
     );
-  const typesAt = new Map<string, ReadonlySet<string>>();
+  // The types each path is read under: the manifest's own, `none` (reading 146), then each type a
+  // resource names the path under.
+  const typesAt = new Map<string, ReadonlySet<string>>([[manifest.path, new Set(["none"])]]);
   for (const { path, resource } of documentsOf(resources, grammar)) {
     typesAt.set(path, new Set([...(typesAt.get(path) ?? []), resource.type]));
   }
@@ -5690,9 +5684,9 @@ const packageBreaches = (
       .flatMap((resource) => Option.toArray(resource.resolved))
       .filter(({ resolution }) => resolution.scope !== "entry")
       .map(({ path }) => breach("Document entry", { path })),
-    // A path two resources name under two document types is one document, of the first type
-    // (reading 93), so the second's href names no document of its type: "Document entry" alone,
-    // and the document is judged once, where its sites place it.
+    // A path two types name, the manifest's `none` among them, is one document, of the first type
+    // (readings 93 and 146), so the second's href names no document of its type: "Document entry"
+    // alone, and the document is judged once, where its sites place it.
     ...[...typesAt]
       .filter(([, types]) => types.size > 1)
       .map(([path, types]) =>
@@ -6382,7 +6376,9 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
     const byPath = new Map(files.map((file) => [file.path, file]));
     const documents: Listed[] = [];
     const missing: string[] = [];
-    const read = new Set<string>();
+    // A path is one document (reading 93), and the manifest's is the manifest, read above
+    // (reading 146), so a resource naming it reads nothing more.
+    const read = new Set<string>([manifestFile.path]);
     for (const [index, { path, resource }] of listing.entries()) {
       const file = byPath.get(path);
       if (file === undefined) {
@@ -6447,6 +6443,7 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
             ),
             entries: files.map(({ path }) => path),
             manifest: { path: view.path, rows: view.rows },
+            spliced: splicedPathsOf(documents, grammar),
           },
           grammar,
           typed,

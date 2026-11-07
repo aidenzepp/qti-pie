@@ -11,7 +11,6 @@ import { comparePackage } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { matchesCommitted, spawnCli } from "#pantry/test/cli.ts";
-import { oracleLocate } from "#pantry/test/locate.ts";
 import { examplesTarball, materializeCorpus } from "#pantry/test/fixtures.ts";
 import { hasLease, settings } from "#pantry/test/settings.ts";
 import { renderVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
@@ -110,11 +109,8 @@ const identities = (facts: readonly { readonly identity: string }[]): readonly s
  * Run one corpus package through the importer and through the CLI, and assert the CLI lands it
  * where the importer does.
  *
- * The importer runs with the law oracle's locator (`oracleLocate`), so a refusal the database
- * names no row for is located by the host, and a schema that refuses what the oracle finds
- * unbroken dies as `LocateDisagreement`. The CLI passes none. The two runs are separate imports of
- * one package, so they agree on the rule and on the laws the database named, and the CLI's error
- * object carries both, read from the refusal's fields.
+ * The two runs are separate imports of one package, so they agree on the rule and on the laws the
+ * database named, and the CLI's error object carries both, read from the refusal's fields.
  */
 const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   readonly dir: string;
@@ -128,10 +124,7 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   yield* fs.remove(cwd, { force: true, recursive: true });
   yield* fs.makeDirectory(cwd, { recursive: true });
 
-  const [importTime, direct] = yield* importPackage(entry.dir, { locate: oracleLocate }).pipe(
-    Effect.result,
-    Effect.timed,
-  );
+  const [importTime, direct] = yield* importPackage(entry.dir).pipe(Effect.result, Effect.timed);
 
   if (Duration.toMillis(importTime) > tally.slowestImport.millis) {
     tally.slowestImport = { millis: Duration.toMillis(importTime), name: entry.name };

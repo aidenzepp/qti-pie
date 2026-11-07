@@ -14,6 +14,7 @@ import {
   lawsOfStatement,
   namedLaws,
 } from "#pantry/import/refusal.ts";
+import { nodeTree } from "#pantry/qti/node.ts";
 
 describe("the laws each module names where it states them", () => {
   it("names each group by a law of the table, holds each check in its own law's group, and names each other law by its group", () => {
@@ -36,5 +37,19 @@ describe("the laws each module names where it states them", () => {
         }
       }
     }
+  });
+
+  it("reads a tree's root from its statement, and no law from a tree statement that holds none", () => {
+    // Oracle: grizzle's `tree` always holds its root field (`schema/statements.ts` `treeBuilder`),
+    // so a copy of the tree with that field taken away is no statement grizzle builds, and decodes
+    // to no law.
+    const roots = lawsOfStatement(nodeTree).flatMap((law) =>
+      law.kind === "tree" ? [law.root] : [],
+    );
+    const rootless = { ...nodeTree };
+
+    Reflect.deleteProperty(rootless, "root");
+    assert.deepStrictEqual(roots, ["document"]);
+    assert.deepStrictEqual(lawsOfStatement(rootless), []);
   });
 });

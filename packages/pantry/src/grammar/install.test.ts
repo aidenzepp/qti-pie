@@ -727,48 +727,6 @@ describe("the MathML relations", () => {
   });
 });
 
-describe("the diagonals", () => {
-  for (const { field, name } of [
-    { field: "position", name: "PositionSelf" },
-    { field: "slot", name: "SlotSelf" },
-    { field: "name", name: "AttributeNameSelf" },
-  ]) {
-    it.effect(
-      `give ${name}.row(c) exactly {c}, every code exhausted`,
-      (ctx) => {
-        const relation = relationNamed(name);
-        const handles = relation.fields[field]?.roster?.handles ?? [];
-
-        return searched(
-          ctx,
-          exhaust(
-            {
-              box: `every code of ${relation.fields[field]?.roster?.name ?? field}, ${handles.length}`,
-              caseHang,
-              coverage: noCoverage,
-              generator: int(0, handles.length - 1),
-              limit: handles.length,
-              literal: Formatter.format,
-              oracle: { kind: "specification", name: "C6: a diagonal's row is a singleton" },
-              suite: `grammar/install/${name}`,
-            },
-            (code) =>
-              Effect.sync(() => {
-                const at = Arr.getUnsafe(handles, code);
-
-                assert.deepStrictEqual(
-                  relation.rows.filter((row) => row[field] === at).map((row) => row["self"]),
-                  [at],
-                );
-              }),
-          ),
-        );
-      },
-      searchTimeout,
-    );
-  }
-});
-
 /**
  * A roster's handles as the install declares them: the committed snapshot's live handles in code
  * order, then the handles new since it, in the grammar's order.

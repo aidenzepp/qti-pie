@@ -69,7 +69,6 @@ import {
   GoverningOf,
   NodeKind,
   SchemaVersion,
-  SlotSelf,
 } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { DocumentId, idValuePattern, spacePattern } from "#pantry/qti/identity.ts";
@@ -204,7 +203,7 @@ type NodeRow = RowScalars<typeof Node>;
 const carries = (n: NodeRow, name: "kind" | "src" | "srclang" | "srcset") =>
   n.eq(
     Compute.subset(
-      SlotSelf.row(
+      Compute.singleton(
         AttributeSlotOf.at(
           "slot",
           AttributeModelOf.at(

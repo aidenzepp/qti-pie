@@ -9,10 +9,10 @@
  * a resolution with no target breaks only its existence law, and `Branch_forward` judges only a
  * target `Branch_target` admits, so no target breaks both.
  *
- * The law oracle states no breach of reading 87 (`assembly.test.ts`), so the model is this test's
- * oracle, not `importAgreesWithOracle`. Every import is refused before any SQL until grizzle
- * compiles a nested write of a tree that owns an ordered family (`docs/grizzle-findings.md`, R87),
- * so this file lands with the pin that fixes it.
+ * The model is this test's oracle, not `importAgreesWithOracle`: it is reading 87's reference, and
+ * the law oracle, which states `Branch target` and `Branch forward`
+ * (`#pantry/test/oracle-laws/tests.ts`), is held to it by
+ * `oracle-laws.differential.oracle.test.ts`.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";

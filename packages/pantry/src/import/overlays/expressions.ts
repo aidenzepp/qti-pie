@@ -223,8 +223,8 @@ const spellingOf: ReadonlyMap<string, "bare" | "braced"> = new Map(
 );
 
 /**
- * The roots whose references resolve against the tests that place their documents: a test's and
- * a section's (spec reading 5).
+ * The roots of the documents that hold item refs, a test's and a section's (spec reading 5), whose
+ * template defaults name the templates of the items their item refs name.
  */
 const tests: ReadonlySet<string> = new Set(testRoots);
 
@@ -1239,8 +1239,9 @@ const sectionIdentifiersOf = (doc: Document): Map<string, Addition<typeof Sectio
   );
 
 /**
- * Write the references of a test or a section document, which resolve against each test that places
- * it: its variable references and its `section-identifier`s; none for any other document.
+ * Write the references of a document that is no item, which resolve against each test that places
+ * it: its variable references and its `section-identifier`s; none for an item, whose references
+ * resolve in its own declarations.
  *
  * @param doc - The document.
  * @param references - Its variable references.
@@ -1253,7 +1254,7 @@ const testReferencesOf = (
   sectionIdentifiers: ReadonlyMap<string, Addition<typeof SectionIdentifier>>,
 ): ReadonlyMap<string, Addition<typeof TestReference>> => {
   const rows = new Map<string, Addition<typeof TestReference>>();
-  if (!tests.has(doc.rootKind)) {
+  if (doc.rootKind === itemKind) {
     return rows;
   }
 
@@ -1339,9 +1340,10 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
   return {
     ...built,
     DeclarationTable: declarationTablesOf(doc, references),
-    ReferenceDocument: tests.has(doc.rootKind)
-      ? new Map([[doc.id, { document: doc.id }]])
-      : new Map<string, Addition<typeof ReferenceDocument>>(),
+    ReferenceDocument:
+      doc.rootKind === itemKind
+        ? new Map<string, Addition<typeof ReferenceDocument>>()
+        : new Map([[doc.id, { document: doc.id }]]),
     SectionIdentifier: sectionIdentifiers,
     TestReference: testReferencesOf(doc, references, sectionIdentifiers),
     VariableLookup: variableLookupsOf(doc, references),
@@ -2156,8 +2158,9 @@ interface PlacedRows {
 }
 
 /**
- * Place every reference of every document each test places, once per instance, and read each once
- * per test.
+ * Place every reference of every document each test places but an item, once per instance, and
+ * read each once per test: the test's own, a section document's, and a fragment's the test or a
+ * section document splices (spec reading 117).
  *
  * @param documents - Every document of the package.
  * @param assembled - The package's assemblies.
@@ -2181,9 +2184,7 @@ const placedRowsOf = (
     ({ assemblyKind }) => assemblyKind === testKind,
   );
   for (const root of roots) {
-    for (const instance of instancesIn(root).filter(({ rootKind }) =>
-      testRoots.some((kind) => kind === rootKind),
-    )) {
+    for (const instance of instancesIn(root).filter(({ rootKind }) => rootKind !== itemKind)) {
       placedDocuments.set(instance.id, {
         assembly: root.assembly,
         assemblyKind: root.assemblyKind,

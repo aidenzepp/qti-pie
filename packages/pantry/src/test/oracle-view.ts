@@ -545,10 +545,61 @@ export interface ListedRows {
 
 /**
  * A package as the package-level producers read it: its manifest, the documents it lists that
- * folded, in manifest order, and its entries' paths.
+ * folded, in manifest order, its entries' paths, and `spliced`, each listed document's path with
+ * the paths of the documents its includes splice in place (spec reading 117), as the oracle's
+ * `standsFor` reads an include: under a parent whose include splices its fragment, and standing for
+ * that fragment's root.
  */
 export interface PackageRows {
   readonly documents: readonly ListedRows[];
   readonly entries: ReadonlySet<string>;
   readonly manifest: View;
+  readonly spliced: ReadonlyMap<string, readonly string[]>;
 }
+
+/**
+ * The laws a content reference breaks where its name resolves to no variable it may name (the
+ * oracle's laws `Context variable reference`, `Feedback reference`, `Printed variable reference`
+ * and `Template reference`).
+ */
+export type ContentLaw =
+  | "Context variable reference"
+  | "Feedback reference"
+  | "Printed variable reference"
+  | "Template reference";
+
+/**
+ * The law a content reference breaks, by the attribute that makes it: a feedback element's
+ * outcome (`feedback-ref`), a template element's or choice's template variable (`template-ref`),
+ * and what a printed variable prints or indexes by (`printed-variable-ref`).
+ */
+const contentLaws: ReadonlyMap<string, ContentLaw> = new Map([
+  ["base", "Printed variable reference"],
+  ["identifier", "Printed variable reference"],
+  ["index", "Printed variable reference"],
+  ["outcome-identifier", "Feedback reference"],
+  ["template-identifier", "Template reference"],
+]);
+
+/**
+ * The law a content reference breaks where its kind decides it rather than its attribute: a
+ * portable custom interaction's context variable (`context-variable-ref`), whose `identifier` is
+ * also a printed variable's attribute.
+ */
+const contentKindLaws: ReadonlyMap<string, ContentLaw> = new Map([
+  ["qti-context-variable", "Context variable reference"],
+]);
+
+/**
+ * Name the law a content reference breaks: its kind's, else its attribute's. The item's overlay
+ * laws (`#pantry/test/oracle.ts`) and a test's assembly (`#pantry/test/oracle-laws/tests.ts`) name
+ * it alike.
+ *
+ * @param kind - The kind of the element that makes the reference.
+ * @param attribute - The attribute it makes it by.
+ * @returns The law, none for a reference no law reads.
+ */
+export const contentLawOf = (kind: string, attribute: string): Option.Option<ContentLaw> =>
+  Option.orElse(Option.fromNullishOr(contentKindLaws.get(kind)), () =>
+    Option.fromNullishOr(contentLaws.get(attribute)),
+  );

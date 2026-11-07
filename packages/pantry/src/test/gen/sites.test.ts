@@ -41,7 +41,7 @@ import {
   sites,
 } from "#pantry/test/gen/sites.ts";
 import type { HrefCase, SiteBox, SiteName } from "#pantry/test/gen/sites.ts";
-import { oracleVerdict } from "#pantry/test/locate.ts";
+import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

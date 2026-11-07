@@ -27,8 +27,8 @@ const witnessKinds = {
 
 /**
  * How a database refusal names the row that broke its laws: `key`, grizzle's key witness, the
- * violating row's key fields; `row`, the row the caller located, such as a test's locator;
- * `unreported`, no row, for a constraint PostgreSQL reports by its name alone.
+ * violating row's key fields; `row`, a row the caller holds, with the fields beyond its key;
+ * `unreported`, no row, for a foreign key or a law no stated row breaks as grizzle judges it.
  */
 export const WitnessKind = Schema.Literals(Object.values(witnessKinds));
 

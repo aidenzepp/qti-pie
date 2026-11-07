@@ -2087,12 +2087,14 @@ against it. A reading that is not an information-model-over-XSD case says which 
      outside every interaction, are refused under "Fragment context", a limit of the representation, not a law of the
      specification; no corpus document places a fragment inside an interaction. Until each is stated in place, these
      laws read a fragment's content in its own document alone, each a known under-refusal and never an over-refusal: the
-     content references and `xml:lang` forms of a fragment a section document or a test places, resolved in the test's
-     declarations and listed by its records; and a rule fragment's types and language, the type laws over its references
+     `xml:lang` forms of a fragment a section document or a test places, listed by the test's records; and a rule
+     fragment's types and language, the type laws over its references
      and expressions (P20 to P29) and the processing language its rules are written in (O4), which read its variables
      untyped and its language as none. This binds pantry and plate alike. This is not a case of documents in conflict.
      (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
-     2026-11-07 by the Mind, decision 416, on audit e8db90e1's F2, and decision 417, on its F3.)
+     2026-11-07 by the Mind, decision 416, on audit e8db90e1's F2, and decision 417, on its F3. Amended 2026-11-07 by
+     the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ASM: the content references of
+     a fragment a section document or a test places resolve in the test, reading 145.)
 
 118. **An include holds at most one fallback, and its `accept` and `accept-language` hold header characters alone,
      though `XInclude.xsd` admits more.** XInclude says "The children property of the xi:include element may include a
@@ -2797,8 +2799,60 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      which no bound tells apart. G1-2 found the database accepting `min-time="-1"`, `step="-1"` and
      `normal-maximum="0"` while the law oracle refused them: the bound had been an unread `facets` column. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-G12.)
+145. **A fragment a test or a section document splices is judged in the test that places it, once per placement: its
+     content references name the test's variables, and a rule fragment's variable references are the test's own.**
+     Reading 117 reads an included fragment as XInclude's result holds it, "in the context of the item in which it is
+     being included" (information model section 2.12), and a section document's references resolve once for each test
+     that places it (reading 5). A fragment that a test's or a section document's include splices is read in that
+     test's context the same way:
+     - its feedback, template, printed-variable and context-variable references each name a variable the test declares,
+       or one of its built-in variables, of a kind its element may name ("Feedback reference", "Feedback outcome type",
+       "Template reference", "Printed variable reference" and "Context variable reference"), once per placement, as
+       the section document's own content references do;
+     - a rule fragment spliced into the test's outcome processing makes the test's variable references, each read as
+       readings 48 and 88 read a test-level reference ("Prefixed reference"), an unprefixed one that resolves nowhere
+       naming nothing ("Variable declared").
 
-145. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+     A content reference names its variable whole, in a test as in an item, and never through a prefix: a printed
+     variable's "outcome variable or template variable must have been defined" (section 7.30.6), a feedback element's
+     outcome is "an outcome variable" (reading 77), and prefixing is the Variable expression's, by which "During
+     outcomes processing, values taken from an individual item session can be looked up" (section 2.11.1.2). An item's references resolve in its
+     own declarations, and no test places an item. This lifts reading 117's known under-refusal of the content
+     references of a fragment a section document or a test places; that fragment's `xml:lang` forms, and a rule
+     fragment's types and language, stay the under-refusals reading 117 lists. This binds pantry and plate alike. This
+     is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing
+     ruling of 2026-11-05, from seat FIX-ASM.)
+
+146. **The manifest is the package's one document at `imsmanifest.xml`, and no resource's: a document-typed resource
+     whose `href` names it names no document of its type, and the manifest is read once.** IMS Content Packaging 1.2
+     sets the manifest apart from the files it describes: "The InterchangePackage shall include a Manifest object and
+     may include content files and control files", and a package interchange file "shall contain a single 1EdTech
+     manifest document object at the root of the PIF. That object shall be bound as an XML document named
+     imsmanifest.xml" (Information Model, Version 1.2 Public Draft v2.0, section 6.3, the InterchangePackage class).
+     "Resource and File are used to reference content files and control files" (section 6.4.1, the Manifest class),
+     and the manifest is neither: a content file embodies "the content described by the logical package" (section
+     3.1.3), and a control file "governs the binding of the information model" (section 3.1.4), of which the manifest
+     is the bound instance. QTI 3.0's profile says the same: "a single manifest called imsmanifest.xml MUST be present
+     at the root of the content package", and "each resource is declared using a resource element which references a
+     single separate XML instance file. All files in the Content Package other than the manifest must be referenced in
+     a resource declaration" (implementation guide, sections 6.1 and 6.1.1). So the manifest is the one document of
+     its path, of no resource type (`none`), and a path is one document, of one type (reading 93). A resource of a
+     type `RootOfType` maps whose `href` names `imsmanifest.xml` names no document of its type, and "Document entry"
+     (`entry-kind`) refuses it, as it refuses the href of a second type at a path a first type names. The manifest is
+     never read again as that resource's document: the importer and the law oracle each read it once, as the
+     manifest. A `cp:file` that names it is a locator "with no other implication as to the use of the resource so
+     identified" (section 6.11.3, the Href class), and is admitted, as is the `href` of a resource of a type
+     `RootOfType` does not map, which names no document (reading 93); no `cp:file` need list the manifest. A site
+     whose href names the manifest names no document (readings 114 and 115), whatever resource names it. This sets
+     aside the reading of the manifest as the document of each document-typed resource that named it, under which the
+     importer and the oracle read it twice: the copy wrote the manifest overlays again, a second `ManifestId` of the
+     package ("Manifest overlay"), broke "DocumentId key", "E1 derived" and `RootOfType`, and a site could target it.
+     The corpus moves no verdict: no resource or file of any manifest of its 29 zips names `imsmanifest.xml`, by a
+     scan of their 1,100 `resource` and `file` elements. This binds pantry and plate alike. This is not a case of
+     documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
+     2026-11-05, from seat FIX-MANIFEST.)
+
+147. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 2.2.2.3, Outcomes Variable (https://www.imsglobal.org/spec/qti/v3p0/info#IV_Outcome), says of SCORE
      "Items that declare a numeric outcome variable representing the candidate's overall performance on the item should
      use the outcome name 'SCORE' for the variable. SCORE MUST be a float." (`info.txt:8478`), and of MAXSCORE "Items that
@@ -2813,7 +2867,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`.)
 
-146. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+148. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for

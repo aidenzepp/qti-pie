@@ -71,11 +71,9 @@ import {
   nonElementKinds,
   openElementClasses,
   Position,
-  PositionSelf,
   ResourceType,
   SchemaVersion,
   SharedModelOf,
-  SlotSelf,
   Symbol as ContentSymbol,
   TextDomain,
   TypeName,
@@ -540,7 +538,7 @@ const cappedChildren = select(Node, (n) =>
   n.and(
     member(n),
     element(n),
-    n.eq(Compute.subset(PositionSelf.row(n.state), Capped.row(n.version, n.parentKind)), true),
+    n.eq(Compute.subset(Compute.singleton(n.state), Capped.row(n.version, n.parentKind)), true),
   ),
 );
 
@@ -683,7 +681,7 @@ export const nodeLawsByName = {
         n.not(positioned(n)),
         n.eq(
           Compute.subset(
-            PositionSelf.row(n.state),
+            Compute.singleton(n.state),
             Follow.row(ContentModelOf.at("model", n.version, n.parentKind), n.was),
           ),
           true,
@@ -702,7 +700,7 @@ export const nodeLawsByName = {
           element(n),
           n.eq(
             Compute.subset(
-              PositionSelf.row(n.state),
+              Compute.singleton(n.state),
               ContentSymbol.row(SharedModelOf.at("model", n.version, n.parentKind), n.kind),
             ),
             true,
@@ -744,7 +742,7 @@ export const nodeLawsByName = {
         n.not(modeled(n)),
         n.eq(
           Compute.subset(
-            PositionSelf.row(n.lastState),
+            Compute.singleton(n.lastState),
             Last.row(ContentModelOf.at("model", n.version, n.kind)),
           ),
           true,
@@ -758,7 +756,10 @@ export const nodeLawsByName = {
       n.or(
         n.not(modeled(n)),
         n.eq(BarredOf.at("position", n.version, n.kind), "0"),
-        n.eq(Compute.disjoint(SlotSelf.row(BarredOf.at("slot", n.version, n.kind)), n.attrs), true),
+        n.eq(
+          Compute.disjoint(Compute.singleton(BarredOf.at("slot", n.version, n.kind)), n.attrs),
+          true,
+        ),
         n.eq(n.barredChildren, 0n),
       ),
     ),

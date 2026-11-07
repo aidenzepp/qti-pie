@@ -1,7 +1,7 @@
 /**
  * The site generator's packages imported on the lease (lane NIL, the SitePath fix; spec readings
  * 114 and 115): the database judges each site's href, and its verdict must be the case table's
- * (`#pantry/test/gen/sites.ts` `rulesOfBox`) and the law oracle's (`#pantry/test/locate.ts`
+ * (`#pantry/test/gen/sites.ts` `rulesOfBox`) and the law oracle's (`#pantry/test/oracle-verdict.ts`
  * `oracleVerdict`). A package whose one fault is an href naming an absent file is refused under
  * `file-exists` alone, `SitePath`'s `File_exists` CHECK, which PostgreSQL meets as the row is
  * inserted, before any deferred key; one whose one fault is an include with no href, under
@@ -28,7 +28,7 @@ import {
   sitePackage,
 } from "#pantry/test/gen/sites.ts";
 import type { SiteBox } from "#pantry/test/gen/sites.ts";
-import { oracleVerdict } from "#pantry/test/locate.ts";
+import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**

@@ -577,8 +577,8 @@ const rowDisagreements = (
 };
 
 /**
- * The witness a refusal of a law over no key's rows carries: PostgreSQL names a foreign key's, a
- * check's and a domain's violating row by none.
+ * The witness the host's refusal is built under: the judge holds its rule to the oracle's, and
+ * names no row.
  */
 const unreported = { kind: "unreported" } as const;
 

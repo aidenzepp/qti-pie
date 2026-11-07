@@ -23,7 +23,7 @@ import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import type { Declaration } from "#pantry/qti/declarations.ts";
 import { declarationKinds } from "#pantry/qti/declarations.ts";
-import { itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
+import { itemKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import {
   adaptiveName,
@@ -1298,23 +1298,24 @@ const placedOf = (
   });
 
 /**
- * Decide whether an instance is a placement `SectionScope` holds: a section document under a test,
- * or an included fragment under an item (spec reading 117). A fragment a section document places
- * resolves nothing yet, a known under-refusal reading 117 lists.
+ * Decide whether an instance is a placement `SectionScope` holds: an instance of an item's or a
+ * test's assembly whose document is neither (`referringRoots`), a section document or a fragment
+ * under a test, a fragment under an item (spec reading 117).
  *
  * @param root - The assembly's root instance.
  * @param instance - The instance.
  * @returns Whether its references resolve under it.
  */
 const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRoot): boolean =>
-  (root.assemblyKind === testKind && instance.rootKind === sectionKind) ||
-  (root.assemblyKind === itemKind && instance.rootKind !== itemKind);
+  referringRoots.some((kind) => kind === root.assemblyKind) &&
+  referringRoots.every((kind) => kind !== instance.rootKind);
 
 /**
- * Build a package's placements: one per instance of a section document under a test and of an
- * included fragment under an item, and under it each of the document's references of each class,
- * resolved among the assembly's declarations, a built-in to its type under the nil declaration,
- * and a name no allowed declaration holds to the nil declaration, which `declarationRef` refuses.
+ * Build a package's placements: one per instance of a section document or a fragment under a test
+ * and of an included fragment under an item, and under it each of the document's references of each
+ * class, resolved among the assembly's declarations, a built-in to its type under the nil
+ * declaration, and a name no allowed declaration holds to the nil declaration, which
+ * `declarationRef` refuses.
  *
  * @param input - The package's rows the placements read.
  * @param input.contexts - Every fragment's context variable references ({@link rowsOf}'s

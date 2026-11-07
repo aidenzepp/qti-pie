@@ -863,12 +863,28 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     145,
     {
       owner:
-        "the law `Reserved type` (`reservedBaseTypes`' `root` and the containment of a non-float SCORE or MAXSCORE into a test's root, `src/qti/declarations.ts`; the oracle producer in `src/test/oracle-laws/documents.ts`), held by `Reserved type` in `src/test/laws.oracle.test.ts`",
+        "`SectionScope`'s placements over every instance of an item's or a test's assembly whose document is neither (`sectionPlacements`, `src/qti/interactions.ts`; `resolvesUnder`, `src/import/overlays/interactions.ts`), and `TestReference`, `ReferenceDocument` and `PlacedDocument` over every document that is no item (`src/qti/expressions.ts`); the oracle's test references read through what each placed document splices (`readDocumentsOf`, `contentBreachesOf`, `src/test/oracle-laws/tests.ts`), held by `src/test/test-fragment-references.oracle.test.ts`",
       status: "G",
     },
   ],
   [
     146,
+    {
+      owner:
+        "the import's listing, one document per path with the manifest's `none` first (`listDocuments`, `src/import/program.ts`), under \"Document entry\"'s key over `Document`'s (package, path) and its containment of each document-typed href in a document of its type (`src/qti/package.ts`); the oracle's listing and its `typesAt` from the manifest's `none` (`judge`, `packageBreaches`, `src/test/oracle.ts`), held by `src/import/manifest-document.oracle.test.ts`",
+      status: "G",
+    },
+  ],
+  [
+    147,
+    {
+      owner:
+        "the law `Reserved type` (`reservedBaseTypes`' `root` and the containment of a non-float SCORE or MAXSCORE into a test's root, `src/qti/declarations.ts`; the oracle producer in `src/test/oracle-laws/documents.ts`), held by `Reserved type` in `src/test/laws.oracle.test.ts`",
+      status: "G",
+    },
+  ],
+  [
+    148,
     {
       owner:
         "the law oracle's direction (`inheritedDirectionOf` and `changesDirection`, `src/test/oracle.ts`) and the builder's (`reading.owns`, `src/import/overlays/mathml-align.ts`): a formula's direction starts at its `m:math`, `ltr` unless it writes `rtl`, and an HTML ancestor's `dir` is not read; held by `src/test/align-direction.test.ts`",

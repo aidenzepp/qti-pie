@@ -65,7 +65,8 @@
  *   whose counts of resolutions are its document's counts of references,
  *   {@link ReferringDocument}). An included fragment's feedback, printed variables, template
  *   variables ({@link SectionTemplateName}) and context variables ({@link SectionContextName})
- *   resolve so once per item that places it (spec reading 117), the same relations holding them: a
+ *   resolve so once per placement in each item or test that places it, a test placing it where the
+ *   test or a section document splices it (spec reading 117), the same relations holding them: a
  *   fragment declares nothing, as a section does.
  *
  * A row a builder gets wrong is refused, never accepted: each overlay's node is its node's, through
@@ -186,7 +187,7 @@ export const nilUuid = "00000000-0000-0000-0000-000000000000";
  * declarations (the port audit's A43 and A44: a test feedback's `outcome-identifier` names an
  * outcome the test declares; a test rubric's printed variable a variable the test declares). Every
  * other document's resolve once per assembly that places it: a section document's in each test's
- * declarations, an included fragment's in each item's (spec reading 117).
+ * declarations, an included fragment's in each item's or test's (spec reading 117).
  */
 export const referringRoots = [itemKind, testKind] as const satisfies readonly Kind[];
 
@@ -1889,17 +1890,15 @@ const fragmentSources = {
 };
 
 /**
- * The placements `SectionScope` holds: a section document's under a test, one per test that
- * reaches the document (a section document no test places has only its own section-rooted
- * assembly, which resolves nothing), and an included fragment's under an item, one per item that
- * places it (spec reading 117). A fragment a section document places resolves nothing yet: a known
- * under-refusal, which reading 117 lists.
+ * The placements `SectionScope` holds: every instance of an assembly whose root's references
+ * resolve in its own declarations, an item's or a test's ({@link referringRoots}), whose document's
+ * resolve in no declarations of its own. Under a test, a section document's, one per placement,
+ * and a fragment's the test or a section document splices; under an item, an included fragment's,
+ * one per placement (spec reading 117). A section document no test places has only its own
+ * section-rooted assembly, which resolves nothing.
  */
 const sectionPlacements = select(Instance, (i) =>
-  i.or(
-    i.and(i.eq(i.assemblyKind, testKind), i.eq(i.rootKind, sectionKind)),
-    i.and(i.eq(i.assemblyKind, itemKind), i.ne(i.rootKind, itemKind)),
-  ),
+  i.and(i.in(i.assemblyKind, referringRoots), i.not(i.in(i.rootKind, referringRoots))),
 );
 
 /**
@@ -2072,12 +2071,12 @@ const contentReferenceLaws = ({ check: rule, names, own, placed }: ContentRefere
  * - **ranges:** "Slider bounds", and "Aria value range" over the elements that carry both ARIA
  *   bounds.
  * - **section documents' and fragments' references:** each one's row, counted per document and class;
- *   one placement row per section-rooted instance under a test and per fragment-rooted instance
- *   under an item (spec reading 117), counting as many resolutions of each class as its document
- *   has references; each resolution its placement's and its reference's, resolved in the assembly's
- *   declarations or to a built-in, under "Feedback reference" and "Feedback outcome type", "Printed
- *   variable reference", "Template reference" and "Template variable type" or "Context variable
- *   reference".
+ *   one placement row per instance of an item's or a test's assembly whose document is neither, a
+ *   section document's or a fragment's (spec reading 117), counting as many resolutions of each
+ *   class as its document has references; each resolution its placement's and its reference's,
+ *   resolved in the assembly's declarations or to a built-in, under "Feedback reference" and
+ *   "Feedback outcome type", "Printed variable reference", "Template reference" and "Template
+ *   variable type" or "Context variable reference".
  * - **content references:** each relation's rows are its source's; the declaration kind each name
  *   resolves to is one `ContentReference` allows for its kind and attribute; a name that is no
  *   built-in's is a declaration's, through `declarationRef`; and a built-in's resolves to the

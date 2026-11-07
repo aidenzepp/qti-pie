@@ -13,18 +13,32 @@ import type { NodeMember } from "#pantry/import/write.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
+import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 
 const fixtures = inject("fixtures");
 
+/**
+ * Count the members a keyed set's rows nest, together.
+ *
+ * @param rows - The keyed set.
+ * @param size - How many members one row nests.
+ * @returns Their number.
+ */
+const sumOf = <A>(rows: ReadonlyMap<string, A>, size: (row: A) => number): number =>
+  [...rows.values()].reduce((sum, row) => sum + size(row), 0);
+
 layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suite) => {
   suite.effect(
-    "counts every row the accepted corpus packages would write, and says the database judged none",
+    "counts every row the accepted corpus packages and the every-relation package would write, and says the database judged none",
     () =>
       // Oracle: a second implementation of the count: each document's rows as `flatten` writes
       // them (its nodes, attributes, declarations, open names and entity references), the record's
-      // entries, the IDREF pieces of the nested inserts (an attribute's and an identity text's),
-      // each assembly's instances, and each flat input's keyed set, over the three accepted corpus
-      // packages.
+      // entries, the members the nested inserts hold (an attribute's IDREF pieces and typed double,
+      // a text's typed double, an identity text's IDREF pieces, a cell's header tokens, a
+      // tolerance's values, an assembled reference's segments), each assembly's instances at every
+      // depth, and each flat input's keyed set, over the three accepted corpus packages and the
+      // every-relation package, which writes a row of every stored relation and nests instances
+      // under its assemblies.
       Effect.gen(function* counts() {
         const dirs = [
           fixtures.simple,
@@ -34,21 +48,24 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
             member: "qtiv3-examples/packaging/svg/svg.zip",
             name: "svg",
           }),
+          yield* scopedPackage(everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 })),
         ];
         for (const dir of dirs) {
           const program = yield* readProgram(dir);
           const flats = program.documents.map(({ ids, listed }) => flatten(listed.tree, ids.idOf));
           const { Instance: instances, Node: roots, Package: records, ...flat } = program.inputs;
-          const nested = [...roots.values()].flatMap((root) => {
-            const stack: NodeMember[] = [root];
-            const pieces: number[] = [];
-            for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
-              pieces.push(...node.attributes.map(({ idrefs }) => idrefs.length));
-              stack.push(...node.children);
+          const members = { DoubleValue: 0, Idref: 0, TextDoubleValue: 0 };
+          const stack: NodeMember[] = [...roots.values()];
+          for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
+            members.TextDoubleValue += node.doubleValue.length;
+            for (const { doubleValue, idrefs } of node.attributes) {
+              members.DoubleValue += doubleValue.length;
+              members.Idref += idrefs.length;
             }
 
-            return pieces;
-          });
+            stack.push(...node.children);
+          }
+
           const instanceStack: InstanceMember[] = [...instances.values()];
           let instanceRows = 0;
           for (
@@ -60,10 +77,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
             instanceStack.push(...instance.children);
           }
 
-          const textIdrefs = [...program.inputs.IdentityText.values()].reduce(
-            (sum, { idrefs }) => sum + idrefs.length,
-            0,
-          );
           const byRelation = new Map<string, number>([
             ["Attribute", flats.reduce((sum, rows) => sum + rows.attributes.length, 0)],
             [
@@ -71,13 +84,18 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
               flats.reduce((sum, rows) => sum + rows.attributeEntities.length, 0),
             ],
             ["Entry", program.files.length],
-            ["Idref", nested.reduce((sum, n) => sum + n, 0)],
+            ["DoubleValue", members.DoubleValue],
+            ["HeaderToken", sumOf(flat.CellHeaders, ({ tokens }) => tokens.length)],
+            ["Idref", members.Idref],
             ["Instance", instanceRows],
             ["Namespace", flats.reduce((sum, rows) => sum + rows.namespaces.length, 0)],
             ["Node", flats.reduce((sum, rows) => sum + rows.nodes.length, 0)],
             ["OpenAttributeName", flats.reduce((sum, rows) => sum + rows.openNames.length, 0)],
             ["Package", records.size],
-            ["TextIdref", textIdrefs],
+            ["ReferenceSegment", sumOf(flat.AssembledReference, ({ segments }) => segments.length)],
+            ["TextDoubleValue", members.TextDoubleValue],
+            ["TextIdref", sumOf(flat.IdentityText, ({ idrefs }) => idrefs.length)],
+            ["ToleranceToken", sumOf(flat.Tolerance, ({ tokens }) => tokens.length)],
             ...Object.entries(flat).map(([relation, rows]) => [relation, rows.size] as const),
           ]);
           const preview = yield* previewPackage(dir);
@@ -94,7 +112,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
             dir,
           );
         }
-      }),
+      }).pipe(Effect.scoped),
   );
 
   suite.effect("refuses a package the codec refuses as an ImportRefused naming its rule", () =>

@@ -104,14 +104,27 @@ const SideValue = Schema.Struct({
 });
 
 /**
- * A family statement's value: `ordered`, `counted` or `tree`, its member side and its slots.
+ * A family's slots as a statement value holds them: its owner relation and the owner's count field.
  */
-const FamilyValue = Schema.Struct({
-  family: SideValue,
-  kind: Schema.Literals(["counted", "ordered", "tree"]),
-  root: Schema.optional(Schema.String),
-  slots: Schema.Struct({ count: Schema.String, owner: Named }),
-});
+const SlotsValue = Schema.Struct({ count: Schema.String, owner: Named });
+
+/**
+ * A family statement's value: an `ordered` or `counted` family's member side and slots, or a
+ * `tree`'s and the root field each tree's rows share, which grizzle's `tree` always holds.
+ */
+const FamilyValue = Schema.Union([
+  Schema.Struct({
+    family: SideValue,
+    kind: Schema.Literals(["counted", "ordered"]),
+    slots: SlotsValue,
+  }),
+  Schema.Struct({
+    family: SideValue,
+    kind: Schema.Literal("tree"),
+    root: Schema.String,
+    slots: SlotsValue,
+  }),
+]);
 
 /**
  * Every statement value a schema of this package holds, as `schema()` keeps it in `statements`.
@@ -187,7 +200,7 @@ const familyLawOf = (family: FamilyRead): Law => {
   const slots = { count: family.slots.count, owner: family.slots.owner.name };
 
   return family.kind === "tree"
-    ? { kind: "tree", member, root: family.root ?? "", slots }
+    ? { kind: "tree", member, root: family.root, slots }
     : { kind: "family", member, order: family.kind, slots };
 };
 

@@ -1,8 +1,7 @@
 /**
  * Choices and their interactions, on the lease (lane NIL's audit, B5 and B6): the database's
  * verdict over the small scope of `#pantry/test/choice-owner-cases.ts`, held to the law oracle's
- * (`importAgreesWithOracle`), each import through the oracle's locator, so a refusal under a law
- * the oracle finds no breach of fails as the `LocateDisagreement` it is.
+ * (`importAgreesWithOracle`).
  *
  * Before `Interaction` and `ChoiceInteraction`, a choice's interaction was `Choice.interaction`,
  * the counted family's group key under `Binding`: the document node where no interaction enclosed
@@ -28,7 +27,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { choiceOwnerPackage, shownCase, smallScope } from "#pantry/test/choice-owner-cases.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { importAgreesWithOracle } from "#pantry/test/locate.ts";
+import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 describe.skipIf(!hasLease)("import/choice-owner.db.test.ts, on the lease", () => {
@@ -39,8 +38,7 @@ describe.skipIf(!hasLease)("import/choice-owner.db.test.ts, on the lease", () =>
     it.effect(
       "the database refuses every case under a rule the law oracle predicts, or accepts it where the oracle does",
       (ctx) =>
-        // Oracle: a second implementation, the law oracle's verdict over the same entries, and its
-        // locator over each refusal's laws. Bound: 5 interaction kinds x named or not x 4 gap
+        // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound: 5 interaction kinds x named or not x 4 gap
         // placements, 40 cases, exhausted, one import each.
         searched(
           ctx,

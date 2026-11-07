@@ -19,14 +19,17 @@
  *   key`, no two written elements of one test's assembly share an identifier (reading 86); `Branch
  *   target` and `Branch forward` over each instance's resolution of each branch rule (reading 87);
  *   `Section identifier target`, a `section-identifier` names one section or section ref the test
- *   places once (A61); and `Prefixed reference`, exactly one reading of a test-level variable
- *   reference resolves, through a name the test places once (readings 48 and 88, M3), with
+ *   places once (A61); `Prefixed reference`, exactly one reading of a variable reference a test's
+ *   processing makes resolves, through a name the test places once (readings 48 and 88, M3), with
  *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`); a braced one
  *   (a string attribute's) that resolves nowhere is a string value, with two readings still refused
- *   (reading R15-k); and `Item duration`, a resolving reading of an untimed item's built-in
- *   `duration` (information model §2.2.2.2); and `Feedback outcome type`, a section document's
- *   feedback names an outcome its reaching test declares as identifier, single or multiple
- *   (information model §5.49.1, §5.52.1).
+ *   (reading R15-k); `Item duration`, a resolving reading of an untimed item's built-in `duration`
+ *   (information model §2.2.2.2); and the content references, each resolving in the test's
+ *   declarations or its built-ins (A43 to A45: `Feedback reference`, `Feedback outcome type`,
+ *   `Printed variable reference`, `Template reference`, `Context variable reference`), with a
+ *   section document's feedback naming a built-in variable judged by the type its name has
+ *   (`Feedback outcome type`). Each is judged over every document the test places and every
+ *   fragment those documents splice in place (spec reading 117).
  */
 import { Option, Result } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -55,6 +58,7 @@ import type {
 import {
   breachAt,
   collapsed,
+  contentLawOf,
   elementsOf,
   typedOr,
   typedValueOf,
@@ -81,7 +85,11 @@ export const testLaws = [
   "Variable declared",
   "Variable kind",
   "Item duration",
+  "Context variable reference",
+  "Feedback reference",
   "Feedback outcome type",
+  "Printed variable reference",
+  "Template reference",
 ] as const;
 
 /**
@@ -821,12 +829,11 @@ const readingsOf = (
 };
 
 /**
- * Judge a section document's feedback reference as the schema's `Feedback_outcome_type` judges the
- * one `SectionFeedbackRef` resolves under each test that reaches it: an outcome its test declares
- * has the base type `identifier` and the cardinality `single` or `multiple`, and a built-in session
- * variable stands as the type its name has (`completionStatus` an identifier, `numAttempts` and
- * `duration` not). A name no outcome of the test declares and an outcome that writes no cardinality
- * (refused by `required-attribute` alone) are not judged here.
+ * Judge a section document's feedback reference to a built-in session variable as the schema's
+ * `Feedback_outcome_type` judges the one `SectionFeedbackRef` resolves under each test that reaches
+ * it: a built-in stands as the type its name has (`completionStatus` an identifier, `numAttempts`
+ * and `duration` not). A declared outcome's type is {@link contentBreachesOf}'s, over every
+ * document the test reads.
  *
  * @param assembled - The test's assembly.
  * @param grammar - The composed grammar.
@@ -857,55 +864,158 @@ const feedbackTypeOf = (
     root: "qti-assessment-item",
     variable: named.value,
   });
-  if (Option.isSome(builtIn)) {
-    return builtIn.value.baseType === "identifier" &&
-      (builtIn.value.cardinality === "single" || builtIn.value.cardinality === "multiple")
-      ? []
-      : [
-          breachAt(rows, node, "Feedback outcome type", {
-            assembly: assembled.test.listed.path,
-            baseType: builtIn.value.baseType,
-            cardinality: builtIn.value.cardinality,
-            identifier: named.value,
-          }),
-        ];
-  }
 
-  const declared = assembled.test.listed.rows;
-  const outcome = declared.members.find(
-    ({ id, kind }) =>
-      kind === "qti-outcome-declaration" &&
-      Option.contains(typedValueOf(declared, id, "identifier"), named.value),
-  );
-  // An outcome that writes no cardinality, or one outside its domain, or a base type outside its
-  // domain, is refused by AL3 ("required-attribute") or that domain alone: it has no `Declaration`
-  // row for a reference to read (lane NIL's audit, B11).
-  const typed = Option.flatMap(Option.fromNullishOr(outcome), ({ id }) =>
-    Option.all([typedOr(declared, id, "base-type", ""), typedValueOf(declared, id, "cardinality")]),
-  );
-  if (Option.isNone(typed)) {
-    return [];
-  }
-
-  const [baseType, cardinality] = typed.value;
-
-  return baseType === "identifier" && (cardinality === "single" || cardinality === "multiple")
-    ? []
-    : [
-        breachAt(rows, node, "Feedback outcome type", {
-          assembly: assembled.test.listed.path,
-          baseType,
-          cardinality,
-          identifier: named.value,
-        }),
-      ];
+  return Option.toArray(builtIn)
+    .filter(
+      ({ baseType, cardinality }) =>
+        baseType !== "identifier" || (cardinality !== "single" && cardinality !== "multiple"),
+    )
+    .map(({ baseType, cardinality }) =>
+      breachAt(rows, node, "Feedback outcome type", {
+        assembly: assembled.test.listed.path,
+        baseType,
+        cardinality,
+        identifier: named.value,
+      }),
+    );
 };
 
 /**
- * Judge each test-level reference of each document a test places, once per test (reading 5): a
- * `section-identifier` names one section or section ref of the assembly, placed once (A61); a
- * variable reference has exactly one reading that resolves, through a name the test places once
- * (M3, readings 48 and 88), and an unprefixed one that resolves nowhere names nothing (P8).
+ * Collect the documents a test's references read, once each: every document its assembly places,
+ * and every document one of them splices in place, at any depth (spec reading 117), since a
+ * fragment's content is the content of the document that includes it, as XInclude's result holds
+ * it.
+ *
+ * @param input - The package.
+ * @param assembled - The test's assembly.
+ * @returns The documents, in pre-order: each placed one, then what it splices.
+ */
+const readDocumentsOf = (input: PackageRows, assembled: Assembled): readonly ListedRows[] => {
+  const byPath = new Map(
+    input.documents.map((listed) => [listed.path, listed] as const).toReversed(),
+  );
+  const read: ListedRows[] = [];
+  const seen = new Set<string>();
+  const visit = (listed: ListedRows): void => {
+    if (!seen.has(listed.path)) {
+      seen.add(listed.path);
+      read.push(listed);
+      for (const path of input.spliced.get(listed.path) ?? []) {
+        for (const target of Option.toArray(Option.fromNullishOr(byPath.get(path)))) {
+          visit(target);
+        }
+      }
+    }
+  };
+  for (const { document } of assembled.instances) {
+    visit(document.listed);
+  }
+
+  return read;
+};
+
+/**
+ * Read the variable a reference attribute's value names, by the reference's spelling: a bare
+ * reference's collapsed value when it is an NCName, a braced reference's identifier between the
+ * braces. Any other value is a literal and names nothing.
+ *
+ * @param lexical - The attribute's value as written.
+ * @param spelling - How its value spells a name.
+ * @returns The name, none for a literal.
+ */
+const spelledName = (lexical: string, spelling: "bare" | "braced"): Option.Option<string> =>
+  spelling === "bare"
+    ? Option.liftPredicate(collapsed(lexical), (name) => ncName.test(name))
+    : Option.fromNullishOr(/^\{(?<name>[^{}]+)\}$/u.exec(lexical)?.groups?.["name"]);
+
+/**
+ * Judge a content reference of a document a test reads (the port audit's A43 to A45, spec readings
+ * 77 and 117): a feedback element's outcome, a template element's or a choice's template variable,
+ * a printed variable's name, base or index, a context variable, each naming a variable the test
+ * declares of a kind its element may name (`ContentReference`), or a built-in variable of the test
+ * that stands as one, never a reading through a scope: "The outcome variable or template variable
+ * must have been defined" (information model §7.30.6), and a prefix names an item's variable
+ * "during outcomes processing" alone (§ Variable). A feedback element's outcome is an identifier of
+ * single or multiple cardinality ("Feedback outcome type").
+ *
+ * @param context - What the reference resolves in.
+ * @param context.builtIns - The test's built-in variables, each with the declaration kind it
+ *   stands as.
+ * @param context.outcomes - The test's outcome declarations, by identifier.
+ * @param context.testDeclared - The test's declared identifiers, each with its declaration kinds.
+ * @param context.test - The test's path.
+ * @param reference - The reference.
+ * @param reference.attribute - The attribute it makes it by.
+ * @param reference.identifier - The name it spells.
+ * @param reference.node - The referring element.
+ * @param reference.rows - The referring element's document.
+ * @param reference.targets - The declaration kinds it may name.
+ * @returns The breaches.
+ */
+const contentBreachesOf = (
+  context: {
+    readonly builtIns: ReadonlyMap<string, string>;
+    readonly outcomes: ReadonlyMap<string, { readonly node: Row; readonly rows: View }>;
+    readonly test: string;
+    readonly testDeclared: ReadonlyMap<string, readonly string[]>;
+  },
+  reference: {
+    readonly attribute: string;
+    readonly identifier: string;
+    readonly node: Row;
+    readonly rows: View;
+    readonly targets: ReadonlySet<string>;
+  },
+): readonly Breach[] => {
+  const { attribute, identifier, node, rows, targets } = reference;
+  const declared = (context.testDeclared.get(identifier) ?? []).some((kind) => targets.has(kind));
+  const builtIn = Option.exists(Option.fromNullishOr(context.builtIns.get(identifier)), (kind) =>
+    targets.has(kind),
+  );
+  const unresolved =
+    declared || builtIn
+      ? []
+      : Option.toArray(contentLawOf(node.kind, attribute)).map((law) =>
+          breachAt(rows, node, law, { attribute, identifier }),
+        );
+  const outcome = Option.fromNullishOr(
+    attribute === "outcome-identifier" && declared ? context.outcomes.get(identifier) : undefined,
+  );
+  // An outcome that writes no cardinality is refused by AL3 alone, never judged as the `single` the
+  // schema holds it as (the orchestrator's ruling of 2026-11-06), as an item's feedback is.
+  const typed = outcome.pipe(
+    Option.flatMap((held) =>
+      Option.map(valueOf(held.rows, held.node.id, "cardinality"), (written) => ({
+        baseType: Option.getOrElse(
+          Option.map(valueOf(held.rows, held.node.id, "base-type"), collapsed),
+          () => "",
+        ),
+        cardinality: collapsed(written),
+      })),
+    ),
+  );
+
+  return [
+    ...unresolved,
+    ...Option.toArray(typed)
+      .filter(
+        ({ baseType, cardinality }) =>
+          baseType !== "identifier" || (cardinality !== "single" && cardinality !== "multiple"),
+      )
+      .map(({ baseType, cardinality }) =>
+        breachAt(rows, node, "Feedback outcome type", { baseType, cardinality, identifier }),
+      ),
+  ];
+};
+
+/**
+ * Judge each test-level reference of each document a test reads, once per test (reading 5): every
+ * document its assembly places, and every fragment one of them splices (reading 117,
+ * {@link readDocumentsOf}). A `section-identifier` names one section or section ref of the assembly,
+ * placed once (A61); a variable reference processing makes has exactly one reading that resolves,
+ * through a name the test places once (M3, readings 48 and 88), and an unprefixed one that resolves
+ * nowhere names nothing (P8); and a content reference, one `ContentReference` names, resolves in
+ * the test's declarations or its built-ins ({@link contentBreachesOf}).
  *
  * @param input - The package.
  * @param assembled - The test's assembly.
@@ -922,20 +1032,45 @@ const referenceLawsOf = (
     builtIns.set(root, new Map([...(builtIns.get(root) ?? []), [variable, declaration]]));
   }
 
+  const testRows = assembled.test.listed.rows;
   const context = {
     assembled,
     builtIns,
     grammar,
     input,
-    testDeclared: declarationsOf(assembled.test.listed.rows, grammar),
+    testDeclared: declarationsOf(testRows, grammar),
   };
-  const placed = [...new Set(assembled.instances.map(({ document }) => document))];
   const test = assembled.test.listed.path;
+  const contents = {
+    builtIns: builtIns.get(testKinds.test) ?? new Map<string, string>(),
+    outcomes: new Map(
+      testRows.members
+        .filter(({ kind }) => kind === "qti-outcome-declaration")
+        .flatMap((node) =>
+          Option.toArray(typedValueOf(testRows, node.id, "identifier")).map(
+            (identifier) => [identifier, { node, rows: testRows }] as const,
+          ),
+        )
+        .toReversed(),
+    ),
+    test,
+    testDeclared: context.testDeclared,
+  };
+  const targetsOf = (kind: string, attribute: string): ReadonlySet<string> =>
+    new Set(
+      grammar.references.contentReference.rows
+        .filter((row) => row.kind === kind && row.attribute === attribute)
+        .map(({ declaration }) => declaration),
+    );
 
-  return placed.flatMap((document) => {
-    const { rows } = document.listed;
+  const sectionPaths = new Set(
+    assembled.instances
+      .filter(({ document }) => document.rootKind === testKinds.section)
+      .map(({ document }) => document.listed.path),
+  );
 
-    return rows.members.flatMap((node): readonly Breach[] => {
+  return readDocumentsOf(input, assembled).flatMap(({ path, rows }) =>
+    rows.members.flatMap((node): readonly Breach[] => {
       const sections = Option.toArray(typedValueOf(rows, node.id, "section-identifier")).flatMap(
         (identifier) => {
           const looked = lookUp(input, assembled, identifier);
@@ -955,11 +1090,14 @@ const referenceLawsOf = (
         .flatMap(({ attribute, spelling }) =>
           Option.toArray(
             Option.flatMap(valueOf(rows, node.id, attribute), (lexical) =>
-              spelling === "bare"
-                ? Option.liftPredicate(collapsed(lexical), (name) => ncName.test(name))
-                : Option.fromNullishOr(/^\{(?<name>[^{}]+)\}$/u.exec(lexical)?.groups?.["name"]),
+              spelledName(lexical, spelling),
             ),
           ).flatMap((identifier): readonly Breach[] => {
+            const targets = targetsOf(node.kind, attribute);
+            if (targets.size > 0) {
+              return contentBreachesOf(contents, { attribute, identifier, node, rows, targets });
+            }
+
             if (node.kind === "qti-random-float" && /^(?:INF|NaN)$/u.test(identifier)) {
               return [];
             }
@@ -1021,14 +1159,11 @@ const referenceLawsOf = (
           }),
         );
 
-      const feedbacks =
-        document.rootKind === testKinds.section
-          ? feedbackTypeOf(assembled, grammar, rows, node)
-          : [];
+      const feedbacks = sectionPaths.has(path) ? feedbackTypeOf(assembled, grammar, rows, node) : [];
 
       return [...sections, ...variables, ...feedbacks];
-    });
-  });
+    }),
+  );
 };
 
 /**

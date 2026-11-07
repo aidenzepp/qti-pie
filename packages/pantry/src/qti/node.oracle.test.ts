@@ -2,7 +2,9 @@
  * The free laws of `Node` (Q5.03): its declarations build, its checks are named by the oracle's
  * laws, its write type is the host's fields alone, and its content-order statements (N5) admit
  * exactly the state `stepOf` gives each child, over every family of the installed grammar and
- * over generated documents. PostgreSQL judges the laws themselves in `node.oracle.db.test.ts`.
+ * over generated documents, and its membership checks test the handle of the node's own `Position`
+ * field, as the host judge reads them. PostgreSQL judges the laws themselves in
+ * `node.oracle.db.test.ts`.
  */
 import {
   bits,
@@ -25,7 +27,7 @@ import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn as drawnCase, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
-import { element as elementOf } from "@grizzle/testing/gen";
+import { element as elementOf, int } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
@@ -41,8 +43,11 @@ import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
+import { checkOf, judgedLaws } from "#pantry/test/key-copies.ts";
+import type { Datum } from "#pantry/test/key-copies.ts";
 import { documentBreaches, lawNames, lawsOf, oracleRules, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 
@@ -112,12 +117,10 @@ const scratchSchema = () =>
       Node,
       NodeKind: install.NodeKind,
       Position: install.Position,
-      PositionSelf: install.PositionSelf,
       SchemaVersion: install.SchemaVersion,
       SharedModel: install.SharedModel,
       SharedModelOf: install.SharedModelOf,
       SharedPositions: install.SharedPositions,
-      SlotSelf: install.SlotSelf,
       StandInAttribute,
       StandInNamespace,
       Symbol: install.Symbol,
@@ -970,5 +973,229 @@ describe("the foreign element laws, by the host oracle", () => {
           assert.deepStrictEqual(foreignBreaches(broken), [law], law);
         }
       }),
+  );
+});
+
+/**
+ * Find a family of the installed grammar whose parent's model admits an element child kind at a
+ * position the predicate holds.
+ *
+ * @param holds - Whether a family's child kind at its position is the one sought.
+ * @returns The family, its content model, a state that model steps from, and the kind.
+ * @throws {Error} When no family holds such a kind, which no installed grammar lacks.
+ */
+const familyWith = (holds: (family: Family, kind: string, position: string) => boolean) => {
+  for (const at of families) {
+    const family = familyKey(at.version, at.parent);
+    const model = contentModelOf.get(family) ?? "";
+    const kind = [...(childGrammar.get(family) ?? [])].find(
+      ([child, position]) => !nonElements.has(child) && holds(at, child, position),
+    )?.[0];
+    const from = install.Follow.rows.find((row) => row.model === model)?.from;
+    if (kind !== undefined && from !== undefined) {
+      return { ...at, from, kind, model };
+    }
+  }
+
+  throw new Error(
+    "No family of the installed grammar holds the element child the membership laws are judged on.",
+  );
+};
+
+/**
+ * A family whose shared model names an element child kind at position 0, for N5 admitted's
+ * `Symbol` read and the other checks.
+ */
+const sharedFamily = familyWith(
+  ({ parent, version }, _, position) =>
+    position === "0" && sharedModelOf.get(familyKey(version, parent)) !== "none",
+);
+
+/**
+ * A family whose parent's model caps a position, for N7 Counted's key over the capped children.
+ */
+const cappedFamily = familyWith(({ parent, version }) =>
+  install.Capped.rows.some((row) => row.parent === parent && row.version === version),
+);
+
+/**
+ * A law of `node.ts` whose membership reads a node's own `Position` field.
+ */
+type MembershipLaw = "N5 Follow" | "N5 admitted" | "N7 Counted" | "N7 Last";
+
+/**
+ * A membership over a node's own `Position` field: its law, whether a row meets it as the host
+ * evaluates the predicate grizzle keeps for it, the field whose handle it tests, and the set it
+ * tests the handle in, read off `install.ts`'s rows. Every other field of its row reaches the
+ * membership, and each other `Position` field holds the state the family steps from, so a
+ * membership of another `Position` field would give one verdict for every handle.
+ */
+interface Membership {
+  readonly field: "lastState" | "state";
+  readonly held: ReadonlySet<string>;
+  readonly law: MembershipLaw;
+  readonly meets: (row: Readonly<Record<string, Datum>>) => boolean;
+  readonly row: Readonly<Record<string, Datum>>;
+}
+
+/**
+ * Read a check of `Node` as the schema states it.
+ *
+ * @param law - The check's law, its name with spaces for underscores.
+ * @returns Whether a row passes it.
+ * @throws {Error} When `Qti` states no such check, or states it in a shape the host does not read.
+ */
+const nodeCheck = (law: MembershipLaw) =>
+  Option.getOrThrowWith(
+    checkOf(Qti.statements, "Node", law.replaceAll(" ", "_")),
+    () => new Error(`Qti states no check ${law} on Node that the host judge reads.`),
+  );
+
+/**
+ * N7 Counted's key over the capped children, `(parent, state)` of the element members its
+ * selection holds, as the host judges it: the one key of `Node` over those two fields.
+ */
+const cappedKey = (() => {
+  const [side, ...more] = judgedLaws(Qti.statements).flatMap((law) =>
+    law.kind === "key" &&
+    law.side.relation === "Node" &&
+    law.side.law.terms.map(({ field }) => field).join(" ") === "parent state"
+      ? [law.side]
+      : [],
+  );
+  if (side === undefined || more.length > 0) {
+    throw new Error(
+      `Qti states ${String(more.length + (side === undefined ? 0 : 1))} keys of Node over (parent, state), and N7 Counted's capped children are the one.`,
+    );
+  }
+
+  return side;
+})();
+
+/**
+ * The row of a member element child of a family, every `Position` field the state its model
+ * steps from.
+ *
+ * @param family - The family and its child kind.
+ * @returns The row.
+ */
+const childRow = ({ from, kind, parent, version }: ReturnType<typeof familyWith>) => ({
+  kind,
+  lastState: from,
+  parentKind: parent,
+  start: 1n,
+  state: from,
+  version,
+  was: from,
+});
+
+/**
+ * The four memberships of `node.ts`: N5 Follow's `{state} ⊆ Follow(model, was)` and N5 admitted's
+ * `{state} ⊆ Symbol(shared, kind)` for a member element, N7 Counted's capped children,
+ * `{state} ⊆ Capped(version, parent)`, and N7 Last's `{lastState} ⊆ Last(model)` for the parent's
+ * own row.
+ */
+const memberships: readonly Membership[] = [
+  {
+    field: "state",
+    held: new Set(
+      install.Follow.rows
+        .filter(({ from, model }) => model === sharedFamily.model && from === sharedFamily.from)
+        .map(({ to }) => to),
+    ),
+    law: "N5 Follow",
+    meets: nodeCheck("N5 Follow"),
+    row: childRow(sharedFamily),
+  },
+  {
+    field: "state",
+    held: new Set(
+      symbol.get(
+        `${sharedModelOf.get(familyKey(sharedFamily.version, sharedFamily.parent)) ?? ""} ${sharedFamily.kind}`,
+      ),
+    ),
+    law: "N5 admitted",
+    meets: nodeCheck("N5 admitted"),
+    row: childRow(sharedFamily),
+  },
+  {
+    field: "state",
+    held: new Set(
+      install.Capped.rows
+        .filter(
+          ({ parent, version }) =>
+            parent === cappedFamily.parent && version === cappedFamily.version,
+        )
+        .map(({ position }) => position),
+    ),
+    law: "N7 Counted",
+    meets: (row) => cappedKey.selection(row) === true,
+    row: childRow(cappedFamily),
+  },
+  {
+    field: "lastState",
+    held: new Set(
+      install.Last.rows
+        .filter(({ model }) => model === sharedFamily.model)
+        .map(({ position }) => position),
+    ),
+    law: "N7 Last",
+    meets: nodeCheck("N7 Last"),
+    row: { ...childRow(sharedFamily), kind: sharedFamily.parent },
+  },
+];
+
+/**
+ * What the exhaustion of the memberships notes: each law's verdict on a handle its set holds and
+ * on one it does not.
+ */
+type MembershipSituation = `${MembershipLaw} ${"held" | "not held"}`;
+
+describe("the memberships of a node's own position, by the host judge", () => {
+  it.effect(
+    "meet a node exactly where the handle of its own Position field is in the tested set, every handle exhausted",
+    (ctx) =>
+      // Oracle: the specification, the meaning of the diagonal `Compute.singleton` replaced:
+      // {h} ⊆ S exactly where h ∈ S, S read off `install.ts`'s rows, over the predicates grizzle
+      // keeps for the laws, evaluated on the host (`#pantry/test/key-copies.ts`).
+      // Bound: every handle of the Position roster in each of the four memberships.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: `every handle of Position, ${install.Position.handles.length}, in each membership`,
+            caseHang,
+            coverage: requiredInSpace<MembershipSituation>([
+              "N5 Follow held",
+              "N5 Follow not held",
+              "N5 admitted held",
+              "N5 admitted not held",
+              "N7 Counted held",
+              "N7 Counted not held",
+              "N7 Last held",
+              "N7 Last not held",
+            ]),
+            generator: int(0, install.Position.handles.length - 1),
+            limit: install.Position.handles.length,
+            literal: Formatter.format,
+            oracle: { kind: "specification", name: "{h} ⊆ S exactly where h ∈ S" },
+            suite: "qti/node-memberships",
+          },
+          (code, c) =>
+            Effect.sync(() => {
+              const handle = install.Position.handles[code] ?? "";
+              for (const { field, held, law, meets, row } of memberships) {
+                const expected = held.has(handle);
+                c.note(`${law} ${expected ? "held" : "not held"}`);
+                assert.strictEqual(
+                  meets({ ...row, [field]: handle }),
+                  expected,
+                  `${law} with ${field} ${handle} in ${Formatter.format(row)}`,
+                );
+              }
+            }),
+        ),
+      ),
+    searchTimeout,
   );
 });

@@ -27,7 +27,7 @@ import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-rela
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/key-copies.ts";
-import { oracleVerdict } from "#pantry/test/locate.ts";
+import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
  * The forms of the box, each with the value §3.3.20 gives it, none for a form outside

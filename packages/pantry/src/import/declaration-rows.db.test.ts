@@ -1,8 +1,7 @@
 /**
  * Declarations that have no `Declaration` row, on the lease (lane NIL's audit, B10 and B11): the
  * database's verdict over the scope of `#pantry/test/declaration-cases.ts`, held to the law
- * oracle's (`importAgreesWithOracle`), each import through the oracle's locator, so a refusal under
- * a law the oracle finds no breach of fails as the `LocateDisagreement` it is.
+ * oracle's (`importAgreesWithOracle`).
  *
  * A declaration whose `identifier` or `cardinality` is unwritten or spells nothing, or whose
  * `base-type` spells nothing, has no `Declaration` row, and nothing binds, references or hangs from
@@ -32,7 +31,7 @@ import {
   declarationStates,
 } from "#pantry/test/declaration-cases.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { importAgreesWithOracle } from "#pantry/test/locate.ts";
+import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
@@ -50,8 +49,7 @@ describe.skipIf(!hasLease)("import/declaration-rows.db.test.ts, on the lease", (
     it.effect(
       "the database refuses every case under a rule the law oracle predicts",
       (ctx) =>
-        // Oracle: a second implementation, the law oracle's verdict over the same entries, and its
-        // locator over each refusal's laws. Bound: every declaration of the every-relation items
+        // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound: every declaration of the every-relation items
         // and test, under each state of its identifier, cardinality and base type that leaves it
         // no row, exhausted, one import each.
         searched(

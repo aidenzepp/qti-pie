@@ -10,16 +10,21 @@
  * is chunked by grizzle into consecutive statements of that transaction (fin.md §4.5a).
  */
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
-import { Db } from "@bjornpagen/grizzle";
-import type { ApplyError, DbLayer, Law, OpenError, Uuid } from "@bjornpagen/grizzle";
+import {
+  CommitUnknown,
+  Db,
+  ReadFailure,
+  StaleSnapshot,
+  TransientFailure,
+} from "@bjornpagen/grizzle";
+import type { ApplyError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
 import { Clock, Duration, Effect, Option, Random, Ref, Result, Schedule, Schema } from "effect";
-import type { Array as Arr, FileSystem, PlatformError } from "effect";
+import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawIdentity, refusalOfLaws } from "#pantry/import/refusal.ts";
-import type { ImportRefused, RefusalWitness } from "#pantry/import/refusal.ts";
+import { refusalOfLaws } from "#pantry/import/refusal.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
-import type { PackageFile } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
 import type { Author } from "#pantry/qti/roles.ts";
@@ -56,38 +61,10 @@ export const retrySchedule = Schedule.exponential("50 millis", 2).pipe(
 );
 
 /**
- * Where a law the database reported without a row broke, as the host found it: the relation and
- * the fields of the row, or of the node, that breaks it.
- */
-export interface Located {
-  readonly relation: string;
-  readonly values: Readonly<Record<string, string>>;
-}
-
-/**
- * Find where a package breaks laws the database refused it under without naming a row: a CHECK or
- * a foreign key PostgreSQL reports by its constraint alone (README, "Errors and outcomes").
- *
- * @param files - The package's entries, as `readPackage` read them.
- * @param laws - The laws the refusal names.
- * @returns The row that breaks one of them, or none when the host finds no breach of any.
- */
-export type Locate = (
-  files: readonly PackageFile[],
-  laws: Arr.NonEmptyReadonlyArray<Law>,
-) => Effect.Effect<Option.Option<Located>>;
-
-/**
- * What a caller may replace in {@link importPackage}: how the database calls are retried, what
- * runs in place of the apply, so a test can inject a failure the cluster will not raise on demand,
- * and how a refusal that names no row is located.
+ * What a caller may replace in {@link importPackage}: how the database calls are retried, and what
+ * runs in place of the apply, so a test can inject a failure the cluster will not raise on demand.
  */
 export interface ImportOptions {
-  /**
-   * Finds the row a CHECK or foreign-key refusal breaks, which grizzle's witness does not name.
-   * Without one, such a refusal says that the database names no row.
-   */
-  readonly locate?: Locate;
   /**
    * The schedule of the retries of `Db.open` and `db.apply`. Defaults to {@link retrySchedule}.
    */
@@ -98,22 +75,6 @@ export interface ImportOptions {
   readonly wrapApply?: <A, E, R>(
     apply: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | ApplyError, R>;
-}
-
-/**
- * The host found no breach of the laws the database refused a package under: the law oracle and
- * the schema disagree, a defect of one of them, never a verdict on the package.
- */
-export class LocateDisagreement extends Schema.TaggedError<LocateDisagreement>()(
-  "LocateDisagreement",
-  { laws: Schema.Array(Schema.String), packageId: Schema.String },
-) {
-  /**
-   * The laws, the package, and the repair.
-   */
-  override get message(): string {
-    return `The database refused package ${this.packageId} under ${this.laws.join("; ")}, and the host's locator finds no breach of any of them. The schema and the law oracle disagree: find which states the law wrongly and correct it.`;
-  }
 }
 
 /**
@@ -175,43 +136,50 @@ const retried = <A, E extends ApplyError | OpenError, R>(
   });
 
 /**
- * Build the refusal of an `invariant-rejected` outcome: its rule and explanation by
- * `refusalOfLaws`, with the row a locator finds where grizzle's witness names none.
- *
- * @param refusal - The outcome's laws and witness, and the package's id and entries.
- * @param refusal.files - The package's entries.
- * @param refusal.laws - The laws.
- * @param refusal.packageId - The package's id.
- * @param refusal.witness - The witness.
- * @param locate - The locator, if any.
- * @returns The `ImportRefused`. Dies with `LocateDisagreement` when the locator finds no breach of
- *   the laws, and with `UnownedLaws` when no rule owns them: each a defect of this package's
- *   schema, oracle or law table, never a verdict on the package.
+ * The apply's COMMIT got no answer, and the read-back that would say whether it committed failed:
+ * the database may hold the package or not. `commit` is grizzle's `CommitUnknown` and `cause` the
+ * read-back's own failure, so a caller can tell this from a read-back that found no package, which
+ * fails with `CommitUnknown` alone.
  */
-const refusedBy = Effect.fnUntraced(function* refusedBy(
-  refusal: {
-    readonly files: readonly PackageFile[];
-    readonly laws: Arr.NonEmptyReadonlyArray<Law>;
-    readonly packageId: Uuid;
-    readonly witness: RefusalWitness;
-  },
-  locate: Locate | undefined,
-): Effect.fn.Return<ImportRefused> {
-  const { files, laws, packageId } = refusal;
-  let { witness } = refusal;
-  if (witness.kind === "unreported" && locate !== undefined) {
-    const located = yield* locate(files, laws);
-    if (Option.isNone(located)) {
-      return yield* Effect.die(new LocateDisagreement({ laws: laws.map(lawIdentity), packageId }));
-    }
-
-    witness = { kind: "row", ...located.value };
+export class CommitUnresolved extends Schema.TaggedError<CommitUnresolved>()("CommitUnresolved", {
+  cause: Schema.Union([
+    Schema.instanceOf(ReadFailure),
+    Schema.instanceOf(TransientFailure),
+    Schema.instanceOf(StaleSnapshot),
+  ]),
+  commit: Schema.instanceOf(CommitUnknown),
+  packageId: Schema.String,
+}) {
+  /**
+   * The package, that its commit's outcome is unknown, and why the read-back did not settle it.
+   */
+  override get message(): string {
+    return `Package ${this.packageId} may or may not be stored: its commit got no answer (${this.commit.message}), and reading it back to see whether it committed failed (${this.cause.message}).`;
   }
+}
 
-  return yield* Result.match(refusalOfLaws(laws, witness, grammar), {
-    onFailure: (unowned) => Effect.die(unowned),
-    onSuccess: (refused) => Effect.succeed(refused),
-  });
+/**
+ * Settle a `CommitUnknown` by reading the package back by its id, as grizzle's README directs for
+ * it ("read back before you run it again", "Errors"): present, the apply committed; absent, it did
+ * not, and the `CommitUnknown` is the answer. A read-back that fails settles nothing, so it fails
+ * with {@link CommitUnresolved}, never as an absent package.
+ *
+ * @param commit - The apply's `CommitUnknown`.
+ * @param packageId - The id the import gave the package.
+ * @param readBack - The read of the package row by `packageId`.
+ * @returns That the apply committed. Fails with `commit` when the read-back finds no package, and
+ *   with `CommitUnresolved` when the read-back fails.
+ */
+export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnknown<A>(
+  commit: CommitUnknown,
+  packageId: Uuid,
+  readBack: Effect.Effect<Option.Option<A>, ReadError>,
+): Effect.fn.Return<{ readonly kind: "committed" }, CommitUnknown | CommitUnresolved> {
+  const found = yield* readBack.pipe(
+    Effect.mapError((cause) => new CommitUnresolved({ cause, commit, packageId })),
+  );
+
+  return Option.isSome(found) ? { kind: "committed" as const } : yield* commit;
 });
 
 /**
@@ -220,22 +188,24 @@ const refusedBy = Effect.fnUntraced(function* refusedBy(
  * Reads the package once, shreds the documents its manifest names, mints every id afresh and
  * builds every row, then applies them as one ChangeSet through the author role. `Db.open` and
  * `db.apply` are retried on a transient refusal and on nothing else. When the commit's outcome is
- * unknown the package row is read back by its id: present, the import was accepted; absent, the
- * error is the answer. The same package imported twice is two packages, each with its own ids.
+ * unknown the package row is read back by its id ({@link settleCommitUnknown}): present, the import
+ * was accepted; absent, the error is the answer; a read-back that fails is `CommitUnresolved`. The
+ * same package imported twice is two packages, each with its own ids.
  *
  * @param dir - The package directory or `.zip` file.
- * @param options - Replacements for the retry schedule, the apply step and the locator, for tests.
+ * @param options - Replacements for the retry schedule and the apply step, for tests.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rule the package
  *   broke, whether the reader, the codec or the database refused it; with the platform's error
- *   when the directory cannot be read; and with grizzle's own error when the database failed for a
- *   reason that is not a refusal.
+ *   when the directory cannot be read; with `CommitUnresolved` when the commit's outcome is
+ *   unknown and the read-back failed, so the package may or may not be stored; and with grizzle's
+ *   own error when the database failed for a reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
   dir: string,
   options: ImportOptions = {},
 ): Effect.fn.Return<
   Uuid,
-  ImportRefused | PlatformError.PlatformError | ApplyError | OpenError,
+  ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
   FileSystem.FileSystem | DbLayer<typeof Author>
 > {
   const schedule = options.schedule ?? retrySchedule;
@@ -245,14 +215,8 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   const changes = changeSetOf(AuthorApp.roles.author.role, program.inputs);
   const db = yield* retried("Db.open", Db.open(AuthorApp.roles.author, {}), schedule);
   const [elapsed, outcome] = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
-    Effect.catchTag("CommitUnknown", (unknown) =>
-      Effect.gen(function* readBack() {
-        const found = yield* db
-          .get(Package, { id: packageId })
-          .pipe(Effect.orElseSucceed(Option.none));
-
-        return Option.isSome(found) ? { kind: "committed" as const } : yield* unknown;
-      }),
+    Effect.catchTag("CommitUnknown", (commit) =>
+      settleCommitUnknown(commit, packageId, db.get(Package, { id: packageId })),
     ),
     Effect.timed,
   );
@@ -270,14 +234,14 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // The rule is the most specific among them either way (`ruleOfLaws`). A breach in a table
     // written or checked later, or one the host cannot witness, never reaches the rule, however
     // specific its law; GEN-A's differential records any such divergence from the oracle.
-    const { laws } = outcome.refused;
-
-    return yield* Effect.fail(
-      yield* refusedBy(
-        { files: program.files, laws, packageId, witness: outcome.witness },
-        options.locate,
-      ),
-    );
+    // The witness is grizzle's own, as the refusal carries it: the key of the first stated row
+    // that breaks the law, or `unreported` for a foreign key and for a law no stated row breaks as
+    // the host judges it (README "Errors and outcomes"). Laws no rule owns die as `UnownedLaws`, a
+    // defect of the law table, never a verdict on the package.
+    return yield* Result.match(refusalOfLaws(outcome.refused.laws, outcome.witness, grammar), {
+      onFailure: (unowned) => Effect.die(unowned),
+      onSuccess: (refused) => Effect.fail(refused),
+    });
   }
 
   if (outcome.kind === "accepted") {

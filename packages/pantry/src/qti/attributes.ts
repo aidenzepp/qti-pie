@@ -14,10 +14,11 @@
  * inline.
  *
  * - **AL1, admission** (`AL1_admission`, rule `attribute-admission`): the name is one its element's
- *   governor admits, `{name} ⊆ AttributeSlotOf.row(model)` through the diagonal
- *   `AttributeNameSelf`. It is a named check, not a generated column's NOT NULL: PostgreSQL reports
- *   a NULL in a NOT NULL column as 23502, which names no law of the installation, so grizzle would
- *   answer an unadmitted name with `ExecutionFailure` rather than `invariant-rejected`.
+ *   governor admits, `{name} ⊆ AttributeSlotOf.row(model)`, with `{name}` the name's
+ *   `Compute.singleton`. It is a named check, not a generated column's NOT NULL: the governor it
+ *   reads is `version`, `kind` and `governs`, accumulated copies, and a generated field's term
+ *   reads only the fields its caller writes (grizzle's README, "How a field is written"). An
+ *   unadmitted name is refused `invariant-rejected` on the check's own law.
  * - **AL1, the lexical half** (`value_domain`, rule `attribute-lexical`): the lexical form as written
  *   matches its domain's compiled pattern, `ValueDomainOf.at("pattern", domain)`, through grizzle's
  *   `Compute.matches`. A universal domain, whose pattern admits every value (`universalDomains` of
@@ -28,7 +29,7 @@
  *   declares one, XML Schema 1.0 Part 2 §3.2.19) holds no value, so a value in one is refused by
  *   the domain's identity: grizzle refuses a pattern whose language is empty
  *   (`scalar/regex/admit.ts:121`), so the domain has no pattern to match (C47).
- * - **AL2** (C9): `slot` is the singleton of the name's slot, `SlotSelf.row(position)` (C6). It is
+ * - **AL2** (C9): `slot` is the singleton of the name's slot, `Compute.singleton(slot)`. It is
  *   written by the host and proved by `E1_derived`, because a generated field reads the caller's
  *   fields alone and `version`, `kind` and `governs` are copies. The `or` fold over the family,
  *   whose step selection leaves the open classes out, ends in `Node.attrs`, and `AL2_distinct` is
@@ -101,7 +102,6 @@ import {
   AttributeGrammar,
   AttributeModelOf,
   AttributeName,
-  AttributeNameSelf,
   AttributeSlot,
   AttributeSlotOf,
   boundedDomains,
@@ -114,7 +114,6 @@ import {
   Required,
   ResourceType,
   SchemaVersion,
-  SlotSelf,
   TextDomain,
   TypeName,
   ValueDomainOf,
@@ -495,10 +494,7 @@ const slotOf = (a: NamedRow) => AttributeSlotOf.at("slot", attributeModelOf(a), 
  * @returns The predicate.
  */
 const admitted = (a: AttributeRow) =>
-  a.eq(
-    Compute.subset(AttributeNameSelf.row(a.name), AttributeSlotOf.row(attributeModelOf(a))),
-    true,
-  );
+  a.eq(Compute.subset(Compute.singleton(a.name), AttributeSlotOf.row(attributeModelOf(a))), true);
 
 /**
  * Read an admitted attribute's value domain under its element's governor.
@@ -758,7 +754,7 @@ export const attributeLawsByName = {
       a.or(
         a.not(admitted(a)),
         a.and(
-          a.eq(a.slot, SlotSelf.row(slotOf(a))),
+          a.eq(a.slot, Compute.singleton(slotOf(a))),
           a.or(
             a.and(carriesIdrefs(a), a.eq(a.lexical, a.idrefText)),
             a.and(a.not(carriesIdrefs(a)), a.eq(a.idrefs, 0n)),

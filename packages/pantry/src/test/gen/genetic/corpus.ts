@@ -9,8 +9,8 @@
  *   member counts, whose import writes a row of every stored relation;
  * - R87's assembly packages (`#pantry/test/gen/assembly.ts`), tests whose sections, refs and branch
  *   rules place items across documents, sampled on a stream this module's label fixes;
- * - The packaging fixtures (`#pantry/test/locate.ts` `packagingFixtures`), the spec's 4.12 to 4.14
- *   positives and their hand-broken copies.
+ * - The packaging fixtures (`#pantry/test/oracle-verdict.ts` `packagingFixtures`), the spec's 4.12 to
+ *   4.14 positives and their hand-broken copies.
  *
  * Every element of every seed small enough to graft is a donor, indexed by its kind
  * ({@link kindOf}), so an insertion builds by construction from parts the corpus holds, under a
@@ -42,7 +42,7 @@ import {
 } from "#pantry/test/gen/genetic/genome.ts";
 import type { Genome } from "#pantry/test/gen/genetic/genome.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
-import { packagingFixtures } from "#pantry/test/locate.ts";
+import { packagingFixtures } from "#pantry/test/oracle-verdict.ts";
 
 /**
  * One package of the seed population: where it comes from, and its genome.

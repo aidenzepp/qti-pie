@@ -222,8 +222,8 @@ const codecRules = [
  * The import meets it as the bound's pattern law: grizzle's encoder and its family fill check a
  * text's type, its NUL and its surrogates and never its pattern (`core/text.ts` `validateText`,
  * `write/family/fold.ts` `admittedAt`), so the column's domain CHECK refuses it as the statement
- * casts it, `invariant-rejected` on the pattern's law with an unreported witness (README, "Errors
- * and outcomes").
+ * casts it, `invariant-rejected` on the pattern's law, its witness the key of the stated row that
+ * holds the value (README, "Errors and outcomes").
  */
 export const limitRules = [
   "key-text-bound",
@@ -913,14 +913,28 @@ const SideValue = Schema.Struct({
 });
 
 /**
- * A family statement's value: `ordered`, `counted` or `tree`, its member side and its slots.
+ * A family's slots as a statement value holds them: its owner relation and the owner's count field.
  */
-const FamilyValue = Schema.Struct({
-  family: SideValue,
-  kind: Schema.Literals(["counted", "ordered", "tree"]),
-  root: Schema.optional(Schema.String),
-  slots: Schema.Struct({ count: Schema.String, owner: NamedValue }),
-});
+const SlotsValue = Schema.Struct({ count: Schema.String, owner: NamedValue });
+
+/**
+ * A family statement's value: an `ordered` or `counted` family's member side and slots, or a
+ * `tree`'s and the root field each tree's rows share, which grizzle's `tree` always holds
+ * (`schema/statements.ts` `treeBuilder`).
+ */
+const FamilyValue = Schema.Union([
+  Schema.Struct({
+    family: SideValue,
+    kind: Schema.Literals(["counted", "ordered"]),
+    slots: SlotsValue,
+  }),
+  Schema.Struct({
+    family: SideValue,
+    kind: Schema.Literal("tree"),
+    root: Schema.String,
+    slots: SlotsValue,
+  }),
+]);
 
 /**
  * Every statement value a module's group of {@link namedLaws} may hold, as grizzle's constructors
@@ -1007,7 +1021,7 @@ export const lawsOfStatement = (statement: Statement): readonly Law[] =>
 
       return [
         read.kind === "tree"
-          ? { kind: "tree", member, root: read.root ?? "", slots }
+          ? { kind: "tree", member, root: read.root, slots }
           : familyOf(read.kind, member, slots.owner, slots.count),
       ];
     },
@@ -1149,11 +1163,12 @@ export const ruleOfLaws = (laws: Arr.NonEmptyReadonlyArray<Law>): Option.Option<
  * What a refusal knows of the row that broke its laws: grizzle's witness, or the row's fields as
  * the caller read them.
  *
- * Grizzle names a key's violating row by its key fields alone, and a constraint PostgreSQL checks
- * itself (a foreign key, a row check, a closed relation's check) by none: its witness is
- * `unreported`. The fields a content-order law reads (a node's `version`, its parent's kind and its
- * predecessor's state) are in no witness grizzle gives, so a caller that holds the row, such as a
- * direct-SQL test or the law oracle's breach, passes it as `row`.
+ * Grizzle names a violating row by its key fields alone, never another column: a key's, and a row
+ * check's, a closed relation's check's, a contract's or a pattern's where the host judges a row the
+ * ChangeSet states to break it. A foreign key, and a check no stated row breaks as the host judges
+ * it, it names by none: its witness is `unreported` (README, "Errors and outcomes"). The fields a
+ * content-order law reads (a node's `version`, its parent's kind and its predecessor's state) are
+ * in no witness grizzle gives, so a caller that holds the row passes it as `row`.
  */
 export type RefusalWitness =
   | Witness
