@@ -177,6 +177,8 @@ describe("the test helpers", () => {
       "qti/quotation.test.ts: #pantry/test/oracle.ts",
       "qti/tests.test.ts: #pantry/test/oracle.ts",
       "test/attribute-order.oracle.test.ts: #pantry/test/oracle.ts",
+      "test/binding-fit.oracle.test.ts: #pantry/test/oracle.ts",
+      "test/document-roots.oracle.test.ts: #pantry/test/oracle.ts",
       "test/gen/xdm.ts: #pantry/test/oracle.ts",
       "test/locate.ts: #pantry/test/oracle.ts",
       "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
@@ -194,6 +196,7 @@ describe("the test helpers", () => {
       "test/oracle.rv-x.test.ts: #pantry/test/oracle.ts",
       "test/oracle.test.ts: #pantry/test/oracle.ts",
       "test/prewitness.corpus.test.ts: #pantry/test/oracle.ts",
+      "test/processing-verdicts.oracle.test.ts: #pantry/test/oracle.ts",
       "test/xsd.corpus.test.ts: #pantry/test/oracle.ts",
     ]);
   });

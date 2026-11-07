@@ -21,7 +21,7 @@ import { CommitUnknown, Db, query, uuid, v } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, DbConnection, Law, Plan } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Layer, Redacted, Result } from "effect";
+import { Duration, Effect, Layer, Redacted, Result } from "effect";
 import { Client } from "pg";
 import type { QueryResultRow } from "pg";
 import { describe, inject } from "vitest";
@@ -40,6 +40,7 @@ import { Author } from "#pantry/qti/roles.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
+import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 import { oracleLocate } from "#pantry/test/locate.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -364,33 +365,6 @@ const inBody = (markup: string): TextEdit => ({
   file: "choice.xml",
   replacement: `${markup}<qti-choice-interaction`,
   search: "<qti-choice-interaction",
-});
-
-/**
- * The processing fixtures' frozen verdicts (`src/test/fixtures/processing/verdicts.tsv`), by the
- * fixture's name: the rule each is refused under, `accepted`, and whether a checker or a guard
- * gave it.
- */
-const processingVerdicts = Effect.gen(function* processingVerdicts() {
-  const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(
-    new URL("../test/fixtures/processing/verdicts.tsv", import.meta.url).pathname,
-  );
-
-  return new Map(
-    text
-      .split("\n")
-      .slice(1)
-      .flatMap((line) => {
-        const fields = line.split("\t");
-        const file = fields[0] ?? "";
-        const rule = fields[2] ?? "";
-        const source = fields[5] ?? "";
-        const name = /^(?:broken|guards)\/(?<name>[^/]+)\.xml$/u.exec(file)?.groups?.["name"];
-
-        return name === undefined ? [] : [[name, { rule, source }] as const];
-      }),
-  );
 });
 
 /**
@@ -975,11 +949,12 @@ describe.skipIf(!hasLease)(
       }
 
       for (const name of processingFixtureNames) {
-        it.effect(`gives the processing fixture ${name} its frozen verdict`, () =>
-          // Oracle: the specification as a checker, the frozen verdicts (Q5.10): a checker's
-          // fixture is refused under its rule, a guard's by AL3, N7's Last or N5's Follow, and an
-          // accepted one commits; a package with no frozen row (a round-trip or template package)
-          // is accepted.
+        it.effect(`gives the processing fixture ${name} its stated verdict`, () =>
+          // Oracle: the specification as a checker, the stated verdicts (Q5.10,
+          // `processing-verdicts.ts`, which the law oracle predicts with no database): a checker's
+          // fixture is refused under its frozen rule, a codec-refused one under the codec's rule, a
+          // guard's by AL3, N7's Last or N5's Follow, and an accepted one commits; a package with
+          // no frozen row (a round-trip or template package) is accepted.
           Effect.gen(function* processingVerdict() {
             const verdict = (yield* processingVerdicts).get(name);
             const dir = yield* materializeProcessing(name);
