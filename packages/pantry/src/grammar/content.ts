@@ -398,9 +398,9 @@ const characterData: Readonly<
  */
 const dataOf = (
   content: ContentType,
-  namespace: string,
+  namespace: NamespaceOfKind,
 ): readonly (typeof characterKinds)[number][] =>
-  content._tag === "empty" && namespace === mathmlNamespace
+  content._tag === "empty" && namespace._tag === "in" && namespace.uri === mathmlNamespace
     ? ["ws", "comment", "pi"]
     : characterData[content._tag];
 

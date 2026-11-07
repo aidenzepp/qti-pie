@@ -122,7 +122,7 @@ import {
   ResourceType,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
-import { baseTypes, languageTag } from "#pantry/grammar/attributes.ts";
+import { languageTag } from "#pantry/grammar/attributes.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
