@@ -318,17 +318,26 @@ const meetsBound = (name: BuiltinName, value: string, bound: string): boolean =>
 /**
  * What settles a narrowed attribute, which its refusal's detail carries: a shared reading, or a
  * line of the information model with the `check` that names the case and the qti package's rule
- * that refuses the same, `pantry`.
+ * that refuses the same, `pantry`. A typed outcome's row also names the outcome, `identifier`, and
+ * the base type it must have, `baseType`, for the wording.
  */
 type Narrowing =
   | { readonly reading: string }
-  | { readonly check: string; readonly pantry: string; readonly source: string };
+  | { readonly check: string; readonly pantry: string; readonly source: string }
+  | {
+      readonly baseType: string;
+      readonly check: "reserved-outcome-type";
+      readonly identifier: string;
+      readonly pantry: string;
+      readonly source: string;
+    };
 
 /**
  * A reading, or a sentence of the information model, that narrows an attribute: on the named
  * elements, or on every element whose table declares it, a value the XSD's own type admits must
- * also satisfy `holds`, which reads the value under `whiteSpace`, or it is `attribute-type` with
- * `expected` as the values the row admits and the facts of `settled`.
+ * also satisfy `holds`, which reads the value under `whiteSpace` and, where the narrowing depends
+ * on another attribute, the element, or it is `attribute-type` with `expected` as the values the
+ * row admits and the facts of `settled`.
  *
  * `whiteSpace` is how `holds` reads the value: `collapse`d, or with each tab and line break
  * `replace`d by a space and nothing trimmed, as XSD reads an `xs:normalizedString`. A row that
@@ -339,7 +348,7 @@ interface NarrowedAttribute {
   readonly attribute: string;
   readonly elements: "declaring" | readonly string[];
   readonly expected: string;
-  readonly holds: (lexical: string) => boolean;
+  readonly holds: (lexical: string, element: SourceElement) => boolean;
   readonly kind: "narrowed-attribute";
   readonly settled: Narrowing;
   readonly whiteSpace: "collapse" | "replace";
@@ -542,6 +551,53 @@ const reservingDeclarations = [
   ["qti-response-declaration", "info.txt:39226"],
   ["qti-template-declaration", "info.txt:45843"],
 ] as const;
+
+/**
+ * The outcomes whose base type the information model fixes, each with that base type and its line:
+ * "SCORE MUST be a float", "MAXSCORE MUST be a float" and "PASSED MUST be a boolean"
+ * (info.txt:8478, :8480, :8482). The qti package refuses an outcome declaration of another base
+ * type as `ReservedOutcomeTypes` (`packages/pantry/src/schema/declaration.ts:295`), in an item or a
+ * test.
+ */
+const typedOutcomes = [
+  ["SCORE", "float", "info.txt:8478"],
+  ["MAXSCORE", "float", "info.txt:8480"],
+  ["PASSED", "boolean", "info.txt:8482"],
+] as const;
+
+/**
+ * Report whether an outcome declaration's `base-type` is the one its identifier needs, as the qti
+ * package's `ReservedOutcomeTypes` reads it.
+ *
+ * That rule reads only a typed declaration, one whose `cardinality` is not `record` as written
+ * (`packages/pantry/src/import/item.ts:331`), so a `record` declaration holds whatever it writes.
+ * Whether "SCORE MUST be a float" also refuses a `record` declaration, which has no base type, is
+ * a reading that awaits the operator (G-R2, pending); until it settles, a `record` one is admitted,
+ * as the qti package admits it.
+ * The identifier is compared exactly after collapse, as {@link reservedIdentifiers} compares it, so
+ * `Score` is another name; one that holds an unexpanded entity reference is unknown and holds.
+ *
+ * @param identifier The outcome the row types.
+ * @param baseType The base type that outcome must have.
+ * @returns Whether a collapsed `base-type` meets the row on its declaration.
+ */
+const typedAs =
+  (identifier: string, baseType: string) =>
+  (lexical: string, element: SourceElement): boolean => {
+    const written = (local: string) =>
+      element.attributes.find(
+        (attribute) => attribute.namespace === "" && attribute.local === local,
+      );
+    const named = written("identifier");
+
+    return (
+      lexical === baseType ||
+      written("cardinality")?.value === "record" ||
+      named === undefined ||
+      named.references.length > 0 ||
+      collapse(named.value) !== identifier
+    );
+  };
 
 /**
  * Report whether a collapsed `tolerance` holds only tokens the qti package's `toleranceList`
@@ -818,6 +874,25 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => !reservedIdentifiers.has(lexical),
     kind: "narrowed-attribute",
     settled: { check: "reserved-identifier", pantry: "DeclarationNotReserved", source },
+    whiteSpace: "collapse",
+  })),
+  // The information model fixes the base types of three outcomes: SCORE and MAXSCORE are floats,
+  // PASSED a boolean (info.txt:8478, :8480, :8482), as pantry's `ReservedOutcomeTypes` refuses an
+  // outcome declaration of another base type, in an item or a test. A response or template
+  // declaration of those names is not an outcome, and a `record` one has no base type to fix.
+  ...typedOutcomes.map(([identifier, baseType, source]): NarrowedAttribute => ({
+    attribute: "base-type",
+    elements: ["qti-outcome-declaration"],
+    expected: `${baseType}, the base type of an outcome named ${identifier}`,
+    holds: typedAs(identifier, baseType),
+    kind: "narrowed-attribute",
+    settled: {
+      baseType,
+      check: "reserved-outcome-type",
+      identifier,
+      pantry: "ReservedOutcomeTypes",
+      source,
+    },
     whiteSpace: "collapse",
   })),
   // The information model's `tolerance` (info.txt:24946) is two numbers, t0 and t1, or one for
@@ -1651,7 +1726,7 @@ const checkValue = (
         local &&
         row.attribute === attribute.local &&
         (row.elements === "declaring" || row.elements.includes(element.local)) &&
-        !row.holds(row.whiteSpace === "collapse" ? lexical : replaced),
+        !row.holds(row.whiteSpace === "collapse" ? lexical : replaced, element),
     )
     .map((row) =>
       refuse(source, "attribute-type", at, { ...detail, expected: row.expected, ...row.settled }),

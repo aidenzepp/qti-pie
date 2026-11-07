@@ -251,6 +251,17 @@ const outcomeXml = (identifier: string, baseType: string, initial?: string): str
   }</qti-outcome-declaration>`;
 
 /**
+ * Write a `record` outcome declaration, which has no base type: the information model fixes the
+ * base type of `SCORE` and `MAXSCORE` as float, and the checker refuses one of another base type,
+ * but reads no `record` one, so a record is how an item names one that is not a float.
+ *
+ * @param identifier Its `identifier`.
+ * @returns The declaration's XML.
+ */
+const recordXml = (identifier: string): string =>
+  `<qti-outcome-declaration identifier="${identifier}" cardinality="record"/>`;
+
+/**
  * Write a hand-built item a built-in template processes, as the bytes a host reads: a single
  * identifier `RESPONSE` whose correct response is `A`, with a `qti-mapping` of `A` to 1 when asked,
  * a Choice of `A` and `B` bound to it, and the outcomes given.
@@ -328,7 +339,7 @@ const markedNotRun = Effect.fnUntraced(function* markedNotRun(bytes: Uint8Array,
 
 describe("a CC2_* template whose needs the item does not meet (Q6: marked, never refused)", () => {
   it.effect(
-    "CC2_map_response is marked mapping:RESPONSE when RESPONSE has no qti-mapping, outcome-type:SCORE when SCORE is an integer, and score runs neither",
+    "CC2_map_response is marked mapping:RESPONSE when RESPONSE has no qti-mapping, variable:SCORE when SCORE is a record, which the engine does not hold, and score runs neither",
     () =>
       Effect.gen(function* cc2MapResponseUnmet() {
         const feedback = outcomeXml("FEEDBACK", "identifier");
@@ -343,37 +354,37 @@ describe("a CC2_* template whose needs the item does not meet (Q6: marked, never
         );
         yield* markedNotRun(
           templatedBytes("CC2_map_response", true, [
-            outcomeXml("SCORE", "integer"),
+            recordXml("SCORE"),
             outcomeXml("MAXSCORE", "float", "1"),
             feedback,
           ]),
-          "outcome-type:SCORE",
+          "variable:SCORE",
         );
       }),
   );
 
   it.effect(
-    "CC2_match is marked outcome-type:SCORE when SCORE is an integer, and score does not run it",
+    "CC2_match is marked variable:SCORE when SCORE is a record, which the engine does not hold, and score does not run it",
     () =>
       Effect.gen(function* cc2MatchUnmet() {
         yield* markedNotRun(
-          templatedBytes("CC2_match", false, [outcomeXml("SCORE", "integer")]),
-          "outcome-type:SCORE",
+          templatedBytes("CC2_match", false, [recordXml("SCORE")]),
+          "variable:SCORE",
         );
       }),
   );
 
   it.effect(
-    "CC2_match_basic is marked outcome-type:SCORE when MAXSCORE is an integer and SCORE a float, and score does not run it",
+    "CC2_match_basic is marked variable:MAXSCORE when MAXSCORE is a record, which the engine does not hold, and SCORE a float, and score does not run it",
     () =>
       Effect.gen(function* cc2MatchBasicUnmet() {
         yield* markedNotRun(
           templatedBytes("CC2_match_basic", false, [
             outcomeXml("SCORE", "float"),
-            outcomeXml("MAXSCORE", "integer", "1"),
+            recordXml("MAXSCORE"),
             outcomeXml("FEEDBACKBASIC", "identifier"),
           ]),
-          "outcome-type:SCORE",
+          "variable:MAXSCORE",
         );
       }),
   );
