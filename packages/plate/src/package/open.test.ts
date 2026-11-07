@@ -312,6 +312,79 @@ const formsPackage = (reference: string): ReadonlyMap<string, Uint8Array> =>
   });
 
 /**
+ * Write a test of one part `P` and one section `SEC` holding the given item refs, which declares a
+ * float outcome `TOTAL` and the given further declarations, and whose outcome processing sets
+ * `TOTAL` to an expression.
+ *
+ * @param expression The expression `TOTAL` is set to, as written.
+ * @param declarations The test's further declarations, as written.
+ * @param refs Each item ref, as written.
+ * @returns The test's text.
+ */
+const readingTestXml = (
+  expression: string,
+  declarations: string,
+  ...refs: readonly string[]
+): string =>
+  `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/>${declarations}<qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${refs.join("")}</qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="TOTAL">${expression}</qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`;
+
+/**
+ * Write an item ref of a test.
+ *
+ * @param identifier The item ref's identifier.
+ * @param href Its `href`.
+ * @param content What it holds, as written.
+ * @returns The item ref's text.
+ */
+const itemRefXml = (identifier: string, href: string, content = ""): string =>
+  `<qti-assessment-item-ref identifier="${identifier}" href="${href}">${content}</qti-assessment-item-ref>`;
+
+/**
+ * A package of one test at `test.xml` and the given items, each listed as an item resource.
+ *
+ * @param test The test's text.
+ * @param items Each item's text, keyed by its path.
+ * @returns The package's files.
+ */
+const readingPackage = (
+  test: string,
+  items: Readonly<Record<string, string>>,
+): ReadonlyMap<string, Uint8Array> =>
+  packageOf({
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      ...Object.keys(items).map((itemPath, index) =>
+        resourceXml(`I${index + 1}`, "imsqti_item_xmlv3p0", itemPath),
+      ),
+    ),
+    ...items,
+    "test.xml": test,
+  });
+
+/**
+ * The path of the expression `readingTestXml`'s outcome processing sets `TOTAL` to, by its local
+ * name.
+ *
+ * @param local The expression's local name.
+ * @returns Its path.
+ */
+const expressionAt = (local: string): string =>
+  `qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/${local}`;
+
+/**
+ * A package whose test's outcome processing reads a reference, beside one item ref `a` whose item
+ * declares `SCORE`.
+ *
+ * @param reference The reference the test reads.
+ * @returns The package's files.
+ */
+const readingThroughA = (reference: string): ReadonlyMap<string, Uint8Array> =>
+  readingPackage(
+    readingTestXml(`<qti-variable identifier="${reference}"/>`, "", itemRefXml("a", "items/a.xml")),
+    { "items/a.xml": itemXml("a", "SCORE") },
+  );
+
+/**
  * Take the two readings each `ambiguous-reference` refusal of a package verdict names, in order.
  *
  * @param verdict The package verdict.
@@ -600,6 +673,178 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(
             readings(yield* openPackage(location, formsPackage("a.b.SCORE"))),
             [],
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses ITEM1.SCORE as undeclared-variable when no reading resolves it, pantry's prefixed-ref (reading 48)",
+      () =>
+        Effect.gen(function* unresolvedReading() {
+          const verdict = yield* openPackage(location, readingThroughA("ITEM1.SCORE"));
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                check: "reading",
+                element: "qti-variable",
+                identifier: "ITEM1.SCORE",
+                reading: "48",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
+              rule: "undeclared-variable",
+            },
+          ]);
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a.0.SCORE when no reading resolves it, an occurrence counting from 1, and accepts a.1.SCORE (reading 4)",
+      () =>
+        Effect.gen(function* occurrenceFromOne() {
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, readingThroughA("a.0.SCORE"))).map(
+              (refusal) => [refusal.rule, refusal.detail["check"]],
+            ),
+            [["undeclared-variable", "reading"]],
+          );
+          acceptedOf(yield* openPackage(location, readingThroughA("a.1.SCORE")));
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a dotted name in qti-index's n that no reading resolves, as one in identifier is (reading 48)",
+      () =>
+        Effect.gen(function* unresolvedAttribute() {
+          const verdict = yield* openPackage(
+            location,
+            readingPackage(
+              readingTestXml(
+                '<qti-index n="ITEM1.N"><qti-variable identifier="LIST"/></qti-index>',
+                '<qti-outcome-declaration identifier="LIST" cardinality="ordered" base-type="float"/>',
+                itemRefXml("a", "items/a.xml"),
+              ),
+              { "items/a.xml": itemXml("a", "SCORE") },
+            ),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                attribute: "n",
+                check: "reading",
+                element: "qti-index",
+                identifier: "ITEM1.N",
+                reading: "48",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: { kind: "path", path: `${expressionAt("qti-index")}/@n` },
+              rule: "undeclared-variable",
+            },
+          ]);
+        }),
+    );
+
+    it.effect(
+      "[T-9] accepts S.TOTAL, a name the test declared whole, with no item ref, part or section S (reading 37)",
+      () =>
+        Effect.gen(function* declaredWhole() {
+          acceptedOf(
+            yield* openPackage(
+              location,
+              readingPackage(
+                readingTestXml(
+                  '<qti-variable identifier="S.TOTAL"/>',
+                  '<qti-outcome-declaration identifier="S.TOTAL" cardinality="single" base-type="float"/>',
+                  itemRefXml("a", "items/a.xml"),
+                ),
+                { "items/a.xml": itemXml("a", "SCORE") },
+              ),
+            ),
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] accepts A.B.C declared whole beside item refs A and A.B whose items would each resolve it (reading 48)",
+      () =>
+        Effect.gen(function* declaredWholeBesideReadings() {
+          acceptedOf(
+            yield* openPackage(
+              location,
+              readingPackage(
+                readingTestXml(
+                  '<qti-variable identifier="A.B.C"/>',
+                  '<qti-outcome-declaration identifier="A.B.C" cardinality="single" base-type="float"/>',
+                  itemRefXml("A", "items/a.xml"),
+                  itemRefXml("A.B", "items/ab.xml"),
+                ),
+                { "items/a.xml": itemXml("a", "B.C"), "items/ab.xml": itemXml("ab", "C") },
+              ),
+            ),
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses ITEM1.duration as untimed-duration when ITEM1's item is not time dependent, pantry's item-duration, and accepts a time-dependent item's",
+      () =>
+        Effect.gen(function* untimed() {
+          const durationOf = (timeDependent: string) =>
+            openPackage(
+              location,
+              readingPackage(
+                readingTestXml(
+                  '<qti-variable identifier="ITEM1.duration"/>',
+                  "",
+                  itemRefXml("ITEM1", "items/a.xml"),
+                ),
+                {
+                  "items/a.xml": itemXml("a", "SCORE").replace(
+                    'time-dependent="false"',
+                    `time-dependent="${timeDependent}"`,
+                  ),
+                },
+              ),
+            );
+
+          assert.deepStrictEqual(refusalsOf(yield* durationOf("false")), [
+            {
+              detail: {
+                check: "untimed-duration",
+                element: "qti-variable",
+                identifier: "ITEM1.duration",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
+              rule: "undeclared-variable",
+            },
+          ]);
+          acceptedOf(yield* durationOf("true"));
+        }),
+    );
+
+    it.effect(
+      "[T-9] accepts ITEM1.T where ITEM1 maps its item's SCORE to T, as pantry resolves a mapping target before a declaration (D9)",
+      () =>
+        Effect.gen(function* mappedTarget() {
+          acceptedOf(
+            yield* openPackage(
+              location,
+              readingPackage(
+                readingTestXml(
+                  '<qti-variable identifier="ITEM1.T"/>',
+                  "",
+                  itemRefXml(
+                    "ITEM1",
+                    "items/a.xml",
+                    '<qti-variable-mapping source-identifier="SCORE" target-identifier="T"/>',
+                  ),
+                ),
+                { "items/a.xml": itemXml("a", "SCORE") },
+              ),
+            ),
           );
         }),
     );
