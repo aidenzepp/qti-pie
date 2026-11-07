@@ -328,8 +328,8 @@ const mapResponsePoint = (
   });
 
 /**
- * Give the value of a `qti-variable`: the response's or the outcome's current value, else the
- * built-in variable's, as {@link variableValue} reads it.
+ * Give the value of a `qti-variable`: the response's, the outcome's or the template variable's
+ * current value, else the built-in variable's, as {@link variableValue} reads it.
  *
  * @param expression The `qti-variable`.
  * @param scope The item and the variables of the attempt.
@@ -340,18 +340,23 @@ const evaluateVariable: Evaluator<"variable"> = (expression, scope) =>
   variableValue(scope.variables, expression.identifier);
 
 /**
- * Give the value of a `qti-correct`: the response's correct response, else NULL of its declared
- * type.
+ * Give the value of a `qti-correct`: the correct response template processing set for the response
+ * (`Variables.correct`), else its declaration's correct response, else NULL of its declared type.
+ *
+ * The response must be declared either way, so an override map never makes an undeclared name
+ * readable; `qti-set-correct-response` names only a declared response on a checked item.
  *
  * @param expression The `qti-correct`.
- * @param scope The item, whose declaration gives the correct response, and the variables.
+ * @param scope The item, whose declaration gives the correct response, and the variables, whose
+ *   override comes first.
  * @returns The correct response, or an {@link UnknownIdentifierError} when the item declares no
  *   modelled response by that name.
  */
 const evaluateCorrect: Evaluator<"correct"> = (expression, scope) =>
   Result.map(responseOf(scope.item, expression.identifier), (declaration) =>
-    Option.getOrElse(declaration.correct, () =>
-      nullOf(declaration.baseType, declaration.cardinality),
+    Option.getOrElse(
+      Option.orElse(own(scope.variables.correct, expression.identifier), () => declaration.correct),
+      () => nullOf(declaration.baseType, declaration.cardinality),
     ),
   );
 
@@ -386,35 +391,44 @@ const evaluateMapResponsePoint: Evaluator<"map-response-point"> = (expression, s
   mapResponsePoint(scope.item, scope.variables, expression.identifier);
 
 /**
- * Give the value of a `qti-default`: the default value declared for the variable it names, else
- * NULL of that variable's type, as the information model says: it "returns the associated
- * defaultValue or NULL if no default value was declared".
+ * Give the value of a `qti-default`: the default template processing set for the variable it names
+ * (`Variables.defaults`), else the default value declared for it, else NULL of that variable's
+ * type, as the information model says: it "returns the associated defaultValue or NULL if no
+ * default value was declared".
  *
- * It reads the declaration, never the attempt's value. A response or an outcome with no
- * `qti-default-value` gives NULL of its base type and cardinality, a single integer or float
- * outcome included: the 0 an attempt starts such an outcome at is not a declared default. A
- * declared variable wins over a built-in of the same name, as `qti-variable` reads it. A built-in
- * the engine holds, `numAttempts` or `completionStatus`, has no declaration and so no declared
- * default: it gives NULL of the built-in's own type ({@link builtInType}), a single integer or a
- * single identifier, whatever the attempt holds of it. Template processing, whose
- * `qti-set-default-value` could change a default, never runs first: the item model runs no
- * response processing of an item that has it.
+ * It reads the defaults and the declaration, never the attempt's value. A response, an outcome or
+ * a template variable with no `qti-default-value` and no default set gives NULL of its base type
+ * and cardinality, a single integer or float outcome included: the 0 an attempt starts such an
+ * outcome at is not a declared default, and a template variable's current value is not its default
+ * either. The variable must be declared for a set default to be read, so an override map never
+ * makes an undeclared name readable; `qti-set-default-value` names only a declared response or
+ * outcome on a checked item. A declared variable wins over a built-in of the same name, as
+ * `qti-variable` reads it. A built-in the engine holds, `numAttempts` or `completionStatus`, has no
+ * declaration and so no declared default: it gives NULL of the built-in's own type
+ * ({@link builtInType}), a single integer or a single identifier, whatever the attempt holds of it.
  *
  * @param expression The `qti-default`.
- * @param scope The item, whose declarations give the defaults.
- * @returns The declared default or the NULL, or an {@link UnknownIdentifierError} when the item
- *   declares no modelled response or outcome by that name and it names no built-in the engine
- *   holds. The item model marks such a name, so a checked item never reaches that failure.
+ * @param scope The item, whose declarations give the defaults, and the variables, whose set
+ *   defaults come first.
+ * @returns The set or declared default or the NULL, or an {@link UnknownIdentifierError} when the
+ *   item declares no modelled response, outcome or template variable by that name and it names no
+ *   built-in the engine holds. The item model marks such a name, so a checked item never reaches
+ *   that failure.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpDefault
  */
 const evaluateDefault: Evaluator<"default"> = (expression, scope) => {
   const declaration =
     scope.item.responses.get(expression.identifier) ??
-    scope.item.outcomes.get(expression.identifier);
+    scope.item.outcomes.get(expression.identifier) ??
+    scope.item.templates.get(expression.identifier);
   if (declaration !== undefined) {
     return Result.succeed(
-      Option.getOrElse(declaration.defaultValue, () =>
-        nullOf(declaration.baseType, declaration.cardinality),
+      Option.getOrElse(
+        Option.orElse(
+          own(scope.variables.defaults, expression.identifier),
+          () => declaration.defaultValue,
+        ),
+        () => nullOf(declaration.baseType, declaration.cardinality),
       ),
     );
   }
