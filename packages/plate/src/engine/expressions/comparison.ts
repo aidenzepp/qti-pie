@@ -306,8 +306,7 @@ const rangeOf = (
  * @param equal The `qti-equal`, in its `absolute` or `relative` mode.
  * @param x The first operand.
  * @param y The second operand.
- * @param t0 The tolerance below `x`.
- * @param t1 The tolerance above `x`.
+ * @param tolerance `t0`, the tolerance below `x`, then `t1`, the tolerance above it.
  * @returns Whether `y` lies in the range.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#DataCharacteristic_Equal.Attr_tolerance
  */

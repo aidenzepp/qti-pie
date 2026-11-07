@@ -177,9 +177,9 @@ const leastFigures: Readonly<Record<RoundingMode, bigint>> = {
  * @param single The number.
  * @param mode The rounding mode.
  * @param figures How many figures it is rounded to.
- * @returns The rounded number, INF and -INF as themselves; none for NaN, which `qti-round-to`
- *   gives NULL for, and for `figures` below its mode's least ({@link leastFigures}), which the
- *   information model does not define.
+ * @returns The rounded number, INF and -INF as themselves; none for NaN, which `qti-round-to` and
+ *   `qti-equal-rounded` give NULL for, and for `figures` below its mode's least
+ *   ({@link leastFigures}), which the information model does not define.
  */
 const roundedOf = (
   single: NumberSingle,

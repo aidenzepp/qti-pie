@@ -1,15 +1,15 @@
 /**
- * The engine's numbers, a leaf the evaluator and the expression families share: the one conversion
+ * The engine's numbers, a leaf the evaluator and the expression families share: the single values
+ * a kind gives ({@link booleanOf}, {@link integerValue}, {@link floatValue}), the one conversion
  * from an integer to a float ({@link toFloat}, and {@link floatOf} for a single number), the one
  * number a single numeric value holds ({@link numberOf}, and {@link integerOf} for an integer),
- * exact equality of two numbers ({@link sameNumber}), the single values a kind gives
- * ({@link booleanOf}, {@link integerValue}, {@link floatValue}), and the bounds on what the engine
- * computes ({@link integerBitBound}, {@link containerSizeBound}), and a product held to the first,
- * built one factor at a time ({@link boundedTimes}).
+ * exact equality of two numbers ({@link sameNumber}), and the bounds on what the engine computes
+ * ({@link integerBitBound}, {@link containerSizeBound}), with the checks that hold a computed
+ * integer, a product built one factor at a time ({@link boundedTimes}) and a container to them.
  *
  * Integers are exact `bigint`s (reading 45) and floats are 64-bit doubles, never infinite when made
  * from an integer. An integer and a float compare exactly, never through a lossy conversion. The
- * module value-imports only `Option` from `effect`, and the value model's types.
+ * module value-imports only `Option` from `effect`, and imports only types from the value model.
  *
  * @module
  */
@@ -79,7 +79,7 @@ export const toFloat = (integer: bigint): number => {
 };
 
 /**
- * A single integer or float.
+ * A single of a numeric base type: an exact integer or a 64-bit double.
  */
 export type NumberSingle = Extract<Single, { readonly baseType: "float" | "integer" }>;
 

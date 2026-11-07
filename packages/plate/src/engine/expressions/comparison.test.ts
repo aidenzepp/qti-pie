@@ -18,7 +18,7 @@ type OrderKind = "gt" | "gte" | "lt" | "lte";
 const unknown: Value = nullOf("boolean", "single");
 
 /**
- * The single boolean value of a truth.
+ * Construct the single boolean value of a truth.
  *
  * @param held The truth.
  * @returns The value.
@@ -58,7 +58,7 @@ const orderOf = (kind: OrderKind, left: Value, right: Value): Expression => ({
 });
 
 /**
- * A float literal of a `tolerance` token.
+ * Construct a float literal of a `tolerance` token.
  *
  * @param value The number.
  * @returns The literal.
@@ -66,7 +66,7 @@ const orderOf = (kind: OrderKind, left: Value, right: Value): Expression => ({
 const literal = (value: number): FloatOrRef => ({ _tag: "literal", value });
 
 /**
- * A `tolerance` token that names a variable.
+ * Construct a `tolerance` token that names a variable.
  *
  * @param identifier The variable's identifier.
  * @returns The reference.
