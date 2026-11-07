@@ -213,6 +213,11 @@ const stepOf = (
 /**
  * Decide whether two steps of the fixpoint agree on every document's context.
  *
+ * An ancestry only grows from one step to the next: the walk starts from none, and each step's is
+ * the union of its sites' folds, each the including document's present ancestry with the flags
+ * its path enters (`foldOf`). So the later ancestry is the earlier one exactly where it holds no
+ * flag the earlier lacks.
+ *
  * @param held - The earlier contexts.
  * @param next - The later contexts.
  * @returns Whether they agree.
@@ -228,7 +233,6 @@ const settledOn = (
       was !== undefined &&
       was.nearest === context.nearest &&
       was.nearestKind === context.nearestKind &&
-      was.ancestry.size === context.ancestry.size &&
       [...context.ancestry].every((flag) => was.ancestry.has(flag))
     );
   });
