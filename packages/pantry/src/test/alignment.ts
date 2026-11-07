@@ -170,7 +170,13 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   ],
   [11, { owner: "codec", status: "G" }],
   [12, { owner: "admission, TextDomain", status: "G" }],
-  [13, { owner: "shred (`open.ts` `dataName`)", status: "G" }],
+  [
+    13,
+    {
+      owner: "the codec's `data-name` and the laws AL4 data name and AL4 declared data name",
+      status: "G",
+    },
+  ],
   [14, { owner: "the Idref family, contained in DocumentId (Q5.05)", status: "G" }],
   [15, { owner: "AttributeAdmission's domain, a kind reading (A5)", status: "X" }],
   [16, { owner: "AL1 (`positiveDouble`)", status: "G" }],
