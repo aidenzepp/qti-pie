@@ -1266,7 +1266,11 @@ edits write, and a generated expression's constant subterms fold on the host. Th
 `every` gives the laws its rule is chosen among, and `first` dies, since the import states every row it writes, so a
 `first` refusal would mean grizzle and PostgreSQL disagree. All three tarballs changed, and the skill did not. The
 single `_init`, regenerated from zero, moves only 02-structure's folded constants, and `grizzle check` gives
-`Qti: ok (1 migration, snapshot 2a610311…)`. The prewitness predicts byte-identical verdicts at `72f7d03` and `73360ca`.
+`Qti: ok (1 migration, snapshot 2a610311…)`, in a clean archive of `25d16460` with the repin's files and again on
+`02b4df25` itself. Typecheck and lint exit 0, and the 193 gates pass. The schema has no cycle of families: 71 over 88
+relations, only `Node` and `Instance` owning themselves, as trees. R87's `compile.ts` is retired: blind since
+`5f5a89b7`, it is replaced by `src/import/roster.test.ts`, which holds the import's inserts to `writtenNames` (158 at
+`25d16460`). The prewitness predicts byte-identical verdicts at `72f7d03` and `73360ca`.
 
 ### What the pin resolves for qti-pie
 
