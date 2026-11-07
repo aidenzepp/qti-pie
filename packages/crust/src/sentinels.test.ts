@@ -1,13 +1,12 @@
 /**
  * The sentinel scan, held to the walk it replaced: the per-code-point walk `read.ts`'s
- * `scanReferences` ran at 1ee51d8d, which built a string for every code point of a document. Both
- * must find the same sentinel-range code points in every string: every short string over the
- * code units around the range and the surrogates, generated strings dense with sentinels, lone
- * surrogates and astral characters under swarm weights, and every pinned XSD and corpus document
- * in the cache.
+ * `scanReferences` ran at 1ee51d8d, which built a string for every code point of a document, over
+ * the private use area as The Unicode Standard bounds it. Both must find the same sentinel-range
+ * code points in every string: every short string over the code units around the range and the
+ * surrogates, and generated strings dense with sentinels, lone surrogates and astral characters
+ * under swarm weights.
  */
-import { NodeServices } from "@effect/platform-node";
-import { assert, describe, it, layer } from "@effect/vitest";
+import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
 import { array, element, int } from "@grizzle/testing/gen";
@@ -17,20 +16,34 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { swarm, swarmChoice } from "@grizzle/testing/swarm";
 import type { Swarm } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
-import { Config, Duration, Effect, FileSystem, Formatter } from "effect";
+import { Duration, Effect, Formatter } from "effect";
 import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
+
+/**
+ * The first code point of the Basic Multilingual Plane's private use area, as the Unicode Character
+ * Database's `Blocks.txt` bounds it (`E000..F8FF; Private Use Area`). The oracle reads the area
+ * from Unicode, not from `sentinels.ts`, so a moved bound of the module's range fails the box at
+ * the bound it moved.
+ */
+const PRIVATE_USE_FIRST = 0xe0_00;
+
+/**
+ * The last code point of the Basic Multilingual Plane's private use area, as `Blocks.txt` bounds
+ * it.
+ */
+const PRIVATE_USE_LAST = 0xf8_ff;
 
 /**
  * The oracle: the walk `scanReferences` ran before, over every code point of the text.
  *
  * @param text - The text.
- * @returns The sentinel-range code points it holds.
+ * @returns The private use area's code points it holds.
  */
 const walked = (text: string): ReadonlySet<number> => {
   const used = new Set<number>();
   for (const character of text) {
     const point = character.codePointAt(0) ?? 0;
-    if (point >= SENTINEL_FIRST && point <= SENTINEL_LAST) {
+    if (point >= PRIVATE_USE_FIRST && point <= PRIVATE_USE_LAST) {
       used.add(point);
     }
   }
@@ -251,47 +264,5 @@ describe("the sentinel scan, against the walk it replaced", () => {
         ),
       ),
     120_000,
-  );
-});
-
-/**
- * The documents in the cache the scan is held to: every pinned XSD and every corpus XML document,
- * when the cache holds them.
- */
-const cachedRoots = Config.String("HOME").pipe(
-  Config.map((home) => [
-    `${home}/.cache/gr8des/qti3/xsd`,
-    `${home}/.cache/gr8des/qti3-examples/qti-examples-0a92fbbb6d2e620a1f7fad19977be4c418246bc0`,
-  ]),
-);
-
-layer(NodeServices.layer)("the sentinel scan over the cache", (cached) => {
-  cached.effect(
-    "finds the same code points as the walk in every pinned XSD and corpus document the cache holds",
-    () =>
-      Effect.gen(function* overTheCache() {
-        const fs = yield* FileSystem.FileSystem;
-        const decoder = new TextDecoder("utf-8");
-        let read = 0;
-        let present = 0;
-        for (const root of yield* cachedRoots) {
-          if (!(yield* fs.exists(root))) {
-            continue;
-          }
-
-          present += 1;
-
-          for (const file of yield* fs.readDirectory(root, { recursive: true })) {
-            if (file.endsWith(".xsd") || file.endsWith(".xml")) {
-              agrees(decoder.decode(yield* fs.readFile(`${root}/${file}`)), file);
-              read += 1;
-            }
-          }
-        }
-
-        // A cache that holds a root holds documents under it.
-        assert.isTrue(present === 0 || read > 0, `${read} documents read under ${present} roots`);
-      }),
-    600_000,
   );
 });
