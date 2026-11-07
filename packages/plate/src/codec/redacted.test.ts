@@ -128,9 +128,9 @@ const choice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "multiple",
   choices: [
-    { content: [words("2")], fixed: false, identifier: "TWO" },
-    { content: [words("3")], fixed: false, identifier: "THREE" },
-    { content: [words("4")], fixed: false, identifier: "FOUR" },
+    { content: [words("2")], fixed: false, identifier: "TWO", templateVisibility: Option.none() },
+    { content: [words("3")], fixed: false, identifier: "THREE", templateVisibility: Option.none() },
+    { content: [words("4")], fixed: false, identifier: "FOUR", templateVisibility: Option.none() },
   ],
   class: "",
   kind: "choice",
@@ -216,7 +216,7 @@ const colour: InlineChoiceInteraction = {
   ariaLabel: Option.some("Colour"),
   ariaLabelledby: Option.some("colour-hint"),
   choices: [
-    { content: [words("red")], fixed: false, identifier: "RED" },
+    { content: [words("red")], fixed: false, identifier: "RED", templateVisibility: Option.none() },
     {
       content: [
         {
@@ -229,8 +229,14 @@ const colour: InlineChoiceInteraction = {
       ],
       fixed: true,
       identifier: "GREEN",
+      templateVisibility: Option.none(),
     },
-    { content: [words("blue")], fixed: false, identifier: "BLUE" },
+    {
+      content: [words("blue")],
+      fixed: false,
+      identifier: "BLUE",
+      templateVisibility: Option.none(),
+    },
   ],
   class: "wide",
   kind: "inline-choice",

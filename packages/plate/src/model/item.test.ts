@@ -1782,8 +1782,18 @@ describe("buildItem", () => {
           ariaLabel: Option.some("Colour"),
           ariaLabelledby: Option.some("intro"),
           choices: [
-            { content: [{ kind: "text", text: "red" }], fixed: false, identifier: "R" },
-            { content: [{ kind: "text", text: "blue" }], fixed: true, identifier: "B" },
+            {
+              content: [{ kind: "text", text: "red" }],
+              fixed: false,
+              identifier: "R",
+              templateVisibility: Option.none(),
+            },
+            {
+              content: [{ kind: "text", text: "blue" }],
+              fixed: true,
+              identifier: "B",
+              templateVisibility: Option.none(),
+            },
             {
               content: [
                 {
@@ -1796,6 +1806,7 @@ describe("buildItem", () => {
               ],
               fixed: false,
               identifier: "G",
+              templateVisibility: Option.none(),
             },
           ],
           class: "qti-input-width-10",
@@ -1846,7 +1857,14 @@ describe("buildItem", () => {
         const expected: InlineChoiceInteraction = {
           ariaLabel: Option.none(),
           ariaLabelledby: Option.none(),
-          choices: [{ content: [{ kind: "text", text: "red" }], fixed: false, identifier: "R" }],
+          choices: [
+            {
+              content: [{ kind: "text", text: "red" }],
+              fixed: false,
+              identifier: "R",
+              templateVisibility: Option.none(),
+            },
+          ],
           class: "",
           kind: "inline-choice",
           label: Option.none(),

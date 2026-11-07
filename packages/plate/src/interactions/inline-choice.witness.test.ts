@@ -100,9 +100,14 @@ const fruits: InlineChoiceInteraction = {
   ariaLabel: Option.none(),
   ariaLabelledby: Option.none(),
   choices: [
-    { content: [words("apples")], fixed: false, identifier: "A" },
-    { content: [words("pears")], fixed: false, identifier: "B" },
-    { content: [words("plums")], fixed: false, identifier: "C" },
+    {
+      content: [words("apples")],
+      fixed: false,
+      identifier: "A",
+      templateVisibility: Option.none(),
+    },
+    { content: [words("pears")], fixed: false, identifier: "B", templateVisibility: Option.none() },
+    { content: [words("plums")], fixed: false, identifier: "C", templateVisibility: Option.none() },
   ],
   class: "",
   kind: "inline-choice",

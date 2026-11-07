@@ -358,8 +358,26 @@ export interface BodyText {
 }
 
 /**
+ * How a template variable controls a choice's visibility: a choice's `template-identifier` and its
+ * `show-hide` (the information model's SimpleChoice, `info.txt:42441-42494`, and InlineChoice,
+ * `info.txt:31948-32001`).
+ */
+export interface TemplateVisibility {
+  /**
+   * `show-hide`, `show` when absent. `show` hides the choice unless the template variable matches,
+   * or contains, the choice's identifier; `hide` shows it unless the variable does.
+   */
+  readonly showHide: "hide" | "show";
+  /**
+   * `template-identifier`: the template variable, of base type identifier and single or multiple
+   * cardinality, whose value controls the choice's visibility.
+   */
+  readonly templateIdentifier: string;
+}
+
+/**
  * A `qti-simple-choice` of a Choice, or a `qti-inline-choice` of an Inline Choice, which carries
- * the same fields: its identifier, its content, and whether it is fixed.
+ * the same fields: its identifier, its content, whether it is fixed, and its template visibility.
  */
 export interface SimpleChoice {
   readonly content: readonly BodyNode[];
@@ -369,6 +387,11 @@ export interface SimpleChoice {
    */
   readonly fixed: boolean;
   readonly identifier: string;
+  /**
+   * The choice's `template-identifier` and `show-hide`, none when it has no `template-identifier`:
+   * a choice with none is always shown.
+   */
+  readonly templateVisibility: Option.Option<TemplateVisibility>;
 }
 
 /**
@@ -1450,7 +1473,12 @@ const simpleChoiceOf = (
     const identifier = yield* identifierAttribute(build, choice, "identifier");
     const fixed = yield* xsBoolean(build, choice, "fixed", false);
 
-    return { content: yield* bodyNodes(build, choice), fixed, identifier };
+    return {
+      content: yield* bodyNodes(build, choice),
+      fixed,
+      identifier,
+      templateVisibility: Option.none(),
+    };
   });
 
 /**
