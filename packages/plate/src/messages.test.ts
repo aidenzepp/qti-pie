@@ -51,6 +51,8 @@ const english = {
   nextItem: "Next item",
   notAccepted: "Not accepted",
   notice: "Not supported here: pattern-mask",
+  nullValue: "NULL",
+  outcomesNotRun: "The test's outcome processing did not run.",
   partSubmitted: "Part submitted",
   patternMismatch: "Enter an answer in the form this question asks for.",
   previousItem: "Previous item",
@@ -72,6 +74,7 @@ const english = {
   submitPart: "Submit part",
   testFinished: "Test finished",
   testNavigation: "Test navigation",
+  testOutcomes: "Test outcomes",
   title: "Scored: Fractions",
   unknownChoice: "Choose one of the listed options.",
 } satisfies Record<MessageKey, string>;
@@ -253,6 +256,13 @@ describe("message", () => {
         "solution not allowed",
         "Download results (XML)",
       ],
+    );
+  });
+
+  it("[T-9] writes the summary's heading for the test's outcomes, a NULL outcome and the words for outcome processing that did not run", () => {
+    assert.deepStrictEqual(
+      [message("en", "testOutcomes"), message("en", "nullValue"), message("en", "outcomesNotRun")],
+      ["Test outcomes", "NULL", "The test's outcome processing did not run."],
     );
   });
 
