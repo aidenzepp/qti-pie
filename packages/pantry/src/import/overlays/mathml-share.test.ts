@@ -18,6 +18,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { GoverningOf } from "#pantry/grammar/install.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { placedShareRowsOf, rowsOf } from "#pantry/import/overlays/mathml-share.ts";
@@ -161,6 +162,8 @@ const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => 
  * records a package does not read.
  */
 const ids = {
+  assembled: false,
+  context: ownContext(idOf(0)),
   documentType: "imsqti_item_xmlv3p0",
   idOf,
   targetAt: () => Option.none(),
@@ -505,6 +508,7 @@ interface Written {
  */
 const assembledIds = ({ base }: Written): IdentityIds => ({
   assembled: true,
+  context: ownContext(idOf(base)),
   documentType: ids.documentType,
   idOf: (index: number) => idOf(base + index),
   targetAt: () => Option.none(),

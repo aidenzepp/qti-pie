@@ -478,7 +478,7 @@ const shareFragmentsOf = (
       name === "src" &&
       lexical.length > 1 &&
       lexical.startsWith("#") &&
-      tree.byId.get(node)?.kind === shareKind
+      tree.nodeAt(node).kind === shareKind
     ) {
       fragments.set(node, {
         assembled,
@@ -742,12 +742,11 @@ const langRowsOf = (
   const documentLangs = new Map<string, Addition<typeof DocumentLang>>();
 
   for (const { lexical, name, node } of tree.rows.attributes) {
-    const element = tree.byId.get(node);
-    if (element === undefined || name !== "xml:lang") {
+    if (name !== "xml:lang") {
       continue;
     }
 
-    const { scope, walk } = scopeWalkOf(tree, element, "qti-catalog-info");
+    const { scope, walk } = scopeWalkOf(tree, tree.nodeAt(node), "qti-catalog-info");
     xmlLangs.set(node, { document, lang: lexical, node, scope });
     if (scope === document) {
       bodyLangs.set(node, { document, lang: lexical, node });
@@ -758,7 +757,7 @@ const langRowsOf = (
       scopes.set(at.id, {
         document,
         kind: at.kind,
-        nearest: tree.folds.get(at.id)?.nearest ?? document,
+        nearest: foldAt(tree.folds, at.id).nearest,
         node: at.id,
         parent: at.parent,
         scope,
