@@ -63,6 +63,8 @@ import { rowsOf as metadataRowsOf, objectRowsOfPackage } from "#pantry/import/ov
 import type { MetadataRows, NamedDocument, ObjectRows } from "#pantry/import/overlays/metadata.ts";
 import { mathmlRowsOf } from "#pantry/import/overlays/mathml.ts";
 import type { MathmlRows } from "#pantry/import/overlays/mathml.ts";
+import { placedShareRowsOf } from "#pantry/import/overlays/mathml-share.ts";
+import type { PlacedShareRows } from "#pantry/import/overlays/mathml-share.ts";
 import { rowsOf as operatorRowsOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows } from "#pantry/import/overlays/operators.ts";
 import {
@@ -77,6 +79,7 @@ import type { QuotationRows } from "#pantry/import/overlays/quotation.ts";
 import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { ListedDocument, NodeIds } from "#pantry/import/write.ts";
+import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { overlayNames } from "#pantry/import/roster.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -104,6 +107,7 @@ export type OverlayRows = AssembledExpressionRows &
   PlacedCatalogRows &
   PlacedIdRows &
   PlacedLanguageRows &
+  PlacedShareRows &
   PlacedVariableRows &
   QuotationRows &
   ReferenceRows &
@@ -304,6 +308,21 @@ export const overlayPartsOf = (
     targets: built.flatMap(({ rows }) => [...rows.identity.IdrefTarget.values()]),
   });
 
+  const documentsById = new Map(
+    built.map(({ document }) => [document.ids.idOf(0), document] as const),
+  );
+  const placedShares = placedShareRowsOf({
+    ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
+    instances: assembled.Instance.values(),
+    nodesOf: (document) => {
+      const read = documentsById.get(document);
+
+      return read === undefined ? [] : flatten(read.listed.tree, read.ids.idOf).nodes;
+    },
+    shares: built.flatMap(({ rows }) => [...rows.identity.ShareFragment.values()]),
+    sites: built.flatMap(({ rows }) => [...rows.tests.Site.values()]),
+  });
+
   return [
     ...built.flatMap(({ rows }) => [
       rows.catalog,
@@ -345,6 +364,7 @@ export const overlayPartsOf = (
       names: built.flatMap(({ rows }) => [...rows.interactions.BindingName.values()]),
     }),
     placedIds,
+    placedShares,
     placedCatalogRowsOf({
       assembledIds: placedIds.AssembledId.values(),
       catalogs: built.flatMap(({ rows }) => [...rows.catalog.CatalogId.values()]),
