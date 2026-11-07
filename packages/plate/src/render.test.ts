@@ -507,6 +507,38 @@ const failureOf = <E>(result: Result.Result<Rendered, E>): Option.Option<E> => {
 };
 
 /**
+ * A lowercase UUID v4: 32 hex digits in the 8-4-4-4-12 form, the version nibble 4 and the variant
+ * nibble 8 to b.
+ */
+const uuidV4 = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/u;
+
+/**
+ * Run an effect with `crypto.randomUUID` unreachable, as a page on plain HTTP has it (a browser
+ * gives it only in a secure context), and make it reachable again afterwards.
+ *
+ * In Node `randomUUID` lives on `Crypto.prototype`, so deleting it from `globalThis.crypto` would
+ * leave it reachable: this defines an own property, `undefined` and configurable, that shadows it,
+ * and deletes that property when the effect ends, however it ends.
+ *
+ * @param effect The effect to run without `randomUUID`.
+ * @returns The effect's result.
+ */
+const withoutRandomUuid = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      Object.defineProperty(globalThis.crypto, "randomUUID", {
+        configurable: true,
+        value: undefined,
+      });
+    }),
+    () => effect,
+    () =>
+      Effect.sync(() => {
+        Reflect.deleteProperty(globalThis.crypto, "randomUUID");
+      }),
+  );
+
+/**
  * Give the fields of an {@link InvalidInstance} a render failed with.
  *
  * @param result The result of a render.
@@ -1044,6 +1076,27 @@ describe("render, the instance token", () => {
       assert.match(drawn, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/u);
       assert.deepStrictEqual(checkInstance(drawn), Option.none());
     }),
+  );
+
+  it.effect("draws a lowercase UUID v4 with crypto.randomUUID unreachable, as on plain HTTP", () =>
+    withoutRandomUuid(
+      Effect.gen(function* drawnWithoutRandomUuid() {
+        assert.throws(() => {
+          globalThis.crypto.randomUUID();
+        }, TypeError);
+
+        const configuration = yield* defaults;
+        const drawn = yield* Effect.fromResult(render(redacted, configuration));
+        assert.match(drawn.instance, uuidV4);
+        assert.deepStrictEqual(checkInstance(drawn.instance), Option.none());
+      }),
+    ).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          assert.match(globalThis.crypto.randomUUID(), uuidV4);
+        }),
+      ),
+    ),
   );
 
   it.effect("returns the instance it used, which validates and partitions its entries", () =>
