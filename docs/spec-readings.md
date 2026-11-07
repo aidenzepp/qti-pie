@@ -404,9 +404,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `1000000000000000000000000000001`. A package never refuses an integer for its size, never rounds one to a float and
     never stores one as an infinity, and it compares and computes integer results exactly. A value a key holds is the
     one exception, as a text rather than an integer: a `qti-value`'s or `qti-base-value`'s folded text and a `map-key`
-    are copied into keys, and so are held to reading 133's key-text bound, 646 characters. This reading is about values.
-    A count attribute such as `max-choices` is not a value of the integer base type: a shared reading of its own holds
-    counts to the signed 64-bit range, read exactly, and refuses a count beyond it with its rule and location. An
+    are copied into keys, and so are held to reading 133's key-text bound, 2,587 UTF-8 bytes. This reading is about
+    values. A count attribute such as `max-choices` is not a value of the integer base type: a shared reading of its own
+    holds counts to the signed 64-bit range, read exactly, and refuses a count beyond it with its rule and location. An
     attribute the XSD types `xs:int`, such as `base`, keeps `xs:int`'s range. Where QTI's types make a result a float,
     an integer operand becomes the nearest float, and an integer beyond the largest finite float becomes the largest
     finite float of its sign. This is not a case of documents in conflict: the sources agree that the type is unbounded
@@ -672,17 +672,17 @@ against it. A reading that is not an information-model-over-XSD case says which 
       law from it. The fold's running text rides the tree's predecessor and last axes, so it is a column of their keys,
       and grizzle refuses at compile a key whose B-tree entry can pass PostgreSQL's `BTMaxItemSize`
       (`UnrepresentableKey`). So the running text and `stringValue` are `keyText` (`src/qti/limits.ts`), bounded to
-      reading 133's key-text bound, 646 code points (`keyTextCodePoints`), the most grizzle's `keyTextBytes` leaves room
-      for beside the widest key's other columns, and a folded value past the bound is refused by `keyText`'s pattern on
-      the fold's text, by name: a stated limit of the representation, not this reading's law. The corpus (28 packages,
-      353 documents) holds 3,095 simple-content elements; the 227 under a checked domain are at most 92 code points; of
-      the copied kinds, `qti-base-value` is at most 102 (1,208 elements), `lom:entry` 86 (59), `qti-value` 45 (898) and
+      reading 133's key-text bound, 2,587 UTF-8 bytes (`keyTextBytes`), what grizzle's `keyTextBytes` leaves beside the
+      widest key's other columns, and a folded value past the bound is refused by `keyText`'s pattern on the fold's
+      text, by name: a stated limit of the representation, not this reading's law. The corpus (28 packages, 353
+      documents) holds 3,095 simple-content elements; the 227 under a checked domain are at most 92 code points; of the
+      copied kinds, `qti-base-value` is at most 102 (1,208 elements), `lom:entry` 86 (59), `qti-value` 45 (898) and
       `lom:language` 2 (44), a LOM title's `lom:string` 121 (66), a learning resource type's `lom:value` 15 and
       `lom:source` 11 (18 each), and no `ud:value` is QTI 3's (the corpus's 77 are QTI 2.2's, refused `not-qti3` by
-      reading 89); and the two over the bound (`lom:string`, 967 and 723 code points) are descriptions,
-      `xs:normalizedString` and not copied, so not folded. (Recorded 2026-11-06, from W5 Q5.03; the copied kinds brought
-      up to date at the readings merge, and the learning resource type's terms added by RV seat M, measured over the
-      1EdTech corpus at 0a92fbb.)
+      reading 89); and the two over the bound (`lom:string`, 967 and 723 code points, past it in bytes too) are
+      descriptions, `xs:normalizedString` and not copied, so not folded. (Recorded 2026-11-06, from W5 Q5.03; the copied
+      kinds brought up to date at the readings merge, and the learning resource type's terms added by RV seat M,
+      measured over the 1EdTech corpus at 0a92fbb.)
 
     This binds pantry and plate alike. pantry checks all of it but those two limits. plate does not yet check the
     text: under a `lax` wildcard it refuses element children and attributes other than the four `xsi:` ones, and
@@ -1359,14 +1359,14 @@ against it. A reading that is not an information-model-over-XSD case says which 
       (U+02D0), so `ːa` is refused and `aː` is accepted.
 
     libxml2 2.9.13's `xmllint` gives the same verdict on each of these. The production states no length, so a name of
-    any length is valid. A name a key holds is held to reading 133's key-text bound (646 characters), and an open
-    attribute's local name, which a key holds beside a namespace name, to 255: stated limits of the representation, not
-    of `xs:NCName`. Every type derived from `xs:NCName` reads it so: `xs:ID`, `xs:IDREF`, `xs:ENTITY` and QTI's
-    identifier types, and the bare variable reference that names a declaration. Reading 55 is not changed by this: a
-    `pattern-mask` is a response pattern plate checks, and its `\i` and `\c` follow the later edition by that reading's
-    own decision. This binds pantry and plate alike. This is not a case of documents in conflict: QTI's XSDs are XML
-    Schema 1.0 (reading 71), and XML Schema 1.0 decides the lexical space of its own types. (Decided 2026-11-06 under
-    the operator's standing ruling of 2026-11-05 that the spec wins.)
+    any length is valid. A name a key holds is held to reading 133's key-text bound (2,587 UTF-8 bytes), an open
+    attribute's local name, which a key holds beside a namespace name, to 1,329 bytes and a namespace prefix to 2,665:
+    stated limits of the representation, not of `xs:NCName`. Every type derived from `xs:NCName` reads it so: `xs:ID`,
+    `xs:IDREF`, `xs:ENTITY` and QTI's identifier types, and the bare variable reference that names a declaration.
+    Reading 55 is not changed by this: a `pattern-mask` is a response pattern plate checks, and its `\i` and `\c` follow
+    the later edition by that reading's own decision. This binds pantry and plate alike. This is not a case of documents
+    in conflict: QTI's XSDs are XML Schema 1.0 (reading 71), and XML Schema 1.0 decides the lexical space of its own
+    types. (Decided 2026-11-06 under the operator's standing ruling of 2026-11-05 that the spec wins.)
 
 95. **An entity reference's name is an `NCName`: no entity name holds a colon.** Namespaces in XML 1.0 (Third
     Edition), section 7, Conformance of Documents: in a namespace-well-formed document, "No entity names, processing
@@ -2199,35 +2199,34 @@ against it. A reading that is not an information-model-over-XSD case says which 
      only be formatted in the e, E, f, g, G, r or R styles" (section 7.30) is advice and is not read. (Decided
      2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec
      wins; at most one conversion is the operator's decision of 2026-11-06 on item L4.)
-133. **A key text holds at most 646 characters: a stated limit of the representation, not a law of QTI.** No QTI
+133. **A key text holds at most 2,587 UTF-8 bytes: a stated limit of the representation, not a law of QTI.** No QTI
      specification bounds the length of an identifier, an ID, an IDREF, an `xml:lang`, a title, an href, a map key or a
      value's lexical form (readings 45 and 94 state that the productions state no length). pantry's representation still
      refuses one past a bound, because grizzle puts every text that takes part in a cross-row equality in a B-tree key,
-     and PostgreSQL refuses a B-tree entry above `BTMaxItemSize`, 2,704 bytes at `BLCKSZ` 8192 (`nbtree.h`). Such a
-     text is copied into a field of type `keyText` (`src/qti/limits.ts`). keyText is a pattern of at most 646 code
-     points, the most whose UTF-8 form, at most four bytes a code point, fits the 2,587 bytes grizzle's own rule,
+     and PostgreSQL refuses a B-tree entry above `BTMaxItemSize`, 2,704 bytes at `BLCKSZ` 8192 (`nbtree.h`). Such a text
+     is copied into a field of type `keyText` (`src/qti/limits.ts`). keyText is grizzle's byte refinement,
+     `str.bytes(keyTextBytes(widestTextKey), any text)`, at most 2,587 UTF-8 bytes, which is what grizzle's own rule,
      `keyTextBytes`, leaves beside the widest key's other fields: the tree's predecessor axis on `Node`, a uuid, five
-     naturals and a closed id beside the string value's running text. `limits.test.ts` holds 646 to fit and 647 not to.
-     The one bound applies evenly: every text the schema copies into a keyText field counts against it, so a
-     647-character `<p id>` is refused just as a 647-character resource identifier is, by the oracle's "Key text bound"
-     (rule `key-text-bound`) and by the database under the same rule: the import writes the copy's row whatever its
-     length, as it writes every copy (no host-side pre-filter leaves an over-long copy out), and keyText's own check
-     refuses it. `src/test/oracle.keys.test.ts` holds the database's rule, read from the import's rows, to the oracle's.
-     The law oracle reads the list of such copies from the schema's statements (`src/test/key-copies.ts`), and
-     `src/test/oracle.keys.test.ts` holds its verdict to the import's rows in 1-, 2-, 3- and 4-byte scripts. A key
-     text's namespace-name kin, `namespaceText`, holds at most 409 code points beside a uuid and a local name of 255,
-     the most that fit the 1,638 bytes keyTextBytes leaves there, and an entry path holds the key text's 646.
+     naturals and a closed id beside the string value's running text. That's about 2,587 ASCII, 1,293 two-byte, 862 CJK
+     or 646 astral characters. `limits.test.ts` holds the bound to `keyTextBytes` exactly. The one bound applies evenly:
+     every text the schema copies into a keyText field counts against it, so a `<p id>` past 2,587 bytes is refused just
+     as a resource identifier past it is, by the oracle's "Key text bound" (rule `key-text-bound`) and by the database
+     under the same rule: the import writes the copy's row whatever its length, as it writes every copy (no host-side
+     pre-filter leaves an over-long copy out), and keyText's own check refuses it. `src/test/oracle.keys.test.ts` holds
+     the database's rule, read from the import's rows, to the oracle's. The law oracle reads the list of such copies
+     from the schema's statements (`src/test/key-copies.ts`), and `src/test/oracle.keys.test.ts` holds its verdict to
+     the import's rows in 1-, 2-, 3- and 4-byte scripts. The bound is no part of the text's type, as a pattern isn't, so
+     the copy of an unbounded attribute value meets it in a containment. An entry path holds the key text's 2,587 bytes.
+     An open attribute's local name and its namespace name share their key, `(node, uri, local)`, evenly: 1,329 bytes
+     each. A namespace prefix holds 2,665 bytes, what its key `Namespace(node, prefix)` leaves beside the element's id.
 
-     The operator's ruling is a bound in UTF-8 bytes rather than code points: about 2,587 ASCII, 1,293 two-byte, 862 CJK
-     or 646 astral characters. It waits on grizzle. A text contract, the one byte bound grizzle has at `a2ff5eb`, is a
-     type of its own, so a containment can't copy an unbounded `Attribute.lexical` into it ("the sides' field types
-     differ"). grizzle has accepted a byte bound that is, like a pattern, no part of a text's type for beta.1,
-     `str.bytes(N)` (`docs/grizzle-findings.md`), and `keyText` becomes `str.bytes(keyTextBytes(...))` when it lands. On
-     what would lift the bound itself, grizzle's statement: "The bound is permanent for any key a foreign key references
-     or a put arbitrates on, while PostgreSQL's B-tree is its only unique index. For other keys it would be lifted by a
-     hash-exclusion key form, which grizzle does not plan." This binds pantry alone: plate holds no key. (Decided
-     2026-11-06 by RV seat S-ORACLE, on the review of PR #46 and Aiden's question of 2026-11-06, under the operator's
-     ruling that the bound is applied evenly.)
+     The bound is in UTF-8 bytes, as the operator ruled, and in no other measure: grizzle 27c4cd2 gives the byte bound
+     as a refinement, `str.bytes(n, pattern)`, after a text contract proved unable to be a copy's target
+     (`docs/grizzle-findings.md`). On what would lift the bound itself, grizzle's statement: "The bound is permanent for
+     any key a foreign key references or a put arbitrates on, while PostgreSQL's B-tree is its only unique index. For
+     other keys it would be lifted by a hash-exclusion key form, which grizzle does not plan." This binds pantry alone:
+     plate holds no key. (Decided 2026-11-06 by RV seat S-ORACLE, on the review of PR #46 and Aiden's question of
+     2026-11-06, under the operator's ruling that the bound is applied evenly.)
 
 134. **An item's or a test's languages are listed by its records' general categories, compared as language tags.** The
      QTI 3.0 Metadata binding says "There must be one value for each of the languages referred to by the language

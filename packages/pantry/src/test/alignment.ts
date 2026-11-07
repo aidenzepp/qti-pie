@@ -429,7 +429,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     94,
     {
       owner:
-        "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference; a name a key holds is held to reading 133's key-text bound; an open attribute's local name to 255 (`OpenLocal`)",
+        "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference; a name a key holds is held to reading 133's key-text bound; an open attribute's local name to 1,329 bytes (`OpenLocal`) and a namespace prefix to 2,665",
       status: "G",
     },
   ],
