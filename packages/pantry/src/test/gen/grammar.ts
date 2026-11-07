@@ -12,9 +12,8 @@
  */
 import { NodeChildProcessSpawner, NodeServices } from "@effect/platform-node";
 import type { Result } from "effect";
-import { Array as Arr, Effect, FileSystem, Layer, Option, pipe, Stream } from "effect";
+import { Array as Arr, Effect, FileSystem, Layer, Option, pipe } from "effect";
 import { Digest } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import type { Gen } from "@grizzle/testing/gen";
 import type { AdmittedChild } from "#pantry/grammar/admission.ts";
@@ -26,10 +25,12 @@ import type { Facets } from "#pantry/grammar/facets.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import type { KindOf, NameOf, SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { catalogText } from "#pantry/test/xsd-catalog.ts";
 import { readSource, sourcePaths, sources, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type { Source, Sources } from "#pantry/vocab/inventory/types.ts";
 import { xmlNamespace } from "#pantry/vocab/namespaces.ts";
+import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The XML Schema namespace.
@@ -992,24 +993,6 @@ export interface ProbeDocument {
 }
 
 /**
- * The XML catalog that maps every pinned XSD's published location onto its file in the cache, so
- * `xmllint` reads every schema, imported ones included, from disk under `--nonet`.
- *
- * @param directory - The cache directory.
- * @returns The catalog's text.
- */
-const catalogOf = (directory: string): string => `<?xml version="1.0"?>
-<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
-${sourcePaths
-  .map(
-    (path) =>
-      `  <uri name="${sources[path].url}" uri="file://${directory}/${path}"/>\n  <system systemId="${sources[path].url}" uri="file://${directory}/${path}"/>`,
-  )
-  .join("\n")}
-</catalog>
-`;
-
-/**
  * The namespace a drawn wildcard child is written in: none for `##local`, the wildcard's first
  * listed namespace when it lists them, and a namespace no schema names otherwise.
  *
@@ -1113,7 +1096,7 @@ ${types
   .join("\n")}
 </xs:schema>
 `;
-  yield* fs.writeFileString(`${scratch}/catalog.xml`, catalogOf(directory));
+  yield* fs.writeFileString(`${scratch}/catalog.xml`, catalogText(directory));
   yield* fs.writeFileString(`${scratch}/wrapper.xsd`, wrapper);
 
   const files = probes.map((_, index) => `${scratch}/probe-${index}.xml`);
@@ -1123,63 +1106,35 @@ ${types
     ),
   );
 
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const stderr = yield* Effect.scoped(
-    Effect.gen(function* runXmllint() {
-      const handle = yield* spawner.spawn(
-        ChildProcess.make(
-          "xmllint",
-          ["--nonet", "--noout", "--schema", `${scratch}/wrapper.xsd`, ...files],
-          {
-            env: { XML_CATALOG_FILES: `${scratch}/catalog.xml` },
-            extendEnv: true,
-            stdin: "ignore",
-          },
-        ),
-      );
-      const [text] = yield* Effect.all(
-        [Stream.mkString(Stream.decodeText(handle.stderr)), handle.exitCode],
-        {
-          concurrency: "unbounded",
-        },
-      );
-
-      return text;
-    }),
-  );
-  const lines = stderr.split("\n");
-  if (lines.some((line) => line.includes("failed to compile"))) {
-    return yield* Effect.die(
-      new Error(
-        `xmllint could not compile the probe schema over ${root}: ${stderr.slice(0, 2000)}`,
-      ),
-    );
-  }
+  const verdicts = yield* xmllintValidate({
+    catalog: `${scratch}/catalog.xml`,
+    paths: files,
+    schema: `${scratch}/wrapper.xsd`,
+  });
 
   return probes.map((probe, index): Validated => {
     const file = Arr.getUnsafe(files, index);
+    const verdict = verdicts[index];
     const last = probe.children.length + 2;
-    const messages = lines.filter((line) => line.startsWith(`${file}:`));
-    const refused = messages.filter((line) => {
-      const lineNumber = Number(line.slice(file.length + 1).split(":")[0]);
-
-      return (
-        ((line.includes("This element is not expected") ||
-          line.includes("demanded by the strict wildcard")) &&
-          lineNumber > 1 &&
-          lineNumber < last) ||
-        (line.includes("Missing child element(s)") && (lineNumber === 1 || lineNumber === last))
-      );
-    });
-
+    const messages = verdict?._tag === "Invalid" ? verdict.messages : [];
+    const refused = messages.filter(
+      ({ line, text }) =>
+        ((text.includes("This element is not expected") ||
+          text.includes("demanded by the strict wildcard")) &&
+          line > 1 &&
+          line < last) ||
+        (text.includes("Missing child element(s)") && (line === 1 || line === last)),
+    );
     const typeRefused = messages.some(
-      (line) =>
-        line.slice(file.length + 1).startsWith("1:") &&
-        line.includes("xsi:type") &&
-        !line.includes("This element is not expected"),
+      ({ line, text }) =>
+        line === 1 && text.includes("xsi:type") && !text.includes("This element is not expected"),
     );
 
-    return { messages: refused, refused: refused.length > 0, typeRefused };
+    return {
+      messages: refused.map(({ line, text }) => `${file}:${line}: ${text}`),
+      refused: refused.length > 0,
+      typeRefused,
+    };
   });
 });
 

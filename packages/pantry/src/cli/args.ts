@@ -253,12 +253,10 @@ const contentOf = Effect.fn("cli.contentOf")(function* contentOf(target: string)
 });
 
 /**
- * Whether writing to `target` would replace something: it holds an entry, or is a file or a link.
- * An absent target and an empty directory are created into.
+ * What a write does to its target: `create` it where nothing is, or `replace` what is there, an
+ * empty directory, a file or a symlink included.
  */
-export const wouldReplace = Effect.fn("cli.wouldReplace")(function* wouldReplace(target: string) {
-  return (yield* contentOf(target)) === "something";
-});
+export type TargetAction = "create" | "replace";
 
 /**
  * What a dry run says about the database.
@@ -266,11 +264,18 @@ export const wouldReplace = Effect.fn("cli.wouldReplace")(function* wouldReplace
 export const databaseNotChecked = "the database's own checks did not run";
 
 /**
- * Refuse to write over something already on disk unless the person said `--yes`, and refuse the
- * current folder, its parents, the home folder and the filesystem root even then. Removes nothing.
+ * Decide what writing `target` does, refusing to write over something already on disk unless the
+ * person said `--yes`, and refusing the current folder, its parents, the home folder and the
+ * filesystem root even then. Removes nothing.
+ *
+ * Existence decides the action: a target that exists, an empty directory among them, is replaced,
+ * because the write takes its place; only where nothing is is it created. An empty directory needs
+ * no `--yes`, since nothing in it is lost. Every command that writes a target reports this action.
  *
  * @param target - The directory or file the command will write.
  * @param yes - Whether the person passed `--yes`.
+ * @returns The action the write takes; a {@link TargetProtected} or {@link TargetNotEmpty} when it
+ *   may not take it.
  */
 export const requireReplaceable = Effect.fn("cli.requireReplaceable")(function* requireReplaceable(
   target: string,
@@ -279,16 +284,18 @@ export const requireReplaceable = Effect.fn("cli.requireReplaceable")(function* 
   const content = yield* contentOf(target);
 
   if (content === "nothing") {
-    return;
+    return "create" satisfies TargetAction;
   }
 
   if (yield* isProtected(target)) {
-    yield* new TargetProtected({ target });
+    return yield* new TargetProtected({ target });
   }
 
   if (content === "something" && !yes) {
-    yield* new TargetNotEmpty({ target });
+    return yield* new TargetNotEmpty({ target });
   }
+
+  return "replace" satisfies TargetAction;
 });
 
 /**

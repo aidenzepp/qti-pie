@@ -19,12 +19,11 @@
  *
  * @see {@link https://gnome.pages.gitlab.gnome.org/libxml2/xmllint.html | xmllint}
  */
-import { Array as Arr, Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { Array as Arr, Effect, FileSystem, Match, Option, Schema } from "effect";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { attributeOf, resolve } from "#pantry/vocab/derive/derive.ts";
 import { declarationsIn, handleOf, loadWorld, typeNameOf } from "#pantry/vocab/derive/models.ts";
-import { sourcePaths, sources, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
+import { sources, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type {
   AttributeDeclaration,
@@ -35,7 +34,10 @@ import type {
   VocabularyRoster,
 } from "#pantry/vocab/inventory/types.ts";
 import type { Cost } from "#pantry/test/gen/vocab.ts";
+import { catalogText } from "#pantry/test/xsd-catalog.ts";
 import { xsNamespace } from "#pantry/vocab/namespaces.ts";
+import { xmllintValidate } from "#pantry/xml/oracle.ts";
+import type { XsdMessage } from "#pantry/xml/oracle.ts";
 
 /**
  * The validator ran, but its report is not one the oracle reads: a line it cannot attribute, or an
@@ -52,11 +54,6 @@ export class XmllintUnreadable extends Schema.TaggedError<XmllintUnreadable>()(
     return `xmllint reported, for ${this.batch}, a line the oracle cannot attribute to a probe: ${this.line}. Read the batch under work/ to see the probe it names.`;
   }
 }
-
-/**
- * The `xmllint` executable: `XMLLINT` when set, else `xmllint` on `PATH`.
- */
-const xmllintPath = Config.String("XMLLINT").pipe(Config.withDefault("xmllint"));
 
 /**
  * The prefix each namespace is written with in the probes, every probe's namespace bound on its
@@ -125,23 +122,6 @@ const driverText = (driver: Driver): string => {
     "</xs:schema>",
   ].join("\n");
 };
-
-/**
- * Write the XML catalog that maps every pin's URL to its cached file.
- *
- * @param directory - The cache directory.
- * @returns The catalog's text.
- */
-const catalogText = (directory: string): string =>
-  [
-    '<?xml version="1.0"?>',
-    '<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">',
-    ...sourcePaths.flatMap((path) => [
-      `  <uri name="${sources[path].url}" uri="file://${directory}/${path}"/>`,
-      `  <system systemId="${sources[path].url}" uri="file://${directory}/${path}"/>`,
-    ]),
-    "</catalog>",
-  ].join("\n");
 
 /**
  * Write one batch: its root, binding every probe prefix, then each probe on a line of its own.
@@ -221,18 +201,39 @@ export const classOf = (error: ValidityError): ErrorClass => {
 };
 
 /**
- * The shape of a validity error line: file, line, element, then the error's element and attribute
- * where a schema error names them, and its message. libxml2 writes an identity error, such as a
- * repeated `ID`, as a plain validity error that names only the element's local name.
+ * The shape of libxml2's own validity error, such as a repeated `ID`, after `file:line: `: the
+ * element's local name in an `element NAME: ` prefix, which libxml2 2.12 and 2.13 alike write for
+ * that domain, then `validity error : ` and the message. A schema validity error the report's
+ * reader reads itself (`#pantry/xml/oracle.ts`).
  */
-const errorLine =
-  /^(?<file>[^:]+):(?<line>\d+): element (?<local>[^:]+): (?:Schemas )?validity error : (?:Element '(?<element>[^']+)'(?:, attribute '(?<attribute>[^']+)')?: )?(?<message>.*)$/u;
+const identityError = /^element (?<local>[^:]+): validity error : (?<message>[\s\S]*)$/u;
 
 /**
- * The lines the validator writes that report no error. Every other line it writes that does not
- * begin with the batch's path echoes the source text an error points into, and its caret.
+ * Read one message of a batch's report as the validity error it states.
+ *
+ * @param message - The message, an error, as the report's reader read it.
+ * @returns The error: a schema message's element and attribute, or the local name an identity
+ *   error names; none for any other message, which no probe's validity explains.
  */
-const quietLine = /^[^:]+ (?:validates|fails to validate)$/u;
+const validityErrorOf = (message: XsdMessage): Option.Option<ValidityError> => {
+  if (message.source === "schema") {
+    return Option.some({
+      attribute: message.attribute,
+      element: Option.getOrElse(message.element, () => ""),
+      message: message.text,
+    });
+  }
+
+  const groups = identityError.exec(message.text)?.groups;
+
+  return groups === undefined
+    ? Option.none()
+    : Option.some({
+        attribute: Option.none(),
+        element: groups["local"] ?? "",
+        message: groups["message"] ?? "",
+      });
+};
 
 /**
  * The number of probes in one batch.
@@ -240,14 +241,54 @@ const quietLine = /^[^:]+ (?:validates|fails to validate)$/u;
 const batchSize = 4000;
 
 /**
+ * Give each probe of a batch the validity errors its report's messages state: probe `i` stands on
+ * line `i + 2`, so an error is the probe's on the line it names, and a warning judges nothing.
+ *
+ * @param batch - The batch's path, for a failure's message.
+ * @param probes - How many probes the batch holds.
+ * @param messages - The batch's messages, as the report's reader read them.
+ * @returns Each probe's errors, in probe order; an {@link XmllintUnreadable} for an error on a line
+ *   no probe stands on, or one no probe's validity explains.
+ */
+export const probeErrorsOf = (
+  batch: string,
+  probes: number,
+  messages: readonly XsdMessage[],
+): Effect.Effect<readonly (readonly ValidityError[])[], XmllintUnreadable> =>
+  Effect.gen(function* attribute() {
+    const errors: ValidityError[][] = Array.from({ length: probes }, () => []);
+    for (const message of messages.filter(({ level }) => level === "error")) {
+      const owner = errors[message.line - 2];
+      const error = validityErrorOf(message);
+
+      if (owner === undefined || Option.isNone(error)) {
+        return yield* new XmllintUnreadable({
+          batch,
+          line: `line ${message.line}: ${message.text}`,
+        });
+      }
+
+      owner.push(error.value);
+    }
+
+    return errors;
+  });
+
+/**
  * Validate probes against a version's XSDs.
+ *
+ * Each batch is judged by `xmllintValidate` (`#pantry/xml/oracle.ts`), whose report reader reads
+ * libxml2 2.12's messages and the unprefixed ones 2.13 and later write alike. Probe `i` of a batch
+ * stands on its line `i + 2`, so each error is the probe's on the line it names; a warning judges
+ * nothing.
  *
  * @param directory - A scratch directory under the package's `work/`, which this writes the
  *   driver, the catalog and the batches into.
  * @param driver - The version's driver.
  * @param probes - The probes, each one line of XML whose root element is one probe.
- * @returns Each probe's validity errors, in probe order; an {@link XmllintUnreadable} for a report
- *   line no probe owns.
+ * @returns Each probe's validity errors, in probe order; an {@link XmllintUnreadable} for an error
+ *   no probe owns or no probe's validity explains, and the validator's own failure when it does
+ *   not run or does not compile the driver.
  */
 export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
   directory: string,
@@ -255,17 +296,14 @@ export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
   probes: readonly string[],
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const xmllint = yield* Effect.orDie(xmllintPath);
   const cache = yield* Effect.orDie(xsdDirectory);
-  const errors: ValidityError[][] = probes.map(() => []);
   const chunks = Arr.chunksOf(probes, batchSize);
 
   yield* fs.makeDirectory(directory, { recursive: true });
   yield* fs.writeFileString(`${directory}/driver.xsd`, driverText(driver));
   yield* fs.writeFileString(`${directory}/catalog.xml`, catalogText(cache));
 
-  yield* Effect.forEach(
+  const judged = yield* Effect.forEach(
     chunks,
     (chunk, at) =>
       Effect.gen(function* validateBatch() {
@@ -273,56 +311,22 @@ export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
 
         yield* fs.writeFileString(batch, batchText(chunk));
 
-        const report = yield* Effect.scoped(
-          Effect.gen(function* collectReport() {
-            const handle = yield* spawner.spawn(
-              ChildProcess.make(
-                xmllint,
-                ["--nonet", "--noout", "--schema", `${directory}/driver.xsd`, batch],
-                {
-                  env: { XML_CATALOG_FILES: `${directory}/catalog.xml` },
-                  extendEnv: true,
-                  stdin: "ignore",
-                },
-              ),
-            );
+        const [verdict] = yield* xmllintValidate({
+          catalog: `${directory}/catalog.xml`,
+          paths: [batch],
+          schema: `${directory}/driver.xsd`,
+        });
 
-            return yield* Effect.all(
-              {
-                code: handle.exitCode,
-                stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
-                stdout: Stream.mkString(Stream.decodeText(handle.stdout)),
-              },
-              { concurrency: "unbounded" },
-            );
-          }),
+        return yield* probeErrorsOf(
+          batch,
+          chunk.length,
+          verdict?._tag === "Invalid" ? verdict.messages : [],
         );
-
-        for (const line of `${report.stdout}\n${report.stderr}`.split("\n")) {
-          const found = errorLine.exec(line);
-
-          if (found?.groups !== undefined) {
-            const index = at * batchSize + Number(found.groups["line"]) - 2;
-            const owner = errors[index];
-
-            if (owner === undefined || index < at * batchSize) {
-              yield* new XmllintUnreadable({ batch, line });
-            } else {
-              owner.push({
-                attribute: Option.fromNullishOr(found.groups["attribute"]),
-                element: found.groups["element"] ?? found.groups["local"] ?? "",
-                message: found.groups["message"] ?? "",
-              });
-            }
-          } else if (line.startsWith(batch) && !quietLine.test(line)) {
-            yield* new XmllintUnreadable({ batch, line });
-          }
-        }
       }),
     { concurrency: 4 },
   );
 
-  return errors;
+  return judged.flat();
 });
 
 /**

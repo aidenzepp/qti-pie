@@ -2,21 +2,22 @@
  * `Node`'s laws judged by PostgreSQL (Q5.03), written to run at N1 on the lease (and restated in
  * the network seat's probe P1), never by a hand.
  *
- * Every case writes a document's `Node` rows by direct SQL, as a direct writer does (README,
- * "Direct SQL access"): the author login, `SET ROLE` to the author role, SERIALIZABLE, one INSERT
- * of every row with each column the host fills, the hidden ones (‹n›, ‹ps›, the hidden fold
- * accumulators) found by the COMMENT grizzle puts on each. The rows come from shred and the host's
- * fold (`#pantry/model/folds.ts`), the fields the folds leave out (the counted and barred folds,
- * the string value's running text) computed here from `install.ts`'s rows, so a lawful document is
- * the rows grizzle's filler writes for it.
+ * Every case states a document's `Node` rows as facts, and the one direct writer
+ * (`#pantry/test/direct-sql.ts`, README, "Direct SQL access") writes them as one INSERT: the author
+ * login, `SET ROLE` to the author role, SERIALIZABLE, each column the host fills a parameter, and
+ * the hidden ones (‹n›, ‹ps›, the hidden fold accumulators) derived from `Qti`'s tree and fold
+ * statements and found by the COMMENT grizzle puts on each. The facts come from shred and the
+ * host's fold (`#pantry/model/folds.ts`), the string value's running text, which the folds leave
+ * out, computed here from `install.ts`'s rows, so a lawful document is the rows grizzle's filler
+ * writes for it.
  *
  * A `Node` tree commits only with its package (the document node's `Document` row, the character
  * arms, the attribute family): those laws are deferred to COMMIT and belong to other slices, so
  * every case is judged at its INSERT's end and rolled back. A law that is itself deferred, the
- * tree's last axis, is made immediate for the case (`SET CONSTRAINTS "qti".… IMMEDIATE`, named with
- * its schema). A lawful document's INSERT raises nothing; a corruption's raises the SQLSTATE and a
- * constraint that maps to its law (C22: membership, since one row may break several laws whose
- * constraints PostgreSQL checks in an order it does not promise).
+ * tree's last axis, is set immediate for the case once the rows are in (`SET CONSTRAINTS "qti".…
+ * IMMEDIATE`, named with its schema). A lawful document raises nothing; a corruption raises the
+ * SQLSTATE and a constraint that maps to its law (C22: membership, since one row may break several
+ * laws whose constraints PostgreSQL checks in an order it does not promise).
  *
  * The census (C12) reads the catalog: Node's foreign keys into Node are exactly the tree's three
  * axes, so N3, N5's predecessor copy and N7's last slot merged; the rest are, target for target,
@@ -24,33 +25,23 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import type { DbConnection } from "@bjornpagen/grizzle";
-import { Array as Arr, Effect, Formatter, Option, Order, Redacted, Result } from "effect";
-import { Client, DatabaseError } from "pg";
-import type { QueryResultRow } from "pg";
+import { Array as Arr, Effect, Formatter, Option, Order } from "effect";
+import type { Client, DatabaseError } from "pg";
 import { describe } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import {
-  AttributeName,
   AttributeSlot,
   Banned,
-  BarredOf,
   ContentModelOf,
-  CountedOf,
   Flag,
   Follow,
   GoverningOf,
   grammar,
-  NodeKind,
-  nonElementKinds,
   Position,
-  SchemaVersion,
   SharedModelOf,
   Symbol as ContentSymbol,
   TextDomain,
-  TypeName,
 } from "#pantry/grammar/install.ts";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -60,38 +51,28 @@ import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { readPackage } from "#pantry/package/read.ts";
+import { Attribute } from "#pantry/qti/attributes.ts";
+import { LabelUse } from "#pantry/qti/identity.ts";
 import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
+import {
+  accumulatorOf,
+  authorRole,
+  judged,
+  loginSession,
+  pinned,
+  qtiSchema,
+  rowsOf,
+  statedInserts,
+} from "#pantry/test/direct-sql.ts";
+import type { Stated } from "#pantry/test/direct-sql.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { keysOf } from "#pantry/test/statements.ts";
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, and the schema of its views.
- */
-const authorRole = "qti__author";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables and their constraints. `SET CONSTRAINTS` looks a bare
- * name up on the session's search path, which grizzle never relies on and which leads to no
- * constraint of `Qti`'s (PostgreSQL answers 42704), so a direct writer names each constraint with
- * this schema.
- */
-const qtiSchema = "qti";
-
-/**
- * `Node`'s table, as a direct writer names it.
- */
-const nodeTable = `"${qtiSchema}"."node"`;
 
 /**
  * The accepted corpus packages (`verdicts/qti-examples-0a92fbb.tsv`), by their zip's name.
@@ -251,23 +232,6 @@ interface Constraint {
 }
 
 /**
- * A column of `Node`'s table as the catalog holds it.
- */
-interface Column {
-  readonly comment: string;
-  readonly generated: boolean;
-  readonly name: string;
-}
-
-/**
- * `Node`'s table read from the catalog: its columns and its constraints.
- */
-interface Catalogue {
-  readonly columns: readonly Column[];
-  readonly constraints: readonly Constraint[];
-}
-
-/**
  * The relation a foreign key of `Node`'s table targets, by its declared name, as grizzle's comment
  * on the constraint states it: `foreign key Node(…) to <Relation>(…)`.
  *
@@ -409,167 +373,47 @@ const treeRoles: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Read the password a connection authenticates with.
- *
- * @param password - The connection's password.
- * @returns Its text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease over verify-full TLS, closed with its scope.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-});
-
-/**
- * Run one statement and return its rows.
+ * Read `Node`'s constraints from the catalog.
  *
  * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters, as text.
- * @returns The rows.
+ * @returns Its constraints.
  */
-const query = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly string[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
- * Read `Node`'s table from the catalog.
- *
- * @param client - The session.
- * @returns Its columns and constraints.
- */
-const catalogueOf = (client: Client) =>
-  Effect.gen(function* catalogue() {
-    const columns = yield* query<{
-      readonly comment: string | null;
-      readonly generated: string;
-      readonly name: string;
-    }>(
-      client,
-      `SELECT a.attname AS name, a.attgenerated AS generated, pg_catalog.col_description(a.attrelid, a.attnum) AS comment
-         FROM pg_catalog.pg_attribute a
-        WHERE a.attrelid = 'qti.node'::regclass AND a.attnum > 0 AND NOT a.attisdropped
-        ORDER BY a.attnum`,
-    );
-    const constraints = yield* query<{
-      readonly columns: readonly string[];
-      readonly comment: string | null;
-      readonly definition: string;
-      readonly kind: Constraint["kind"];
-      readonly name: string;
-      readonly target: string | null;
-    }>(
-      client,
-      `SELECT c.conname AS name, c.contype AS kind, pg_catalog.pg_get_constraintdef(c.oid) AS definition,
-              pg_catalog.obj_description(c.oid, 'pg_constraint') AS comment,
-              CASE WHEN c.confrelid = 0 THEN NULL ELSE c.confrelid::regclass::text END AS target,
-              ARRAY(SELECT a.attname::text FROM unnest(c.conkey) AS k(n)
-                      JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n) AS columns
-         FROM pg_catalog.pg_constraint c
-        WHERE c.conrelid = 'qti.node'::regclass`,
-    );
-
-    return {
-      columns: columns.map((column) => ({
-        comment: column.comment ?? "",
-        generated: column.generated !== "",
-        name: column.name,
-      })),
-      constraints: constraints.map((constraint) => ({
+const constraintsOf = (client: Client) =>
+  rowsOf<{
+    readonly columns: readonly string[];
+    readonly comment: string | null;
+    readonly definition: string;
+    readonly kind: Constraint["kind"];
+    readonly name: string;
+    readonly target: string | null;
+  }>(
+    client,
+    `SELECT c.conname AS name, c.contype AS kind, pg_catalog.pg_get_constraintdef(c.oid) AS definition,
+            pg_catalog.obj_description(c.oid, 'pg_constraint') AS comment,
+            CASE WHEN c.confrelid = 0 THEN NULL ELSE c.confrelid::regclass::text END AS target,
+            ARRAY(SELECT a.attname::text FROM unnest(c.conkey) AS k(n)
+                    JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n) AS columns
+       FROM pg_catalog.pg_constraint c
+      WHERE c.conrelid = 'qti.node'::regclass`,
+  ).pipe(
+    Effect.map((constraints) =>
+      constraints.map((constraint): Constraint => ({
         ...constraint,
         comment: constraint.comment ?? "",
         target: constraint.target ?? "",
       })),
-    } satisfies Catalogue;
-  });
+    ),
+  );
 
 /**
- * A node's row as a direct writer sends it: each column's SQL literal, keyed by the field it holds
- * or by the hidden column's role (`copy`, `parentStart`, `countedBefore`, `countedAfter`,
- * `barredBefore`, `barredAfter`).
- */
-type SqlRow = Record<string, string>;
-
-/**
- * Quote a text as a SQL literal.
+ * The names of `Node`'s constraints of one role, as a case sets a deferred one immediate.
  *
- * @param text - The text.
- * @returns The literal.
+ * @param constraints - Node's constraints.
+ * @param role - The role.
+ * @returns The names.
  */
-const text = (value: string): string => `'${value.replaceAll("'", "''")}'`;
-
-/**
- * Read a code back as its handle, the inverse of {@link code}.
- *
- * @param roster - The roster.
- * @param roster.handles - Its handles, in code order.
- * @param at - The code's literal.
- * @returns The handle, empty for a code past the roster.
- */
-const handleAt = (roster: { readonly handles: readonly string[] }, at: string): string =>
-  roster.handles[Number(at)] ?? "";
-
-/**
- * Spell a handle as its code, its index in its roster's handles, the code a fresh installation
- * gives it.
- *
- * @param roster - The roster.
- * @param roster.handles - Its handles, in code order.
- * @param handle - The handle.
- * @returns The code's literal.
- * @throws {Error} When the roster lacks the handle, a case built over a name the grammar does not
- *   hold.
- */
-const code = (roster: { readonly handles: readonly string[] }, handle: string): string => {
-  const at = roster.handles.indexOf(handle);
-  if (at === -1) {
-    throw new Error(`${handle} is no handle of its roster, so the case writes no code for it.`);
-  }
-
-  return String(at);
-};
-
-/**
- * Spell a set of handles as its SQL literal: its text in grizzle's one spelling of a bit string
- * (`#pantry/test/bits.ts`), quoted, which the set's column reads through bit's input function.
- *
- * @param roster - The roster.
- * @param roster.handles - Its handles, in code order.
- * @param members - The set's handles.
- * @returns The literal.
- */
-const bitsOf = (
-  roster: { readonly handles: readonly string[] },
-  members: ReadonlySet<string>,
-): string => text(bitsText(roster, members));
-
-/**
- * The kinds that are no element, as a set.
- */
-const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
+const namesOf = (constraints: readonly Constraint[], role: string): readonly string[] =>
+  constraints.filter((constraint) => roleOf(constraint) === role).map(({ name }) => name);
 
 /**
  * `GoverningOf`'s rows by `<version> <kind> <governs>`.
@@ -594,17 +438,6 @@ const universal: ReadonlySet<string> = new Set(universalDomains);
  * The kinds whose text an overlay copies, whose children the string value's fold steps too.
  */
 const copiedKinds: ReadonlySet<string> = new Set(copiedTextKinds);
-
-/**
- * `CountedOf`'s and `BarredOf`'s positions by `<version> <parent>`.
- */
-const countedAt = new Map(
-  CountedOf.rows.map((row) => [`${row.version} ${row.parent}`, row.position]),
-);
-
-const barredAt = new Map(
-  BarredOf.rows.map((row) => [`${row.version} ${row.parent}`, row.position]),
-);
 
 /**
  * Decide whether a member's characters make its parent's string value, as `node.ts`'s fold steps
@@ -634,17 +467,18 @@ const inStringValue = (
 };
 
 /**
- * Compute a document's `Node` rows, every column the host and grizzle write, in pre-order: the
- * fields from the host's fold, ‹n› and ‹ps› from the parent, and each fold's running values as
- * `node.ts`'s folds step them. `parentParentKind` is accumulated, so the host never writes it: the
- * direct writer fills it as grizzle's owner-axis copy does, the parent's `parentKind`, the root's
- * own, and steps the children whose text an overlay copies by two kinds (`copiedUnder`) as the fold
- * does.
+ * State a document's `Node` facts, every field the host writes, in pre-order: the fields from the
+ * host's fold, and the string value's running text as `node.ts`'s fold steps it. The writer derives
+ * the rest from `Qti`'s statements: ‹n› and ‹ps› from the parent, and the counted and barred folds'
+ * accumulators and ends from the members their selections hold. `parentParentKind` is accumulated,
+ * so the host never writes it: the fact states it as grizzle's owner-axis copy does, the parent's
+ * `parentKind`, the root's own, and steps the children whose text an overlay copies by two kinds
+ * (`copiedUnder`) as the fold does.
  *
  * @param rows - The document's folded rows.
- * @returns Each node's row, in document order.
+ * @returns Each node's fact, in document order.
  */
-const sqlRowsOf = (rows: FoldedRows<Composed>): SqlRow[] => {
+const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
   const byId = new Map(rows.nodes.map((node) => [node.id, node]));
   const chars = new Map(
     [...rows.texts, ...rows.whitespace].map(({ node, value }) => [node, value]),
@@ -658,50 +492,21 @@ const sqlRowsOf = (rows: FoldedRows<Composed>): SqlRow[] => {
     familyOf.set(node.parent, [...(familyOf.get(node.parent) ?? []), node]);
   }
 
-  const running = new Map<
-    string,
-    {
-      counted: number;
-      barred: number;
-      charsWas: string;
-      charsAfter: string;
-      countedWas: number;
-      barredWas: number;
-      piece: string;
-    }
-  >();
+  const running = new Map<string, { charsAfter: string; charsWas: string; piece: string }>();
   for (const [parentId, members] of familyOf) {
     const parent = byId.get(parentId);
     members.sort((left, right) => Number(left.at - right.at));
-    let counted = 0;
-    let barred = 0;
     let joined = "";
     for (const member of members) {
       const checked = inStringValue(member, parent);
-      const element = !nonElements.has(member.kind);
-      const state = String(member.derived.state);
-      const countedWas = counted;
-      const barredWas = barred;
       const charsWas = joined;
-      if (element && state === countedAt.get(`${member.version} ${member.parentKind}`)) {
-        counted += 1;
-      }
-
-      if (element && state === barredAt.get(`${member.version} ${member.parentKind}`)) {
-        barred += 1;
-      }
-
       if (checked) {
         joined += chars.get(member.id) ?? "";
       }
 
       running.set(member.id, {
-        barred,
-        barredWas,
         charsAfter: joined,
         charsWas,
-        counted,
-        countedWas,
         piece: checked ? (chars.get(member.id) ?? "") : "",
       });
     }
@@ -709,198 +514,57 @@ const sqlRowsOf = (rows: FoldedRows<Composed>): SqlRow[] => {
 
   return rows.nodes.map((node) => {
     const parent = node.start === 0n ? node : (byId.get(node.parent) ?? node);
-    const own = running.get(node.id) ?? {
-      barred: 0,
-      barredWas: 0,
-      charsAfter: "",
-      charsWas: "",
-      counted: 0,
-      countedWas: 0,
-      piece: "",
-    };
+    const own = running.get(node.id) ?? { charsAfter: "", charsWas: "", piece: "" };
     const last = Arr.last(familyOf.get(node.id) ?? []).pipe(
       Option.flatMap(({ id }) => Option.fromNullishOr(running.get(id))),
     );
 
     return {
-      ancestry: bitsOf(Flag, node.derived.ancestry),
-      at: String(node.at),
-      attributes: String(node.attributes),
-      attrs: bitsOf(AttributeSlot, new Set([...node.attrs].map(String))),
-      barredAfter: String(own.barred),
-      barredBefore: String(own.barredWas),
-      barredChildren: String(
-        Option.match(last, { onNone: () => 0, onSome: ({ barred }) => barred }),
-      ),
-      chars: text(chars.get(node.id) ?? ""),
-      charsAfter: text(own.charsAfter),
-      charsWas: text(own.charsWas),
-      children: String(node.children),
-      copy: String(parent.children),
-      countedAfter: String(own.counted),
-      countedBefore: String(own.countedWas),
-      countedChildren: String(
-        Option.match(last, { onNone: () => 0, onSome: ({ counted }) => counted }),
-      ),
-      document: text(node.document),
-      elementChildren: String(node.elementChildren),
-      elements: String(node.derived.elements),
-      elementsWas: String(node.elementsWas),
-      end: String(node.end),
-      first: text(node.first),
-      governs: code(TypeName, node.governs),
-      id: text(node.id),
-      kind: code(NodeKind, node.kind),
-      last: text(node.last),
-      lastState: code(Position, String(node.childState)),
-      namespaces: String(node.namespaces),
-      nearest: text(node.nearest),
-      nearestKind: code(NodeKind, node.nearestKind),
-      parent: text(node.parent),
-      parentAncestry: bitsOf(Flag, node.parentAncestry),
-      parentGoverns: code(TypeName, parent.governs),
-      parentKind: code(NodeKind, node.parentKind),
-      parentNearest: text(node.parentNearest),
-      parentNearestKind: code(NodeKind, node.parentNearestKind),
-      parentParentKind: code(NodeKind, parent.parentKind),
-      parentStart: String(node.parentStart),
-      prefix: text(node.prefix),
-      start: String(node.start),
-      state: code(Position, String(node.derived.state)),
-      stringPiece: text(own.piece),
-      stringValue: text(
-        Option.match(last, { onNone: () => "", onSome: ({ charsAfter }) => charsAfter }),
-      ),
-      version: code(SchemaVersion, node.version),
-      was: code(Position, String(node.was)),
+      fact: {
+        ancestry: bitsText(Flag, node.derived.ancestry),
+        at: node.at,
+        attributes: node.attributes,
+        attrs: bitsText(AttributeSlot, [...node.attrs].map(String)),
+        chars: chars.get(node.id) ?? "",
+        charsAfter: own.charsAfter,
+        charsWas: own.charsWas,
+        children: node.children,
+        document: node.document,
+        elementChildren: node.elementChildren,
+        elements: node.derived.elements,
+        elementsWas: node.elementsWas,
+        end: node.end,
+        first: node.first,
+        governs: node.governs,
+        id: node.id,
+        kind: node.kind,
+        last: node.last,
+        lastState: String(node.childState),
+        namespaces: node.namespaces,
+        nearest: node.nearest,
+        nearestKind: node.nearestKind,
+        parent: node.parent,
+        parentAncestry: bitsText(Flag, node.parentAncestry),
+        parentGoverns: parent.governs,
+        parentKind: node.parentKind,
+        parentNearest: node.parentNearest,
+        parentNearestKind: node.parentNearestKind,
+        parentParentKind: parent.parentKind,
+        prefix: node.prefix,
+        start: node.start,
+        state: String(node.derived.state),
+        stringPiece: own.piece,
+        stringValue: Option.match(last, {
+          onNone: () => "",
+          onSome: ({ charsAfter }) => charsAfter,
+        }),
+        version: node.version,
+        was: String(node.was),
+      },
+      relation: Node,
     };
   });
 };
-
-/**
- * Spell a field as its column: its conversion, lowercased segments joined by underscores.
- *
- * @param field - The field.
- * @returns The column's name.
- */
-const columnOfField = (field: string): string =>
-  field.replaceAll(/[A-Z]/gu, (upper) => `_${upper.toLowerCase()}`);
-
-/**
- * Name each written column of `Node`'s table by the role a row holds its value under: a field by
- * its name, ‹n› as `copy`, ‹ps› as `parentStart`, and each hidden fold accumulator by its fold,
- * read off the fold's CHECK, which names the end column beside it.
- *
- * @param catalogue - The table.
- * @returns Each column a direct writer fills, with its role.
- * @throws {Error} When a written column has no role, a column this case cannot fill.
- */
-const writtenColumns = (
-  catalogue: Catalogue,
-): readonly { readonly column: string; readonly role: string }[] => {
-  const fields = new Map(Object.keys(Node.fields).map((field) => [columnOfField(field), field]));
-  const foldOf = (column: string): string => {
-    const check = catalogue.constraints.find(
-      ({ definition, kind }) => kind === "c" && definition.includes(column),
-    );
-
-    return check?.definition.includes("counted_children") === true ? "counted" : "barred";
-  };
-
-  return catalogue.columns
-    .filter(({ generated }) => !generated)
-    .map(({ comment, name }) => {
-      const field = fields.get(name);
-      if (field !== undefined) {
-        return { column: name, role: field };
-      }
-
-      if (comment === "the owner's count of the family Node.children") {
-        return { column: name, role: "copy" };
-      }
-
-      if (comment === "the parent's start of the family Node.children") {
-        return { column: name, role: "parentStart" };
-      }
-
-      const hidden =
-        /^the accumulator (?<side>before|after) plane 0 of the fold \S+ over the family Node\.children$/u.exec(
-          comment,
-        )?.groups?.["side"];
-      if (hidden !== undefined) {
-        return { column: name, role: `${foldOf(name)}${hidden === "before" ? "Before" : "After"}` };
-      }
-
-      throw new Error(
-        `Node's column ${name} (${comment}) is written by no role this test fills. Give it a role in writtenColumns.`,
-      );
-    });
-};
-
-/**
- * Write the INSERT of a set of `Node` rows.
- *
- * @param columns - The written columns and their roles.
- * @param rows - The rows.
- * @returns The statement.
- */
-const insertOf = (
-  columns: readonly { readonly column: string; readonly role: string }[],
-  rows: readonly SqlRow[],
-): string =>
-  `INSERT INTO ${nodeTable} (${columns.map(({ column }) => `"${column}"`).join(", ")}) VALUES ${rows
-    .map((row) => `(${columns.map(({ role }) => row[role] ?? "NULL").join(", ")})`)
-    .join(", ")}`;
-
-/**
- * What PostgreSQL answered an INSERT with: nothing, or its SQLSTATE and the constraint it names.
- */
-type Verdict = Option.Option<{ readonly code: string; readonly constraint: string }>;
-
-/**
- * Judge a set of rows at its INSERT's end, as the author role at SERIALIZABLE, and roll back.
- *
- * @param client - The session.
- * @param catalogue - Node's table.
- * @param rows - The rows.
- * @param immediate - The roles of deferred constraints the case checks at the statement's end.
- * @returns PostgreSQL's verdict.
- */
-const judged = (
-  client: Client,
-  catalogue: Catalogue,
-  rows: readonly SqlRow[],
-  immediate: readonly string[] = [],
-) =>
-  Effect.gen(function* judge() {
-    const columns = writtenColumns(catalogue);
-    const deferred = catalogue.constraints.filter((constraint) =>
-      immediate.includes(roleOf(constraint)),
-    );
-    yield* query(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
-    yield* query(client, `SET LOCAL ROLE ${authorRole}`);
-    for (const { name } of deferred) {
-      yield* query(client, `SET CONSTRAINTS "${qtiSchema}"."${name}" IMMEDIATE`);
-    }
-
-    const answered = yield* Effect.result(
-      Effect.tryPromise({
-        catch: (cause) => cause,
-        try: () => client.query(insertOf(columns, rows)),
-      }),
-    );
-    yield* query(client, "ROLLBACK");
-
-    return Result.match(answered, {
-      onFailure: (cause): Verdict =>
-        Option.some(
-          cause instanceof DatabaseError
-            ? { code: cause.code ?? "", constraint: cause.constraint ?? "" }
-            : { code: "", constraint: String(cause) },
-        ),
-      onSuccess: (): Verdict => Option.none(),
-    });
-  });
 
 /**
  * Read the indexes of `Node`'s table whose first two key columns are T1's (document, start): each
@@ -910,7 +574,7 @@ const judged = (
  * @returns The indexes' names.
  */
 const documentOrderIndexes = (client: Client) =>
-  query<{ readonly name: string }>(
+  rowsOf<{ readonly name: string }>(
     client,
     `SELECT c.relname AS name
        FROM pg_catalog.pg_index i
@@ -994,86 +658,47 @@ const foldedAt = (xml: string, version: (typeof schemaVersions)[number]) =>
   });
 
 /**
- * The comment on an `Attribute` row's copy of its element's attribute count.
- */
-const attributeCount = "the owner's count of the family Node.attributes";
-
-/**
- * A document's `Attribute` rows as a direct writer sends them, each column's SQL literal by its
- * name, and the copy of the owner's count as `copy`: the fold's fields, the slot the fold steps
- * (`attrs` without the slots before it), and the counts of the families an attribute owns, its
- * entity references and its open name from the document's rows; no witness of these cases holds an
- * IDREF attribute, so each has no token and the empty concatenation.
+ * State a document's `Attribute` facts: the fold's fields, the slot the fold steps (`attrs` without
+ * the slots before it), and the counts of the families an attribute owns whose members these cases
+ * write none of, its entity references and its open name, from the document's rows; no witness of
+ * these cases holds an IDREF attribute, so each has no token, the count the writer derives, and the
+ * empty concatenation.
  *
  * @param rows - The document's folded rows.
- * @returns Each attribute's row, in the fold's order.
+ * @returns Each attribute's fact, in the fold's order.
  */
-const attributeSqlRowsOf = (rows: FoldedRows<Composed>): SqlRow[] => {
-  const owners = new Map(rows.nodes.map((node) => [node.id, node]));
-
-  return rows.attributes.map((attribute) => {
+const attributeFactsOf = (rows: FoldedRows<Composed>): Stated[] =>
+  rows.attributes.map((attribute) => {
+    const after = [...attribute.derived.attrs].map(String);
     const was = new Set([...attribute.attrsWas].map(String));
 
     return {
-      at: String(attribute.at),
-      attrs_after: bitsOf(AttributeSlot, new Set([...attribute.derived.attrs].map(String))),
-      attrs_was: bitsOf(AttributeSlot, was),
-      copy: String(owners.get(attribute.node)?.attributes ?? 0n),
-      document: text(attribute.document),
-      entities: String(
-        rows.attributeEntities.filter((row) => row.attribute === attribute.id).length,
-      ),
-      governs: code(TypeName, attribute.governs),
-      id: text(attribute.id),
-      idref_text: text(""),
-      idrefs: "0",
-      kind: code(NodeKind, attribute.kind),
-      lexical: text(attribute.lexical),
-      name: code(AttributeName, attribute.name),
-      node: text(attribute.node),
-      open_name: String(rows.openNames.filter((row) => row.attribute === attribute.id).length),
-      prefix: text(attribute.prefix),
-      slot: bitsOf(
-        AttributeSlot,
-        new Set([...attribute.derived.attrs].map(String).filter((slot) => !was.has(slot))),
-      ),
-      version: code(SchemaVersion, attribute.version),
+      fact: {
+        at: attribute.at,
+        attrsAfter: bitsText(AttributeSlot, after),
+        attrsWas: bitsText(AttributeSlot, was),
+        document: attribute.document,
+        entities: BigInt(
+          rows.attributeEntities.filter((row) => row.attribute === attribute.id).length,
+        ),
+        governs: attribute.governs,
+        id: attribute.id,
+        idrefText: "",
+        kind: attribute.kind,
+        lexical: attribute.lexical,
+        name: attribute.name,
+        node: attribute.node,
+        openName: BigInt(rows.openNames.filter((row) => row.attribute === attribute.id).length),
+        prefix: attribute.prefix,
+        slot: bitsText(
+          AttributeSlot,
+          after.filter((slot) => !was.has(slot)),
+        ),
+        version: attribute.version,
+      },
+      relation: Attribute,
     };
   });
-};
-
-/**
- * Read one of `Qti`'s tables' written columns, each with grizzle's comment, and write the INSERT of
- * rows keyed by column name, the owner's count copy of `Node.attributes` keyed as `copy`.
- *
- * @param client - The session.
- * @param table - The table.
- * @param rows - The rows, each column's SQL literal.
- * @returns The statement; a column a row does not fill fails the case.
- */
-const tableInsertOf = (client: Client, table: string, rows: readonly SqlRow[]) =>
-  query<{ readonly comment: string | null; readonly name: string }>(
-    client,
-    `SELECT a.attname AS name, pg_catalog.col_description(a.attrelid, a.attnum) AS comment
-       FROM pg_catalog.pg_attribute a
-      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
-        AND a.attgenerated = ''
-      ORDER BY a.attnum`,
-    [`${qtiSchema}.${table}`],
-  ).pipe(
-    Effect.map((columns) => {
-      const roles = columns.map(({ comment, name }) =>
-        comment === attributeCount ? "copy" : name,
-      );
-
-      return `INSERT INTO "${qtiSchema}"."${table}" (${columns.map(({ name }) => `"${name}"`).join(", ")}) VALUES ${rows
-        .map(
-          (row) =>
-            `(${roles.map((role) => row[role] ?? assert.fail(`${table}: no value for ${role}`)).join(", ")})`,
-        )
-        .join(", ")}`;
-    }),
-  );
 
 /**
  * Read the one constraint of a table whose comment matches a `LIKE` pattern.
@@ -1084,7 +709,7 @@ const tableInsertOf = (client: Client, table: string, rows: readonly SqlRow[]) =
  * @returns The constraint's name.
  */
 const constraintDescribed = (client: Client, table: string, pattern: string) =>
-  query<{ readonly conname: string }>(
+  rowsOf<{ readonly conname: string }>(
     client,
     `SELECT c.conname FROM pg_catalog.pg_constraint c
       WHERE c.conrelid = pg_catalog.to_regclass($1)
@@ -1097,64 +722,6 @@ const constraintDescribed = (client: Client, table: string, pattern: string) =>
       return rows[0]?.conname ?? "";
     }),
   );
-
-/**
- * Judge a whole document's `Node`, `Attribute` and `LabelUse` rows, three INSERTs as the author
- * role at SERIALIZABLE, then the named deferred constraints set immediate, and roll back.
- *
- * @param client - The session.
- * @param catalogue - Node's table.
- * @param document - The document's rows.
- * @param document.attributes - Its `Attribute` rows.
- * @param document.labels - Its `LabelUse` rows.
- * @param document.nodes - Its `Node` rows.
- * @param immediate - The deferred constraints to check before the rollback, by name.
- * @returns PostgreSQL's verdict.
- */
-const judgedDocument = (
-  client: Client,
-  catalogue: Catalogue,
-  document: {
-    readonly attributes: readonly SqlRow[];
-    readonly labels: readonly SqlRow[];
-    readonly nodes: readonly SqlRow[];
-  },
-  immediate: readonly string[],
-) =>
-  Effect.gen(function* judge() {
-    const statements = [
-      insertOf(writtenColumns(catalogue), document.nodes),
-      yield* tableInsertOf(client, "attribute", document.attributes),
-      ...(document.labels.length === 0
-        ? []
-        : [yield* tableInsertOf(client, "label_use", document.labels)]),
-    ];
-    yield* query(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
-    yield* query(client, `SET LOCAL ROLE ${authorRole}`);
-
-    const answered = yield* Effect.result(
-      Effect.forEach(
-        [
-          ...statements,
-          ...immediate.map((name) => `SET CONSTRAINTS "${qtiSchema}"."${name}" IMMEDIATE`),
-        ],
-        (statement) =>
-          Effect.tryPromise({ catch: (cause) => cause, try: () => client.query(statement) }),
-        { discard: true },
-      ),
-    );
-    yield* query(client, "ROLLBACK");
-
-    return Result.match(answered, {
-      onFailure: (cause): Verdict =>
-        Option.some(
-          cause instanceof DatabaseError
-            ? { code: cause.code ?? "", constraint: cause.constraint ?? "" }
-            : { code: "", constraint: String(cause) },
-        ),
-      onSuccess: (): Verdict => Option.none(),
-    });
-  });
 
 /**
  * An item whose root may carry a `label`, a `tool-name` and a `tool-version`, and whose body's
@@ -1193,15 +760,15 @@ const nodeBreaches = (rows: FoldedRows<Composed>): readonly string[] => {
  * Assert PostgreSQL refused a case with one of the SQLSTATEs and by a constraint of one of the
  * roles.
  *
- * @param catalogue - Node's table.
+ * @param constraints - Node's constraints.
  * @param verdict - The verdict.
  * @param codes - The SQLSTATEs the law's constraints raise.
  * @param roles - The roles of the law's constraints.
  * @param label - The case.
  */
 const assertRefused = (
-  catalogue: Catalogue,
-  verdict: Verdict,
+  constraints: readonly Constraint[],
+  verdict: Option.Option<DatabaseError>,
   codes: readonly string[],
   roles: ReadonlySet<string>,
   label: string,
@@ -1210,47 +777,67 @@ const assertRefused = (
     verdict,
     () => new Error(`${label}: PostgreSQL accepted it`),
   );
-  const constraint = catalogue.constraints.find(({ name }) => name === refusal.constraint);
+  const constraint = constraints.find(({ name }) => name === refusal.constraint);
 
   assert.include(codes, refusal.code, `${label}: SQLSTATE`);
   assert.isTrue(
     constraint !== undefined && roles.has(roleOf(constraint)),
-    `${label}: refused by ${refusal.constraint}, a ${constraint === undefined ? "constraint of no role" : roleOf(constraint)}`,
+    `${label}: refused by ${refusal.constraint ?? ""}, a ${constraint === undefined ? "constraint of no role" : roleOf(constraint)}`,
   );
 };
 
 /**
- * Edit one row of a copy of a document's rows.
+ * Edit one fact of a copy of a document's facts, and the hidden values it states.
  *
- * @param rows - The rows.
- * @param at - The row's index in document order.
+ * @param rows - The facts.
+ * @param at - The fact's index in document order.
  * @param edit - The fields to replace.
- * @returns The edited rows.
+ * @param hidden - The hidden values to state, a breach of one of them.
+ * @returns The edited facts.
  */
-const edited = (rows: readonly SqlRow[], at: number, edit: SqlRow): SqlRow[] =>
-  rows.map((row, index) => (index === at ? { ...row, ...edit } : row));
+const edited = (
+  rows: readonly Stated[],
+  at: number,
+  edit: Stated["fact"],
+  hidden: Stated["hidden"] = {},
+): Stated[] =>
+  rows.map((row, index) =>
+    index === at
+      ? { ...row, fact: { ...row.fact, ...edit }, hidden: { ...row.hidden, ...hidden } }
+      : row,
+  );
 
 /**
- * Find the first row whose fields hold a predicate, as a corruption's target.
+ * Find the first fact whose fields hold a predicate, as a corruption's target.
  *
- * @param rows - The rows.
- * @param holds - The predicate over a row and its index.
+ * @param rows - The facts.
+ * @param holds - The predicate over a fact and its index.
  * @param what - The target, for the failure's message.
  * @returns Its index.
- * @throws {Error} When no row holds the predicate, a case document too small for the corruption.
+ * @throws {Error} When no fact holds the predicate, a case document too small for the corruption.
  */
 const targetOf = (
-  rows: readonly SqlRow[],
-  holds: (row: SqlRow, index: number) => boolean,
+  rows: readonly Stated[],
+  holds: (fact: Stated["fact"], index: number) => boolean,
   what: string,
 ): number => {
-  const at = rows.findIndex(holds);
+  const at = rows.findIndex(({ fact }, index) => holds(fact, index));
   if (at === -1) {
     throw new Error(`The case document holds no ${what}, so the corruption has no target.`);
   }
 
   return at;
 };
+
+/**
+ * The key of one of the counted or barred folds' hidden accumulators, a case's breach of one.
+ *
+ * @param end - The fold, by its end on the parent.
+ * @param side - The accumulator.
+ * @returns The key.
+ */
+const childFold = (end: "countedChildren" | "barredChildren", side: "before" | "after") =>
+  accumulatorOf(side, `Node.${end}`, "Node.children");
 
 describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
   layer(NodeServices.layer, { excludeTestServices: true })(
@@ -1262,11 +849,11 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // Oracle: the corpus verdicts (`verdicts/qti-examples-0a92fbb.tsv`: sharedMedia, simple and svg
           // accepted), and fin.md §11's row-order obligation: an INSERT whose rows arrive successor
           // before predecessor passes the immediate predecessor key, which PostgreSQL checks at the
-          // statement's end. The last axis is checked at the statement's end too.
+          // statement's end. The last axis is checked once the statement is in.
           // Bound: every XML entry of the three packages.
           Effect.gen(function* accepted() {
             const client = yield* loginSession;
-            const catalogue = yield* catalogueOf(client);
+            const lastAxis = namesOf(yield* constraintsOf(client), "last axis");
             const packages = (yield* materializeCorpus()).filter(({ name }) =>
               acceptedPackages.has(name),
             );
@@ -1282,7 +869,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 const rows = yield* Effect.orDie(
                   Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))),
                 );
-                const verdict = yield* judged(client, catalogue, sqlRowsOf(rows), ["last axis"]);
+                const verdict = yield* judged(client, statedInserts(nodeFactsOf(rows)), lastAxis);
 
                 assert.isTrue(
                   Option.isNone(verdict),
@@ -1291,9 +878,9 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               }
             }
 
-            const reversed = sqlRowsOf(yield* foldedOf(lawfulItem)).toReversed();
+            const reversed = nodeFactsOf(yield* foldedOf(lawfulItem)).toReversed();
 
-            assert.isTrue(Option.isNone(yield* judged(client, catalogue, reversed, ["last axis"])));
+            assert.isTrue(Option.isNone(yield* judged(client, statedInserts(reversed), lastAxis)));
           }),
         leaseTestTimeoutMs,
       );
@@ -1308,70 +895,70 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // and the math item as the second document of T0's case.
           Effect.gen(function* trees() {
             const client = yield* loginSession;
-            const catalogue = yield* catalogueOf(client);
-            const lawful = sqlRowsOf(yield* foldedOf(lawfulItem));
-            const other = sqlRowsOf(yield* foldedOf(mathItem)).map((row) => ({
+            const constraints = yield* constraintsOf(client);
+            // Each corruption edits a lawful document's facts, every value the writer derives for
+            // them pinned, so it moves the fields it names and nothing the program fills.
+            const lawful = pinned(nodeFactsOf(yield* foldedOf(lawfulItem)));
+            const other = pinned(nodeFactsOf(yield* foldedOf(mathItem))).map((row) => ({
               ...row,
-              document:
-                row["document"]?.replace("00000000-0000-4000-8000", "00000000-0000-4000-9000") ??
-                "",
-              id: row["id"]?.replace("00000000-0000-4000-8000", "00000000-0000-4000-9000") ?? "",
-              nearest:
-                row["nearest"]?.replace("00000000-0000-4000-8000", "00000000-0000-4000-9000") ?? "",
-              parent:
-                row["parent"]?.replace("00000000-0000-4000-8000", "00000000-0000-4000-9000") ?? "",
-              parentNearest:
-                row["parentNearest"]?.replace(
-                  "00000000-0000-4000-8000",
-                  "00000000-0000-4000-9000",
-                ) ?? "",
+              fact: {
+                ...row.fact,
+                ...Object.fromEntries(
+                  ["document", "id", "nearest", "parent", "parentNearest"].map((field) => [
+                    field,
+                    String(row.fact[field]).replace(
+                      "00000000-0000-4000-8000",
+                      "00000000-0000-4000-9000",
+                    ),
+                  ]),
+                ),
+              },
             }));
             const leaf = targetOf(
               lawful,
-              (row) => row["children"] === "0" && row["at"] === "0" && row["start"] !== "0",
+              (row) => row["children"] === 0n && row["at"] === 0n && row["start"] !== 0n,
               "first leaf",
             );
-            const withSibling = targetOf(lawful, (row) => row["at"] === "1", "second sibling");
+            const withSibling = targetOf(lawful, (row) => row["at"] === 1n, "second sibling");
             // The ring moves an inner element under its own first leaf, at slot 0. An element that
             // already stands at slot 0 of its family keeps every first-slot value of its folds and
             // its content state there (fin.md §4.3), so no row CHECK of its own breaks: only the
             // tree's natives, which read across rows, can refuse it.
             const inner = targetOf(
               lawful,
-              (row, index) => index > 1 && row["children"] !== "0" && row["at"] === "0",
+              (row, index) => index > 1 && row["children"] !== 0n && row["at"] === 0n,
               "inner element at slot 0",
             );
             const deeper = targetOf(
               lawful,
-              (row, index) => index > inner && row["children"] === "0",
+              (row, index) => index > inner && row["children"] === 0n,
               "leaf below an inner element",
             );
+            const field = (at: number, name: string) => BigInt(lawful[at]?.fact[name] ?? 0n);
             const corruptions: readonly {
               readonly codes: readonly string[];
               readonly name: string;
-              readonly rows: readonly SqlRow[];
+              readonly rows: readonly Stated[];
             }[] = [
               {
                 codes: ["23503", "23514", "23505"],
                 name: "a ring: an inner element under its own descendant",
-                rows: edited(lawful, inner, { at: "0", parent: lawful[deeper]?.["id"] ?? "" }),
+                rows: edited(lawful, inner, { at: 0n, parent: lawful[deeper]?.fact["id"] ?? "" }),
               },
               {
                 codes: ["23505"],
                 name: "a shared child: one id at two slots",
-                rows: [...lawful, { ...lawful[leaf], at: "1" }],
+                rows: [...lawful, ...edited(lawful, leaf, { at: 1n }).slice(leaf, leaf + 1)],
               },
               {
                 codes: ["23514", "23503"],
                 name: "a gap: a slot past its family's count",
-                rows: edited(lawful, withSibling, { at: "2" }),
+                rows: edited(lawful, withSibling, { at: 2n }),
               },
               {
                 codes: ["23503"],
                 name: "an orphan: a parent no row holds",
-                rows: edited(lawful, leaf, {
-                  parent: text("00000000-0000-4000-8000-0000000fffff"),
-                }),
+                rows: edited(lawful, leaf, { parent: "00000000-0000-4000-8000-0000000fffff" }),
               },
               {
                 codes: ["23503"],
@@ -1383,52 +970,45 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                     targetOf(
                       other,
                       (row) =>
-                        row["children"] === "0" &&
-                        BigInt(row["start"] ?? "0") >= BigInt(lawful.length),
+                        row["children"] === 0n &&
+                        BigInt(row["start"] ?? 0n) >= BigInt(lawful.length),
                       "leaf past the first document's starts",
                     ),
-                    { document: lawful[0]?.["document"] ?? "" },
+                    { document: lawful[0]?.fact["document"] ?? "" },
                   ),
                 ],
               },
               {
                 codes: ["23514", "23503"],
                 name: "wrongSize: a leaf's interval of two",
-                rows: edited(lawful, leaf, {
-                  end: String(BigInt(lawful[leaf]?.["end"] ?? "0") + 1n),
-                }),
+                rows: edited(lawful, leaf, { end: field(leaf, "end") + 1n }),
               },
               {
                 codes: ["23503", "23514"],
                 name: "overlappingSiblings: a predecessor ending past its successor's start",
-                rows: edited(lawful, withSibling - 1, {
-                  end: String(BigInt(lawful[withSibling - 1]?.["end"] ?? "0") + 1n),
-                }),
+                rows: edited(lawful, withSibling - 1, { end: field(withSibling - 1, "end") + 1n }),
               },
               {
                 codes: ["23503", "23514", "23505"],
                 name: "gapBetweenSiblings: a successor starting past its predecessor's end",
-                rows: edited(lawful, withSibling, {
-                  start: String(BigInt(lawful[withSibling]?.["start"] ?? "0") + 1n),
-                }),
+                rows: edited(lawful, withSibling, { start: field(withSibling, "start") + 1n }),
               },
               {
                 codes: ["23503"],
                 name: "childOutsideParent: a parent ending before its last child",
-                rows: edited(lawful, inner, {
-                  end: String(BigInt(lawful[inner]?.["end"] ?? "0") - 1n),
-                }),
+                rows: edited(lawful, inner, { end: field(inner, "end") - 1n }),
               },
               {
                 codes: ["23514", "23503"],
                 name: "secondRoot: a member as its own parent",
-                rows: edited(lawful, leaf, { parent: lawful[leaf]?.["id"] ?? "" }),
+                rows: edited(lawful, leaf, { parent: lawful[leaf]?.fact["id"] ?? "" }),
               },
             ];
+            const lastAxis = namesOf(constraints, "last axis");
             for (const corruption of corruptions) {
               assertRefused(
-                catalogue,
-                yield* judged(client, catalogue, corruption.rows, ["last axis"]),
+                constraints,
+                yield* judged(client, statedInserts(corruption.rows), lastAxis),
                 corruption.codes,
                 treeRoles,
                 corruption.name,
@@ -1447,13 +1027,19 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // Bound: the seven items of `lawCases` and the two lawful items.
           Effect.gen(function* content() {
             const client = yield* loginSession;
-            const catalogue = yield* catalogueOf(client);
+            const constraints = yield* constraintsOf(client);
             for (const xml of [lawfulItem, mathItem]) {
               const rows = yield* foldedOf(xml);
 
               assert.deepStrictEqual(nodeBreaches(rows), []);
               assert.isTrue(
-                Option.isNone(yield* judged(client, catalogue, sqlRowsOf(rows), ["last axis"])),
+                Option.isNone(
+                  yield* judged(
+                    client,
+                    statedInserts(nodeFactsOf(rows)),
+                    namesOf(constraints, "last axis"),
+                  ),
+                ),
               );
             }
 
@@ -1462,8 +1048,8 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
 
               assert.deepStrictEqual(nodeBreaches(rows), [law], name);
               assertRefused(
-                catalogue,
-                yield* judged(client, catalogue, sqlRowsOf(rows)),
+                constraints,
+                yield* judged(client, statedInserts(nodeFactsOf(rows))),
                 ["23514"],
                 new Set([law]),
                 name,
@@ -1484,19 +1070,20 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // Bound: the two lawful items under each named edit.
           Effect.gen(function* rowLaws() {
             const client = yield* loginSession;
-            const catalogue = yield* catalogueOf(client);
+            const constraints = yield* constraintsOf(client);
             const lawfulRows = yield* foldedOf(lawfulItem);
-            const lawful = sqlRowsOf(lawfulRows);
-            const math = sqlRowsOf(yield* foldedOf(mathItem));
-            const ciKind = code(NodeKind, "m:ci");
+            // Each edit is of a lawful item's facts, every value the writer derives for them pinned,
+            // so it breaks the one law it names.
+            const lawful = pinned(nodeFactsOf(lawfulRows));
+            const math = pinned(nodeFactsOf(yield* foldedOf(mathItem)));
             const firstCi = targetOf(
               math,
-              (row) => row["kind"] === ciKind && row["at"] === "0",
+              (row) => row["kind"] === "m:ci" && row["at"] === 0n,
               "first m:ci",
             );
             const secondCi = targetOf(
               math,
-              (row) => row["kind"] === ciKind && row["at"] === "1",
+              (row) => row["kind"] === "m:ci" && row["at"] === 1n,
               "second m:ci",
             );
             // The positions N5 reads for the second m:ci, from the closed relations themselves: the
@@ -1504,15 +1091,13 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             // Follow steps to from its predecessor's state (N5 Follow). Each case below states its
             // position by them, so the laws it breaks are its premise, checked here, never an
             // accident of which CHECK PostgreSQL names first.
-            const version = handleAt(SchemaVersion, math[secondCi]?.["version"] ?? "");
-            const mfrac = handleAt(NodeKind, math[secondCi]?.["parentKind"] ?? "");
+            const second = math[secondCi]?.fact ?? {};
             const sharedModel = SharedModelOf.rows.find(
-              (row) => row.version === version && row.parent === mfrac,
+              (row) => row.version === second["version"] && row.parent === second["parentKind"],
             )?.model;
             const contentModel = ContentModelOf.rows.find(
-              (row) => row.version === version && row.parent === mfrac,
+              (row) => row.version === second["version"] && row.parent === second["parentKind"],
             )?.model;
-            const was = handleAt(Position, math[secondCi]?.["was"] ?? "");
             const symbolPositions = new Set<string>(
               ContentSymbol.rows
                 .filter((row) => row.model === sharedModel && row.kind === "m:ci")
@@ -1520,7 +1105,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             );
             const followed = new Set<string>(
               Follow.rows
-                .filter((row) => row.model === contentModel && row.from === was)
+                .filter((row) => row.model === contentModel && row.from === second["was"])
                 .map(({ to }) => to),
             );
             const breaks = (position: string) =>
@@ -1528,7 +1113,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 ...(symbolPositions.has(position) ? [] : ["N5 admitted"]),
                 ...(followed.has(position) ? [] : ["N5 Follow"]),
               ].toSorted();
-            const firstState = handleAt(Position, math[firstCi]?.["state"] ?? "");
+            const firstState = String(math[firstCi]?.fact["state"]);
             const unnamed = Position.handles.find(
               (position) =>
                 position !== "0" && !symbolPositions.has(position) && !followed.has(position),
@@ -1538,30 +1123,25 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
 
             const firstMember = targetOf(
               lawful,
-              (row) => row["at"] === "0" && row["start"] !== "0",
+              (row) => row["at"] === 0n && row["start"] !== 0n,
               "first child",
             );
             const lastElement = targetOf(
               lawful,
-              (row, index) => index > 0 && row["kind"] === code(NodeKind, "qti-item-body"),
+              (row, index) => index > 0 && row["kind"] === "qti-item-body",
               "item body",
             );
-            const textLeaf = targetOf(
-              lawful,
-              (row) => row["kind"] === code(NodeKind, "text"),
-              "text node",
-            );
+            const textLeaf = targetOf(lawful, (row) => row["kind"] === "text", "text node");
             const flag =
               Flag.handles.find(
                 (handle) =>
                   !Banned.rows.some(
                     (row) =>
-                      row.flag === handle &&
-                      lawful.some((held) => held["kind"] === code(NodeKind, row.kind)),
+                      row.flag === handle && lawful.some(({ fact }) => fact["kind"] === row.kind),
                   ),
               ) ?? Flag.handles[0];
             const leaked = new Set([flag]);
-            const leakedRows = sqlRowsOf({
+            const leakedRows = nodeFactsOf({
               ...lawfulRows,
               nodes: lawfulRows.nodes.map((node) => ({
                 ...node,
@@ -1573,13 +1153,13 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               readonly codes: readonly string[];
               readonly name: string;
               readonly roles: readonly string[];
-              readonly rows: readonly SqlRow[];
+              readonly rows: readonly Stated[];
             }[] = [
               {
                 codes: ["23514"],
                 name: "a shared kind at a Symbol position Follow does not step to: the first m:ci's",
                 roles: breaks(firstState),
-                rows: edited(math, secondCi, { state: code(Position, firstState) }),
+                rows: edited(math, secondCi, { state: firstState }),
               },
               {
                 // A position Symbol does not name is no position Follow steps to either, so the
@@ -1587,44 +1167,60 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 codes: ["23514"],
                 name: "a shared kind at a position Symbol does not name",
                 roles: breaks(unnamed ?? ""),
-                rows: edited(math, secondCi, { state: code(Position, unnamed ?? "") }),
+                rows: edited(math, secondCi, { state: unnamed ?? "" }),
               },
               {
                 codes: ["23514"],
                 name: "a junk elements accumulator at slot 0",
                 roles: ["elements fold"],
-                rows: edited(lawful, firstMember, { elementsWas: "1" }),
+                rows: edited(lawful, firstMember, { elementsWas: 1n }),
               },
               {
                 codes: ["23514"],
                 name: "a junk counted accumulator at slot 0",
                 roles: ["counted fold"],
-                rows: edited(lawful, firstMember, { countedAfter: "1", countedBefore: "1" }),
+                rows: edited(
+                  lawful,
+                  firstMember,
+                  {},
+                  {
+                    [childFold("countedChildren", "after")]: 1,
+                    [childFold("countedChildren", "before")]: 1,
+                  },
+                ),
               },
               {
                 codes: ["23514"],
                 name: "a junk barred accumulator at slot 0",
                 roles: ["barred fold"],
-                rows: edited(lawful, firstMember, { barredAfter: "1", barredBefore: "1" }),
+                rows: edited(
+                  lawful,
+                  firstMember,
+                  {},
+                  {
+                    [childFold("barredChildren", "after")]: 1,
+                    [childFold("barredChildren", "before")]: 1,
+                  },
+                ),
               },
               {
                 codes: ["23514"],
                 name: "a junk string-value accumulator at slot 0",
                 roles: ["string value fold"],
-                rows: edited(lawful, firstMember, { charsAfter: text("x"), charsWas: text("x") }),
+                rows: edited(lawful, firstMember, { charsAfter: "x", charsWas: "x" }),
               },
               {
                 codes: ["23514"],
                 name: "a junk state copy at slot 0",
                 roles: ["was pin", "N5 Follow"],
-                rows: edited(lawful, firstMember, { was: code(Position, "1") }),
+                rows: edited(lawful, firstMember, { was: "1" }),
               },
               {
                 codes: ["23514"],
                 name: "a wrong after: an element counted twice",
                 roles: ["elements fold"],
                 rows: edited(lawful, lastElement, {
-                  elements: String(BigInt(lawful[lastElement]?.["elements"] ?? "0") + 1n),
+                  elements: BigInt(lawful[lastElement]?.fact["elements"] ?? 0n) + 1n,
                 }),
               },
               {
@@ -1633,40 +1229,43 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 roles: ["N1 sentinel"],
                 rows: lawful.map((row, at) => ({
                   ...row,
-                  ancestry: leakedRows[at]?.["ancestry"] ?? "",
-                  parentAncestry: leakedRows[at]?.["parentAncestry"] ?? "",
+                  fact: {
+                    ...row.fact,
+                    ancestry: leakedRows[at]?.fact["ancestry"] ?? "",
+                    parentAncestry: leakedRows[at]?.fact["parentAncestry"] ?? "",
+                  },
                 })),
               },
               {
                 codes: ["23514"],
                 name: "a nearest that is no interaction's",
                 roles: ["N8 nearest"],
-                rows: edited(lawful, textLeaf, { nearest: lawful[textLeaf]?.["parent"] ?? "" }),
+                rows: edited(lawful, textLeaf, { nearest: lawful[textLeaf]?.fact["parent"] ?? "" }),
               },
               {
                 codes: ["23514"],
                 name: "a text whose first is not its first character",
                 roles: ["E1 derived"],
-                rows: edited(lawful, textLeaf, { first: text("x") }),
+                rows: edited(lawful, textLeaf, { first: "x" }),
               },
               {
                 codes: ["23514"],
                 name: "an element with a last character, though it holds none",
                 roles: ["E1 derived"],
-                rows: edited(lawful, lastElement, { last: text("x") }),
+                rows: edited(lawful, lastElement, { last: "x" }),
               },
               {
                 codes: ["23514"],
                 name: "an xsi:type outside XsiType",
                 roles: ["xsi type", "other"],
-                rows: edited(lawful, lastElement, { governs: code(TypeName, "xs:anyType") }),
+                rows: edited(lawful, lastElement, { governs: "xs:anyType" }),
               },
             ];
             assert.isTrue(leaked.size === 1);
             for (const { codes, name, roles, rows } of cases) {
               assertRefused(
-                catalogue,
-                yield* judged(client, catalogue, rows),
+                constraints,
+                yield* judged(client, statedInserts(rows)),
                 codes,
                 new Set(roles),
                 name,
@@ -1687,13 +1286,19 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // Bound: the two cases of `foreignCases`, a lawful document and one corruption each.
           Effect.gen(function* foreign() {
             const client = yield* loginSession;
-            const catalogue = yield* catalogueOf(client);
+            const constraints = yield* constraintsOf(client);
             for (const { corrupt, law, lawful, name } of foreignCases) {
               const rows = yield* foldedOf(lawful);
 
               assert.deepStrictEqual(nodeBreaches(rows), [], name);
               assert.isTrue(
-                Option.isNone(yield* judged(client, catalogue, sqlRowsOf(rows), ["last axis"])),
+                Option.isNone(
+                  yield* judged(
+                    client,
+                    statedInserts(nodeFactsOf(rows)),
+                    namesOf(constraints, "last axis"),
+                  ),
+                ),
                 name,
               );
 
@@ -1709,8 +1314,8 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
 
               assert.deepStrictEqual(nodeBreaches(broken), [law], name);
               assertRefused(
-                catalogue,
-                yield* judged(client, catalogue, sqlRowsOf(broken)),
+                constraints,
+                yield* judged(client, statedInserts(nodeFactsOf(broken))),
                 ["23514"],
                 new Set([law]),
                 name,
@@ -1736,7 +1341,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // tool-version and the body's label, 32 items; the two named cases among them.
           Effect.gen(function* labelTools() {
             const client = yield* loginSession;
-            const catalogue = yield* catalogueOf(client);
             const keys = [
               yield* constraintDescribed(
                 client,
@@ -1779,18 +1383,13 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                         documentAt: () => Option.none(),
                         idOf,
                       }).LabelUse.values();
-                      const verdict = yield* judgedDocument(
+                      const verdict = yield* judged(
                         client,
-                        catalogue,
-                        {
-                          attributes: attributeSqlRowsOf(rows),
-                          labels: [...uses].map((use) => ({
-                            document: text(use.document),
-                            node: text(use.node),
-                            root_kind: code(NodeKind, use.rootKind),
-                          })),
-                          nodes: sqlRowsOf(rows),
-                        },
+                        statedInserts([
+                          ...nodeFactsOf(rows),
+                          ...attributeFactsOf(rows),
+                          ...[...uses].map((use): Stated => ({ fact: use, relation: LabelUse })),
+                        ]),
                         keys,
                       );
                       if (breached) {
@@ -1826,8 +1425,8 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // Bound: every constraint of Node's table and every statement of Qti.
           Effect.gen(function* census() {
             const client = yield* loginSession;
-            const catalogue = yield* catalogueOf(client);
-            const foreign = catalogue.constraints.filter(({ kind }) => kind === "f");
+            const constraints = yield* constraintsOf(client);
+            const foreign = constraints.filter(({ kind }) => kind === "f");
             const intoNode = foreign.filter(({ target }) => target === "qti.node");
 
             assert.sameMembers(intoNode.map(roleOf), [
@@ -1881,10 +1480,8 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // Bound: the two reads.
           Effect.gen(function* plans() {
             const client = yield* loginSession;
-            const catalogue = yield* catalogueOf(client);
-            const order = catalogue.constraints.find(
-              (constraint) => roleOf(constraint) === "document order",
-            );
+            const constraints = yield* constraintsOf(client);
+            const order = constraints.find((constraint) => roleOf(constraint) === "document order");
             const ordered = yield* documentOrderIndexes(client);
             assert.include(ordered, order?.name, "T1's UNIQUE leads with (document, start)");
 
@@ -1892,22 +1489,26 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               `SELECT id, start FROM ${authorRole}.node WHERE document = $1 AND start > $2 AND start < $3 ORDER BY start`,
               `SELECT id, at FROM ${authorRole}.node WHERE document = $1 AND start > $2 AND start < $3 AND parent = $4 ORDER BY start`,
             ];
-            yield* query(client, "BEGIN");
-            yield* query(client, `SET LOCAL ROLE ${authorRole}`);
-            yield* query(client, "SET LOCAL enable_seqscan = off");
-            yield* query(client, "SET LOCAL enable_bitmapscan = off");
+            yield* rowsOf(client, "BEGIN");
+            yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+            yield* rowsOf(client, "SET LOCAL enable_seqscan = off");
+            yield* rowsOf(client, "SET LOCAL enable_bitmapscan = off");
 
             const explained = yield* Effect.all(
               reads.map((read, index) =>
-                query<{ readonly "QUERY PLAN": unknown }>(client, `EXPLAIN (FORMAT JSON) ${read}`, [
-                  "00000000-0000-4000-8000-000000000000",
-                  "0",
-                  "10",
-                  ...(index === 1 ? ["00000000-0000-4000-8000-000000000001"] : []),
-                ]),
+                rowsOf<{ readonly "QUERY PLAN": unknown }>(
+                  client,
+                  `EXPLAIN (FORMAT JSON) ${read}`,
+                  [
+                    "00000000-0000-4000-8000-000000000000",
+                    "0",
+                    "10",
+                    ...(index === 1 ? ["00000000-0000-4000-8000-000000000001"] : []),
+                  ],
+                ),
               ),
             );
-            yield* query(client, "ROLLBACK");
+            yield* rowsOf(client, "ROLLBACK");
             for (const plan of explained) {
               const shown = JSON.stringify(plan);
               const scanned = [...shown.matchAll(/"Index Name":"(?<name>[^"]+)"/gu)].map(

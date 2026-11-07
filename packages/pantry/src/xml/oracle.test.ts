@@ -72,7 +72,14 @@ const schemaMessageOf =
       lines: [
         `${path}:${String(line)}: ${prefix}Schemas validity ${severity} : Element '{urn:x}${local}'${named}: ${text}`,
       ],
-      message: { attribute, element: Option.some(`{urn:x}${local}`), line, source: "schema", text },
+      message: {
+        attribute,
+        element: Option.some(`{urn:x}${local}`),
+        level: severity,
+        line,
+        source: "schema",
+        text,
+      },
     };
   };
 
@@ -95,6 +102,7 @@ const parserMessageOf =
       message: {
         attribute: Option.none(),
         element: Option.none(),
+        level: "error",
         line,
         source: "parser",
         text: [body, ...context].join("\n"),
@@ -238,6 +246,7 @@ describe("xmllint's report, read back", () => {
               {
                 attribute: Option.some("v"),
                 element: Option.some("{urn:x}p"),
+                level: "error",
                 line: 3,
                 source: "schema",
                 text: "[facet 'pattern'] The value 'x' is not accepted by the pattern 'y'.",
@@ -245,6 +254,7 @@ describe("xmllint's report, read back", () => {
               {
                 attribute: Option.none(),
                 element: Option.some("{urn:x}q"),
+                level: "error",
                 line: 4,
                 source: "schema",
                 text: "This element is not expected.",

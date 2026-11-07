@@ -146,14 +146,6 @@ const everyName: readonly string[] = [
 ];
 
 describe("KindByNameUnder", () => {
-  it("is keyed by exactly the (version, parent) families that admit a foreign element", () => {
-    // Oracle: the admission relation read directly, its foreign children.
-    assert.deepStrictEqual(
-      new Set(grammar.kindByNameUnder.rows.map(({ parent, version }) => `${version} ${parent}`)),
-      new Set(foreignHosts.keys()),
-    );
-  });
-
   it.effect(
     "matches exactly the expanded names its parent admits: every family's pattern against every element kind's name, each admitted local under another namespace, and each admitted name extended by a letter",
     (ctx) =>

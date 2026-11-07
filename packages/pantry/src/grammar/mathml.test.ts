@@ -38,9 +38,7 @@ import {
   Formatter,
   Option,
   Result,
-  Stream,
 } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { admits, step } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import { composed } from "#pantry/grammar/compose.ts";
@@ -70,6 +68,7 @@ import {
 } from "#pantry/test/gen/relaxng.ts";
 import type { MathClasses } from "#pantry/test/gen/relaxng.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
+import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The composed grammar of production, failing the test that reads it when a generator refuses.
@@ -932,16 +931,18 @@ const cases: readonly Case[] = [
 type Verdicts = readonly boolean[];
 
 /**
- * Validate instances with xmllint, against a RelaxNG schema or an XSD, in one run.
+ * Validate instances with xmllint, against a RelaxNG schema or an XSD, in one run, through the
+ * shared validity oracle (`#pantry/xml/oracle.ts` `xmllintValidate`).
  *
- * @param mode - `--relaxng` or `--schema`.
+ * @param language - The schema's language.
  * @param schema - The schema's path.
  * @param label - The batch's folder under {@link outputRoot}.
  * @param instances - The instances' texts.
- * @returns Each instance's verdict, in order.
+ * @returns Each instance's verdict, in order; the oracle's failure when the schema does not
+ *   compile or xmllint does not run.
  */
 const validated = Effect.fn("test.mathml.validated")(function* validated(
-  mode: "--relaxng" | "--schema",
+  language: "relax-ng" | "xsd",
   schema: string,
   label: string,
   instances: readonly string[],
@@ -958,31 +959,9 @@ const validated = Effect.fn("test.mathml.validated")(function* validated(
     { concurrency: 8 },
   );
 
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const stderr = yield* Effect.scoped(
-    Effect.gen(function* runXmllint() {
-      const handle = yield* spawner.spawn(
-        ChildProcess.make("xmllint", ["--nonet", "--noout", mode, schema, ...files], {
-          stdin: "ignore",
-        }),
-      );
-      const [text] = yield* Effect.all(
-        [Stream.mkString(Stream.decodeText(handle.stderr)), handle.exitCode],
-        { concurrency: "unbounded" },
-      );
+  const verdicts = yield* xmllintValidate({ language, paths: files, schema });
 
-      return text;
-    }),
-  );
-  if (stderr.includes("failed to compile")) {
-    return yield* Effect.die(
-      new Error(`xmllint could not compile ${schema}: ${stderr.slice(0, 2000)}`),
-    );
-  }
-
-  const lines = new Set(stderr.split("\n"));
-
-  return files.map((file) => lines.has(`${file} validates`)) satisfies Verdicts;
+  return verdicts.map(({ _tag }) => _tag === "Valid") satisfies Verdicts;
 });
 
 /**
@@ -1329,13 +1308,13 @@ describe.skipIf(!cached)("spec reading 2 against libxml2's RelaxNG and XSD valid
         const composedGrammar = yield* grammar;
         const texts = cases.map(({ instance }) => written(instance));
         const rng = yield* validated(
-          "--relaxng",
+          "relax-ng",
           `${yield* relaxNgDirectory}/mathml3.rng`,
           "cases-rng",
           texts,
         );
         const xsd = yield* validated(
-          "--schema",
+          "xsd",
           `${yield* xsdDirectory}/mathml/mathml3.xsd`,
           "cases-xsd",
           texts,
@@ -1375,7 +1354,7 @@ describe.skipIf(!cached)("spec reading 2 against libxml2's RelaxNG and XSD valid
           treeCount,
         );
         const rng = yield* validated(
-          "--relaxng",
+          "relax-ng",
           `${yield* relaxNgDirectory}/mathml3.rng`,
           "trees-rng",
           trees.map((tree) => written(tree)),

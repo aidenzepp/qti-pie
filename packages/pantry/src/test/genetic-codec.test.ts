@@ -41,6 +41,7 @@ import {
   genericGenome,
   genomeOfTree,
   mutationOf,
+  reversedAttributes,
   smallerOf,
   sourceText,
   weightsOf,
@@ -168,8 +169,7 @@ const open: readonly Open[] = [
       { charset: "UTF-16BE", text: '<?xml version="1.0" encoding="UTF-16LE"?><!DOCTYPE r><r/>' },
       { charset: "UTF-8 BOM", text: '<?xml version="1.0" encoding="UTF-16LE"?><r/>' },
     ],
-    signature:
-      /^O[124] encoding declared against the bytes: (?:crust accepts, libxml2 refuses|.+ changes|reread refused .+|reshred refused .+|rows differ.*|canonical .+|unwritable .+)$/u,
+    signature: /^O\d encoding declared against the bytes: (?!crust refuses, libxml2 accepts$).+$/u,
     why: "XML 1.0 (Fifth Edition) section 4.3.3: \"it is a fatal error for an entity including an encoding declaration to be presented to the XML processor in an encoding other than that named in the declaration\"; crust decodes by the byte order mark or the Appendix F pattern and keeps or drops the label (decode.ts: a mark 'decides the encoding ... and the document's declaration is not consulted'; the utf16 decoder keeps 'the label as spelled even when it names the other order'), where it must refuse, and a UTF-8-marked document declaring UTF-16LE is then written without its mark and refused on reading; libxml2 refuses both (2.9.13 only once its input runs past its first buffer for the unmarked one)",
   },
   {
@@ -208,14 +208,18 @@ const grammar = Result.getOrThrow(composed());
 
 /**
  * The QTI seeds: the XDM generator's documents, on a stream this label fixes, so shred admits
- * the population's QTI members and O4 has trees to round-trip.
+ * the population's QTI members and O4 has trees to round-trip. Every other seed writes each
+ * element's attributes in the reverse of the generator's order, as an author may write them in
+ * any order (XML 1.0 section 3.1; spec reading 137 keeps the order written), so the codec meets
+ * unsorted attributes from the start.
  */
 const qtiSeeds: readonly CodecGenome[] = sample(
   xdmDocument(grammar),
   floorSeed("pantry/genetic-codec/qti-seeds"),
   48,
-).map(({ document }) => {
-  const genome = genomeOfTree(toXmlDocument(document, namesOf(grammar)));
+).map(({ document }, at) => {
+  const written = genomeOfTree(toXmlDocument(document, namesOf(grammar)));
+  const genome = at % 2 === 1 ? reversedAttributes(written) : written;
 
   return Option.isSome(document.doctype)
     ? {

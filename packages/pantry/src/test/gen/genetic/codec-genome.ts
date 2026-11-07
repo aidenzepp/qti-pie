@@ -1128,6 +1128,23 @@ export const genomeOfTree = (document: XmlDocument): CodecGenome => {
 };
 
 /**
+ * Rebuild a genome with every element's attributes and namespace declarations written in the
+ * reverse order.
+ *
+ * @param genome - The genome.
+ * @returns The genome.
+ */
+export const reversedAttributes = (genome: CodecGenome): CodecGenome => {
+  const node = (held: Node): Node =>
+    held._tag === "element"
+      ? { ...held, attributes: held.attributes.toReversed(), children: held.children.map(node) }
+      : held;
+  const root = node(genome.root);
+
+  return { ...genome, root: root._tag === "element" ? root : genome.root };
+};
+
+/**
  * Draw a small generic document by construction: a root named from {@link elementNames}, a few
  * children of every kind with pieces from the dictionaries, and, half the time, a doctype whose
  * internal subset declares an entity or two the body references and an attribute list on an
@@ -1182,7 +1199,10 @@ export const genericGenome: Gen<CodecGenome> = (source) => {
     })),
     {
       _tag: "attlist",
-      attribute: source.draw(oneOf(attributeNames)) ?? "a",
+      // A plain name the root may write, so a seed's default is normalized or added in no
+      // namespace as it should be; the edits name defaults with prefixes, which crust's N1 then
+      // claims, and a seed claimed by it from the start would hide every other defect it holds.
+      attribute: source.draw(oneOf(["a", "b", "c", "id"] as const)) ?? "a",
       default: { _tag: "value", fixed: false, pieces: pieces(2), quote: '"' },
       element: "r",
       type: source.draw(oneOf(attTypes)) ?? "CDATA",

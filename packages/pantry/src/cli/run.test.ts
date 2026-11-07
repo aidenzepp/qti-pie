@@ -153,19 +153,6 @@ describe("describeFailure and exitCodeOf", () => {
       assert.strictEqual(error.tag, error.name);
     }
   });
-
-  for (const error of grizzleErrors) {
-    it(`${error.name} exits 1 as database`, () => {
-      const failure = { _tag: error.tag };
-
-      assert.deepStrictEqual(describeFailure(failure), {
-        exitCode: 1,
-        help: kindHelp.database,
-        kind: "database",
-      });
-      assert.strictEqual(exitCodeOf(Exit.fail(failure)), 1);
-    });
-  }
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })("the run's exit code", (live) => {

@@ -6,7 +6,6 @@ import {
   replaceWith,
   requirePackage,
   requireReplaceable,
-  wouldReplace,
   yesFlag,
   zipFlag,
 } from "#pantry/cli/args.ts";
@@ -115,12 +114,11 @@ export const roundtripCommand = Command.make(
     const name = path.basename(path.resolve(dir)).replace(/\.zip$/u, "");
     const exportDir = path.join("work", "export", zip ? `${name}.zip` : name);
 
-    yield* requireReplaceable(exportDir, yes);
+    const action = yield* requireReplaceable(exportDir, yes);
 
     if (dryRun) {
       const { previewPackage } = yield* Effect.promise(() => import("#pantry/import/preview.ts"));
       const { relations, rows } = yield* previewPackage(dir);
-      const action = (yield* wouldReplace(exportDir)) ? "replace" : "create";
 
       yield* emitSuccess(mode, {
         command: "roundtrip",
