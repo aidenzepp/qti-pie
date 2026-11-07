@@ -1086,8 +1086,8 @@ interface CellContent {
 }
 
 /**
- * Collect a cell's alignment groups and complete elements in document order. A nested `m:mtd`
- * that holds elements is another cell's and is not entered.
+ * Collect a cell's alignment groups and complete elements in document order. A nested `m:mtd`,
+ * empty or not, is another cell's: it is no leaf of this one and is not entered.
  *
  * @param view - The document.
  * @param cell - The `m:mtd`.
@@ -1103,13 +1103,17 @@ const contentOfCell = (
   const leaves: FoldedNode<Composed>[] = [];
   const visit = (parent: FoldedNode<Composed>): void => {
     for (const child of elementChildrenOf(view, parent, elements)) {
+      if (child.kind === "m:mtd") {
+        continue;
+      }
+
       if (child.kind === "m:maligngroup") {
         groups.push(child);
       }
 
       if (elementChildrenOf(view, child, elements).length === 0) {
         leaves.push(child);
-      } else if (child.kind !== "m:mtd") {
+      } else {
         visit(child);
       }
     }
