@@ -1076,59 +1076,6 @@ export const known = {
     fix: "(3): no package record is written from a cp:* element outside imsmanifest.xml, and the oracle bounds no key text of one",
     owner: "GEN-A",
   },
-  "oracle-only-law: LomObjectIdentifier": {
-    files: [
-      [
-        "choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="choice" title="Unattended Luggage">
-    
-    
-    
-    
-</qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <metadata>
-        
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata>
-    
-    <resources>
-        <resource type="imsqti_test_xmlv3p0" href="choice.xml">
-            <metadata>
-                
-                <imsmd:lom>
-                    <imsmd:general>
-                        <imsmd:identifier>
-                            <imsmd:entry>choice</imsmd:entry>
-                        </imsmd:identifier>
-                        
-                        
-                    </imsmd:general>
-                    
-                    
-                    
-                </imsmd:lom>
-            </metadata>
-            
-            
-            
-        </resource>
-        
-    </resources>
-</manifest>`,
-      ],
-    ],
-    fix: "a resource whose document's root is of another type: the oracle reads its record's identifier against no assessment object",
-    owner: "JAN",
-  },
   "oracle-only-law: Set type": {
     files: [
       [
@@ -1615,5 +1562,58 @@ export const fixed = {
     ],
     fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
     owner: "VD",
+  },
+  "oracle-only-law: LomObjectIdentifier": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="choice" title="Unattended Luggage">
+    
+    
+    
+    
+</qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <metadata>
+        
+        <schemaversion>3.0.0</schemaversion>
+        
+    </metadata>
+    
+    <resources>
+        <resource type="imsqti_test_xmlv3p0" href="choice.xml">
+            <metadata>
+                
+                <imsmd:lom>
+                    <imsmd:general>
+                        <imsmd:identifier>
+                            <imsmd:entry>choice</imsmd:entry>
+                        </imsmd:identifier>
+                        
+                        
+                    </imsmd:general>
+                    
+                    
+                    
+                </imsmd:lom>
+            </metadata>
+            
+            
+            
+        </resource>
+        
+    </resources>
+</manifest>`,
+      ],
+    ],
+    fix: "the oracle reads a record's object as the document its resource names where its root is an item or a test, whatever the resource's type (QTI 3.0 Metadata §2.7.1.1 and §2.7.1.2)",
+    owner: "JAN",
   },
 } satisfies Entries;

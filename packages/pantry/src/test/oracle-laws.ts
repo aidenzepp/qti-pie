@@ -39,7 +39,7 @@ import {
   testPackageBreaches,
 } from "#pantry/test/oracle-laws/tests.ts";
 
-export { addedLaws } from "#pantry/test/oracle-laws/documents.ts";
+export { addedLaws, lomNamedTypes, objectRoots } from "#pantry/test/oracle-laws/documents.ts";
 
 /**
  * Every law this module's producers raise.

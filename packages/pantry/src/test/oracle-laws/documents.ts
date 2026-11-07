@@ -465,12 +465,26 @@ export const documentDocumentBreaches = (
 };
 
 /**
- * The resource types whose documents a LOM record names by identifier and title (QTI 3.0 Metadata
- * §2.7.1): an item's and a test's.
+ * The resource types whose LOM record names its document by identifier and title (QTI 3.0 Metadata
+ * §2.7.1; reading 62): an item's and a test's, as the implementation guide's LOM profile says "the
+ * test or item identifier should be present as an identifier in the LOM metadata", a
+ * recommendation the operator rules binding.
  */
-const namedTypes: ReadonlyMap<string, string> = new Map([
-  ["imsqti_item_xmlv3p0", "qti-assessment-item"],
-  ["imsqti_test_xmlv3p0", "qti-assessment-test"],
+export const lomNamedTypes: ReadonlySet<string> = new Set([
+  "imsqti_item_xmlv3p0",
+  "imsqti_test_xmlv3p0",
+]);
+
+/**
+ * The roots of an assessment object, "the associated item, test or object bank" whose identifier a
+ * record's entry matches and whose title its string matches (QTI 3.0 Metadata §2.7.1.1 and
+ * §2.7.1.2): an item's and a test's. The object is the document the record's resource names
+ * (reading 93), whatever type the resource is listed under, which `RootOfType` judges on its own;
+ * a document of any other root is no object, so no entry and no title string matches it.
+ */
+export const objectRoots: ReadonlySet<string> = new Set([
+  "qti-assessment-item",
+  "qti-assessment-test",
 ]);
 
 /**
@@ -496,10 +510,12 @@ const folded = (tag: string): string =>
  * test's resource, a `lom:lom` of the resource's own `cp:metadata` (spec reading 62; a `cp:file`'s
  * record describes the file: "The scope of Metadata is the parent container class only", IMS
  * Content Packaging 1.2 §6.7), whose general category has a title holds a title string whose value
- * is the
- * document's `title`, in the document's language: a string whose `language` is the root's
+ * is its object's `title`, in the object's language: a string whose `language` is the root's
  * `xml:lang`, without regard to case, or one with no `language`, or any string where the root
- * states no `xml:lang` (an empty or blank one states none, XML 1.0 §2.12).
+ * states no `xml:lang` (an empty or blank one states none, XML 1.0 §2.12). The object is the
+ * document the resource's href names where its root is an item or a test ({@link objectRoots}),
+ * whatever the resource's type; a document of another root is no object, and a record with a
+ * title breaks the law.
  *
  * @param input - The package.
  * @returns The breaches, each at the record.
@@ -513,20 +529,19 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
     }
 
     const type = Option.getOrElse(typedValueOf(manifest, resource.id, "type"), () => "");
-    const rootKind = namedTypes.get(type);
     const href = valueOf(manifest, resource.id, "href");
-    const document = input.documents.find(
-      (listed) =>
-        Option.exists(href, (written) => listed.path === written.replace(/[?#].*$/su, "")) &&
-        Option.exists(listed.rows.root, ({ kind }) => kind === rootKind),
+    const document = input.documents.find((listed) =>
+      Option.exists(href, (written) => listed.path === written.replace(/[?#].*$/su, "")),
     );
     const root = document === undefined ? undefined : Option.getOrUndefined(document.rows.root);
-    if (document === undefined || root === undefined) {
+    if (!lomNamedTypes.has(type) || document === undefined || root === undefined) {
       return [];
     }
 
+    // The object's title and language; a root of no object has neither, and no string names it.
+    const object = objectRoots.has(root.kind);
     const title = replaced(Option.getOrElse(valueOf(document.rows, root.id, "title"), () => ""));
-    const written = typedOr(document.rows, root.id, "xml:lang", "");
+    const written = object ? typedOr(document.rows, root.id, "xml:lang", "") : Option.some("");
     if (Option.isNone(written)) {
       return [];
     }
@@ -566,6 +581,7 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
           );
 
           return (
+            object &&
             replaced(string.stringValue) === title &&
             (lang === "" || language === "" || language === lang)
           );
