@@ -13,7 +13,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -40,10 +40,11 @@ import type {
  */
 export interface MappingIds {
   /**
-   * The document's context (spec reading 117), its own where none is given: an included
-   * fragment's nodes take the interaction their includes stand in as their nearest.
+   * The document's context (spec reading 117), `ownContext` of its document node for a document no
+   * site names: an included fragment's nodes take the interaction their includes stand in as their
+   * nearest.
    */
-  readonly context?: DocumentContext;
+  readonly context: DocumentContext;
   readonly idOf: (index: number) => NodeId;
 }
 
@@ -126,22 +127,32 @@ type IntegerParts = Pick<
 >;
 
 /**
+ * Whether a text is a sign or none, the language of `MapKeyInteger.sign`.
+ *
+ * @param text - The text, none where the split did not match.
+ * @returns Whether it is `+`, `-` or nothing.
+ */
+const isSign = (text: string | undefined): text is IntegerParts["sign"] =>
+  text === "" || text === "+" || text === "-";
+
+/**
  * Whether a text is a run of zeros, the language of `MapKeyInteger.zeros`.
  *
- * @param text - The text.
+ * @param text - The text, none where the split did not match.
  * @returns Whether it holds `0` alone, or nothing.
  */
-const isZeros = (text: string): text is IntegerParts["zeros"] => /^0*$/u.test(text);
+const isZeros = (text: string | undefined): text is IntegerParts["zeros"] =>
+  text !== undefined && /^0*$/u.test(text);
 
 /**
  * Whether a text is an integer's magnitude with no leading zero, the language of
  * `MapKeyInteger.digits`.
  *
- * @param text - The text.
+ * @param text - The text, none where the split did not match.
  * @returns Whether it is `0` or starts with a nonzero digit, digits alone.
  */
-const isDigits = (text: string): text is IntegerParts["digits"] =>
-  /^(?:0|[1-9][0-9]*)$/u.test(text);
+const isDigits = (text: string | undefined): text is IntegerParts["digits"] =>
+  text !== undefined && /^(?:0|[1-9][0-9]*)$/u.test(text);
 
 /**
  * The float map keys of grizzle's form that name their double: PostgreSQL's cast reads them, and
@@ -182,14 +193,13 @@ export const floatValueOf = (key: string): number => namedFloats.get(key) ?? Num
  */
 export const integerValueOf = (key: string): IntegerParts | undefined => {
   const groups = integerParts.exec(key)?.groups;
-  const zeros = groups?.["zeros"] ?? "";
-  const digits = groups?.["digits"] ?? "";
-  if (groups === undefined || !isZeros(zeros) || !isDigits(digits)) {
+  const sign = groups?.["sign"];
+  const zeros = groups?.["zeros"];
+  const digits = groups?.["digits"];
+  if (!isSign(sign) || !isZeros(zeros) || !isDigits(digits)) {
     return undefined;
   }
 
-  const signs = { "": "", "+": "+", "-": "-" } as const;
-  const sign = groups["sign"] === "-" || groups["sign"] === "+" ? signs[groups["sign"]] : signs[""];
   const negative = sign === "-" && digits !== "0" ? "-" : "";
 
   return { digits, negative, sign, value: `${negative}${digits}`, zeros };
@@ -203,10 +213,11 @@ type GapText = Addition<typeof MapKeyPair>["gap"];
 /**
  * Whether a text is one XML whitespace character, the language of `Gap`.
  *
- * @param text - The text.
+ * @param text - The text, none where the split did not match.
  * @returns Whether it is one space, tab or line end.
  */
-const isGap = (text: string): text is GapText => /^[\t\n\r ]$/u.test(text);
+const isGap = (text: string | undefined): text is GapText =>
+  text === " " || text === "\t" || text === "\n" || text === "\r";
 
 /**
  * Split a key of two items around the whitespace between them.
@@ -220,7 +231,7 @@ const itemsOf = (
 ): { readonly first: string; readonly gap: GapText; readonly second: string } | undefined => {
   const groups = twoItems.exec(key)?.groups;
   const first = groups?.["first"];
-  const gap = groups?.["gap"] ?? "";
+  const gap = groups?.["gap"];
   const second = groups?.["second"];
 
   return first === undefined || !isGap(gap) || second === undefined
@@ -264,28 +275,17 @@ export const pointValueOf = (
 /**
  * Compare two texts by their code points, as PostgreSQL's `pg_c_utf8` collation orders a key's
  * text: JavaScript's `<` compares UTF-16 code units, which order a supplementary character below
- * U+E000 to U+FFFF.
+ * U+E000 to U+FFFF. UTF-8 orders its encodings as their code points, so the texts' UTF-8 bytes
+ * compare as `pg_c_utf8` does; a key holds no lone surrogate, which no XML `Char` is and no
+ * PostgreSQL text can hold, so its encoding is its code points'.
  *
  * @param left - The first text.
  * @param right - The second.
  * @returns Whether the first sorts at or before the second.
+ * @see {@link https://www.rfc-editor.org/rfc/rfc3629#section-1 | RFC 3629, §1: byte order is code point order}
  */
-const atOrBefore = (left: string, right: string): boolean => {
-  let i = 0;
-  let j = 0;
-  while (i < left.length && j < right.length) {
-    const a = left.codePointAt(i) ?? 0;
-    const b = right.codePointAt(j) ?? 0;
-    if (a !== b) {
-      return a < b;
-    }
-
-    i += a > 0xff_ff ? 2 : 1;
-    j += b > 0xff_ff ? 2 : 1;
-  }
-
-  return i >= left.length;
-};
+const atOrBefore = (left: string, right: string): boolean =>
+  Buffer.compare(Buffer.from(left, "utf-8"), Buffer.from(right, "utf-8")) <= 0;
 
 /**
  * Split a pair map key into its typed value's parts: its two items, the whitespace between them,
@@ -432,21 +432,20 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
 export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows => {
   const rows = flatten(doc, ids.idOf);
   const document = rows.document.node;
-  const folds = foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node));
+  const folds = foldOf(rows.nodes, ids.context);
   const byId = new Map(rows.nodes.map((node) => [node.id, node]));
-  const attributes = new Map<NodeId, Map<string, string>>();
-  for (const { lexical, name, node } of rows.attributes) {
-    const named = attributes.get(node) ?? new Map<string, string>();
-    named.set(name, lexical);
-    attributes.set(node, named);
-  }
+  const attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>> = new Map(
+    [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
+      ([node, held]) => [node, new Map(held.map(({ lexical, name }) => [name, lexical]))] as const,
+    ),
+  );
 
   const valueOf = (node: NodeId, name: string): string | undefined =>
     attributes.get(node)?.get(name);
   const tupleOf = (node: NodeRow<Composed>) => ({
     document,
     kind: node.kind,
-    nearest: folds.get(node.id)?.nearest ?? document,
+    nearest: foldAt(folds, node.id).nearest,
     node: node.id,
     start: node.start,
     version: node.version,
