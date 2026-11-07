@@ -571,10 +571,11 @@ export const UsageValue = relation(
 
 /**
  * A record's usage value whose `baseType` spells a code (`baseTypes`, as written), keyed by its
- * `ud:value` node: `baseType`, the `BaseType` code its lexical form spells (C17), beside that form
- * and the value's `text`, both its {@link UsageValue}'s. A `baseType` that spells no code has no
- * row, so no base type stands for it, and its value domain refuses it alone (decision 427, as
- * `DeclarationBaseType` holds a declaration's base type only where it has one).
+ * `ud:value` node: `baseType`, the `BaseType` code its lexical form spells (C17), beside that form,
+ * its {@link UsageValue}'s, copied both ways, and `text`, its node's string value, copied as
+ * `UsageValue` copies it (one UNIQUE holds one key text, not two). A `baseType` that spells no code
+ * has no row, so no base type stands for it, and its value domain refuses it alone (decision 427,
+ * as `DeclarationBaseType` holds a declaration's base type only where it has one).
  */
 export const UsageValueBaseType = relation(
   "UsageValueBaseType",
@@ -943,9 +944,9 @@ const spelledUsageValues = select(UsageValue, (u) => u.in(u.baseTypeLexical, bas
  *   and every such row is one, its lexical form the attribute's; each that also writes a
  *   `fieldIdentifier` has its {@link UsageValue}, and every such row is one, with its `baseType`
  *   copied from that row; its `text` is its node's string value; one whose `baseType` spells a code
- *   has its {@link UsageValueBaseType}, and every such row is one, its lexical form and text
- *   copied; its code is the one its lexical form spells ("E1 derived"); and its text is a lexical
- *   form of that base type ("Usage typed value").
+ *   has its {@link UsageValueBaseType}, and every such row is one, its lexical form copied from it
+ *   and its text from the node; its code is the one its lexical form spells ("E1 derived"); and its
+ *   text is a lexical form of that base type ("Usage typed value").
  */
 export const metadataLawsByName = {
   "Document entry": [contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named"))],
@@ -1181,13 +1182,14 @@ export const metadataLawsByName = {
     contained(on(UsageValue, "node"), on(usageRecordValues, "id")),
     contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
     contained(
-      on(spelledUsageValues, "node", "baseTypeLexical", "text"),
-      on(UsageValueBaseType, "node", "baseTypeLexical", "text"),
+      on(spelledUsageValues, "node", "baseTypeLexical"),
+      on(UsageValueBaseType, "node", "baseTypeLexical"),
     ),
     contained(
-      on(UsageValueBaseType, "node", "baseTypeLexical", "text"),
-      on(spelledUsageValues, "node", "baseTypeLexical", "text"),
+      on(UsageValueBaseType, "node", "baseTypeLexical"),
+      on(spelledUsageValues, "node", "baseTypeLexical"),
     ),
+    contained(on(UsageValueBaseType, "node", "text"), on(Node, "id", "stringValue")),
     check("E1_derived", UsageValueBaseType, (u) =>
       u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
     ),
