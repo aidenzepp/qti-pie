@@ -139,10 +139,11 @@ const orderRule: KindRule = {
  * cardinality and have a numerical base-type" (`info-compact.txt:11415`).
  *
  * Each token of its `tolerance` may name a float or integer variable (9.11), so its reference facet
- * lists the attribute, a list, unchecked: the validator refuses no token (the qti package does not
- * check `tolerance`, and the XSD types a token `xs:string | xs:double`), the walks mark a token
- * that names a variable the engine does not hold, and one that names no number gives NULL at run
- * time.
+ * lists the attribute, a list, unchecked. The structure check refuses a token that is neither an
+ * `xs:double` nor an NCName (pantry's P6), and no prose rule refuses a name, as the qti package
+ * checks none. The walks mark a token that names a variable the engine does not hold. A name is
+ * resolved at run time, where only a template or outcome variable's value is used and any other
+ * name gives NULL.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpEqual
  */
