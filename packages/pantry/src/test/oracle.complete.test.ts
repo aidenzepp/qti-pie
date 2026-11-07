@@ -18,9 +18,9 @@
  *   in parts (`statedInParts`), or no host predicate can judge it, with the reason
  *   (`hostlessLaws`).
  *
- * A law with no mutation yet is a row of {@link owed} with why, a list that only shrinks: a law
- * both owed and mutated fails, and so does a law neither owed nor mutated, so a law that joins the
- * oracle joins this file.
+ * A law no mutation can break alone is a row of {@link owed} with why, a list that only shrinks: a
+ * law both owed and mutated fails, and so does a law neither owed nor mutated, so a law that joins
+ * the oracle joins this file.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -37,6 +37,7 @@ import { int } from "@grizzle/testing/gen";
 import { everyRelationPackage, memberCounts } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts, PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { documentMutations } from "#pantry/test/oracle-complete/documents.ts";
+import { contentEdits } from "#pantry/test/oracle-complete/content-edits.ts";
 import { foreignEdits } from "#pantry/test/oracle-complete/foreign-edits.ts";
 import { expressionMutations } from "#pantry/test/oracle-complete/expressions.ts";
 import { layerMutations } from "#pantry/test/oracle-complete/layer.ts";
@@ -86,20 +87,17 @@ const mutations: Readonly<Partial<Record<LawName, Mutation>>> = {
   ...rowEdits,
   ...nodeEdits,
   ...foreignEdits,
+  ...contentEdits,
   ...documentMutations,
   ...expressionMutations,
   ...testMutations,
 };
 
 /**
- * The laws with no mutation yet, each with why: the list only shrinks.
+ * The laws no mutation breaks alone, each with why: every edit that breaks one breaks a law ranked
+ * ahead of it too. The list only shrinks.
  */
 const owed: Readonly<Partial<Record<LawName, string>>> = {
-  "AL5 attribute count": "its mutation is not written yet",
-  "Foreign simple content": "its mutation is not written yet",
-  "Fragment context": "its mutation is not written yet",
-  "Graphic gap match default hotspot": "its mutation is not written yet",
-  "Href form": "its mutation is not written yet",
   "Manifest id space":
     "every resource identifier and the manifest's are xs:ID values of one document, so a resource named as its manifest breaks DocumentId key, which ranks first, and the database names document-key: the law is shadowed (lane OL's finding)",
   "MathML align first": "its mutation is not written yet",
@@ -110,15 +108,10 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "MathML share cycle": "its mutation is not written yet",
   "N2 mirrors":
     "each of xdm.ts's mirror corruptions (gap, duplicateSlot, countOffByOne) also leaves a family's last slot unread, which N7 last slot (union-count) refuses ahead of reachability; folds.test.ts holds each variant to its law",
-  "N7 Last": "its mutation is not written yet",
-  "Namespace name": "its mutation is not written yet",
   "Node key":
     "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.test.ts holds the variant to its law",
-  "SSML lexicon reference": "its mutation is not written yet",
-  "SSML trim mark": "its mutation is not written yet",
   "T2 root":
     "a second self-parented root also breaks E1's derived fields, which rank ahead of reachability; folds.test.ts holds the variant to its law",
-  "default hotspot last slot": "its mutation is not written yet",
 };
 
 /**

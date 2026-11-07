@@ -66,6 +66,7 @@ const lawKinds = {
   coverage: true,
   family: true,
   fold: true,
+  generated: true,
   key: true,
   pattern: true,
   primaryKey: true,

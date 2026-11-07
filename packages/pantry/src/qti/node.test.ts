@@ -254,10 +254,8 @@ describe("Node's declarations", () => {
       { ...leaf, children: [leaf], document: someId, kind: "document", state: "0" },
     ]);
     const refused = () => [
-      ChangeSet.empty(Scratch).insert(Node, [
-        // @ts-expect-error -- The root names the root field: its own id.
-        { ...leaf },
-      ]),
+      // @ts-expect-error -- The root names the root field: its own id.
+      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf }]),
       // @ts-expect-error -- A slot is drawn by grizzle from the nesting.
       ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, at: 0n, document: someId }]),
       // @ts-expect-error -- The predecessor's state is filled by grizzle along its axis.

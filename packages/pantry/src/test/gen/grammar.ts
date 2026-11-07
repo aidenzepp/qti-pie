@@ -18,6 +18,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import type { Gen } from "@grizzle/testing/gen";
 import type { AdmittedChild } from "#pantry/grammar/admission.ts";
+import type { DomainReader } from "#pantry/grammar/attributes.ts";
 import { compose } from "#pantry/grammar/compose.ts";
 import type { ComposeError, Grammar, Vocabulary } from "#pantry/grammar/compose.ts";
 import { noFacets } from "#pantry/grammar/facets.ts";
@@ -1230,11 +1231,15 @@ export const toyVocabulary = <const K extends string, const D extends string>(in
  * Compose a toy vocabulary list.
  *
  * @param list - The vocabularies.
+ * @param readDomain - The reader its attributes' domains are read through, which a test that
+ *   composes many toy lists shares among them, so the document layer's definitions, the same in
+ *   every one, compile once (`#pantry/grammar/attributes.ts`, `domainReader`).
  * @returns The grammar, or the first generator's refusal.
  */
 export const toyGrammar = <const V extends readonly Vocabulary[]>(
   list: V,
-): Result.Result<Grammar<KindOf<V>, NameOf<V>>, ComposeError> => compose(list);
+  readDomain?: DomainReader,
+): Result.Result<Grammar<KindOf<V>, NameOf<V>>, ComposeError> => compose(list, readDomain);
 
 /**
  * The source of a toy model and its particles, once per version: a toy cites no XSD.

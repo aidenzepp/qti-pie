@@ -46,6 +46,7 @@ import type {
   AttributeGrammar,
   AttributeGrammarError,
   Declared,
+  DomainReader,
   GovernedDeclared,
   Governor,
 } from "#pantry/grammar/attributes.ts";
@@ -642,10 +643,14 @@ const typeNamespaceOf = (type: string): string =>
  * counts the work. Production's list is composed once per process, through {@link composed}.
  *
  * @param list - The vocabularies, in composition order.
+ * @param readDomain - The reader its attributes' domains are read through, when its caller shares
+ *   one among compositions (`#pantry/grammar/attributes.ts`, `domainReader`); a reader of its own
+ *   otherwise.
  * @returns The grammar, or the first generator's refusal.
  */
 export const compose = <const V extends readonly Vocabulary[]>(
   list: V,
+  readDomain?: DomainReader,
 ): Result.Result<Grammar<KindOf<V>, NameOf<V>>, ComposeError> =>
   Result.gen(function* composeGrammar() {
     compositions.publish(list);
@@ -742,16 +747,19 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const governingTexts = governingTextsOf(
       new Set(list.flatMap(({ namespace }) => (namespace === "" ? [] : [namespace]))),
     );
-    const attributes = yield* generateAttributes({
-      declarations: [...declarations, ...layerOf(kinds, declared, declaresId)],
-      ...governedOf(kinds, xsi, governingTexts),
-      kinds: kinds.nodeKind,
-      names: kinds.attributeName,
-      texts: textTypes.filter(({ kind }) => kinds.nodeKind.has(kind)),
-      typeName: xsi.typeName,
-      typeTexts: governingTexts,
-      versions: kinds.versions,
-    });
+    const attributes = yield* generateAttributes(
+      {
+        declarations: [...declarations, ...layerOf(kinds, declared, declaresId)],
+        ...governedOf(kinds, xsi, governingTexts),
+        kinds: kinds.nodeKind,
+        names: kinds.attributeName,
+        texts: textTypes.filter(({ kind }) => kinds.nodeKind.has(kind)),
+        typeName: xsi.typeName,
+        typeTexts: governingTexts,
+        versions: kinds.versions,
+      },
+      readDomain,
+    );
     const namespaces = [
       ...new Set(list.flatMap(({ namespace }) => (namespace === "" ? [] : [namespace]))),
     ];

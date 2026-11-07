@@ -7,6 +7,7 @@ import { NAME_CHAR, NAME_START, lexProlog, substitute } from "#crust/dtd.ts";
 import type { AttlistEntry, Prolog, Substituted } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import { rebuild } from "#crust/rebuild.ts";
+import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
 import type {
   Attribute,
   AttributeReference,
@@ -44,14 +45,6 @@ interface Built {
 }
 
 /**
- * The first and last code points of the private use area, where an undeclared entity reference
- * borrows a stand-in character (6,400 of them).
- */
-const SENTINEL_FIRST = 0xe0_00;
-
-const SENTINEL_LAST = 0xf8_ff;
-
-/**
  * What the undeclared-reference scan stops at, in document order: a comment, a processing
  * instruction or a CDATA section (skipped whole), a character reference (its value group), or a
  * general entity reference (its name group).
@@ -81,14 +74,7 @@ interface Scanned {
  */
 const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Scanned => {
   const names = new Set<string>();
-  const used = new Set<number>();
-  for (const character of body) {
-    const point = character.codePointAt(0) ?? 0;
-    if (point >= SENTINEL_FIRST && point <= SENTINEL_LAST) {
-      used.add(point);
-    }
-  }
-
+  const used = sentinelsWritten(body);
   for (const match of body.matchAll(SCAN)) {
     const { decimal, hex, name } = match.groups ?? {};
     if (name !== undefined && !PREDEFINED.has(name) && !declared.has(name)) {
