@@ -194,11 +194,13 @@ const passageItemXml = (identifier: string): string =>
   ].join("");
 
 /**
- * One test part of a hand-built test: its modes, the attributes of its item session control, and
- * the item refs its one section holds.
+ * One test part of a hand-built test: its modes, the attributes of its item session control, the
+ * item refs its one section holds, and the text of the template defaults an item ref holds, by its
+ * identifier, none by default.
  */
 interface BuiltPart {
   readonly control: string;
+  readonly defaults?: Readonly<Record<string, string>>;
   readonly identifier: string;
   readonly navigation: "linear" | "nonlinear";
   readonly refs: readonly string[];
@@ -268,9 +270,13 @@ const testXml = (
           ? [
               `<qti-assessment-section-ref identifier="${part.identifier}-elsewhere" href="elsewhere.xml"/>`,
             ]
-          : part.refs.map(
-              (ref) => `<qti-assessment-item-ref identifier="${ref}" href="${ref}.xml"/>`,
-            )),
+          : part.refs.map((ref) => {
+              const defaults = part.defaults?.[ref];
+
+              return defaults === undefined
+                ? `<qti-assessment-item-ref identifier="${ref}" href="${ref}.xml"/>`
+                : `<qti-assessment-item-ref identifier="${ref}" href="${ref}.xml">${defaults}</qti-assessment-item-ref>`;
+            })),
         "</qti-assessment-section></qti-test-part>",
       ].join(""),
     ),
@@ -428,7 +434,7 @@ const shown = (
   sequenceIndex: number,
   now: Date,
 ): TestSession => ({
-  ...accepted(present(delivery.items, session, sequenceIndex, now)),
+  ...accepted(present(delivery.test.test, delivery.items, session, sequenceIndex, now)),
   position: sequenceIndex - 1,
 });
 
@@ -1897,6 +1903,63 @@ describe("outcome processing in a session", () => {
             : [],
           ["record", "SCORE", "outcome"],
         );
+      }),
+  );
+});
+
+describe("a linear item ref's template defaults at a part's end", () => {
+  it.effect(
+    "[T-9] applies the template default of the next linear part's first item when endPart presents it, reading the test outcome a submission's run set",
+    () =>
+      Effect.gen(function* appliesAtPartEnd() {
+        const delivery = yield* builtDelivery(
+          "defaulted",
+          [
+            partOf("first", ["one"], { navigation: "linear" }),
+            partOf("second", ["two"], {
+              defaults: {
+                two: '<qti-template-default template-identifier="T"><qti-variable identifier="TOTAL"/></qti-template-default>',
+              },
+              navigation: "linear",
+            }),
+          ],
+          [
+            ["one", choiceItemXml("one")],
+            [
+              "two",
+              [
+                '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="two" title="two" adaptive="false" time-dependent="false">',
+                '<qti-template-declaration identifier="T" cardinality="single" base-type="float"/>',
+                "<qti-item-body><p>Read this passage.</p></qti-item-body></qti-assessment-item>",
+              ].join(""),
+            ],
+          ],
+          {
+            declarations:
+              '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/>',
+            rules:
+              '<qti-set-outcome-value identifier="TOTAL"><qti-sum><qti-test-variables variable-identifier="SCORE"/></qti-sum></qti-set-outcome-value>',
+          },
+        );
+        const session = seeded(delivery, defaults);
+        const submitted = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            session,
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            defaults,
+            { now: after(5) },
+          ),
+        );
+        const ended = accepted(
+          endPart(delivery.test, delivery.items, submitted, stepOf("end-part"), { now: after(6) }),
+        );
+
+        assert.deepStrictEqual(session.outcomes, { TOTAL: scored(0) });
+        assert.deepStrictEqual(submitted.outcomes, { TOTAL: scored(1) });
+        assert.strictEqual(ended.position, 1);
+        assert.deepStrictEqual(itemAt(ended, 2).record.templates, { T: scored(1) });
       }),
   );
 });

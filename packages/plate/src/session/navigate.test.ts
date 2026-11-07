@@ -3,6 +3,7 @@ import { Effect, Option, Result } from "effect";
 import { decodeSession, encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { move, moveTarget } from "#plate/session/navigate.ts";
@@ -16,6 +17,7 @@ import type {
   ItemView,
   TestNotDeliverable,
 } from "#plate/session/start.ts";
+import { integer } from "#plate/test/fixtures.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -339,7 +341,12 @@ const withAttempt = (session: TestSession, sequenceIndex: number): TestSession =
 const outcome = (
   result: Result.Result<
     number,
-    InvalidTime | ItemNotInSession | MoveRefused | TestNotDeliverable | UnknownItemRef
+    | EngineFailure
+    | InvalidTime
+    | ItemNotInSession
+    | MoveRefused
+    | TestNotDeliverable
+    | UnknownItemRef
   >,
 ): string =>
   Result.match(result, {
@@ -662,5 +669,126 @@ describe("moveTarget", () => {
         ["item 3", "item 1", "item 3", "refused out-of-range"],
       );
     }),
+  );
+});
+
+/**
+ * Write the text of a hand-built item that a test's template default sets: the single integer
+ * outcome `POINTS` and the single integer template variable `T`, which declares the default 3. Its
+ * body is a passage.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const scoredItemXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-outcome-declaration identifier="POINTS" cardinality="single" base-type="integer"/>',
+    '<qti-template-declaration identifier="T" cardinality="single" base-type="integer">',
+    "<qti-default-value><qti-value>3</qti-value></qti-default-value></qti-template-declaration>",
+    "<qti-item-body><p>Read this passage.</p></qti-item-body></qti-assessment-item>",
+  ].join("");
+
+/**
+ * Open a hand-built linear, individual test of the items `one` and `two`, each through `open` on
+ * its own and never as a package, whose item ref `two` sets `T` to `one.POINTS`.
+ *
+ * @returns The test and its items.
+ */
+const defaultedDelivery = Effect.fnUntraced(function* defaultedDelivery() {
+  const encoder = new TextEncoder();
+  const test = yield* openTest(
+    "tests/defaulted.xml",
+    encoder.encode(
+      [
+        '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="defaulted" title="defaulted">',
+        '<qti-test-part identifier="part" navigation-mode="linear" submission-mode="individual">',
+        '<qti-assessment-section identifier="section" title="Section" visible="true">',
+        '<qti-assessment-item-ref identifier="one" href="one.xml"/>',
+        '<qti-assessment-item-ref identifier="two" href="two.xml">',
+        '<qti-template-default template-identifier="T"><qti-variable identifier="one.POINTS"/></qti-template-default>',
+        "</qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>",
+      ].join(""),
+    ),
+  );
+  const items = new Map<string, Accepted>();
+  for (const ref of ["one", "two"]) {
+    items.set(ref, yield* openItem(`tests/${ref}.xml`, encoder.encode(scoredItemXml(ref))));
+  }
+
+  return { items, test } satisfies Delivery;
+});
+
+/**
+ * Give a session whose item 1 has a processed attempt that left its outcomes as given, as a
+ * submission and the host's storage leave it.
+ *
+ * @param session The session.
+ * @param outcomes Item 1's outcomes.
+ * @returns The session.
+ */
+const scoredFirst = (
+  session: TestSession,
+  outcomes: Readonly<Record<string, Value>>,
+): TestSession => ({
+  ...session,
+  items: session.items.map((item) =>
+    item.sequenceIndex === 1
+      ? { ...item, record: { ...item.record, numAttempts: 1, outcomes } }
+      : item,
+  ),
+});
+
+describe("move and a linear item ref's template defaults", () => {
+  it.effect(
+    "[T-9] applies the template default of the item next reaches in a linear part, reading the item before it through a prefixed name",
+    () =>
+      Effect.gen(function* appliesOnMove() {
+        const delivery = yield* defaultedDelivery();
+        const session = started(delivery, yield* configure({}));
+        const first = session.items[0] ?? assert.fail("the session has no item 1");
+        const reached = moved(
+          delivery,
+          scoredFirst(session, { ...first.record.outcomes, POINTS: integer(4n) }),
+          { intent: next },
+          after(1000),
+        );
+
+        assert.deepStrictEqual(session.items[1]?.record.templates, {});
+        assert.deepStrictEqual(reached.items[1]?.record.templates, { T: integer(4n) });
+        assert.strictEqual(reached.position, 1);
+      }),
+  );
+
+  it.effect(
+    "[T-9] returns move's UnknownIdentifierError, never a throw, for a test checked apart whose stored session's record lacks the outcome a later default reads",
+    () =>
+      Effect.gen(function* gapOnMove() {
+        const delivery = yield* defaultedDelivery();
+        const session = started(delivery, yield* configure({}));
+        const { POINTS: _points, ...outcomes } = (
+          session.items[0] ?? assert.fail("the session has no item 1")
+        ).record.outcomes;
+
+        const failure = Option.getOrElse(
+          Result.getFailure(
+            move(
+              delivery.test,
+              delivery.items,
+              scoredFirst(session, outcomes),
+              { intent: next },
+              after(1000),
+            ),
+          ),
+          () => assert.fail("expected the move to fail, and it moved"),
+        );
+
+        assert.deepStrictEqual(
+          failure._tag === "UnknownIdentifierError"
+            ? [failure.holder, failure.identifier, failure.role]
+            : assert.fail(`expected UnknownIdentifierError, not ${failure._tag}`),
+          ["record", "POINTS", "outcome"],
+        );
+      }),
   );
 });
