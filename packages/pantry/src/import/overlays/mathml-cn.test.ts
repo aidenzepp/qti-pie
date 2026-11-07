@@ -146,6 +146,91 @@ const keysOf = (rows: ReadonlyMap<string, unknown>): readonly string[] =>
   [...rows.keys()].toSorted();
 
 describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
+  it("gives a base-40 rational of three parts a shape and three slots, and no MathCn or CnPartText", () => {
+    // Nodes: 0 document, 1 math, 2 cn, 3 text, 4 sep, 5 text, 6 sep, 7 text.
+    const rows = rowsOf(
+      documentOf(
+        elementOf("m:math", [
+          elementOf(
+            "m:cn",
+            [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
+            [attributeOf("type", "rational"), attributeOf("base", "40")],
+          ),
+        ]),
+      ),
+      ids,
+    );
+
+    assert.deepStrictEqual(keysOf(rows.CnCount), [idOf(2)]);
+    assert.deepStrictEqual(rows.CnCount.get(idOf(2)), {
+      node: idOf(2),
+      type: "rational",
+      typeLexical: "rational",
+    });
+    assert.deepStrictEqual(keysOf(rows.CnSlot), [partKey(2, 0), partKey(2, 1), partKey(2, 2)]);
+    assert.deepStrictEqual(rows.CnSlot.get(partKey(2, 1)), {
+      form: "integer",
+      node: idOf(2),
+      part: "1",
+      type: "rational",
+    });
+    assert.strictEqual(rows.CnSlot.get(partKey(2, 2))?.form, "real");
+    assert.deepStrictEqual(keysOf(rows.MathCn), []);
+    assert.deepStrictEqual(keysOf(rows.CnPartText), []);
+  });
+
+  it("gives a cn with an mglyph part its slots, and a cn of a type no form lists none", () => {
+    // Nodes: 0 document, 1 math, 2 cn, 3 mglyph, 4 sep, 5 text; 6 cn, 7 text.
+    const rows = rowsOf(
+      documentOf(
+        elementOf("m:math", [
+          elementOf(
+            "m:cn",
+            [elementOf("m:mglyph"), elementOf("m:sep"), text("2")],
+            [attributeOf("type", "rational")],
+          ),
+          elementOf("m:cn", [text("x")], [attributeOf("type", "constant")]),
+        ]),
+      ),
+      ids,
+    );
+
+    assert.deepStrictEqual(keysOf(rows.CnCount), [idOf(2)]);
+    assert.deepStrictEqual(keysOf(rows.CnSlot), [partKey(2, 0), partKey(2, 1)]);
+    assert.deepStrictEqual(keysOf(rows.MathCn), []);
+  });
+
+  it("gives every cn of a listed type a shape and its slots, whatever its base, and writes the slots as the parts are", () => {
+    // Nodes: 0 document, 1 math, 2 cn (no base), 3 text; 4 cn (base 37), 5 text; 6 cn (empty
+    // base), 7 text; 8 cn (rational surplus of three), 9 text, 10 sep, 11 text, 12 sep, 13 text.
+    const rows = rowsOf(
+      documentOf(
+        elementOf("m:math", [
+          elementOf("m:cn", [text("1")]),
+          elementOf("m:cn", [text("1")], [attributeOf("base", "37")]),
+          elementOf("m:cn", [text("1")], [attributeOf("base", "")]),
+          elementOf(
+            "m:cn",
+            [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
+            [attributeOf("type", "rational")],
+          ),
+        ]),
+      ),
+      ids,
+    );
+
+    assert.deepStrictEqual(keysOf(rows.CnCount), [idOf(2), idOf(4), idOf(6), idOf(8)]);
+    assert.deepStrictEqual(keysOf(rows.CnSlot), [
+      partKey(2, 0),
+      partKey(4, 0),
+      partKey(6, 0),
+      partKey(8, 0),
+      partKey(8, 1),
+      partKey(8, 2),
+    ]);
+    assert.deepStrictEqual(keysOf(rows.MathCn), [idOf(2), idOf(8)]);
+  });
+
   it("gives a rational cn one MathCn row and two integer parts, split at its sep", () => {
     // Nodes: 0 document, 1 math, 2 cn, 3 text, 4 sep, 5 text.
     const rows = rowsOf(

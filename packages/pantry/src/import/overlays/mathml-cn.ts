@@ -17,6 +17,15 @@
  *   judged. A part beyond the places its type lists is written at its place, up to the one place no
  *   type lists, under the form `real`, which `CnForm` does not list for it, so the database refuses
  *   a `cn` with more parts than its type lists; a later part adds nothing, as the refusal is made.
+ * - **`CnCount`**, one row for every `m:cn` whose `type` {@link cnForms} lists (`real` where it
+ *   writes none), whatever its `base` and whatever its parts hold: its node, its `type` and the
+ *   lexical form of its `type` attribute (empty where it writes none). `CnCount.parts` is drawn by
+ *   the database from the slot rows, so no row carries it.
+ * - **`CnSlot`**, one row for every part of such a `cn`, judged or not, at its place as `CnPartText`
+ *   places parts (up to the one place no type lists), with the `type` of its `cn` and the form
+ *   {@link cnForms} gives its place. A `cn` of a `base` outside the radixes, or with a part that
+ *   holds an element or an entity reference, has these rows and no `MathCn` or `CnPartText`, so the
+ *   database counts its parts and judges none of its digits.
  * - **`CnAttribute`**, one row for every `type` and every `base` an `m:cn` writes, whatever its type
  *   and whether or not it is judged: the node, the attribute's name and its lexical form as
  *   written. A `type` on another element has no row.
@@ -33,16 +42,18 @@ import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import type { CnAttribute, CnPartText, MathCn } from "#pantry/qti/mathml-cn.ts";
+import type { CnAttribute, CnPartText, CnCount, CnSlot, MathCn } from "#pantry/qti/mathml-cn.ts";
 
 /**
  * A document's cn rows, one keyed set per relation: a `CnAttribute` row by the JSON of its node's
- * id and its name, a `MathCn` row by its node's id, a `CnPartText` row by the JSON of its node's id
- * and its part.
+ * id and its name, a `MathCn` row and a `CnCount` row by its node's id, a `CnPartText` row and a
+ * `CnSlot` row by the JSON of its node's id and its part.
  */
 export interface MathmlCnRows {
   readonly CnAttribute: ReadonlyMap<string, Addition<typeof CnAttribute>>;
   readonly CnPartText: ReadonlyMap<string, Addition<typeof CnPartText>>;
+  readonly CnCount: ReadonlyMap<string, Addition<typeof CnCount>>;
+  readonly CnSlot: ReadonlyMap<string, Addition<typeof CnSlot>>;
   readonly MathCn: ReadonlyMap<string, Addition<typeof MathCn>>;
 }
 
@@ -133,33 +144,100 @@ const stretchesOf = (
 const judgedAttributes: ReadonlySet<string> = new Set(["type", "base"]);
 
 /**
- * The type and radix a `cn` is judged under, and the form of each place of its parts.
+ * The type a `cn` is counted under, and the form of each place of its parts.
  */
-interface Judgement {
-  readonly base: string;
-  readonly baseLexical: string;
+interface Typed {
   readonly forms: readonly CnForm[];
   readonly type: string;
   readonly typeLexical: string;
 }
 
 /**
- * Judge a `cn` from the attributes it writes.
+ * The type and radix a `cn` is judged under, and the form of each place of its parts.
+ */
+interface Judgement extends Typed {
+  readonly base: string;
+  readonly baseLexical: string;
+}
+
+/**
+ * Read the type a `cn` is counted under from the attributes it writes.
  *
  * @param values - The lexical forms of its `type` and `base`, where it writes them.
- * @returns What it is judged under, or nothing when its `type` is no listed one or its `base` no
- *   radix.
+ * @returns What it is counted under, or nothing when its `type` is no listed one.
  */
-const judgementOf = (values: ReadonlyMap<string, string> | undefined): Judgement | undefined => {
+const typedOf = (values: ReadonlyMap<string, string> | undefined): Typed | undefined => {
   const typeLexical = values?.get("type");
-  const baseLexical = values?.get("base");
   const type = typeLexical === undefined ? cnDefaultType : collapse(typeLexical);
-  const base = baseLexical === undefined ? defaultBase : radixOf(baseLexical);
   const forms = cnForms.get(type);
 
-  return forms === undefined || base === undefined
-    ? undefined
-    : { base, baseLexical: baseLexical ?? "", forms, type, typeLexical: typeLexical ?? "" };
+  return forms === undefined ? undefined : { forms, type, typeLexical: typeLexical ?? "" };
+};
+
+/**
+ * Judge a `cn` whose type is counted from the radix it writes.
+ *
+ * @param typed - What the `cn` is counted under.
+ * @param values - The lexical forms of its `type` and `base`, where it writes them.
+ * @returns What it is judged under, or nothing when its `base` is no radix.
+ */
+const judgementOf = (
+  typed: Typed,
+  values: ReadonlyMap<string, string> | undefined,
+): Judgement | undefined => {
+  const baseLexical = values?.get("base");
+  const base = baseLexical === undefined ? defaultBase : radixOf(baseLexical);
+
+  return base === undefined ? undefined : { ...typed, base, baseLexical: baseLexical ?? "" };
+};
+
+/**
+ * Write the rows of one `cn` of a listed type: its count and a slot for each of its parts, whatever
+ * its base and whatever its parts hold, and, where its base is a radix and no part holds an element
+ * or an entity reference, its judged row and a text row for each part.
+ *
+ * @param rows - The rows of the document, which the `cn`'s are added to.
+ * @param node - The `cn`'s id.
+ * @param typed - What the `cn` is counted under.
+ * @param values - The lexical forms of its `type` and `base`, where it writes them.
+ * @param stretches - The stretches of its content.
+ */
+const writeCn = (
+  rows: {
+    readonly CnCount: Map<string, Addition<typeof CnCount>>;
+    readonly CnPartText: Map<string, Addition<typeof CnPartText>>;
+    readonly CnSlot: Map<string, Addition<typeof CnSlot>>;
+    readonly MathCn: Map<string, Addition<typeof MathCn>>;
+  },
+  node: NodeId,
+  typed: Typed,
+  values: ReadonlyMap<string, string> | undefined,
+  stretches: readonly Stretch[],
+): void => {
+  const { forms, type, typeLexical } = typed;
+  const placed = stretches.slice(0, places.size);
+  rows.CnCount.set(node, { node, type, typeLexical });
+  for (const [at] of placed.entries()) {
+    rows.CnSlot.set(partKey(node, at), { form: forms[at] ?? "real", node, part: String(at), type });
+  }
+
+  const judgement = judgementOf(typed, values);
+  if (judgement === undefined || stretches.some(({ judged }) => !judged)) {
+    return;
+  }
+
+  const { base, baseLexical } = judgement;
+  rows.MathCn.set(node, { base, baseLexical, node, type, typeLexical });
+  for (const [at, { text }] of placed.entries()) {
+    rows.CnPartText.set(partKey(node, at), {
+      base,
+      form: forms[at] ?? "real",
+      node,
+      part: String(at),
+      text: collapse(text),
+      type,
+    });
+  }
 };
 
 /**
@@ -208,28 +286,20 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: Pick<NodeIds, "idOf">):
     }
   }
 
-  const cns = new Map<string, Addition<typeof MathCn>>();
-  const parts = new Map<string, Addition<typeof CnPartText>>();
+  const rows = {
+    CnAttribute: attributes,
+    CnCount: new Map<string, Addition<typeof CnCount>>(),
+    CnPartText: new Map<string, Addition<typeof CnPartText>>(),
+    CnSlot: new Map<string, Addition<typeof CnSlot>>(),
+    MathCn: new Map<string, Addition<typeof MathCn>>(),
+  } satisfies MathmlCnRows;
   for (const node of flat.nodes) {
-    const judgement = node.kind === "m:cn" ? judgementOf(written.get(node.id)) : undefined;
-    const stretches = stretchesOf(childrenOf.get(node.id) ?? [], textOf);
-    if (judgement === undefined || stretches.some(({ judged }) => !judged)) {
-      continue;
-    }
-
-    const { base, baseLexical, forms, type, typeLexical } = judgement;
-    cns.set(node.id, { base, baseLexical, node: node.id, type, typeLexical });
-    for (const [at, { text }] of stretches.slice(0, places.size).entries()) {
-      parts.set(partKey(node.id, at), {
-        base,
-        form: forms[at] ?? "real",
-        node: node.id,
-        part: String(at),
-        text: collapse(text),
-        type,
-      });
+    const values = written.get(node.id);
+    const typed = node.kind === "m:cn" ? typedOf(values) : undefined;
+    if (typed !== undefined) {
+      writeCn(rows, node.id, typed, values, stretchesOf(childrenOf.get(node.id) ?? [], textOf));
     }
   }
 
-  return { CnAttribute: attributes, CnPartText: parts, MathCn: cns };
+  return rows;
 };
