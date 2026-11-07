@@ -1,4 +1,6 @@
-import type { Attribute, Child, Element, Misc, XmlDocument } from "#crust/tree.ts";
+import { tour } from "#crust/tour.ts";
+import type { Leaf } from "#crust/tour.ts";
+import type { Attribute, Element, Misc, XmlDocument } from "#crust/tree.ts";
 
 /**
  * The namespace name that every namespace declaration's attribute is in.
@@ -120,30 +122,65 @@ const renderMisc = (item: Misc): string =>
     : `<?${item.target}${item.data === "" ? "" : ` ${item.data}`}?>`;
 
 /**
+ * Render a node that holds no other node: a text run escaped, an entity reference as `&name;`, or
+ * a comment or a processing instruction.
+ *
+ * @param node - The node to render.
+ * @returns The node's canonical form.
+ */
+const renderLeaf = (node: Leaf): string => {
+  if (node.kind === "text") {
+    return escapeText(node.value);
+  }
+
+  if (node.kind === "entityRef") {
+    return `&${node.name};`;
+  }
+
+  return renderMisc(node);
+};
+
+/**
+ * The scope above the root element: the `xml` prefix, which Namespaces in XML 1.0 section 3 binds
+ * to its namespace by definition, and nothing else. So an element's written declaration of `xml`
+ * to that name gives no name its parent's scope lacks, and is never rendered, as Canonical XML 1.0
+ * section 2.3 omits the namespace node "with local name xml, which defines the xml prefix, if its
+ * string value is http://www.w3.org/XML/1998/namespace".
+ */
+const outermost: Scope = new Map([["xml", "http://www.w3.org/XML/1998/namespace"]]);
+
+/**
  * Render an element, its namespace axis, its attribute axis and its children, always with a
  * separate end tag.
+ *
+ * The element is rendered by its {@link tour}, so a tree of any depth or width renders without
+ * recursion. Each open pushes the scope the element makes and each close pops it, so every element
+ * renders its namespace axis against the scope its parent makes; opens and closes pair, so the
+ * stack holds the outermost scope at every step.
+ *
+ * @param root - The element to render.
+ * @returns The element's canonical form.
  */
-const renderElement = (element: Element, parent: Scope): string => {
-  const scope = scopeOf(element, parent);
-  const children = element.children
-    .map((child: Child): string => {
-      if (child.kind === "element") {
-        return renderElement(child, scope);
-      }
+const renderElement = (root: Element): string => {
+  const rendered: string[] = [];
+  const scopes: Scope[] = [outermost];
+  for (const step of tour(root)) {
+    if (step.kind === "leaf") {
+      rendered.push(renderLeaf(step.node));
+    } else if (step.kind === "close") {
+      scopes.pop();
+      rendered.push(`</${step.element.qname}>`);
+    } else {
+      const parent = scopes.at(-1) ?? outermost;
+      const scope = scopeOf(step.element, parent);
+      scopes.push(scope);
+      rendered.push(
+        `<${step.element.qname}${renderNamespaces(scope, parent)}${renderAttributes(step.element)}>`,
+      );
+    }
+  }
 
-      if (child.kind === "text") {
-        return escapeText(child.value);
-      }
-
-      if (child.kind === "entityRef") {
-        return `&${child.name};`;
-      }
-
-      return renderMisc(child);
-    })
-    .join("");
-
-  return `<${element.qname}${renderNamespaces(scope, parent)}${renderAttributes(element)}>${children}</${element.qname}>`;
+  return rendered.join("");
 };
 
 /**
@@ -161,5 +198,5 @@ export const canonicalize = (doc: XmlDocument): Uint8Array => {
   const prolog = doc.prolog.map((item) => `${renderMisc(item)}\n`).join("");
   const epilog = doc.epilog.map((item) => `\n${renderMisc(item)}`).join("");
 
-  return new TextEncoder().encode(`${prolog}${renderElement(doc.root, new Map())}${epilog}`);
+  return new TextEncoder().encode(`${prolog}${renderElement(doc.root)}${epilog}`);
 };

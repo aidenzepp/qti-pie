@@ -3,13 +3,17 @@ packages:
 
 # grizzle is not on npm yet. Its tarballs are packed from a local clone; see vendor/README.md.
 # The grizzle tarball depends on the engine by version, so the override points that version at its tarball.
+# The testing tarball depends on typescript 7.1.0-beta, and Vite+'s core, its vite by the vite override, takes
+# typescript as an optional peer. Overriding typescript everywhere to the root's 7.0.2 keeps one TypeScript, one
+# Vite+ core, and one Vitest.
 overrides:
   "@bjornpagen/grizzle-engine": file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz
-  vite: npm:@voidzero-dev/vite-plus-core@1.0.0
+  typescript: 7.0.2
+  vite: npm:@voidzero-dev/vite-plus-core@1.5.0
   # plate passes the Playwright provider to Vitest in its own config, so this keeps a single vitest copy.
   "vitest>@vitest/browser-playwright": "-"
 
-# The vite override above is Vite+'s own core, which reports version 1.0.0 to its bundled Vitest.
+# The vite override above is Vite+'s own core, which reports its own version to its bundled Vitest.
 peerDependencyRules:
   allowedVersions:
-    vite: 1.0.0
+    vite: 1.5.0

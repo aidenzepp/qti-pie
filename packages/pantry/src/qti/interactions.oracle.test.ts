@@ -1,0 +1,350 @@
+/**
+ * The O3 overlays' free tests: their statements are composed into `Qti`, each check is named by an
+ * oracle law, and the closed data the laws read is the grammar's: the built-in variables, the
+ * content references, the last-slot rules, the count pairs and the attributes copied.
+ *
+ * The database tests (`interactions.db.test.ts`) judge the laws through PostgreSQL; the builder's
+ * tests (`#pantry/import/overlays/interactions.oracle.test.ts`) check its rows.
+ */
+import type { Statement } from "@bjornpagen/grizzle";
+import { NodeServices } from "@effect/platform-node";
+import { assert, describe, it } from "@effect/vitest";
+import { Effect, Option } from "effect";
+import { inject } from "vitest";
+import {
+  BindingFit,
+  BuiltInVariable,
+  ChoiceBound,
+  ContentReference,
+  grammar,
+  interactionKinds,
+  RecordBindingFit,
+  versions,
+} from "#pantry/grammar/install.ts";
+import {
+  anyTypeKinds,
+  builtIns,
+  cardinalityKinds,
+  choiceKinds,
+  countDefault,
+  hotspotKinds,
+  interactionLaws,
+  interactionRelations,
+  readAttributes,
+  references,
+} from "#pantry/qti/interactions.ts";
+import { Qti } from "#pantry/qti/schema.ts";
+import { readPackage } from "#pantry/package/read.ts";
+import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+
+/**
+ * The fixtures the global setup materializes: `simple` among them.
+ */
+const fixtures = inject("fixtures");
+
+/**
+ * The law oracle's tables, derived once.
+ */
+const oracleLaws = lawsOf(grammar);
+
+/**
+ * The law each content reference relation states for a name that resolves to no allowed variable,
+ * by the relation's key in `references`.
+ */
+const referenceLaws = {
+  context: "Context variable reference",
+  feedback: "Feedback reference",
+  printed: "Printed variable reference",
+  template: "Template reference",
+  variable: "Printed variable reference",
+} as const satisfies Readonly<Record<keyof typeof references, string>>;
+
+/**
+ * The content reference relations, by their keys in `references`.
+ */
+const referenceRelations = [
+  "context",
+  "feedback",
+  "printed",
+  "template",
+  "variable",
+] as const satisfies readonly (keyof typeof references)[];
+
+describe("qti/interactions.ts, declared", () => {
+  it("is composed into Qti: every O3 overlay a member under its name, every statement once", () => {
+    // Oracle: grizzle's schema builder, which built `Qti` from these statements when
+    // `#pantry/qti/schema.ts` loaded and refuses a statement over a relation it does not hold.
+    for (const relation of Object.values(interactionRelations)) {
+      assert.strictEqual(
+        Object.getOwnPropertyDescriptor(Qti.relations, relation.name)?.value,
+        relation,
+      );
+    }
+
+    const statements: readonly Statement[] = Qti.statements;
+    assert.strictEqual(new Set(interactionLaws).size, interactionLaws.length);
+    for (const statement of interactionLaws) {
+      assert.strictEqual(statements.filter((held) => held === statement).length, 1);
+    }
+  });
+
+  it("names each check by an oracle law, spaces written as underscores, so ruleOf maps it", () => {
+    // Oracle: the oracle's own law list (`#pantry/test/oracle.ts` lawNames), the names Q5.17 maps.
+    const named = interactionLaws.flatMap((statement) =>
+      statement.kind === "check" ? [statement.name.replaceAll("_", " ")] : [],
+    );
+
+    for (const name of named) {
+      const law = lawNames.find((known) => known === name);
+
+      assert.isDefined(law, `${name} is no oracle law`);
+      if (law !== undefined) {
+        assert.isDefined(ruleOf(law), name);
+      }
+    }
+
+    assert.deepStrictEqual([...new Set(named)].toSorted(), [
+      "Aria value range",
+      "Binding declared",
+      "BindingFit",
+      "Choice bounds",
+      "Choice not variable",
+      "Context variable reference",
+      "E1 derived",
+      "Feedback outcome type",
+      "Feedback reference",
+      "Graphic gap match default hotspot",
+      "Printed variable reference",
+      "Slider bounds",
+      "Template reference",
+      "default hotspot last slot",
+    ]);
+  });
+});
+
+describe("qti/interactions.ts, the closed data its laws read", () => {
+  it("types every built-in variable BuiltInVariable holds, under the declaration kind it stands as", () => {
+    // Oracle: the closed relation itself, `BuiltInVariable`'s rows.
+    assert.deepStrictEqual(
+      builtIns.map(({ declaration, variable }) => `${variable} ${declaration}`).toSorted(),
+      BuiltInVariable.rows
+        .map(({ declaration, variable }) => `${variable} ${declaration}`)
+        .toSorted(),
+    );
+  });
+
+  it("holds every ContentReference row in exactly one reference relation, the one whose law the oracle names for it", () => {
+    // Oracle: the oracle's `contentLawOf`, the law a reference by (kind, attribute) breaks.
+    for (const { attribute, kind } of ContentReference.rows) {
+      const holders = referenceRelations.filter(
+        (relation) =>
+          references[relation].attributes.some((name) => name === attribute) &&
+          references[relation].kinds.some((holder) => holder === kind),
+      );
+
+      assert.strictEqual(holders.length, 1, `${kind} ${attribute}`);
+      for (const relation of holders) {
+        assert.isTrue(
+          Option.contains(contentLawOf(kind, attribute), referenceLaws[relation]),
+          `${kind} ${attribute}`,
+        );
+      }
+    }
+  });
+
+  it("reads every LastWhere rule over a shape of a hotspot kind under interactions, so Hotspot states each", () => {
+    // Oracle: the grammar's `lastWhere` rules, which the default-hotspot check is built from.
+    assert.isNotEmpty(grammar.lastWhere);
+    for (const { attribute, kind, parents } of grammar.lastWhere) {
+      assert.strictEqual(attribute, "shape", kind);
+      assert.include(hotspotKinds, kind);
+      for (const parent of parents) {
+        assert.include(interactionKinds, parent, kind);
+      }
+    }
+  });
+
+  it("holds every ChoiceBound kind an interaction or a choice, so a Binding or a Choice row brings its CountBound", () => {
+    // Oracle: the grammar's interaction roster and `choiceKinds`, against `ChoiceBound`'s rows.
+    for (const { kind } of ChoiceBound.rows) {
+      assert.isTrue(
+        interactionKinds.includes(kind) || choiceKinds.some((choice) => choice === kind),
+        kind,
+      );
+    }
+  });
+
+  it("reads reading 92's cardinality kinds' most count with an XSD default in every version, so the law reads a known most", () => {
+    // Oracle: the inventory leaf's attribute declarations, by way of `countDefault`, and
+    // `ChoiceBound`'s max attributes.
+    for (const kind of cardinalityKinds) {
+      const bound = ChoiceBound.rows.find((row) => row.kind === kind);
+
+      assert.isDefined(bound, kind);
+      assert.include(["max-choices", "max-associations"], bound?.max, kind);
+      for (const version of versions) {
+        assert.isTrue(
+          Option.isSome(countDefault(version, kind, bound?.max ?? "max-choices")),
+          kind,
+        );
+      }
+    }
+  });
+
+  it("copies only attributes the inventory declares on each kind they are read on", () => {
+    // Oracle: the inventory leaf's attribute declarations.
+    const declared = new Set(attributeDeclarations.map(({ kind, name }) => `${kind} ${name}`));
+    for (const [name, kinds] of readAttributes) {
+      for (const kind of kinds) {
+        assert.isTrue(declared.has(`${kind} ${name}`), `${kind} ${name}`);
+      }
+    }
+  });
+
+  it("lets the interactions no fit relation names bind any type, and no other", () => {
+    // Oracle: `BindingFit` and `RecordBindingFit`'s rows: the custom and portable custom
+    // interactions bind a response of any type (information model §5.36, §5.106).
+    assert.deepStrictEqual(
+      [...anyTypeKinds].toSorted(),
+      ["qti-custom-interaction", "qti-portable-custom-interaction"].toSorted(),
+    );
+    for (const kind of anyTypeKinds) {
+      assert.isFalse(
+        BindingFit.rows.some((row) => row.kind === kind),
+        kind,
+      );
+      assert.isFalse(
+        RecordBindingFit.rows.some((row) => row.kind === kind),
+        kind,
+      );
+    }
+  });
+});
+
+/**
+ * The `simple` fixture's item, the one document the reading-104 cases edit.
+ */
+const simpleItem = "choice.xml";
+
+/**
+ * A second choice interaction, bound to a declared response of its own, whose one simple choice is
+ * named as given: the item-wide scope's case and its control.
+ *
+ * @param identifier - The simple choice's identifier.
+ * @returns The interaction's markup.
+ */
+const secondInteraction = (identifier: string): string =>
+  `<qti-choice-interaction response-identifier="RESPONSE2" max-choices="1"><qti-simple-choice identifier="${identifier}">x</qti-simple-choice></qti-choice-interaction>`;
+
+/**
+ * The second interaction's response declaration.
+ */
+const secondDeclaration =
+  '<qti-response-declaration identifier="RESPONSE2" cardinality="single" base-type="identifier"/>';
+
+/**
+ * The reading-104 cases over the `simple` fixture's item: each edit, written as search and
+ * replacement pairs applied in order, and the laws of the two it must break.
+ */
+const choiceNameCases: readonly {
+  readonly breaks: readonly ("Choice identifier key" | "Choice not variable")[];
+  readonly edits: readonly (readonly [string, string])[];
+  readonly name: string;
+}[] = [
+  { breaks: [], edits: [], name: "the item as it is" },
+  {
+    breaks: ["Choice not variable"],
+    edits: [['identifier="ChoiceA"', 'identifier="SCORE"']],
+    name: "a choice named as the declared SCORE",
+  },
+  {
+    breaks: ["Choice not variable"],
+    edits: [['identifier="ChoiceA"', 'identifier=" RESPONSE "']],
+    name: "a choice named as the declared RESPONSE, padded",
+  },
+  {
+    breaks: ["Choice not variable"],
+    edits: [['identifier="ChoiceA"', 'identifier="numAttempts"']],
+    name: "a choice named as the built-in numAttempts",
+  },
+  {
+    breaks: ["Choice identifier key"],
+    edits: [['identifier="ChoiceB"', 'identifier="ChoiceA"']],
+    name: "two choices of one interaction named ChoiceA",
+  },
+  {
+    breaks: ["Choice identifier key"],
+    edits: [
+      ["</qti-choice-interaction>", `</qti-choice-interaction>${secondInteraction("ChoiceA")}`],
+      ["<qti-item-body>", `${secondDeclaration}<qti-item-body>`],
+    ],
+    name: "choices of two interactions named ChoiceA",
+  },
+  {
+    breaks: [],
+    edits: [
+      ["</qti-choice-interaction>", `</qti-choice-interaction>${secondInteraction("ChoiceZ")}`],
+      ["<qti-item-body>", `${secondDeclaration}<qti-item-body>`],
+    ],
+    name: "choices of two interactions named apart",
+  },
+  {
+    breaks: [],
+    edits: [
+      [
+        "</qti-choice-interaction>",
+        '</qti-choice-interaction><qti-hottext-interaction response-identifier="RESPONSE2" max-choices="1"><p><qti-hottext identifier="ChoiceA">x</qti-hottext></p></qti-hottext-interaction>',
+      ],
+      ["<qti-item-body>", `${secondDeclaration}<qti-item-body>`],
+    ],
+    name: "a hottext and a simple choice named ChoiceA, two classes",
+  },
+];
+
+describe("qti/interactions.ts, reading 104 by the law oracle", () => {
+  it.effect(
+    "breaks Choice not variable and Choice identifier key exactly where reading 104 says, over edits of simple's item",
+    () =>
+      // Oracle: the specification as a checker, reading 104 (§5.132.1, §5.65.1, §7.16, §2.2.2): a
+      // choice's identifier names one choice of its class in its document and no item variable,
+      // declared or built in; each case's expected laws are read off its edit.
+      // Bound: the `simple` fixture as it is and 7 edits of its item: a choice named as a declared
+      // outcome, a declared response padded and a built-in, two choices of one interaction and of
+      // two named alike, two interactions' choices named apart, and a hottext beside a simple
+      // choice of one name.
+      Effect.gen(function* choiceNames() {
+        const files = yield* readPackage(fixtures.simple);
+        for (const { breaks, edits, name } of choiceNameCases) {
+          const edited = files.map((file) => {
+            if (file.path !== simpleItem) {
+              return file;
+            }
+
+            let text = new TextDecoder().decode(file.bytes);
+            for (const [search, replacement] of edits) {
+              assert.include(text, search, `${name}: the item holds ${search}`);
+              text = text.replace(search, replacement);
+            }
+
+            return { ...file, bytes: new TextEncoder().encode(text) };
+          });
+          const judgment = yield* judge(edited, grammar, oracleLaws);
+          assert.strictEqual(judgment._tag, "Judged", name);
+
+          const found = judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : [];
+          assert.sameMembers(
+            [
+              ...new Set(
+                found.filter(
+                  (law) => law === "Choice identifier key" || law === "Choice not variable",
+                ),
+              ),
+            ],
+            [...breaks],
+            name,
+          );
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});

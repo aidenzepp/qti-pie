@@ -4,6 +4,7 @@
  */
 import { Config, Console, Effect, Option, Schema } from "effect";
 import { CliError, Flag, GlobalFlag } from "effect/cli";
+import { RefusedLaw, WitnessKind } from "#pantry/package/refusal-origin.ts";
 
 /**
  * The modes `--output` names, in the order the help lists them.
@@ -151,20 +152,50 @@ export const modeOfEnvironment = Effect.gen(function* resolveEnvironmentMode() {
 }).pipe(Effect.orElseSucceed(() => Option.none<OutputMode>()));
 
 /**
+ * One law the database refused an import under, as the error object names it: the refusal's own
+ * `RefusedLaw` (`#pantry/package/refusal-origin.ts`).
+ */
+export const ErrorLaw = RefusedLaw;
+
+/**
+ * One law of a refusal, as {@link ErrorLaw} reads it.
+ */
+export type LawFact = typeof ErrorLaw.Type;
+
+/**
+ * How a refusal the database gave names the row that broke its laws, as the error object prints
+ * it: the refusal's own `WitnessKind` (`#pantry/package/refusal-origin.ts`). `key` (grizzle's key
+ * witness) and `row` (a row the host located) name one in the message, and `unreported` names
+ * none, for a constraint PostgreSQL reports by its name alone.
+ */
+export const ErrorWitness = WitnessKind;
+
+/**
  * What a failure prints under `json` and `jsonl`: one line on standard error, in the shape of the
  * success envelope's `schema_version`, `command` and `ok`, with `error` true and the failure's
- * kind, message, next step and exit code. `rule` is present only when an import was refused.
+ * kind, message, next step and exit code.
+ *
+ * - `rule` is present only when an import was refused, and `laws`, `sources` and `witness` only when
+ *   the database refused it: the laws its refusal names, where each is stated, and whether the
+ *   message names the row that broke them (`key` or `row`) or the database named none
+ *   (`unreported`).
+ * - `failure` is present only for an `internal` failure qti can name, such as an export that cannot
+ *   rebuild a stored package: the failure's tag.
  */
 export const ErrorObject = Schema.Struct({
   command: Schema.String,
   error: Schema.Literal(true),
   exit_code: Schema.Int,
+  failure: Schema.optionalKey(Schema.String),
   help: Schema.String,
   kind: Schema.String,
+  laws: Schema.optionalKey(Schema.Array(ErrorLaw)),
   message: Schema.String,
   ok: Schema.Literal(false),
   rule: Schema.optionalKey(Schema.String),
   schema_version: Schema.Literal(1),
+  sources: Schema.optionalKey(Schema.Array(Schema.String)),
+  witness: Schema.optionalKey(ErrorWitness),
 });
 
 /**

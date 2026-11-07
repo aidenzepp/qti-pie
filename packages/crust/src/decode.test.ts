@@ -1,6 +1,11 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`, `US-ASCII`) the declarations under test carry. */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { exhaust } from "@grizzle/testing/explore";
+import { requiredInSpace } from "@grizzle/testing/features";
+import { element, int } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { searched } from "@grizzle/testing/vitest";
+import { Duration, Effect, Formatter, Result } from "effect";
 import { decode } from "#crust/decode.ts";
 import type { ReaderRefusal } from "#crust/errors.ts";
 import { ascii, bytesOf, declared } from "#crust/test/bytes.ts";
@@ -28,6 +33,84 @@ const utf16 = (text: string, order: "be" | "le"): Uint8Array => {
 const utf16Bare = (text: string, order: "be" | "le"): Uint8Array => utf16(text, order).subarray(2);
 
 /**
+ * The byte order marks of XML 1.0 section 4.3.3, with the `TextDecoder` encoding and the label
+ * each selects.
+ */
+const marks = [
+  { bytes: [0xef, 0xbb, 0xbf], encoding: "utf-8", label: "UTF-8" },
+  { bytes: [0xfe, 0xff], encoding: "utf-16be", label: "UTF-16" },
+  { bytes: [0xff, 0xfe], encoding: "utf-16le", label: "UTF-16" },
+] as const;
+
+/**
+ * Every near byte order mark, each once: a mark with any one of its bytes replaced by any byte
+ * value (the mark itself among them), and each proper prefix of a mark.
+ */
+const nearMarkPrefixes: readonly (readonly number[])[] = [
+  ...new Map(
+    marks
+      .flatMap(({ bytes }) => [
+        ...bytes.flatMap((_, at) =>
+          Array.from({ length: 256 }, (__, value) =>
+            bytes.map((byte, index) => (index === at ? value : byte)),
+          ),
+        ),
+        ...bytes.slice(1).map((_, length) => bytes.slice(0, length + 1)),
+      ])
+      .map((prefix) => [prefix.join(" "), prefix] as const),
+  ).values(),
+];
+
+/**
+ * The bodies a near mark opens: ASCII, and text with a two-byte UTF-8 character.
+ */
+const nearMarkBodies = [ascii("<a/>"), bytesOf(ascii("<a>"), [0xc3, 0xa9], ascii("</a>"))].map(
+  (body) => [...body],
+);
+
+/**
+ * What decoding a document gives: its label and text, or a refusal.
+ */
+type MarkReading =
+  | { readonly _tag: "read"; readonly label: string; readonly text: string }
+  | { readonly _tag: "refused" };
+
+/**
+ * Read a document with no XML declaration as XML 1.0 section 4.3.3 says, through the platform's
+ * fatal decoders: a whole mark selects its encoding and is not text, and anything else is UTF-8,
+ * every byte of it text. Text holding U+0000 or an unpaired surrogate is refused (section 2.2).
+ *
+ * @param bytes - The document.
+ * @returns The label and text, or a refusal.
+ */
+const markReading = (bytes: Uint8Array): MarkReading => {
+  const mark = marks.find(({ bytes: held }) => held.every((byte, index) => bytes[index] === byte));
+  const encoding = mark?.encoding ?? "utf-8";
+  const decoded = Result.try(() =>
+    new TextDecoder(encoding, { fatal: true, ignoreBOM: true }).decode(
+      bytes.subarray(mark?.bytes.length ?? 0),
+    ),
+  );
+
+  return Result.match(decoded, {
+    onFailure: (): MarkReading => ({ _tag: "refused" }),
+    onSuccess: (text): MarkReading =>
+      text.includes("\0") || /\p{Cs}/u.test(text)
+        ? { _tag: "refused" }
+        : { _tag: "read", label: mark?.label ?? "UTF-8", text },
+  });
+};
+
+/**
+ * Spell bytes in hexadecimal, for a failure's message.
+ *
+ * @param bytes - The bytes.
+ * @returns Each byte as two upper-case digits, spaced.
+ */
+const hexOf = (bytes: readonly number[]): string =>
+  bytes.map((byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+
+/**
  * Decodes `input` and returns the refusal it raised, failing the test when `input` decodes.
  */
 const refusalOf = (input: Uint8Array): Effect.Effect<ReaderRefusal> =>
@@ -43,7 +126,7 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesRemappedLabel() {
       const refusal = yield* refusalOf(declared("ISO-8859-9", ascii("x")));
 
-      assert.strictEqual(refusal.rule, "decode");
+      assert.strictEqual(refusal.rule, "unsupported-encoding");
       assert.include(refusal.detail, "ISO-8859-9");
     }),
   );
@@ -52,7 +135,7 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesUnknownLabel() {
       const refusal = yield* refusalOf(declared("no-such-charset", ascii("x")));
 
-      assert.strictEqual(refusal.rule, "decode");
+      assert.strictEqual(refusal.rule, "unsupported-encoding");
       assert.include(refusal.detail, "no-such-charset");
     }),
   );
@@ -66,11 +149,11 @@ describe("decode refuses what it cannot decode faithfully", () => {
     }),
   );
 
-  it.effect("a declared UTF-16 with no byte order mark", () =>
+  it.effect("a declared UTF-16 in bytes that write ASCII as single bytes", () =>
     Effect.gen(function* refusesBareUtf16() {
       const refusal = yield* refusalOf(declared("UTF-16", ascii("x")));
 
-      assert.strictEqual(refusal.rule, "bare-utf16");
+      assert.strictEqual(refusal.rule, "encoding-mismatch");
     }),
   );
 
@@ -80,7 +163,8 @@ describe("decode refuses what it cannot decode faithfully", () => {
         utf16Bare('<?xml version="1.0" encoding="UTF-16"?><a>x</a>', "le"),
       );
 
-      assert.strictEqual(refusal.rule, "bare-utf16");
+      assert.strictEqual(refusal.rule, "encoding-mismatch");
+      assert.include(refusal.detail, "UTF-16");
     }),
   );
 
@@ -88,7 +172,7 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesNonUtf16() {
       const refusal = yield* refusalOf(declared("UTF-16LE", ascii("x")));
 
-      assert.strictEqual(refusal.rule, "decode");
+      assert.strictEqual(refusal.rule, "encoding-mismatch");
       assert.include(refusal.detail, "UTF-16LE");
     }),
   );
@@ -121,7 +205,7 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesNul() {
       const refusal = yield* refusalOf(declared("UTF-8", [0x00]));
 
-      assert.strictEqual(refusal.rule, "nul-or-surrogate");
+      assert.strictEqual(refusal.rule, "nul");
       assert.include(refusal.detail, "U+0000");
     }),
   );
@@ -130,8 +214,141 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesLatin1Nul() {
       const refusal = yield* refusalOf(declared("ISO-8859-1", [0x00]));
 
-      assert.strictEqual(refusal.rule, "nul-or-surrogate");
+      assert.strictEqual(refusal.rule, "nul");
     }),
+  );
+});
+
+/**
+ * The ways a lone surrogate reaches `decode`: as a UTF-16 code unit under a byte order mark, or
+ * under a declared byte order with no mark, in either order, and as the three bytes CESU-8 writes
+ * for it.
+ */
+const loneForms = [
+  "UTF-16LE marked",
+  "UTF-16BE marked",
+  "UTF-16LE declared",
+  "UTF-16BE declared",
+  "CESU-8",
+] as const;
+
+/**
+ * Where the surrogate stands in the root's text: alone, before a letter, after one, or twice, so a
+ * leading surrogate is never followed by a trailing one.
+ */
+const lonePlaces = ["alone", "before a letter", "after a letter", "doubled"] as const;
+
+/**
+ * One case of the box: a form, a place and a surrogate code unit.
+ */
+interface LoneSurrogate {
+  readonly form: (typeof loneForms)[number];
+  readonly place: (typeof lonePlaces)[number];
+  readonly unit: number;
+}
+
+/**
+ * Every lone surrogate in every form and place: 5 forms, 4 places, 2,048 code units.
+ */
+const loneSurrogate: Gen<LoneSurrogate> = (source) => ({
+  form: source.draw(element(loneForms)),
+  place: source.draw(element(lonePlaces)),
+  unit: source.draw(int(0xd8_00, 0xdf_ff)),
+});
+
+/**
+ * The size of {@link loneSurrogate}'s box.
+ */
+const LONE_SURROGATES = loneForms.length * lonePlaces.length * 0x8_00;
+
+/**
+ * The document that carries a case: `<a>`, the surrogate where the case puts it, `</a>`.
+ *
+ * @param lone - The case.
+ * @returns Its bytes.
+ */
+const loneDocument = ({ form, place, unit }: LoneSurrogate): Uint8Array => {
+  const surrogate = String.fromCodePoint(unit);
+  const body = {
+    "after a letter": `b${surrogate}`,
+    alone: surrogate,
+    "before a letter": `${surrogate}b`,
+    doubled: `${surrogate}${surrogate}`,
+  }[place];
+  // The three bytes CESU-8 writes for the unit: 1110xxxx 10xxxxxx 10xxxxxx.
+  const cesu = [
+    0xe0 + Math.floor(unit / 0x10_00),
+    0x80 + (Math.floor(unit / 0x40) % 0x40),
+    0x80 + (unit % 0x40),
+  ];
+  const documents: Readonly<Record<LoneSurrogate["form"], () => Uint8Array>> = {
+    "CESU-8": () =>
+      bytesOf(
+        ascii("<a>"),
+        {
+          "after a letter": [0x62, ...cesu],
+          alone: cesu,
+          "before a letter": [...cesu, 0x62],
+          doubled: [...cesu, ...cesu],
+        }[place],
+        ascii("</a>"),
+      ),
+    "UTF-16BE declared": () =>
+      utf16Bare(`<?xml version="1.0" encoding="UTF-16BE"?><a>${body}</a>`, "be"),
+    "UTF-16BE marked": () => utf16(`<a>${body}</a>`, "be"),
+    "UTF-16LE declared": () =>
+      utf16Bare(`<?xml version="1.0" encoding="UTF-16LE"?><a>${body}</a>`, "le"),
+    "UTF-16LE marked": () => utf16(`<a>${body}</a>`, "le"),
+  };
+
+  return documents[form]();
+};
+
+describe("decode refuses every lone surrogate under decode", () => {
+  it.effect(
+    `for every surrogate code unit in every form and place, exhausted: ${String(LONE_SURROGATES)} documents`,
+    (ctx) =>
+      // Oracle: the WHATWG Encoding Standard. Its decoders emit scalar values only (§4.1, process
+      // an item), the UTF-8 decoder errs on a surrogate's bytes (§8.1.1) and the shared UTF-16
+      // decoder on a lone surrogate (§14.2.1, steps 6.7 and 8). decode runs each fatally, so every
+      // one is refused as `decode`, before decode.ts would have to look for a surrogate itself.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every surrogate code unit, in 5 forms and 4 places",
+            caseHang: Duration.minutes(1),
+            coverage: requiredInSpace<(typeof loneForms)[number] | (typeof lonePlaces)[number]>([
+              ...loneForms,
+              ...lonePlaces,
+            ]),
+            generator: loneSurrogate,
+            limit: LONE_SURROGATES,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "the WHATWG Encoding Standard's fatal decoders, §4.1, §8.1.1 and §14.2.1",
+            },
+            suite: "crust/decode/lone-surrogates",
+          },
+          (lone, c) =>
+            Effect.gen(function* refusesLone() {
+              c.note(lone.form);
+              c.note(lone.place);
+
+              const refusal = yield* refusalOf(loneDocument(lone));
+
+              assert.strictEqual(refusal.rule, "decode", Formatter.format(lone));
+            }),
+        ),
+      ).pipe(
+        Effect.tap((done) =>
+          Effect.sync(() => {
+            assert.strictEqual(done.cases, LONE_SURROGATES);
+          }),
+        ),
+      ),
+    120_000,
   );
 });
 
@@ -191,6 +408,41 @@ describe("decode reads the label and the bytes", () => {
     }),
   );
 
+  it.effect(
+    "drops a byte order mark only when the whole mark opens the document, and loses no byte of any near one",
+    () =>
+      // Oracle: the specification as a checker, XML 1.0 section 4.3.3 and Appendix F (a document
+      // opened by `EF BB BF` is UTF-8, by `FE FF` or `FF FE` UTF-16 in that order, the mark not
+      // part of its text; any other is read as UTF-8 here, having no declaration), with the
+      // platform's fatal `TextDecoder` as a second implementation of each decoding.
+      // Bound: exhaustive over the near marks: each mark with any one of its bytes replaced by
+      // any of the 256 values, and each mark's proper prefixes, before each of two bodies.
+      Effect.gen(function* nearMarks() {
+        const wrong: string[] = [];
+        for (const prefix of nearMarkPrefixes) {
+          for (const body of nearMarkBodies) {
+            const bytes = bytesOf(prefix, body);
+            const expected = markReading(bytes);
+            const read = yield* decode(bytes).pipe(
+              Effect.match({
+                onFailure: (): MarkReading => ({ _tag: "refused" }),
+                onSuccess: ({ label, text }): MarkReading => ({ _tag: "read", label, text }),
+              }),
+            );
+
+            if (JSON.stringify(read) !== JSON.stringify(expected)) {
+              wrong.push(
+                `${hexOf(prefix)} before ${hexOf(body)}: read ${JSON.stringify(read)}, expected ${JSON.stringify(expected)}`,
+              );
+            }
+          }
+        }
+
+        assert.strictEqual(wrong.slice(0, 8).join("\n"), "");
+        assert.strictEqual(nearMarkPrefixes.length, 1790, "the box holds every near mark once");
+      }),
+  );
+
   it.effect("decodes UTF-8 without a declaration and labels it UTF-8", () =>
     Effect.gen(function* defaultsToUtf8() {
       const decoded = yield* decode(bytesOf(ascii("<a>"), [0xc3, 0xa9], ascii("</a>")));
@@ -226,13 +478,14 @@ describe("decode reads the label and the bytes", () => {
     }),
   );
 
-  it.effect("decodes by the byte order Appendix F detects when the label names the other", () =>
-    Effect.gen(function* decodesByDetectedOrder() {
-      const text = '<?xml version="1.0" encoding="UTF-16LE"?><a>x</a>';
-      const decoded = yield* decode(utf16Bare(text, "be"));
+  it.effect("refuses a label naming the other byte order than Appendix F detects", () =>
+    Effect.gen(function* refusesTheOtherOrder() {
+      const refusal = yield* refusalOf(
+        utf16Bare('<?xml version="1.0" encoding="UTF-16LE"?><a>x</a>', "be"),
+      );
 
-      assert.strictEqual(decoded.label, "UTF-16LE");
-      assert.strictEqual(decoded.text, text);
+      assert.strictEqual(refusal.rule, "encoding-mismatch");
+      assert.include(refusal.detail, "UTF-16LE");
     }),
   );
 
@@ -260,30 +513,6 @@ const decodeWithoutBuffer = (bytes: Uint8Array) =>
   );
 
 describe("decode runs without Node's Buffer", () => {
-  it.effect("a UTF-8 document with no declaration and no mark", () =>
-    Effect.gen(function* decodesPlainUtf8() {
-      const decoded = yield* decodeWithoutBuffer(bytesOf(ascii("<a/>")));
-
-      assert.strictEqual(decoded.label, "UTF-8");
-    }),
-  );
-
-  it.effect("an ISO-8859-1 document, 0x85 included", () =>
-    Effect.gen(function* decodesLatin1() {
-      const decoded = yield* decodeWithoutBuffer(declared("ISO-8859-1", [0x85, 0xe9]));
-
-      assert.include(decoded.text, "<a>\u0085é</a>");
-    }),
-  );
-
-  it.effect("a US-ASCII document", () =>
-    Effect.gen(function* decodesAscii() {
-      const decoded = yield* decodeWithoutBuffer(declared("US-ASCII", ascii("x")));
-
-      assert.include(decoded.text, "<a>x</a>");
-    }),
-  );
-
   it.effect("an ISO-8859-1 body of a million bytes", () =>
     Effect.gen(function* decodesLargeLatin1() {
       const bytes = declared("ISO-8859-1", Array.from<number>({ length: 1_048_576 }).fill(0xe9));

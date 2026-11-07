@@ -1,246 +1,240 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 
 /**
- * The names a refused import carries, and the maps from what refused it to one of them.
+ * The names a refused import carries, and how a refusal names one (plan W5, Q5.17; the W5
+ * amendment's C22).
  *
- * What refuses a package is one of three things: a guard that judged the rows before any write, the
- * reader that could not read the input, or grizzle's `invariant-rejected` outcome naming the law of
- * the schema that the apply broke. {@link ruleOfError} maps the first two and {@link ruleOfLaw} the
- * third, so a caller and a test see one closed roster, {@link ImportRule}, whichever refused.
+ * A package is refused before any row exists, by the reader, the ZIP container or the codec
+ * ({@link ruleOfError}), or by grizzle's `invariant-rejected` outcome, which names every law
+ * merged into the PostgreSQL object that refused the write ({@link refusalOfLaws}). Each law keeps
+ * the rule of the guard or schema rule it replaces, so a verdict reads as it did.
+ *
+ * - **Laws by name.** Every law the schema states has a name, the law oracle's (`src/test/oracle.ts`
+ *   `LawName`) where the oracle states the law, with its rule and its spec source
+ *   ({@link lawTable}). A check is named by its law ({@link checkNameOf}); every other law is a row
+ *   of {@link statedLaws}, keyed by its identity as the outcome reports it ({@link lawIdentity}).
+ *   {@link lawRules} is the one table from identity to rule.
+ * - **One rule per refusal.** A family's axis foreign key discharges the family and every containment
+ *   and fold merged into it, and its violation names them all, so a refusal picks the rule of its
+ *   most specific law by one fixed order ({@link precedence}).
+ * - **Explanations are computed.** {@link explain} reads the laws, the witness and the installed
+ *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
+ *   its XSD particle. There is no catalog of messages.
  */
-import { Match, Schema } from "effect";
-import type { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
-import type { ItemGuardRefusal } from "#pantry/import/guards/item.ts";
-import type { ManifestGuardRefusal } from "#pantry/import/guards/manifest.ts";
-import type { ProcessingGuardRefusal } from "#pantry/import/guards/processing.ts";
-import type { ReferenceGuardRefusal } from "#pantry/import/guards/reference.ts";
-import type { TestGuardRefusal } from "#pantry/import/guards/test.ts";
-import type { GuardRefusal } from "#pantry/import/guards/tree.ts";
-import type { UsageGuardRefusal } from "#pantry/import/guards/usage.ts";
-import type { WildcardGuardRefusal } from "#pantry/import/guards/wildcard.ts";
-import type { NotQti3 } from "#pantry/import/manifest.ts";
-import type { ProcessingRefused } from "#pantry/import/processing.ts";
-import type { ExternalRefusal } from "#pantry/import/record.ts";
-import type { ItemRefusal, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { date, lexical, str } from "@bjornpagen/grizzle";
+import type { Law, LawSide, Statement, Witness } from "@bjornpagen/grizzle";
+import {
+  Array as Arr,
+  Formatter,
+  Match,
+  Option,
+  Order,
+  pipe,
+  Predicate,
+  Result,
+  Schema,
+} from "effect";
+import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
+import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { noSharedModel } from "#pantry/grammar/content.ts";
+import { schemaVersions } from "#pantry/grammar/kinds.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
+import { attributeLawsByName, EntityName, OpenLocal, Space } from "#pantry/qti/attributes.ts";
+import {
+  Affix,
+  AssembledReference,
+  DeclarationTable,
+  Expression,
+  ExpressionAttribute,
+  expressionLawsByName,
+  referenceLawsByName,
+  ItemTiming,
+  Literal,
+  MappingLookup,
+  MappingSource,
+  NameLookup,
+  Operand,
+  PlacedDocument,
+  PlacedReference,
+  PlacedVariableRef,
+  Processing,
+  ProcessingTemplate,
+  Reading,
+  ReferenceDocument,
+  ReferenceSegment,
+  SectionIdentifier,
+  Separator,
+  TemplateDefault,
+  TestReference,
+  VariableLookup,
+  VariableRef,
+} from "#pantry/qti/expressions.ts";
+import {
+  chardataLawsByName,
+  CommentText,
+  DeclaredEncoding,
+  DoctypeText,
+  EncName,
+  EntryPath,
+  ForeignNamespace,
+  NamespacePrefix,
+  NamespaceUri,
+  NcName,
+  PiData,
+  PiTarget,
+  XmlVersion,
+} from "#pantry/qti/chardata.ts";
+import { readerOrigin, RefusalOrigin } from "#pantry/package/refusal-origin.ts";
+import { keyText, namespaceText } from "#pantry/qti/limits.ts";
+import {
+  AriaElement,
+  AriaRange,
+  AriaValue,
+  Binding,
+  BindingDeclaration,
+  BindingName,
+  BoundVariable,
+  Choice,
+  ChoiceInteraction,
+  ChoiceVariableName,
+  ContextRef,
+  CountBound,
+  FeedbackRef,
+  Hotspot,
+  Hottext,
+  Interaction,
+  InteractionAttribute,
+  interactionLawsByName,
+  ItemMode,
+  PlacedBinding,
+  PlacedBindingDeclaration,
+  PlacedChoice,
+  PlacedHottext,
+  PrintedVariableRef,
+  ReferringDocument,
+  SectionContextName,
+  SectionContextRef,
+  SectionFeedbackName,
+  SectionFeedbackRef,
+  SectionPrintedName,
+  SectionPrintedRef,
+  SectionScope,
+  SectionTemplateName,
+  SectionTemplateRef,
+  Slider,
+  TemplateRef,
+  VarRef,
+} from "#pantry/qti/interactions.ts";
+import {
+  Digits,
+  floatKeyPattern,
+  Gap,
+  Item,
+  LookupValue,
+  MapKeyDirectedPair,
+  MapKeyPair,
+  MapKeyPoint,
+  mappingLawsByName,
+  Negative,
+  pairKeyPattern,
+  pointKeyPattern,
+  Sign,
+  Zeros,
+} from "#pantry/qti/mapping.ts";
+import {
+  AssessmentObject,
+  LomEntry,
+  LomGeneral,
+  LomObject,
+  LomObjectIdentifier,
+  LomObjectTitle,
+  LomRecord,
+  LomResource,
+  LomResourceType,
+  LomResourceTypeSource,
+  LomString,
+  LomStringLanguage,
+  LomTitle,
+  LomTitleString,
+  metadataLawsByName,
+  ObjectLang,
+  ResourceLomGeneral,
+  StatisticDate,
+  UsageValue,
+} from "#pantry/qti/metadata.ts";
+import { EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
+import { declarationLawsByName } from "#pantry/qti/declarations.ts";
+import { htmlLawsByName } from "#pantry/qti/html.ts";
+import { identityLawsByName } from "#pantry/qti/identity.ts";
+import { operatorLawsByName } from "#pantry/qti/operators.ts";
+import {
+  EntryContent,
+  HrefParams,
+  packageLawsByName,
+  Reference,
+  ReferencePath,
+} from "#pantry/qti/package.ts";
+import { quotationLawsByName } from "#pantry/qti/quotation.ts";
+import {
+  branchLaws,
+  inclusionLaws,
+  itemRefLaws,
+  SectionSelection,
+  SelectForm,
+  testNameLaws,
+  testOverlayLaws,
+  testRelations,
+} from "#pantry/qti/tests.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipRefusal } from "#pantry/package/zip.ts";
-import { families } from "#pantry/schema/mathml/values.ts";
-import * as patterns from "#pantry/schema/patterns.ts";
-import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
+import type { Source } from "#pantry/vocab/inventory/types.ts";
+import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 
 /**
- * Every name a refused import may carry: the rules the schema holds at commit, the guards that run
- * before the apply and the reader's refusals.
- *
- * The `P` names are the rule ids of the processing model's refusals (spec 4.10): bin 1 is the
- * schema's (`P1` to `P13`, `P17`, `P36`), `P5` the builder's, and `P20` to `P32` the checker's and
- * the guards'. `arm-expression`, `ref-exists`, `condition-edge` and `outcome-minmax-kind` name the
- * schema's structural laws of that model, which 4.10 lists as representatives without an id.
+ * The rules a package is refused under before any row exists, which no law keeps: the codec's
+ * `not-qti3` (shred reads no schema version or a QTI 2 root), the reader's `reader-refusal`, and
+ * the ZIP container's and the package reader's (`src/package/zip.ts`, `read.ts`). The codec's
+ * `unmodeled-vocabulary` and `attribute-admission` and the reader's `well-formedness` are laws'
+ * rules as well, in {@link precedence}.
  */
-export const ImportRule = Schema.Literals([
-  "admission",
-  "edge-parent",
-  "schema-version",
-  "resource-type",
-  "resource-root",
-  "manifest-identifier",
-  "resource-identifier",
-  "file-exists",
-  "href-path",
-  "dependency-target",
-  "document-key",
-  "root-identifier",
-  "root-title",
-  "declaration-key",
-  "declaration-reserved",
-  "value-base-type",
-  "value-single",
-  "value-present",
-  "value-lexical",
-  "value-set-role",
-  "binding-key",
-  "binding-declared",
-  "binding-fit",
-  "binding-max",
-  "binding-exists",
-  "choice-present",
-  "choice-parent",
-  "choice-bounds",
-  "choice-key",
-  "prompt-single",
-  "body-single",
-  "processing-single",
-  "processing-item",
-  "processing-root",
-  "manifest-children",
-  "schema-single",
-  "resource-metadata-single",
-  "resource-file-present",
-  "lom-general-single",
-  "lom-title-single",
-  // lom-identifier and lom-title are backed by normative text (decision 307; reading 62): the
-  // ASI Information Model 4.1.1 and 4.4.1 (identifier) and 4.1.2 (title), "MUST be the same", and
-  // the metadata binding 2.7.1.1 (#Gen1) and 2.7.1.2 (#Gen2).
-  "lom-identifier",
-  "lom-title",
-  "qti-metadata-single",
-  "qti-metadata-child-single",
-  "tool-string-length",
-  "uri-syntax",
-  "attribute-lexical",
-  "text-copy",
-  "typed-copy",
-  "template-derivation",
-  "ordering",
-  "reachability",
-  "body-empty",
-  "file-listed",
-  "href-listed",
-  "manifest-root",
-  "manifest-id-space",
+const codecRules = [
   "not-qti3",
-  "unmodeled-vocabulary",
-  "well-formedness",
   "reader-refusal",
-  "union-count",
-  "idref-copy",
-  "varref-copy",
-  "lang-set-copy",
-  "owner-copy",
-  "max-strings-required",
-  "aria-value-range",
-  "mastery-range",
-  "string-identifier-distinct",
-  "same-table-headers",
-  "q-punctuation",
-  "attribute-admission",
-  "idref-target",
-  "coords-owner",
-  "ancestry-ban",
-  "ancestry-step",
-  "adaptive-feedback",
-  "gap-multiple",
-  "record-binding-fit",
-  "order-choice-count",
-  "template-ref",
-  "feedback-ref",
-  "printed-variable-ref",
-  "string-binding",
-  "match-sets",
-  "details-summary",
-  "picture-img",
-  "picture-source",
-  "table-parts",
-  "source-srcset",
-  "track-srclang",
-  "colgroup-span",
-  "bdo-dir",
-  "aria-role",
-  "modal-body",
-  "context-id",
-  "label-tool",
-  "document-lang",
-  "mapping-base-type",
-  "area-mapping-point",
-  "table-outcome",
-  "map-key-lexical",
-  "normal-maximum",
-  "reserved-type",
-  "hotspot-default",
-  "required-attribute",
-  "lom-capacity",
-  "lom-learning-resource-type",
-  "qti-metadata-host",
-  "file-metadata-single",
-  "file-lom-owner",
-  "external-lom-owner",
-  "variant-target",
-  "variant-resource",
-  "variant-key",
-  "variant-metadata",
-  "drd-value",
-  "drd-single",
-  "manifest-id-holder",
-  "csm-capacity",
-  "csm-single",
-  "usage-root",
-  "usage-statistic-kind",
-  "usage-count",
-  "usage-key",
-  "usage-typed-value",
-  "usage-lexical",
-  "outcome-document",
-  "calendar",
-  "root-type-reverse",
-  "record-unnamed",
-  "entry-kind",
   "zip-format",
-  "structure-count",
-  "section-empty",
-  "structure-identifier",
-  "reach-copy",
-  "section-ref-cycle",
-  "section-ref-target",
-  "item-ref-target",
-  "stimulus-ref-target",
-  "stimulus-ref-key",
-  "resolution-copy",
-  "document-reference",
-  "selection-bounds",
-  "selection-required",
-  "branch-target",
-  "branch-forward",
-  "variable-mapping-source",
-  "variable-mapping-target",
-  "template-default-target",
-  "prefixed-ref",
-  "prefixed-root",
-  "prefixed-copy",
-  "item-duration",
-  "section-identifier-target",
-  "section-root-copy",
-  "include-xpointer",
-  "include-parse",
-  "section-variable-ref",
-  "section-copy",
-  "P1",
-  "P2",
-  "P3",
-  "P4",
-  "P5",
-  "P6",
-  "P7",
-  "P8",
-  "P9",
-  "P10",
-  "P11",
-  "P12",
-  "P13",
-  "P17",
-  "P20",
-  "P21",
-  "P22",
-  "P23",
-  "P24",
-  "P25",
-  "P26",
-  "P27",
-  "P28",
-  "P29",
-  "P30",
-  "P31",
-  "P32",
-  "P36",
-  "arm-expression",
-  "ref-exists",
-  "condition-edge",
-  "outcome-minmax-kind",
-  "wildcard-namespace",
-  "wildcard-declared",
-  "wildcard-attribute",
-  "xsi-type",
-  "xsi-nil",
-]);
+  "manifest-root",
+  "href-path",
+] as const;
+
+/**
+ * The rules that name a stated limit of the representation, never a law of the specification:
+ * `key-text-bound` is the bound on a text a key holds (`src/qti/limits.ts` `keyText`), which
+ * grizzle's representability rule derives from PostgreSQL's `BTMaxItemSize`, and `href-form` an
+ * href the importer reads no name from (reading 102, `overlays/package.ts` `Limit`), and
+ * `fragment-context` the one context an included fragment's rows are judged in (reading 117,
+ * `tests.ts` `Fragment_context`): a fragment two includes place in different interactions would
+ * need two rows per node.
+ *
+ * A value over the bound is valid QTI the model cannot key, so its verdict says so by its rule.
+ * The import meets it as the bound's pattern law: grizzle's encoder and its family fill check a
+ * text's type, its NUL and its surrogates and never its pattern (`core/text.ts` `validateText`,
+ * `write/family/fold.ts` `admittedAt`), so the column's domain CHECK refuses it as the statement
+ * casts it, `invariant-rejected` on the pattern's law with an unreported witness (README, "Errors
+ * and outcomes").
+ */
+export const limitRules = [
+  "key-text-bound",
+  "href-form",
+  "fragment-context",
+] as const satisfies readonly (typeof precedence)[number][];
+
+/**
+ * Every name a refused import may carry: the laws' rules, the codec's, the reader's and the
+ * container's.
+ *
+ * The verdict file names its refusals by these (`verdicts/*.tsv`, `src/test/verdicts.ts`).
+ */
+export const ImportRule = Schema.Literals([...precedence, ...codecRules]);
 
 /**
  * One name of the roster.
@@ -248,14 +242,1340 @@ export const ImportRule = Schema.Literals([
 export type Rule = typeof ImportRule.Type;
 
 /**
+ * The rules no law of the schema keeps yet, each with the W5 slice that states its law, so the
+ * census shows them. Each slice names its law, and its row joins {@link lawTable} or
+ * {@link statedLaws} when it lands.
+ *
+ * - `typed-copy`: a typed value proved against its lexical form through G-parse (the tier 1
+ *   addendum), as a relation of its own per typed form.
+ * - The O2 to O4 and O6 laws the oracle states no host predicate for.
+ */
+export const owedRules = {} as const satisfies Partial<Readonly<Record<Rule, string>>>;
+
+/**
+ * The name of a law of {@link lawTable}.
+ */
+export type LawName = keyof typeof lawTable;
+
+/**
+ * Every law name, in the table's order.
+ */
+export const lawNames: readonly LawName[] = Object.keys(lawTable).filter((name): name is LawName =>
+  Object.hasOwn(lawTable, name),
+);
+
+/**
+ * Name the check that states a law: its name with each space an underscore, since grizzle's check
+ * names are `[A-Za-z0-9_]` and no law name holds an underscore, so {@link lawOfCheck} inverts it.
+ *
+ * @param law - The law.
+ * @returns The check's name.
+ */
+export const checkNameOf = (law: LawName): string => law.replaceAll(" ", "_");
+
+/**
+ * Read the law a check states from the check's name, as an `invariant-rejected` outcome reports it.
+ *
+ * @param name - The check's name.
+ * @returns The law, or none for a name no law's check bears.
+ */
+export const lawOfCheck = (name: string): Option.Option<LawName> => {
+  const law = name.replaceAll("_", " ");
+
+  return Option.fromUndefinedOr(lawNames.find((known) => known === law));
+};
+
+/**
+ * One term of a law side: a field, or `pred` of a natural field.
+ */
+type Term = LawSide["terms"][number];
+
+/**
+ * Write a term as a law's identity spells it: a field by its name, `pred` of one as `pred(field)`.
+ *
+ * @param term - The term.
+ * @returns Its text.
+ */
+const termText = (term: Term): string =>
+  term.kind === "field" ? term.field : `pred(${term.field})`;
+
+/**
+ * Write a side as a law's identity spells it: its relation and its terms in the order the law
+ * pairs them, as `Node(parent, pred(at), was)`.
+ *
+ * @param side - The side.
+ * @returns Its text.
+ */
+const sideText = (side: LawSide): string =>
+  `${side.relation}(${side.terms.map(termText).join(", ")})`;
+
+/**
+ * Write a law's identity: the text {@link lawRules} is keyed by, one per law the schema states.
+ *
+ * A check is its name alone, since every check is named by its law ({@link checkNameOf}) and one
+ * law may be checked on several relations, as E1 is on `Node`, `Attribute` and `Idref`. A side is
+ * its relation and its terms; its selection is no part of the identity, since no two laws the
+ * schema states differ by a selection alone, which the census in `refusal.oracle.test.ts` holds. A
+ * family and a tree are their slots, since one count counts one family, and a fold is its family's
+ * slots, its monoid and its end, since an accumulated end is filled by one statement. A generated
+ * field is its relation and field, since grizzle names one by them where a closed read in its term
+ * has no row and its column's NOT NULL refuses the row.
+ *
+ * @param law - A law as an `invariant-rejected` outcome names it.
+ * @returns Its identity.
+ */
+export const lawIdentity = (law: Law): string =>
+  Match.value(law).pipe(
+    Match.discriminatorsExhaustive("kind")({
+      check: ({ name }) => `check ${name}`,
+      contained: ({ from, to }) => `contained ${sideText(from)} in ${sideText(to)}`,
+      contract: ({ contract }) => `contract ${contract}`,
+      coverage: ({ from, to }) => `coverage ${sideText(from)} in ${sideText(to)}`,
+      family: ({ order, slots }) => `${order} family ${slots.owner}.${slots.count}`,
+      fold: ({ end, family, monoid }) =>
+        `${monoid} fold over ${family.owner}.${family.count} into ${sideText(end)}`,
+      generated: ({ field, relation }) => `generated ${relation}.${field}`,
+      key: ({ side }) => `key ${sideText(side)}`,
+      pattern: ({ flags, source }) => `pattern /${source}/${flags}`,
+      primaryKey: ({ fields, relation }) => `primary key ${relation}(${fields.join(", ")})`,
+      tree: ({ root, slots }) => `tree ${slots.owner}.${slots.count} by ${root}`,
+    }),
+  );
+
+/**
+ * The prefix that marks a `pred` term among a side's terms as {@link sideOf} takes them.
+ */
+const predPrefix = "pred:";
+
+/**
+ * Read one term as {@link sideOf} takes it: `pred:field` is `pred(field)`, any other text a field.
+ *
+ * @param term - The term's text.
+ * @returns The term.
+ */
+const termOf = (term: string): Term =>
+  term.startsWith(predPrefix)
+    ? { field: term.slice(predPrefix.length), kind: "pred" }
+    : { field: term, kind: "field" };
+
+/**
+ * Build a side over every fact of a relation, as a law states it.
+ *
+ * @param relation - The relation.
+ * @param terms - Its terms in the order the law pairs them: a field's name, or `pred:field`.
+ * @returns The side.
+ */
+const sideOf = (relation: string, ...terms: readonly [string, ...string[]]): LawSide => ({
+  relation,
+  selection: { conjuncts: [] },
+  terms: pipe(terms, Arr.map(termOf)),
+});
+
+/**
+ * Build a containment law.
+ *
+ * @param from - The side whose tuples are contained.
+ * @param to - The side they are among.
+ * @returns The law.
+ */
+const containedIn = (from: LawSide, to: LawSide): Law => ({ from, kind: "contained", to });
+
+/**
+ * Build both containments of a mirrors statement.
+ *
+ * @param left - One side.
+ * @param right - The other.
+ * @returns The two laws.
+ */
+const mirrored = (left: LawSide, right: LawSide): readonly Law[] => [
+  containedIn(left, right),
+  containedIn(right, left),
+];
+
+/**
+ * Build a key law over a side.
+ *
+ * @param side - The side.
+ * @returns The law.
+ */
+const keyOver = (side: LawSide): Law => ({ kind: "key", side });
+
+/**
+ * Build a relation's primary key law.
+ *
+ * @param relation - The relation.
+ * @param fields - Its key's fields.
+ * @returns The law.
+ */
+const primaryKeyOf = (relation: string, ...fields: readonly string[]): Law => ({
+  fields,
+  kind: "primaryKey",
+  relation,
+});
+
+/**
+ * Build a generated field's law, which grizzle names when PostgreSQL refuses a row because the
+ * field's column is NULL there (23502). grizzle writes no NULL, so only the field's term can have
+ * no value: a closed read `C.at` at a key its closed relation holds no row at.
+ *
+ * @param relation - The relation.
+ * @param field - Its generated field.
+ * @returns The law.
+ */
+const generatedOf = <R extends { readonly fields: object; readonly name: string }>(
+  relation: R,
+  field: keyof R["fields"] & string,
+): Law => ({ field, kind: "generated", relation: relation.name });
+
+/**
+ * Build a family law: an ordered family's members indexed by their own field, a counted family's
+ * by a hidden one.
+ *
+ * @param order - `ordered` or `counted`.
+ * @param member - The member side, its group then an ordered family's index.
+ * @param owner - The owner relation.
+ * @param count - The owner's drawn count.
+ * @returns The law.
+ */
+const familyOf = (
+  order: "counted" | "ordered",
+  member: LawSide,
+  owner: string,
+  count: string,
+): Law => ({ kind: "family", member, order, slots: { count, owner } });
+
+/**
+ * Build a fold law over a family's slots.
+ *
+ * @param slots - The family's slots.
+ * @param slots.owner - The owner relation.
+ * @param slots.count - The owner's count.
+ * @param monoid - The monoid it combines by.
+ * @param step - The member side it steps by.
+ * @param end - The owner side it ends at.
+ * @returns The law.
+ */
+const foldOf = (
+  slots: { readonly count: string; readonly owner: string },
+  monoid: Extract<Law, { kind: "fold" }>["monoid"],
+  step: LawSide,
+  end: LawSide,
+): Law => ({ end, family: slots, kind: "fold", monoid, step });
+
+/**
+ * A text field type, as `str.regex` builds it: its pattern's source and flags.
+ */
+interface TextType {
+  readonly pattern: { readonly flags: "su" | "u"; readonly source: string };
+}
+
+/**
+ * Two text types whose rows of {@link writtenLaws} name one pattern law by two names.
+ */
+export interface PatternConflict {
+  readonly first: LawName;
+  readonly identity: string;
+  readonly second: LawName;
+}
+
+/**
+ * Build the pattern law of each text type, as its domain's CHECK reports it, once per language.
+ *
+ * Grizzle reports one law for every spelling of the same pattern, carrying only its source and its
+ * flags (docs/grizzle-findings.md, the pattern law's refusal), so two types of one source are one
+ * law, and one name must hold for both: a refusal cannot tell which type's column broke it. Two
+ * rows of one source that name two laws are a conflict, never the first row's silent win.
+ *
+ * @param types - Each type, with the law it states.
+ * @returns The laws, one per source; or the first {@link PatternConflict}.
+ */
+export const patternLawsOf = (
+  types: readonly (readonly [TextType, LawName])[],
+): Result.Result<readonly (readonly [Law, LawName])[], PatternConflict> => {
+  const named = new Map<string, readonly [Law, LawName]>();
+  for (const [{ pattern }, name] of types) {
+    const law: Law = { flags: pattern.flags, kind: "pattern", source: pattern.source };
+    const identity = lawIdentity(law);
+    const held = named.get(identity);
+    if (held === undefined) {
+      named.set(identity, [law, name]);
+    } else if (held[1] !== name) {
+      return Result.fail({ first: held[1], identity, second: name });
+    }
+  }
+
+  return Result.succeed([...named.values()]);
+};
+
+/**
+ * {@link patternLawsOf} of the table's own rows, which fails the module's load on a conflict, naming
+ * the pattern and its two laws, since the table is a constant no caller can repair.
+ *
+ * @param types - Each type, with the law it states.
+ * @returns The laws, one per source.
+ */
+const patternLaws = (
+  types: readonly (readonly [TextType, LawName])[],
+): readonly (readonly [Law, LawName])[] =>
+  Result.getOrThrowWith(
+    patternLawsOf(types),
+    ({ first, identity, second }) =>
+      new Error(
+        `Two rows of writtenLaws in src/import/refusal.ts name the law ${identity} "${first}" and "${second}", and grizzle reports one law per pattern. Name both rows by the one law a package can break, or give one type a pattern of its own.`,
+      ),
+  );
+
+/**
+ * The names of the primary keys of `tests.ts`'s relations that are no overlay's: the assembled
+ * test's instances, its names and its branch resolutions (Q5.13).
+ */
+const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
+  ["AssembledName", "Test name key"],
+  ["BranchResolution", "Branch target"],
+  ["Instance", "Inclusion cycle"],
+  ["InstanceName", "Test name key"],
+  ["ItemRefTarget", "Item ref target"],
+]);
+
+/**
+ * The laws written out row by row, each as its outcome names it, with its name in {@link lawTable}:
+ * the text types' patterns, each read from the type its module exports, so a bound that moves moves
+ * its row; each relation's primary key; the generated fields' laws; and the laws of the modules
+ * that do not yet name them where they state them ({@link namedLaws} holds those that do), in the
+ * module order of the plan's §C.
+ *
+ * - **The text patterns**, in three classes (the orchestrator's ruling of 2026-11-06):
+ *
+ *   - A bound on a text is "Key text bound", a stated limit. `keyText` and `namespaceText` hold any
+ *     text; the bounded names and paths also carry a production no package the reader accepts breaks,
+ *     so their refusal means the bound alone. A prefix and a local name are NCNames because crust
+ *     reads with saxes's `xmlns` on, which refuses a name that is no QName (Namespaces in XML 1.0,
+ *     §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
+ *     with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
+ *     refuses an absolute name;
+ *   - An unbounded XML production (a comment, an instruction, a doctype, an encoding name, a version
+ *     number, an NCName) is "XML production", which crust refuses before any row exists. `Char*`
+ *     (`Chars`, an attribute's `Lexical`) has the foreign namespace name's very pattern, so it is
+ *     that law, "Key text bound": grizzle reports one law per pattern ({@link patternLawsOf}), and
+ *     the bound is the one cause of it a package reaches;
+ *   - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
+ *     which crust does not check, so the domain is the law;
+ *   - The whitespace around an IDREF token and an entry's base64 bytes are the host's own split and
+ *     encoding, "E1 derived".
+ * - **Each relation's primary key**, under the law its module's rows belong to.
+ * - **The other overlays**: the keys, families and containments the W5 briefs state exactly.
+ * - **The generated fields**: each one's law, its term's NULL, beside its relation's rows, under the
+ *   law that states its value exists. No term of Qti's reads `C.at`, the one read that can miss, so
+ *   no row breaks one. Each row says which law refuses first, or why none needs to, and is stated
+ *   so an outcome naming it still has a rule.
+ */
+const writtenLaws: readonly (readonly [Law, LawName])[] = [
+  ...patternLaws([
+    [keyText, "Key text bound"],
+    [namespaceText, "Key text bound"],
+    [str.regex(prefixPattern), "Key text bound"],
+    [OpenLocal, "Key text bound"],
+    [NamespacePrefix, "Key text bound"],
+    [ForeignNamespace, "Key text bound"],
+    [EntryPath, "Key text bound"],
+    [NamespaceUri, "Namespace name"],
+    [CommentText, "XML production"],
+    [PiTarget, "XML production"],
+    [PiData, "XML production"],
+    [DoctypeText, "XML production"],
+    [EncName, "XML production"],
+    [DeclaredEncoding, "XML production"],
+    [XmlVersion, "XML production"],
+    [NcName, "XML production"],
+    [EntityName, "XML production"],
+    [Space, "E1 derived"],
+    [str.regex(floatKeyPattern), "E1 derived"],
+    [str.regex(pointKeyPattern), "E1 derived"],
+    [str.regex(pairKeyPattern), "E1 derived"],
+    [Sign, "E1 derived"],
+    [Zeros, "E1 derived"],
+    [Digits, "E1 derived"],
+    [Negative, "E1 derived"],
+    [Gap, "E1 derived"],
+    [Item, "E1 derived"],
+    [Affix, "E1 derived"],
+    [Separator, "E1 derived"],
+    [HrefParams, "E1 derived"],
+    [EntryContent, "E1 derived"],
+    [EndCharacter, "E1 derived"],
+  ]),
+  [primaryKeyOf("Node", "id"), "Node key"],
+  ...(
+    [
+      ["Comment", "comment arm"],
+      ["Pi", "pi arm"],
+      ["Doctype", "doctype arm"],
+      ["Document", "Document"],
+    ] as const
+  ).map(([relation, name]) => [primaryKeyOf(relation, "node"), name] as const),
+  [primaryKeyOf("Namespace", "node", "at"), "Namespace family"],
+  [primaryKeyOf("OpenElementName", "node"), "OpenElementName"],
+  [primaryKeyOf("Attribute", "node", "id"), "AL2 count"],
+  [primaryKeyOf("OpenAttributeName", "node", "attribute", "at"), "AL4 open names"],
+  [primaryKeyOf("Idref", "node", "attribute", "at"), "E1 derived"],
+  [primaryKeyOf("AttributeEntity", "node", "attribute", "at"), "AttributeEntity owner"],
+  [primaryKeyOf("Package", "id"), "Package key"],
+  [primaryKeyOf("Entry", "package", "at"), "Entry family"],
+  ...(["ManifestId", "Resource", "File", "Dependency"] as const).map(
+    (overlay) => [primaryKeyOf(overlay, "node"), "Manifest overlay"] as const,
+  ),
+  [primaryKeyOf("ResourceHref", "node"), "Manifest overlay"],
+  [primaryKeyOf("NamedHref", "package", "path", "type"), "RootOfType"],
+  [primaryKeyOf("FileHref", "package", "scope", "path"), "File listed"],
+  [primaryKeyOf("ResourceFile", "resource", "scope", "path"), "Href listed"],
+  [primaryKeyOf("IdBinding", "document", "id", "owner"), "E1 derived"],
+  [primaryKeyOf("IdrefTarget", "document", "id"), "E1 derived"],
+  [primaryKeyOf("PlacedId", "instance", "node"), "E1 derived"],
+  [primaryKeyOf("AssembledId", "assembly", "id", "owner", "copy"), "E1 derived"],
+  [primaryKeyOf("PlacedIdref", "instance", "id"), "E1 derived"],
+  [primaryKeyOf("IdentityText", "node"), "E1 derived"],
+  [primaryKeyOf("TextIdref", "node", "at"), "E1 derived"],
+  [primaryKeyOf("DocumentId", "node"), "DocumentId key"],
+  [primaryKeyOf("XmlLang", "node"), "E1 derived"],
+  [primaryKeyOf("DocumentLang", "document", "lang"), "E1 derived"],
+  [primaryKeyOf("GeneralNamed", "general"), "E1 derived"],
+  [primaryKeyOf("GeneralObject", "general"), "E1 derived"],
+  [primaryKeyOf("DocumentGenerals", "document"), "E1 derived"],
+  [primaryKeyOf("GeneralLang", "general", "lang"), "E1 derived"],
+  [primaryKeyOf("PlacedXmlLang", "instance", "node"), "E1 derived"],
+  [primaryKeyOf("AssembledLang", "assembly", "lang"), "E1 derived"],
+  [primaryKeyOf("PlacedGeneralLang", "general", "lang"), "E1 derived"],
+  [primaryKeyOf("SsmlAttribute", "node", "name"), "E1 derived"],
+  [primaryKeyOf("SsmlScope", "node"), "E1 derived"],
+  [primaryKeyOf("FragmentValue", "fragment", "kind", "value"), "E1 derived"],
+  [primaryKeyOf("LomLanguage", "node"), "E1 derived"],
+  [primaryKeyOf("ResourceLomLanguageSet", "general", "lang"), "E1 derived"],
+  [primaryKeyOf("Quotation", "node"), "E1 derived"],
+  [primaryKeyOf("LabelUse", "node"), "Label tools"],
+  [primaryKeyOf("TableScope", "node"), "E1 derived"],
+  [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
+  [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
+  [primaryKeyOf("TableHeader", "node"), "E1 derived"],
+  [primaryKeyOf("Rounding", "node"), "E1 derived"],
+  [primaryKeyOf("Tolerance", "node"), "E1 derived"],
+  [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
+  ...(["Declaration", "ValueSet", "Value", "RecordField", "OutcomeRange"] as const).map(
+    (overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const,
+  ),
+  // An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of
+  // a set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds
+  // no row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
+  // (docs/grizzle-findings.md, lane DBT's). So no row breaks either law. A field a closed relation
+  // determines is E1 derived.
+  [generatedOf(Operand, "baseTypeBit"), "E1 derived"],
+  [generatedOf(Operand, "cardinalityBit"), "E1 derived"],
+  ...(
+    [
+      "Mapping",
+      "MapKey",
+      "MapKeyInteger",
+      "MapKeyFloat",
+      "AreaMapping",
+      "MatchTable",
+      "InterpolationTable",
+    ] as const
+  ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
+  [keyOver(sideOf("Named", "document", "identifier")), "Structure identifier"],
+  [keyOver(sideOf("VariableMapping", "parent", "target")), "Variable mapping target"],
+  [keyOver(sideOf("StimulusRef", "document", "identifier")), "Stimulus ref key"],
+  [keyOver(sideOf("TestDocument", "package", "path")), "Document entry"],
+  [
+    containedIn(
+      sideOf("SiteTarget", "package", "path", "target"),
+      sideOf("TestDocument", "package", "path", "node"),
+    ),
+    "Document entry",
+  ],
+  [
+    foldOf(
+      { count: "members", owner: "Section" },
+      "count",
+      sideOf("SectionMember", "section"),
+      sideOf("Section", "node", "required"),
+    ),
+    "Selection required",
+  ],
+  [keyOver(sideOf("TestFlag", "node")), "Selection required"],
+  [keyOver(sideOf("SectionMember", "node")), "Selection required"],
+  [containedIn(sideOf("SectionMember", "node"), sideOf("TestFlag", "node")), "Selection required"],
+  [containedIn(sideOf("TestFlag", "node"), sideOf("SectionMember", "node")), "Selection required"],
+  [
+    containedIn(
+      sideOf("ItemRefTarget", "node", "package", "path"),
+      sideOf("ReferencePath", "node", "package", "path"),
+    ),
+    "E1 derived",
+  ],
+  // A site's href is its SitePath, a row only where the href names a path of the package, and the
+  // document there is its SiteTarget. An href naming a path no entry holds is refused by the
+  // SitePath's File_exists check alone, and the laws below read only paths an entry holds: an
+  // include with no such href, or whose path names no listed document, is refused here (reading
+  // 115); a section ref, which must write an href, by "Document entry" on its path; and the target
+  // is the document at its path.
+  [containedIn(sideOf("SitePath", "node"), sideOf("SiteTarget", "node")), "Include target"],
+  [
+    containedIn(sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind")),
+    "Include target",
+  ],
+  [containedIn(sideOf("Site", "node"), sideOf("SitePath", "node")), "Document entry"],
+  [
+    containedIn(sideOf("SitePath", "package", "path"), sideOf("TestDocument", "package", "path")),
+    "Document entry",
+  ],
+  [
+    containedIn(sideOf("SitePath", "package", "path"), sideOf("Entry", "package", "path")),
+    "File exists",
+  ],
+  [
+    containedIn(
+      sideOf(
+        "SiteTarget",
+        "package",
+        "path",
+        "target",
+        "targetRoot",
+        "targetNearest",
+        "targetNearestKind",
+      ),
+      sideOf(
+        "Document",
+        "package",
+        "path",
+        "node",
+        "rootKind",
+        "contextNearest",
+        "contextNearestKind",
+      ),
+    ),
+    "Include target",
+  ],
+  [
+    containedIn(
+      sideOf("Inclusion", "version", "includeParent", "root"),
+      sideOf("IncludeRoot", "version", "parent", "kind"),
+    ),
+    "Include root",
+  ],
+  [familyOf("counted", sideOf("SiteTarget", "target"), "Document", "targetedBy"), "E1 derived"],
+  [
+    foldOf(
+      { count: "targetedBy", owner: "Document" },
+      "or",
+      sideOf("SiteTarget", "ancestry"),
+      sideOf("Document", "node", "context"),
+    ),
+    "E1 derived",
+  ],
+  // The includes that splice a document, whose count is 0 exactly where it heads an assembly
+  // (reading 117, tests.ts splicingParents), and each assembly's root a head's: both the import's
+  // own derivation, so a breach is the import's. The heads' other half, a root for each head, is
+  // "Inclusion cycle" with its group.
+  [
+    foldOf(
+      { count: "targetedBy", owner: "Document" },
+      "count",
+      sideOf("SiteTarget", "target"),
+      sideOf("Document", "node", "spliced"),
+    ),
+    "E1 derived",
+  ],
+  [containedIn(sideOf("Instance", "document"), sideOf("Document", "node")), "E1 derived"],
+  [containedIn(sideOf("TestDocument", "node"), sideOf("Document", "node")), "E1 derived"],
+  [
+    containedIn(
+      sideOf("Instance", "document", "ids", "idrefTargets", "choices", "hottexts"),
+      sideOf("Document", "node", "ids", "idrefTargets", "choices", "hottexts"),
+    ),
+    "E1 derived",
+  ],
+  [
+    containedIn(
+      sideOf("Instance", "document", "bindings", "langs", "variables"),
+      sideOf("Document", "node", "bindings", "langs", "variables"),
+    ),
+    "E1 derived",
+  ],
+  ...Object.values(testRelations).map(
+    ({ name, primaryKey }) =>
+      [
+        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+        testKeyNames.get(name) ?? "Test overlay",
+      ] as const,
+  ),
+  ...patternLaws([[SelectForm, "E1 derived"]]),
+  // `select` casts `selectForm`, which SelectForm's pattern, the row above, holds to the language
+  // the cast reads total: a form outside it is refused by that law as the statement casts it into
+  // its column, before PostgreSQL computes `select`, so no row breaks this one.
+  [generatedOf(SectionSelection, "select"), "E1 derived"],
+  ...[
+    AssessmentObject,
+    LomEntry,
+    LomGeneral,
+    LomObject,
+    LomObjectIdentifier,
+    LomObjectTitle,
+    LomRecord,
+    LomResource,
+    LomResourceType,
+    LomResourceTypeSource,
+    LomString,
+    LomStringLanguage,
+    LomTitle,
+    LomTitleString,
+    ObjectLang,
+    ResourceLomGeneral,
+    StatisticDate,
+    UsageValue,
+  ].map(
+    ({ name, primaryKey }) =>
+      [
+        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+        "E1 derived",
+      ] as const,
+  ),
+  // `day` restates `lastUpdated`, a `DateDType`, whose language the attribute's value domain
+  // states: xs:date's lexical space, the month lengths and the leap rule included, under its
+  // pattern. Its type, lexical(date), is that language, and its pattern law is the value domain's,
+  // with its rule, so one cause names one rule (the orchestrator's ruling of 2026-11-06).
+  ...patternLaws([[lexical(date), "value domain"]]),
+  // `date` casts `day`, which lexical(date)'s pattern, the row above, holds to the days 0001-01-01
+  // to 9999-12-31 the cast reads total: a day outside it is refused by that law as the statement
+  // casts it into its column, before PostgreSQL computes `date`, so no row breaks this one. Its
+  // value is the calendar day `lastUpdated` names, which the value domain states exists.
+  [generatedOf(StatisticDate, "date"), "value domain"],
+  ...[
+    AriaElement,
+    AriaRange,
+    AriaValue,
+    Binding,
+    BindingDeclaration,
+    BindingName,
+    BoundVariable,
+    Choice,
+    ChoiceInteraction,
+    ChoiceVariableName,
+    ContextRef,
+    CountBound,
+    FeedbackRef,
+    Hotspot,
+    Hottext,
+    Interaction,
+    InteractionAttribute,
+    ItemMode,
+    PlacedBinding,
+    PlacedBindingDeclaration,
+    PlacedChoice,
+    PlacedHottext,
+    PrintedVariableRef,
+    ReferringDocument,
+    SectionContextName,
+    SectionContextRef,
+    SectionFeedbackName,
+    SectionFeedbackRef,
+    SectionPrintedName,
+    SectionPrintedRef,
+    SectionScope,
+    SectionTemplateName,
+    SectionTemplateRef,
+    Slider,
+    TemplateRef,
+    VarRef,
+  ].map(
+    ({ name, primaryKey }) =>
+      [
+        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+        "E1 derived",
+      ] as const,
+  ),
+  ...[MapKeyPoint, MapKeyPair, MapKeyDirectedPair, LookupValue].map(
+    ({ name, primaryKey }) =>
+      [
+        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+        "Mapping overlay",
+      ] as const,
+  ),
+  ...[
+    AssembledReference,
+    DeclarationTable,
+    Expression,
+    ExpressionAttribute,
+    ItemTiming,
+    Literal,
+    MappingLookup,
+    MappingSource,
+    NameLookup,
+    Operand,
+    PlacedDocument,
+    PlacedReference,
+    PlacedVariableRef,
+    Processing,
+    ProcessingTemplate,
+    Reading,
+    ReferenceDocument,
+    ReferenceSegment,
+    SectionIdentifier,
+    TemplateDefault,
+    TestReference,
+    VariableLookup,
+    VariableRef,
+  ].map(
+    ({ name, primaryKey }) =>
+      [
+        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+        "E1 derived",
+      ] as const,
+  ),
+  ...[Reference, ReferencePath].map(
+    ({ name, primaryKey }) =>
+      [
+        { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
+        "Reference overlay",
+      ] as const,
+  ),
+];
+
+/**
+ * A term of a side as a statement value holds it: a field's name, or `pred` of one.
+ */
+const TermValue = Schema.Union([
+  Schema.String,
+  Schema.Struct({ field: Schema.String, kind: Schema.Literal("pred") }),
+]);
+
+/**
+ * A relation as a statement value names it.
+ */
+const NamedValue = Schema.Struct({ name: Schema.String });
+
+/**
+ * A side as a statement value holds it: its source, a relation or a selection of one, and its
+ * terms. A selection's predicate is no part of the value, nor of a law's identity.
+ */
+const SideValue = Schema.Struct({
+  source: Schema.Union([NamedValue, Schema.Struct({ relation: NamedValue })]),
+  terms: Schema.NonEmptyArray(TermValue),
+});
+
+/**
+ * A family statement's value: `ordered`, `counted` or `tree`, its member side and its slots.
+ */
+const FamilyValue = Schema.Struct({
+  family: SideValue,
+  kind: Schema.Literals(["counted", "ordered", "tree"]),
+  root: Schema.optional(Schema.String),
+  slots: Schema.Struct({ count: Schema.String, owner: NamedValue }),
+});
+
+/**
+ * Every statement value a group of {@link lawGroups} may hold, as grizzle's constructors build it.
+ */
+const StatementValue = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("check") }),
+  Schema.Struct({ kind: Schema.Literal("key"), side: SideValue }),
+  Schema.Struct({
+    kind: Schema.Literals(["contained", "mirrors"]),
+    left: SideValue,
+    right: SideValue,
+  }),
+  FamilyValue,
+  Schema.Struct({
+    end: SideValue,
+    family: FamilyValue,
+    kind: Schema.Literal("fold"),
+    monoid: Schema.Struct({
+      name: Schema.Literals(["count", "sum", "or", "twos", "max", "concat"]),
+    }),
+    step: SideValue,
+  }),
+]);
+
+/**
+ * Read a statement value's side as a law names it.
+ *
+ * @param side - The side's value.
+ * @returns The side.
+ */
+const sideRead = (side: typeof SideValue.Type): LawSide => ({
+  relation: "relation" in side.source ? side.source.relation.name : side.source.name,
+  selection: { conjuncts: [] },
+  terms: pipe(
+    side.terms,
+    Arr.map((term): Term => (Predicate.isString(term) ? termOf(term) : term)),
+  ),
+});
+
+/**
+ * Read the laws a statement states that are no check, as an `invariant-rejected` outcome names
+ * them: a mirrors is its two containments, and a check is named by its law already.
+ *
+ * @param statement - A statement of a schema.
+ * @returns Its laws, none for a check or a statement value no law reads.
+ */
+export const lawsOfStatement = (statement: Statement): readonly Law[] =>
+  Option.match(Schema.decodeUnknownOption(StatementValue)(statement), {
+    onNone: () => [],
+    onSome: (read): readonly Law[] => {
+      if (read.kind === "check") {
+        return [];
+      }
+
+      if (read.kind === "key") {
+        return [keyOver(sideRead(read.side))];
+      }
+
+      if (read.kind === "contained" || read.kind === "mirrors") {
+        const left = sideRead(read.left);
+        const right = sideRead(read.right);
+
+        return read.kind === "contained" ? [containedIn(left, right)] : mirrored(left, right);
+      }
+
+      if (read.kind === "fold") {
+        return [
+          foldOf(
+            { count: read.family.slots.count, owner: read.family.slots.owner.name },
+            read.monoid.name,
+            sideRead(read.step),
+            sideRead(read.end),
+          ),
+        ];
+      }
+
+      if (!("slots" in read)) {
+        return [];
+      }
+
+      const member = sideRead(read.family);
+      const slots = { count: read.slots.count, owner: read.slots.owner.name };
+
+      return [
+        read.kind === "tree"
+          ? { kind: "tree", member, root: read.root ?? "", slots }
+          : familyOf(read.kind, member, slots.owner, slots.count),
+      ];
+    },
+  });
+
+/**
+ * The law groups a module exports, each with the one name all of its laws but its checks are
+ * stated under, so a law the group gains is named with it: the tests' groups, the one module whose
+ * laws are not yet named where they are stated ({@link namedLaws} holds the others).
+ *
+ * - **Tests** (`tests.ts`, Q5.13): every overlay's row, copies and families is "Test overlay"; the
+ *   assembled test's instance tree is "Inclusion cycle", since no finite instance tree has one
+ *   child per site under a cycle a head reaches, which the deferred foreign key from `Instance`
+ *   into `TestDocument.sites` refuses, and none places a document of a cycle no head reaches, which
+ *   `TestDocument.instances`' check refuses; its names are "Test name key"; its branch resolutions
+ *   are "Branch target"; each item ref's target is "Item ref target". A row of {@link writtenLaws}
+ *   names a law of a group otherwise: a section document's key and an href's entry ("Document
+ *   entry"), a named element's key ("Structure identifier") and the required members ("Selection
+ *   required"), a variable mapping's target key ("Variable mapping target"), a stimulus ref's key
+ *   ("Stimulus ref key"), the item ref target's copy of its resolved path ("E1 derived"), an
+ *   include's site into its document ("Include target") and its root's kind ("Include root"), the
+ *   sites' count, their context and splice folds under their document, the assembled documents'
+ *   copies and each assembly's root a head's ("E1 derived").
+ */
+export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
+  [testOverlayLaws, "Test overlay"],
+  [inclusionLaws, "Inclusion cycle"],
+  [testNameLaws, "Test name key"],
+  [branchLaws, "Branch target"],
+  [itemRefLaws, "Item ref target"],
+];
+
+/**
+ * A module's statements by the law each states, the law's name its key: `nodeLawsByName` of
+ * `#pantry/qti/node.ts` and its peers, so a law is named where it is stated and this module reads
+ * the name rather than restating the law.
+ */
+type LawsByName = { readonly [Name in LawName]?: readonly Statement[] };
+
+/**
+ * The modules that name their laws where they state them, each a {@link LawsByName}.
+ */
+export const namedLaws: readonly LawsByName[] = [
+  nodeLawsByName,
+  chardataLawsByName,
+  attributeLawsByName,
+  packageLawsByName,
+  identityLawsByName,
+  declarationLawsByName,
+  mappingLawsByName,
+  interactionLawsByName,
+  expressionLawsByName,
+  referenceLawsByName,
+  metadataLawsByName,
+  htmlLawsByName,
+  quotationLawsByName,
+  operatorLawsByName,
+];
+
+/**
+ * Read the laws a module names: every law of each statement under its law's name, a check by its
+ * own name already.
+ *
+ * @param byName - The module's statements by law.
+ * @returns Its laws, each with its name.
+ */
+const lawsNamedIn = (byName: LawsByName): readonly (readonly [Law, LawName])[] =>
+  lawNames.flatMap((name) =>
+    (byName[name] ?? []).flatMap(lawsOfStatement).map((law) => [law, name] as const),
+  );
+
+/**
+ * The identities two statements share while their owners name them by two laws, so no row or group
+ * may name them and the census lists them until their sides differ. None stands today: Q5.09 gave
+ * the strings a multiple extended text requires (`max-strings-required`) the term `kind`, apart
+ * from the single-count binding (`binding-fit`), and identity.ts reads "SSML trim mark" from its
+ * speak's `node`, apart from "SSML lexicon reference"'s `fragment`.
+ */
+export const contestedIdentities: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Every law the schema states that is no check, each as its outcome names it, with its name in
+ * {@link lawTable}: {@link writtenLaws}, then every law of {@link lawGroups} they do not name and no
+ * two owners contest ({@link contestedIdentities}), each once.
+ */
+export const statedLaws: readonly (readonly [Law, LawName])[] = Arr.dedupeWith(
+  [
+    ...namedLaws.flatMap(lawsNamedIn),
+    ...writtenLaws,
+    ...lawGroups.flatMap(([statements, name]) =>
+      statements
+        .flatMap(lawsOfStatement)
+        .filter((law) => !contestedIdentities.has(lawIdentity(law)))
+        .map((law) => [law, name] as const),
+    ),
+  ],
+  ([a], [b]) => lawIdentity(a) === lawIdentity(b),
+);
+
+/**
+ * Each law's name by its identity: every law's check, by {@link checkNameOf}, and every law of
+ * {@link statedLaws}.
+ */
+const namesByIdentity: ReadonlyMap<string, LawName> = new Map([
+  ...lawNames.map((name) => [`check ${checkNameOf(name)}`, name] as const),
+  ...statedLaws.map(([law, name]) => [lawIdentity(law), name] as const),
+]);
+
+/**
+ * The rule each law the schema states keeps, by the law's identity ({@link lawIdentity}): the one
+ * table from a law as grizzle reports it to the rule its refusal names.
+ */
+export const lawRules: ReadonlyMap<string, Rule> = new Map(
+  [...namesByIdentity].map(([identity, name]) => [identity, lawTable[name].rule] as const),
+);
+
+/**
+ * Name the law an outcome's law is.
+ *
+ * @param law - A law as an `invariant-rejected` outcome names it.
+ * @returns Its name, or none for a law no row of the table states.
+ */
+export const lawNameOf = (law: Law): Option.Option<LawName> =>
+  Option.fromUndefinedOr(namesByIdentity.get(lawIdentity(law)));
+
+/**
+ * Each rule's place in {@link precedence}.
+ */
+const ranks: ReadonlyMap<Rule, number> = new Map(precedence.map((rule, rank) => [rule, rank]));
+
+/**
+ * Name the one rule a refusal that names `laws` is refused under: the most specific rule among
+ * theirs, by {@link precedence}.
+ *
+ * The laws are a set: their order and any repeat change nothing. A law no row of the table states
+ * is left out, so the rule is the most specific of the others; the census in
+ * `refusal.oracle.test.ts` keeps every law the schema states in the table.
+ *
+ * @param laws - The `laws` of an `invariant-rejected` outcome.
+ * @returns The rule, or none when no law of the set is in the table.
+ */
+export const ruleOfLaws = (laws: Arr.NonEmptyReadonlyArray<Law>): Option.Option<Rule> =>
+  Arr.head(
+    Arr.sort(
+      laws.flatMap((law) =>
+        Option.toArray(Option.map(lawNameOf(law), (name): Rule => lawTable[name].rule)),
+      ),
+      Order.mapInput(Order.Number, (rule: Rule) => ranks.get(rule) ?? precedence.length),
+    ),
+  );
+
+/**
+ * What a refusal knows of the row that broke its laws: grizzle's witness, or the row's fields as
+ * the caller read them.
+ *
+ * Grizzle names a key's violating row by its key fields alone, and a constraint PostgreSQL checks
+ * itself (a foreign key, a row check, a closed relation's check) by none: its witness is
+ * `unreported`. The fields a content-order law reads (a node's `version`, its parent's kind and its
+ * predecessor's state) are in no witness grizzle gives, so a caller that holds the row, such as a
+ * direct-SQL test or the law oracle's breach, passes it as `row`.
+ */
+export type RefusalWitness =
+  | Witness
+  | {
+      readonly kind: "row";
+      readonly relation: string;
+      readonly values: Readonly<Record<string, string>>;
+    };
+
+/**
+ * The installed grammar's rows an explanation reads: the content grammar and `Admission`, the
+ * generators' rows `src/grammar/install.ts` installs (its `grammar`).
+ */
+export type RefusalConstants = Pick<ComposedGrammar, "admission" | "content">;
+
+/**
+ * A position a content model allows next: its code, the kinds that stand at it, and the particle
+ * of the XSD or the reading that states it.
+ */
+export interface Allowed {
+  readonly kinds: readonly string[];
+  readonly position: string;
+  readonly source: Option.Option<string>;
+}
+
+/**
+ * The explanation of a refusal: what broke, where each of its laws is stated, and for a
+ * content-order law the positions its parent's content model allows next.
+ */
+export interface Explanation {
+  /**
+   * Each law, its rule and its identity; the witness's row; and for a content-order law the state
+   * it broke at and what its model allows there.
+   */
+  readonly detail: string;
+  /**
+   * The positions `Follow` allows after the state a content-order law broke at, ascending; none
+   * when no content-order law is named, or the witness gives no row it reads.
+   */
+  readonly next: Option.Option<readonly Allowed[]>;
+  /**
+   * Each law's spec source, then for a content-order law its model's and each allowed position's.
+   */
+  readonly sources: Arr.NonEmptyReadonlyArray<string>;
+}
+
+/**
+ * The content-order laws, by name, with the fields of a node row each reads its model's state by:
+ * the parent's kind and the predecessor's state for a child's step (N5), the node's own kind and
+ * its last child's state for its family's end (N7).
+ */
+const contentOrderLaws: Readonly<
+  Partial<Record<LawName, { readonly parent: string; readonly state: string }>>
+> = {
+  "N5 Follow": { parent: "parentKind", state: "was" },
+  "N7 Last": { parent: "kind", state: "lastState" },
+};
+
+/**
+ * The content grammar as an explanation reads it, every lookup a map's: each family's content
+ * model by `version parent` (`ContentModelOf`), `Follow`'s successors by `model position`, `Last`'s
+ * ends by model, and the kinds at each position of each family by `version parent position`, those
+ * its `Admission` gives the position and then those its shared model's `Symbol` does.
+ */
+interface ContentIndex {
+  readonly ends: ReadonlyMap<string, readonly string[]>;
+  readonly kinds: ReadonlyMap<string, readonly string[]>;
+  readonly models: ReadonlyMap<string, string>;
+  readonly next: ReadonlyMap<string, readonly string[]>;
+}
+
+/**
+ * Each content grammar's index, built on its first explanation, which no later explanation scans
+ * the rows for again.
+ */
+const contentIndexes = new WeakMap<RefusalConstants, ContentIndex>();
+
+/**
+ * Key a row of a relation over (version, parent, position).
+ *
+ * @param version - The schema version.
+ * @param parent - The model's kind.
+ * @param position - The position.
+ * @returns The key.
+ */
+const positionKey = (version: string, parent: string, position: string): string =>
+  `${version} ${parent} ${position}`;
+
+/**
+ * Group values under keys, each key's values in first-seen order and each once.
+ *
+ * @param pairs - The (key, value) pairs.
+ * @returns The groups.
+ */
+const grouped = (pairs: Iterable<readonly [string, string]>): ReadonlyMap<string, string[]> => {
+  const groups = new Map<string, string[]>();
+  for (const [key, value] of pairs) {
+    const group = groups.get(key);
+    if (group === undefined) {
+      groups.set(key, [value]);
+    } else if (!group.includes(value)) {
+      group.push(value);
+    }
+  }
+
+  return groups;
+};
+
+/**
+ * Read the content grammar's index, building it once per grammar.
+ *
+ * @param constants - The installed grammar's rows.
+ * @returns The index.
+ */
+const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
+  const known = contentIndexes.get(constants);
+  if (known !== undefined) {
+    return known;
+  }
+
+  const { admission, content } = constants;
+  const symbols = Map.groupBy(content.symbol.rows, ({ model }) => model);
+  const index: ContentIndex = {
+    ends: grouped(content.last.rows.map(({ model, position }) => [model, position] as const)),
+    kinds: grouped([
+      ...admission.rows.map(
+        ({ child, parent, position, version }) =>
+          [positionKey(version, parent, position), child] as const,
+      ),
+      ...content.sharedModelOf.rows.flatMap(({ model, parent, version }) =>
+        model === noSharedModel
+          ? []
+          : (symbols.get(model) ?? []).map(
+              ({ kind, position }) => [positionKey(version, parent, position), kind] as const,
+            ),
+      ),
+    ]),
+    models: new Map(
+      content.contentModelOf.rows.map(
+        ({ model, parent, version }) => [`${version} ${parent}`, model] as const,
+      ),
+    ),
+    next: grouped(
+      content.follow.rows.map(({ from, model, to }) => [`${model} ${from}`, to] as const),
+    ),
+  };
+  contentIndexes.set(constants, index);
+
+  return index;
+};
+
+/**
+ * Write a source as an explanation names it: an XSD's file and line, or a specification's cite.
+ *
+ * @param source - The source.
+ * @returns Its text.
+ */
+const sourceText = (source: Source): string =>
+  source._tag === "xsd" ? `${source.file}:${String(source.line)}` : source.cite;
+
+/**
+ * Order positions by their code.
+ */
+const byPosition = Order.mapInput(Order.Number, Number);
+
+/**
+ * The state a content-order law broke at, read from a row: the version, the model's kind and the
+ * state, and the node's own kind.
+ */
+interface BrokenState {
+  readonly kind: string;
+  readonly law: LawName;
+  readonly parent: string;
+  readonly state: string;
+  readonly version: SchemaVersion;
+}
+
+/**
+ * Read the state a content-order law broke at from a row witness.
+ *
+ * @param law - The law's name.
+ * @param witness - The refusal's witness.
+ * @returns The state, or none when the law reads no content model or the witness gives no row
+ *   holding its fields.
+ */
+const brokenStateOf = (law: LawName, witness: RefusalWitness): Option.Option<BrokenState> => {
+  const reads = contentOrderLaws[law];
+  if (reads === undefined || witness.kind !== "row") {
+    return Option.none();
+  }
+
+  const { values } = witness;
+  const version = schemaVersions.find((known) => known === values["version"]);
+  const parent = values[reads.parent];
+  const state = values[reads.state];
+
+  return version === undefined || parent === undefined || state === undefined
+    ? Option.none()
+    : Option.some({ kind: values["kind"] ?? parent, law, parent, state, version });
+};
+
+/**
+ * Name the positions a model allows after a state, with their kinds and sources.
+ *
+ * @param broken - The state.
+ * @param constants - The installed grammar's rows.
+ * @returns The positions, ascending by code.
+ */
+const allowedAfter = (broken: BrokenState, constants: RefusalConstants): readonly Allowed[] => {
+  const index = contentIndexOf(constants);
+  const { parent, state, version } = broken;
+  const model = index.models.get(`${version} ${parent}`) ?? "";
+
+  return Arr.sort(index.next.get(`${model} ${state}`) ?? [], byPosition).map((position) => ({
+    kinds: index.kinds.get(positionKey(version, parent, position)) ?? [],
+    position,
+    source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
+  }));
+};
+
+/**
+ * Write the positions a model allows, as an explanation lists them.
+ *
+ * @param allowed - The positions.
+ * @returns Their text: each position with its kinds and source, or that the model allows none.
+ */
+const allowedText = (allowed: readonly Allowed[]): string =>
+  allowed.length === 0
+    ? "no further child"
+    : allowed
+        .map(
+          ({ kinds, position, source }) =>
+            `${position} (${kinds.join(" ") || "no kind"}${Option.match(source, {
+              onNone: () => "",
+              onSome: (text) => `, ${text}`,
+            })})`,
+        )
+        .join("; ");
+
+/**
+ * Write what a content-order law's broken state means: where the node stands in its parent's model,
+ * or where its family ends in its own, and what the model allows next.
+ *
+ * @param broken - The state.
+ * @param allowed - What the model allows after it.
+ * @param constants - The installed grammar's rows.
+ * @returns The sentence.
+ */
+const brokenStateText = (
+  broken: BrokenState,
+  allowed: readonly Allowed[],
+  constants: RefusalConstants,
+): string => {
+  const { kind, parent, state, version } = broken;
+  if (broken.law === "N7 Last") {
+    const index = contentIndexOf(constants);
+    const ends = index.ends.get(index.models.get(`${version} ${parent}`) ?? "") ?? [];
+
+    return `${parent}'s children end in state ${state} of its content model in ${version}, which ends only in ${Arr.sort(ends, byPosition).join(", ") || "no state"}; after state ${state} it needs one of ${allowedText(allowed)}`;
+  }
+
+  return `${kind} follows state ${state} of ${parent}'s content model in ${version}, which allows next ${allowedText(allowed)}`;
+};
+
+/**
+ * Write a witness as an explanation names it.
+ *
+ * @param witness - The refusal's witness.
+ * @returns Where the row is, or that the database names none.
+ */
+const witnessText = (witness: RefusalWitness): string => {
+  if (witness.kind === "unreported") {
+    return "the database names no row: PostgreSQL reports a constraint it checks itself by the constraint alone";
+  }
+
+  const values = Object.entries(witness.values)
+    .map(
+      ([field, value]) => `${field}=${Predicate.isString(value) ? value : Formatter.format(value)}`,
+    )
+    .join(" ");
+
+  return `at ${witness.relation} ${values}`;
+};
+
+/**
+ * Explain a refusal from its laws, its witness and the installed grammar, as a pure function.
+ *
+ * Each law is named with its rule and identity, and its spec source joins `sources`. For a
+ * content-order law (N5's `Follow` step, N7's `Last` end) whose row the witness gives, the
+ * explanation names the positions `Follow` allows after the state it broke at, each with its kinds
+ * and the XSD particle or reading that states it, and `sources` adds the model's and each
+ * position's.
+ *
+ * @param laws - The `laws` of an `invariant-rejected` outcome.
+ * @param witness - Its `witness`, or the row the caller read.
+ * @param constants - The installed grammar's rows.
+ * @returns The explanation.
+ */
+export const explain = (
+  laws: Arr.NonEmptyReadonlyArray<Law>,
+  witness: RefusalWitness,
+  constants: RefusalConstants,
+): Explanation => {
+  const named = laws.map((law) => ({ identity: lawIdentity(law), name: lawNameOf(law) }));
+  const broken = Arr.head(
+    named.flatMap(({ name }) =>
+      Option.toArray(name.pipe(Option.flatMap((law) => brokenStateOf(law, witness)))),
+    ),
+  );
+  const next = broken.pipe(Option.map((state) => allowedAfter(state, constants)));
+  const lawText = named
+    .map(({ identity, name }) =>
+      Option.match(name, {
+        onNone: () => `${identity}, which no rule of the law table owns`,
+        onSome: (law) => `${law} (rule ${lawTable[law].rule}): ${identity}`,
+      }),
+    )
+    .join("; ");
+  const stateText = Option.match(Option.all({ allowed: next, broken }), {
+    onNone: () => "",
+    onSome: ({ allowed, broken: state }) => `. ${brokenStateText(state, allowed, constants)}`,
+  });
+  const modelSources = Option.match(broken, {
+    onNone: () => [],
+    onSome: ({ parent, version }) => [
+      ...Option.toArray(
+        Option.map(constants.content.sourceOf({ parent, position: "0", version }), sourceText),
+      ),
+      ...Option.getOrElse(next, () => []).flatMap(({ source }) => Option.toArray(source)),
+    ],
+  });
+  const [first, ...rest] = Arr.dedupe([
+    ...named.flatMap(({ name }) =>
+      Option.toArray(name.pipe(Option.map((law) => lawTable[law].source))),
+    ),
+    ...modelSources,
+  ]);
+
+  return {
+    detail: `${lawText}, ${witnessText(witness)}${stateText}`,
+    next,
+    sources:
+      first === undefined
+        ? ["no law of the refusal is in the law table, so none names its source"]
+        : [first, ...rest],
+  };
+};
+
+/**
  * The package was refused under one rule of the roster.
  *
- * `detail` says what broke it. `law` is the schema's law as grizzle reported it, present when the
- * database refused the apply.
+ * `detail` says what broke it, and `origin` where the refusal came from
+ * (`#pantry/package/refusal-origin.ts`): the reader, the container or the codec, or the database,
+ * whose case carries the laws it named, each parsed into its identity, name and rule, where each
+ * is stated, and how the refusal names the row that broke them. A reader that tells the user where
+ * to look reads the witness's kind rather than the detail's wording.
  */
 export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRefused", {
   detail: Schema.String,
-  law: Schema.optional(Schema.Unknown),
+  origin: RefusalOrigin,
   rule: ImportRule,
 }) {
   /**
@@ -267,1630 +1587,119 @@ export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRe
 }
 
 /**
- * A value a law's selection holds: a handle, a number or one of the engine's value objects.
+ * The database refused an apply under laws no row of the law table states, so no rule names the
+ * refusal. It is a defect of this module's table, which the census in `refusal.oracle.test.ts`
+ * keeps whole, never a verdict on the package.
  */
-type SelectedValue = bigint | boolean | number | object | string;
-
-/**
- * One side of a containment, mirrors or capacity law: a relation, the fields it names and the
- * values the statement selects on it, as `Edge(parent)` selected on `childKind`. `selection` is
- * absent on a hand-written law and empty on a side that selects nothing.
- */
-interface LawSide {
-  readonly fields: readonly string[];
-  readonly relation: string;
-  readonly selection?: readonly { readonly field: string; readonly value: SelectedValue }[];
+export class UnownedLaws extends Schema.TaggedError<UnownedLaws>()("UnownedLaws", {
+  laws: Schema.Array(Schema.String),
+}) {
+  /**
+   * The laws, and the repair.
+   */
+  override get message(): string {
+    return `No rule owns the laws ${this.laws.join("; ")}. Add each to statedLaws in src/import/refusal.ts under the law it states, and run the census in refusal.oracle.test.ts.`;
+  }
 }
 
 /**
- * Whether a side selects `field` equal to `value`, or on any value when none is given.
- */
-const selects = (side: LawSide, field: string, value?: string): boolean =>
-  side.selection?.some(
-    (pair) => pair.field === field && (value === undefined || pair.value === value),
-  ) ?? false;
-
-/**
- * Whether a side's fields are exactly `fields`, in order.
- */
-const fieldsAre = (side: LawSide, ...fields: readonly string[]): boolean =>
-  side.fields.join(",") === fields.join(",");
-
-/**
- * A law as grizzle reports it in an `invariant-rejected` outcome (the engine's `Law`), the parts
- * this module reads. A `pattern` law carries the regex and no relation: grizzle reports one law for
- * every spelling of one language.
- */
-export type ImportLaw =
-  | { readonly fields: readonly string[]; readonly kind: "key"; readonly relation: string }
-  | { readonly fields: readonly string[]; readonly kind: "primaryKey"; readonly relation: string }
-  | { readonly kind: "check"; readonly name: string; readonly relation: string }
-  | { readonly from: LawSide; readonly kind: "contained"; readonly to: LawSide }
-  | { readonly from: LawSide; readonly kind: "mirrors"; readonly to: LawSide }
-  | { readonly from: LawSide; readonly kind: "coverage"; readonly to: LawSide }
-  | { readonly field: string; readonly kind: "alternatives"; readonly relation: string }
-  | {
-      readonly arm: string;
-      readonly field: string;
-      readonly handles: readonly [string, ...string[]];
-      readonly kind: "alternativesArm";
-      readonly relation: string;
-    }
-  | { readonly from: LawSide; readonly kind: "capacity"; readonly target: LawSide }
-  | { readonly contract: string; readonly kind: "contract" }
-  | { readonly field: string; readonly kind: "numericBound"; readonly relation: string }
-  | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string };
-
-/**
- * The rule a law maps to, and whether the schema's statement was recognized.
- */
-interface Mapped {
-  readonly mapped: boolean;
-  readonly rule: Rule;
-}
-
-const named = (rule: Rule): Mapped => ({ mapped: true, rule });
-
-/**
- * The nearest rule for a law no row of the map names, by the kind of the law alone. It is a sort,
- * not a claim: the caller keeps the law verbatim in the refusal.
- */
-const nearest = (law: ImportLaw): Mapped => {
-  if (law.kind === "key" || law.kind === "primaryKey") {
-    return { mapped: false, rule: "document-key" };
-  }
-
-  if (law.kind === "check" || law.kind === "numericBound" || law.kind === "capacity") {
-    return { mapped: false, rule: "binding-max" };
-  }
-
-  if (law.kind === "pattern" || law.kind === "contract") {
-    return { mapped: false, rule: "value-lexical" };
-  }
-
-  return { mapped: false, rule: "admission" };
-};
-
-/**
- * The rule of a key, by the relation and the fields it constrains.
- */
-const keyRules = new Map<string, Rule>([
-  ["Declaration.(document,identifier)", "declaration-key"],
-  ["DocumentIdentifier.(package,resource)", "root-identifier"],
-  ["DocumentTitle.(package,resource)", "root-title"],
-  ["Edge.(child)", "edge-parent"],
-  ["ForeignAttribute.(node,prefix,local)", "wildcard-attribute"],
-  ["InteractionBinding.(document,responseIdentifier)", "binding-key"],
-  ["ItemBody.(item)", "body-single"],
-  ["ItemStimulusRef.(document,identifier)", "stimulus-ref-key"],
-  ["LomGeneral.(lom)", "lom-general-single"],
-  ["LomGeneralTitle.(lom)", "lom-title-single"],
-  ["LomObjectIdentifier.(lom)", "lom-identifier"],
-  ["LomObjectTitle.(lom)", "lom-title"],
-  ["Manifest.(id)", "manifest-identifier"],
-  ["ManifestMetadata.(manifest)", "manifest-children"],
-  ["ManifestSchema.(metadata)", "schema-single"],
-  ["ManifestSchemaVersion.(metadata)", "schema-single"],
-  ["Organizations.(manifest)", "manifest-children"],
-  ["OutcomeElseArm.(condition)", "P4"],
-  ["OutcomeIfArm.(condition)", "P4"],
-  ["Package.(id)", "manifest-identifier"],
-  ["Prompt.(parent)", "prompt-single"],
-  ["Resource.(package,identifier)", "resource-identifier"],
-  ["ResourceMetadata.(resource)", "resource-metadata-single"],
-  ["Resources.(manifest)", "manifest-children"],
-  ["ResponseElseArm.(condition)", "P4"],
-  ["ResponseIfArm.(condition)", "P4"],
-  ["ResponseProcessingItem.(item)", "processing-single"],
-  ["RuleOperand.(child)", "P3"],
-  ["Selection.(section)", "structure-count"],
-  ["SimpleChoice.(interaction,identifier)", "choice-key"],
-  ["TemplateElseArm.(condition)", "P4"],
-  ["TemplateIfArm.(condition)", "P4"],
-  ["TemplateProcessing.(item)", "P17"],
-  ["TestIdentifier.(scope,identifier)", "structure-identifier"],
-  ["TestReach.(test,identifier)", "structure-identifier"],
-  ["TypedDeclaration.(document,identifier)", "declaration-key"],
-  ["StringBinding.(document,identifier)", "string-binding"],
-  ["ResourceLomGeneral.(package,resource)", "document-lang"],
-  ["ResourceLomLanguageSet.(package,resource,value)", "document-lang"],
-  ["ValueSet.(declaration,role)", "value-set-role"],
-  ["VariableMapping.(itemRef,target)", "variable-mapping-target"],
-]);
-
-const keyRule = (relation: string, fields: readonly string[]): Rule | undefined => {
-  const rule = keyRules.get(`${relation}.(${fields.join(",")})`);
-  if (rule !== undefined) {
-    return rule;
-  }
-
-  if (relation === "AttributeLexical" || relation === "AttributeSpelling") {
-    return "attribute-lexical";
-  }
-
-  if (relation === "Document") {
-    return "document-key";
-  }
-
-  if (fields.join(",") === "interaction,identifier") {
-    return "choice-key";
-  }
-
-  if (fields.join(",") === "document,id") {
-    return "document-key";
-  }
-
-  return relation.startsWith("Qmd") && fields.length === 1
-    ? "qti-metadata-child-single"
-    : undefined;
-};
-
-/**
- * The rule of a row check, by its name in the schema.
- */
-const checkRules = new Map<string, Rule>([
-  ["AdaptiveFeedback", "adaptive-feedback"],
-  ["AriaRoleH1", "aria-role"],
-  ["AriaRoleNotSource", "aria-role"],
-  ["AssociableHotspotBounds", "choice-bounds"],
-  ["AssociateBounds", "choice-bounds"],
-  ["AssessmentItemLabelRoot", "label-tool"],
-  ["BdoDirNotAuto", "bdo-dir"],
-  ["BindingMax", "binding-max"],
-  ["BranchTargetKind", "branch-target"],
-  ["BuiltInRefKind", "P9"],
-  ["ChoiceBounds", "choice-bounds"],
-  ["ChoiceTemplateRefType", "template-ref"],
-  ["DeclarationNotReserved", "declaration-reserved"],
-  ["DeclaredRefKind", "P8"],
-  ["DependencyNotSelf", "dependency-target"],
-  ["EqualRoundedFigures", "P10"],
-  ["EqualRoundedFiguresRefZero", "P32"],
-  ["FeedbackOutcomeRefType", "feedback-ref"],
-  ["ForeignAttributePrefix", "wildcard-attribute"],
-  ["ForeignUnqualifiedUnprefixed", "wildcard-attribute"],
-  ["GapImgBounds", "choice-bounds"],
-  ["GapMatchBounds", "choice-bounds"],
-  ["GapTextBounds", "choice-bounds"],
-  ["GraphicAssociateBounds", "choice-bounds"],
-  ["GraphicGapMatchBounds", "choice-bounds"],
-  ["GraphicOrderChoiceBounds", "choice-bounds"],
-  ["GraphicOrderMinChoicesPositive", "attribute-lexical"],
-  ["HotspotChoiceBounds", "choice-bounds"],
-  ["HottextChoiceBounds", "choice-bounds"],
-  ["IndexNRefZero", "P32"],
-  ["IndexPositive", "P11"],
-  ["ItemInstancePositive", "value-lexical"],
-  ["ItemInstanceVariableRoot", "prefixed-root"],
-  ["ItemRefLtiType", "item-ref-target"],
-  ["ItemToolRoot", "attribute-admission"],
-  ["ItemVariableRoot", "prefixed-root"],
-  ["LomLearningResourceType", "lom-learning-resource-type"],
-  ["MatchBounds", "choice-bounds"],
-  ["MaxAttemptsInt", "attribute-lexical"],
-  ["MediaPlays", "choice-bounds"],
-  ["NodeClassNotMathml", "attribute-admission"],
-  ["NodeDirNotMathml", "attribute-admission"],
-  ["NoDefaultHotspotInGraphicGapMatch", "hotspot-default"],
-  ["NodeLabelNotRoot", "attribute-admission"],
-  ["OrderChoiceBounds", "choice-bounds"],
-  ["OrderMinChoicesPositive", "attribute-lexical"],
-  ["OutcomeMinMaxKind", "outcome-minmax-kind"],
-  ["PositionObjectChoiceBounds", "choice-bounds"],
-  ["PrefixedBuiltInName", "prefixed-ref"],
-  ["PrefixedVariableSourceKind", "prefixed-ref"],
-  ["PrintedVariableRefKind", "printed-variable-ref"],
-  ["PrintedVariableVarRefType", "printed-variable-ref"],
-  ["ProcessingRoot", "processing-root"],
-  ["RepeatInt", "P6"],
-  ["RepeatNumberRepeatsRefZero", "P32"],
-  ["RequiredChildRequired", "selection-required"],
-  ["ReservedOutcomeTypes", "reserved-type"],
-  ["RoundToFigures", "P10"],
-  ["RoundToFiguresRefZero", "P32"],
-  ["SectionDurationRoot", "prefixed-root"],
-  ["SectionDurationTargetHolder", "prefixed-ref"],
-  ["SectionDurationTargetKind", "prefixed-ref"],
-  ["SectionFeedbackOutcomeRefType", "feedback-ref"],
-  ["SectionIdentifierTargetHolderKind", "section-identifier-target"],
-  ["SectionPrintedVariableRefKind", "printed-variable-ref"],
-  ["SectionPrintedVariableVarRefType", "printed-variable-ref"],
-  ["SectionVariableDeclaredKind", "P8"],
-  ["SectionVariableReferrer", "section-variable-ref"],
-  ["SectionVariableRoot", "section-variable-ref"],
-  ["SelectionBoundedWithoutReplacement", "selection-bounds"],
-  ["SelectionSelectInt", "attribute-lexical"],
-  ["RuleOperandKind", "P3"],
-  ["SelectPointChoiceBounds", "choice-bounds"],
-  ["SimpleAssociableChoiceBounds", "choice-bounds"],
-  ["TemplateContentRefType", "template-ref"],
-  ["TemplateParameterReferrer", "P13"],
-  ["TemplateParameterRoot", "P13"],
-  ["VariableWeightInTest", "P12"],
-  ["VariantNotSelf", "variant-target"],
-  ["XIncludeParseXml", "include-parse"],
-  ["XsiNilUndeclared", "xsi-nil"],
-  ["XsiTypeAttributePrefix", "xsi-type"],
-]);
-
-/**
- * The rule of a check whose name is a form, not a roster entry: `<Relation>Attribute` holds an
- * attribute relation's constant `attribute` column (the relation's own containment into
- * `AttributeAdmission` reads it), and `<Name>ByVersion` is a version-gated attribute value
- * (goal 3.9). `HeadersTarget`'s constant belongs to the `IDREFS` copy it is contained by.
- */
-const checkRuleByForm = (relation: string, name: string): Rule | undefined => {
-  if (name === `${relation}Attribute`) {
-    return relation === "HeadersTarget" ? "idref-copy" : "attribute-admission";
-  }
-
-  return name.endsWith("ByVersion") ? "attribute-lexical" : undefined;
-};
-
-/**
- * The rule of a capacity, by the relation it bounds and the one that fills it, as
- * `bounded<filler>`.
- */
-const capacityRules = new Map<string, Rule>([
-  ["AreaMapEntry<Coords", "coords-owner"],
-  ["AssessmentSection<StructureChild", "section-empty"],
-  ["AssociableHotspot<Coords", "coords-owner"],
-  ["ChoiceInteraction<SimpleChoice", "choice-present"],
-  ["ColgroupSpan<Edge", "colgroup-span"],
-  ["Details<Edge", "details-summary"],
-  ["EqualRounded<EqualRoundedFiguresRef", "P32"],
-  ["Document<DocumentIdentifier", "root-identifier"],
-  ["Document<DocumentTitle", "root-title"],
-  ["Expression<Operand", "P2"],
-  ["ExpressionMax<Operand", "P2"],
-  ["GapMatchBinding<Gap", "gap-multiple"],
-  ["GraphicOrderInteraction<HotspotChoice", "order-choice-count"],
-  ["HotspotChoice<Coords", "coords-owner"],
-  ["Index<IndexNRef", "P32"],
-  ["InlineChoiceInteraction<InlineChoice", "choice-present"],
-  ["ManifestMetadata<ManifestSchema", "schema-single"],
-  ["ManifestMetadata<ManifestSchemaVersion", "schema-single"],
-  ["MatchInteraction<Edge", "match-sets"],
-  ["MathmlBvar<Edge", "union-count"],
-  ["MathmlMmultiscripts<Edge", "union-count"],
-  ["MathmlPiecewise<Edge", "union-count"],
-  ["ModalFeedback<Edge", "modal-body"],
-  ["Node<NodeDir", "bdo-dir"],
-  ["OrderInteraction<SimpleChoice", "order-choice-count"],
-  ["Package<ManifestMetadata", "manifest-children"],
-  ["Package<Organizations", "manifest-children"],
-  ["Package<Resources", "manifest-children"],
-  ["Repeat<RepeatNumberRepeatsRef", "P32"],
-  ["Resource<File", "resource-file-present"],
-  ["ResourceLomIdentified<LomIdentifier", "lom-identifier"],
-  ["ResourceLomIdentified<LomObjectIdentifier", "lom-identifier"],
-  ["ResourceLomTitled<LomGeneralTitle", "lom-title-single"],
-  ["ResourceLomTitled<LomObjectTitle", "lom-title"],
-  ["RoundTo<RoundToFiguresRef", "P32"],
-  ["Selection<RequiredChild", "selection-required"],
-  ["SelectionBounded<StructureChild", "selection-bounds"],
-  ["Table<Edge", "table-parts"],
-  ["TestPart<StructureChild", "structure-count"],
-  ["TypedValueSet<DeclaredValue", "value-single"],
-  ["ValueSet<DeclaredValue", "value-present"],
-  ["XInclude<XIncludeXpointer", "include-xpointer"],
-]);
-
-/**
- * The rule of a capacity. A capacity is named by the relation it bounds and the one that fills it;
- * the two `Picture` capacities fill from the same `Edge` and differ by the child kind they select,
- * whether or not they also select the parent kind `picture`.
- */
-const capacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
-  if (target.relation === "StimulusBody") {
-    return "attribute-admission";
-  }
-
-  if (target.relation === "Picture" && from.relation === "Edge") {
-    if (selects(from, "childKind", "img")) {
-      return "picture-img";
-    }
-
-    return selects(from, "childKind", "source") ? "picture-source" : undefined;
-  }
-
-  return capacityRules.get(`${target.relation}<${from.relation}`);
-};
-
-/**
- * The containments of the phase-5 test layer, each rule beside the `from>to` pairs it names. A
- * statement the spec's 4.16 gives no name is filed under the closest (decision 177):
+ * Build the refusal of an `invariant-rejected` outcome: its rule by {@link ruleOfLaws}, its
+ * explanation by {@link explain}.
  *
- * - A holder's copy of its document into `Node`, and the containments between a holder and its
- *   `TestIdentifier`, are `structure-identifier`; a stimulus reference's own copy is
- *   `stimulus-ref-key`;
- * - `StructureChild` and the `Edge` rows it counts, and a `Selection`'s own, are `structure-count`;
- * - A branch rule's owner statements are `branch-target`, and a weight's link to its edge `P12`;
- * - A `TestDocument` row's containments are the reach, `reach-copy`;
- * - The root checks of the prefixed arms are `prefixed-root` and E18's `section-variable-ref`; an
- *   arm's containment into `VariableRef` keeps the `ref-exists` form every arm has.
- */
-const testContainedEntries: readonly (readonly [Rule, readonly string[]])[] = [
-  ["P12", ["Weight>Edge"]],
-  ["P8", ["SectionVariableDeclared>Declaration", "SectionVariableDeclared>SectionVariableRef"]],
-  ["attribute-admission", ["ItemTool>AssessmentItem", "ItemTool>Tree", "StimulusBody>Node"]],
-  [
-    "branch-target",
-    [
-      "BranchRule>AssessmentSection",
-      "BranchRule>Edge",
-      "BranchRule>ItemRef",
-      "BranchRule>TestPart",
-      "BranchRuleTarget>BranchRule",
-      "BranchRuleTarget>TestIdentifier",
-    ],
-  ],
-  [
-    "item-ref-target",
-    ["ItemRef>ItemRefResolution", "ItemRefDocument>Document", "ItemRefLti>Resource"],
-  ],
-  ["label-tool", ["AssessmentItemLabel>Tree"]],
-  [
-    "prefixed-ref",
-    [
-      "ItemInstanceVariableRef>PrefixedVariableSource",
-      "ItemVariableRef>PrefixedVariableSource",
-      "PrefixedBuiltIn>PrefixedVariableSource",
-      "PrefixedDeclared>Declaration",
-      "PrefixedDeclared>PrefixedVariableSource",
-      "PrefixedMapped>PrefixedVariableSource",
-      "PrefixedMapped>VariableMapping",
-      "PrefixedVariableSource>ItemInstanceVariableRef",
-      "PrefixedVariableSource>ItemRefDocument",
-      "PrefixedVariableSource>ItemVariableRef",
-      "PrefixedVariableSource>TestDocument",
-      "PrefixedVariableSource>TestReach",
-      "PrefixedVariableSource>VariableRef",
-      "SectionDurationRef>SectionDurationTarget",
-      "SectionDurationTarget>SectionDurationRef",
-      "SectionDurationTarget>TestDocument",
-      "SectionDurationTarget>TestReach",
-      "SectionDurationTarget>VariableRef",
-    ],
-  ],
-  [
-    "prefixed-root",
-    ["ItemInstanceVariableRef>Document", "ItemVariableRef>Document", "SectionDurationRef>Document"],
-  ],
-  ["reach-copy", ["TestDocument>Document"]],
-  [
-    "section-identifier-target",
-    [
-      "SectionIdentifierTarget>ExpressionSectionIdentifier",
-      "SectionIdentifierTarget>Node",
-      "SectionIdentifierTarget>TestDocument",
-      "SectionIdentifierTarget>TestReach",
-    ],
-  ],
-  ["section-ref-target", ["SectionRef>SectionRefResolution", "SectionRefResolution>Document"]],
-  [
-    "section-variable-ref",
-    [
-      "SectionVariableRef>Document",
-      "SectionVariableRef>Node",
-      "SectionVariableResolution>SectionVariableRef",
-      "SectionVariableResolution>TestDocument",
-    ],
-  ],
-  ["selection-bounds", ["Selection>SelectionBounded", "SelectionBounded>Selection"]],
-  [
-    "selection-required",
-    ["AssessmentSection>RequiredChild", "ItemRef>RequiredChild", "RequiredChild>StructureChild"],
-  ],
-  ["stimulus-ref-key", ["ItemStimulusRef>Node"]],
-  [
-    "stimulus-ref-target",
-    ["ItemStimulusRef>StimulusRefResolution", "StimulusRefResolution>Document"],
-  ],
-  [
-    "structure-count",
-    ["Edge>StructureChild", "Selection>AssessmentSection", "Selection>Edge", "StructureChild>Edge"],
-  ],
-  [
-    "structure-identifier",
-    [
-      "AssessmentSection>Node",
-      "AssessmentSection>TestIdentifier",
-      "ItemRef>Node",
-      "ItemRef>TestIdentifier",
-      "SectionRef>Node",
-      "SectionRef>TestIdentifier",
-      "TestIdentifier>AssessmentSection",
-      "TestIdentifier>ItemRef",
-      "TestIdentifier>SectionRef",
-      "TestIdentifier>TestPart",
-      "TestPart>Node",
-      "TestPart>TestIdentifier",
-      "TestReach>TestIdentifier",
-    ],
-  ],
-  [
-    "template-default-target",
-    ["TemplateDefault>Declaration", "TemplateDefault>Edge", "TemplateDefault>ItemRefDocument"],
-  ],
-  ["value-lexical", ["ItemInstanceSpelling>ItemInstanceVariableRef"]],
-  [
-    "variable-mapping-source",
-    ["VariableMapping>Declaration", "VariableMapping>Edge", "VariableMapping>ItemRefDocument"],
-  ],
-];
-
-/**
- * The relations of the test layer's optional attribute values and defaulted markers: a containment
- * that leaves one of them states that its host carries the attribute, `attribute-admission`.
- */
-const attributeValueHosts: ReadonlySet<string> = new Set([
-  "DeclaredAllowComment",
-  "DeclaredAllowLateSubmission",
-  "DeclaredAllowReview",
-  "DeclaredAllowSkipping",
-  "DeclaredOrderingShuffle",
-  "DeclaredShowFeedback",
-  "DeclaredShowSolution",
-  "DeclaredValidateResponses",
-  "DeclaredWithReplacement",
-  "ItemRefCategory",
-  "ItemSessionMaxAttempts",
-  "ItemStimulusRefTitle",
-  "TestFeedbackTitle",
-  "TestPartTitle",
-  "TestRubricBlockUse",
-  "TimeLimitMax",
-  "TimeLimitMin",
-]);
-
-/**
- * The two containments of each of the 67 MathML attribute families, built from `values.ts`'s
- * `families` and not written out: the family's `(kind, attribute)` into the type matrix and its
- * `(node, kind)` into `Node`. Both state that the host carries the attribute with that value type,
- * `attribute-admission`, the rule phase 2's family containments into `Node` have (spec 4.13).
- */
-const mathmlFamilyContainedEntries: readonly (readonly [string, Rule])[] = families.flatMap(
-  (family): readonly (readonly [string, Rule])[] => [
-    [`${family.relation}>MathmlAttributeType`, "attribute-admission"],
-    [`${family.relation}>Node`, "attribute-admission"],
-  ],
-);
-
-/**
- * The rule of a containment, by the relation it leaves and the one it enters, as `from>to`.
- */
-const containedRules = new Map<string, Rule>([
-  ...testContainedEntries.flatMap(([rule, pairs]) =>
-    pairs.map((pair): [string, Rule] => [pair, rule]),
-  ),
-  ...mathmlFamilyContainedEntries,
-  ["AssessmentItemLabel>ItemToolBoth", "label-tool"],
-  ["AttributeIdref>DocumentId", "idref-target"],
-  ["AttributeIdref>Node", "idref-target"],
-  ["ContextDeclarationArm>ContextDeclarationId", "context-id"],
-  ["ContextDeclarationId>Node", "document-key"],
-  ["DeclaredValue>TypedValueSet", "value-base-type"],
-  ["Dependency>Resource", "dependency-target"],
-  ["Document>PackageEntry", "file-exists"],
-  ["Edge>Admission", "admission"],
-  ["Edge>AncestryStep", "ancestry-step"],
-  ["File>PackageEntry", "file-exists"],
-  ["FileContent>PackageEntry", "file-exists"],
-  ["ForeignAttribute>AttributeWildcard", "wildcard-attribute"],
-  ["HeadersTarget>AttributeIdref", "idref-copy"],
-  ["HeadersTarget>HtmlId", "idref-target"],
-  ["HtmlId>Node", "document-key"],
-  ["InteractionBinding>AssessmentItem", "adaptive-feedback"],
-  ["InteractionBinding>Declaration", "binding-declared"],
-  ["ItemBodyId>Node", "document-key"],
-  ["Mapping>MappableBaseType", "mapping-base-type"],
-  ["MathmlAttributeType>AttributeAdmission", "attribute-admission"],
-  ["Node>AncestryStep", "ancestry-ban"],
-  ["PrintedVariableId>Node", "document-key"],
-  ["RecordBinding>RecordBindingFit", "record-binding-fit"],
-  ["ResponseProcessing>TreeRoot", "processing-root"],
-  ["SimpleChoice>ChoiceInteraction", "choice-parent"],
-  ["SimpleChoice>Edge", "choice-parent"],
-  ["Source>SourceSrcset", "source-srcset"],
-  ["Track>TrackSrclang", "track-srclang"],
-  ["TypedBinding>BindingFit", "binding-fit"],
-  ["XsiTypeAttribute>XsiType", "xsi-type"],
-]);
-
-/**
- * The rule of every containment that leaves one of these relations: each is a reference to a
- * declared variable, or the binding of a string to one, and all its containments state one law.
- */
-const referenceRules = new Map<string, Rule>([
-  ["ChoiceTemplateRef", "template-ref"],
-  ["FeedbackOutcomeRef", "feedback-ref"],
-  ["PrintedVariableRef", "printed-variable-ref"],
-  ["PrintedVariableVarRef", "printed-variable-ref"],
-  ["SectionFeedbackOutcomeRef", "feedback-ref"],
-  ["SectionPrintedVariableRef", "printed-variable-ref"],
-  ["SectionPrintedVariableVarRef", "printed-variable-ref"],
-  ["StringBinding", "string-binding"],
-  ["TemplateContentRef", "template-ref"],
-]);
-
-/**
- * The relations whose containments state one law, by the relation they leave: the copy of a count
- * attribute's typed value to its interaction's column is a typed copy, and a reference arm of a
- * processing attribute is held by the parent that selects it, `P32`.
- */
-const copyLeaves = new Map<string, Rule>([
-  ["EqualRoundedFiguresRef", "P32"],
-  ["GraphicOrderMaxChoicesN", "typed-copy"],
-  ["GraphicOrderMinChoicesN", "typed-copy"],
-  ["IndexNRef", "P32"],
-  ["OrderMaxChoicesN", "typed-copy"],
-  ["OrderMinChoicesN", "typed-copy"],
-  ["RepeatNumberRepeatsRef", "P32"],
-  ["RoundToFiguresRef", "P32"],
-]);
-
-/**
- * The rule of the two containments that state a manifest's `cp:schemaversion` is its package's
- * `schemaversion`: both are a typed copy, though the second enters `Package.schemaversion`, which a
- * resource's own containment names `schema-version`.
- */
-const schemaVersionCopyRule = (from: LawSide): Rule | undefined =>
-  from.relation === "ManifestSchemaVersion" &&
-  (fieldsAre(from, "metadata", "package") || fieldsAre(from, "package", "version"))
-    ? "typed-copy"
-    : undefined;
-
-/**
- * The relations of the document and LOM language sets: a containment that leaves or enters one of
- * them is the rule that every `xml:lang` of a document is a `general.language` of its resource's
- * record (R26) or that the record's set is complete.
- */
-const languageRelations = new Set(["DocumentLang", "ResourceLomGeneral", "ResourceLomLanguageSet"]);
-
-/**
- * The tables whose variable is a single-cardinality outcome.
- */
-const tableRelations = new Set(["InterpolationTable", "MatchTable"]);
-
-/**
- * The relations the schema's `Literal` value arms are, `valueArms("Literal")`'s eleven.
- */
-const literalArms: ReadonlySet<string> = new Set([
-  "LiteralBoolean",
-  "LiteralDirectedPair",
-  "LiteralDuration",
-  "LiteralFile",
-  "LiteralFloat",
-  "LiteralIdentifier",
-  "LiteralInteger",
-  "LiteralPair",
-  "LiteralPoint",
-  "LiteralString",
-  "LiteralUri",
-]);
-
-/**
- * The relations that hold the arity seeds a processing expression is judged against.
- */
-const arityRelations: ReadonlySet<string> = new Set([
-  "OperatorArity",
-  "OperatorArityMax",
-  "OperatorArityUnbounded",
-]);
-
-/**
- * The relations of the six condition arms that bind their condition copy into `Edge`, and of the
- * operand rows that bind their position into it.
- */
-const edgeBoundArms: ReadonlySet<string> = new Set([
-  "Operand",
-  "OutcomeElseArm",
-  "OutcomeIfArm",
-  "ResponseElseArm",
-  "ResponseIfArm",
-  "RuleOperand",
-  "TemplateElseArm",
-  "TemplateIfArm",
-]);
-
-/**
- * The rule of a containment of the processing model, by the relation it leaves and the one it
- * enters, as `from>to`.
- */
-const processingContained = new Map<string, Rule>([
-  ["BuiltInRef>Node", "P9"],
-  ["DeclaredRef>Declaration", "P8"],
-  ["DeclaredRef>Node", "P8"],
-  ["Equal>EqualTolerance", "P36"],
-  ["EqualTolerance>Equal", "P36"],
-  ["Expression>ExpressionMax", "P2"],
-  ["Expression>Node", "arm-expression"],
-  ["ExpressionMax>Expression", "P2"],
-  ["OutcomeMaximumArm>OutcomeMinMax", "outcome-minmax-kind"],
-  ["OutcomeMinMax>Node", "outcome-minmax-kind"],
-  ["OutcomeMinimumArm>OutcomeMinMax", "outcome-minmax-kind"],
-  ["ResponseProcessing>Node", "processing-root"],
-  ["ResponseProcessingItem>AssessmentItem", "processing-item"],
-  ["ResponseProcessingItem>Edge", "processing-item"],
-  ["RuleOperand>Node", "P3"],
-  ["TemplateParameterRef>Node", "P13"],
-  ["TemplateProcessing>AssessmentItem", "P17"],
-  ["TemplateProcessing>Edge", "P17"],
-  ["VariableRef>Node", "ref-exists"],
-  ["VariableWeightIdentifier>Node", "P12"],
-  ["VariableWeightIdentifier>Variable", "P12"],
-]);
-
-/**
- * The rule of a containment of the processing model, or nothing when it is not one: by the
- * relation it enters first (the arity seeds, `RuleOperand`, `VariableRef`, `Expression`, `Edge`),
- * then by the exact pair.
- */
-const processingContainedRule = (from: LawSide, to: LawSide): Rule | undefined => {
-  if (arityRelations.has(to.relation)) {
-    return "P2";
-  }
-
-  if (to.relation === "RuleOperand") {
-    return "P3";
-  }
-
-  if (to.relation === "VariableRef") {
-    return "ref-exists";
-  }
-
-  if (literalArms.has(from.relation)) {
-    return "P7";
-  }
-
-  if (to.relation === "Edge" && edgeBoundArms.has(from.relation)) {
-    return "condition-edge";
-  }
-
-  if (to.relation === "Expression") {
-    return "arm-expression";
-  }
-
-  return processingContained.get(`${from.relation}>${to.relation}`);
-};
-
-const selectedContainedRule = (from: LawSide, to: LawSide): Rule | undefined => {
-  if (from.relation === "AreaMapping" && selects(to, "baseType", "point")) {
-    return "area-mapping-point";
-  }
-
-  return tableRelations.has(from.relation) && (to.selection?.length ?? 0) > 0
-    ? "table-outcome"
-    : undefined;
-};
-
-/**
- * The rule of a containment by the relation it enters, or by the copy it binds to a node.
- */
-const copyContainedRule = (from: LawSide, to: LawSide): Rule | undefined => {
-  if (to.relation === "AttributeAdmission") {
-    return "attribute-admission";
-  }
-
-  if (to.relation === "ItemToolBoth") {
-    return "label-tool";
-  }
-
-  if (languageRelations.has(to.relation) || languageRelations.has(from.relation)) {
-    return "document-lang";
-  }
-
-  if (to.relation === "InteractionBinding") {
-    return "binding-exists";
-  }
-
-  if (to.relation === "Node" && fieldsAre(to, "id", "kind")) {
-    if (fieldsAre(from, "node", "ownerKind")) {
-      return "coords-owner";
-    }
-
-    if (fieldsAre(from, "node", "kind")) {
-      return "attribute-admission";
-    }
-  }
-
-  if (to.relation === "Edge" && fieldsAre(from, "id", "interaction")) {
-    return "choice-parent";
-  }
-
-  if (from.relation === "Coords" && from.selection !== undefined && from.selection.length > 0) {
-    return "coords-owner";
-  }
-
-  return undefined;
-};
-
-/**
- * The rule of a containment of the package and resource tables, by the relation it enters.
- */
-const entryContainedRule = (to: LawSide): Rule | undefined => {
-  if (to.relation === "ResourceTypeOf") {
-    return "resource-type";
-  }
-
-  if (to.relation === "RootOfType") {
-    return "resource-root";
-  }
-
-  return to.relation === "Package" && to.fields.includes("schemaversion")
-    ? "schema-version"
-    : undefined;
-};
-
-/**
- * The rule of a containment that leaves `AttributeFileReference`: its path into the package's
- * entries, its document and its node's copy of that document state that an in-package reference
- * names a file the package holds (R6), `file-exists`, the form `Document>PackageEntry` has. Its
- * node and attribute containments are the attribute's own (`copyContainedRule`). That a described
- * file is a `File` is a guard, not a containment (`document-reference`).
- */
-const fileReferenceRule = (from: LawSide, to: LawSide): Rule | undefined => {
-  if (from.relation !== "AttributeFileReference") {
-    return undefined;
-  }
-
-  return to.relation === "PackageEntry" ||
-    to.relation === "Document" ||
-    (to.relation === "Node" && fieldsAre(to, "id", "tree"))
-    ? "file-exists"
-    : undefined;
-};
-
-const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
-  // The next two rules enforce "MUST be the same" (ASI Information Model 4.1.1, 4.4.1 and 4.1.2;
-  // metadata binding 2.7.1.1 #Gen1 and 2.7.1.2 #Gen2; decision 307, reading 62).
-  if (from.relation === "LomObjectIdentifier") {
-    return "lom-identifier";
-  }
-
-  if (from.relation === "LomObjectTitle") {
-    return "lom-title";
-  }
-
-  const rule =
-    copyLeaves.get(from.relation) ??
-    schemaVersionCopyRule(from) ??
-    fileReferenceRule(from, to) ??
-    (attributeValueHosts.has(from.relation) ? "attribute-admission" : undefined) ??
-    containedRules.get(`${from.relation}>${to.relation}`) ??
-    referenceRules.get(from.relation) ??
-    selectedContainedRule(from, to) ??
-    processingContainedRule(from, to);
-  if (rule !== undefined) {
-    return rule;
-  }
-
-  return copyContainedRule(from, to) ?? entryContainedRule(to);
-};
-
-/**
- * The rule of a pattern, by its regex source. grizzle reports one pattern law for every column
- * that spells the same language, so a source names every column that uses it: `anyUri` is also the
- * `Uri` value arm's, the three DRD URIs', `CsmCaseItemUri.value`'s, `Statistic.context`'s and the
- * two glossaries' (every `anyUri` column of the usage and DRD relations is `uri-syntax` through
- * it); and `hrefInPackage` is the pattern of every path column. A closed vocabulary has no
- * row: its column is a roster handle, so no pattern law names it. The `Literal` value arms share
- * their sources with `DeclaredValue`'s, so a pattern law cannot tell `P7` from `value-lexical`: P7
- * is named by the other laws of the `Literal` arms (the pattern law carries no relation).
+ * A host-side key conflict, two facts of one key that grizzle refuses before any SQL, names its
+ * key law and the submitted key as its witness, and is refused the same way, with no SQLSTATE.
  *
- * A source shared with an earlier phase's columns keeps that phase's rule, since the law carries no
- * relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair` and `point` name
- * `value-lexical`, never `drd-value`, `usage-lexical` or `usage-typed-value`. Only a source no
- * earlier column spells names the new rule: the nine DRD vocabularies and the usage date. The 28
- * `mathml*` sources, written last, are no earlier column's: each is `attribute-lexical` (spec
- * 4.13).
+ * @param laws - The outcome's `laws`.
+ * @param witness - Its `witness`, or the row the caller read.
+ * @param constants - The installed grammar's rows.
+ * @returns The refusal, or {@link UnownedLaws} when no law of the set is in the table.
  */
-const patternRules = new Map<string, Rule>([
-  [patterns.anyUri, "uri-syntax"],
-  [patterns.ariaRelevantList, "attribute-lexical"],
-  [patterns.bcp47, "attribute-lexical"],
-  [patterns.classList, "attribute-lexical"],
-  [patterns.coords, "P6"],
-  [patterns.coordsAny, "attribute-lexical"],
-  [patterns.coordsCircle, "attribute-lexical"],
-  [patterns.coordsEllipse, "attribute-lexical"],
-  [patterns.coordsPoly, "attribute-lexical"],
-  [patterns.coordsRect, "attribute-lexical"],
-  [patterns.drdAccessMode, "drd-value"],
-  [patterns.drdAdaptationDetail, "drd-value"],
-  [patterns.drdAdaptationMediaType, "drd-value"],
-  [patterns.drdAdaptationType, "drd-value"],
-  [patterns.drdApiInteroperable, "drd-value"],
-  [patterns.drdControlFlexibility, "drd-value"],
-  [patterns.drdDisplayTransformability, "drd-value"],
-  [patterns.drdEducationalComplexityOfAdaptation, "drd-value"],
-  [patterns.drdHazard, "drd-value"],
-  [patterns.floatOrVariableRef, "P6"],
-  [patterns.hrefInPackage, "href-path"],
-  [patterns.identifierList, "P6"],
-  [patterns.integerList, "attribute-lexical"],
-  [patterns.integerOrVariableRef, "P6"],
-  [patterns.integerOrVariableString, "attribute-lexical"],
-  [patterns.intOrIdentifier, "P6"],
-  [patterns.lengthDType, "attribute-lexical"],
-  [patterns.mimeTypeList, "attribute-lexical"],
-  [patterns.ncName, "value-lexical"],
-  [patterns.ncNameList, "attribute-lexical"],
-  [patterns.ncNameListOrEmpty, "attribute-lexical"],
-  [patterns.nonNegativeDouble, "attribute-lexical"],
-  [patterns.pair, "value-lexical"],
-  [patterns.point, "value-lexical"],
-  [patterns.positiveDouble, "normal-maximum"],
-  [patterns.positiveInteger, "attribute-lexical"],
-  [patterns.printfFormat, "attribute-lexical"],
-  [patterns.toleranceList, "P6"],
-  [patterns.toolString, "tool-string-length"],
-  [patterns.uncollapsed, "attribute-lexical"],
-  [patterns.usageDate, "usage-lexical"],
-  [patterns.useEnumExt, "attribute-lexical"],
-  [patterns.viewList, "attribute-lexical"],
-  [patterns.xsDecimal, "attribute-lexical"],
-  [patterns.xsDouble, "value-lexical"],
-  [patterns.xsInt, "attribute-lexical"],
-  [patterns.xsInteger, "value-lexical"],
-  [patterns.xsNonNegativeInteger, "attribute-lexical"],
-  [patterns.mathmlLength, "attribute-lexical"],
-  [patterns.mathmlMpaddedLength, "attribute-lexical"],
-  [patterns.mathmlColor, "attribute-lexical"],
-  [patterns.mathmlCharacter, "attribute-lexical"],
-  [patterns.mathmlAlign, "attribute-lexical"],
-  [patterns.mathmlClass, "attribute-lexical"],
-  [patterns.mathmlNumber, "attribute-lexical"],
-  [patterns.mathmlUnsignedInteger, "attribute-lexical"],
-  [patterns.mathmlInteger, "attribute-lexical"],
-  [patterns.mathmlPositiveInteger, "attribute-lexical"],
-  [patterns.mathmlMathsize, "attribute-lexical"],
-  [patterns.mathmlIndentshiftLine, "attribute-lexical"],
-  [patterns.mathmlLineThickness, "attribute-lexical"],
-  [patterns.mathmlCharspacing, "attribute-lexical"],
-  [patterns.mathmlMaxsize, "attribute-lexical"],
-  [patterns.mathmlAltimgValign, "attribute-lexical"],
-  [patterns.mathmlTableWidth, "attribute-lexical"],
-  [patterns.mathmlBackground, "attribute-lexical"],
-  [patterns.mathmlLinestyleList, "attribute-lexical"],
-  [patterns.mathmlLengthList, "attribute-lexical"],
-  [patterns.mathmlColumnalign, "attribute-lexical"],
-  [patterns.mathmlRowalign, "attribute-lexical"],
-  [patterns.mathmlCrossout, "attribute-lexical"],
-  [patterns.mathmlAlignmentscope, "attribute-lexical"],
-  [patterns.mathmlColumnwidth, "attribute-lexical"],
-  [patterns.mathmlFramespacing, "attribute-lexical"],
-  [patterns.mathmlGroupAlignmentList, "attribute-lexical"],
-  [patterns.mathmlGroupAlignmentListList, "attribute-lexical"],
-]);
-
-/**
- * The regex source of every pattern that has a row, in the map's order: a read-only view for the
- * test that each row names a pattern the schema still exports.
- */
-export const patternRuleSources: readonly string[] = [...patternRules.keys()];
-
-/**
- * Whether a relation is one of the usage-data module's: the data, its statistics, their target
- * objects, values and mappings.
- */
-const isUsage = (relation: string): boolean =>
-  relation.startsWith("Statistic") ||
-  relation.startsWith("TargetObject") ||
-  relation.startsWith("Usage") ||
-  relation === "CategorizedStatisticArm" ||
-  relation === "DeclaredDefaultValue" ||
-  relation === "OrdinaryStatisticArm";
-
-const isStatisticArm = (relation: string): boolean =>
-  relation === "CategorizedStatisticArm" || relation === "OrdinaryStatisticArm";
-
-const isVariantMetadata = (relation: string): boolean =>
-  relation === "VariantMetadata" || relation === "AccessForAllResource";
-
-/**
- * The rule of a key by the relation it constrains, for the relations this phase added. A key over
- * the fields a row names is the rule's; the primary key of a relation that carries a rule is that
- * rule's too, where the relation's rule is one of capacity or identity.
- */
-const phaseKeyRule = (relation: string, fields: readonly string[]): Rule | undefined => {
-  const key = fields.join(",");
-
-  if (relation === "QtiMetadata") {
-    return key === "package,resource" ? "qti-metadata-single" : undefined;
-  }
-
-  if (relation === "Variant") {
-    return key === "package,identifier" ? "variant-key" : undefined;
-  }
-
-  if (relation === "FileMetadata") {
-    return fields.includes("file") ? "file-metadata-single" : undefined;
-  }
-
-  if (relation.startsWith("Drd")) {
-    return fields.includes("owner") ? "drd-single" : undefined;
-  }
-
-  if (relation === "ExternalLom") {
-    return "external-lom-owner";
-  }
-
-  if (isVariantMetadata(relation)) {
-    return "variant-metadata";
-  }
-
-  if (relation === "ManifestId") {
-    return "manifest-id-holder";
-  }
-
-  if (relation.startsWith("Csm")) {
-    return "csm-single";
-  }
-
-  if (relation === "UsageData") {
-    return "usage-root";
-  }
-
-  if (relation === "OutcomeDocument") {
-    return "outcome-document";
-  }
-
-  return isUsage(relation) ? "usage-key" : undefined;
-};
-
-/**
- * The rule of a capacity by the relation that fills it, for the relations this phase added: the
- * `Edge` rows of a LOM category selected on `parentKind` and `childKind` (R30), a CSM or usage
- * relation, a variant's metadata. An `Edge` capacity on a `Picture` is a content capacity
- * (`capacityRule`) even when it selects `parentKind` too, as does one selected on `childKind`
- * alone.
- */
-const phaseCapacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
-  if (from.relation === "Edge") {
-    return target.relation !== "Picture" &&
-      selects(from, "childKind") &&
-      selects(from, "parentKind")
-      ? "lom-capacity"
-      : undefined;
-  }
-
-  if (from.relation.startsWith("Csm")) {
-    return "csm-capacity";
-  }
-
-  if (isVariantMetadata(from.relation)) {
-    return "variant-metadata";
-  }
-
-  return isUsage(from.relation) ? "usage-count" : undefined;
-};
-
-/**
- * The rule of a containment or mirror by the relations on its sides, for the relations this phase
- * added. The side that leaves names the rule, except where a mirror enters a relation whose own
- * rule it is (a document root mirrored by the record or the data it holds, a statistic by its
- * kind's arm, a typed value by its base type).
- */
-const packageSidesRule = (from: LawSide, to: LawSide): Rule | undefined => {
-  const leaves = from.relation;
-  const enters = to.relation;
-
-  if (
-    (leaves === "Node" && selects(from, "kind", "qmd:qtiMetadata")) ||
-    (enters === "Node" && selects(to, "kind", "qmd:qtiMetadata")) ||
-    leaves.startsWith("QtiMetadata")
-  ) {
-    return "qti-metadata-host";
-  }
-
-  if (leaves === "LomValue" && enters === "Edge") {
-    return "lom-learning-resource-type";
-  }
-
-  if (leaves === "FileMetadata" || leaves === "FileLom") {
-    return "file-lom-owner";
-  }
-
-  if (leaves === "ExternalLom" || enters === "ExternalLom") {
-    return "external-lom-owner";
-  }
-
-  if (leaves === "Variant") {
-    return enters === "Resource" && !to.fields.includes("id")
-      ? "variant-target"
-      : "variant-resource";
-  }
-
-  if (isVariantMetadata(leaves)) {
-    return "variant-metadata";
-  }
-
-  if (leaves.startsWith("Drd")) {
-    return "drd-single";
-  }
-
-  if (leaves.startsWith("ManifestId")) {
-    return "manifest-id-holder";
-  }
-
-  return undefined;
-};
-
-/**
- * The rule of a containment or mirror on the sides of the CSM, usage-data and outcome modules.
- */
-const moduleSidesRule = (from: LawSide, to: LawSide): Rule | undefined => {
-  const leaves = from.relation;
-  const enters = to.relation;
-
-  if (leaves.startsWith("Csm")) {
-    return "csm-single";
-  }
-
-  if (leaves.startsWith("UsageTypedValue") || enters.startsWith("UsageTypedValue")) {
-    return "usage-typed-value";
-  }
-
-  if (isStatisticArm(leaves) || isStatisticArm(enters)) {
-    return "usage-statistic-kind";
-  }
-
-  if (leaves === "UsageData" || enters === "UsageData") {
-    return "usage-root";
-  }
-
-  if (leaves === "OutcomeDocument" || enters === "OutcomeDocument") {
-    return "outcome-document";
-  }
-
-  return isUsage(leaves) ? "usage-key" : undefined;
-};
-
-/**
- * The rule of a containment or mirror on the relations this phase added.
- */
-const phaseSidesRule = (from: LawSide, to: LawSide): Rule | undefined =>
-  packageSidesRule(from, to) ?? moduleSidesRule(from, to);
-
-/**
- * The sides an `alternativesArm` law stands for, the arm and the parent it is the payload of: the
- * arm leaves, and the parent is entered selecting its discriminator on the arm's handles. These
- * are the sides the arm-to-parent `mirrors` half named before grizzle reported one law per arm
- * relation, so the same breach keeps its rule.
- */
-const armSides = (law: Extract<ImportLaw, { kind: "alternativesArm" }>): [LawSide, LawSide] => [
-  { fields: [], relation: law.arm },
-  {
-    fields: [],
-    relation: law.relation,
-    selection: law.handles.map((handle) => ({ field: law.field, value: handle })),
-  },
-];
-
-/**
- * The owners whose child counts the test layer bounds with a capacity filled from `Edge` rows
- * selected on a parent and a child kind (4.15 row 3). The same form bounds a LOM category
- * (`phaseCapacityRule`), told apart by the owner.
- */
-const structureOwners: ReadonlySet<string> = new Set([
-  "AdaptiveSelection",
-  "AssessmentSection",
-  "AssessmentStimulus",
-  "AssessmentTest",
-  "ItemRef",
-  "TestFeedback",
-  "TestPart",
-  "TestRubricBlock",
-]);
-
-const structureCapacityRule = (target: LawSide, from: LawSide): Rule | undefined =>
-  from.relation === "Edge" && structureOwners.has(target.relation) ? "structure-count" : undefined;
-
-/**
- * The rule of each `alternatives` the test layer states, by the parent it discriminates: the
- * parent's own statement and one law per arm state the same rule.
- */
-const testAlternativeRules = new Map<string, Rule>([
-  ["BranchRule", "branch-target"],
-  ["ItemRefResolution", "item-ref-target"],
-  ["PrefixedVariableSource", "prefixed-ref"],
-  ["SectionVariableResolution", "section-variable-ref"],
-]);
-
-/**
- * The rule of each arm the test layer adds to `VariableRef`. The other arms of that `alternatives`
- * are an earlier phase's.
- */
-const variableRefArmRules = new Map<string, Rule>([
-  ["ItemInstanceVariableRef", "prefixed-ref"],
-  ["ItemVariableRef", "prefixed-ref"],
-  ["SectionDurationRef", "prefixed-ref"],
-  ["SectionVariableRef", "section-variable-ref"],
-]);
-
-/**
- * The thin arms of E18's `SectionVariableResolution`, each mirrored with the hub row it stands
- * for: that mirror is `section-variable-ref`, whichever half of it the engine reports.
- */
-const sectionVariableThinArms: ReadonlySet<string> = new Set([
-  "SectionVariableDuration",
-  "SectionVariablePrefixed",
-]);
-
-const testArmRule = (law: Extract<ImportLaw, { kind: "alternativesArm" }>): Rule | undefined =>
-  testAlternativeRules.get(law.relation) ??
-  (law.relation === "VariableRef" ? variableRefArmRules.get(law.arm) : undefined);
-
-/**
- * The rule of a law over the relations this phase added, or nothing when the law is an earlier
- * phase's (those rows follow). Every `Node` kind with an arm has its own `mirrors` law, so a
- * `qmd:qtiMetadata` that lacks its host arm breaks that handle's law, which the containments and
- * mirrors the expansion states name.
- */
-const phaseRule = (law: ImportLaw): Rule | undefined => {
-  if (law.kind === "key" || law.kind === "primaryKey") {
-    return phaseKeyRule(law.relation, law.fields);
-  }
-
-  if (law.kind === "capacity") {
-    return structureCapacityRule(law.target, law.from) ?? phaseCapacityRule(law.target, law.from);
-  }
-
-  if (law.kind === "contained" || law.kind === "mirrors") {
-    return phaseSidesRule(law.from, law.to);
-  }
-
-  if (law.kind === "alternativesArm") {
-    return testArmRule(law) ?? phaseSidesRule(...armSides(law));
-  }
-
-  if (law.kind === "alternatives") {
-    const testRule = testAlternativeRules.get(law.relation);
-    if (testRule !== undefined) {
-      return testRule;
-    }
-
-    if (law.relation === "ManifestId") {
-      return "manifest-id-holder";
-    }
-
-    if (law.relation === "QtiMetadata") {
-      return "qti-metadata-host";
-    }
-
-    return law.relation === "UsageTypedValue" ? "usage-typed-value" : undefined;
-  }
-
-  return undefined;
-};
-
-/**
- * The three condition roots whose `mirrors` with their `if` arm state that a condition holds an
- * `if`.
- */
-const conditionMirrors: ReadonlySet<string> = new Set([
-  "OutcomeConditionArm",
-  "ResponseConditionArm",
-  "TemplateConditionArm",
-]);
-
-/**
- * The contracts of the schema that `valueContexts` does not mint, each rule beside the names it
- * judges. A contract is a branded domain, so two contracts of one language are told apart by name
- * here: `CategoryList` is `P6` and `MatchGroupList` `attribute-lexical`,
- * `ExpressionIntegerOrVariable` `P6` and `PrintedVariableIntegerOrVariable` `attribute-lexical`,
- * `ExpressionCoords` `P6` and `ShapeCoords` `attribute-lexical`, `ClassList` `attribute-lexical`
- * and `LomToken` `value-lexical`.
- */
-const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
-  [
-    "attribute-lexical",
-    [
-      "AriaInteger",
-      "AriaPositiveInteger",
-      "ChoiceCount",
-      "ClassList",
-      "ContainerWidth",
-      "ContentLanguage",
-      "ContentMediaType",
-      "ExpectedLength",
-      "ExpectedLines",
-      "IdReference",
-      "InterpolationSourceValue",
-      "MappingScore",
-      "MatchGroupList",
-      "MatchSourceValue",
-      "MathmlBaseValue",
-      "MathmlCbytesValue",
-      "MathmlCdValue",
-      "MathmlIndexValue",
-      "MathmlNameValue",
-      "MathmlNargsValue",
-      "MathmlPositionValue",
-      "MathmlScriptlevelValue",
-      "MathmlSelectionValue",
-      "MathmlShiftValue",
-      "MathmlSpanValue",
-      "MediaRectCoords",
-      "PrintedVariableIntegerOrVariable",
-      "RectCoords",
-      "ShapeCoords",
-      "ShowHideIdentifier",
-      "SliderBound",
-      "StringCount",
-      "TableSpan",
-      "TimeLimitSeconds",
-      "TrackLanguage",
-    ],
-  ],
-  ["drd-value", ["AccessMode", "AccessModeAdapted"]],
-  ["href-path", ["PackagePath", "ResourceEntryHref"]],
-  ["manifest-identifier", ["ManifestIdentifier"]],
-  ["P6", ["CategoryList", "ExpressionCoords", "ExpressionIntegerOrVariable"]],
-  ["tool-string-length", ["ToolName", "ToolVendor", "ToolVersion"]],
-  [
-    "uri-syntax",
-    [
-      "AdaptiveRefHref",
-      "CaseItemUri",
-      "CitationUri",
-      "CustomOperatorDefinitionUri",
-      "DrdAdaptationUri",
-      "EmbedSourceUri",
-      "GlossaryUri",
-      "HyperlinkUri",
-      "ItemRefHref",
-      "LongDescriptionUri",
-      "LongInterpretationUri",
-      "MathmlCdgroupValue",
-      "MathmlDefinitionUrlValue",
-      "MathmlSrcValue",
-      "NamespaceUri",
-      "SectionRefHref",
-      "StatisticContextUri",
-      "StimulusRefHref",
-      "StylesheetUri",
-      "TemplateLocationUri",
-      "TemplateUri",
-      "XIncludeUri",
-      "XlinkArcroleUri",
-      "XlinkHrefUri",
-      "XlinkRoleUri",
-      "XmlBaseUri",
-    ],
-  ],
-  [
-    "usage-lexical",
-    [
-      "StatisticMeasure",
-      "StatisticName",
-      "UsageCaseCount",
-      "UsageFieldIdentifier",
-      "UsageMappingScore",
-      "UsagePartIdentifier",
-      "UsageValueToken",
-    ],
-  ],
-  [
-    "value-lexical",
-    [
-      "AdaptiveRefIdentifier",
-      "ChoiceIdentifier",
-      "CustomOperatorClassName",
-      "FileMediaType",
-      "LangStringLanguage",
-      "LomToken",
-      "LomVocabularySource",
-      "LomVocabularyValue",
-      "MappedVariableName",
-      "NamespacePrefix",
-      "OutcomeScaleValue",
-      "PiTarget",
-      "RecordFieldIdentifier",
-      "StimulusRefIdentifier",
-      "TemplateParameterName",
-      "TestStructureIdentifier",
-      "VariableReference",
-      "WeightReference",
-      "WeightValue",
-      "XlinkLabelName",
-      "XmlEntityName",
-      "XmlLocalName",
-    ],
-  ],
-];
-
-/**
- * The rule of each of the eight contexts of a typed value, for the eight arm contracts
- * `<Context><BaseType>Value` it mints. This repeats the `rule` of `valueContexts` in
- * `schema/value.ts`, which this module cannot import: that module imports this one's `Rule`.
- */
-const armContextRules: readonly (readonly [string, Rule])[] = [
-  ["Declared", "value-lexical"],
-  ["InterpolationDefault", "attribute-lexical"],
-  ["InterpolationTarget", "attribute-lexical"],
-  ["Literal", "P7"],
-  ["MapKey", "map-key-lexical"],
-  ["MatchDefault", "attribute-lexical"],
-  ["MatchTarget", "attribute-lexical"],
-  ["Usage", "usage-typed-value"],
-];
-
-/**
- * The contexts whose Uri arm refuses by the anyUri pattern rather than its context's rule: the
- * merged tree refuses a bad URI in these columns under `uri-syntax`, and a moved refusal keeps its
- * rule (decision 150).
- */
-const uriSyntaxContexts: ReadonlySet<string> = new Set([
-  "Declared",
-  "InterpolationDefault",
-  "InterpolationTarget",
-  "MatchDefault",
-  "MatchTarget",
-]);
-
-const armBaseTypes = [
-  "DirectedPair",
-  "Duration",
-  "Float",
-  "Identifier",
-  "Integer",
-  "Pair",
-  "Point",
-  "Uri",
-] as const;
-
-/**
- * The rule each named contract of the schema maps to: the written-out contracts, then the 64 arms.
- * A contract no row names falls to {@link nearest}, `value-lexical`, unmapped.
- */
-const contractRules: ReadonlyMap<string, Rule> = new Map([
-  ...writtenContractRules.flatMap(([rule, names]) =>
-    names.map((name): [string, Rule] => [name, rule]),
-  ),
-  ...armContextRules.flatMap(([context, rule]) =>
-    armBaseTypes.map((base): [string, Rule] => [
-      `${context}${base}Value`,
-      base === "Uri" && uriSyntaxContexts.has(context) ? "uri-syntax" : rule,
-    ]),
-  ),
-]);
-
-const some = (rule: Rule | undefined): Mapped | undefined =>
-  rule === undefined ? undefined : named(rule);
-
-const recognized = (law: ImportLaw): Mapped | undefined => {
-  const added = phaseRule(law);
-  if (added !== undefined) {
-    return named(added);
-  }
-
-  if (law.kind === "key" || law.kind === "primaryKey") {
-    return some(keyRule(law.relation, law.fields));
-  }
-
-  if (law.kind === "check") {
-    return some(checkRules.get(law.name) ?? checkRuleByForm(law.relation, law.name));
-  }
-
-  if (law.kind === "capacity") {
-    return some(capacityRule(law.target, law.from));
-  }
-
-  if (law.kind === "contained") {
-    return some(containedRule(law.from, law.to));
-  }
-
-  if (law.kind === "mirrors") {
-    if (
-      sectionVariableThinArms.has(law.from.relation) ||
-      sectionVariableThinArms.has(law.to.relation)
-    ) {
-      return named("section-variable-ref");
-    }
-
-    const between = new Set([law.from.relation, law.to.relation]);
-
-    if (conditionMirrors.has(law.from.relation) || conditionMirrors.has(law.to.relation)) {
-      return named("P4");
-    }
-
-    return between.has("ResponseProcessing") && between.has("ResponseProcessingItem")
-      ? named("processing-item")
-      : undefined;
-  }
-
-  if (law.kind === "alternativesArm") {
-    return conditionMirrors.has(law.arm) ? named("P4") : undefined;
-  }
-
-  if (law.kind === "pattern") {
-    return some(patternRules.get(law.source)) ?? { mapped: false, rule: "value-lexical" };
-  }
-
-  if (law.kind === "contract") {
-    return some(contractRules.get(law.contract));
-  }
-
-  return undefined;
-};
-
-const classify = (law: ImportLaw): Mapped => recognized(law) ?? nearest(law);
-
-/**
- * The rule of the roster a schema law maps to.
- *
- * A law is matched by its kind and the relations and fields it names, against the statements `Qti`
- * declares. A law no row names falls to the nearest rule by kind; {@link refusalOfLaw} keeps such a
- * law verbatim in `detail`, and `isMappedLaw` tells the two apart.
- *
- * @param law - The `law` of an `invariant-rejected` outcome.
- * @returns The rule the law breaks.
- */
-export const ruleOfLaw = (law: ImportLaw): Rule => classify(law).rule;
-
-/**
- * Whether {@link ruleOfLaw} recognized the law, not merely sorted it.
- *
- * @param law - The `law` of an `invariant-rejected` outcome.
- * @returns False when the law fell to the nearest rule; a test reports it as a finding.
- */
-export const isMappedLaw = (law: ImportLaw): boolean => classify(law).mapped;
-
-const sideText = (side: LawSide): string => `${side.relation}(${side.fields.join(", ")})`;
-
-const lawText = (law: ImportLaw): string => {
-  if (law.kind === "key" || law.kind === "primaryKey") {
-    return `${law.kind === "key" ? "key" : "primary key"} ${law.relation}.(${law.fields.join(", ")})`;
-  }
-
-  if (law.kind === "check") {
-    return `check ${law.relation}.${law.name}`;
-  }
-
-  if (law.kind === "contained" || law.kind === "mirrors" || law.kind === "coverage") {
-    return `${law.kind} ${sideText(law.from)} into ${sideText(law.to)}`;
-  }
-
-  if (law.kind === "capacity") {
-    return `capacity of ${sideText(law.target)} by ${sideText(law.from)}`;
-  }
-
-  if (law.kind === "alternatives") {
-    return `alternatives ${law.relation}.${law.field}`;
-  }
-
-  if (law.kind === "alternativesArm") {
-    return `alternatives arm ${law.arm} of ${law.relation}.${law.field}`;
-  }
-
-  if (law.kind === "contract") {
-    return `contract ${law.contract}`;
-  }
-
-  if (law.kind === "numericBound") {
-    return `numeric bound ${law.relation}.${law.field}`;
-  }
-
-  return `pattern ${law.source} (flags ${law.flags})`;
-};
-
-/**
- * The witness of an `invariant-rejected` outcome, as grizzle's `Witness` states it.
- */
-export type ImportWitness =
-  | { readonly kind: "key"; readonly relation: string; readonly values: object }
-  | { readonly kind: "unreported" | "withheld" };
-
-const witnessText = (witness: ImportWitness): string =>
-  witness.kind === "key"
-    ? `, witness ${witness.relation} ${Object.entries(witness.values)
-        .map(([field, value]) => `${field}=${String(value)}`)
-        .join(" ")}`
-    : "";
-
-/**
- * The refusal of an `invariant-rejected` outcome.
- *
- * `detail` names the law as the schema states it, and the witness row's key when grizzle gives one;
- * a law no row of the map names says so, under the nearest rule. The law itself rides in `law`.
- *
- * @param law - The `law` of the outcome.
- * @param witness - The `witness` of the outcome, when the caller has it; only a key witness is
- *   named.
- * @returns The refusal naming the rule.
- */
-export const refusalOfLaw = (law: ImportLaw, witness?: ImportWitness): ImportRefused => {
-  const { mapped, rule } = classify(law);
-  const unmapped = mapped ? "" : "no rule names this law, so it is filed under the nearest: ";
-
-  return new ImportRefused({
-    detail: `${unmapped}${lawText(law)}${witness === undefined ? "" : witnessText(witness)}`,
-    law,
-    rule,
+export const refusalOfLaws = (
+  laws: Arr.NonEmptyReadonlyArray<Law>,
+  witness: RefusalWitness,
+  constants: RefusalConstants,
+): Result.Result<ImportRefused, UnownedLaws> =>
+  Option.match(ruleOfLaws(laws), {
+    onNone: () => Result.fail(new UnownedLaws({ laws: laws.map(lawIdentity) })),
+    onSome: (rule) => {
+      const { detail, sources } = explain(laws, witness, constants);
+      const named = pipe(
+        laws,
+        Arr.map((law) => {
+          const identity = lawIdentity(law);
+
+          return Option.match(lawNameOf(law), {
+            onNone: () => ({ identity }),
+            onSome: (name) => ({ identity, name, rule: lawTable[name].rule }),
+          });
+        }),
+      );
+
+      return Result.succeed(
+        new ImportRefused({
+          detail,
+          origin: { _tag: "Database", laws: named, sources, witness: witness.kind },
+          rule,
+        }),
+      );
+    },
   });
-};
 
 /**
- * Every error that refuses an import before the database does, an `ImportRefused` the importer
- * raised itself among them.
+ * Every error that refuses a package before the database does: the reader's, the ZIP container's,
+ * the package reader's and the codec's, and an `ImportRefused` the importer raised itself.
  */
 export type ReadRefusal =
-  | ExternalRefusal
-  | GuardRefusal
   | ImportRefused
-  | ItemGuardRefusal
-  | ItemRefusal
-  | ManifestGuardRefusal
   | NotQti3
   | PackageReadError
-  | ProcessingGuardRefusal
-  | ProcessingRefused
   | ReaderRefusal
-  | ReferenceGuardRefusal
-  | TestGuardRefusal
   | UnmodeledVocabulary
-  | UsageGuardRefusal
   | WellFormednessError
-  | WildcardGuardRefusal
   | ZipRefusal;
 
 /**
- * The refusal of an error a guard or the reader raised.
+ * Build the refusal of an error the reader, the container or the codec raised.
  *
- * A guard's `rule` is the rule of the same name; `PackageReadError` maps by its own rule, a missing
- * manifest to `manifest-root` and an entry path outside the package to `href-path` (R8's pattern
- * law names the same cause); `ItemRefusal` names the importer rule it carries (`import/tree.ts`).
- * An `ImportRefused` is a refusal the importer raised itself before the write (`closedOf`,
- * `integerOf`, `spelledInteger`); it already names its rule and is its own answer.
- *
- * `ContentGuardRefusal` is accepted beside {@link ReadRefusal}, not inside it: `ReadRefusal` is the
- * error channel `import/package.ts` narrows to, and the content guards join that channel when
- * `guards.ts` composes them.
+ * Shred's `UnmodeledVocabulary` is `attribute-admission` for an attribute its element admits
+ * under no name or open class (reason `unadmitted`, AL1's rule) and `unmodeled-vocabulary` for
+ * every other name it cannot represent; `PackageReadError` is `manifest-root` for a missing
+ * manifest and `href-path` for an entry outside the package; a `ZipRefusal` names its own rule.
  *
  * @param e - The error raised.
  * @returns The refusal naming its rule.
  */
-export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused =>
+export const ruleOfError = (e: ReadRefusal): ImportRefused =>
   Match.value(e).pipe(
     Match.tagsExhaustive({
-      ContentGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      ExternalRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      GuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      ImportRefused: (g) => g,
-      ItemGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      ItemRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      ManifestGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      NotQti3: (g) => new ImportRefused({ detail: g.detail, rule: "not-qti3" }),
-      PackageReadError: (g) =>
+      ImportRefused: (refused) => refused,
+      NotQti3: (refused) =>
+        new ImportRefused({ detail: refused.message, origin: readerOrigin, rule: "not-qti3" }),
+      PackageReadError: (refused) =>
         new ImportRefused({
-          detail: g.message,
-          rule: g.rule === "manifest-root" ? "manifest-root" : "href-path",
+          detail: refused.message,
+          origin: readerOrigin,
+          rule: refused.rule === "manifest-root" ? "manifest-root" : "href-path",
         }),
-      ProcessingGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      ProcessingRefused: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      ReaderRefusal: (g) =>
-        new ImportRefused({ detail: `${g.rule}: ${g.detail}`, rule: "reader-refusal" }),
-      ReferenceGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      TestGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      UnmodeledVocabulary: (g) =>
+      ReaderRefusal: (refused) =>
         new ImportRefused({
-          detail: `${g.kind} ${g.name}${g.parent._tag === "Some" ? ` in ${g.parent.value}` : ""} has no model yet`,
-          rule: "unmodeled-vocabulary",
+          detail: `${refused.rule}: ${refused.detail}`,
+          origin: readerOrigin,
+          rule: "reader-refusal",
         }),
-      UsageGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      WellFormednessError: (g) =>
+      UnmodeledVocabulary: (refused) =>
         new ImportRefused({
-          detail: `${g.message} at line ${g.line}, column ${g.column}`,
+          detail: refused.message,
+          origin: readerOrigin,
+          rule: refused.reason === "unadmitted" ? "attribute-admission" : "unmodeled-vocabulary",
+        }),
+      WellFormednessError: (refused) =>
+        new ImportRefused({
+          detail: `${refused.message} at line ${String(refused.line)}, column ${String(refused.column)}`,
+          origin: readerOrigin,
           rule: "well-formedness",
         }),
-      WildcardGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
-      ZipRefusal: (g) => new ImportRefused({ detail: `${g.entry}: ${g.feature}`, rule: g.rule }),
+      ZipRefusal: (refused) =>
+        new ImportRefused({ detail: refused.message, origin: readerOrigin, rule: refused.rule }),
     }),
   );
-
-if (import.meta.main) {
-  process.stdout.write(`ImportRule: ${ImportRule.members.length} names\n`);
-}

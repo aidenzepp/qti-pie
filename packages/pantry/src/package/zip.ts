@@ -123,34 +123,50 @@ const DOS_DIRECTORY = 0x10;
 const UNIX_DIRECTORY_TYPE = 4;
 
 /**
- * The most central records an archive may hold, directory entries included. The corpus's largest
- * archive has 99.
+ * The budgets an archive is read under, checked against the central directory's declared sizes
+ * before any entry is inflated. They are a parameter of the reader, so a test can draw them small
+ * and reach both sides of each bound with a small archive; production reads under
+ * {@link packageBudget}.
  */
-const MAX_ENTRIES = 10_000;
+export interface ZipBudget {
+  /**
+   * The most bytes one file may declare uncompressed.
+   */
+  readonly entryBytes: number;
+  /**
+   * The most central records an archive may hold, directory entries included.
+   */
+  readonly entries: number;
+  /**
+   * The most bytes the files of one archive may declare uncompressed, summed.
+   */
+  readonly packageBytes: number;
+  /**
+   * How many times its stored size an entry may declare, once past `ratioAllowance`.
+   */
+  readonly ratio: number;
+  /**
+   * The bytes any entry may declare whatever its stored size, so a small, well-compressed file is
+   * not refused for its ratio.
+   */
+  readonly ratioAllowance: number;
+}
 
 /**
- * The most bytes one file may declare uncompressed. The corpus's largest file is 5,251,725 bytes.
+ * The budgets every package is read under, the one place they are set, each well past what the
+ * corpus measures. Entries: 10,000 records, where the corpus's largest archive has 99. Entry
+ * bytes: 64 MiB, where its largest file is 5,251,725 bytes. Package bytes: 256 MiB, where its
+ * largest package is 11,018,253 bytes. Ratio: 100 past 1 MiB, where its highest ratio is 27.95 (a
+ * 6,148-byte `.DS_Store`) and 3.61 for any entry of 64 KiB or more, and deflate itself reaches
+ * about 1,032.
  */
-const MAX_ENTRY_SIZE = 64 * 1024 * 1024;
-
-/**
- * The most bytes the files of one archive may declare uncompressed, summed. The corpus's largest
- * package is 11,018,253 bytes.
- */
-const MAX_PACKAGE_SIZE = 256 * 1024 * 1024;
-
-/**
- * How many times its stored size an entry may declare, once past {@link RATIO_ALLOWANCE}. The
- * corpus's highest ratio is 27.95 (a 6,148-byte `.DS_Store`) and 3.61 for any entry of 64 KiB or
- * more; deflate itself reaches about 1,032.
- */
-const MAX_RATIO = 100;
-
-/**
- * The bytes any entry may declare whatever its stored size, so a small, well-compressed file is not
- * refused for its ratio.
- */
-const RATIO_ALLOWANCE = 1024 * 1024;
+export const packageBudget: ZipBudget = {
+  entries: 10_000,
+  entryBytes: 64 * 1024 * 1024,
+  packageBytes: 256 * 1024 * 1024,
+  ratio: 100,
+  ratioAllowance: 1024 * 1024,
+};
 
 /**
  * The upper half (0x80 to 0xFF) of code page 437, transcribed from the ZIP APPNOTE (version 6.3.10,
@@ -208,7 +224,8 @@ interface Directory {
 const hasFlag = (flags: number, bit: number): boolean => Math.floor(flags / bit) % 2 === 1;
 
 /**
- * Decode an entry's name: UTF-8 when general-purpose bit 11 is set, otherwise code page 437.
+ * Decode an entry's name: UTF-8 when general-purpose bit 11 is set, otherwise code page 437. The
+ * table holds a character for each of the 256 byte values, so every byte finds its cell.
  *
  * @param bytes - The name's bytes.
  * @param flags - The entry's general-purpose flags.
@@ -217,15 +234,23 @@ const hasFlag = (flags: number, bit: number): boolean => Math.floor(flags / bit)
 const decodeName = (bytes: Uint8Array, flags: number): string =>
   hasFlag(flags, FLAG_UTF8)
     ? new TextDecoder("utf-8").decode(bytes)
-    : Array.from(bytes, (byte) => CP437[byte] ?? "").join("");
+    : Array.from(bytes, (byte) => CP437[byte]).join("");
 
 /**
- * Why a name cannot be a package path, or `undefined` when it can.
+ * Why a path cannot be a package entry's path, or `undefined` when it can: the one rule a zip's
+ * entry names and a package directory's file paths are both held to (reading 138).
  *
- * @param name - A decoded entry name.
+ * The ZIP format's stored path "MUST NOT contain a drive or device letter, or a leading slash", and
+ * its slashes "MUST be forward slashes" (APPNOTE 6.3.10, section 4.4.17.1); a manifest names an
+ * entry by an RFC 3986 URI reference, which holds no `\` and in which a leading `C:` is a scheme.
+ * So a path that is absolute, begins with a drive prefix, holds a backslash or a `..` segment names
+ * no entry, whichever form the package takes.
+ *
+ * @param name - A decoded entry name, or a file's path relative to the package directory.
  * @returns The refused feature, as a sentence fragment.
+ * @see {@link https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT | APPNOTE 6.3.10, section 4.4.17.1}
  */
-const unsafeName = (name: string): string | undefined => {
+export const unsafeEntryPath = (name: string): string | undefined => {
   if (name.startsWith("/") || /^[A-Za-z]:/u.test(name)) {
     return "the name is an absolute path, and a package entry's path is relative to the package root";
   }
@@ -276,10 +301,16 @@ const isDirectory = (name: string, versionMadeBy: number, attributes: number): b
 /**
  * Find the end record and the central directory it points at.
  *
+ * The central directory must end exactly where the end record begins: APPNOTE's overall layout
+ * places nothing between them but the ZIP64 records (section 4.3.6, reading 139), which are not
+ * read, so an archive with other bytes in that gap is not a zip.
+ *
  * @param archive - The zip file's path, naming refusals.
  * @param view - The whole file.
  * @returns Where the central directory is, or a {@link ZipRefusal} for a file that is not a zip, is
- *   split across disks or uses ZIP64.
+ *   split across disks, uses ZIP64, or holds bytes between its central directory and its end
+ *   record.
+ * @see {@link https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT | APPNOTE 6.3.10, sections 4.3.6, 4.4.23 and 4.4.24}
  */
 const locateDirectory = Effect.fn("package.locateDirectory")(function* locateDirectory(
   archive: string,
@@ -328,8 +359,15 @@ const locateDirectory = Effect.fn("package.locateDirectory")(function* locateDir
     );
   }
 
-  if (offset + size > end) {
-    return yield* malformed("the central directory does not parse: it runs past the end record");
+  // The end record follows the central directory, with only the ZIP64 records, refused above,
+  // between them (APPNOTE 6.3.10, section 4.3.6), so the directory's own offset and size (sections
+  // 4.4.23 and 4.4.24) name the end record's offset, and any other bytes there are no zip.
+  if (offset + size !== end) {
+    return yield* malformed(
+      offset + size > end
+        ? "the central directory does not parse: it runs past the end record"
+        : "the central directory does not parse: bytes stand between it and the end record",
+    );
   }
 
   return { count, end, offset };
@@ -410,7 +448,7 @@ const readRecord = Effect.fn("package.readRecord")(function* readRecord(
     );
   }
 
-  const unsafe = unsafeName(name);
+  const unsafe = unsafeEntryPath(name);
 
   if (unsafe !== undefined) {
     return yield* refuse("href-path", name, unsafe);
@@ -513,46 +551,48 @@ const dataSpan = Effect.fn("package.dataSpan")(function* dataSpan(
 /**
  * Refuse a listing whose declared sizes pass a budget, before any entry is read.
  *
- * The first file past {@link MAX_ENTRY_SIZE} or past its ratio bound is refused, then a sum past
- * {@link MAX_PACKAGE_SIZE}.
+ * The first file past the entry budget is refused, then the first past its ratio bound, then a sum
+ * past the package budget.
  *
  * @param archive - The zip file's path, which names the refusal about the whole archive.
  * @param files - The non-directory records.
+ * @param budget - The budgets read under.
  * @returns Nothing, or a {@link ZipRefusal}.
  */
 const checkBudget = Effect.fn("package.checkBudget")(function* checkBudget(
   archive: string,
   files: readonly CentralRecord[],
+  budget: ZipBudget,
 ): Effect.fn.Return<void, ZipRefusal> {
-  const large = files.find((record) => record.size > MAX_ENTRY_SIZE);
+  const large = files.find((record) => record.size > budget.entryBytes);
 
   if (large !== undefined) {
     yield* refuse(
       "zip-format",
       large.name,
-      `it declares ${large.size} bytes for one entry, past the limit of ${MAX_ENTRY_SIZE}`,
+      `it declares ${large.size} bytes for one entry, past the limit of ${budget.entryBytes}`,
     );
   }
 
   const ratio = files.find(
-    (record) => record.size > Math.max(RATIO_ALLOWANCE, MAX_RATIO * record.storedSize),
+    (record) => record.size > Math.max(budget.ratioAllowance, budget.ratio * record.storedSize),
   );
 
   if (ratio !== undefined) {
     yield* refuse(
       "zip-format",
       ratio.name,
-      `it declares ${ratio.size} bytes from ${ratio.storedSize} stored, more than ${MAX_RATIO} times its stored size and past ${RATIO_ALLOWANCE} bytes`,
+      `it declares ${ratio.size} bytes from ${ratio.storedSize} stored, more than ${budget.ratio} times its stored size and past ${budget.ratioAllowance} bytes`,
     );
   }
 
   const total = files.reduce((sum, record) => sum + record.size, 0);
 
-  if (total > MAX_PACKAGE_SIZE) {
+  if (total > budget.packageBytes) {
     yield* refuse(
       "zip-format",
       archive,
-      `the files declare ${total} bytes for one package, past the limit of ${MAX_PACKAGE_SIZE}`,
+      `the files declare ${total} bytes for one package, past the limit of ${budget.packageBytes}`,
     );
   }
 });
@@ -564,8 +604,13 @@ const checkBudget = Effect.fn("package.checkBudget")(function* checkBudget(
  * local entry overlap, and so does a record that points into another's data. A data descriptor
  * lies after the range.
  *
+ * The ranges are walked by offset alone. Records of one offset keep the order `files` gives them,
+ * by name, because `toSorted` is stable (ECMA-262 has required `Array.prototype.sort` to be stable
+ * since ES2019, and `toSorted` sorts as it does), so which record a refusal names is fixed without
+ * a tiebreak.
+ *
  * @param view - The whole file.
- * @param files - The non-directory records.
+ * @param files - The non-directory records, sorted by name, no two of one name.
  * @param limit - Where the central directory starts.
  * @returns Each file's span, keyed by name, or a {@link ZipRefusal}.
  */
@@ -583,9 +628,7 @@ const checkSpans = Effect.fn("package.checkSpans")(function* checkSpans(
     spans.set(record.name, yield* dataSpan(view, record, limit));
   }
 
-  const ordered = files.toSorted(
-    (left, right) => left.offset - right.offset || (left.name < right.name ? -1 : 1),
-  );
+  const ordered = files.toSorted((left, right) => left.offset - right.offset);
   let previous: CentralRecord | undefined;
 
   for (const record of ordered) {
@@ -668,15 +711,16 @@ const readData = Effect.fn("package.readData")(function* readData(
 const parseZip = Effect.fn("package.parseZip")(function* parseZip(
   archive: string,
   bytes: Uint8Array,
+  budget: ZipBudget,
 ): Effect.fn.Return<readonly ZipEntry[], ZipRefusal> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const { count, end, offset } = yield* locateDirectory(archive, view);
 
-  if (count > MAX_ENTRIES) {
+  if (count > budget.entries) {
     yield* refuse(
       "zip-format",
       archive,
-      `the archive has ${count} entries, past the limit of ${MAX_ENTRIES}`,
+      `the archive has ${count} entries, past the limit of ${budget.entries}`,
     );
   }
 
@@ -694,11 +738,11 @@ const parseZip = Effect.fn("package.parseZip")(function* parseZip(
 
   yield* checkListing(files);
 
-  yield* checkBudget(archive, files);
+  yield* checkBudget(archive, files, budget);
 
   const spans = yield* checkSpans(view, files, offset);
   const entries: ZipEntry[] = [];
-  let remaining = MAX_PACKAGE_SIZE;
+  let remaining = budget.packageBytes;
 
   for (const record of files) {
     const span = spans.get(record.name);
@@ -724,16 +768,18 @@ const parseZip = Effect.fn("package.parseZip")(function* parseZip(
  * central directory. The listing is sorted by UTF-16 code unit, so it is the same on every host.
  *
  * @param path - The zip file.
+ * @param budget - The budgets read under: {@link packageBudget} for a package.
  * @returns The files as {@link ZipEntry} values. A {@link ZipRefusal} names the entry and the
  *   feature: `zip-format` for another method, encryption, ZIP64, an archive that does not parse, a
- *   CRC-32 mismatch, more than 10,000 entries, a file declaring over 64 MiB or over 100 times its
- *   stored size (past 1 MiB), files declaring over 256 MiB between them, or two files whose stored
- *   ranges overlap; `href-path` for an absolute name or one with a `..` segment or a backslash;
- *   `manifest-root` for no `imsmanifest.xml` at the root or two of them. A missing file is a
- *   `PlatformError`.
+ *   CRC-32 mismatch, more records than the budget's `entries`, a file declaring more than its
+ *   `entryBytes` or more than `ratio` times its stored size past `ratioAllowance`, files declaring
+ *   more than `packageBytes` between them, or two files whose stored ranges overlap; `href-path`
+ *   for an absolute name or one with a `..` segment or a backslash; `manifest-root` for no
+ *   `imsmanifest.xml` at the root or two of them. A missing file is a `PlatformError`.
  */
 export const readZip = Effect.fn("package.readZip")(function* readZip(
   path: string,
+  budget: ZipBudget,
 ): Effect.fn.Return<
   readonly ZipEntry[],
   ZipRefusal | PlatformError.PlatformError,
@@ -741,7 +787,7 @@ export const readZip = Effect.fn("package.readZip")(function* readZip(
 > {
   const fs = yield* FileSystem.FileSystem;
 
-  return yield* parseZip(path, yield* fs.readFile(path));
+  return yield* parseZip(path, yield* fs.readFile(path), budget);
 });
 
 /**

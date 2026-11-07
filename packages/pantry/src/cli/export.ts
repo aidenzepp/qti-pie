@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 import {
   dryRunFlag,
@@ -8,6 +8,7 @@ import {
   yesFlag,
   zipFlag,
 } from "#pantry/cli/args.ts";
+import { withAuthorApp } from "#pantry/cli/engine.ts";
 import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
 
 /**
@@ -44,22 +45,6 @@ const ExportPlanned = Schema.Struct({
 export const ExportData = Schema.Union([ExportPlanned, ExportWritten]);
 
 /**
- * Whether the export would create `target` or replace what is there. A symlink counts as there,
- * whatever it points to.
- */
-const targetActionOf = Effect.fn("cli.targetActionOf")(function* targetActionOf(target: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const present = yield* fs.lstat(target).pipe(
-    Effect.as(true),
-    Effect.catchTag("PlatformError", (error) =>
-      error.reason._tag === "NotFound" ? Effect.succeed(false) : Effect.fail(error),
-    ),
-  );
-
-  return present ? "replace" : "create";
-});
-
-/**
  * Write the imported package `packageId` to `dir`, or to a zip file under `--zip`.
  *
  * A target that already has something in it needs `--yes`, which replaces it, files `qti` did not
@@ -67,9 +52,10 @@ const targetActionOf = Effect.fn("cli.targetActionOf")(function* targetActionOf(
  * is written beside the target first and takes its place only once it is complete, so an export
  * that fails leaves the old target as it was. A symlink target is replaced, never followed.
  *
- * The engine loads when the handler runs, so `--help` and a usage error never pay for it.
- * `exportPackage` returns nothing, so under `--output json` the entries are read back from what it
- * wrote; text mode prints nothing and does not read them.
+ * The engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
+ * exporter loads inside the database's pool (`withAuthorApp`), so neither does a run that cannot
+ * reach the database. `exportPackage` returns nothing, so under `--output json` the entries are
+ * read back from what it wrote; text mode prints nothing and does not read them.
  *
  * Under `--dry-run` nothing is written and the target is not touched: the entries the export would
  * write are listed with their sizes, and whether the target would be created or replaced. A dry run
@@ -90,15 +76,14 @@ export const exportCommand = Command.make(
     const target = zip && !dir.endsWith(".zip") ? `${dir}.zip` : dir;
 
     const id = yield* requirePackageId(packageId);
-    yield* requireReplaceable(target, yes);
-
-    const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
+    const action = yield* requireReplaceable(target, yes);
 
     if (dryRun) {
-      const { exportEntries } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
-      const planned = yield* exportEntries(id).pipe(Effect.provide(AuthorAppLayer));
+      const planned = yield* withAuthorApp(
+        () => import("#pantry/export/package.ts"),
+        ({ exportEntries }) => exportEntries(id),
+      );
       const entries = planned.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path }));
-      const action = yield* targetActionOf(target);
       const lines = entries.map(({ bytes, path }) => `  ${path} (${bytes} bytes)`);
 
       yield* emitSuccess(mode, {
@@ -118,10 +103,11 @@ export const exportCommand = Command.make(
       return;
     }
 
-    const { exportPackage } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
-
     yield* replaceWith(target, (written) =>
-      exportPackage(id, written).pipe(Effect.provide(AuthorAppLayer)),
+      withAuthorApp(
+        () => import("#pantry/export/package.ts"),
+        ({ exportPackage }) => exportPackage(id, written),
+      ),
     );
 
     if (mode === "text") {

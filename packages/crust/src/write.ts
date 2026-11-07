@@ -1,6 +1,8 @@
 import { Effect, Option } from "effect";
 import { EncodeError } from "#crust/errors.ts";
-import type { Attribute, Child, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
+import { preorder, tour } from "#crust/tour.ts";
+import type { Step } from "#crust/tour.ts";
+import type { Attribute, Child, Element, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
 
 /**
  * How the writer treats code points above the highest one the label's encoder represents.
@@ -129,10 +131,14 @@ const renderCdata = (value: string, threshold: number): string => {
 };
 
 /**
- * Render a node: an element with its attributes in stored order, as `<x/>` when it has no children,
- * or one of the leaf kinds.
+ * Render a node that holds no other node: a text run, a comment, a processing instruction or an
+ * entity reference.
+ *
+ * @param node - The node to render.
+ * @param threshold - The highest code point a text run writes as itself.
+ * @returns The node's markup.
  */
-const renderNode = (node: Child, threshold: number): string => {
+const renderLeaf = (node: Exclude<Child, Element>, threshold: number): string => {
   if (node.kind === "text") {
     return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold);
   }
@@ -145,22 +151,55 @@ const renderNode = (node: Child, threshold: number): string => {
     return `<?${node.target}${node.data === "" ? "" : ` ${node.data}`}?>`;
   }
 
-  if (node.kind === "entityRef") {
-    return `&${node.name};`;
-  }
+  return `&${node.name};`;
+};
 
-  const attributes = node.attributes
+/**
+ * Render an element's attributes in stored order, each led by a space.
+ *
+ * @param element - The element whose attributes to render.
+ * @param threshold - The highest code point an attribute value writes as itself.
+ * @returns The attributes' markup, empty when the element has none.
+ */
+const renderAttributes = (element: Element, threshold: number): string =>
+  element.attributes
     .map((attribute) => ` ${attribute.qname}="${renderValue(attribute, threshold)}"`)
     .join("");
 
-  if (node.children.length === 0) {
-    return `<${node.qname}${attributes}/>`;
+/**
+ * Render one step of a tour: an element's start tag with its attributes in stored order, as `<x/>`
+ * when it has no children and with nothing at its close, else its end tag at its close; or a leaf.
+ *
+ * @param step - The step.
+ * @param threshold - The highest code point a text run or an attribute value writes as itself.
+ * @returns The step's markup.
+ */
+const renderStep = (step: Step, threshold: number): string => {
+  if (step.kind === "leaf") {
+    return renderLeaf(step.node, threshold);
   }
 
-  const children = node.children.map((child) => renderNode(child, threshold)).join("");
+  const { element } = step;
+  if (step.kind === "close") {
+    return element.children.length === 0 ? "" : `</${element.qname}>`;
+  }
 
-  return `<${node.qname}${attributes}>${children}</${node.qname}>`;
+  return `<${element.qname}${renderAttributes(element, threshold)}${element.children.length === 0 ? "/" : ""}>`;
 };
+
+/**
+ * Render a node and everything below it, in document order, by its {@link tour}, so a tree of any
+ * depth or width renders without recursion.
+ *
+ * @param node - The node to render.
+ * @param threshold - The highest code point a text run or an attribute value writes as itself.
+ * @returns The node's markup.
+ */
+const renderNode = (node: Child, threshold: number): string =>
+  tour(node)
+    .map((step) => renderStep(step, threshold))
+    .toArray()
+    .join("");
 
 /**
  * Render the XML declaration with only the pseudo-attributes it has, in the order version,
@@ -206,10 +245,15 @@ const unwritable = (
 };
 
 /**
- * The first construct under `node`, itself included, that cannot carry a character reference and
- * holds a code point above `threshold`, in document order.
+ * The first construct of `node` itself, its children aside, that cannot carry a character
+ * reference and holds a code point above `threshold`: an element's name, then each attribute's
+ * name and recorded reference names in stored order.
+ *
+ * @param node - The node to search.
+ * @param threshold - The highest code point the encoder carries as itself.
+ * @returns The failure for the first such construct, or `undefined` when there is none.
  */
-const findInNode = (node: Child, threshold: number): EncodeError | undefined => {
+const findInOwn = (node: Child, threshold: number): EncodeError | undefined => {
   if (node.kind === "text") {
     return undefined;
   }
@@ -244,9 +288,29 @@ const findInNode = (node: Child, threshold: number): EncodeError | undefined => 
     }
   }
 
-  return node.children
-    .map((child) => findInNode(child, threshold))
-    .find((error) => error !== undefined);
+  return undefined;
+};
+
+/**
+ * The first construct under `node`, itself included, that cannot carry a character reference and
+ * holds a code point above `threshold`, in document order.
+ *
+ * The node is visited by its {@link preorder}, so a tree of any depth or width is searched without
+ * recursion, and the search stops at the first failure.
+ *
+ * @param node - The node to search.
+ * @param threshold - The highest code point the encoder carries as itself.
+ * @returns The failure for the first such construct, or `undefined` when there is none.
+ */
+const findInNode = (node: Child, threshold: number): EncodeError | undefined => {
+  for (const visited of preorder(node)) {
+    const found = findInOwn(visited, threshold);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+
+  return undefined;
 };
 
 /**

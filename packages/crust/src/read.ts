@@ -1,11 +1,14 @@
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { SaxesParser } from "saxes";
-import type { SaxesAttributeNS } from "saxes";
 import { decode } from "#crust/decode.ts";
 import type { Decoded } from "#crust/decode.ts";
-import { NAME_CHAR, NAME_START, lexProlog, substitute } from "#crust/dtd.ts";
-import type { AttlistEntry, Prolog, Substituted } from "#crust/dtd.ts";
+import { NAME_CHAR, NAME_START, lexProlog, substitute, undeclaredEntity } from "#crust/dtd.ts";
+import type { AttlistEntry, Prolog, Substituted, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
+import { isNCName, resolved, rootScope } from "#crust/namespaces.ts";
+import type { Scope } from "#crust/namespaces.ts";
+import { rebuild } from "#crust/rebuild.ts";
+import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
 import type {
   Attribute,
   AttributeReference,
@@ -17,33 +20,38 @@ import type {
 } from "#crust/tree.ts";
 
 /**
- * An element whose start tag has been read and whose end tag has not.
+ * Where the parser stood when it had read an element's start tag: the line and column it reports,
+ * and its offset in code points.
+ */
+interface StartTag {
+  readonly column: number;
+  readonly line: number;
+  readonly position: number;
+}
+
+/**
+ * An element whose start tag has been read and whose end tag has not: its attributes as written,
+ * its names unresolved, and where its start tag ended.
  */
 interface OpenElement {
   readonly attributes: readonly Attribute[];
   readonly children: Child[];
-  readonly local: string;
-  readonly namespace: string;
-  readonly prefix: string;
   readonly qname: string;
+  readonly start: StartTag;
 }
 
 /**
- * What `parse` builds: the root element and the comments and processing instructions around it.
+ * What `parse` builds: the root element and the comments and processing instructions around it,
+ * and where each element's start tag ended. The tree's names are unresolved: each element and
+ * attribute holds its name as written as its local name, in no namespace and with no prefix, until
+ * {@link assemble} resolves them after the attribute-list defaults are added.
  */
 interface Built {
   readonly epilog: readonly Misc[];
   readonly prolog: readonly Misc[];
   readonly root: Element;
+  readonly starts: ReadonlyMap<Element, StartTag>;
 }
-
-/**
- * The first and last code points of the private use area, where an undeclared entity reference
- * borrows a stand-in character (6,400 of them).
- */
-const SENTINEL_FIRST = 0xe0_00;
-
-const SENTINEL_LAST = 0xf8_ff;
 
 /**
  * What the undeclared-reference scan stops at, in document order: a comment, a processing
@@ -75,14 +83,7 @@ interface Scanned {
  */
 const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Scanned => {
   const names = new Set<string>();
-  const used = new Set<number>();
-  for (const character of body) {
-    const point = character.codePointAt(0) ?? 0;
-    if (point >= SENTINEL_FIRST && point <= SENTINEL_LAST) {
-      used.add(point);
-    }
-  }
-
+  const used = sentinelsWritten(body);
   for (const match of body.matchAll(SCAN)) {
     const { decimal, hex, name } = match.groups ?? {};
     if (name !== undefined && !PREDEFINED.has(name) && !declared.has(name)) {
@@ -96,22 +97,12 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
 };
 
 /**
- * The refusal for a reference to an entity the document never declares and has nowhere to declare.
- */
-const undeclared = (name: string, why: string): ReaderRefusal =>
-  new ReaderRefusal({
-    detail: `the entity "${name}" is referenced but not declared, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared).`,
-    rule: "undeclared-entity",
-  });
-
-/**
  * Give each undeclared entity name in the body a stand-in character, or refuse.
  *
- * A document that is `standalone="yes"` or has no external subset declares every entity it may use
- * in its own prolog, so an undeclared reference is a well-formedness error and is refused naming
- * the entity. Otherwise the declaration may sit in the external subset, which is never read: the
- * name gets a private use character that occurs nowhere in the document, and the parser appends it
- * as plain text.
+ * The prolog's {@link Prolog.undeclared} treatment decides, as it decided each attribute default's
+ * references: a refused reference is a well-formedness error, refused naming the entity. A kept one
+ * may be declared in the external subset, which is never read: the name gets a private use
+ * character that occurs nowhere in the body, and the parser appends it as plain text.
  *
  * @returns The stand-in character of each name; the map is empty when the body has no such
  *   reference.
@@ -127,12 +118,8 @@ const assignSentinels = (
       return Effect.succeed(new Map<string, string>());
     }
 
-    if (prolog.standalone) {
-      return Effect.fail(undeclared(firstName, 'the document says standalone="yes"'));
-    }
-
-    if (!prolog.externalSubset) {
-      return Effect.fail(undeclared(firstName, "the document has no external subset"));
+    if (prolog.undeclared._tag === "refused") {
+      return Effect.fail(undeclaredEntity(firstName, prolog.undeclared.why));
     }
 
     const sentinels = new Map<string, string>();
@@ -144,7 +131,10 @@ const assignSentinels = (
 
       if (point > SENTINEL_LAST) {
         return Effect.fail(
-          undeclared(name, "the document leaves no private use character free to stand for it"),
+          undeclaredEntity(
+            name,
+            "the document leaves no private use character free to stand for it",
+          ),
         );
       }
 
@@ -168,48 +158,75 @@ const utf16Offset = (text: string, position: number): number => {
 };
 
 /**
- * The tree attribute for one `saxes` attribute; its value is the parser's, with no references.
+ * The unresolved tree attribute for one written attribute: its name as written, its value the
+ * parser's, with no references.
  */
-const toAttribute = (attribute: SaxesAttributeNS): Attribute => ({
-  local: attribute.local,
-  namespace: attribute.uri,
-  prefix: attribute.prefix,
-  qname: attribute.name,
+const toAttribute = ([qname, value]: readonly [string, string]): Attribute => ({
+  local: qname,
+  namespace: "",
+  prefix: "",
+  qname,
   references: [],
-  value: attribute.value,
+  value,
 });
 
 /**
- * The tree element for a closed element and the children collected for it.
+ * The unresolved tree element for a closed element and the children collected for it.
  */
 const toElement = (open: OpenElement): Element => ({
   attributes: open.attributes,
   children: open.children,
   kind: "element",
-  local: open.local,
-  namespace: open.namespace,
-  prefix: open.prefix,
+  local: open.qname,
+  namespace: "",
+  prefix: "",
   qname: open.qname,
 });
 
 /**
- * The most elements open at once; `xmllint`'s default depth limit.
+ * The most elements a document may hold open at once unless its reader says otherwise: `xmllint`'s
+ * default depth limit.
  */
-const ELEMENT_DEPTH = 256;
+export const defaultElementDepth = 256;
+
+/**
+ * How {@link readXml} reads a document.
+ */
+export interface ReadOptions {
+  /**
+   * The most elements open at once before the document is refused under rule `element-depth`:
+   * {@link defaultElementDepth} when absent, and `Number.POSITIVE_INFINITY` for a document of any
+   * depth.
+   */
+  readonly elementDepth?: number;
+}
 
 /**
  * Run `saxes` over `substituted.body` and build the root element with the comments and processing
- * instructions around it.
+ * instructions around it, its names unresolved.
  *
- * `saxes` throws its first well-formedness error; that error becomes a `WellFormednessError` at
- * the position the parser had reached. A document that nests more than `ELEMENT_DEPTH` elements is
- * refused with a `ReaderRefusal` under rule `element-depth`.
+ * `saxes` reads without namespaces: a namespace declaration may come from an attribute-list
+ * default, which `saxes` never sees, so every namespace constraint is judged after the defaults are
+ * added ({@link assemble}). It throws its first well-formedness error; that error becomes a
+ * `WellFormednessError` at the position the parser had reached, as does a processing instruction
+ * target holding a colon, which Namespaces in XML section 7 forbids. A document that nests more
+ * than `elementDepth` elements is refused with a `ReaderRefusal` under rule `element-depth`. The
+ * tree is built on a stack of open elements, so a document of any depth within that bound is read
+ * without recursion.
+ *
+ * @param substituted - The document text with its declared entities substituted.
+ * @param sentinels - The stand-in character of each undeclared entity name.
+ * @param elementDepth - The most elements open at once.
+ * @returns The root element, the comments and processing instructions around it and where each
+ *   start tag ended; the `ReaderRefusal` for an element past `elementDepth`, or the
+ *   `WellFormednessError` for the first error `saxes` raises.
  */
 const parse = (
   substituted: Substituted,
   sentinels: ReadonlyMap<string, string>,
+  elementDepth: number,
 ): Effect.Effect<Built, WellFormednessError | ReaderRefusal> => {
-  const parser = new SaxesParser({ position: true, xmlns: true });
+  const parser = new SaxesParser({ position: true });
   for (const [name, sentinel] of sentinels) {
     parser.ENTITIES[name] = sentinel;
   }
@@ -228,6 +245,7 @@ const parse = (
           }),
     try: () => {
       const open: OpenElement[] = [];
+      const starts = new Map<Element, StartTag>();
       const prolog: Misc[] = [];
       const epilog: Misc[] = [];
       let root: Element | undefined;
@@ -241,9 +259,9 @@ const parse = (
       };
 
       parser.on("opentag", (tag) => {
-        if (open.length >= ELEMENT_DEPTH) {
+        if (open.length >= elementDepth) {
           throw new ReaderRefusal({
-            detail: `The document nests elements more than ${ELEMENT_DEPTH} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${ELEMENT_DEPTH} elements are open at once.`,
+            detail: `The document nests elements more than ${elementDepth} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${elementDepth} elements are open at once.`,
             rule: "element-depth",
           });
         }
@@ -251,12 +269,10 @@ const parse = (
         // The attribute record's insertion order is the order the attributes were written in,
         // namespace declarations included.
         open.push({
-          attributes: Object.values(tag.attributes).map(toAttribute),
+          attributes: Object.entries(tag.attributes).map(toAttribute),
           children: [],
-          local: tag.local,
-          namespace: tag.uri,
-          prefix: tag.prefix,
           qname: tag.name,
+          start: { column: parser.column, line: parser.line, position: parser.position },
         });
       });
       parser.on("closetag", () => {
@@ -266,6 +282,8 @@ const parse = (
         }
 
         const element = toElement(closed);
+        starts.set(element, closed.start);
+
         const parent = open.at(-1);
         if (parent === undefined) {
           root = element;
@@ -295,6 +313,12 @@ const parse = (
         place({ kind: "comment", text });
       });
       parser.on("processinginstruction", ({ body, target }) => {
+        if (!isNCName(target)) {
+          throw new Error(
+            `the processing instruction target ${target} holds a colon, which Namespaces in XML section 7 forbids in every processing instruction target`,
+          );
+        }
+
         place({ data: body, kind: "pi", target });
       });
       parser.write(substituted.body).close();
@@ -303,118 +327,45 @@ const parse = (
         throw new Error("the document has no root element");
       }
 
-      return { epilog, prolog, root };
+      return { epilog, prolog, root, starts };
     },
   });
 };
 
 /**
- * The value with leading and trailing spaces removed and each run of spaces made one (XML 1.0
- * section 3.3.3, the second step, which applies to every attribute type but `CDATA`).
+ * A value's pieces after the second normalization step a non-`CDATA` attribute type adds (XML 1.0
+ * section 3.3.3): each run of spaces made one, and a space at either end removed. A reference is
+ * no space, so a run ends at one; only U+0020 counts, so a tab or other white space a character
+ * reference wrote stays.
+ *
+ * @param pieces - The value's pieces, text and references alternating.
+ * @returns The normalized pieces, text and references still alternating.
  */
-const collapseSpaces = (value: string): string => value.replaceAll(/ +/gu, " ").trim();
-
-/**
- * The `&name;` references in `value`, each as its name and the index of its `&`.
- */
-const referencesIn = (value: string): readonly AttributeReference[] =>
-  [...value.matchAll(/&(?<name>[^\s&;]+);/gu)].map((match) => ({
-    name: match.groups?.["name"] ?? "",
-    offset: match.index,
-  }));
-
-/**
- * The attribute `declared` names with `value`, which is as the ATTLIST declaration supplies it
- * except for the second normalization step a non-`CDATA` type adds; a name in it other than the
- * predefined five is kept as written and recorded as a reference.
- */
-const defaultAttribute = (declared: string, entry: AttlistEntry, value: string): Attribute => {
-  const normalized = entry.type === "CDATA" ? value : collapseSpaces(value);
-
-  return {
-    local: declared,
-    namespace: "",
-    prefix: "",
-    qname: declared,
-    references: referencesIn(normalized),
-    value: normalized,
-  };
-};
-
-/**
- * `element`'s attributes after the ATTLIST table of its name is applied: a non-`CDATA` value is
- * normalized and each declared default the element lacks is appended in declaration order.
- */
-const applyAttlist = (
-  attributes: readonly Attribute[],
-  table: ReadonlyMap<string, AttlistEntry>,
-): readonly Attribute[] => {
-  const written = attributes.map((attribute) => {
-    const entry = table.get(attribute.qname);
-
-    return entry === undefined || entry.type === "CDATA"
-      ? attribute
-      : { ...attribute, value: collapseSpaces(attribute.value) };
-  });
-  const present = new Set(attributes.map((attribute) => attribute.qname));
-  const defaulted = [...table].flatMap(([declared, entry]) =>
-    !present.has(declared) && Option.isSome(entry.default)
-      ? [defaultAttribute(declared, entry, entry.default.value)]
-      : [],
-  );
-
-  return [...written, ...defaulted];
-};
-
-/**
- * `element` and everything below it with the ATTLIST tables applied.
- */
-const applyAttlists = (element: Element, attlists: Prolog["attlists"]): Element => {
-  const table = attlists.get(element.qname);
-
-  return {
-    ...element,
-    attributes: table === undefined ? element.attributes : applyAttlist(element.attributes, table),
-    children: element.children.map((child) =>
-      child.kind === "element" ? applyAttlists(child, attlists) : child,
-    ),
-  };
-};
-
-/**
- * An attribute value after its stand-in characters are written back as `&name;`, with where each
- * `&` landed.
- */
-interface Restored {
-  readonly references: readonly AttributeReference[];
-  readonly value: string;
-}
-
-/**
- * `value` with each stand-in character written back as `&name;`.
- */
-const restoreValue = (value: string, names: ReadonlyMap<string, string>): Restored => {
-  const references: AttributeReference[] = [];
-  let restored = "";
-  for (const character of value) {
-    const name = names.get(character);
-    if (name === undefined) {
-      restored += character;
-    } else {
-      references.push({ name, offset: restored.length });
-      restored += `&${name};`;
+const collapsed = (pieces: readonly ValuePiece[]): readonly ValuePiece[] =>
+  pieces.flatMap((piece, at): readonly ValuePiece[] => {
+    if (piece.kind === "reference") {
+      return [piece];
     }
-  }
 
-  return { references, value: restored };
-};
+    const spaced = piece.text.replaceAll(/ +/gu, " ");
+    const start = at === 0 && spaced.startsWith(" ") ? 1 : 0;
+    const end =
+      at === pieces.length - 1 && spaced.endsWith(" ") ? spaced.length - 1 : spaced.length;
+    const text = spaced.slice(start, Math.max(start, end));
+
+    return text === "" ? [] : [{ kind: "text", text }];
+  });
 
 /**
- * `value` split around its stand-in characters: the text between them as `Text` runs and each
- * stand-in as an `EntityRef`.
+ * Split `value` around its stand-in characters: the text between them, and the reference each
+ * stand-in stands for.
+ *
+ * @param value - Text the parser built, holding a stand-in for each undeclared reference.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The pieces, text and references alternating, no text piece empty.
  */
-const restoreText = (value: string, names: ReadonlyMap<string, string>): readonly Child[] => {
-  const children: Child[] = [];
+const piecesOf = (value: string, names: ReadonlyMap<string, string>): readonly ValuePiece[] => {
+  const pieces: ValuePiece[] = [];
   let run = "";
   for (const character of value) {
     const name = names.get(character);
@@ -422,74 +373,217 @@ const restoreText = (value: string, names: ReadonlyMap<string, string>): readonl
       run += character;
     } else {
       if (run !== "") {
-        children.push({ cdata: false, kind: "text", value: run });
+        pieces.push({ kind: "text", text: run });
       }
 
-      children.push({ kind: "entityRef", name } satisfies EntityRef);
+      pieces.push({ kind: "reference", name });
       run = "";
     }
   }
 
   if (run !== "") {
-    children.push({ cdata: false, kind: "text", value: run });
+    pieces.push({ kind: "text", text: run });
   }
 
-  return children;
+  return pieces;
 };
 
 /**
- * `element` and everything below it with each stand-in character replaced by the reference it
- * stands for: an `EntityRef` among the children, and `&name;` in an attribute value with its
- * offset recorded.
+ * Write a value's pieces as an attribute value: text as itself, each reference as `&name;`, with
+ * where each reference's `&` lands.
+ *
+ * @param pieces - The value's pieces.
+ * @returns The value and its references, in order.
  */
-const restoreReferences = (element: Element, names: ReadonlyMap<string, string>): Element => ({
-  ...element,
-  attributes: element.attributes.map((attribute) => {
-    const restored = restoreValue(attribute.value, names);
-
-    return restored.references.length === 0
-      ? attribute
-      : { ...attribute, references: restored.references, value: restored.value };
-  }),
-  children: element.children.flatMap((child): readonly Child[] => {
-    if (child.kind === "element") {
-      return [restoreReferences(child, names)];
+const attributeValueOf = (
+  pieces: readonly ValuePiece[],
+): Pick<Attribute, "references" | "value"> => {
+  const references: AttributeReference[] = [];
+  let value = "";
+  for (const piece of pieces) {
+    if (piece.kind === "text") {
+      value += piece.text;
+    } else {
+      references.push({ name: piece.name, offset: value.length });
+      value += `&${piece.name};`;
     }
+  }
 
-    return child.kind === "text" && !child.cdata ? restoreText(child.value, names) : [child];
-  }),
-});
+  return { references, value };
+};
+
+/**
+ * Normalize a value's pieces as its declared type asks: as given for `CDATA` or an undeclared
+ * attribute, {@link collapsed} for any other type.
+ *
+ * @param pieces - The value's pieces.
+ * @param entry - The attribute's declaration, when the ATTLIST table has one.
+ * @returns The normalized pieces.
+ */
+const normalizedAs = (
+  pieces: readonly ValuePiece[],
+  entry: AttlistEntry | undefined,
+): readonly ValuePiece[] =>
+  entry === undefined || entry.type === "CDATA" ? pieces : collapsed(pieces);
+
+/**
+ * An element's attributes in the finished tree: each written one with its stand-ins restored as
+ * references and its value normalized by its declared type, then each declared default the element
+ * lacks, in declaration order, built from the default's own pieces.
+ *
+ * A default never holds a stand-in: its references are pieces the prolog's lexer kept, and its text
+ * is the prolog's, which the body's stand-ins are chosen apart from. So a default is appended after
+ * the stand-ins are restored, and no character of its text is read as a reference.
+ *
+ * @param element - The element as `saxes` built it, its names unresolved.
+ * @param table - The ATTLIST table of the element's name, if any.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The attributes, their names unresolved until {@link resolved} resolves them with the
+ *   element's.
+ */
+const attributesOf = (
+  element: Element,
+  table: ReadonlyMap<string, AttlistEntry> | undefined,
+  names: ReadonlyMap<string, string>,
+): readonly Attribute[] => {
+  const written = element.attributes.map((attribute): Attribute => ({
+    ...attribute,
+    ...attributeValueOf(
+      normalizedAs(piecesOf(attribute.value, names), table?.get(attribute.qname)),
+    ),
+  }));
+  const present = new Set(element.attributes.map((attribute) => attribute.qname));
+  const defaulted = [...(table ?? [])].flatMap(([declared, entry]): readonly Attribute[] =>
+    !present.has(declared) && Option.isSome(entry.default)
+      ? [
+          {
+            local: declared,
+            namespace: "",
+            prefix: "",
+            qname: declared,
+            ...attributeValueOf(normalizedAs(entry.default.value, entry)),
+          },
+        ]
+      : [],
+  );
+
+  return [...written, ...defaulted];
+};
+
+/**
+ * A text run's nodes once its stand-in characters are restored: the text between them as `Text`
+ * runs and each stand-in as an `EntityRef`.
+ *
+ * @param value - The run's text.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The nodes, in order.
+ */
+const restoredText = (value: string, names: ReadonlyMap<string, string>): readonly Child[] =>
+  piecesOf(value, names).map((piece): Child =>
+    piece.kind === "text"
+      ? { cdata: false, kind: "text", value: piece.text }
+      : ({ kind: "entityRef", name: piece.name } satisfies EntityRef),
+  );
+
+/**
+ * Build the error for a namespace constraint an element breaks, at the position its start tag
+ * ended, where `saxes` itself reports a well-formedness error a start tag holds.
+ *
+ * @param substituted - The document text with its declared entities substituted.
+ * @param start - Where the element's start tag ended.
+ * @param message - What the element breaks.
+ * @returns The error.
+ */
+const violationAt = (
+  substituted: Substituted,
+  start: StartTag,
+  message: string,
+): WellFormednessError =>
+  new WellFormednessError({
+    afterSubstitution: substituted.afterSubstitution(utf16Offset(substituted.body, start.position)),
+    column: start.column,
+    line: start.line,
+    message: `${String(start.line)}:${String(start.column)}: ${message}.`,
+  });
 
 /**
  * Assemble the document from what the earlier stages read and the tree `saxes` built.
+ *
+ * One walk, without recursion, gives every element its {@link attributesOf}, written and
+ * defaulted, then resolves its names and its attributes' against the namespaces in scope, its own
+ * declarations, written or defaulted, included ({@link resolved}); and it puts every stand-in
+ * character of the content back as the `EntityRef` it stands for.
+ *
+ * @param substituted - The document text with its declared entities substituted, for a
+ *   violation's position.
+ * @param decoded - The decoded bytes, for the charset label.
+ * @param prolog - The prolog, for its declaration, DOCTYPE and ATTLIST tables.
+ * @param built - The root element, the comments and processing instructions around it, and where
+ *   each start tag ended.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The document; the `WellFormednessError` of the first namespace constraint an element
+ *   breaks, in document order.
  */
 const assemble = (
+  substituted: Substituted,
   decoded: Decoded,
   prolog: Prolog,
   built: Built,
   names: ReadonlyMap<string, string>,
-): XmlDocument => {
-  const applied =
-    prolog.attlists.size === 0 ? built.root : applyAttlists(built.root, prolog.attlists);
+): Effect.Effect<XmlDocument, WellFormednessError> => {
+  const version = Option.match(prolog.declaration, {
+    onNone: () => "1.0",
+    onSome: (declaration) => declaration.version,
+  });
+  // Every element of the built tree has its start tag, set when it closed.
+  const documentStart: StartTag = { column: 0, line: 1, position: 0 };
+  const root = rebuild<Scope, WellFormednessError>(
+    built.root,
+    rootScope,
+    (element, scope) =>
+      Result.mapError(
+        resolved(
+          {
+            ...element,
+            attributes: attributesOf(element, prolog.attlists.get(element.qname), names),
+          },
+          scope,
+          version,
+        ),
+        (message) => violationAt(substituted, built.starts.get(element) ?? documentStart, message),
+      ),
+    (leaf) =>
+      Result.succeed(
+        leaf.kind === "text" && !leaf.cdata && names.size > 0
+          ? restoredText(leaf.value, names)
+          : [leaf],
+      ),
+  );
 
-  return {
-    charset: decoded.label,
-    declaration: prolog.declaration,
-    doctype: prolog.doctype,
-    epilog: built.epilog,
-    prolog: built.prolog,
-    root: names.size === 0 ? applied : restoreReferences(applied, names),
-  };
+  return Result.match(root, {
+    onFailure: (error) => Effect.fail(error),
+    onSuccess: (resolvedRoot) =>
+      Effect.succeed({
+        charset: decoded.label,
+        declaration: prolog.declaration,
+        doctype: prolog.doctype,
+        epilog: built.epilog,
+        prolog: built.prolog,
+        root: resolvedRoot,
+      }),
+  });
 };
 
 /**
  * Read a document's bytes into its tree.
  *
  * The bytes are decoded, the prolog is lexed and the declared entities are substituted into the
- * body, then `saxes` parses the result with namespaces on and the tree is built from its events:
+ * body, then `saxes` parses the result without namespaces and the tree is built from its events:
  * adjacent text events become one `Text`, a CDATA section stays its own `Text`, and the
  * empty-element form is dropped. The ATTLIST table is then applied: a declared default the element
- * lacks is appended, and a non-`CDATA` attribute value is normalized.
+ * lacks is appended, and a non-`CDATA` attribute value is normalized. Last, every name is resolved
+ * against the namespace declarations in scope, defaulted ones included, and each namespace
+ * constraint is checked (`#crust/namespaces.ts`).
  *
  * A reference to an entity the document does not declare is refused when the document is
  * `standalone="yes"` or has no external subset. Otherwise each such name is registered with
@@ -497,23 +591,28 @@ const assemble = (
  * character becomes the reference it stood for: an `EntityRef` in content, `&name;` with a recorded
  * offset in an attribute value.
  *
- * At most 256 elements may be open at once, as in `xmllint`; a deeper document is refused under
- * rule `element-depth`.
+ * At most `options.elementDepth` elements may be open at once, {@link defaultElementDepth} (256,
+ * as in `xmllint`) unless the caller gives another bound; a deeper document is refused under rule
+ * `element-depth`. Within the bound, a document of any depth or width is read: the tree is built,
+ * and then rewritten, on stacks of its own, never by recursion.
  *
  * @param bytes - The document as read from storage.
- * @returns The tree; a `ReaderRefusal` from decoding, the prolog or the element depth, or a
- *   `WellFormednessError` whose position is the parser's and whose `afterSubstitution` says whether
- *   a substitution precedes it.
+ * @param options - How to read it: the element depth it is refused past.
+ * @returns The tree; a `ReaderRefusal` from decoding, the prolog, an entity reference or the
+ *   element depth, or a `WellFormednessError` whose position is the parser's, or the end of the
+ *   start tag of an element that breaks a namespace constraint, and whose `afterSubstitution` says
+ *   whether a substitution precedes it.
  */
 export const readXml = Effect.fn("xml.read")(function* readXml(
   bytes: Uint8Array,
+  options: ReadOptions = {},
 ): Effect.fn.Return<XmlDocument, WellFormednessError | ReaderRefusal> {
   const decoded = yield* decode(bytes);
   const prolog = yield* lexProlog(decoded.text);
   const substituted = yield* substitute(decoded.text, prolog);
   const sentinels = yield* assignSentinels(substituted, prolog);
-  const built = yield* parse(substituted, sentinels);
+  const built = yield* parse(substituted, sentinels, options.elementDepth ?? defaultElementDepth);
   const names = new Map([...sentinels].map(([name, sentinel]) => [sentinel, name]));
 
-  return assemble(decoded, prolog, built, names);
+  return yield* assemble(substituted, decoded, prolog, built, names);
 });

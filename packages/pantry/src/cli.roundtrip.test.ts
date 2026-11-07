@@ -1,9 +1,11 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Cause, Console, Effect, Exit, Stdio } from "effect";
+import { Cause, Console, Effect, Exit, Schema, Stdio } from "effect";
 import { Command } from "effect/cli";
 import { describe, inject } from "vitest";
 import { cli } from "#pantry/cli.ts";
+import { ErrorObject } from "#pantry/cli/output.ts";
+import { captureCli } from "#pantry/test/cli.ts";
 import { hasLease } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
@@ -40,6 +42,9 @@ describe.skipIf(!hasLease)("cli.roundtrip.test.ts, on the lease", () => {
       it.effect(
         "roundtrip of simple lists every entry equal and ends all equal",
         () =>
+          // Oracle: `simple`'s own bytes. Its two XML entries end their lines in CR LF, which XML's
+          // end-of-line handling reads as LF and the export writes as LF, so their bytes differ and
+          // their canonical forms agree; its image is written back as read.
           Effect.gen(function* roundtripSimple() {
             const { exit, output } = yield* run(["roundtrip", "--yes", fixtures.simple]);
 
@@ -56,13 +61,23 @@ describe.skipIf(!hasLease)("cli.roundtrip.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "import of metaData fails and names the rule",
+        "import of metaData is refused by the database, naming its rule, each law and its sources",
         () =>
+          // Oracle: the verdict file's rule family for metaData (`lom-`, O6's metadata laws), which
+          // the database states, so the refusal carries laws and sources.
           Effect.gen(function* importRefused() {
-            const { exit } = yield* run(["import", fixtures.metaData]);
+            const { exit, stderr } = yield* captureCli(["--json", "import", fixtures.metaData]);
+            const error = Schema.decodeUnknownSync(Schema.fromJsonString(ErrorObject))(stderr);
 
             assert.isTrue(Exit.isFailure(exit));
-            assert.match(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", /lom-/u);
+            assert.strictEqual(error.kind, "import-refused");
+            assert.match(error.rule ?? "", /^lom-/u);
+            assert.isAbove(error.laws?.length ?? 0, 0, stderr);
+            assert.isTrue(
+              (error.laws ?? []).some((law) => law.rule === error.rule),
+              `one of the laws keeps the rule ${error.rule ?? ""}: ${stderr}`,
+            );
+            assert.isAbove(error.sources?.length ?? 0, 0, stderr);
           }),
         TEST_TIMEOUT,
       );

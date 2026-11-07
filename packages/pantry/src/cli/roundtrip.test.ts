@@ -8,16 +8,16 @@ import { successEnvelope } from "#pantry/cli/output.ts";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
 import { captureCli, packageCopy, preloadEngine } from "#pantry/test/cli.ts";
-import { makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
+import { fileScratchDirectory, makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The folder the run's home and cluster state live under, `packages/pantry/work/cli-roundtrip`. No
- * other test file writes there.
+ * The folder the run's home and cluster state live under, `packages/pantry/work/cli-roundtrip-*`,
+ * the run's own.
  */
-const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-roundtrip");
+const root = fileScratchDirectory("cli-roundtrip-");
 
 /**
  * The environment of a run: a scratch home and a cluster state folder that is empty, so the import
@@ -215,7 +215,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("roundtrip --dry-run", 
   );
 
   it.effect(
-    "onto an empty export folder it reports create, with or without --yes",
+    "onto an empty export folder it reports replace, with or without --yes, since existence decides",
     () =>
       Effect.gen(function* empty() {
         const fs = yield* FileSystem.FileSystem;
@@ -233,7 +233,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("roundtrip --dry-run", 
         );
 
         assert.isTrue(Exit.isSuccess(exit), stderr);
-        assert.strictEqual(dryRunArm(stdout).export_dir_action, "create");
+        assert.strictEqual(dryRunArm(stdout).export_dir_action, "replace");
         assert.deepStrictEqual(yield* fs.readDirectory(folder), []);
       }),
     cliProcessTestTimeoutMs,

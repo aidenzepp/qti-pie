@@ -6,14 +6,14 @@ import { BadPackageId, replaceWith, TargetNotEmpty } from "#pantry/cli/args.ts";
 import { describeFailure } from "#pantry/cli/errors.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
 import { captureCli, preloadEngine } from "#pantry/test/cli.ts";
-import { makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
+import { fileScratchDirectory, makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
- * The folder every case here works under, `packages/pantry/work/cli-export`. No other test file
- * writes there.
+ * The folder every case here works under, `packages/pantry/work/cli-export-*`, the run's own, so
+ * two runs at once never empty each other's folders.
  */
-const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-export");
+const root = fileScratchDirectory("cli-export-");
 
 /**
  * An id no package has.

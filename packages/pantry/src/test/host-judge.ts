@@ -1,0 +1,812 @@
+/**
+ * The import's rows as the database holds them, rebuilt on the host from a program's inputs by the
+ * schema's own statements, and judged by every law of the schema the host can read: each
+ * containment and each half of a `mirrors`, each key and each check (`#pantry/test/key-copies.ts`
+ * `judgedLaws`).
+ *
+ * A program writes each row without the values grizzle fills, and nests a sequence's members under
+ * their owner (`#pantry/import/write.ts`). {@link hostRowsOf} restores what grizzle's README says
+ * it fills ("Families"), from the statements alone:
+ *
+ * - **a sequence's members**, each an ordered family's or a tree's, as rows of their own relation,
+ *   their group the owner's primary key and their index their place, a tree's member its parent's
+ *   child under its root's root field, the tree's root its own parent;
+ * - **every count**: an ordered family's or a tree's members, a counted family's by its group, and a
+ *   tree's pre-order interval `[start, end)`;
+ * - **each fold** of `Monoid.count`, `Monoid.or`, `Monoid.concat` or `Monoid.sum`: its owner's end,
+ *   and its members' running values in slot order, a member its step's selection does not hold
+ *   stepping by the identity;
+ * - **each copy along a family's axis**: an accumulated field of a member that a containment pairs,
+ *   beside the member's group and the owner's primary key, with a field of the owner.
+ *
+ * What it does not restore stays absent: a tree root's copies along the axis, whose start values
+ * grizzle keeps in its own field builders; a copy along a last or a predecessor axis; a field
+ * PostgreSQL generates; and a value no datum of `#pantry/test/key-copies.ts` is, a float. A law
+ * that reads an absent value on a row it reads is not judged, and {@link judge} names it with every
+ * absent value, so a skip is always named by its cause.
+ */
+import type { Law } from "@bjornpagen/grizzle";
+import { Option, Predicate, Schema } from "effect";
+import type { PackageInputs } from "#pantry/import/write.ts";
+import { Qti } from "#pantry/qti/schema.ts";
+import {
+  closedRows,
+  datumText,
+  judgedLaws,
+  judgedSideOf,
+  SideSchema,
+} from "#pantry/test/key-copies.ts";
+import type { Datum, JudgedLaw, JudgedSide } from "#pantry/test/key-copies.ts";
+
+/**
+ * A row as the host holds it: each of its fields' values that is a datum.
+ */
+export type HostRow = Readonly<Record<string, Datum>>;
+
+/**
+ * A row as the host fills it.
+ */
+type FilledRow = Record<string, Datum>;
+
+/**
+ * Every relation's rows as the database holds them, by relation.
+ */
+export type HostRows = ReadonlyMap<string, readonly HostRow[]>;
+
+/**
+ * A stored relation as its descriptor holds it: its primary key, and each field's writing where
+ * grizzle or PostgreSQL writes it.
+ */
+const RelationSchema = Schema.Struct({
+  heading: Schema.Record(
+    Schema.String,
+    Schema.Struct({ writing: Schema.optionalKey(Schema.String) }),
+  ),
+  kind: Schema.Literal("relation"),
+  name: Schema.String,
+  primaryKey: Schema.Array(Schema.String),
+});
+
+/**
+ * Each stored relation's primary key and its fields' writings, by name.
+ */
+const relations: ReadonlyMap<
+  string,
+  { readonly key: readonly string[]; readonly writing: ReadonlyMap<string, string> }
+> = new Map(
+  Object.values(Qti.relations).flatMap((member) =>
+    Option.match(Schema.decodeUnknownOption(RelationSchema)(member), {
+      onNone: () => [],
+      onSome: ({ heading, name, primaryKey }) => [
+        [
+          name,
+          {
+            key: primaryKey,
+            writing: new Map(
+              Object.entries(heading).flatMap(([field, { writing }]) =>
+                writing === undefined ? [] : [[field, writing] as const],
+              ),
+            ),
+          },
+        ] as const,
+      ],
+    }),
+  ),
+);
+
+/**
+ * Read a relation's primary key.
+ *
+ * @param relation - The relation's name.
+ * @returns Its key's fields, none for a relation the schema does not store.
+ */
+const keyOf = (relation: string): readonly string[] => relations.get(relation)?.key ?? [];
+
+/**
+ * A family as grizzle keeps it: its kind, its member's side, its slots and a tree's root field.
+ */
+const FamilySchema = Schema.Struct({
+  family: SideSchema,
+  kind: Schema.Literals(["counted", "ordered", "tree"]),
+  root: Schema.optionalKey(Schema.String),
+  slots: Schema.Struct({ count: Schema.String, owner: Schema.Struct({ name: Schema.String }) }),
+});
+
+/**
+ * A fold as grizzle keeps it: its family, its monoid, its step and its end.
+ */
+const FoldSchema = Schema.Struct({
+  end: SideSchema,
+  family: FamilySchema,
+  kind: Schema.Literal("fold"),
+  monoid: Schema.Struct({ name: Schema.String }),
+  step: SideSchema,
+});
+
+/**
+ * A family as the host fills it: its member, its owner and the owner's count, the member's group in
+ * the order the owner's primary key pairs it, an ordered family's or a tree's index, and a tree's
+ * root field.
+ */
+interface Family {
+  readonly count: string;
+  readonly group: readonly string[];
+  readonly index: Option.Option<string>;
+  readonly kind: "counted" | "ordered" | "tree";
+  readonly member: string;
+  readonly owner: string;
+  readonly root: Option.Option<string>;
+}
+
+/**
+ * Read a family statement.
+ *
+ * @param read - The statement.
+ * @returns The family.
+ */
+const familyOf = (read: typeof FamilySchema.Type): Family => {
+  const side = judgedSideOf(read.family);
+  const terms = side.law.terms.map(({ field }) => field);
+  const indexed = read.kind !== "counted";
+
+  return {
+    count: read.slots.count,
+    group: indexed ? terms.slice(0, -1) : terms,
+    index: indexed ? Option.fromUndefinedOr(terms.at(-1)) : Option.none(),
+    kind: read.kind,
+    member: side.relation,
+    owner: read.slots.owner.name,
+    root: Option.fromUndefinedOr(read.root),
+  };
+};
+
+/**
+ * Every family the schema states, in statement order.
+ */
+const families: readonly Family[] = Qti.statements.flatMap((statement) =>
+  Option.match(Schema.decodeUnknownOption(FamilySchema)(statement), {
+    onNone: () => [],
+    onSome: (read) => [familyOf(read)],
+  }),
+);
+
+/**
+ * A fold as the host fills it: its family, its monoid, its step's side, the step's value field and
+ * running pair where it names them, and the owner's end field.
+ */
+interface Fold {
+  readonly end: string;
+  readonly family: Family;
+  readonly monoid: string;
+  readonly running: Option.Option<readonly [string, string]>;
+  readonly step: JudgedSide;
+  readonly value: Option.Option<string>;
+}
+
+/**
+ * Every fold the schema states, in statement order.
+ */
+const folds: readonly Fold[] = Qti.statements.flatMap((statement) =>
+  Option.match(Schema.decodeUnknownOption(FoldSchema)(statement), {
+    onNone: () => [],
+    onSome: (read): readonly Fold[] => {
+      const family = familyOf(read.family);
+      const step = judgedSideOf(read.step);
+      const end = judgedSideOf(read.end);
+
+      const rest = step.law.terms.slice(family.group.length).map(({ field }) => field);
+      const valued = read.monoid.name === "count" ? [] : rest.slice(0, 1);
+      const [before, after] = rest.slice(valued.length);
+      const endField = end.law.terms.at(-1)?.field;
+
+      return endField === undefined
+        ? []
+        : [
+            {
+              end: endField,
+              family,
+              monoid: read.monoid.name,
+              running:
+                before === undefined || after === undefined
+                  ? Option.none()
+                  : Option.some([before, after] as const),
+              step,
+              value: Option.fromUndefinedOr(valued[0]),
+            },
+          ];
+    },
+  }),
+);
+
+/**
+ * The fields the folds fill, as `Relation.field`: each end and each running pair.
+ */
+const foldFilled: ReadonlySet<string> = new Set(
+  folds.flatMap((fold) => [
+    `${fold.family.owner}.${fold.end}`,
+    ...Option.match(fold.running, {
+      onNone: () => [],
+      onSome: ([before, after]) => [
+        `${fold.family.member}.${before}`,
+        `${fold.family.member}.${after}`,
+      ],
+    }),
+  ]),
+);
+
+/**
+ * Whether a value is a datum the host judges: a text, a natural, a truth value or a set of handles.
+ *
+ * @param value - The value.
+ * @returns Whether it is a datum.
+ */
+const isDatum = (value: unknown): value is Datum =>
+  Predicate.isString(value) ||
+  Predicate.isBigInt(value) ||
+  Predicate.isBoolean(value) ||
+  (value instanceof Set && [...value].every(Predicate.isString));
+
+/**
+ * A row as a program writes it, its fields unread.
+ */
+const WrittenRow = Schema.Record(Schema.String, Schema.Unknown);
+
+/**
+ * A program's written rows as the boundary reads them: each relation's keyed set.
+ */
+const WrittenInputs = Schema.Record(Schema.String, Schema.ReadonlyMap(Schema.String, WrittenRow));
+
+/**
+ * Write the text of a row's values at some fields, the key a family groups its members by.
+ *
+ * @param row - The row.
+ * @param fields - The fields.
+ * @returns The text.
+ */
+const keyText = (row: HostRow, fields: readonly string[]): string =>
+  fields.map((field) => datumText(row[field])).join("\u001F");
+
+/**
+ * A sequence's members as a program nests them at their owner's count field.
+ */
+const WrittenMembers = Schema.Array(WrittenRow);
+
+/**
+ * Index a relation's rows by the text of their values at some fields.
+ *
+ * @param held - The rows.
+ * @param fields - The fields.
+ * @returns The rows at each key's text.
+ */
+const indexed = (
+  held: readonly FilledRow[],
+  fields: readonly string[],
+): ReadonlyMap<string, readonly FilledRow[]> => {
+  const index = new Map<string, FilledRow[]>();
+  for (const row of held) {
+    const at = keyText(row, fields);
+    const rows = index.get(at);
+    if (rows === undefined) {
+      index.set(at, [row]);
+    } else {
+      rows.push(row);
+    }
+  }
+
+  return index;
+};
+
+/**
+ * Whether a row is a tree's root, its own parent, which no family of its owner holds.
+ *
+ * @param family - The family.
+ * @param row - The member's row.
+ * @returns Whether the row is a root of the family's tree.
+ */
+const isRoot = (family: Family, row: HostRow): boolean =>
+  family.kind === "tree" &&
+  row[family.group[0] ?? ""] !== undefined &&
+  row[family.group[0] ?? ""] === row[keyOf(family.owner)[0] ?? ""];
+
+/**
+ * Fill each counted family's count on its owners: its members by their group.
+ *
+ * @param rows - Every relation's rows.
+ */
+const countFamilies = (rows: ReadonlyMap<string, FilledRow[]>): void => {
+  for (const family of families.filter(({ kind }) => kind === "counted")) {
+    const members = indexed(rows.get(family.member) ?? [], family.group);
+    for (const owner of rows.get(family.owner) ?? []) {
+      owner[family.count] = BigInt(members.get(keyText(owner, keyOf(family.owner)))?.length ?? 0);
+    }
+  }
+};
+
+/**
+ * A copy along a family's axis: the family, and each accumulated field of its member a containment
+ * pairs with a field of its owner, beside the member's group paired with the owner's primary key.
+ */
+interface AxisCopy {
+  readonly family: Family;
+  readonly pairs: readonly (readonly [string, string])[];
+}
+
+/**
+ * Read a containment as copies along a family's axis, where it is one.
+ *
+ * @param law - The containment.
+ * @returns The copies; none for a containment that rides no family's axis or copies nothing.
+ */
+const axisCopiesOf = (
+  law: Extract<JudgedLaw, { readonly kind: "contained" }>,
+): readonly AxisCopy[] =>
+  families.flatMap((family) => {
+    const from = law.from.law.terms;
+    const to = law.to.law.terms;
+    const ownerKey = keyOf(family.owner);
+    if (
+      family.member !== law.from.relation ||
+      family.owner !== law.to.relation ||
+      law.to.reads.length > 0 ||
+      [...from, ...to].some(({ kind }) => kind !== "field")
+    ) {
+      return [];
+    }
+
+    const positions = family.group.map((field, index) =>
+      from.findIndex((term, at) => term.field === field && to[at]?.field === ownerKey[index]),
+    );
+    const grouped = new Set(positions);
+    if (grouped.has(-1)) {
+      return [];
+    }
+
+    const writing = relations.get(family.member)?.writing;
+    const pairs = from.flatMap((term, at) => {
+      const target = to[at]?.field;
+
+      return target === undefined ||
+        grouped.has(at) ||
+        writing?.get(term.field) !== "accumulated" ||
+        foldFilled.has(`${family.member}.${term.field}`)
+        ? []
+        : [[term.field, target] as const];
+    });
+
+    return pairs.length === 0 ? [] : [{ family, pairs }];
+  });
+
+/**
+ * Every copy along a family's axis the schema's containments state.
+ *
+ * @param laws - The laws the host judges.
+ * @returns The copies.
+ */
+const axisCopies = (laws: readonly JudgedLaw[]): readonly AxisCopy[] =>
+  laws.flatMap((law) => (law.kind === "contained" ? axisCopiesOf(law) : []));
+
+/**
+ * Fill each copy along a family's axis the host does not hold yet, from its owner's row.
+ *
+ * @param rows - Every relation's rows.
+ * @param copies - The copies.
+ * @returns How many values it filled.
+ */
+const copyAlong = (rows: ReadonlyMap<string, FilledRow[]>, copies: readonly AxisCopy[]): number => {
+  let filled = 0;
+  for (const { family, pairs } of copies) {
+    const owners = indexed(rows.get(family.owner) ?? [], keyOf(family.owner));
+    for (const member of rows.get(family.member) ?? []) {
+      const owner = owners.get(keyText(member, family.group))?.[0];
+      if (owner === undefined || isRoot(family, member)) {
+        continue;
+      }
+
+      for (const [field, source] of pairs) {
+        const value = owner[source];
+        if (member[field] === undefined && value !== undefined) {
+          member[field] = value;
+          filled += 1;
+        }
+      }
+    }
+  }
+
+  return filled;
+};
+
+/**
+ * A monoid the host folds: its identity, and its step's combination with the running value, none
+ * where the step's value is of another type.
+ */
+const monoids: ReadonlyMap<
+  string,
+  {
+    readonly combine: (running: Datum, step: Datum | undefined) => Datum | undefined;
+    readonly identity: () => Datum;
+  }
+> = new Map([
+  [
+    "count",
+    {
+      combine: (running: Datum) => (Predicate.isBigInt(running) ? running + 1n : undefined),
+      identity: () => 0n,
+    },
+  ],
+  [
+    "sum",
+    {
+      combine: (running: Datum, step: Datum | undefined) =>
+        Predicate.isBigInt(running) && Predicate.isBigInt(step) ? running + step : undefined,
+      identity: () => 0n,
+    },
+  ],
+  [
+    "or",
+    {
+      combine: (running: Datum, step: Datum | undefined) =>
+        running instanceof Set && step instanceof Set ? new Set([...running, ...step]) : undefined,
+      identity: () => new Set<string>(),
+    },
+  ],
+  [
+    "concat",
+    {
+      combine: (running: Datum, step: Datum | undefined) =>
+        Predicate.isString(running) && Predicate.isString(step) ? running + step : undefined,
+      identity: () => "",
+    },
+  ],
+]);
+
+/**
+ * Fill each fold's end on every owner whose members' steps the host holds, and each member's
+ * running pair, in slot order: a member the step's selection does not hold steps by the identity.
+ *
+ * @param rows - Every relation's rows.
+ * @returns How many ends it filled.
+ */
+const foldAll = (rows: ReadonlyMap<string, FilledRow[]>): number => {
+  let filled = 0;
+  for (const fold of folds) {
+    const monoid = monoids.get(fold.monoid);
+    if (monoid === undefined) {
+      continue;
+    }
+
+    const { family } = fold;
+    const members = indexed(
+      (rows.get(family.member) ?? []).filter((row) => !isRoot(family, row)),
+      family.group,
+    );
+    const index = Option.getOrUndefined(family.index);
+    for (const owner of rows.get(family.owner) ?? []) {
+      if (owner[fold.end] !== undefined) {
+        continue;
+      }
+
+      const slotOf = (row: HostRow): bigint => {
+        const at = index === undefined ? undefined : row[index];
+
+        return Predicate.isBigInt(at) ? at : 0n;
+      };
+      const slots = [...(members.get(keyText(owner, keyOf(family.owner))) ?? [])].toSorted((a, b) =>
+        Number(slotOf(a) - slotOf(b)),
+      );
+      let running: Datum | undefined = monoid.identity();
+      for (const member of slots) {
+        const stepped = fold.step.unread.length > 0 ? undefined : fold.step.selection(member);
+        if (running === undefined || stepped === undefined) {
+          running = undefined;
+          break;
+        }
+
+        const before: Datum = running;
+        if (stepped) {
+          running = monoid.combine(
+            running,
+            Option.isSome(fold.value) ? member[fold.value.value] : undefined,
+          );
+        }
+
+        for (const [was, after] of Option.toArray(fold.running)) {
+          member[was] ??= before;
+          if (running !== undefined) {
+            member[after] ??= running;
+          }
+        }
+      }
+
+      if (running !== undefined) {
+        owner[fold.end] = running;
+        filled += 1;
+      }
+    }
+  }
+
+  return filled;
+};
+
+/**
+ * Every copy along a family's axis the schema states.
+ */
+const copies = axisCopies(judgedLaws(Qti.statements));
+
+/**
+ * Rebuild a program's rows as the database holds them, every value grizzle fills that the
+ * statements give restored (the module's comment).
+ *
+ * @param inputs - The program's inputs.
+ * @returns Every relation's rows.
+ */
+export const hostRowsOf = (inputs: PackageInputs): HostRows => {
+  const rows = new Map<string, FilledRow[]>();
+  const add = (relation: string, row: FilledRow): void => {
+    const held = rows.get(relation);
+    if (held === undefined) {
+      rows.set(relation, [row]);
+    } else {
+      held.push(row);
+    }
+  };
+  const sequences = families.filter(({ kind }) => kind !== "counted");
+  const trees = new Set(families.flatMap(({ kind, owner }) => (kind === "tree" ? [owner] : [])));
+  const visit = (
+    relation: string,
+    written: typeof WrittenRow.Type,
+    row: FilledRow,
+    order: { next: bigint },
+  ): void => {
+    for (const [field, value] of Object.entries(written)) {
+      if (isDatum(value) && row[field] === undefined) {
+        row[field] = value;
+      }
+    }
+
+    const tree = trees.has(relation);
+    if (tree) {
+      row["start"] = order.next;
+      order.next += 1n;
+    }
+
+    add(relation, row);
+    for (const family of sequences.filter(({ owner }) => owner === relation)) {
+      const members = Option.getOrElse(
+        Schema.decodeUnknownOption(WrittenMembers)(written[family.count]),
+        () => [],
+      );
+      const ownerKey = keyOf(relation);
+      row[family.count] = BigInt(members.length);
+      for (const [at, member] of members.entries()) {
+        const filled: FilledRow = {};
+        for (const [index, field] of family.group.entries()) {
+          const value = row[ownerKey[index] ?? ""];
+          if (value !== undefined) {
+            filled[field] = value;
+          }
+        }
+
+        for (const index of Option.toArray(family.index)) {
+          filled[index] = BigInt(at);
+        }
+
+        for (const root of Option.toArray(family.root)) {
+          const value = row[root];
+          if (value !== undefined) {
+            filled[root] = value;
+          }
+        }
+
+        visit(family.member, member, filled, family.kind === "tree" ? order : { next: 0n });
+      }
+    }
+
+    if (tree) {
+      row["end"] = order.next;
+    }
+  };
+
+  for (const [relation, keyed] of Object.entries(Schema.decodeUnknownSync(WrittenInputs)(inputs))) {
+    const tree = families.find(({ kind, owner }) => kind === "tree" && owner === relation);
+    for (const written of keyed.values()) {
+      const root: FilledRow = {};
+      for (const family of Option.toArray(Option.fromUndefinedOr(tree))) {
+        const id = written[keyOf(relation)[0] ?? ""];
+        if (Predicate.isString(id)) {
+          root[family.group[0] ?? ""] = id;
+        }
+
+        for (const index of Option.toArray(family.index)) {
+          root[index] = 0n;
+        }
+      }
+
+      visit(relation, written, root, { next: 0n });
+    }
+  }
+
+  countFamilies(rows);
+  // Each round fills what the last one's copies and folds made readable, until one fills nothing.
+  while (copyAlong(rows, copies) + foldAll(rows) > 0) {
+    countFamilies(rows);
+  }
+
+  return rows;
+};
+
+/**
+ * A law the host judged and found broken: the law, and the rows that break it, at most a few.
+ */
+export interface Broken {
+  readonly law: Law;
+  readonly rows: readonly HostRow[];
+}
+
+/**
+ * A law the host could not judge: the law, and each value it reads that the host does not hold,
+ * as `Relation.field`, or as `Relation: a <kind> term` for a term of a selection or a check it
+ * cannot read.
+ */
+export interface Skipped {
+  readonly absent: readonly string[];
+  readonly law: Law;
+}
+
+/**
+ * The host's judgment of rows by laws: the laws it judged, the ones of them the rows break, and the
+ * ones it could not judge.
+ */
+export interface Judgment {
+  readonly broken: readonly Broken[];
+  readonly judged: readonly Law[];
+  readonly skipped: readonly Skipped[];
+}
+
+/**
+ * The most rows a breach reports.
+ */
+const reported = 3;
+
+/**
+ * Read a relation's rows for a law: the host's, a closed relation's facts, or none, a relation the
+ * program writes no row of.
+ *
+ * @param rows - Every relation's rows.
+ * @param relation - The relation.
+ * @returns Its rows.
+ */
+const rowsFor = (rows: HostRows, relation: string): readonly HostRow[] =>
+  rows.get(relation) ?? Option.getOrElse(closedRows(relation), () => []);
+
+/**
+ * One side's projection over a relation's rows: each selected row's tuple's text, with the row,
+ * and every value the side reads that some row it reads lacks.
+ */
+interface Projection {
+  readonly absent: ReadonlySet<string>;
+  readonly tuples: ReadonlyMap<string, HostRow>;
+}
+
+/**
+ * One law read over rows: the rows that break it, or the values it reads that the rows lack.
+ */
+interface LawRead {
+  readonly absent: readonly string[];
+  readonly breaking: readonly HostRow[];
+}
+
+/**
+ * Project one side over a relation's rows ({@link Projection}).
+ *
+ * @param side - The side.
+ * @param held - The rows.
+ * @returns The tuples and the absent values.
+ */
+const projectionOf = (side: JudgedSide, held: readonly HostRow[]): Projection => {
+  const absent = new Set(side.unread.map((kind) => `${side.relation}: a ${kind} term`));
+  const tuples = new Map<string, HostRow>();
+  for (const row of held) {
+    const selected = side.selection(row);
+    if (selected === undefined) {
+      for (const field of side.reads.filter((at) => row[at] === undefined)) {
+        absent.add(`${side.relation}.${field}`);
+      }
+    }
+
+    if (selected !== true) {
+      continue;
+    }
+
+    const values: Datum[] = [];
+    let outside = false;
+    for (const term of side.law.terms) {
+      const value = row[term.field];
+      if (value === undefined) {
+        absent.add(`${side.relation}.${term.field}`);
+      } else if (term.kind === "pred") {
+        outside ||= value === 0n;
+        values.push(Predicate.isBigInt(value) ? value - 1n : value);
+      } else {
+        values.push(value);
+      }
+    }
+
+    if (!outside && values.length === side.law.terms.length) {
+      tuples.set(values.map(datumText).join("\u001F"), row);
+    }
+  }
+
+  return { absent, tuples };
+};
+
+/**
+ * Judge one law over rows.
+ *
+ * @param rows - Every relation's rows.
+ * @param law - The law.
+ * @returns The rows that break it, or the values it reads that the rows lack.
+ */
+const judgedBy = (rows: HostRows, law: JudgedLaw): LawRead => {
+  if (law.kind === "check") {
+    const absent = new Set(law.unread.map((kind) => `${law.relation}: a ${kind} term`));
+    const breaking: HostRow[] = [];
+    for (const row of rowsFor(rows, law.relation)) {
+      const value = law.value(row);
+      if (value === false) {
+        breaking.push(row);
+      } else if (value === undefined) {
+        for (const field of law.reads.filter((at) => row[at] === undefined)) {
+          absent.add(`${law.relation}.${field}`);
+        }
+      }
+    }
+
+    return { absent: [...absent], breaking };
+  }
+
+  if (law.kind === "key") {
+    const held = rowsFor(rows, law.side.relation);
+    const { absent, tuples } = projectionOf(law.side, held);
+    const selected = held.filter((row) => law.side.selection(row) === true);
+
+    return {
+      absent: [...absent],
+      breaking: selected.length === tuples.size ? [] : selected,
+    };
+  }
+
+  const from = projectionOf(law.from, rowsFor(rows, law.from.relation));
+  const to = projectionOf(law.to, rowsFor(rows, law.to.relation));
+
+  return {
+    absent: [...new Set([...from.absent, ...to.absent])],
+    breaking: [...from.tuples].flatMap(([tuple, row]) => (to.tuples.has(tuple) ? [] : [row])),
+  };
+};
+
+/**
+ * Judge rows by laws: each law whose every value the rows hold, on every row it reads, is judged,
+ * and broken where a row breaks it; each other law is skipped, named with the values it lacks.
+ *
+ * @param rows - Every relation's rows ({@link hostRowsOf}).
+ * @param laws - The laws (`#pantry/test/key-copies.ts` `judgedLaws`).
+ * @returns The judgment.
+ */
+export const judge = (rows: HostRows, laws: readonly JudgedLaw[]): Judgment => {
+  const broken: Broken[] = [];
+  const judged: Law[] = [];
+  const skipped: Skipped[] = [];
+  for (const law of laws) {
+    const { absent, breaking } = judgedBy(rows, law);
+    if (absent.length > 0) {
+      skipped.push({ absent: absent.toSorted(), law: law.law });
+    } else {
+      judged.push(law.law);
+      if (breaking.length > 0) {
+        broken.push({ law: law.law, rows: breaking.slice(0, reported) });
+      }
+    }
+  }
+
+  return { broken, judged, skipped };
+};

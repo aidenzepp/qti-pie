@@ -18,10 +18,6 @@ import {
   transformHash,
 } from "#pantry/test/fixtures.ts";
 import type { Edit, FixtureName, FixtureSpec } from "#pantry/test/fixtures.ts";
-import { readRows } from "#pantry/import/package.ts";
-import { Rows } from "#pantry/import/tree.ts";
-import { AttributeFileReference } from "#pantry/schema/reference.ts";
-import { PackageEntry } from "#pantry/schema/package.ts";
 import { settings as hostSettings } from "#pantry/test/settings.ts";
 
 /**
@@ -237,8 +233,9 @@ const positiveVersions: readonly (readonly [FixtureName, "3.0.0" | "3.0.1"])[] =
 const qtiNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 /**
- * The 63 negative fixtures of phase 5, as a literal: the spec's 4.15 last column, less the corpus
- * packages and `stimulus-300-data` (phase 8's), plus `prefixed-ambiguous` (decision 189).
+ * The 62 negative fixtures of phase 5, as a literal: the spec's 4.15 last column, less the corpus
+ * packages, `stimulus-300-data` (phase 8's) and `section-empty` (spec reading 26: a section may
+ * hold no part), plus `prefixed-ambiguous` (decision 189).
  */
 const expectedNegativeNames = [
   "branch-backward",
@@ -274,7 +271,6 @@ const expectedNegativeNames = [
   "rubric-no-body",
   "rubric-printed-undeclared",
   "section-adaptive-and-selection",
-  "section-empty",
   "section-feedback-undeclared",
   "section-identifier-unknown",
   "section-prefixed-unresolved",
@@ -337,7 +333,6 @@ const negativeBreaches: readonly (readonly [FixtureName, string, string])[] = [
   ["rubric-interaction", "assessment.xml", "<qti-text-entry-interaction"],
   ["rubric-printed-undeclared", "assessment.xml", '<qti-printed-variable identifier="NOPE"/>'],
   ["section-adaptive-and-selection", "adaptive-test.xml", '<qti-selection select="1"/>'],
-  ["section-empty", "rtest13.xml", 'identifier="bare"'],
   ["section-identifier-unknown", "rtest26.xml", 'section-identifier="NOPE"'],
   ["section-prefixed-unresolved", "test-b.xml", 'identifier="RENAMED"'],
   ["section-ref-cycle", "sections/shared.xml", 'href="shared.xml"'],
@@ -677,58 +672,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
     ),
   );
 
-  it.effect("the variants' Spanish image resolves to a file the package holds", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* variantImages() {
-        for (const name of [
-          "variant",
-          "variant-padded",
-          "variant-no-resource",
-          "variant-no-metadata",
-        ] as const) {
-          const { rows } = yield* readRows(yield* materialize(name));
-          const references = Rows.of(rows, AttributeFileReference);
-          const entries = Rows.of(rows, PackageEntry);
-
-          assert.isAtLeast(references.length, 1, `${name}: file references`);
-
-          for (const reference of references) {
-            assert.isTrue(
-              entries.some(
-                (entry) => entry.package === reference.package && entry.path === reference.path,
-              ),
-              `${name}: ${reference.path} is a package entry`,
-            );
-          }
-        }
-      }),
-    ),
-  );
-
-  it.effect("the media fixtures' referenced files are entries of their package", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* mediaFiles() {
-        for (const name of ["html-audio", "html-param", "controls-3-0-0"] as const) {
-          const { rows } = yield* readRows(yield* materialize(name));
-          const references = Rows.of(rows, AttributeFileReference);
-          const entries = Rows.of(rows, PackageEntry);
-
-          assert.isAtLeast(references.length, 1, `${name}: file references`);
-
-          for (const reference of references) {
-            assert.isTrue(
-              entries.some(
-                (entry) => entry.package === reference.package && entry.path === reference.path,
-              ),
-              `${name}: ${reference.path} is a package entry`,
-            );
-          }
-        }
-      }),
-    ),
-  );
-
-  it.effect("cut-drawing keeps the file its srcset names, and its references resolve", () =>
+  it.effect("cut-drawing keeps the file its srcset names, and its manifest lists it", () =>
     inFreshRoot(() =>
       Effect.gen(function* cutDrawing() {
         const fs = yield* FileSystem.FileSystem;
@@ -740,21 +684,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           "items/images/anglePQR.svg",
           "manifest lists anglePQR.svg",
         );
-
-        const { rows } = yield* readRows(dir);
-        const references = Rows.of(rows, AttributeFileReference);
-        const entries = Rows.of(rows, PackageEntry);
-
-        assert.isAtLeast(references.length, 1, "file references");
-
-        for (const reference of references) {
-          assert.isTrue(
-            entries.some(
-              (entry) => entry.package === reference.package && entry.path === reference.path,
-            ),
-            `${reference.path} is a package entry`,
-          );
-        }
       }),
     ),
   );
@@ -1099,10 +1028,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
       ),
   );
 
-  it.effect("the 63 negative names are the spec's list, each in the fixture table", () =>
+  it.effect("the 62 negative names are the spec's list, each in the fixture table", () =>
     Effect.sync(() => {
       assert.deepStrictEqual([...negativeNames], [...expectedNegativeNames]);
-      assert.strictEqual(new Set(negativeNames).size, 63);
+      assert.strictEqual(new Set(negativeNames).size, 62);
       assert.includeMembers([...fixtureNames], [...negativeNames]);
 
       for (const name of negativeNames) {

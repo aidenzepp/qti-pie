@@ -1,0 +1,285 @@
+import { Option, Result } from "effect";
+import { NAME_START } from "#crust/dtd.ts";
+import type { Attribute, Element } from "#crust/tree.ts";
+
+/**
+ * The namespace name the `xml` prefix is bound to by definition (Namespaces in XML 1.0, section 3).
+ */
+const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
+
+/**
+ * The namespace name of the namespace declarations themselves, which the `xmlns` prefix is bound
+ * to by definition (Namespaces in XML 1.0, section 3).
+ */
+const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
+
+/**
+ * The namespace bindings in scope at an element, from prefix to namespace name, the empty prefix
+ * standing for the default namespace and the empty name for none. A prefix with no binding is
+ * absent.
+ */
+export type Scope = Readonly<Record<string, string>>;
+
+/**
+ * The bindings in scope above the root element: the `xml` and `xmlns` prefixes, bound by
+ * definition, and no default namespace.
+ */
+export const rootScope = {
+  "": "",
+  xml: XML_NAMESPACE,
+  xmlns: XMLNS_NAMESPACE,
+} as const satisfies Scope;
+
+/**
+ * The first character of a name, as XML 1.0's [4] NameStartChar admits it.
+ */
+const nameStart = new RegExp(`^[${NAME_START}]`, "u");
+
+/**
+ * A name's two parts, by Namespaces in XML 1.0's [7] QName: the prefix, empty for an unprefixed
+ * name, and the local part.
+ */
+interface QName {
+  readonly local: string;
+  readonly prefix: string;
+}
+
+/**
+ * Split a name the parser has read as an XML Name into its QName parts.
+ *
+ * A Name is a QName when it holds at most one colon, which neither begins nor ends it, and the
+ * local part after it begins with a NameStartChar other than the colon ([7] to [9] and [4]
+ * NCName): `a:1b` is a Name and no QName, its local part beginning with a digit.
+ *
+ * @param name - The name, an XML Name.
+ * @returns The parts; `None` when the name is no QName.
+ */
+const qnameOf = (name: string): Option.Option<QName> => {
+  const parts = name.split(":");
+  const [prefix = "", local = ""] = parts.length === 1 ? ["", name] : parts;
+
+  return parts.length <= 2 &&
+    local !== "" &&
+    nameStart.test(local) &&
+    (parts.length === 1 || prefix !== "")
+    ? Option.some({ local, prefix })
+    : Option.none();
+};
+
+/**
+ * Test whether a name the parser has read as an XML Name is an NCName: a Name with no colon, as
+ * Namespaces in XML 1.0 section 7 asks of every entity name and processing instruction target.
+ *
+ * @param name - The name, an XML Name.
+ * @returns Whether it holds no colon.
+ */
+export const isNCName = (name: string): boolean => !name.includes(":");
+
+/**
+ * Check a namespace declaration's binding against Namespaces in XML 1.0's constraint Reserved
+ * Prefixes and Namespace Names (section 3) and, in an XML 1.0 document, No Prefix Undeclaring
+ * (section 5).
+ *
+ * @param prefix - The prefix declared, empty for the default namespace.
+ * @param name - The declaration's normalized value.
+ * @param version - The document's XML version.
+ * @returns The violation's description; `None` when the binding is allowed.
+ */
+const bindingViolation = (prefix: string, name: string, version: string): Option.Option<string> => {
+  const declaring = prefix === "" ? "the default namespace" : `the prefix ${prefix}`;
+  if (prefix === "xmlns" || name === XMLNS_NAMESPACE) {
+    return Option.some(
+      `${declaring} is bound to ${JSON.stringify(name)}, but neither the prefix xmlns nor its namespace name may be declared (Namespaces in XML section 3)`,
+    );
+  }
+
+  if ((prefix === "xml") !== (name === XML_NAMESPACE)) {
+    return Option.some(
+      `${declaring} is bound to ${JSON.stringify(name)}, but the prefix xml and the namespace name ${XML_NAMESPACE} are bound only to each other (Namespaces in XML section 3)`,
+    );
+  }
+
+  return prefix !== "" && name === "" && version === "1.0"
+    ? Option.some(
+        `the prefix ${prefix} is declared empty, but an XML 1.0 document may not undeclare a prefix (Namespaces in XML 1.0 section 5)`,
+      )
+    : Option.none();
+};
+
+/**
+ * The prefix a namespace declaration's name declares: empty for `xmlns`, the part after `xmlns:`
+ * for a prefixed declaration.
+ *
+ * @param qname - The attribute's name as written.
+ * @returns The prefix; `None` for an attribute that declares no namespace.
+ */
+const declaredPrefix = (qname: string): Option.Option<string> => {
+  if (qname === "xmlns") {
+    return Option.some("");
+  }
+
+  return qname.startsWith("xmlns:") ? Option.some(qname.slice("xmlns:".length)) : Option.none();
+};
+
+/**
+ * Apply one declaration to a scope: bind its prefix to its value, or undeclare a prefix whose
+ * value is empty, which only an XML 1.1 document may (the default namespace's empty value names
+ * none and stays a binding).
+ *
+ * @param scope - The scope so far.
+ * @param prefix - The prefix declared.
+ * @param name - The declaration's normalized value.
+ * @returns The scope with the declaration applied.
+ */
+const bound = (scope: Scope, prefix: string, name: string): Scope =>
+  prefix !== "" && name === ""
+    ? Object.fromEntries(Object.entries(scope).filter(([held]) => held !== prefix))
+    : { ...scope, [prefix]: name };
+
+/**
+ * The scope an element's children see: its parent's, with each namespace declaration among the
+ * element's attributes, written or defaulted, applied in document order.
+ *
+ * An empty value undeclares the default namespace, and in an XML 1.1 document a prefix
+ * (Namespaces in XML 1.1, section 5); a scope no declaration changes is the parent's own object, so
+ * a deep document without declarations costs no copy per element.
+ *
+ * @param attributes - The element's attributes.
+ * @param scope - The parent's scope.
+ * @param version - The document's XML version.
+ * @returns The scope, or the first declaration's violation.
+ */
+const declared = (
+  attributes: readonly Attribute[],
+  scope: Scope,
+  version: string,
+): Result.Result<Scope, string> => {
+  let next = scope;
+  for (const { qname, value } of attributes) {
+    const prefix = declaredPrefix(qname);
+    if (Option.isSome(prefix)) {
+      const violation = bindingViolation(prefix.value, value, version);
+      if (Option.isSome(violation)) {
+        return Result.fail(violation.value);
+      }
+
+      next = bound(next, prefix.value, value);
+    }
+  }
+
+  return Result.succeed(next);
+};
+
+/**
+ * Resolve a QName's prefix in a scope, as Namespaces in XML 1.0's constraint Prefix Declared asks:
+ * `xml` and `xmlns` are bound by definition, and any other prefix must be declared on the element
+ * or an ancestor.
+ *
+ * @param name - The name's parts.
+ * @param scope - The element's scope, its own declarations applied.
+ * @param unprefixed - The namespace an unprefixed name is in: the default namespace for an element
+ *   name, none for an attribute's.
+ * @returns The namespace name; `None` when the prefix is unbound.
+ */
+const namespaceOf = (name: QName, scope: Scope, unprefixed: string): Option.Option<string> =>
+  name.prefix === "" ? Option.some(unprefixed) : Option.fromUndefinedOr(scope[name.prefix]);
+
+/**
+ * Resolve an element's names and its attributes' names against the scope its parent gives it,
+ * every attribute it holds, written or defaulted from the attribute-list declarations, taking part.
+ *
+ * Namespaces in XML 1.0 section 3 says namespace declarations, "like any other XML attributes, may
+ * be provided directly or by default", and XML 1.0 section 3.3.2 has a processor "behave as though
+ * the attribute were present with the declared default value", so each constraint holds over the
+ * attributes written and defaulted alike: the declarations bind for the element itself and its
+ * content; every element and attribute name is a QName (section 7) whose prefix is declared
+ * (Prefix Declared, section 5); no element is named with the prefix `xmlns` (section 3); and no two
+ * attributes share an expanded name (Attributes Unique, section 6.3). A declaration is in the
+ * namespace `http://www.w3.org/2000/xmlns/`, and an unprefixed attribute in none.
+ *
+ * Crust's reader refuses a namespace-well-formedness violation (Namespaces in XML, section 7) as a
+ * well-formedness error, so a document either reader of the specifications would call not
+ * well-formed is one refusal class, and pantry's rule table names one rule for a document that is
+ * not readable XML.
+ *
+ * @param element - The element as the parser read it, its names unresolved and its attributes
+ *   complete.
+ * @param scope - The scope its parent gives it.
+ * @param version - The document's XML version, `1.0` when it declares none.
+ * @returns The element with its names resolved and the scope its children see, or the first
+ *   violation's description.
+ * @see {@link https://www.w3.org/TR/2009/REC-xml-names-20091208/#ns-decl | Namespaces in XML 1.0 (Third Edition), section 3}
+ */
+export const resolved = (
+  element: Element,
+  scope: Scope,
+  version: string,
+): Result.Result<{ readonly element: Element; readonly scope: Scope }, string> =>
+  Result.flatMap(declared(element.attributes, scope, version), (inner) => {
+    const name = qnameOf(element.qname);
+    if (Option.isNone(name)) {
+      return Result.fail(
+        `the element name ${element.qname} is not a qualified name (Namespaces in XML section 7)`,
+      );
+    }
+
+    if (name.value.prefix === "xmlns") {
+      return Result.fail(
+        `the element ${element.qname} has the prefix xmlns, which no element may have (Namespaces in XML section 3)`,
+      );
+    }
+
+    const namespace = namespaceOf(name.value, inner, inner[""] ?? "");
+    if (Option.isNone(namespace)) {
+      return Result.fail(
+        `the prefix of element ${element.qname} is not declared (Namespaces in XML section 5)`,
+      );
+    }
+
+    const attributes: Attribute[] = [];
+    const expanded = new Set<string>();
+    for (const attribute of element.attributes) {
+      const parts = qnameOf(attribute.qname);
+      if (Option.isNone(parts)) {
+        return Result.fail(
+          `the attribute name ${attribute.qname} of element ${element.qname} is not a qualified name (Namespaces in XML section 7)`,
+        );
+      }
+
+      const uri =
+        attribute.qname === "xmlns"
+          ? Option.some(XMLNS_NAMESPACE)
+          : namespaceOf(parts.value, inner, "");
+      if (Option.isNone(uri)) {
+        return Result.fail(
+          `the prefix of attribute ${attribute.qname} of element ${element.qname} is not declared (Namespaces in XML section 5)`,
+        );
+      }
+
+      const key = `{${uri.value}}${parts.value.local}`;
+      if (expanded.has(key)) {
+        return Result.fail(
+          `element ${element.qname} holds two attributes named ${key} (Namespaces in XML section 6.3)`,
+        );
+      }
+
+      expanded.add(key);
+      attributes.push({
+        ...attribute,
+        local: parts.value.local,
+        namespace: uri.value,
+        prefix: parts.value.prefix,
+      });
+    }
+
+    return Result.succeed({
+      element: {
+        ...element,
+        attributes,
+        local: name.value.local,
+        namespace: namespace.value,
+        prefix: name.value.prefix,
+      },
+      scope: inner,
+    });
+  });

@@ -5,8 +5,15 @@
  * exit code each kind ends the process with, and {@link describeFailure}, which names the kind of
  * any failure a run ends with.
  */
-import { Predicate, Runtime, Schema } from "effect";
+import { Option, Predicate, Runtime, Schema } from "effect";
+import type { Effect } from "effect";
 import { CliError } from "effect/cli";
+import { databaseRefusalOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
+import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
+import type { exportPackage } from "#pantry/export/package.ts";
+import type { OverlayConflict } from "#pantry/import/overlays/index.ts";
+import type { importPackage, LocateDisagreement } from "#pantry/import/package.ts";
+import type { UnownedLaws } from "#pantry/import/refusal.ts";
 
 /**
  * Every kind a failure of this program has.
@@ -68,7 +75,7 @@ export const kindHelp: Readonly<Record<Kind, string>> = {
   "import-refused":
     "Fix the package as the message says, then import it again. Nothing was written.",
   internal:
-    "This is a defect in qti. Report it with the command you ran and the trace printed below.",
+    "This is a defect in qti. Report it with the command you ran and everything it printed.",
   io: "Check that the path exists, is readable or writable, and that the disk has room, then run the command again.",
   "not-found":
     "Use the id that `qti import` printed when it stored the package, in the same database, or import the package again.",
@@ -86,10 +93,10 @@ export const kindHelp: Readonly<Record<Kind, string>> = {
 export const cliKind: unique symbol = Symbol("qti.cli.kind");
 
 /**
- * The tags of grizzle's public errors (`adapter/public/errors.ts`), which {@link describeFailure}
- * maps to `database` without importing grizzle, so the program starts without loading it.
+ * The tags of grizzle's public errors (`adapter/public/errors.ts`), in a literal list so the named
+ * failures below can leave them out by type.
  */
-export const grizzleErrorTags: ReadonlySet<string> = new Set([
+const grizzleTags = [
   "CommitUnknown",
   "CredentialError",
   "ExecutionFailure",
@@ -99,7 +106,105 @@ export const grizzleErrorTags: ReadonlySet<string> = new Set([
   "TokenError",
   "TransientFailure",
   "TransportFailure",
-]);
+] as const;
+
+/**
+ * The tags of grizzle's public errors (`adapter/public/errors.ts`), which {@link describeFailure}
+ * maps to `database` without importing grizzle, so the program starts without loading it, except a
+ * program grizzle refused to compile, which is `internal`.
+ */
+export const grizzleErrorTags: ReadonlySet<string> = new Set(grizzleTags);
+
+/**
+ * The tags of the failures {@link describeFailure} maps to a kind of their own: grizzle's, the
+ * file system's, a refused import's and an absent package's.
+ */
+type KindedTag =
+  | (typeof grizzleTags)[number]
+  | "ImportRefused"
+  | "PackageNotFound"
+  | "PlatformError";
+
+/**
+ * Every other failure the export ends with (`#pantry/export/package.ts`): the database holds the
+ * package, but the export cannot rebuild a document of it from its rows (`assemble`'s refusals,
+ * `DocumentRowCount`, `XmlVersionUnread`), page through them (grizzle's `CursorError`) or write it
+ * in its charset (crust's `EncodeError`). Each is a defect of qti, never of the package.
+ */
+export type ExportDefectTag = Exclude<
+  Effect.Error<ReturnType<typeof exportPackage>>["_tag"],
+  KindedTag
+>;
+
+/**
+ * Every other way the import ends (`#pantry/import/package.ts`): the codec refusing a value the
+ * builders wrote (grizzle's `EncodingFailure`), and the three defects it dies with, a locator that
+ * finds no breach of the refusal's laws, laws no rule owns, and two builders that disagree on a
+ * row. Each is a defect of qti, never of the package.
+ */
+export type ImportDefectTag =
+  | Exclude<Effect.Error<ReturnType<typeof importPackage>>["_tag"], KindedTag>
+  | LocateDisagreement["_tag"]
+  | OverlayConflict["_tag"]
+  | UnownedLaws["_tag"];
+
+/**
+ * What to do next after an export that cannot rebuild a package the database holds.
+ */
+const exportDefectHelp =
+  "This is a defect in qti, not in the package: the database holds the package, but the export cannot rebuild it. Nothing was exported, and the target is as it was. Report it with the command you ran and everything it printed.";
+
+/**
+ * What to do next after an import that ended on a defect of qti.
+ */
+const importDefectHelp =
+  "This is a defect in qti, not in the package, and nothing was written. Report it with the command you ran and everything it printed.";
+
+/**
+ * What to do next after a refusal the database gave, by the kind of its witness: it names the law
+ * and where the law is stated, and names the failing row only when its witness holds one, a key
+ * grizzle reported or a row a locator found.
+ */
+const databaseRefusalHelp = {
+  key: "Find what the law describes in the package, at the row the message names, fix it, then import the package again. Nothing was written.",
+  row: "Find what the law describes in the package, at the row the message names, fix it, then import the package again. Nothing was written.",
+  unreported:
+    "The database names no row for this law, so find what the law describes in the package by the law's source, fix it, then import the package again. Nothing was written.",
+} as const satisfies Readonly<Record<DatabaseRefusal["witness"], string>>;
+
+/**
+ * A tag {@link namedFailureOf} names: one of the export's defects or the import's.
+ */
+type NamedTag = ExportDefectTag | ImportDefectTag;
+
+/**
+ * The help of each named failure, by its tag: every export defect's is {@link exportDefectHelp}
+ * and every import defect's {@link importDefectHelp}. It is checked against both error unions both
+ * ways, so a failure either gains fails to compile here until it is named, and one it loses until
+ * its row goes. Each such failure's kind is `internal`, which {@link kindOf} gives any failure no
+ * other kind claims, so its exit code is that kind's.
+ */
+const namedHelp = {
+  CursorError: exportDefectHelp,
+  DocumentRowCount: exportDefectHelp,
+  EncodeError: exportDefectHelp,
+  EncodingFailure: importDefectHelp,
+  LocateDisagreement: importDefectHelp,
+  OverlayConflict: importDefectHelp,
+  RootMissing: exportDefectHelp,
+  RowMissing: exportDefectHelp,
+  RowsOutsideImage: exportDefectHelp,
+  UnownedLaws: importDefectHelp,
+  XmlVersionUnread: exportDefectHelp,
+} as const satisfies Readonly<Record<NamedTag, string>>;
+
+/**
+ * Test whether a tag is one {@link namedHelp} names.
+ *
+ * @param tag - A failure's tag.
+ * @returns Whether it is a named failure's.
+ */
+const isNamedTag = (tag: string): tag is NamedTag => Object.hasOwn(namedHelp, tag);
 
 /**
  * The path the person named is not there, or is neither a directory nor a `.zip` file.
@@ -203,9 +308,20 @@ const tagOf = (failure: unknown): string | undefined =>
     : undefined;
 
 /**
+ * The tag of a failure qti can name though its kind is `internal`: one of the export's defects or
+ * the import's, which a run prints by that tag and with the help of its own.
+ *
+ * @param failure - What a run failed or died with.
+ * @returns The failure's tag, or none for any other failure.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
+export const namedFailureOf = (failure: unknown): Option.Option<NamedTag> =>
+  Option.filter(Option.fromUndefinedOr(tagOf(failure)), isNamedTag);
+
+/**
  * The tags of the failures that mean the local set-up is missing or unreadable: the layer's two
- * (`db/layer.ts`) and Effect's `ConfigError`, which a missing or malformed setting raises. They are
- * matched by tag so this module imports neither the layer nor the engine.
+ * (`db/connection.ts` and `db/layer.ts`) and Effect's `ConfigError`, which a missing or malformed
+ * setting raises. They are matched by tag so this module imports neither the layer nor the engine.
  */
 const configTags: ReadonlySet<string> = new Set([
   "ClusterConfigError",
@@ -223,6 +339,26 @@ const isCredentialFailure = (failure: unknown): boolean =>
   (tagOf(failure) === "OpenError" || tagOf(failure) === "TransportFailure") &&
   Predicate.hasProperty(failure, "reason") &&
   tagOf(failure.reason) === "CredentialError";
+
+/**
+ * Whether `failure` is grizzle refusing to compile one of qti's programs, before any SQL is sent:
+ * an `ExecutionFailure` (a ChangeSet that `db.apply` compiles) or an `OpenError` (the schema and
+ * the workload that `DbLayer.make` and `Db.open` compile) whose `reason` is a `CompileError`, such
+ * as the `UnsupportedOperation` of a value grizzle's write filler cannot fill. The cause is qti's
+ * schema or program, the same for every package, so retrying or checking the cluster cannot help.
+ * It is matched by tag, so this module imports neither grizzle nor its engine.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
+const isUncompiled = (failure: unknown): boolean =>
+  (tagOf(failure) === "ExecutionFailure" || tagOf(failure) === "OpenError") &&
+  Predicate.hasProperty(failure, "reason") &&
+  tagOf(failure.reason) === "CompileError";
+
+/**
+ * What to do next after grizzle refused to compile one of qti's programs ({@link isUncompiled}).
+ */
+const uncompiledHelp =
+  "This is a defect in qti, not in the package or the database: grizzle refused to compile qti's program before sending any SQL, so the database is as it was. Report it with the command you ran and everything it printed.";
 
 /**
  * Name the kind of a failure by what it is.
@@ -257,21 +393,44 @@ const kindOf = (failure: unknown): Kind => {
     return "config";
   }
 
+  if (isUncompiled(failure)) {
+    return "internal";
+  }
+
   return tag !== undefined && grizzleErrorTags.has(tag) ? "database" : "internal";
 };
 
 /**
- * What to do next: the failure's own `help` when this program defined it and it has one, else the
- * help of its kind.
+ * What to do next: the failure's own `help` when this program defined it and it has one; for a
+ * named failure (`namedFailureOf`) the help of its own; for a program grizzle refused to compile
+ * (`isUncompiled`), that a defect of qti left the database as it was; for a refusal the database
+ * gave, the help of a law's refusal by the kind of its witness; else the help of its kind.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
-const helpOf = (failure: unknown, kind: Kind): string =>
-  Predicate.hasProperty(failure, cliKind) &&
-  Predicate.hasProperty(failure, "help") &&
-  Predicate.isString(failure.help) &&
-  failure.help !== ""
-    ? failure.help
-    : kindHelp[kind];
+const helpOf = (failure: unknown, kind: Kind): string => {
+  if (
+    Predicate.hasProperty(failure, cliKind) &&
+    Predicate.hasProperty(failure, "help") &&
+    Predicate.isString(failure.help) &&
+    failure.help !== ""
+  ) {
+    return failure.help;
+  }
+
+  const named = Option.map(namedFailureOf(failure), (tag) => namedHelp[tag]);
+  if (Option.isSome(named)) {
+    return named.value;
+  }
+
+  if (isUncompiled(failure)) {
+    return uncompiledHelp;
+  }
+
+  return Option.match(Option.flatMap(refusalFieldsOf(failure), databaseRefusalOf), {
+    onNone: () => kindHelp[kind],
+    onSome: ({ witness }) => databaseRefusalHelp[witness],
+  });
+};
 
 /**
  * The kind of a failure.
@@ -280,8 +439,10 @@ const helpOf = (failure: unknown, kind: Kind): string =>
  * mapped by what it is, without importing the module that defines it, so the program starts
  * without loading the engine: Effect's CLI errors are `cli-usage`, an `ImportRefused` is
  * `import-refused`, a `PackageNotFound` is `not-found`, a `PlatformError` is `io`, a missing or
- * unreadable local set-up is `config` and grizzle's other errors are `database`. Anything else, a
- * defect included, is `internal`.
+ * unreadable local set-up is `config`, a program grizzle refused to compile before sending any SQL
+ * is `internal`, and grizzle's other errors are `database`. Anything else, a defect included, is
+ * `internal`; the export's and the import's defects that {@link namedFailureOf} names keep that
+ * kind, with a help of their own.
  *
  * @param failure - What a run failed with: the squashed cause of its exit.
  * @returns The kind, the exit code of that kind, and what to do next.
