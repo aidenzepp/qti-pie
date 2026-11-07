@@ -9,16 +9,16 @@
  * names, so no law ahead of its own breaks first.
  */
 import { element, int } from "@grizzle/testing/gen";
-import type { Gen } from "@grizzle/testing/gen";
-import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
 import {
+  passageAt,
   replaceDrawn,
   replaceOnce,
+  replacing,
   textOf,
   withText,
 } from "#pantry/test/oracle-complete/mutation.ts";
-import type { Base, Mutation } from "#pantry/test/oracle-complete/mutation.ts";
+import type { Mutation } from "#pantry/test/oracle-complete/mutation.ts";
 
 /**
  * The every-relation item.
@@ -29,50 +29,6 @@ const item = "items/item.xml";
  * The every-relation manifest.
  */
 const manifest = "imsmanifest.xml";
-
-/**
- * One drawn replacement: a passage of a document, which occurs exactly once, and the texts that may
- * replace it.
- */
-interface Site {
-  readonly passage: string;
-  readonly path: string;
-  readonly replacements: readonly [string, ...string[]];
-}
-
-/**
- * Draw one site and one of its replacements, and write it into the base.
- *
- * @param sites - The sites.
- * @returns The mutation's edit.
- */
-const replacing =
-  (sites: readonly [Site, ...Site[]]) =>
-  ({ entries }: Base): Gen<PackageEntries> =>
-  (source) => {
-    const site = sites[source.draw(int(0, sites.length - 1))] ?? sites[0];
-    const replacement = source.draw(element([...site.replacements]));
-
-    return withText(
-      entries,
-      site.path,
-      replaceOnce(textOf(entries, site.path), site.passage, replacement),
-    );
-  };
-
-/**
- * One site, as a mutation.
- *
- * @param path - The document.
- * @param passage - The passage, which occurs exactly once.
- * @param replacements - What may replace it.
- * @returns The mutation.
- */
-const at = (
-  path: string,
-  passage: string,
-  replacements: readonly [string, ...string[]],
-): Mutation => ({ mutate: replacing([{ passage, path, replacements }]), over: "package" });
 
 /**
  * The usage data's resource, which nothing else names, so its type and identifier may change
@@ -92,7 +48,7 @@ const slider =
 export const packageMutations = {
   // AL3 required (the XSDs' use="required"): a declaration of the item written with no
   // cardinality, refused under required-attribute alone (an absent attribute is no empty one).
-  "AL3 required": at(
+  "AL3 required": passageAt(
     item,
     '<qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>',
     [
@@ -101,7 +57,7 @@ export const packageMutations = {
     ],
   ),
   // AreaMapping base type (O5): an area mapping on the integer response LEVER, which no point is.
-  "AreaMapping base type": at(
+  "AreaMapping base type": passageAt(
     item,
     '<qti-mapping default-value="0"><qti-map-entry map-key="3" mapped-value="1"/></qti-mapping>',
     [
@@ -110,30 +66,30 @@ export const packageMutations = {
   ),
   // Aria value range (reading 9's ARIA bounds): the division's aria-valuemin above its
   // aria-valuemax.
-  "Aria value range": at(item, 'aria-valuemin="0" aria-valuemax="10"', [
+  "Aria value range": passageAt(item, 'aria-valuemin="0" aria-valuemax="10"', [
     'aria-valuemin="11" aria-valuemax="10"',
     'aria-valuemin="0" aria-valuemax="-1"',
   ]),
   // Arity (P2): the match given one operand.
-  Arity: at(item, '\n          <qti-correct identifier="RESPONSE"/>', [""]),
+  Arity: passageAt(item, '\n          <qti-correct identifier="RESPONSE"/>', [""]),
   // Binding cardinality (reading 92): the choice interaction that binds the single RESPONSE told
   // to take more than one choice.
-  "Binding cardinality": at(item, 'max-choices="1" min-choices="0"', [
+  "Binding cardinality": passageAt(item, 'max-choices="1" min-choices="0"', [
     'max-choices="2" min-choices="0"',
     'max-choices="0" min-choices="0"',
   ]),
   // Binding declared (O3): the slider bound to an outcome, or a template, of its type.
-  "Binding declared": at(item, slider, [
+  "Binding declared": passageAt(item, slider, [
     slider.replace("LEVER", "COUNT"),
     slider.replace("LEVER", "N"),
   ]),
   // Binding unique (reading 92): a second interaction bound to a bound response.
-  "Binding unique": at(item, '<qti-hottext-interaction response-identifier="HOT"', [
+  "Binding unique": passageAt(item, '<qti-hottext-interaction response-identifier="HOT"', [
     '<qti-hottext-interaction response-identifier="RESPONSE"',
     '<qti-hottext-interaction response-identifier="AREA"',
   ]),
   // BindingFit (O3): the slider bound to a response of a type it does not take.
-  BindingFit: at(
+  BindingFit: passageAt(
     item,
     '<qti-response-declaration identifier="LEVER" cardinality="single" base-type="integer">',
     [
@@ -142,19 +98,21 @@ export const packageMutations = {
     ],
   ),
   // Choice bounds (readings 18 and 76): the choice interaction's least above its most.
-  "Choice bounds": at(item, 'max-choices="1" min-choices="0"', ['max-choices="1" min-choices="2"']),
+  "Choice bounds": passageAt(item, 'max-choices="1" min-choices="0"', [
+    'max-choices="1" min-choices="2"',
+  ]),
   // Choice identifier key (reading 104): two simple choices of one identifier.
-  "Choice identifier key": at(item, '<qti-simple-choice identifier="ChoiceB">', [
+  "Choice identifier key": passageAt(item, '<qti-simple-choice identifier="ChoiceB">', [
     '<qti-simple-choice identifier="ChoiceA">',
   ]),
   // Choice not variable (reading 104): a hottext named as a variable its item declares.
-  "Choice not variable": at(item, '<qti-hottext identifier="H1">', [
+  "Choice not variable": passageAt(item, '<qti-hottext identifier="H1">', [
     '<qti-hottext identifier="COUNT">',
     '<qti-hottext identifier="SHOWN">',
   ]),
   // Context variable reference (§2.2.2.1): the portable interaction's context variable naming an
   // ID of the item that is no context declaration.
-  "Context variable reference": at(item, '<qti-context-variable identifier="CTX"/>', [
+  "Context variable reference": passageAt(item, '<qti-context-variable identifier="CTX"/>', [
     '<qti-context-variable identifier="lead"/>',
     '<qti-context-variable identifier="caption"/>',
   ]),
@@ -167,15 +125,18 @@ export const packageMutations = {
     over: "package",
   },
   // Document lang (R26): the item's xml:lang no language its record lists.
-  "Document lang": at(item, 'xml:lang="en" tool-name', [
+  "Document lang": passageAt(item, 'xml:lang="en" tool-name', [
     'xml:lang="fr" tool-name',
     'xml:lang="de" tool-name',
   ]),
   // DocumentId key (reading 101): a second element of the item given an id the item holds.
-  "DocumentId key": at(item, '<span id="caption">', ['<span id="lead">', '<span id="row-head">']),
+  "DocumentId key": passageAt(item, '<span id="caption">', [
+    '<span id="lead">',
+    '<span id="row-head">',
+  ]),
   // Equal tolerance (reading 121): an absolute or relative equality written with no tolerance,
   // or with a tolerance that is not above 0.
-  "Equal tolerance": at(
+  "Equal tolerance": passageAt(
     item,
     '<qti-match>\n          <qti-variable identifier="RESPONSE"/>\n          <qti-correct identifier="RESPONSE"/>\n        </qti-match>',
     [
@@ -185,16 +146,16 @@ export const packageMutations = {
     ],
   ),
   // Feedback outcome type: the feedback inline naming an outcome that is no identifier.
-  "Feedback outcome type": at(item, '<qti-feedback-inline outcome-identifier="FEEDBACK"', [
+  "Feedback outcome type": passageAt(item, '<qti-feedback-inline outcome-identifier="FEEDBACK"', [
     '<qti-feedback-inline outcome-identifier="COUNT"',
     '<qti-feedback-inline outcome-identifier="SCORE"',
   ]),
   // Feedback reference: the feedback inline naming nothing the item declares.
-  "Feedback reference": at(item, '<qti-feedback-inline outcome-identifier="FEEDBACK"', [
+  "Feedback reference": passageAt(item, '<qti-feedback-inline outcome-identifier="FEEDBACK"', [
     '<qti-feedback-inline outcome-identifier="ABSENT"',
   ]),
   // File exists (P3, reading 102): a resource's file naming a path no entry is.
-  "File exists": at(manifest, '<file href="usage.xml"/>', [
+  "File exists": passageAt(manifest, '<file href="usage.xml"/>', [
     '<file href="usage.xml"/><file href="missing.xml"/>',
     '<file href="usage.xml"/><file href="media/none.png"/>',
   ]),
@@ -212,29 +173,29 @@ export const packageMutations = {
   },
   // Href listed (P3, reading 102): a new resource whose href names an entry its own files do not
   // list.
-  "Href listed": at(manifest, "  </resources>", [
+  "Href listed": passageAt(manifest, "  </resources>", [
     '    <resource identifier="extra-res" type="webcontent" href="items/media/pic.png"><file href="usage.xml"/></resource>\n  </resources>',
   ]),
   // Idref target (reading 14): the division's aria-labelledby naming no id of the item.
-  "Idref target": at(item, 'aria-labelledby="caption"', [
+  "Idref target": passageAt(item, 'aria-labelledby="caption"', [
     'aria-labelledby="nothing"',
     'aria-labelledby="caption absent"',
   ]),
   // Include fragment identifier, Include target and Include root (readings 85, 114 and 117): the
   // second item's include naming its fragment by a fragment identifier, naming no document, or
   // naming the rule fragment, whose root no item body holds.
-  "Include fragment identifier": at("items/item2.xml", '<xi:include href="fragment.xml"/>', [
+  "Include fragment identifier": passageAt("items/item2.xml", '<xi:include href="fragment.xml"/>', [
     '<xi:include href="fragment.xml#part"/>',
   ]),
-  "Include root": at("items/item2.xml", '<xi:include href="fragment.xml"/>', [
+  "Include root": passageAt("items/item2.xml", '<xi:include href="fragment.xml"/>', [
     '<xi:include href="fragment.xml"/><xi:include href="rules.xml"/>',
   ]),
-  "Include target": at("items/item2.xml", '<xi:include href="fragment.xml"/>', [
+  "Include target": passageAt("items/item2.xml", '<xi:include href="fragment.xml"/>', [
     '<xi:include href="fragment.xml"/><xi:include href="missing.xml"/>',
     '<xi:include href="fragment.xml"/><xi:include href="media/pic.png"/>',
   ]),
   // Inclusion cycle (reading 85): the section document placing itself.
-  "Inclusion cycle": at("section.xml", "</qti-assessment-section>", [
+  "Inclusion cycle": passageAt("section.xml", "</qti-assessment-section>", [
     '  <qti-assessment-section-ref identifier="itself" href="section.xml"/>\n</qti-assessment-section>',
   ]),
   // Key text bound (the stated limit, keyText): an id of more UTF-8 bytes than a key text holds,
@@ -278,15 +239,15 @@ export const packageMutations = {
     over: "package",
   },
   // Label tools (§5.16.5): the item, whose division has a label, writing no tool-version.
-  "Label tools": at(item, ' tool-version="1"', [""]),
+  "Label tools": passageAt(item, ' tool-version="1"', [""]),
   // LomObjectIdentifier (QTI 3.0 Metadata §2.7.1.1): a record naming another identifier.
-  LomObjectIdentifier: at(manifest, "<imsmd:entry>item1</imsmd:entry>", [
+  LomObjectIdentifier: passageAt(manifest, "<imsmd:entry>item1</imsmd:entry>", [
     "<imsmd:entry>item9</imsmd:entry>",
     "<imsmd:entry>Item1</imsmd:entry>",
   ]),
   // Lookup table cardinality (O5): the outcome LEVEL, which holds a match table, made a
   // container.
-  "Lookup table cardinality": at(
+  "Lookup table cardinality": passageAt(
     item,
     '<qti-outcome-declaration identifier="LEVEL" cardinality="single" base-type="string">',
     [
@@ -295,23 +256,23 @@ export const packageMutations = {
     ],
   ),
   // Map key (O5): the slider's response mapping one key twice.
-  "Map key": at(item, '<qti-map-entry map-key="3" mapped-value="1"/>', [
+  "Map key": passageAt(item, '<qti-map-entry map-key="3" mapped-value="1"/>', [
     '<qti-map-entry map-key="3" mapped-value="1"/><qti-map-entry map-key="3" mapped-value="2"/>',
     '<qti-map-entry map-key="3" mapped-value="1"/><qti-map-entry map-key="+3" mapped-value="2"/>',
   ]),
   // MappableBaseType (O5): the float response REAL, which holds a mapping, made a file.
-  MappableBaseType: at(
+  MappableBaseType: passageAt(
     item,
     '<qti-response-declaration identifier="REAL" cardinality="single" base-type="float">',
     ['<qti-response-declaration identifier="REAL" cardinality="single" base-type="file">'],
   ),
   // MathML arity (MathML 3 §4.2.3): a divide applied to one operand, or to three.
-  "MathML arity": at(item, "    <p>It says <q>read this</q> and stops.</p>", [
+  "MathML arity": passageAt(item, "    <p>It says <q>read this</q> and stops.</p>", [
     '    <p><math xmlns="http://www.w3.org/1998/Math/MathML"><apply><divide/><cn>1</cn></apply></math></p>\n    <p>It says <q>read this</q> and stops.</p>',
     '    <p><math xmlns="http://www.w3.org/1998/Math/MathML"><apply><divide/><cn>1</cn><cn>2</cn><cn>3</cn></apply></math></p>\n    <p>It says <q>read this</q> and stops.</p>',
   ]),
   // Media source src (reading 124): a video's source that names no resource.
-  "Media source src": at(item, "    <p>It says <q>read this</q> and stops.</p>", [
+  "Media source src": passageAt(item, "    <p>It says <q>read this</q> and stops.</p>", [
     '    <video><source type="video/mp4"/></video>\n    <p>It says <q>read this</q> and stops.</p>',
     '    <audio><source type="audio/ogg"/></audio>\n    <p>It says <q>read this</q> and stops.</p>',
   ]),
@@ -393,21 +354,25 @@ export const packageMutations = {
     over: "package",
   },
   // N7 barred by (the children an attribute bars): a column group with a span and a column.
-  "N7 barred by": at(item, "    <p>It says <q>read this</q> and stops.</p>", [
+  "N7 barred by": passageAt(item, "    <p>It says <q>read this</q> and stops.</p>", [
     '    <table><colgroup span="2"><col/></colgroup><tbody><tr><td>x</td></tr></tbody></table>\n    <p>It says <q>read this</q> and stops.</p>',
     '    <table><colgroup span="3"><col/><col/></colgroup><tbody><tr><td>x</td></tr></tbody></table>\n    <p>It says <q>read this</q> and stops.</p>',
   ]),
   // Picture source srcset (reading 124): a picture's source that names no image candidates.
-  "Picture source srcset": at(item, "    <p>It says <q>read this</q> and stops.</p>", [
+  "Picture source srcset": passageAt(item, "    <p>It says <q>read this</q> and stops.</p>", [
     '    <p><picture><source type="image/png"/><img src="media/pic.png" alt="a"/></picture></p>\n    <p>It says <q>read this</q> and stops.</p>',
   ]),
   // Printed variable reference: the printed variable naming nothing the item declares.
-  "Printed variable reference": at(item, '<qti-printed-variable identifier="N" base="DIGITS"/>', [
-    '<qti-printed-variable identifier="ABSENT" base="DIGITS"/>',
-    '<qti-printed-variable identifier="N" base="ABSENT"/>',
-  ]),
+  "Printed variable reference": passageAt(
+    item,
+    '<qti-printed-variable identifier="N" base="DIGITS"/>',
+    [
+      '<qti-printed-variable identifier="ABSENT" base="DIGITS"/>',
+      '<qti-printed-variable identifier="N" base="ABSENT"/>',
+    ],
+  ),
   // Quotation punctuation (reading 127): a q holding a quotation mark of its own.
-  "Quotation punctuation": at(item, "<q>read this</q>", [
+  "Quotation punctuation": passageAt(item, "<q>read this</q>", [
     '<q>"read this"</q>',
     "<q>“read this”</q>",
   ]),
@@ -432,38 +397,38 @@ export const packageMutations = {
     over: "package",
   },
   // ResourceTypeOf (P1): the usage data's resource given a type no version admits.
-  ResourceTypeOf: at(manifest, usageResource, [
+  ResourceTypeOf: passageAt(manifest, usageResource, [
     usageResource.replace("qtiusagedata/xml", "qtiusagedata/xml2"),
     usageResource.replace("qtiusagedata/xml", "imsqti_item_xmlv9"),
   ]),
   // RootOfType (P2): the usage data listed as an item, a test or a stimulus.
-  RootOfType: at(manifest, usageResource, [
+  RootOfType: passageAt(manifest, usageResource, [
     usageResource.replace("qtiusagedata/xml", "imsqti_item_xmlv3p0"),
     usageResource.replace("qtiusagedata/xml", "imsqti_stimulus_xmlv3p0"),
   ]),
   // Rounding figures (reading 119): a round-to of no significant figures, or of fewer than no
   // decimal places.
-  "Rounding figures": at(item, '<qti-round><qti-variable identifier="SCORE"/></qti-round>', [
+  "Rounding figures": passageAt(item, '<qti-round><qti-variable identifier="SCORE"/></qti-round>', [
     '<qti-round-to rounding-mode="significantFigures" figures="0"><qti-variable identifier="SCORE"/></qti-round-to>',
     '<qti-round-to rounding-mode="decimalPlaces" figures="-1"><qti-variable identifier="SCORE"/></qti-round-to>',
   ]),
   // Selection bound (reading 79): the section second selecting more than its two parts.
-  "Selection bound": at("test.xml", '<qti-selection select="1"/>', [
+  "Selection bound": passageAt("test.xml", '<qti-selection select="1"/>', [
     '<qti-selection select="3"/>',
     '<qti-selection select="9"/>',
   ]),
   // Self dependency (CP 1.2): a resource depending on itself.
-  "Self dependency": at(manifest, '      <dependency identifierref="stimulus1-res"/>', [
+  "Self dependency": passageAt(manifest, '      <dependency identifierref="stimulus1-res"/>', [
     '      <dependency identifierref="stimulus1-res"/>\n      <dependency identifierref="item1-res"/>',
   ]),
   // Slider bounds (§5.150): the slider's lower bound above its upper.
-  "Slider bounds": at(item, slider, [
+  "Slider bounds": passageAt(item, slider, [
     slider.replace('lower-bound="0"', 'lower-bound="11"'),
     slider.replace('upper-bound="10"', 'upper-bound="-1"'),
   ]),
   // Stimulus ref target (the UP audit's B5): the stimulus ref naming a document that is no
   // stimulus.
-  "Stimulus ref target": at(
+  "Stimulus ref target": passageAt(
     item,
     '<qti-assessment-stimulus-ref identifier="stimulus1" href="stimulus.xml"/>',
     [
@@ -473,33 +438,39 @@ export const packageMutations = {
   ),
   // Table headers (reading 126): a cell's headers naming an id of the item that is no header of
   // its table.
-  "Table headers": at(item, '<td headers="row-head">', [
+  "Table headers": passageAt(item, '<td headers="row-head">', [
     '<td headers="caption">',
     '<td headers="lead">',
   ]),
   // Template reference: the template inline naming nothing the item declares.
-  "Template reference": at(item, '<qti-template-inline template-identifier="SHOWN"', [
+  "Template reference": passageAt(item, '<qti-template-inline template-identifier="SHOWN"', [
     '<qti-template-inline template-identifier="ABSENT"',
   ]),
   // Track srclang (reading 125): a subtitles track that names no language.
-  "Track srclang": at(item, "    <p>It says <q>read this</q> and stops.</p>", [
+  "Track srclang": passageAt(item, "    <p>It says <q>read this</q> and stops.</p>", [
     '    <video src="media/pic.png"><track src="media/pic.png"/></video>\n    <p>It says <q>read this</q> and stops.</p>',
     '    <video src="media/pic.png"><track src="media/pic.png" kind="subtitles"/></video>\n    <p>It says <q>read this</q> and stops.</p>',
   ]),
   // Typed attribute value (O5): the slider's response mapping a key that is no integer.
-  "Typed attribute value": at(item, '<qti-map-entry map-key="3" mapped-value="1"/>', [
+  "Typed attribute value": passageAt(item, '<qti-map-entry map-key="3" mapped-value="1"/>', [
     '<qti-map-entry map-key="three" mapped-value="1"/>',
     '<qti-map-entry map-key="3.5" mapped-value="1"/>',
   ]),
   // Usage typed value (reading 105): the usage statistic's float value written as no float.
-  "Usage typed value": at("usage.xml", '<value fieldIdentifier="F" baseType="float">0.5</value>', [
-    '<value fieldIdentifier="F" baseType="float">half</value>',
-    '<value fieldIdentifier="F" baseType="float">0,5</value>',
-  ]),
+  "Usage typed value": passageAt(
+    "usage.xml",
+    '<value fieldIdentifier="F" baseType="float">0.5</value>',
+    [
+      '<value fieldIdentifier="F" baseType="float">half</value>',
+      '<value fieldIdentifier="F" baseType="float">0,5</value>',
+    ],
+  ),
   // Variable declared (P8): the item's round reading a variable nothing declares.
-  "Variable declared": at(item, '<qti-round><qti-variable identifier="SCORE"/></qti-round>', [
-    '<qti-round><qti-variable identifier="ABSENT"/></qti-round>',
-  ]),
+  "Variable declared": passageAt(
+    item,
+    '<qti-round><qti-variable identifier="SCORE"/></qti-round>',
+    ['<qti-round><qti-variable identifier="ABSENT"/></qti-round>'],
+  ),
   // value domain (each attribute's simple type): a count, a boolean or a shape that is no value
   // of its type.
   "value domain": {

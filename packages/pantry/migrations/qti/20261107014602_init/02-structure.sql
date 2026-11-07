@@ -1561,7 +1561,7 @@ CREATE TABLE "qti"."outcome_range" (
 CREATE TABLE "qti"."package" (
   "entries" "qti"."__domain_gfw43vigph" NOT NULL,
   "id" "pg_catalog"."uuid" NOT NULL,
-  "name" "qti"."__text_4hqxrnyxw2" NOT NULL,
+  "name" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" NOT NULL,
   CONSTRAINT "__package_pk_sg2cyzxgtm" PRIMARY KEY ("id"),
   CONSTRAINT "__package_key_id_entries_afhrapqqtr" UNIQUE NULLS DISTINCT ("id", "entries")
 );

@@ -987,8 +987,6 @@ CREATE DOMAIN "qti"."__text_7j6kgluyjp" AS "pg_catalog"."text" COLLATE "pg_catal
 
 CREATE DOMAIN "qti"."__text_xey6ryorh5" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK ((VALUE ~ '\A[A-Za-z][\-\.0-9A-Z\_a-z]*\Z'::"pg_catalog"."text") IS TRUE);
 
-CREATE DOMAIN "qti"."__text_4hqxrnyxw2" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK ((VALUE ~ '\A[\u0001-\.0-\U0010FFFF]{1,255}\Z'::"pg_catalog"."text") IS TRUE);
-
 CREATE DOMAIN "qti"."__text_n4nva7wrgk" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK ((VALUE ~ '\A[\+\-]?\Z'::"pg_catalog"."text") IS TRUE);
 
 CREATE DOMAIN "qti"."__text_pwaizaq6lx" AS "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK (("pg_catalog"."octet_length"(VALUE) <= 2587) IS TRUE);

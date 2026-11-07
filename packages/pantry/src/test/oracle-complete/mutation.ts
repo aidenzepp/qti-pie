@@ -16,7 +16,7 @@
  * rule stands ahead of the law's in the refusal's precedence (`#pantry/import/refusal.ts`
  * `precedence`), so the database, which names a refusal by that order, names it by the law's rule.
  */
-import { int } from "@grizzle/testing/gen";
+import { element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { Effect, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -261,6 +261,50 @@ export const replaceOnce = (text: string, passage: string, replacement: string):
 
   return `${text.slice(0, at)}${replacement}${text.slice(at + passage.length)}`;
 };
+
+/**
+ * One drawn replacement: a passage of a document, which occurs exactly once, and the texts that may
+ * replace it.
+ */
+export interface Site {
+  readonly passage: string;
+  readonly path: string;
+  readonly replacements: readonly [string, ...string[]];
+}
+
+/**
+ * Draw one site and one of its replacements, and write it into the base.
+ *
+ * @param sites - The sites.
+ * @returns The mutation's edit.
+ */
+export const replacing =
+  (sites: readonly [Site, ...Site[]]) =>
+  ({ entries }: Base): Gen<PackageEntries> =>
+  (source) => {
+    const site = sites[source.draw(int(0, sites.length - 1))] ?? sites[0];
+    const replacement = source.draw(element([...site.replacements]));
+
+    return withText(
+      entries,
+      site.path,
+      replaceOnce(textOf(entries, site.path), site.passage, replacement),
+    );
+  };
+
+/**
+ * One passage of a document and the texts that may replace it, as a `package` mutation.
+ *
+ * @param path - The document.
+ * @param passage - The passage, which occurs exactly once.
+ * @param replacements - What may replace it.
+ * @returns The mutation.
+ */
+export const passageAt = (
+  path: string,
+  passage: string,
+  replacements: readonly [string, ...string[]],
+): Mutation => ({ mutate: replacing([{ passage, path, replacements }]), over: "package" });
 
 /**
  * Draw one row of a list among those a predicate keeps, and replace it, every other row as it is.

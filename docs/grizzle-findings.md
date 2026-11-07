@@ -1550,6 +1550,46 @@ DETAIL naming the failing row (as the server log above shows for a foreign key).
 wrong verdict. Asked as a question, grizzle accepted it: a refused CHECK will carry the failing row's key from
 PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". Nothing is filed.
 
+### A law's key that closes a cycle with a family's owner axis is installed immediate, and no write can order it (grizzle defect, confirmed; lane DBT)
+
+- **Checked at:** grizzle `27c4cd2` and trunk `4ec7574`; both files are unchanged between them.
+- **Cause:**
+  - README "Direct SQL access" 23503 (`README.md:2441` at `27c4cd2`) defers a key that "lies on a cycle of foreign
+    keys".
+  - `#deferral` (`packages/engine/src/laws/model/model.ts:1053-1065`) builds that cycle from the laws' own keys
+    (`deferral === "rule"`) and period keys only, and leaves out owner axes, which are immediate (`:1526`).
+  - So `select(O, n=1)(node, language) → M(node, language)`, whose target `M` holds no other field, is immediate beside
+    `M`'s owner axis `M(node, copy) → O(node, n)`.
+  - The scheduler (`packages/engine/src/write/frontend/schedule.ts:48-51`, `:67-72`) drops one edge of the cycle, so
+    the write compiles, and then PostgreSQL refuses `O`'s INSERT with 23503 whenever both sides hold rows.
+- **Seen:** qti-pie's `LomString`→`LomStringLanguage` and `AssessmentObject`→`ObjectLang`, the `4b155e8` `_init`'s
+  only two cross-table cycles of immediate FKs. They refused `sharedMedia` and `metaData` in N2's tier at `5ca47304`.
+- **Reproduction:**
+  - schema: `O {node uuid, language text, n drawn(natural)}` keyed by `node`; `M {node uuid, language text}` keyed by
+    `node`;
+  - laws: `counted(on(M, 'node'), fin(O, 'n'))`; a check on `O` (`n = 1 or language = ''`);
+    `contained(select(O, n = 1)(node, language), M(node, language))`;
+  - write: insert `O` and `M` with `node` and `'en'`;
+  - expected: invariant-rejected 23503 on the containment's key at `O`'s INSERT, with generate drafting that key
+    without DEFERRABLE;
+  - control: the containment turned to `M` → `O` is accepted.
+- **Workaround in qti-pie:** both laws are stated member → owner (`a6d23fcc`), which is equivalent under the count and
+  E1. The guard `src/test/write-order.test.ts` restates the deferral rule over Qti's statements. It comes out once
+  grizzle fixes the gap.
+- **Confirmed by lane N2** at grizzle `27c4cd2` and at its newest `main`, `dec8ab3`
+  (`dec8ab32289d91d0190c676e6232ca89a74697a2`), with the same results in
+  `~/.cache/gr8des/n2/repro/deferral-owner-cycle/run-27c4cd2.out` and `run-dec8ab3.out`:
+  - **case:** generate and check pass (`N2DeferCycle: ok (1 migration, snapshot bfc36e51…)`). The drafted `O`→`M` key
+    has no DEFERRABLE, and `M`'s owner axis is immediate. The one-ChangeSet write is `invariant-rejected`, with
+    `insert or update on table "o" violates foreign key constraint "__o_fk_node_language_…"` and `DETAIL: Key (…)=(…d1,
+    en) is not present in table "m"`;
+  - **control:** the containment turned `M` → `O` is accepted (`N2DeferTurned: ok (1 migration, snapshot
+    2b51d625…)`).
+  - **Anchors:** `model.ts:1050-1051`'s comment, "A family axis fixes its own deferral and is no edge of the cycle
+    graph…", is the stated reason owner axes are left out.
+- **Status:** handed to grizzle-c5, whose lane F takes it as a defect, with a generated-search guard and this case
+  kept. Nothing is filed. The workaround, `a6d23fcc`, comes out when F's fix is pinned.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
@@ -1872,7 +1912,7 @@ ran 3.5 to 6 times CPU at load 42 to 73.
 | whole layer build with `importWork`                                                 | 48.5         |
 | whole layer build without it (dropped in scratch, snapshot regenerated)             | 30.1         |
 
-### LP-1. The write front end decides every relation's unique objects on every compile (grizzle cost)
+### LP-1. The write front end decides every relation's unique objects on every compile (grizzle cost, fixed in `dec8ab3`)
 
 - **Cause:** 96% of a write compile is one line.
   - `compile`'s `writable` map (`packages/engine/src/write/frontend/compile.ts:730-732`) calls `relationUniques`
@@ -1912,13 +1952,19 @@ ran 3.5 to 6 times CPU at load 42 to 73.
   - At r=4, k=32 under the one-insert workload: `compileLaws` is 83% `beyondPrimary`, `loginAccess` 96-99%, and
     `compileRoleWorkload` 94-99%, though the ChangeSet writes only `U`.
   - The hot files are byte-identical from `4b155e8` to `27c4cd2`, and `run.out` holds both pins.
+- **Fixed in grizzle `dec8ab3`** (`dec8ab32289d91d0190c676e6232ca89a74697a2`), lane K's `beyondPrimary` fix: startup
+  decides the keys beyond the primary once, 6.06 s down to 0.39 s at 128 guarded keys, under a call-count gate.
+  qti-pie's repin D to it follows S-ORACLE's clean regeneration.
 
-### LP-2. A closed-id literal carries its roster into every canonical encode (grizzle cost)
+### LP-2. A closed-id literal carries its roster into every canonical encode (grizzle cost, its cutover ruled)
 
 - Attribute's guard predicates encode to 23,000-62,000 characters each, some to 100,000-392,000.
 - interactions.ts:1709's encodes to 2,979,763 characters.
 - Each comparison of a closed-id field with a literal carries the whole roster, so every canonical encode of such a
   predicate costs as much as the roster. That bears on every canonical encode, not only `beyondPrimary`.
+- **grizzle's ruling:** a closed-id literal will name its roster by identity, encoded once with the schema, under a
+  gate that an encode's size does not grow with the roster. It is a hard cutover still to land, and fingerprints will
+  change.
 
 ### LP-3. Four of Attribute's keys are implied by wider ones (qti, after the database tier)
 

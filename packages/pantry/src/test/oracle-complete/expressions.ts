@@ -11,26 +11,13 @@
  * and the section document's precondition. Each writes a value of a type the law refuses, drawn
  * among several, at a site drawn among those the base holds.
  */
-import { element, int } from "@grizzle/testing/gen";
-import type { Gen } from "@grizzle/testing/gen";
-import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { replaceOnce, textOf, withText } from "#pantry/test/oracle-complete/mutation.ts";
-import type { Base, Mutation } from "#pantry/test/oracle-complete/mutation.ts";
+import { replacing } from "#pantry/test/oracle-complete/mutation.ts";
+import type { Mutation } from "#pantry/test/oracle-complete/mutation.ts";
 
 /**
  * The every-relation item.
  */
 const item = "items/item.xml";
-
-/**
- * One drawn replacement: a passage of a document, which occurs exactly once, and the texts that
- * may replace it.
- */
-interface Site {
-  readonly passage: string;
-  readonly path: string;
-  readonly replacements: readonly [string, ...string[]];
-}
 
 /**
  * A base value's text.
@@ -41,30 +28,6 @@ interface Site {
  */
 const literal = (baseType: string, text: string): string =>
   `<qti-base-value base-type="${baseType}">${text}</qti-base-value>`;
-
-/**
- * Draw one site and one of its replacements, and write it into the base.
- *
- * @param sites - The sites.
- * @returns The mutation's edit.
- */
-const replacing =
-  (sites: readonly Site[]) =>
-  ({ entries }: Base): Gen<PackageEntries> =>
-  (source) => {
-    const site = sites[source.draw(int(0, sites.length - 1))];
-    if (site === undefined) {
-      throw new Error("no site to draw");
-    }
-
-    const replacement = source.draw(element([...site.replacements]));
-
-    return withText(
-      entries,
-      site.path,
-      replaceOnce(textOf(entries, site.path), site.passage, replacement),
-    );
-  };
 
 /**
  * The item's sum's map response point, an operand any float or integer may stand for.
