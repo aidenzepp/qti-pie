@@ -1194,6 +1194,12 @@ const formatZeros = 64_000;
 const formatGrowthTimeoutMs = 60_000;
 
 /**
+ * The `format` equivalence check judges 271,453 strings. It takes about 0.75 s alone and took
+ * 6.9 s on a loaded machine, past vitest's default of 5 s, so it is given room to finish there.
+ */
+const formatEquivalenceTimeoutMs = 60_000;
+
+/**
  * Each outcome the information model types, with the base type it must have and the line that says
  * so: SCORE and MAXSCORE are floats, PASSED is a boolean.
  */
@@ -2782,17 +2788,21 @@ describe("checkStructure", () => {
       ]);
     });
 
-    it("[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i and d (review 079e8c44 P2-13)", () => {
-      const strings = stringsUpTo(formatAlphabet, 5);
-      const disagreeing = strings.filter(
-        (format) =>
-          quadraticPrintfFormat.test(format) !==
-          (found(printed(format), generatedTables).length === 0),
-      );
+    it(
+      "[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i and d (review 079e8c44 P2-13)",
+      () => {
+        const strings = stringsUpTo(formatAlphabet, 5);
+        const disagreeing = strings.filter(
+          (format) =>
+            quadraticPrintfFormat.test(format) !==
+            (found(printed(format), generatedTables).length === 0),
+        );
 
-      assert.strictEqual(strings.length, 271_453);
-      assert.deepStrictEqual(disagreeing, []);
-    });
+        assert.strictEqual(strings.length, 271_453);
+        assert.deepStrictEqual(disagreeing, []);
+      },
+      formatEquivalenceTimeoutMs,
+    );
 
     it.effect(
       "[I-5] refuses a format of %, 64,000 zeros and d as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
