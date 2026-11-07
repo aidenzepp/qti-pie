@@ -7,7 +7,10 @@ import { examplesTarball, materialize } from "#pantry/test/fixtures.ts";
 import { judge, verdictOf } from "#pantry/test/oracle.ts";
 import {
   asi,
+  base,
   breachesOf,
+  edit,
+  item,
   itemResource,
   judged,
   grammar,
@@ -31,6 +34,33 @@ const packageOfInclude = (href: string) => ({
   "imsmanifest.xml": manifestOf(itemResource),
   "item.xml": `<qti-assessment-item xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="I" title="Item" time-dependent="false"><qti-item-body><xi:include href="${href}"/></qti-item-body></qti-assessment-item>`,
 });
+
+/**
+ * The base package with its response declared a string and mapped by the given entries.
+ *
+ * @param entries - The mapping's `qti-map-entry` elements, as written.
+ * @returns The package's files, by path.
+ */
+const packageOfMapping = (entries: string) => ({
+  ...base,
+  "item.xml": edit(
+    item,
+    "</qti-correct-response>",
+    `</qti-correct-response><qti-mapping default-value="0">${entries}</qti-mapping>`,
+  ).replace('base-type="identifier"', 'base-type="string"'),
+});
+
+/**
+ * Count the breaches of one law in a judged package.
+ *
+ * @param files - The package's files, by path.
+ * @param law - The law's name.
+ * @returns The number of breaches of the law.
+ */
+const breachesOfLaw = (files: Readonly<Record<string, string>>, law: string) =>
+  judged(files).pipe(
+    Effect.map((judgment) => breachesOf(judgment).filter((breach) => breach.law === law).length),
+  );
 
 /**
  * Judges the restored-check fixtures and the restored laws' cases with the law oracle. The
@@ -79,6 +109,92 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           shown(breaches),
         );
       }),
+    );
+
+    judging.effect(
+      "a string mapping's keys that differ only in ASCII case break Map key, as the default case-sensitive false matches them (reading 98)",
+      () =>
+        Effect.gen(function* foldedKeys() {
+          const clash = (first: string, second: string) =>
+            breachesOfLaw(
+              packageOfMapping(
+                `<qti-map-entry map-key="${first}" mapped-value="1"/><qti-map-entry map-key="${second}" mapped-value="2"/>`,
+              ),
+              "Map key",
+            );
+
+          assert.strictEqual(yield* clash("York", "york"), 1, "two default entries fold together");
+          assert.strictEqual(
+            yield* breachesOfLaw(
+              packageOfMapping(
+                `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="york" mapped-value="2"/>`,
+              ),
+              "Map key",
+            ),
+            0,
+            "a case-sensitive entry beside a default one is two keys",
+          );
+          assert.strictEqual(
+            yield* breachesOfLaw(
+              packageOfMapping(
+                `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="york" case-sensitive="true" mapped-value="2"/>`,
+              ),
+              "Map key",
+            ),
+            0,
+            "two case-sensitive entries compare by code points",
+          );
+          assert.strictEqual(
+            yield* breachesOfLaw(
+              packageOfMapping(
+                `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="York" case-sensitive="1" mapped-value="2"/>`,
+              ),
+              "Map key",
+            ),
+            1,
+            "one string matched the same way twice still clashes",
+          );
+          assert.strictEqual(yield* clash("\u00C9", "\u00E9"), 0, "the fold is ASCII only");
+        }),
+    );
+
+    judging.effect.skipIf(!tarballPresent)(
+      "a usage value outside a record is untyped text whatever baseType it writes, and inside a record it is typed (reading 105)",
+      () =>
+        Effect.gen(function* usageValue() {
+          const files = yield* readPackage(yield* materialize("usage3-integer-float"));
+          const typed = (text: (original: string) => string) =>
+            judge(
+              files.map((file) =>
+                file.path === "example.xml"
+                  ? {
+                      ...file,
+                      bytes: new TextEncoder().encode(text(new TextDecoder().decode(file.bytes))),
+                    }
+                  : file,
+              ),
+              grammar,
+              laws,
+            ).pipe(
+              Effect.map(
+                (judgment) =>
+                  breachesOf(judgment).filter(({ law }) => law === "Usage typed value").length,
+              ),
+            );
+
+          assert.strictEqual(yield* typed((xml) => xml), 0, "outside a record");
+          assert.strictEqual(
+            yield* typed((xml) =>
+              edit(
+                xml,
+                '<value baseType="integer">',
+                '<value baseType="integer" fieldIdentifier="F">',
+              ),
+            ),
+            1,
+            "inside a record",
+          );
+        }),
     );
   },
 );
