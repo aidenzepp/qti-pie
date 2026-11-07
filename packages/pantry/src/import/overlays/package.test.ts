@@ -743,12 +743,14 @@ type SplitSituation = "fragment" | "lead" | "plain" | "query" | "trail";
  * for `div@title`, which names no file.
  */
 const census: ReferenceCensus = (_version, kind, name) =>
-  new Map<string, CensusEntry>([
-    ["a href", { form: "uri", whiteSpace: "collapse" }],
-    ["img src", { form: "uri", whiteSpace: "collapse" }],
-    ["source srcset", { form: "srcset", whiteSpace: "replace" }],
-    ["video poster", { form: "uri", whiteSpace: "replace" }],
-  ]).get(`${kind} ${name}`);
+  Option.fromUndefinedOr(
+    new Map<string, CensusEntry>([
+      ["a href", { form: "uri", whiteSpace: "collapse" }],
+      ["img src", { form: "uri", whiteSpace: "collapse" }],
+      ["source srcset", { form: "srcset", whiteSpace: "replace" }],
+      ["video poster", { form: "uri", whiteSpace: "replace" }],
+    ]).get(`${kind} ${name}`),
+  );
 
 /**
  * The elements a generated document holds, each with the one attribute it carries.
@@ -871,8 +873,7 @@ const expectedReferences = (input: ReferenceCase, documentIds: DocumentIds) => {
   for (const [at, { base, carrier, value }] of input.elements.entries()) {
     const [kind, name] = carrier;
     const node = documentIds.idOf(3 + 2 * at);
-    const entry = census("3.0.1", kind, name);
-    if (entry !== undefined) {
+    for (const entry of Option.toArray(census("3.0.1", kind, name))) {
       const resolution = resolveAttribute({
         bases: [input.base, base].flatMap((written) => (written === undefined ? [] : [written])),
         document: documentIds.path,
@@ -980,7 +981,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
     for (const { form, kind, name, version } of ReferenceAttribute.rows) {
       assert.deepStrictEqual(
         referenceCensus(version, kind, name),
-        { form, whiteSpace: declaredWhiteSpace(version, kind, name) },
+        Option.some({ form, whiteSpace: declaredWhiteSpace(version, kind, name) }),
         `${version} ${kind} ${name}`,
       );
     }
@@ -990,7 +991,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
       ["cp:file", "href"],
       ["qti-assessment-item", "xml:base"],
     ] as const) {
-      assert.isUndefined(referenceCensus("3.0.1", kind, name), `${kind} ${name}`);
+      assert.isTrue(Option.isNone(referenceCensus("3.0.1", kind, name)), `${kind} ${name}`);
     }
   });
 

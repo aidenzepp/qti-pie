@@ -21,7 +21,7 @@
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option, Result } from "effect";
 import { documentTypes, grammar, ResourceType } from "#pantry/grammar/install.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -150,6 +150,40 @@ const isParams = (text: string): text is Params =>
 const isWhitespace = (text: string): text is Whitespace => /^[\t\n\r ]*$/u.test(text);
 
 /**
+ * Hold a piece the split cut as an href's `params` to its type.
+ *
+ * @param text - The piece: empty, or from the href's first `?` or `#`.
+ * @returns The piece.
+ * @throws {Error} When it is neither, which the split never cuts.
+ */
+const paramsOf = (text: string): Params => {
+  if (isParams(text)) {
+    return text;
+  }
+
+  throw new Error(
+    `The href split cut ${JSON.stringify(text)} as params, which start at a "?" or "#". Correct hrefPiecesOf.`,
+  );
+};
+
+/**
+ * Hold a piece the split cut as a reference's outer whitespace to its type.
+ *
+ * @param text - The piece: the XML whitespace at one end of a lexical form.
+ * @returns The piece.
+ * @throws {Error} When it holds anything but XML whitespace, which the split never cuts.
+ */
+const whitespaceOf = (text: string): Whitespace => {
+  if (isWhitespace(text)) {
+    return text;
+  }
+
+  throw new Error(
+    `The reference split cut ${JSON.stringify(text)} as whitespace, and it holds more. Correct referencePiecesOf.`,
+  );
+};
+
+/**
  * An href's two written pieces (reading 102), `href = path ‖ params`.
  */
 export interface HrefPieces {
@@ -176,12 +210,10 @@ export interface ReferencePieces {
  */
 export const hrefPiecesOf = (href: string): HrefPieces => {
   const at = href.search(/[?#]/u);
-  const params = at === -1 ? "" : href.slice(at);
 
-  return {
-    params: isParams(params) ? params : "",
-    path: at === -1 ? href : href.slice(0, at),
-  };
+  return at === -1
+    ? { params: "", path: href }
+    : { params: paramsOf(href.slice(at)), path: href.slice(0, at) };
 };
 
 /**
@@ -192,16 +224,17 @@ export const hrefPiecesOf = (href: string): HrefPieces => {
  * @returns `lead ‖ target ‖ params ‖ trail`, the lexical form.
  */
 export const referencePiecesOf = (lexical: string): ReferencePieces => {
-  const lead = /^[\t\n\r ]*/u.exec(lexical)?.[0] ?? "";
-  const rest = lexical.slice(lead.length);
-  const trail = /[\t\n\r ]*$/u.exec(rest)?.[0] ?? "";
-  const { params, path } = hrefPiecesOf(rest.slice(0, rest.length - trail.length));
+  // Both patterns match at some index of any text, the second at its end at the latest, so
+  // neither search gives -1.
+  const start = lexical.search(/[^\t\n\r ]|$/u);
+  const end = start + lexical.slice(start).search(/[\t\n\r ]*$/u);
+  const { params, path } = hrefPiecesOf(lexical.slice(start, end));
 
   return {
-    lead: isWhitespace(lead) ? lead : "",
+    lead: whitespaceOf(lexical.slice(0, start)),
     params,
     target: path,
-    trail: isWhitespace(trail) ? trail : "",
+    trail: whitespaceOf(lexical.slice(end)),
   };
 };
 
@@ -396,7 +429,7 @@ const writtenLimitOf = (path: string): Limit | undefined => {
     return "control";
   }
 
-  return (path.split("/", 1)[0] ?? "").includes(":") ? "colon" : undefined;
+  return /^[^/]*:/u.test(path) ? "colon" : undefined;
 };
 
 /**
@@ -478,15 +511,10 @@ const encoder = new TextEncoder();
  */
 const decodedSegmentOf = (segment: string): Result.Result<string, Limit> => {
   const octets: number[] = [];
-  for (let at = 0; at < segment.length;) {
-    if (segment.charAt(at) === "%") {
-      octets.push(Number.parseInt(segment.slice(at + 1, at + 3), 16));
-      at += 3;
-    } else {
-      const character = String.fromCodePoint(segment.codePointAt(at) ?? 0);
-      octets.push(...encoder.encode(character));
-      at += character.length;
-    }
+  for (const [token] of segment.matchAll(/%[0-9A-Fa-f]{2}|./gsu)) {
+    octets.push(
+      ...(token.startsWith("%") ? [Number.parseInt(token.slice(1), 16)] : encoder.encode(token)),
+    );
   }
 
   return Result.match(
@@ -552,6 +580,26 @@ export const baseIn = (value: string, base: HrefBase): HrefBase => {
 };
 
 /**
+ * Read the base of a node of a document.
+ *
+ * @param bases - The document's bases, as {@link basesOf} computes them.
+ * @param node - The id of a node of the document.
+ * @returns Its base.
+ * @throws {Error} When the node has none: every node of a document has a base, each computed after
+ *   its parent's, so a miss names a node of another document, or one read before its parent.
+ */
+const baseAt = (bases: ReadonlyMap<NodeId, HrefBase>, node: NodeId): HrefBase => {
+  const base = bases.get(node);
+  if (base === undefined) {
+    throw new Error(
+      `Node ${node} has no base: every node of a document has one, each computed after its parent's. Resolve each href against its own document's rows, in document order.`,
+    );
+  }
+
+  return base;
+};
+
+/**
  * Compute the base of every node of a document: the document's own path at its root, and below it
  * each element's parent's, resolved with the element's own `xml:base` where it holds one (XML
  * Base: an element's other attributes resolve against its own `xml:base`).
@@ -569,7 +617,7 @@ export const basesOf = (rows: FlatRows<Composed>, path: string): ReadonlyMap<Nod
   const root = documentBase(path);
   const bases = new Map<NodeId, HrefBase>();
   for (const node of rows.nodes) {
-    const inherited = node.parent === node.id ? root : (bases.get(node.parent) ?? root);
+    const inherited = node.parent === node.id ? root : baseAt(bases, node.parent);
     const own = written.get(node.id);
     bases.set(
       node.id,
@@ -600,10 +648,9 @@ export type HrefResolver = (
  */
 export const hrefResolverOf = (rows: FlatRows<Composed>, path: string): HrefResolver => {
   const bases = basesOf(rows, path);
-  const root = documentBase(path);
 
   return (node, lexical, whiteSpace = "collapse") =>
-    resolveIn(hrefValueOf(lexical, whiteSpace), bases.get(node) ?? root);
+    resolveIn(hrefValueOf(lexical, whiteSpace), baseAt(bases, node));
 };
 
 /**
@@ -625,7 +672,7 @@ export const entryPathOf = (resolution: HrefResolution): string | undefined =>
  * @returns The path.
  */
 const comparedPathOf = (resolution: HrefResolution, lexical: string): string =>
-  entryPathOf(resolution) ?? hrefPathOf(hrefValueOf(lexical, "collapse"));
+  resolution.scope === "entry" ? resolution.path : hrefPathOf(hrefValueOf(lexical, "collapse"));
 
 /**
  * Write the key text of a projection's row.
@@ -641,19 +688,12 @@ const headingKey = (values: readonly string[]): string => JSON.stringify(values)
  * @param rows - The document's flat rows.
  * @returns Each element's attributes' lexical forms, by the element's id and the attribute's name.
  */
-const attributesOf = (
-  rows: FlatRows<Composed>,
-): ReadonlyMap<NodeId, ReadonlyMap<string, string>> => {
-  const byNode = new Map<NodeId, Map<string, string>>();
-
-  for (const { lexical, name, node } of rows.attributes) {
-    const named = byNode.get(node) ?? new Map<string, string>();
-    named.set(name, lexical);
-    byNode.set(node, named);
-  }
-
-  return byNode;
-};
+const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, ReadonlyMap<string, string>> =>
+  new Map(
+    [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
+      ([node, held]) => [node, new Map(held.map(({ lexical, name }) => [name, lexical]))] as const,
+    ),
+  );
 
 /**
  * Build the overlay rows of a package's manifest.
@@ -681,7 +721,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
   const tupleOf = (node: NodeRow<Composed>) => ({
     document,
     kind: node.kind,
-    nearest: folds.get(node.id)?.nearest ?? document,
+    nearest: foldAt(folds, node.id).nearest,
     node: node.id,
     start: node.start,
     version: node.version,
@@ -891,7 +931,7 @@ export type ReferenceCensus = (
   version: string,
   kind: string,
   name: string,
-) => CensusEntry | undefined;
+) => Option.Option<CensusEntry>;
 
 /**
  * Each declared attribute's whitespace class, by `version kind name`: its type's, a union's read
@@ -911,6 +951,27 @@ const whiteSpaces: ReadonlyMap<string, WhiteSpace> = new Map(
 );
 
 /**
+ * Read a census attribute's whitespace class from its declaration.
+ *
+ * @param version - The element's schema version.
+ * @param kind - Its kind.
+ * @param name - The attribute's name.
+ * @returns Its type's whitespace class ({@link whiteSpaces}).
+ * @throws {Error} When no XSD declares the attribute: every attribute of the census is declared
+ *   (`#pantry/vocab/inventory/attributes.ts`), so a miss is a defect of the grammar.
+ */
+const whiteSpaceOf = (version: string, kind: string, name: string): WhiteSpace => {
+  const whiteSpace = whiteSpaces.get(`${version} ${kind} ${name}`);
+  if (whiteSpace === undefined) {
+    throw new Error(
+      `ReferenceAttribute lists ${kind}@${name} under ${version}, which no XSD of the inventory declares. Regenerate the grammar's reference census from the declarations.`,
+    );
+  }
+
+  return whiteSpace;
+};
+
+/**
  * The grammar's reference census, `ReferenceAttribute` (spec reading 103): the census the
  * database's copy into `Reference` selects by, so the builder writes a row for exactly the
  * attributes the copy requires one of, with each attribute's whitespace class from its XSD
@@ -922,14 +983,9 @@ const whiteSpaces: ReadonlyMap<string, WhiteSpace> = new Map(
  * @returns How it holds its references, none for an attribute the census does not list.
  */
 export const referenceCensus: ReferenceCensus = (version, kind, name) =>
-  Option.getOrUndefined(
-    Option.map(
-      grammar.references.referenceAttribute.lookup({ kind, name, version }),
-      ({ form }): CensusEntry => ({
-        form,
-        whiteSpace: whiteSpaces.get(`${version} ${kind} ${name}`) ?? "collapse",
-      }),
-    ),
+  Option.map(
+    grammar.references.referenceAttribute.lookup({ kind, name, version }),
+    ({ form }): CensusEntry => ({ form, whiteSpace: whiteSpaceOf(version, kind, name) }),
   );
 
 /**
@@ -992,12 +1048,18 @@ export const referenceRowsOf = (
 
   for (const { lexical, name: attribute, node } of rows.attributes) {
     const element = nodes.get(node);
-    const entry =
-      element === undefined ? undefined : census(element.version, element.kind, attribute);
-    if (element === undefined || entry === undefined) {
+    if (element === undefined) {
+      throw new Error(
+        `flatten wrote an attribute ${attribute} of node ${node}, and wrote no such node. Correct flatten.`,
+      );
+    }
+
+    const listed = census(element.version, element.kind, attribute);
+    if (Option.isNone(listed)) {
       continue;
     }
 
+    const entry = listed.value;
     const resolution = censusResolutionOf(resolve, node, lexical, entry);
     const key = headingKey([node, attribute]);
     references.set(key, {
