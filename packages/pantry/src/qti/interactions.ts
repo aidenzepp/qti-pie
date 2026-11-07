@@ -2257,9 +2257,9 @@ const contentReferenceLaws = ({
  *   its declaration row, the reference's, of a declaration kind `ContentReference` allows for its
  *   kind and attribute, a declaration through `declarationRef`; and a built-in's is one its kind
  *   and attribute may name, under its reference's law ("Feedback reference", "Template reference",
- *   "Printed variable reference", "Context variable reference"); "Feedback outcome type" over
- *   the declaration rows (reading 77: an outcome of base type identifier, single or multiple; the
- *   one built-in a feedback may name, `completionStatus`, is a single identifier, §2.2.2.3); and
+ *   "Printed variable reference", "Context variable reference"); "Feedback outcome type" over the
+ *   declaration rows (reading 77: an outcome of base type identifier, single or multiple; the one
+ *   built-in a feedback may name, `completionStatus`, is a single identifier, §2.2.2.3); and
  *   "Template variable type" over the declaration rows (reading R15-l: a template element's or a
  *   choice's template variable of base type identifier, single or multiple, a portable custom
  *   interaction's free).
