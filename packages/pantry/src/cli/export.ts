@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 import {
   dryRunFlag,
@@ -45,22 +45,6 @@ const ExportPlanned = Schema.Struct({
 export const ExportData = Schema.Union([ExportPlanned, ExportWritten]);
 
 /**
- * Whether the export would create `target` or replace what is there. A symlink counts as there,
- * whatever it points to.
- */
-const targetActionOf = Effect.fn("cli.targetActionOf")(function* targetActionOf(target: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const present = yield* fs.lstat(target).pipe(
-    Effect.as(true),
-    Effect.catchTag("PlatformError", (error) =>
-      error.reason._tag === "NotFound" ? Effect.succeed(false) : Effect.fail(error),
-    ),
-  );
-
-  return present ? "replace" : "create";
-});
-
-/**
  * Write the imported package `packageId` to `dir`, or to a zip file under `--zip`.
  *
  * A target that already has something in it needs `--yes`, which replaces it, files `qti` did not
@@ -92,7 +76,7 @@ export const exportCommand = Command.make(
     const target = zip && !dir.endsWith(".zip") ? `${dir}.zip` : dir;
 
     const id = yield* requirePackageId(packageId);
-    yield* requireReplaceable(target, yes);
+    const action = yield* requireReplaceable(target, yes);
 
     if (dryRun) {
       const planned = yield* withAuthorApp(
@@ -100,7 +84,6 @@ export const exportCommand = Command.make(
         ({ exportEntries }) => exportEntries(id),
       );
       const entries = planned.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path }));
-      const action = yield* targetActionOf(target);
       const lines = entries.map(({ bytes, path }) => `  ${path} (${bytes} bytes)`);
 
       yield* emitSuccess(mode, {

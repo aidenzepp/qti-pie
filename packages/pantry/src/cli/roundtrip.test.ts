@@ -215,7 +215,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("roundtrip --dry-run", 
   );
 
   it.effect(
-    "onto an empty export folder it reports create, with or without --yes",
+    "onto an empty export folder it reports replace, with or without --yes, since existence decides",
     () =>
       Effect.gen(function* empty() {
         const fs = yield* FileSystem.FileSystem;
@@ -233,7 +233,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("roundtrip --dry-run", 
         );
 
         assert.isTrue(Exit.isSuccess(exit), stderr);
-        assert.strictEqual(dryRunArm(stdout).export_dir_action, "create");
+        assert.strictEqual(dryRunArm(stdout).export_dir_action, "replace");
         assert.deepStrictEqual(yield* fs.readDirectory(folder), []);
       }),
     cliProcessTestTimeoutMs,
