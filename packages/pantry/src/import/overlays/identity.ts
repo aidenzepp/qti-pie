@@ -756,12 +756,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
 };
 
 /**
- * The nil uuid: a placed ID's `copy` under a test's assembly, where a section document placed twice
- * holds its IDs once (reading 86).
- */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
-
-/**
  * Collect every instance of an assembly's tree, its root's own included.
  *
  * @param root - The assembly's root instance.
@@ -781,8 +775,9 @@ const instancesOf = (root: InstanceRoot): readonly (InstanceMember | InstanceRoo
 /**
  * Build a package's placed IDs and IDREF targets (spec reading 117): under each instance of each
  * assembly, every `DocumentId` and every `IdrefTarget` of the instance's document; and their
- * projection, each placed ID's binding in its assembly, its copy the instance but under a test's
- * assembly, where a section document placed twice is written once (reading 86).
+ * projection, each placed ID's binding in its assembly, its copy the instance, but the placed
+ * document under a test's assembly, where a section document placed twice is written once (reading
+ * 86).
  *
  * @param input - The package's rows the placements read.
  * @param input.ids - Every document's IDs ({@link rowsOf}'s `DocumentId`).
@@ -803,7 +798,7 @@ export const placedIdRowsOf = (input: {
   const placedTargets = new Map<string, Addition<typeof PlacedIdref>>();
   for (const root of input.instances) {
     for (const instance of instancesOf(root)) {
-      const copy = root.assemblyKind === testKind ? nilUuid : instance.id;
+      const copy = root.assemblyKind === testKind ? instance.document : instance.id;
       for (const { document, id, node, owner } of idsOf.get(instance.document) ?? []) {
         placed.set(headingKey([instance.id, node]), {
           assembly: root.assembly,

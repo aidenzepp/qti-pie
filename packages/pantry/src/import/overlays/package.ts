@@ -789,8 +789,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
  * file). An href outside the package names no document, and "Document entry" refuses it.
  *
  * @param rows - The manifest's overlay rows.
- * @returns The named documents' paths and types, a keyed set by (path, type). One path named under
- *   two types is two pairs, and the database refuses the package, since a document has one type.
+ * @returns The named documents' paths and types, a keyed set by (path, type), in the manifest's
+ *   order. One path named under two types is two pairs; the import reads the path once, as the
+ *   first pair's type, so the second's href names no document of its type, and "Document entry"
+ *   refuses it.
  */
 export const namedDocuments = (
   rows: PackageRows,

@@ -139,9 +139,14 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
   const documents: ListedDocument[] = [
     { path: manifest.path, resourceType: "none", tree: manifestTree },
   ];
+  // A path is one document, of the first type a resource names it under (reading 93): a second
+  // type's href then names no document of its type, which "Document entry" refuses alone, and the
+  // document is judged once, where its sites place it.
+  const read = new Set<string>();
   for (const { path, type } of named.values()) {
     const file = byPath.get(path);
-    if (file !== undefined) {
+    if (file !== undefined && !read.has(path)) {
+      read.add(path);
       documents.push({ path, resourceType: type, tree: yield* shredFile(file, version) });
     }
   }

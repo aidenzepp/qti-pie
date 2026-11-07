@@ -1691,7 +1691,7 @@ CREATE TABLE "qti"."placed_id" (
   "node" "pg_catalog"."uuid" NOT NULL,
   "owner" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__placed_id_pk_qlkpea6rki" PRIMARY KEY ("instance", "node"),
-  CONSTRAINT "e_1_derived" CHECK (("assembly_kind" = 302::smallint AND "copy" = '00000000-0000-0000-0000-000000000000'::"pg_catalog"."uuid" OR "assembly_kind" <> 302::smallint AND "copy" = "instance") IS TRUE)
+  CONSTRAINT "e_1_derived" CHECK (("assembly_kind" = 302::smallint AND "copy" = "document" OR "assembly_kind" <> 302::smallint AND "copy" = "instance") IS TRUE)
 );
 
 CREATE TABLE "qti"."placed_idref" (
@@ -3342,13 +3342,15 @@ ALTER TABLE "qti"."instance" ADD COLUMN "__parent_start_children_62bpiwnu2d" big
 
 ALTER TABLE "qti"."instance" ADD COLUMN "__predecessor_instances_zgawrigo7i" bigint GENERATED ALWAYS AS (CASE WHEN "__index_instances_5husp6rtth" > 0::bigint THEN "__index_instances_5husp6rtth"::numeric - (1::bigint)::numeric END) STORED;
 
+ALTER TABLE "qti"."instance" ADD COLUMN "__assembly_kfl4hggern" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "root_kind" IN (300::smallint, 302::smallint) AND "assembly_kind" = 302::smallint THEN "assembly" END) STORED;
+
 ALTER TABLE "qti"."instance" ADD COLUMN "__assembly_gwkpmxdmvu" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 299::smallint AND "root_kind" <> 299::smallint OR "assembly_kind" = 302::smallint AND "root_kind" = 300::smallint THEN "assembly" END) STORED;
 
-ALTER TABLE "qti"."instance" ADD COLUMN "__assembly_2bth77u5h5" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 302::smallint THEN "assembly" END) STORED;
-
-ALTER TABLE "qti"."instance" ADD COLUMN "__assembly_kind_bixx5reh6b" smallint GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 302::smallint THEN "assembly_kind" END) STORED;
+ALTER TABLE "qti"."instance" ADD COLUMN "__assembly_kind_urfzl7hgv2" smallint GENERATED ALWAYS AS (CASE WHEN "root_kind" IN (300::smallint, 302::smallint) AND "assembly_kind" = 302::smallint THEN "assembly_kind" END) STORED;
 
 ALTER TABLE "qti"."instance" ADD COLUMN "__bindings_5fgw5mpsmp" bigint GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 299::smallint THEN "bindings" END) STORED;
+
+ALTER TABLE "qti"."instance" ADD COLUMN "__document_mfczcavrbd" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "root_kind" IN (300::smallint, 302::smallint) AND "assembly_kind" = 302::smallint THEN "document" END) STORED;
 
 ALTER TABLE "qti"."instance" ADD COLUMN "__document_z464tmpugd" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 299::smallint AND "root_kind" <> 299::smallint OR "assembly_kind" = 302::smallint AND "root_kind" = 300::smallint THEN "document" END) STORED;
 
@@ -3360,9 +3362,9 @@ ALTER TABLE "qti"."instance" ADD COLUMN "__document_ch5fh3p4n7" "pg_catalog"."uu
 
 ALTER TABLE "qti"."instance" ADD COLUMN "__document_iu7n6ahln3" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "start" > 0::bigint THEN "document" END) STORED;
 
-ALTER TABLE "qti"."instance" ADD COLUMN "__id_spoxawgzkd" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 299::smallint AND "root_kind" <> 299::smallint OR "assembly_kind" = 302::smallint AND "root_kind" = 300::smallint THEN "id" END) STORED;
+ALTER TABLE "qti"."instance" ADD COLUMN "__id_uu6dmbaxjz" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "root_kind" IN (300::smallint, 302::smallint) AND "assembly_kind" = 302::smallint THEN "id" END) STORED;
 
-ALTER TABLE "qti"."instance" ADD COLUMN "__id_pw5xaukp2l" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 302::smallint THEN "id" END) STORED;
+ALTER TABLE "qti"."instance" ADD COLUMN "__id_spoxawgzkd" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 299::smallint AND "root_kind" <> 299::smallint OR "assembly_kind" = 302::smallint AND "root_kind" = 300::smallint THEN "id" END) STORED;
 
 ALTER TABLE "qti"."instance" ADD COLUMN "__langs_sby525kjel" bigint GENERATED ALWAYS AS (CASE WHEN "assembly_kind" = 299::smallint THEN "langs" END) STORED;
 
@@ -6478,9 +6480,9 @@ ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_document_rules_jex7ce
 
 ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_document_tag_assembled_true_tag_szhub74ihe" FOREIGN KEY ("__document_ch5fh3p4n7", "__tag_assembled_true_gg7wow7ogq", "__tag_spliced_0_f6cte5phah") REFERENCES "qti"."document" ("node", "assembled", "spliced") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_id_document_assembly_bhovlikpex" FOREIGN KEY ("__id_spoxawgzkd", "__document_z464tmpugd", "__assembly_gwkpmxdmvu") REFERENCES "qti"."section_scope" ("instance", "document", "assembly") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_id_assembly_assembly_kind_document_da3jfotpub" FOREIGN KEY ("__id_uu6dmbaxjz", "__assembly_kfl4hggern", "__assembly_kind_urfzl7hgv2", "__document_mfczcavrbd") REFERENCES "qti"."placed_document" ("instance", "assembly", "assembly_kind", "document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_id_assembly_assembly_kind_document_goh3fwaznb" FOREIGN KEY ("__id_pw5xaukp2l", "__assembly_2bth77u5h5", "__assembly_kind_bixx5reh6b", "__document_rhvczgk64o") REFERENCES "qti"."placed_document" ("instance", "assembly", "assembly_kind", "document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_id_document_assembly_bhovlikpex" FOREIGN KEY ("__id_spoxawgzkd", "__document_z464tmpugd", "__assembly_gwkpmxdmvu") REFERENCES "qti"."section_scope" ("instance", "document", "assembly") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_parent_pred_at_start_tvc6c7li3f" FOREIGN KEY ("__parent_l4ckjnvwat", "__pred_at_xktcobhsti", "start") REFERENCES "qti"."instance" ("__parent_l4ckjnvwat", "at", "end") MATCH SIMPLE;
 

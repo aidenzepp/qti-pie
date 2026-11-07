@@ -55,30 +55,6 @@ export const knownEntries = (known: Known): PackageEntries =>
  * The known disagreements, keyed by signature.
  */
 export const known = {
-  "dangling-uuid: AssembledId.copy": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "section.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS4: a test-level id with no copy is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
   "dangling-uuid: ItemRefDocument.document": {
     files: [
       [
@@ -229,30 +205,6 @@ export const known = {
       ],
     ],
     fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
-  "dangling-uuid: PlacedId.copy": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "section.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS4: a test-level id with no copy is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
   "dangling-uuid: PlacedVariableRef.declaration": {
@@ -792,30 +744,6 @@ export const known = {
       fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
       owner: "NIL",
     },
-  "import-only-law: Idref target, contained IdrefTarget(document, id) in IdBinding(document, id)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/><resource type="imsqti_outcomes_xmlv3p0" href="items/fragment.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/fragment.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-portable-custom-interaction><qti-context-variable identifier="CTX2"/></qti-portable-custom-interaction></div>`,
-      ],
-      [
-        "items/item2.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-context-declaration identifier="CTX2"/><qti-item-body><xi:include href="fragment.xml"/></qti-item-body></qti-assessment-item>`,
-      ],
-    ],
-    fix: "a fragment listed under two resource types and included: the import heads it as an assembly of its own beside the splice, so its IDREF is judged against its own ids",
-    owner: "S-ORACLE",
-  },
   "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
     files: [
       [
@@ -1402,6 +1330,54 @@ export const known = {
  * the lane that fixed it, the fix, and the package that showed it, which must never show it again.
  */
 export const fixed = {
+  "dangling-uuid: AssembledId.copy": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "section.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
+    owner: "NIL",
+  },
+  "dangling-uuid: PlacedId.copy": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "section.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
+    owner: "NIL",
+  },
   "import-only-law: Binding declared, contained BoundVariable(node, attribute, kind, document, identifier) in BindingDeclaration(node, attribute, kind, document, identifier)":
     {
       files: [
@@ -1464,6 +1440,30 @@ export const fixed = {
       fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, and removes the containment this class broke, so no package can show it",
       owner: "NIL",
     },
+  "import-only-law: Idref target, contained IdrefTarget(document, id) in IdBinding(document, id)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/><resource type="imsqti_outcomes_xmlv3p0" href="items/fragment.xml"/></resources></manifest>`,
+      ],
+      [
+        "items/fragment.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-portable-custom-interaction><qti-context-variable identifier="CTX2"/></qti-portable-custom-interaction></div>`,
+      ],
+      [
+        "items/item2.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-context-declaration identifier="CTX2"/><qti-item-body><xi:include href="fragment.xml"/></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "NS4: the import and the law oracle read a path two resource types name once, as the first type, so the fragment is judged where item2.xml splices it, and the second type's href names no document of its type, Document entry alone (reading 93)",
+    owner: "S-ORACLE",
+  },
   "import-only-law: Key text bound, a text past Node.stringPiece's bound": {
     files: [
       [

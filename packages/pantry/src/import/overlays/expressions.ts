@@ -2083,7 +2083,9 @@ const placedRowsOf = (
     ({ assemblyKind }) => assemblyKind === testKind,
   );
   for (const root of roots) {
-    for (const instance of instancesIn(root)) {
+    for (const instance of instancesIn(root).filter(({ rootKind }) =>
+      testRoots.some((kind) => kind === rootKind),
+    )) {
       placedDocuments.set(instance.id, {
         assembly: root.assembly,
         assemblyKind: root.assemblyKind,

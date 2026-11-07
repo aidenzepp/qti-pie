@@ -2051,7 +2051,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE TABLE \"qti\".\"placed_id\" (\n  \"assembly\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"assembly_kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"copy\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"id\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"instance\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"owner\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__placed_id_pk_qlkpea6rki\" PRIMARY KEY (\"instance\", \"node\"),\n  CONSTRAINT \"e_1_derived\" CHECK ((\"assembly_kind\" = 302::smallint AND \"copy\" = '00000000-0000-0000-0000-000000000000'::\"pg_catalog\".\"uuid\" OR \"assembly_kind\" <> 302::smallint AND \"copy\" = \"instance\") IS TRUE)\n)"
+						"statement": "CREATE TABLE \"qti\".\"placed_id\" (\n  \"assembly\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"assembly_kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"copy\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"id\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"instance\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"owner\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__placed_id_pk_qlkpea6rki\" PRIMARY KEY (\"instance\", \"node\"),\n  CONSTRAINT \"e_1_derived\" CHECK ((\"assembly_kind\" = 302::smallint AND \"copy\" = \"document\" OR \"assembly_kind\" <> 302::smallint AND \"copy\" = \"instance\") IS TRUE)\n)"
 					},
 					{
 						"kind": "statement",
@@ -3631,19 +3631,23 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__assembly_kfl4hggern\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"root_kind\" IN (300::smallint, 302::smallint) AND \"assembly_kind\" = 302::smallint THEN \"assembly\" END) STORED"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__assembly_gwkpmxdmvu\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"assembly_kind\" = 299::smallint AND \"root_kind\" <> 299::smallint OR \"assembly_kind\" = 302::smallint AND \"root_kind\" = 300::smallint THEN \"assembly\" END) STORED"
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__assembly_2bth77u5h5\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"assembly_kind\" = 302::smallint THEN \"assembly\" END) STORED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__assembly_kind_bixx5reh6b\" smallint GENERATED ALWAYS AS (CASE WHEN \"assembly_kind\" = 302::smallint THEN \"assembly_kind\" END) STORED"
+						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__assembly_kind_urfzl7hgv2\" smallint GENERATED ALWAYS AS (CASE WHEN \"root_kind\" IN (300::smallint, 302::smallint) AND \"assembly_kind\" = 302::smallint THEN \"assembly_kind\" END) STORED"
 					},
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__bindings_5fgw5mpsmp\" bigint GENERATED ALWAYS AS (CASE WHEN \"assembly_kind\" = 299::smallint THEN \"bindings\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__document_mfczcavrbd\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"root_kind\" IN (300::smallint, 302::smallint) AND \"assembly_kind\" = 302::smallint THEN \"document\" END) STORED"
 					},
 					{
 						"kind": "statement",
@@ -3667,11 +3671,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__id_spoxawgzkd\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"assembly_kind\" = 299::smallint AND \"root_kind\" <> 299::smallint OR \"assembly_kind\" = 302::smallint AND \"root_kind\" = 300::smallint THEN \"id\" END) STORED"
+						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__id_uu6dmbaxjz\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"root_kind\" IN (300::smallint, 302::smallint) AND \"assembly_kind\" = 302::smallint THEN \"id\" END) STORED"
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__id_pw5xaukp2l\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"assembly_kind\" = 302::smallint THEN \"id\" END) STORED"
+						"statement": "ALTER TABLE \"qti\".\"instance\" ADD COLUMN \"__id_spoxawgzkd\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"assembly_kind\" = 299::smallint AND \"root_kind\" <> 299::smallint OR \"assembly_kind\" = 302::smallint AND \"root_kind\" = 300::smallint THEN \"id\" END) STORED"
 					},
 					{
 						"kind": "statement",
@@ -9231,11 +9235,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"instance\" ADD CONSTRAINT \"__instance_fk_id_document_assembly_bhovlikpex\" FOREIGN KEY (\"__id_spoxawgzkd\", \"__document_z464tmpugd\", \"__assembly_gwkpmxdmvu\") REFERENCES \"qti\".\"section_scope\" (\"instance\", \"document\", \"assembly\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+						"statement": "ALTER TABLE \"qti\".\"instance\" ADD CONSTRAINT \"__instance_fk_id_assembly_assembly_kind_document_da3jfotpub\" FOREIGN KEY (\"__id_uu6dmbaxjz\", \"__assembly_kfl4hggern\", \"__assembly_kind_urfzl7hgv2\", \"__document_mfczcavrbd\") REFERENCES \"qti\".\"placed_document\" (\"instance\", \"assembly\", \"assembly_kind\", \"document\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"instance\" ADD CONSTRAINT \"__instance_fk_id_assembly_assembly_kind_document_goh3fwaznb\" FOREIGN KEY (\"__id_pw5xaukp2l\", \"__assembly_2bth77u5h5\", \"__assembly_kind_bixx5reh6b\", \"__document_rhvczgk64o\") REFERENCES \"qti\".\"placed_document\" (\"instance\", \"assembly\", \"assembly_kind\", \"document\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+						"statement": "ALTER TABLE \"qti\".\"instance\" ADD CONSTRAINT \"__instance_fk_id_document_assembly_bhovlikpex\" FOREIGN KEY (\"__id_spoxawgzkd\", \"__document_z464tmpugd\", \"__assembly_gwkpmxdmvu\") REFERENCES \"qti\".\"section_scope\" (\"instance\", \"document\", \"assembly\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
@@ -11444,11 +11448,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE INDEX \"__instance_ix_id_pw_5_xaukp_2_l_assembly_2_bth_77_u_duwcdae7o3\" ON \"qti\".\"instance\" USING btree (\"__id_pw5xaukp2l\", \"__assembly_2bth77u5h5\", \"__assembly_kind_bixx5reh6b\", \"__document_rhvczgk64o\")"
+						"statement": "CREATE INDEX \"__instance_ix_id_spoxawgzkd_document_z_464_tmpugd_z6o4bnanft\" ON \"qti\".\"instance\" USING btree (\"__id_spoxawgzkd\", \"__document_z464tmpugd\", \"__assembly_gwkpmxdmvu\")"
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE INDEX \"__instance_ix_id_spoxawgzkd_document_z_464_tmpugd_z6o4bnanft\" ON \"qti\".\"instance\" USING btree (\"__id_spoxawgzkd\", \"__document_z464tmpugd\", \"__assembly_gwkpmxdmvu\")"
+						"statement": "CREATE INDEX \"__instance_ix_id_uu_6_dmbaxjz_assembly_kfl_4_hggern_enqhsq6tlr\" ON \"qti\".\"instance\" USING btree (\"__id_uu6dmbaxjz\", \"__assembly_kfl4hggern\", \"__assembly_kind_urfzl7hgv2\", \"__document_mfczcavrbd\")"
 					},
 					{
 						"kind": "statement",
@@ -18117,19 +18121,23 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__assembly_kfl4hggern\" IS 'assembly where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__assembly_gwkpmxdmvu\" IS 'assembly where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}'"
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__assembly_2bth77u5h5\" IS 'assembly where {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__assembly_kind_bixx5reh6b\" IS 'assemblyKind where {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}'"
+						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__assembly_kind_urfzl7hgv2\" IS 'assemblyKind where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}'"
 					},
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__bindings_5fgw5mpsmp\" IS 'bindings where {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__document_mfczcavrbd\" IS 'document where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}'"
 					},
 					{
 						"kind": "statement",
@@ -18153,11 +18161,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__id_spoxawgzkd\" IS 'id where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}'"
+						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__id_uu6dmbaxjz\" IS 'id where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}'"
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__id_pw5xaukp2l\" IS 'id where {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}'"
+						"statement": "COMMENT ON COLUMN \"qti\".\"instance\".\"__id_spoxawgzkd\" IS 'id where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}'"
 					},
 					{
 						"kind": "statement",
@@ -23045,11 +23053,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__instance_fk_id_document_assembly_bhovlikpex\" ON \"qti\".\"instance\" IS 'foreign key Instance(id where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}, document where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}, assembly where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}) to SectionScope(instance, document, assembly)'"
+						"statement": "COMMENT ON CONSTRAINT \"__instance_fk_id_assembly_assembly_kind_document_da3jfotpub\" ON \"qti\".\"instance\" IS 'foreign key Instance(id where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}, assembly where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}, assemblyKind where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}, document where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}) to PlacedDocument(instance, assembly, assemblyKind, document)'"
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__instance_fk_id_assembly_assembly_kind_document_goh3fwaznb\" ON \"qti\".\"instance\" IS 'foreign key Instance(id where {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}, assembly where {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}, assemblyKind where {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}, document where {\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}}) to PlacedDocument(instance, assembly, assemblyKind, document)'"
+						"statement": "COMMENT ON CONSTRAINT \"__instance_fk_id_document_assembly_bhovlikpex\" ON \"qti\".\"instance\" IS 'foreign key Instance(id where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}, document where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}, assembly where {\"args\":[{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-item\"}}],\"kind\":\"and\"},{\"args\":[{\"kind\":\"compare\",\"left\":{\"field\":\"assemblyKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-test\"}},{\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}],\"kind\":\"and\"}],\"kind\":\"or\"}) to SectionScope(instance, document, assembly)'"
 					},
 					{
 						"kind": "statement",
@@ -25253,11 +25261,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__instance_ix_id_pw_5_xaukp_2_l_assembly_2_bth_77_u_duwcdae7o3\" IS 'btree index Instance(__id_pw5xaukp2l, __assembly_2bth77u5h5, __assembly_kind_bixx5reh6b, __document_rhvczgk64o)'"
+						"statement": "COMMENT ON INDEX \"qti\".\"__instance_ix_id_spoxawgzkd_document_z_464_tmpugd_z6o4bnanft\" IS 'btree index Instance(__id_spoxawgzkd, __document_z464tmpugd, __assembly_gwkpmxdmvu)'"
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__instance_ix_id_spoxawgzkd_document_z_464_tmpugd_z6o4bnanft\" IS 'btree index Instance(__id_spoxawgzkd, __document_z464tmpugd, __assembly_gwkpmxdmvu)'"
+						"statement": "COMMENT ON INDEX \"qti\".\"__instance_ix_id_uu_6_dmbaxjz_assembly_kfl_4_hggern_enqhsq6tlr\" IS 'btree index Instance(__id_uu6dmbaxjz, __assembly_kfl4hggern, __assembly_kind_urfzl7hgv2, __document_mfczcavrbd)'"
 					},
 					{
 						"kind": "statement",
@@ -26142,7 +26150,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "c18f8c1f35152cf563fc7ac24b5a7272e9d8ca6413908645b843503c66ac12ce"
+		"target": "d2fdc3db1a8b2503f5e63a01e069f3f0bcb22212f65c62cd0693262f20cebcb6"
 	},
-	"seal": "ae9ad0594b750f8134a853d2eed4ce733496866da5ba12666d859e85a378739b"
+	"seal": "29b6cfd2b869cfc11867183195ccfa8cd6e06e287bc3b30ff8cd7189a34cdb0d"
 }

@@ -154,9 +154,9 @@ export interface PackageIds {
  * after, as an import mints them each time it runs. So the same package imported twice is two
  * packages, every id fresh.
  *
- * A document's `documentAt` reads every listed document's document node; where two documents share
- * a path (one path named under two resource types, which the database refuses), it gives the
- * first. Its `targetAt` reads only the documents a resource names, the first at each path: a site
+ * A document's `documentAt` reads every listed document's document node, one per path, since the
+ * import reads a path named under two resource types once (`#pantry/import/program.ts`). Its
+ * `targetAt` reads only the documents a resource names: a site
  * never names the manifest, which no resource names (spec reading 115), so an href that resolves
  * to it names no target, and "Include target" refuses an include of it.
  *

@@ -15,9 +15,11 @@
  * no entry: for each of the 10 resource types `RootOfType` maps, at a path in the package with no
  * entry (10 cases), and for the item type, each other way an href names none: a path in a
  * directory, one through a dot-dot segment, and the two external forms, a scheme and a leading `/`
- * (4 cases), 14 cases, exhausted. A path listed under two document types is "Document entry" by
- * `Document`'s key over (package, path), which the host does not evaluate, so the bound leaves it
- * out.
+ * (4 cases); and the fragment item2.xml includes listed under a second type, the outcome
+ * declaration's, beside its own (1 case): 15 cases, exhausted. The import reads that path once, as
+ * the fragment its first resource names, so it is judged where item2.xml splices it and nowhere
+ * alone, and the second type's href names no document of its type, "Document entry" alone: neither
+ * side raises RootOfType for it, and the import's rows break no Idref target the oracle does not.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -58,8 +60,14 @@ interface Case {
 }
 
 /**
+ * The every-relation package's fragment, which item2.xml includes, listed again under the outcome
+ * declaration's type.
+ */
+const twin: Case = { href: "items/fragment.xml", type: "imsqti_outcomes_xmlv3p0" };
+
+/**
  * Every case of the bound: each type naming a path with no entry, then the item type naming none
- * each other way.
+ * each other way, then the fragment listed under a second type.
  */
 const cases: readonly Case[] = [
   ...documentTypes.map((type): Case => ({ href: "missing.xml", type })),
@@ -69,6 +77,7 @@ const cases: readonly Case[] = [
     "https://example.com/missing.xml",
     "/missing.xml",
   ].map((href): Case => ({ href, type: "imsqti_item_xmlv3p0" })),
+  twin,
 ];
 
 /**
@@ -107,11 +116,11 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             const bench = { directory, grammar, laws };
 
             assert.strictEqual(documentTypes.length, 10, "the resource types RootOfType maps");
-            assert.strictEqual(cases.length, 14);
+            assert.strictEqual(cases.length, 15);
 
             return yield* exhaust(
               {
-                box: "the 10 document types, each naming a path with no entry, and the item type naming none four other ways",
+                box: "the 10 document types, each naming a path with no entry, the item type naming none four other ways, and an included fragment listed under a second type",
                 caseHang: Duration.minutes(5),
                 coverage: noCoverage,
                 generator: int(0, cases.length - 1),
@@ -137,11 +146,15 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   const judged = yield* judgeOne(yield* genomeOf(packageOf(of)), bench, at);
                   const said = `${of.type} at ${of.href}: the oracle ${judged.summary.oracle}; the import ${judged.summary.import}`;
+                  const watched: readonly string[] =
+                    of === twin
+                      ? ["Document entry", "RootOfType", "Idref target"]
+                      : ["Document entry", "RootOfType"];
                   const apart = judged.disagreements.filter(
                     (disagreement) =>
                       (disagreement.kind === "oracle-only-law" ||
                         disagreement.kind === "import-only-law") &&
-                      (disagreement.law === "Document entry" || disagreement.law === "RootOfType"),
+                      watched.includes(disagreement.law),
                   );
 
                   assert.deepStrictEqual(apart.map(shownDisagreement), [], said);

@@ -1487,9 +1487,13 @@ const templateIdentifiers = select(Attribute, (a) =>
 );
 
 /**
- * The instances of a test's assembly, each of which reads its document's references.
+ * The instances of a test's assembly whose documents are a test's or a section's, each of which
+ * reads its document's references: a fragment those documents splice has no references a test
+ * resolves (spec reading 117, a stated under-refusal), so it places none.
  */
-const placingInstances = select(Instance, (i) => i.eq(i.assemblyKind, testKind));
+const placingInstances = select(Instance, (i) =>
+  i.and(i.eq(i.assemblyKind, testKind), i.in(i.rootKind, testRoots)),
+);
 
 /**
  * The variable references of the documents a test places: every `VariableRef` of a test or a
