@@ -1137,8 +1137,9 @@ const referenceLawsOf = (
                     source !== "linked" && !allowed.includes(declarationKind),
                 ));
 
-            // Item duration over the readings, as the schema's `Item_duration` over the readings
-            // an item holds: a resolving reading of an untimed item's built-in `duration`.
+            // Item duration over the readings, as the schema's containment of each reading of an
+            // item's built-in `duration` through an item ref into the time-dependent items
+            // (`timedItems`): a resolving reading of an untimed item's built-in `duration`.
             const untimed = resolving.some(({ untimedDuration }) => untimedDuration);
 
             return [
