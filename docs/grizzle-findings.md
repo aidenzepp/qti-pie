@@ -1648,6 +1648,68 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   closed reads with absent keys in every position, planted bugs, and this case kept. Nothing is filed and no
   workaround is applied. DBT's `Compute.cond` guard is recorded only as an option not taken.
 
+### `AriaRange`'s immediate key into `AriaValue` is refused at import (grizzle defect, fixed upstream in `e9227af`; lane AR)
+
+- **Checked at:** the vendored `1bf3dbb` and grizzle `e9227af` (`e9227afd2fa183bba52d74829b38aa52e973cef0`),
+  `origin/main` when fetched on 2026-11-06.
+- **The law** (`src/qti/interactions.ts`, the containments after `ariaValueFamily`): `AriaRange(node, max)` is
+  contained in `AriaValue(node, value)` where `name = aria-valuemax`, and the same for `min`. `AriaValue` is a member
+  of the counted family `ariaValueFamily`, owned by `AriaElement`.
+- **The rows are right.** `readProgram` on `everyRelationPackage({choices: 2, hotspots: 1, hottexts: 1})` builds
+  `AriaValue` `{name: "aria-valuemax", value: "10"}` and `{name: "aria-valuemin", value: "0"}`, and `AriaRange`
+  `{max: "10", min: "0"}`, for the same node. Both are text, collapsed and equal.
+- **The cause, at `1bf3dbb`:**
+  - The installed key `__aria_range_fk_node_max_tag_name_aria_valuemax_ptxqw5jpmd`
+    (`migrations/qti/20261107020714_init/02-structure.sql:5826`, and `:5828` for `min`) has no DEFERRABLE.
+  - The deferral rule makes it immediate: the target's fields are all referenced, and the cycle search leaves owner
+    axes out (engine `laws/model/model.ts:1079-1094`, "a family's members are written only through its planner,
+    which orders them"). This is the same cause as lane DBT's owner-axis deferral entry above.
+  - The flat insert of a counted member becomes a family edit, not an action (`write/frontend/compile.ts:1462-1480`),
+    so the stratum's scheduler never orders it against `AriaRange` (`compile.ts:1713-1733`, `schedule.ts`
+    `scheduleStratum`). The family statements are placed "after every statement of its stratum"
+    (`write/program/compile.ts:695-703`).
+  - In the compiled import program, statement 0 (the plain stratum, one statement) inserts `aria_element` and
+    `aria_range`, and statement 192 inserts `aria_value`. The immediate key is checked at the end of statement 0,
+    and refused with 23503.
+- **At `e9227af`:** `AriaRange` → `AriaValue` and the owner axis are deferred, because the owner axis counts in the
+  cycle search and `AriaElement` → `AriaRange` → `AriaValue` → `AriaElement` is a cycle. The acyclic form is ordered by
+  the joint schedule. Standalone reproduction: `~/.cache/gr8des/integration/grizzle-repros/ar-order/` (case, cycle,
+  control).
+- **qti-pie's workaround:** none. The import needs the repin, which `e9227af`'s next entry blocks.
+
+### A ChangeSet chain of more than about 94 inserts is TS2589 at `e9227af` (grizzle defect, type layer)
+
+- **Checked at:** grizzle `e9227af`, under grizzle's own checker (effect-tsgo `tsrs`) and under `tsc` 7.0.2. It is a
+  regression from `1bf3dbb`.
+- **Cause:** a ChangeSet's strata, its sixth type parameter (`packages/engine/src/types/changeset/changeset.ts:466`,
+  `:473`), are rebuilt by every insert (`:482-486`) through `WithMember` (`:586`), which nests over the previous
+  stratum. So n inserts make n nested instantiations, past the depth limit of 100.
+- **Symptom:** `chain100` gives TS2589 seven times, and from the 95th insert on TS2345, "a member fact is not a fact
+  of the relation". The controls: `chain100` is ok at `1bf3dbb`, and `chain90` and `union100` are ok at `e9227af`.
+- **Files:** `packages/pantry/work/rv/s-oracle/chain/` (`chain100.ts`, `chain90.ts`, `union100.ts`, `tsrs.out`,
+  `tsrs-control.out`, `tc-e9227af.out`, `tc-1bf3dbb.out`).
+- **Effect in qti-pie:** `changeSetOf`'s 152 inserts gave 117 errors in `write.ts`, and cascades from them.
+- **Workaround:** `changeSetOf` is three ChangeSets of 51, 51 and 50 inserts, joined by `ChangeSet.union` (repin F).
+  It goes back to one chain when the depth is fixed.
+- **Status:** relayed to grizzle-c5, with a guard asked for: a 300-insert chain that typechecks in linear time, with
+  a planted nested variant shown failing. Not filed.
+
+### `UnorderableStratum` on qti-pie's import ChangeSet at `e9227af` (under triage)
+
+- **What happens:** `e9227af`'s single schedule, in which plain and family statements share one order, refuses
+  qti-pie's 152-insert stratum: `changeSetOf: REFUSED: UnorderableStratum at ChangeSet: the stratum's count of
+  ChoiceVariableName, then count of Document, …`, a cycle of 52 statements through the count of `ReferringDocument`,
+  the insert of `SectionScope` and the update of `SectionTemplateRef`
+  (`~/.cache/gr8des/s-oracle/clean-f-r87.out`). At `1bf3dbb` the same stratum compiled.
+- **Lane AR's reduction:** a 4-relation reproduction (`~/.cache/gr8des/integration/grizzle-repros/ar-order/`,
+  `unorderable`) fails at `e9227af` and compiles at `1bf3dbb`. The preliminary cause is that the joint schedule
+  treats a family's in-place update, which sets only hidden index columns, as an addition for every reference from
+  its relation (`schedule.ts:253`), and chains every family statement in one total order (`schedule.ts:159`). The
+  import's ChangeSet is in the author login's workload (`src/qti/logins.ts:54`, `importWork`), so at `e9227af`
+  `grizzle generate` refuses at stage generate, as the reproduction's generate does.
+- **Status:** under triage, not yet through the six-step gate. Lane AR is computing whether the immediate keys alone
+  make a cycle, and grizzle-c5 has the text. It blocks repin F.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
