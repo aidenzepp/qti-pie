@@ -618,16 +618,35 @@ const skipComment = Effect.fnUntraced(function* skipCommentMarkup(
 });
 
 /**
- * Advance past a processing instruction.
+ * Advance past a processing instruction, holding it to XML 1.0 section 2.6: its target is a
+ * `PITarget`, a name other than `xml` in any case ([17]), and white space or the closing `?>`
+ * follows it ([16]).
  *
  * @param cursor - The read position, at `<?`.
- * @returns Nothing; fails when it has no target name or is not closed.
+ * @returns Nothing; fails when its target is missing or reserved, runs into its data, or it is not
+ *   closed.
  */
 const skipInstruction = Effect.fnUntraced(function* skipProcessingInstruction(
   cursor: Cursor,
 ): Effect.fn.Return<void, WellFormednessError> {
   cursor.offset += "<?".length;
-  yield* readName(cursor, "processing instruction");
+  const target = yield* readName(cursor, "processing instruction");
+  if (/^xml$/iu.test(target)) {
+    yield* failure(
+      cursor,
+      `processing instruction: the target "${target}" is reserved, since a target that spells xml in any case is no PITarget (XML 1.0 section 2.6, [17]). Rename the instruction's target.`,
+    );
+  }
+
+  if (
+    !cursor.text.startsWith("?>", cursor.offset) &&
+    !/^[ \t\r\n]/u.test(cursor.text.slice(cursor.offset, cursor.offset + 1))
+  ) {
+    yield* failure(
+      cursor,
+      `processing instruction: white space or "?>" must follow the target "${target}" (XML 1.0 section 2.6, [16]), found ${found(cursor)}.`,
+    );
+  }
 
   const end = cursor.text.indexOf("?>", cursor.offset);
   if (end === -1) {

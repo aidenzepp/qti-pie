@@ -213,13 +213,6 @@ const open: readonly Open[] = [
     signature: /^(?:O2 charset changes|O4 rows differ: charset)$/u,
     why: "crust reads an unmarked UTF-16BE document as UTF-16BE and writes it FE FF first (encode.ts utf16Bytes), so it reads back as UTF-16; the Unicode Standard (section 3.10, D97 and D98) and RFC 2781 (section 3.3) give the UTF-16BE and UTF-16LE schemes no byte order mark, an initial FE FF in UTF-16BE being U+FEFF, so the bytes contradict their own declaration",
   },
-  {
-    finding:
-      "GEN-B/codec N5: a reserved processing-instruction target is accepted in the internal subset",
-    kept: [{ charset: "UTF-8", text: "<!DOCTYPE r [<?XmL d?>]><r/>" }],
-    signature: /^O1 crust accepts, libxml2 refuses: (?:.+ \+ )?Invalid PI name(?: \+ .+)?$/u,
-    why: "XML 1.0 (Fifth Edition) section 2.6, [17] PITarget ::= Name - (('X' | 'x') ('M' | 'm') ('L' | 'l')): a target spelling xml in any case is no PITarget; crust's internal-subset lexer skips a processing instruction without reading its target (dtd.ts), where the body's reader refuses it; libxml2 refuses it",
-  },
 ];
 
 /**
@@ -237,6 +230,15 @@ interface Fixed {
  * The defects closed since the search found them.
  */
 const fixed: readonly Fixed[] = [
+  {
+    commit: "the commit that holds the subset's processing instructions to [16] and [17]",
+    finding:
+      "GEN-B/codec N5: a reserved processing-instruction target was accepted in the internal subset",
+    kept: [
+      { charset: "UTF-8", text: "<!DOCTYPE r [<?XmL d?>]><r/>" },
+      { charset: "UTF-8", text: "<!DOCTYPE r [<?ta?b?>]><r/>" },
+    ],
+  },
   {
     commit: "the commit that binds xml in canonical.ts's outermost scope",
     finding: "GEN-B/codec N7: crust's canonical form rendered the declaration of the xml prefix",
