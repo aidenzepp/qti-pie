@@ -161,7 +161,7 @@ const tagLength = 32;
  *
  * @param seed The record's seed, the HMAC key: the caller's, used as given.
  * @param label What the stream draws for, such as {@link templateLabel}'s,
- *   {@link responseLabel}'s or {@link outcomeLabel}'s.
+ *   {@link responseLabel}'s, {@link outcomeLabel}'s or {@link defaultLabel}'s.
  * @returns The stream's draws.
  * @see https://www.rfc-editor.org/rfc/rfc2104
  */
@@ -311,3 +311,21 @@ export const responseLabel = (instance: string, numAttempts: number): string =>
  */
 export const outcomeLabel = (instance: string, run: number): string =>
   [instance, "outcome", String(run)].join(labelSeparator);
+
+/**
+ * Construct the label an item ref's template defaults draw under:
+ * `<instance>\u001Fdefault\u001F<sequenceIndex>`, the index written with `String`.
+ *
+ * The seed is no field: it is the stream's key ({@link drawStream}), the session's processing
+ * seed, so the defaults never draw under the default key. The label is injective: every field
+ * after the instance is free of U+001F (a fixed word and decimal digits), so a label splits from
+ * the right into its fields, and two items of one session draw apart. One stream serves all of an
+ * item ref's defaults, in document order.
+ *
+ * @param instance The test session's instance.
+ * @param sequenceIndex The item's place in the session's sequence, counted from 1
+ *   (`SessionItem.sequenceIndex`).
+ * @returns The label, for {@link drawStream}.
+ */
+export const defaultLabel = (instance: string, sequenceIndex: number): string =>
+  [instance, "default", String(sequenceIndex)].join(labelSeparator);

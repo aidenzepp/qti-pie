@@ -2,12 +2,13 @@
  * The attempt: the record an item's first attempt starts with, and one non-adaptive submission of
  * an item, from the record before it to the record after its response processing.
  *
- * {@link firstAttempt} starts the record: it runs the item's template processing under the
- * record's seed and sets every response and outcome to its default. {@link runAttempt} sets the
- * responses, counts the attempt, resets the declared outcomes, carries the built-in
- * `completionStatus` over, and runs the item's rules with the evaluator over the record's template
- * values and overrides. Both are pure and return the engine's failure rather than throw it. The
- * author's flow decides whether an attempt may run (rule `a9d04969`); this module only runs it.
+ * {@link firstAttempt} starts the record: it runs the item's template processing under the record's
+ * seed, from the declared state with any template defaults the test gives, and sets every response
+ * and outcome to its default. {@link runAttempt} sets the responses, counts the attempt, resets the
+ * declared outcomes, carries the built-in `completionStatus` over, and runs the item's rules with
+ * the evaluator over the record's template values and overrides. Both are pure and return the
+ * engine's failure rather than throw it. The author's flow decides whether an attempt may run (rule
+ * `a9d04969`); this module only runs it.
  *
  * Value imports point one way: here to the template interpreter (`#plate/engine/template.ts`), and
  * both to the evaluator.
@@ -19,7 +20,7 @@ import { runRules } from "#plate/engine/evaluate.ts";
 import type { EngineFailure, Variables } from "#plate/engine/evaluate.ts";
 import { drawStream, responseLabel, templateLabel } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
-import { runTemplates } from "#plate/engine/template.ts";
+import { checkTemplateDefaults, runTemplates } from "#plate/engine/template.ts";
 import type { TemplateValues } from "#plate/engine/template.ts";
 import type { Item } from "#plate/model/item.ts";
 import {
@@ -191,17 +192,19 @@ export const runAttempt = (
  *   - Where the item's template processing runs (`Item.templateProcessing` is some), what it leaves
  *     (`runTemplates` in `#plate/engine/template.ts`), run from the declared state with one stream,
  *     keyed by the seed under the item's template label, `<instance>\u001Ftemplate\u001F<item>`
- *     (`templateLabel`), so the same seed, instance and item give the same values every run.
- *   - Where the item has no `qti-template-processing`, each declared template variable at its declared
- *     default, else NULL, the values no processing changes, and no override; an item that declares
- *     none holds three empty maps.
+ *     (`templateLabel`), so the same seed, instance and item give the same values every run. The
+ *     declared state holds each template variable at the default the test gives it, else its declared
+ *     default, else NULL, and a constraint's restart returns to it.
+ *   - Where the item has no `qti-template-processing`, each declared template variable at the default
+ *     the test gives it, else its declared default, else NULL, the values no processing changes, and
+ *     no override; an item that declares none holds three empty maps.
  *   - Where it has a `qti-template-processing` the item model marks, because it holds an element the
  *     engine does not run or names a variable the engine does not hold while it runs (such as
  *     `QTI_CONTEXT`, a context variable, or a template variable, response or outcome of a type plate
- *     does not model, read or set), no template value and no override, since nothing computed them.
- *     Each response and outcome begins at its declared default, and `check`'s verdict tells the host,
- *     `accepted-with-unsupported` with each mark (`variable:<identifier>` at
- *     `qti-template-processing` for a name the engine does not hold).
+ *     does not model, read or set), no override, and no template value but the defaults the test
+ *     gives, since nothing else computed them. Each response and outcome begins at its declared
+ *     default, and `check`'s verdict tells the host, `accepted-with-unsupported` with each mark
+ *     (`variable:<identifier>` at `qti-template-processing` for a name the engine does not hold).
  * - `responses`: each at its default, the one template processing set, else the declared one, else
  *   NULL of its type, before any response is given.
  * - `outcomes`: each declared outcome at its default, the one template processing set, else its
@@ -216,23 +219,42 @@ export const runAttempt = (
  * @param start.instance The host's name for this use of the item, which scopes its ids.
  * @param start.seed The key of the stream template processing draws from: the caller's, used as
  *   given.
- * @returns The record, or template processing's first failure, an {@link EngineFailure}: an
- *   expression reads a variable template processing holds no value of, a rule sets a variable the
- *   item does not declare in the kind the rule sets, or sets one to a value of another type. None
- *   of these occurs on a checked item: the validator refuses each, or the item model marks the
- *   template processing that would cause it, which then does not run.
+ * @param start.templateDefaults The defaults the test's item ref gives the item's template
+ *   variables, by template identifier, as `evaluateTemplateDefaults` in
+ *   `#plate/engine/template.ts` gives them; none by default. Each is checked where it is applied
+ *   (`checkTemplateDefaults`), in every one of the three cases.
+ * @returns The record, or the first failure, an {@link EngineFailure}: a test's default names no
+ *   template variable of the item (an {@link UnknownIdentifierError}, holder `item`) or is a value
+ *   of another type (an {@link OutcomeMismatchError}); or template processing's own: an expression
+ *   reads a variable template processing holds no value of, a rule sets a variable the item does
+ *   not declare in the kind the rule sets, or sets one to a value of another type. A test and its
+ *   items each pass `check` apart, so a default that does not fit is caller input; a caller that
+ *   checks the defaults first (`checkTemplateDefaults`) knows a failure after it is the item's
+ *   own. None of the item's own occurs on a checked item: the validator refuses each, or the item
+ *   model marks the template processing that would cause it, which then does not run.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_TemplateDefault
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_TemplateProcessing
  */
 export const firstAttempt = (
   item: Item,
-  start: { readonly instance: string; readonly seed: string },
+  start: {
+    readonly instance: string;
+    readonly seed: string;
+    readonly templateDefaults?: Readonly<Record<string, Value>>;
+  },
 ): Result.Result<ItemRecord, EngineFailure> => {
   const draw = drawStream(start.seed, templateLabel(start.instance, item.identifier));
-  const unrun: TemplateValues = { correct: {}, defaults: {}, templates: {} };
+  const given = start.templateDefaults ?? {};
   const set: Result.Result<TemplateValues, EngineFailure> = Option.match(item.templateProcessing, {
     onNone: () =>
-      unrunTemplateProcessing(item) ? Result.succeed(unrun) : runTemplates(item, [], draw),
-    onSome: (rules) => runTemplates(item, rules, draw),
+      unrunTemplateProcessing(item)
+        ? Result.map(checkTemplateDefaults(item, given), (templates): TemplateValues => ({
+            correct: {},
+            defaults: {},
+            templates,
+          }))
+        : runTemplates(item, [], draw, given),
+    onSome: (rules) => runTemplates(item, rules, draw, given),
   });
 
   return set.pipe(
