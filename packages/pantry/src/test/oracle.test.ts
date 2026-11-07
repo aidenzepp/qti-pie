@@ -1856,6 +1856,14 @@ const unownedValid: readonly {
     name: "reading 2: an maction with no selection over one child",
   },
   {
+    files: withMath(`<m:apply><m:plus/><m:ci id="a">x</m:ci><m:share src="#a"/></m:apply>`),
+    name: "reading 2: a share naming an id beside it, which no element dominates itself through",
+  },
+  {
+    files: withMath(`<m:share src="imsmanifest.xml#a"/>`),
+    name: "reading 103: a share naming a packaged file, which is no fragment of this document",
+  },
+  {
     files: withMath(
       `<m:mtable><m:mtr><m:mtd><m:maligngroup/><m:mi>a</m:mi></m:mtd></m:mtr></m:mtable>`,
     ),
@@ -2122,6 +2130,26 @@ const unownedBroken: readonly LawCase[] = [
     law: "MathML align first",
     name: "reading 2: a cell whose first complete element is no alignment group",
     rule: "ordering",
+  },
+  {
+    files: withMath(`<m:share src="#nowhere"/>`),
+    law: "Idref target",
+    name: "reading 2: a share whose fragment names no id of its document",
+    rule: "idref-target",
+  },
+  {
+    files: withMath(`<m:apply id="a"><m:plus/><m:share src="#a"/><m:cn>1</m:cn></m:apply>`),
+    law: "MathML share cycle",
+    name: "reading 2: a share inside the element it names",
+    rule: "document-key",
+  },
+  {
+    files: withMath(
+      `<m:apply id="a"><m:plus/><m:share src="#b"/></m:apply><m:apply id="b"><m:plus/><m:share src="#a"/></m:apply>`,
+    ),
+    law: "MathML share cycle",
+    name: "reading 2: two applies each holding a share of the other",
+    rule: "document-key",
   },
   {
     files: withScore(

@@ -707,6 +707,8 @@ const unconstructed = {
     "an operator's qualifier children, which a generated tree draws without reading the operator's syntax table",
   "MathML maction selection":
     "an maction's selection and children, values a generated tree draws without reading them",
+  "MathML share cycle":
+    "a share's fragment and the elements it dominates, which a generated tree draws without reading §4.2.7",
   "Max strings required":
     "an extended text interaction's binding, over identifiers drawn without reading",
   "N6 ancestry":
