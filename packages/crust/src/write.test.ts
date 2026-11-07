@@ -2,7 +2,9 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`) the encoder is given. */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
-import { noCoverage, required } from "@grizzle/testing/features";
+import { noCoverage, required, requiredInSpace } from "@grizzle/testing/features";
+import { array, element } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
@@ -11,6 +13,7 @@ import { classify } from "#crust/charset.ts";
 import type { EncoderClass } from "#crust/charset.ts";
 import { encode } from "#crust/encode.ts";
 import { EncodeError } from "#crust/errors.ts";
+import { readXml } from "#crust/read.ts";
 import {
   caseHang,
   documentSituations,
@@ -22,7 +25,7 @@ import {
   planeTreeUpTo,
 } from "#crust/test/trees.ts";
 import type { Bounds } from "#crust/test/trees.ts";
-import type { Attribute, Child, XmlDeclaration, XmlDocument } from "#crust/tree.ts";
+import type { Attribute, Child, Text, XmlDeclaration, XmlDocument } from "#crust/tree.ts";
 import { writeXml } from "#crust/write.ts";
 
 // The oracle: `write.ts` and `encode.ts` as they were at 1854123, the recursive writer, kept
@@ -87,11 +90,11 @@ const renderValue = (attribute: Attribute, threshold: number): string => {
 };
 
 /**
- * Escape a plain text run.
+ * Escape a plain text run, after a plain run that ends `before`.
  */
-const escapeText = (value: string, threshold: number): string => {
+const escapeText = (value: string, threshold: number, before: string): string => {
   let escaped = "";
-  let previous = "";
+  let previous = before;
 
   for (const character of value) {
     if (isAbove(character, threshold)) {
@@ -145,7 +148,7 @@ const renderCdata = (value: string, threshold: number): string => {
  */
 const renderNode = (node: Child, threshold: number): string => {
   if (node.kind === "text") {
-    return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold);
+    return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold, "");
   }
 
   if (node.kind === "comment") {
@@ -168,7 +171,22 @@ const renderNode = (node: Child, threshold: number): string => {
     return `<${node.qname}${attributes}/>`;
   }
 
-  const children = node.children.map((child) => renderNode(child, threshold)).join("");
+  // A plain text run is escaped knowing the last two characters of the plain run just before it.
+  let before = "";
+  const children = node.children
+    .map((child) => {
+      if (child.kind === "text" && !child.cdata) {
+        const rendered = escapeText(child.value, threshold, before);
+        before = (before + child.value).slice(-2);
+
+        return rendered;
+      }
+
+      before = "";
+
+      return renderNode(child, threshold);
+    })
+    .join("");
 
   return `<${node.qname}${attributes}>${children}</${node.qname}>`;
 };
@@ -498,6 +516,104 @@ describe("encode gives the recursive writer's bytes", () => {
 
               return agrees(document, "the drawn document");
             }),
+        ),
+      ),
+    GENERATED_TIMEOUT_MS,
+  );
+});
+
+/**
+ * The runs a stretch of content is drawn from: the empty run, the halves of `]]>` and a letter,
+ * each as plain text and as a CDATA section.
+ */
+const RUNS: readonly [Text, ...Text[]] = [
+  { cdata: false, kind: "text", value: "" },
+  { cdata: true, kind: "text", value: "" },
+  { cdata: false, kind: "text", value: "]" },
+  { cdata: true, kind: "text", value: "]" },
+  { cdata: false, kind: "text", value: "]]" },
+  { cdata: true, kind: "text", value: "]]" },
+  { cdata: false, kind: "text", value: ">" },
+  { cdata: true, kind: "text", value: ">" },
+  { cdata: false, kind: "text", value: "a" },
+  { cdata: true, kind: "text", value: "a" },
+];
+
+/**
+ * The most runs one stretch holds.
+ */
+const MOST_RUNS = 4;
+
+/**
+ * Every stretch of 1 to {@link MOST_RUNS} adjacent runs.
+ */
+const stretch: Gen<readonly Text[]> = array(element(RUNS), { max: MOST_RUNS, min: 1 });
+
+/**
+ * The size of {@link stretch}'s box: the stretches of 1 to 4 of the 10 runs.
+ */
+const STRETCHES = Array.from({ length: MOST_RUNS }, (_, at) => RUNS.length ** (at + 1)).reduce(
+  (sum, count) => sum + count,
+  0,
+);
+
+describe("writeXml writes adjacent text runs as the content they hold", () => {
+  it.effect(
+    `for every stretch of 1 to ${String(MOST_RUNS)} plain and CDATA runs over the halves of ]]>, exhausted: ${String(STRETCHES)} documents`,
+    (ctx) =>
+      // Oracle: XML 1.0 section 2.4, as the reader's parser checks it ("]]>" in content with its
+      // ">" unescaped is not well-formed), and the content kept: the text read back is the runs'
+      // text joined. Bound: every sequence of 1 to 4 of the 10 runs.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every stretch of 1 to 4 of 10 runs: the empty run, ], ]], > and a letter, plain and CDATA",
+            caseHang,
+            coverage: requiredInSpace<"across" | "none">(["across", "none"]),
+            generator: stretch,
+            limit: STRETCHES,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML 1.0 section 2.4 as crust's reader checks it, and the text kept",
+            },
+            suite: "crust/write/adjacent-runs",
+          },
+          (runs, c) =>
+            Effect.gen(function* keepsTheContent() {
+              const joined = runs.map(({ value }) => value).join("");
+              const plain = runs
+                .map(({ cdata, value }) => (cdata ? "\0" : value))
+                .join("")
+                .split("\0");
+              const across = plain.some((held) => held.includes("]]>"));
+              c.note(across ? "across" : "none");
+
+              const text = yield* writeXml(
+                bare({
+                  attributes: [],
+                  children: runs,
+                  kind: "element",
+                  local: "a",
+                  namespace: "",
+                  prefix: "",
+                  qname: "a",
+                }),
+              );
+              const read = yield* readXml(new TextEncoder().encode(text));
+              const content = read.root.children
+                .map((child) => (child.kind === "text" ? child.value : "\u{FFFF}"))
+                .join("");
+
+              assert.strictEqual(content, joined, text);
+            }),
+        ),
+      ).pipe(
+        Effect.tap((done) =>
+          Effect.sync(() => {
+            assert.strictEqual(done.cases, STRETCHES);
+          }),
         ),
       ),
     GENERATED_TIMEOUT_MS,

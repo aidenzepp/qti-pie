@@ -74,10 +74,21 @@ const renderValue = (attribute: Attribute, threshold: number): string => {
 /**
  * Escape a plain text run: `&`, `<`, the `>` that ends `]]>`, and CR; code points above `threshold`
  * become character references.
+ *
+ * XML 1.0 section 2.4 has a `>` escaped "when it appears in the string "]]>" in content", a string
+ * the content's characters make whatever text runs hold them, so a `>` that opens a run is escaped
+ * after a plain run that ends `]]`.
+ *
+ * @param value - The run's text.
+ * @param threshold - The highest code point the run writes as itself.
+ * @param before - The last two characters of the plain text run written just before, empty when
+ *   anything else came before.
+ * @returns The run's markup.
+ * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#syntax | XML 1.0 (Fifth Edition), section 2.4}
  */
-const escapeText = (value: string, threshold: number): string => {
+const escapeText = (value: string, threshold: number, before: string): string => {
   let escaped = "";
-  let previous = "";
+  let previous = before;
 
   for (const character of value) {
     if (isAbove(character, threshold)) {
@@ -140,7 +151,7 @@ const renderCdata = (value: string, threshold: number): string => {
  */
 const renderLeaf = (node: Exclude<Child, Element>, threshold: number): string => {
   if (node.kind === "text") {
-    return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold);
+    return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold, "");
   }
 
   if (node.kind === "comment") {
@@ -191,15 +202,28 @@ const renderStep = (step: Step, threshold: number): string => {
  * Render a node and everything below it, in document order, by its {@link tour}, so a tree of any
  * depth or width renders without recursion.
  *
+ * Adjacent plain text runs are one stretch of content, so each run is escaped knowing the last two
+ * characters of the plain run just before it ({@link escapeText}).
+ *
  * @param node - The node to render.
  * @param threshold - The highest code point a text run or an attribute value writes as itself.
  * @returns The node's markup.
  */
-const renderNode = (node: Child, threshold: number): string =>
-  tour(node)
-    .map((step) => renderStep(step, threshold))
-    .toArray()
-    .join("");
+const renderNode = (node: Child, threshold: number): string => {
+  const parts: string[] = [];
+  let before = "";
+  for (const step of tour(node)) {
+    if (step.kind === "leaf" && step.node.kind === "text" && !step.node.cdata) {
+      parts.push(escapeText(step.node.value, threshold, before));
+      before = (before + step.node.value).slice(-2);
+    } else {
+      parts.push(renderStep(step, threshold));
+      before = "";
+    }
+  }
+
+  return parts.join("");
+};
 
 /**
  * Render the XML declaration with only the pseudo-attributes it has, in the order version,
