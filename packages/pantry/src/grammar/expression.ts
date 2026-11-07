@@ -701,6 +701,21 @@ export const referencedTables = [
 export type ReferencedTable = (typeof referencedTables)[number];
 
 /**
+ * Which table each processing reference reads of its variable's declaration, in the order a
+ * reference reads them: `qti-map-response` a `qti-mapping`, `qti-map-response-point` a
+ * `qti-area-mapping` (information model §2.11.3.29 and §2.11.3.30), and `qti-lookup-outcome-value`
+ * a `qti-match-table`, else a `qti-interpolation-table` (§2.5.1.4). Every other reference reads
+ * none. The `TableReader` relation holds these rows, and the importer's reading of a reference's
+ * table follows them.
+ */
+export const tableReaders = [
+  { kind: "qti-map-response", table: "qti-mapping" },
+  { kind: "qti-map-response-point", table: "qti-area-mapping" },
+  { kind: "qti-lookup-outcome-value", table: "qti-match-table" },
+  { kind: "qti-lookup-outcome-value", table: "qti-interpolation-table" },
+] as const satisfies readonly { readonly kind: string; readonly table: ReferencedTable }[];
+
+/**
  * The response processing templates 1EdTech publishes, in code order: the `RpTemplate` roster's
  * handles, `none` for a `template` URI that names none of them. The two forms of the published
  * URI prefix, each with or without `.xml`, name each (QTI 3.0 implementation guide, Response

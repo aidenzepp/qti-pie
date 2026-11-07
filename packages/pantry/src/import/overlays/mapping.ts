@@ -22,7 +22,6 @@ import { booleanTrue } from "#pantry/grammar/domains.ts";
 import { floatKeyPattern, pairKeyPattern } from "#pantry/qti/mapping.ts";
 import type {
   AreaMapping,
-  InterpolationTable,
   LookupValue,
   MapKey,
   MapKeyDirectedPair,
@@ -31,7 +30,7 @@ import type {
   MapKeyPair,
   MapKeyPoint,
   Mapping,
-  MatchTable,
+  LookupTable,
 } from "#pantry/qti/mapping.ts";
 
 /**
@@ -56,7 +55,6 @@ export interface MappingIds {
  */
 export interface MappingRows {
   readonly AreaMapping: ReadonlyMap<string, Addition<typeof AreaMapping>>;
-  readonly InterpolationTable: ReadonlyMap<string, Addition<typeof InterpolationTable>>;
   readonly LookupValue: ReadonlyMap<string, Addition<typeof LookupValue>>;
   readonly MapKey: ReadonlyMap<string, Addition<typeof MapKey>>;
   readonly MapKeyDirectedPair: ReadonlyMap<string, Addition<typeof MapKeyDirectedPair>>;
@@ -65,7 +63,7 @@ export interface MappingRows {
   readonly MapKeyPair: ReadonlyMap<string, Addition<typeof MapKeyPair>>;
   readonly MapKeyPoint: ReadonlyMap<string, Addition<typeof MapKeyPoint>>;
   readonly Mapping: ReadonlyMap<string, Addition<typeof Mapping>>;
-  readonly MatchTable: ReadonlyMap<string, Addition<typeof MatchTable>>;
+  readonly LookupTable: ReadonlyMap<string, Addition<typeof LookupTable>>;
 }
 
 /**
@@ -480,7 +478,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   };
 
   const areaMappings = new Map<string, Addition<typeof AreaMapping>>();
-  const interpolationTables = new Map<string, Addition<typeof InterpolationTable>>();
   const lookupValues = new Map<string, Addition<typeof LookupValue>>();
   const mapKeys = new Map<string, Addition<typeof MapKey>>();
   const typed: TypedKeys = {
@@ -491,7 +488,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     MapKeyPoint: new Map(),
   };
   const mappings = new Map<string, Addition<typeof Mapping>>();
-  const matchTables = new Map<string, Addition<typeof MatchTable>>();
+  const lookupTables = new Map<string, Addition<typeof LookupTable>>();
 
   for (const node of rows.nodes) {
     const declared = () => ({
@@ -504,10 +501,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
       mappings.set(node.id, declared());
     } else if (node.kind === "qti-area-mapping") {
       areaMappings.set(node.id, declared());
-    } else if (node.kind === "qti-match-table") {
-      matchTables.set(node.id, declared());
-    } else if (node.kind === "qti-interpolation-table") {
-      interpolationTables.set(node.id, declared());
+    } else if (node.kind === "qti-match-table" || node.kind === "qti-interpolation-table") {
+      lookupTables.set(node.id, declared());
     }
 
     const lookupAttribute = lookupAttributeOf.get(node.kind);
@@ -548,11 +543,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
 
   return {
     AreaMapping: areaMappings,
-    InterpolationTable: interpolationTables,
+    LookupTable: lookupTables,
     LookupValue: lookupValues,
     MapKey: mapKeys,
     ...typed,
     Mapping: mappings,
-    MatchTable: matchTables,
   };
 };

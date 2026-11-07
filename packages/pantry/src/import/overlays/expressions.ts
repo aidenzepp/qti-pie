@@ -16,8 +16,10 @@ import type { DocumentContext } from "#pantry/import/context.ts";
 import { Option } from "effect";
 import {
   integerMathOperators,
+  lookupKind,
   rpTemplatePattern,
   rpTemplates,
+  tableReaders,
   valueBases,
   valueCardinalities,
 } from "#pantry/grammar/expression.ts";
@@ -383,6 +385,28 @@ const oneOf = (bases: ReadonlySet<ValueBase>): ValueBase => {
 };
 
 /**
+ * The tables each kind of reference reads, in the order it reads them (`tableReaders` of
+ * `#pantry/grammar/expression.ts`, `TableReader`'s rows).
+ */
+const tablesRead: ReadonlyMap<string, readonly ReferencedTable[]> = new Map(
+  [...Map.groupBy(tableReaders, ({ kind }) => kind)].map(([kind, rows]) => [
+    kind,
+    rows.map(({ table }) => table),
+  ]),
+);
+
+/**
+ * Read the table a reference of a kind reads among those its declaration holds: the first it
+ * reads that the declaration holds, else none.
+ *
+ * @param kind - The reference's kind.
+ * @param held - The tables its declaration holds.
+ * @returns The table.
+ */
+const heldTableOf = (kind: string, held: ReadonlySet<string>): ReferencedTable =>
+  (tablesRead.get(kind) ?? []).find((table) => held.has(table)) ?? "none";
+
+/**
  * The table a reference's element needs its declaration to hold, as the declaration holds it: a map
  * response's mapping, a point's area mapping, a lookup's match or interpolation table; `none` where
  * the declaration holds none of them or the reference needs none, which `Mapped_response` and
@@ -397,30 +421,8 @@ const tableOf = (
   kind: string,
   attribute: string,
   declared: DeclarationEntry | undefined,
-): ReferencedTable => {
-  const tables = declared?.tables ?? new Set<string>();
-  if (attribute !== "identifier") {
-    return "none";
-  }
-
-  if (kind === "qti-map-response") {
-    return tables.has("qti-mapping") ? "qti-mapping" : "none";
-  }
-
-  if (kind === "qti-map-response-point") {
-    return tables.has("qti-area-mapping") ? "qti-area-mapping" : "none";
-  }
-
-  if (kind !== "qti-lookup-outcome-value") {
-    return "none";
-  }
-
-  if (tables.has("qti-match-table")) {
-    return "qti-match-table";
-  }
-
-  return tables.has("qti-interpolation-table") ? "qti-interpolation-table" : "none";
-};
+): ReferencedTable =>
+  attribute === "identifier" ? heldTableOf(kind, declared?.tables ?? new Set<string>()) : "none";
 
 /**
  * The base type a numeric aggregate gives: `unknown` when an operand is unknown, `integer` when
@@ -1131,22 +1133,12 @@ const variableLookupsOf = (
  * @param held - The tables it holds.
  * @returns The `ReferencedTable` handle.
  */
-const lookupOf = (held: ReadonlySet<string>): ReferencedTable => {
-  if (held.has("qti-match-table")) {
-    return "qti-match-table";
-  }
-
-  return held.has("qti-interpolation-table") ? "qti-interpolation-table" : "none";
-};
+const lookupOf = (held: ReadonlySet<string>): ReferencedTable => heldTableOf(lookupKind, held);
 
 /**
  * The kinds that read a table of their variable's declaration.
  */
-const tableReaders: ReadonlySet<string> = new Set([
-  "qti-map-response",
-  "qti-map-response-point",
-  "qti-lookup-outcome-value",
-]);
+const tableReaderKinds: ReadonlySet<string> = new Set(tablesRead.keys());
 
 /**
  * Write a document's declaration tables: a row for every declaration that holds a table, and for
@@ -1165,7 +1157,7 @@ const declarationTablesOf = (
     [...references.values()].flatMap((reference) =>
       reference.resolution === "declared" &&
       reference.attribute === "identifier" &&
-      tableReaders.has(reference.kind)
+      tableReaderKinds.has(reference.kind)
         ? [reference.declaration]
         : [],
     ),

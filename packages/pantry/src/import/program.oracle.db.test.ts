@@ -739,7 +739,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [checkNamed("MatchTable", "Lookup_table_cardinality")],
+          laws: [checkNamed("LookupTable", "Lookup_table_cardinality")],
           name: "a match table on a multiple-cardinality outcome (lookup-cardinality, Q5.11)",
         },
         {

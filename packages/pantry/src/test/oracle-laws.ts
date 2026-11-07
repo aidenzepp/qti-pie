@@ -163,13 +163,11 @@ export const hostlessLaws = {
   "Manifest overlay":
     "its rows (ManifestId, Resource, ResourceHref, File, Dependency) are copies the importer writes of each manifest element's node and attributes (plan §1.6, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
   "Mapping overlay":
-    "its rows (Mapping, MapKey and its typed forms, AreaMapping, MatchTable, InterpolationTable) are copies the importer writes of each mapping element's node, its declaration's reference and its map key (plan §1.7 O5, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
+    "its rows (Mapping, MapKey and its typed forms, AreaMapping, LookupTable) are copies the importer writes of each mapping element's node, its declaration's reference and its map key (plan §1.7 O5, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
   "Package key":
     "its one row per package is keyed by the id the importer mints, which no package states, so no package text can repeat or omit it",
   "Reference overlay":
     "its rows (DocumentDirectory, XmlBase, Reference, ReferencePath) are each document's directory and each reference's copy, which the importer writes and resolves from the tree (CP 1.2 (b) and (d), reading 102); the host writes no such row, and the laws a package can break over its references are the oracle's Href form, File exists and Stimulus ref target",
   "Test overlay":
     "its rows (TestDocument, TestToken, TestFlag, Named, Section, SectionMember, SectionSelection, SectionOrdering, Site, BranchRule) are copies the importer writes of each test element's node and attributes, collapsed (plan §1.7 O7, C15, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
-  "Variable reference copy":
-    "its rows (VarRef) are the importer's copies of each printed variable base or index that names a variable, keyed by the attribute (plan §1.7 O3, Q5.09); a package's text decides only whether the attribute names a variable, and what it names is judged by the oracle's Printed variable reference, so no text can leave a copy out",
 } as const satisfies Readonly<Record<string, string>>;

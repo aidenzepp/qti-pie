@@ -124,7 +124,6 @@ import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
 import { interactionLaws, interactionRelations } from "#pantry/qti/interactions.ts";
 import {
   AreaMapping,
-  InterpolationTable,
   LookupValue,
   MapKey,
   MapKeyDirectedPair,
@@ -134,7 +133,7 @@ import {
   MapKeyPoint,
   Mapping,
   mappingLaws,
-  MatchTable,
+  LookupTable,
 } from "#pantry/qti/mapping.ts";
 import { metadataLaws, metadataRelations } from "#pantry/qti/metadata.ts";
 import {
@@ -152,6 +151,7 @@ import {
   ResultBase,
   ResultCardinality,
   RpTemplate,
+  TableReader,
   TailCardinality,
   ValueBase,
   ValueBaseBit,
@@ -360,7 +360,7 @@ const declarationRelations = { Declaration, OutcomeRange, RecordField, Value, Va
  */
 const mappingRelations = {
   AreaMapping,
-  InterpolationTable,
+  LookupTable,
   LookupValue,
   MapKey,
   MapKeyDirectedPair,
@@ -369,7 +369,6 @@ const mappingRelations = {
   MapKeyPair,
   MapKeyPoint,
   Mapping,
-  MatchTable,
 };
 
 /**
@@ -403,6 +402,7 @@ const expressionRelations = {
   ResultBase,
   ResultCardinality,
   RpTemplate,
+  TableReader,
   TailCardinality,
   ValueBase,
   ValueBaseBit,

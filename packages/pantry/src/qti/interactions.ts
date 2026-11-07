@@ -52,10 +52,11 @@
  *   and {@link ItemMode}, an item's `adaptive`, which "AdaptiveFeedback" reads (§5.49, §5.52: "A
  *   feedback element that forms part of a Non-adaptive Item must not contain an interaction object,
  *   either directly or indirectly").
- * - The content references: {@link FeedbackRef}, {@link TemplateRef}, {@link PrintedVariableRef},
- *   {@link VarRef} (the old `varref-copy`) and {@link ContextRef}, each naming a declaration of a
- *   kind `ContentReference` allows, through `declarationRef`, or a built-in variable that stands as
- *   one (reading 77), in an item's or a test's own declarations (the port audit's A43 and A44).
+ * - The content references: {@link FeedbackRef}, {@link TemplateRef}, {@link PrintedVariableRef} (a
+ *   printed variable's name, and its `base` or `index` where that names a variable) and
+ *   {@link ContextRef}, each naming a declaration of a kind `ContentReference` allows, through
+ *   `declarationRef`, or a built-in variable that stands as one (reading 77), in an item's or a
+ *   test's own declarations (the port audit's A43 and A44).
  * - A section document's feedback and printed variables ({@link SectionFeedbackName},
  *   {@link SectionPrintedName}) resolve once per test that places it ({@link SectionFeedbackRef},
  *   {@link SectionPrintedRef}, A45), every one of them under each placement ({@link SectionScope},
@@ -1099,18 +1100,13 @@ export const TemplateRef = relation("TemplateRef", referenceFields, ["node", "at
 
 /**
  * The variable a printed variable prints, keyed by its node and `identifier` (§7.30.6: "The
- * outcome variable or template variable must have been defined").
+ * outcome variable or template variable must have been defined"), and the variable its `base` or
+ * `index` names where that value is a name, not an integer, keyed by its node and the attribute.
  */
 export const PrintedVariableRef = relation("PrintedVariableRef", referenceFields, [
   "node",
   "attribute",
 ]);
-
-/**
- * The variable a printed variable's `base` or `index` names where its value is a name, not an
- * integer, keyed by its node and the attribute: the old `varref-copy`.
- */
-export const VarRef = relation("VarRef", referenceFields, ["node", "attribute"]);
 
 /**
  * The context variable a PCI's `qti-context-variable` binds, keyed by its node and `identifier`
@@ -1373,7 +1369,6 @@ export const interactionRelations = {
   SectionTemplateRef,
   Slider,
   TemplateRef,
-  VarRef,
 };
 
 /**
@@ -1709,16 +1704,20 @@ const adaptiveTrue = select(InteractionAttribute, (v) =>
 const referenceSources = {
   context: referenceReadOf(references.context.attributes, references.context.kinds),
   feedback: referenceReadOf(references.feedback.attributes, references.feedback.kinds),
-  printed: referenceReadOf(references.printed.attributes, references.printed.kinds),
-  template: referenceReadOf(references.template.attributes, references.template.kinds),
-  variable: select(InteractionAttribute, (v) =>
+  printed: select(InteractionAttribute, (v) =>
     v.and(
-      v.in(v.name, references.variable.attributes),
-      v.in(v.kind, references.variable.kinds),
       v.in(v.rootKind, referringRoots),
-      v.not(Compute.matches(v.value, integerStartPattern)),
+      v.or(
+        v.and(v.in(v.name, references.printed.attributes), v.in(v.kind, references.printed.kinds)),
+        v.and(
+          v.in(v.name, references.variable.attributes),
+          v.in(v.kind, references.variable.kinds),
+          v.not(Compute.matches(v.value, integerStartPattern)),
+        ),
+      ),
     ),
   ),
+  template: referenceReadOf(references.template.attributes, references.template.kinds),
 };
 
 /**
@@ -2636,36 +2635,6 @@ export const interactionLawsByName = {
       ),
     ),
     contained(
-      on(VarRef, "kind", "attribute", "declarationKind"),
-      on(ContentReference, "kind", "attribute", "declaration"),
-    ),
-    contained(
-      on(
-        select(VarRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      declarationRef,
-    ),
-    check("Printed_variable_reference", VarRef, (r) =>
-      r.or(
-        r.not(r.in(r.identifier, builtInNames)),
-        ...builtIns.map((builtIn) =>
-          r.and(
-            r.eq(r.identifier, builtIn.variable),
-            r.eq(r.declaration, nilUuid),
-            r.eq(r.declarationKind, builtIn.declaration),
-            r.eq(r.baseType, builtIn.baseType),
-            r.eq(r.cardinality, builtIn.cardinality),
-          ),
-        ),
-      ),
-    ),
-    contained(
       on(SectionPrintedRef, "node", "attribute", "kind", "document", "identifier"),
       on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
     ),
@@ -2826,12 +2795,6 @@ export const interactionLawsByName = {
         r.eq(r.kind, templateVariableKind),
         r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
       ),
-    ),
-  ],
-  "Variable reference copy": [
-    contained(
-      on(referenceSources.variable, "node", "name", "kind", "document", "value"),
-      on(VarRef, "node", "attribute", "kind", "document", "identifier"),
     ),
   ],
   "default hotspot last slot": [check("default_hotspot_last_slot", Hotspot, lastWhere)],

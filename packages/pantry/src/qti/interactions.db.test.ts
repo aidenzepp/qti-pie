@@ -54,8 +54,8 @@ import {
   SectionTemplateName,
   SectionTemplateRef,
   Slider,
+  PrintedVariableRef,
   TemplateRef,
-  VarRef,
 } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -355,7 +355,8 @@ const hottextOf = (at: number, fields: Partial<Fact<typeof Hottext>> = {}) =>
   }) satisfies Fact<typeof Hottext>;
 
 /**
- * A printed variable's `index` reference: a `VarRef` fact of the given name and declaration.
+ * A printed variable's `index` reference: a `PrintedVariableRef` fact of the given name and
+ * declaration.
  *
  * @param identifier - The name it makes.
  * @param declaration - The declaration it resolves to.
@@ -366,7 +367,7 @@ const indexReference = (
   declaration: Fact<typeof FeedbackRef>["declaration"],
 ): Stated => ({
   fact: feedbackOf({ attribute: "index", declaration, identifier, kind: "qti-printed-variable" }),
-  relation: VarRef,
+  relation: PrintedVariableRef,
 });
 
 /**
@@ -896,13 +897,13 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         "refuses a reference to an undeclared name, and accepts one to the built-in completionStatus, by the containment into Declaration",
         () =>
           // Oracle: PostgreSQL, the foreign key of a printed variable's `index` reference into
-          // `declarationRef` (the old `varref-copy`), selected out for a built-in's name, and the
+          // `declarationRef`, selected out for a built-in's name, and the
           // `Printed_variable_reference` check that resolves the built-in. 23503 on that key.
           // Bound: an undeclared name, refused; completionStatus under the nil declaration,
           // accepted.
           Effect.gen(function* varRef() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeysBetween(client, "var_ref", "declaration");
+            const keys = yield* foreignKeysBetween(client, "printed_variable_ref", "declaration");
             assert.isNotEmpty(keys);
 
             const undeclared = Option.getOrUndefined(

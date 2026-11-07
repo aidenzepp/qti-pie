@@ -1376,9 +1376,9 @@ describe("verdictOf", () => {
   });
   it("names the rule the catalog's precedence ranks first, whatever order the breaches are listed in", () => {
     // Oracle: the law catalog's precedence, the order the database names a refusal by: of the
-    // breaches below, RootOfType's root-type-reverse ranks first, then Document entry's entry-kind,
-    // File exists's, N5 Follow's ordering and AL1 admission's attribute-admission. Bound: every
-    // order of the five, 120.
+    // breaches below, Document entry's entry-kind ranks first, a path's listing before the root it
+    // lists (reading 93), then RootOfType's root-type-reverse, File exists's, N5 Follow's ordering
+    // and AL1 admission's attribute-admission. Bound: every order of the five, 120.
     const listed: readonly LawName[] = [
       "AL1 admission",
       "N5 Follow",
@@ -1402,7 +1402,7 @@ describe("verdictOf", () => {
           breaches: order.map((law) => ({ document: "", keys: {}, law })),
           documents: [],
         }),
-        { rule: "root-type-reverse", verdict: "refused" },
+        { rule: "entry-kind", verdict: "refused" },
         order.join(", "),
       );
     }

@@ -122,6 +122,7 @@ import {
   ReferenceBase,
   ReferenceDeclaration,
   ReferencedTable,
+  TableReader,
   ReferenceResolution,
   ReferenceRole,
   ResultBase,
@@ -144,7 +145,7 @@ import {
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { AreaMapping, InterpolationTable, Mapping, MatchTable } from "#pantry/qti/mapping.ts";
+import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import {
   AssembledName,
@@ -1168,9 +1169,9 @@ const resolvedType = (v: VariableRefRow) =>
   );
 
 /**
- * State the table a reference claims its declaration holds: none, or the one its element reads, a
- * map response's `qti-mapping`, a point's `qti-area-mapping`, a lookup's match or interpolation
- * table, where its variable is declared. Each claimed table is a containment into its overlay, and
+ * State where a reference may claim a table of its declaration: none, or one where it names a
+ * declared variable by its `identifier`. Which table its kind reads is {@link TableReader}'s, the
+ * containment of {@link claimedTables}; each claimed table is a containment into its overlay, and
  * a missing one is `Mapped_response`'s or `Lookup_type`'s refusal.
  *
  * @param v - The row.
@@ -1179,19 +1180,14 @@ const resolvedType = (v: VariableRefRow) =>
 const tableClaimed = (v: VariableRefRow) =>
   v.or(
     v.eq(v.table, "none"),
-    v.and(
-      v.eq(v.attribute, "identifier"),
-      v.eq(v.resolution, "declared"),
-      v.or(
-        v.and(v.eq(v.kind, "qti-map-response"), v.eq(v.table, "qti-mapping")),
-        v.and(v.eq(v.kind, "qti-map-response-point"), v.eq(v.table, "qti-area-mapping")),
-        v.and(
-          v.eq(v.kind, lookupKindHandle),
-          v.in(v.table, ["qti-match-table", "qti-interpolation-table"]),
-        ),
-      ),
-    ),
+    v.and(v.eq(v.attribute, "identifier"), v.eq(v.resolution, "declared")),
   );
+
+/**
+ * The references that claim a table, each a pair of its kind and the table, which
+ * {@link TableReader} holds.
+ */
+const claimedTables = select(VariableRef, (v) => v.ne(v.table, "none"));
 
 /**
  * The references that read their declaration's table of one slot: a map response's mapping, a map
@@ -1230,6 +1226,16 @@ const matchedDeclarations = select(DeclarationTable, (d) => d.eq(d.lookup, "qti-
 const interpolatedDeclarations = select(DeclarationTable, (d) =>
   d.eq(d.lookup, "qti-interpolation-table"),
 );
+
+/**
+ * The lookup tables that are match tables, each keyed by its declaration as its slot is.
+ */
+const matchTables = select(LookupTable, (t) => t.eq(t.kind, "qti-match-table"));
+
+/**
+ * The lookup tables that are interpolation tables.
+ */
+const interpolationTables = select(LookupTable, (t) => t.eq(t.kind, "qti-interpolation-table"));
 
 /**
  * The attributes an element writes among those its type follows from.
@@ -2526,8 +2532,7 @@ export const expressionLawsByName = {
     // DeclarationTable: each declaration's tables, both ways, and each table a reference reads.
     key(on(Mapping, "declaration")),
     key(on(AreaMapping, "declaration")),
-    key(on(MatchTable, "declaration")),
-    key(on(InterpolationTable, "declaration")),
+    key(on(LookupTable, "declaration")),
     key(on(mappedDeclarations, "declaration")),
     key(on(areaMappedDeclarations, "declaration")),
     key(on(matchedDeclarations, "declaration")),
@@ -2536,10 +2541,10 @@ export const expressionLawsByName = {
     contained(on(mappedDeclarations, "declaration"), on(Mapping, "declaration")),
     contained(on(AreaMapping, "declaration"), on(areaMappedDeclarations, "declaration")),
     contained(on(areaMappedDeclarations, "declaration"), on(AreaMapping, "declaration")),
-    contained(on(MatchTable, "declaration"), on(matchedDeclarations, "declaration")),
-    contained(on(matchedDeclarations, "declaration"), on(MatchTable, "declaration")),
-    contained(on(InterpolationTable, "declaration"), on(interpolatedDeclarations, "declaration")),
-    contained(on(interpolatedDeclarations, "declaration"), on(InterpolationTable, "declaration")),
+    contained(on(matchTables, "declaration"), on(matchedDeclarations, "declaration")),
+    contained(on(matchedDeclarations, "declaration"), on(matchTables, "declaration")),
+    contained(on(interpolationTables, "declaration"), on(interpolatedDeclarations, "declaration")),
+    contained(on(interpolatedDeclarations, "declaration"), on(interpolationTables, "declaration")),
     check("E1_derived", DeclarationTable, (d) =>
       d.and(
         d.in(d.mapping, ["none", "qti-mapping"]),
@@ -2559,6 +2564,7 @@ export const expressionLawsByName = {
       on(tableReaders(lookupKindHandle), "declaration", "table"),
       on(DeclarationTable, "declaration", "lookup"),
     ),
+    contained(on(claimedTables, "kind", "table"), on(TableReader, "kind", "table")),
     check("E1_derived", VariableRef, (v) =>
       v.and(
         spells(v),

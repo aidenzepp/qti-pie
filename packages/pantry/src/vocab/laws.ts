@@ -59,7 +59,6 @@ export const precedence = [
   "slider-bounds",
   "max-strings-required",
   "aria-value-range",
-  "varref-copy",
   "adaptive-feedback",
   // HTML content.
   "source-srcset",
@@ -107,8 +106,8 @@ export const precedence = [
   "include-root",
   "inclusion-cycle",
   // P1 to P4, packaging.
-  "root-type-reverse",
   "entry-kind",
+  "root-type-reverse",
   "file-listed",
   "file-exists",
   "href-listed",
@@ -536,7 +535,7 @@ export const lawTable = {
   "Mapping overlay": {
     rule: "reachability",
     source:
-      "plan §1.7 O5 and the W5 amendment's C18: each O5 overlay (Mapping, MapKey, MapKeyInteger, MapKeyFloat, AreaMapping, MatchTable, InterpolationTable) is its element's row, keyed by its node: it copies its node's nodeRef tuple and its declaration's declarationRef tuple, names a node of its kind, takes its key from its element's map-key attribute, and a typed key is the row of exactly the map keys of its form (Q5.11)",
+      "plan §1.7 O5 and the W5 amendment's C18: each O5 overlay (Mapping, MapKey, MapKeyInteger, MapKeyFloat, AreaMapping, LookupTable) is its element's row, keyed by its node: it copies its node's nodeRef tuple and its declaration's declarationRef tuple, names a node of its kind, takes its key from its element's map-key attribute, and a typed key is the row of exactly the map keys of its form (Q5.11)",
   },
   "Mastery range": {
     rule: "mastery-range",
@@ -942,11 +941,6 @@ export const lawTable = {
     rule: "variable-mapping-target",
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 74: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 97), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSourceDeclaration, its declared half)",
-  },
-  "Variable reference copy": {
-    rule: "varref-copy",
-    source:
-      "plan §1.7 O3, the varref-copy rule (Q5.09): every printed variable base or index that names a variable has its VarRef row, which resolves it; the XSD's union of xs:integer and VariableStringDType on those attributes decides what names a variable",
   },
   "Weighted base": {
     rule: "P29",
