@@ -177,16 +177,7 @@ import {
   ReferencePath,
 } from "#pantry/qti/package.ts";
 import { quotationLawsByName } from "#pantry/qti/quotation.ts";
-import {
-  branchLaws,
-  inclusionLaws,
-  itemRefLaws,
-  SectionSelection,
-  SelectForm,
-  testNameLaws,
-  testOverlayLaws,
-  testRelations,
-} from "#pantry/qti/tests.ts";
+import { SectionSelection, SelectForm, testLawsByName, testRelations } from "#pantry/qti/tests.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipRefusal } from "#pantry/package/zip.ts";
 import type { Source } from "#pantry/vocab/inventory/types.ts";
@@ -344,12 +335,12 @@ export const lawIdentity = (law: Law): string =>
   );
 
 /**
- * The prefix that marks a `pred` term among a side's terms as {@link sideOf} takes them.
+ * The prefix that marks a `pred` term among a side's terms, as a statement's reading writes it.
  */
 const predPrefix = "pred:";
 
 /**
- * Read one term as {@link sideOf} takes it: `pred:field` is `pred(field)`, any other text a field.
+ * Read one term of a side: `pred:field` is `pred(field)`, any other text a field.
  *
  * @param term - The term's text.
  * @returns The term.
@@ -358,19 +349,6 @@ const termOf = (term: string): Term =>
   term.startsWith(predPrefix)
     ? { field: term.slice(predPrefix.length), kind: "pred" }
     : { field: term, kind: "field" };
-
-/**
- * Build a side over every fact of a relation, as a law states it.
- *
- * @param relation - The relation.
- * @param terms - Its terms in the order the law pairs them: a field's name, or `pred:field`.
- * @returns The side.
- */
-const sideOf = (relation: string, ...terms: readonly [string, ...string[]]): LawSide => ({
-  relation,
-  selection: { conjuncts: [] },
-  terms: pipe(terms, Arr.map(termOf)),
-});
 
 /**
  * Build a containment law.
@@ -675,126 +653,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ...(
     ["Mapping", "MapKey", "MapKeyInteger", "MapKeyFloat", "AreaMapping", "LookupTable"] as const
   ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
-  [keyOver(sideOf("Named", "document", "identifier")), "Structure identifier"],
-  [keyOver(sideOf("VariableMapping", "parent", "target")), "Variable mapping target"],
-  [keyOver(sideOf("StimulusRef", "document", "identifier")), "Stimulus ref key"],
-  [keyOver(sideOf("TestDocument", "package", "path")), "Document entry"],
-  [
-    containedIn(
-      sideOf("SiteTarget", "package", "path", "target"),
-      sideOf("TestDocument", "package", "path", "node"),
-    ),
-    "Document entry",
-  ],
-  [
-    foldOf(
-      { count: "members", owner: "Section" },
-      "count",
-      sideOf("SectionMember", "section"),
-      sideOf("Section", "node", "required"),
-    ),
-    "Selection required",
-  ],
-  [keyOver(sideOf("TestFlag", "node")), "Selection required"],
-  [keyOver(sideOf("SectionMember", "node")), "Selection required"],
-  [containedIn(sideOf("SectionMember", "node"), sideOf("TestFlag", "node")), "Selection required"],
-  [containedIn(sideOf("TestFlag", "node"), sideOf("SectionMember", "node")), "Selection required"],
-  [
-    containedIn(
-      sideOf("ItemRefTarget", "node", "package", "path"),
-      sideOf("ReferencePath", "node", "package", "path"),
-    ),
-    "E1 derived",
-  ],
-  // A site's href is its SitePath, a row only where the href names a path of the package, and the
-  // document there is its SiteTarget. An href naming a path no entry holds is refused by the
-  // SitePath's File_exists check alone, and the laws below read only paths an entry holds: an
-  // include with no such href, or whose path names no listed document, is refused here (reading
-  // 115); a section ref, which must write an href, by "Document entry" on its path; and the target
-  // is the document at its path.
-  [containedIn(sideOf("SitePath", "node"), sideOf("SiteTarget", "node")), "Include target"],
-  [
-    containedIn(sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind")),
-    "Include target",
-  ],
-  [containedIn(sideOf("Site", "node"), sideOf("SitePath", "node")), "Document entry"],
-  [
-    containedIn(sideOf("SitePath", "package", "path"), sideOf("TestDocument", "package", "path")),
-    "Document entry",
-  ],
-  [
-    containedIn(sideOf("SitePath", "package", "path"), sideOf("Entry", "package", "path")),
-    "File exists",
-  ],
-  [
-    containedIn(
-      sideOf(
-        "SiteTarget",
-        "package",
-        "path",
-        "target",
-        "targetRoot",
-        "targetNearest",
-        "targetNearestKind",
-      ),
-      sideOf(
-        "Document",
-        "package",
-        "path",
-        "node",
-        "rootKind",
-        "contextNearest",
-        "contextNearestKind",
-      ),
-    ),
-    "Include target",
-  ],
-  [
-    containedIn(
-      sideOf("Inclusion", "version", "includeParent", "root"),
-      sideOf("IncludeRoot", "version", "parent", "kind"),
-    ),
-    "Include root",
-  ],
-  [familyOf("counted", sideOf("SiteTarget", "target"), "Document", "targetedBy"), "E1 derived"],
-  [
-    foldOf(
-      { count: "targetedBy", owner: "Document" },
-      "or",
-      sideOf("SiteTarget", "ancestry"),
-      sideOf("Document", "node", "context"),
-    ),
-    "E1 derived",
-  ],
-  // The includes that splice a document, whose count is 0 exactly where it heads an assembly
-  // (reading 117, tests.ts splicingParents), and each assembly's root a head's: both the import's
-  // own derivation, so a breach is the import's. The heads' other half, a root for each head, is
-  // "Inclusion cycle" with its group.
-  [
-    foldOf(
-      { count: "targetedBy", owner: "Document" },
-      "count",
-      sideOf("SiteTarget", "target"),
-      sideOf("Document", "node", "spliced"),
-    ),
-    "E1 derived",
-  ],
-  [containedIn(sideOf("Instance", "document"), sideOf("Document", "node")), "E1 derived"],
-  [containedIn(sideOf("TestDocument", "node"), sideOf("Document", "node")), "E1 derived"],
-  [
-    containedIn(
-      sideOf("Instance", "document", "ids", "idrefTargets", "choices", "hottexts"),
-      sideOf("Document", "node", "ids", "idrefTargets", "choices", "hottexts"),
-    ),
-    "E1 derived",
-  ],
-  [
-    containedIn(
-      sideOf("Instance", "document", "bindings", "langs", "variables"),
-      sideOf("Document", "node", "bindings", "langs", "variables"),
-    ),
-    "E1 derived",
-  ],
   ...Object.values(testRelations).map(
     ({ name, primaryKey }) =>
       [
@@ -968,7 +826,8 @@ const FamilyValue = Schema.Struct({
 });
 
 /**
- * Every statement value a group of {@link lawGroups} may hold, as grizzle's constructors build it.
+ * Every statement value a module's group of {@link namedLaws} may hold, as grizzle's constructors
+ * build it.
  */
 const StatementValue = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("check") }),
@@ -1058,33 +917,6 @@ export const lawsOfStatement = (statement: Statement): readonly Law[] =>
   });
 
 /**
- * The law groups a module exports, each with the one name all of its laws but its checks are
- * stated under, so a law the group gains is named with it: the tests' groups, the one module whose
- * laws are not yet named where they are stated ({@link namedLaws} holds the others).
- *
- * - **Tests** (`tests.ts`, Q5.13): every overlay's row, copies and families is "Test overlay"; the
- *   assembled test's instance tree is "Inclusion cycle", since no finite instance tree has one
- *   child per site under a cycle a head reaches, which the deferred foreign key from `Instance`
- *   into `TestDocument.sites` refuses, and none places a document of a cycle no head reaches, which
- *   `TestDocument.instances`' check refuses; its names are "Test name key"; its branch resolutions
- *   are "Branch target"; each item ref's target is "Item ref target". A row of {@link writtenLaws}
- *   names a law of a group otherwise: a section document's key and an href's entry ("Document
- *   entry"), a named element's key ("Structure identifier") and the required members ("Selection
- *   required"), a variable mapping's target key ("Variable mapping target"), a stimulus ref's key
- *   ("Stimulus ref key"), the item ref target's copy of its resolved path ("E1 derived"), an
- *   include's site into its document ("Include target") and its root's kind ("Include root"), the
- *   sites' count, their context and splice folds under their document, the assembled documents'
- *   copies and each assembly's root a head's ("E1 derived").
- */
-export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
-  [testOverlayLaws, "Test overlay"],
-  [inclusionLaws, "Inclusion cycle"],
-  [testNameLaws, "Test name key"],
-  [branchLaws, "Branch target"],
-  [itemRefLaws, "Item ref target"],
-];
-
-/**
  * A module's statements by the law each states, the law's name its key: `nodeLawsByName` of
  * `#pantry/qti/node.ts` and its peers, so a law is named where it is stated and this module reads
  * the name rather than restating the law.
@@ -1109,6 +941,7 @@ export const namedLaws: readonly LawsByName[] = [
   htmlLawsByName,
   quotationLawsByName,
   operatorLawsByName,
+  testLawsByName,
 ];
 
 /**
@@ -1124,30 +957,12 @@ const lawsNamedIn = (byName: LawsByName): readonly (readonly [Law, LawName])[] =
   );
 
 /**
- * The identities two statements share while their owners name them by two laws, so no row or group
- * may name them and the census lists them until their sides differ. None stands today: Q5.09 gave
- * the strings a multiple extended text requires (`max-strings-required`) the term `kind`, apart
- * from the single-count binding (`binding-fit`), and identity.ts reads "SSML trim mark" from its
- * speak's `node`, apart from "SSML lexicon reference"'s `fragment`.
- */
-export const contestedIdentities: ReadonlySet<string> = new Set<string>();
-
-/**
  * Every law the schema states that is no check, each as its outcome names it, with its name in
- * {@link lawTable}: {@link writtenLaws}, then every law of {@link lawGroups} they do not name and no
- * two owners contest ({@link contestedIdentities}), each once.
+ * {@link lawTable}: every law of {@link namedLaws}, under the name its module groups it by, then
+ * {@link writtenLaws}' rows for the laws no module names, each once.
  */
 export const statedLaws: readonly (readonly [Law, LawName])[] = Arr.dedupeWith(
-  [
-    ...namedLaws.flatMap(lawsNamedIn),
-    ...writtenLaws,
-    ...lawGroups.flatMap(([statements, name]) =>
-      statements
-        .flatMap(lawsOfStatement)
-        .filter((law) => !contestedIdentities.has(lawIdentity(law)))
-        .map((law) => [law, name] as const),
-    ),
-  ],
+  [...namedLaws.flatMap(lawsNamedIn), ...writtenLaws],
   ([a], [b]) => lawIdentity(a) === lawIdentity(b),
 );
 

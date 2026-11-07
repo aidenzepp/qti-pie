@@ -18,16 +18,7 @@ import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-import {
-  branchLaws,
-  collapsedPattern,
-  inclusionLaws,
-  itemRefLaws,
-  testLaws,
-  testNameLaws,
-  testOverlayLaws,
-  testRelations,
-} from "#pantry/qti/tests.ts";
+import { collapsedPattern, testLaws, testRelations } from "#pantry/qti/tests.ts";
 import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
 
 describe("qti/tests.ts, declared", () => {
@@ -48,14 +39,6 @@ describe("qti/tests.ts, declared", () => {
     }
 
     assert.strictEqual(new Set(testLaws).size, testLaws.length);
-    assert.strictEqual(
-      testLaws.length,
-      testOverlayLaws.length +
-        inclusionLaws.length +
-        testNameLaws.length +
-        branchLaws.length +
-        itemRefLaws.length,
-    );
     assert.strictEqual(
       built.statements.length,
       nodeLaws.length +
