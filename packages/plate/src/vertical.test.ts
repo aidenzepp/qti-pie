@@ -5,6 +5,7 @@ import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace, walk } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
+  begin,
   checkResponses,
   configure,
   decode,
@@ -13,6 +14,7 @@ import {
   postings,
   redact,
   render,
+  restore,
   score,
 } from "#plate/index.ts";
 import type {
@@ -624,6 +626,41 @@ describe(
           );
           assert.isTrue(Option.isSome(accepted.item.processing), "the response processing runs");
           assert.deepStrictEqual(accepted.unsupported, []);
+        }),
+    );
+
+    it.effect(
+      "[I-5] [I-9b] template_digging needs its record to score: with none it fails RecordRequired, and over begin's record its template-set correct response scores 1 and a wrong one 0",
+      () =>
+        Effect.gen(function* templateDiggingScores() {
+          const location = "QTI3_BPIG_Examples/items/template_digging.xml";
+          const { verdict } = yield* openFixture(location);
+          const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+            assert.fail(`${location} is ${verdict.verdict}, not accepted`),
+          );
+          const stored = yield* Effect.fromResult(begin(accepted, { instance, seed: 20_251_107 }));
+          const { record } = yield* Effect.fromResult(restore(accepted, stored));
+          const correct = Option.getOrElse(Option.fromUndefinedOr(record.correct["RESPONSE"]), () =>
+            assert.fail("begin's record holds no correct response for RESPONSE"),
+          );
+          const [single] = correct.values;
+          const wrong: Value = {
+            baseType: "float",
+            cardinality: "single",
+            values: [
+              { baseType: "float", value: single?.baseType === "float" ? single.value + 1 : 0 },
+            ],
+          };
+          const right = yield* Effect.fromResult(score(accepted, { RESPONSE: correct }, stored));
+          const missed = yield* Effect.fromResult(score(accepted, { RESPONSE: wrong }, stored));
+
+          assert.strictEqual(
+            Option.getOrUndefined(Result.getFailure(score(accepted, { RESPONSE: correct })))?._tag,
+            "RecordRequired",
+          );
+          assert.strictEqual(correct.baseType, "float");
+          assert.deepStrictEqual(valuesOf(right.outcomes, "SCORE"), [1]);
+          assert.deepStrictEqual(valuesOf(missed.outcomes, "SCORE"), [0]);
         }),
     );
   },

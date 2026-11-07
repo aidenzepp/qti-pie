@@ -1,7 +1,7 @@
 /**
  * The failures the engine returns, a leaf the evaluator, the reference resolver and the expression
- * families share: the rules name an identifier the item or the variables do not hold, set an
- * outcome to a value of another type, or map a response that has no mapping.
+ * families share: the rules name an identifier the item or the variables do not hold, set a
+ * variable to a value of another type, or map a response that has no mapping.
  *
  * Each is a failure the caller can cause, since the variables come from the record the host hands
  * back, so the engine returns it in a `Result` and never throws it. `#plate/engine/evaluate.ts`
@@ -47,20 +47,23 @@ export class UnknownIdentifierError extends Data.TaggedError("UnknownIdentifierE
     const identifier = JSON.stringify(this.identifier);
 
     return this.holder === "record"
-      ? `The session record holds no value for ${identifier}, which the rules read as a ${this.role}: pass back, unchanged, the record score returned for this item, or none to start it afresh.`
+      ? `The session record holds no value for ${identifier}, which the rules read as a ${this.role}: pass back, unchanged, the record begin or score returned for this item.`
       : `The rules read ${identifier} as a ${this.role}, and the item holds no ${this.role} by that name: run rules built from this item, with the variables its record holds.`;
   }
 }
 
 /**
- * The failure of a `qti-set-outcome-value` whose expression gives a value, not NULL, of a base type
- * or cardinality that differs from the outcome's declaration, which the evaluator returns.
+ * The failure of a rule that sets a variable to a value, not NULL, of a base type or cardinality
+ * that differs from the variable's declaration: a `qti-set-outcome-value`, which the evaluator
+ * returns, or, in template processing, a `qti-set-template-value`, `qti-set-correct-response` or
+ * `qti-set-default-value`, which the template interpreter returns.
  *
  * QTI assigns without conversion: "floating point values can not be assigned to integer variables
  * and vice-versa", and the expression's type must match the target's. A NULL is never checked: it
- * is the absence of a value, so it has no type to differ from the outcome's, and the outcome takes
- * its own NULL, of its declared base type and cardinality. The engine stores no value of another
- * type, so the record always holds each outcome at its declared type.
+ * is the absence of a value, so it has no type to differ from the variable's, and the variable
+ * takes its own NULL, of its declared base type and cardinality. The engine stores no value of
+ * another type, so the record always holds each variable at its declared type. The failure does
+ * not say which rule set the value, so its message names the four.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_SetValue
  */
@@ -71,20 +74,20 @@ export class OutcomeMismatchError extends Data.TaggedError("OutcomeMismatchError
   readonly actual: string;
 
   /**
-   * The base type and cardinality the outcome is declared with.
+   * The base type and cardinality the variable is declared with.
    */
   readonly expected: string;
 
   /**
-   * The outcome's identifier.
+   * The identifier of the variable the rule sets.
    */
   readonly identifier: string;
 }> {
   /**
-   * The outcome, both types, and the expression to give it, in one line.
+   * The variable, both types, and the expression to give the rule that sets it, in one line.
    */
   override get message(): string {
-    return `The rules set ${JSON.stringify(this.identifier)}, declared ${this.expected}, to a ${this.actual} value: give its qti-set-outcome-value an expression of base type and cardinality ${this.expected}.`;
+    return `The rules set ${JSON.stringify(this.identifier)}, declared ${this.expected}, to a ${this.actual} value: give the rule that sets it (a qti-set-outcome-value, or in template processing a qti-set-template-value, qti-set-correct-response or qti-set-default-value) an expression of base type and cardinality ${this.expected}.`;
   }
 }
 
@@ -123,6 +126,6 @@ export class UnmappedResponseError extends Data.TaggedError("UnmappedResponseErr
 
 /**
  * A failure the engine returns: the rules name an identifier the item or the variables do not hold,
- * set an outcome to a value of another type, or map a response that has no mapping.
+ * set a variable to a value of another type, or map a response that has no mapping.
  */
 export type EngineFailure = OutcomeMismatchError | UnknownIdentifierError | UnmappedResponseError;

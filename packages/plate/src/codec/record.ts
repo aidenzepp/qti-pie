@@ -129,7 +129,7 @@ export type RecordStage = "decode" | "encode";
  */
 const recordRemedies: Readonly<Record<RecordStage, (issue: string) => string>> = {
   decode: (issue) =>
-    `The session record is not one the renderer wrote: ${issue}. Pass back, unchanged, the record score returned, or none to start the item afresh.`,
+    `The session record is not one the renderer wrote: ${issue}. Pass back, unchanged, the record begin or score returned for this item.`,
   encode: (issue) =>
     `The renderer could not write the session record it produced: ${issue}. This is a renderer defect; report it with the item.`,
 };
