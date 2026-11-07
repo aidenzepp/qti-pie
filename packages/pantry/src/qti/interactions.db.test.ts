@@ -59,6 +59,8 @@ import {
   Hottext,
   InteractionAttribute,
   nilUuid,
+  ReferringDocument,
+  SectionFeedbackName,
   SectionFeedbackRef,
   SectionScope,
   Slider,
@@ -1007,7 +1009,10 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // Oracle: PostgreSQL, the `Feedback_outcome_type` check (reading 77) and the containment
           // of (kind, attribute, declarationKind) into the closed `ContentReference`.
           // Bound: a float outcome, of an item's feedback and of a section's feedback placed under
-          // a test (port audit A45); a feedback naming the response built-in numAttempts.
+          // a test (port audit A45); a feedback naming the response built-in numAttempts. The placed
+          // feedback stands on the section document's `ReferringDocument` and its
+          // `SectionFeedbackName`, since its placement's counts are its document's and its
+          // reference is its document's, both keys PostgreSQL judges at the INSERT.
           Effect.gen(function* references() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const typed = yield* db.apply(
@@ -1029,11 +1034,12 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             );
             assert.isTrue(rejectedBy(builtIn, containedIn("FeedbackRef", "ContentReference")));
 
+            const { attribute, document, identifier, kind, node } = feedbackOf();
             const placed = yield* db.apply(
               ChangeSet.empty(Author)
-                .insert(SectionScope, [
-                  { assembly: stray, document: stray, instance: strayNode(1) },
-                ])
+                .insert(ReferringDocument, [{ document }])
+                .insert(SectionFeedbackName, [{ attribute, document, identifier, kind, node }])
+                .insert(SectionScope, [{ assembly: stray, document, instance: strayNode(1) }])
                 .insert(SectionFeedbackRef, [
                   {
                     ...feedbackOf({ baseType: "float" }),
