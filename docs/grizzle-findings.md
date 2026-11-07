@@ -1612,6 +1612,34 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 - **Status:** handed to grizzle-c5, whose lane F takes it as a defect, with a generated-search guard and this case
   kept. Nothing is filed. The workaround, `a6d23fcc`, comes out when F's fix is pinned.
 
+### A closed `C.row` read whose key is an absent `C.at` casts NULL to a bits domain, whose CHECK raises 23514 (grizzle defect, confirmed; lane DBT)
+
+- **Checked at:** the vendored `dec8ab3`, and grizzle `main` `0a8f697` for the pull-first check.
+- **Cause:**
+  - grizzle casts `C.row`'s completions to the set's bits domain (`packages/engine/src/sql/constants.ts:285`).
+  - That domain's CHECK is `((VALUE & L()) = VALUE) IS TRUE` (`packages/engine/src/physical/ddl/constants.ts:1002`
+    to `1010`).
+  - PostgreSQL runs a domain CHECK on NULL (`execExpr.c` `ExecInitCoerceToDomain`; `execExprInterp.c:4498-4508`), so
+    the cast raises before the law's three-valued OR can hold by its other disjunct.
+  - That contradicts grizzle's own statement that an absent key reads "the empty set for C.row"
+    (`packages/engine/src/physical/ddl/expr.ts:242-244`; `README.md:1427-1428`).
+- **Reproduction:** `~/.cache/gr8des/grizzle-trunk/packages/grizzle/work/null-set-read/` (`run.sql` over the drafted
+  migration, in one SERIALIZABLE transaction rolled back), generated and checked on grizzle `main` `0a8f697`. Its
+  output, `~/.cache/gr8des/n2/repro/null-set-read.out`:
+  - **scalar control:** the scalar read, absent at kind b, holds by `kind <> a`: `INSERT 0 1`;
+  - **held-key control:** the set read where the key is held, kind a carrying {x}: `INSERT 0 1`;
+  - **the case:** the set read, absent at kind b, which should hold as the scalar one does, is refused:
+    `ERROR:  value for domain null_set_read.__flag_bits_4_urrfzqnzt6 violates check constraint "check"`;
+  - **why:** a bare `SELECT NULL::bit varying::"null_set_read"."__flag_bits_4_urrfzqnzt6"` is refused with the same
+    error.
+- **Effect in qti-pie:** `Node`'s `picture_source_srcset` and `track_srclang` CHECKs read
+  `SlotSelf.row(AttributeSlotOf.at("slot", model, name))`, whose key is absent on all but 2 to 4 of 231 models. So
+  every lawful `Node` row is refused: node.db's six direct-SQL cases, and every package import. The pin evidence is in
+  `~/.cache/gr8des/n2/t2/logs/node-pin.out` and `node-pin-2.out`.
+- **Status:** relayed to grizzle-c5 under the operator's standing order: fixed at the root, with a search guard over
+  closed reads with absent keys in every position, planted bugs, and this case kept. Nothing is filed and no
+  workaround is applied. DBT's `Compute.cond` guard is recorded only as an option not taken.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
