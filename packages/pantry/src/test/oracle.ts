@@ -120,6 +120,7 @@ import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { addedLaws, lawDocumentBreaches, lawPackageBreaches } from "#pantry/test/oracle-laws.ts";
+import { lawTable } from "#pantry/vocab/laws.ts";
 import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 import {
@@ -5453,22 +5454,18 @@ const rootsExplained = (grammar: ComposedGrammar, type: string): string => {
 };
 
 /**
- * One law of the oracle, in one place: the rule its refusal is named by, the source it states, and
- * its explanation, computed from a breach's keys and the closed relations the law reads. `node`
- * marks a law over node rows, which {@link nodeLaws} states in the order the oracle evaluates
- * them.
+ * One law of the oracle, in one place: its explanation, computed from a breach's keys and the
+ * closed relations the law reads. `node` marks a law over node rows, which {@link nodeLaws} states
+ * in the order the oracle evaluates them. Its rule and its source are the law catalog's
+ * (`#pantry/vocab/laws.ts` `lawTable`, {@link ruleOf} and {@link lawSources}), under the same name.
  */
 export interface OracleLaw {
   readonly explain: Explainer;
   readonly node?: true;
-  readonly rule: OracleRule;
-  readonly source: string;
 }
 
 /**
- * The oracle's own laws. Each source is a reading of `docs/spec-readings.md`, an XML Schema or XSD
- * anchor, a specification section, or the design document a structural law comes from; where a law
- * follows one reading over another, its source says which.
+ * The oracle's own laws, each by the law catalog's name for it.
  */
 const ownLaws = {
   "AL1 admission": {
@@ -5476,44 +5473,30 @@ const ownLaws = {
       `${field(keys, "kind")} admits no ${field(keys, "name")} in ${field(keys, "version")}; it admits ${inBraces(
         admittedNames(keys, grammar).map(({ name }) => name),
       )}`,
-    rule: "attribute-admission",
-    source:
-      "the XSDs' attribute declarations and wildcards as AttributeAdmission (fin.md D2); reading 13 for data-*, reading 47 for xsi:; and the declarations readings refuse (attributes.ts readingRefusals): 9 (role on source, the Schematron's RULE ARIA ROLE 1a) and 85 (xi:include's xpointer)",
   },
   "AL1 owner": {
     explain: (keys) =>
       field(keys, "ownerDocument") === ""
         ? `the attribute at slot ${field(keys, "at")} sits on a ${field(keys, "ownerKind") || "missing node"}, which is no element`
         : `the attribute's owner copy (${field(keys, "kind")}, ${field(keys, "version")}) is not its owner's (${field(keys, "ownerKind")}, ${field(keys, "ownerVersion")}, document ${field(keys, "ownerDocument")})`,
-    rule: "attribute-admission",
-    source: "fin.md §16, the attribute family's owner copy (kind, version, document)",
   },
   "AL2 count": {
     explain: (keys) =>
       `attributes ${field(keys, "attributes")} over ${field(keys, "rows")} attribute rows`,
     node: true,
-    rule: "attribute-admission",
-    source: "fin.md §16, the attribute family's count",
   },
   "AL2 distinct": {
     explain: (keys) =>
       `${field(keys, "name")} takes position ${field(keys, "position")}, which attrs ${inBraces(membersOf(keys["attrsWas"]))} already holds, and no open class does`,
-    rule: "attribute-admission",
-    source:
-      "XML 1.0 §3.1, WFC Unique Att Spec, by position (fin.md §16, masked by the open classes, D2)",
   },
   "AL2 fold": {
     explain: (keys) =>
       `attrs ${inBraces(membersOf(keys["attrs"]))} from attrsWas ${inBraces(membersOf(keys["attrsWas"]))}, where its predecessor's fold is ${inBraces(membersOf(keys["predecessorAttrs"]))}`,
-    rule: "attribute-admission",
-    source: "fin.md §16, attrs = attrsWas | bit(position)",
   },
   "AL2 last slot": {
     explain: (keys) =>
       `attrs ${inBraces(membersOf(keys["attrs"]))}, where its last attribute's fold is ${inBraces(membersOf(keys["lastAttrs"]))}`,
     node: true,
-    rule: "attribute-admission",
-    source: "fin.md §16, the attribute family's end value",
   },
   "AL3 required": {
     explain: (keys, grammar) => {
@@ -5526,21 +5509,14 @@ const ownLaws = {
       )}, which Required holds`;
     },
     node: true,
-    rule: "required-attribute",
-    source:
-      "the XSDs' use=\"required\", and reading 123: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BDO (§5.11: 'Authors must specify the dir attribute on this tag'), where the XSD declares bdo's dir optional (attributes.ts readingUses): AttributeAdmission's use side (Required)",
   },
   "AL4 open name key": {
     explain: (keys) =>
       `${field(keys, "openNames")} open names, ${field(keys, "distinct")} distinct by (node, uri, local)`,
-    rule: "attribute-admission",
-    source: "fin.md D2, an open-class attribute keeps its exact name; reading 13",
   },
   "AL4 open names": {
     explain: (keys) =>
       `${field(keys, "openNames")} open names over ${field(keys, "openAttributes")} open-class attributes`,
-    rule: "attribute-admission",
-    source: "fin.md D2, an open-class attribute keeps its exact name; reading 13",
   },
   "AL5 attribute count": {
     explain: (keys) =>
@@ -5553,23 +5529,14 @@ const ownLaws = {
         },
       ),
     node: true,
-    rule: "attribute-count",
-    source:
-      "readings 41 and 43 (attributes.ts attributeCounts): https://www.w3.org/TR/speech-synthesis11/#S3.1.6 (SSML 1.1 §3.1.6, meta: 'Either a name or http-equiv attribute is required. It is an error to provide both name and http-equiv attributes'); https://www.w3.org/TR/speech-synthesis11/#S3.2.1 and #S3.2.4 (§3.2.1, voice, and §3.2.4, prosody: 'Although each attribute individually is optional, it is an error if no attributes are specified'), counting what §2.2.1's fragment removal keeps: SSML's own attributes, xml:lang and xml:base",
   },
   "AreaMapping base type": {
     explain: (keys) =>
       `an area mapping of base type ${JSON.stringify(field(keys, "baseType"))}, where an area mapping maps points alone`,
-    rule: "mapping-base-type",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_AreaMapping (§5.5, the AreaMapping class: 'A special class used to create a mapping from a source set of point values to a target set of float values'): an area mapping's response declaration is of base type point (mapping.ts AreaMapping_base_type)",
   },
   "Aria value range": {
     explain: (keys) =>
       `${field(keys, "kind")}'s aria-valuemax ${field(keys, "max")} is below its aria-valuemin ${field(keys, "min")}`,
-    rule: "aria-value-range",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ARIABase.Attr_aria-valuemax (§5.2.31, and §7.1.31 of ARIABaseEmpty: 'Authors MUST ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin''), both read as xs:decimal, as the XSD types them (interactions.ts AriaRange); reading 91 makes the MUST a law",
   },
   Arity: {
     explain: (keys, grammar) =>
@@ -5578,43 +5545,26 @@ const ownLaws = {
         onSome: ({ max, min }) =>
           `${field(keys, "kind")} holds ${field(keys, "count")} expressions; OperatorArity admits ${String(min)} to ${String(max)}`,
       }),
-    rule: "P2",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_ExpressionGroup (§6.9, ExpressionGroup: each operator's attribute is of a container class whose logic attribute's multiplicity is its sub-expression count, §5.83.1 Logic0toMany '[0.. unbounded]', §5.84.1 Logic1toMany and §5.94.1 NumericLogic1toMany '[1.. unbounded]', §5.85.1 LogicPair '[2]' and §5.86.1 LogicSingle '[1]', or of its own class, whose logic attribute states its count, as §5.113.2 Repeat's '[1.. unbounded]' with §5.113's 'The repeat operator takes one or more sub-expressions', over §6.9.49's '0 or more'; a leaf class's children row reads 'There are no children.'; as §6.9.21, https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-match, 'The match operator takes two sub-expressions') (expression.ts OperatorArity); reading 21",
   },
   "Attribute prefix": {
     explain: (keys) =>
       `${field(keys, "kind")}'s attribute ${field(keys, "name")} is written with the prefix ${JSON.stringify(field(keys, "prefix"))}, where a name in no namespace has none, an xml: name has xml, and a name in another namespace has a declared prefix other than xml and xmlns`,
-    rule: "attribute-admission",
-    source:
-      "reading 47 (an xsi: attribute is exported byte for byte, C54), with https://www.w3.org/TR/xml-names/#ns-decl (Namespaces in XML 1.0 §3: 'The prefix xml is by definition bound to the namespace name http://www.w3.org/XML/1998/namespace … Other prefixes MUST NOT be bound to this namespace name'; 'The prefix xmlns is used only to declare namespace bindings') and https://www.w3.org/TR/xml-names/#defaulting (§6.2: 'The namespace name for an unprefixed attribute name always has no value'): every attribute keeps the prefix its name is written with, empty for a name in no namespace, xml for the XML namespace's, and neither empty, xml nor xmlns for an xsi:, xlink: or namespaced open name (attributes.ts Attribute_prefix)",
   },
   "AttributeEntity owner": {
     explain: (keys) =>
       `an entity reference at offset ${field(keys, "offset")} of attribute ${field(keys, "attribute")} has no attribute row`,
-    rule: "attribute-lexical",
-    source: "XML 1.0 §4.1 (entity references in attribute values), kept unexpanded (plan §1.4)",
   },
   "Binding cardinality": {
     explain: (keys) =>
       `${field(keys, "kind")}'s ${field(keys, "attribute")} is ${field(keys, "most")}, so it binds a response of multiple cardinality, and ${field(keys, "identifier")} is ${field(keys, "cardinality")}`,
-    rule: "binding-fit",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_max-choices (§5.30.2: 'If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with multiple cardinality'), and the same sentence of max-choices (§5.66.1, §5.68.2, §5.107.3, §5.128.2) and max-associations (§5.8.2, §5.57.3, §5.59.2, §5.60.2, §5.89.2), reading 92; the Schematron's RESPONSEDEC rule 2 is the choice interaction's case; a most left unwritten reads its XSD default",
   },
   "Binding declared": {
     explain: (keys) =>
       `response-identifier names ${field(keys, "identifier")}, which no qti-response-declaration declares`,
-    rule: "binding-declared",
-    source:
-      "reading 75: https://www.imsglobal.org/spec/qti/v3p0/info#Data_ResponseDeclaration (§5.115: 'Response variables are declared by response declarations and bound to interactions in the itemBody'), https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BasePromptInteraction.Attr_response-identifier (§5.15.7, and §5.18.6, §5.19.6, §5.45.1 and §5.162.1, each of multiplicity [1]: 'The response variable associated with the interaction') and each interaction class's binding sentence, as https://www.imsglobal.org/spec/qti/v3p0/info#Data_ChoiceInteraction (§5.30: 'The ChoiceInteraction must be bound to a response variable with a base-type of identifier and single or multiple cardinality'): an interaction's response-identifier names a response declaration of its item; the text entry interaction's response-identifier is the XSD's IDREF (reading 14), every other interaction's, the extended text interaction's among them, an IdentifierDType this law resolves",
   },
   "Binding unique": {
     explain: (keys) =>
       `${field(keys, "kind")} binds ${field(keys, "identifier")}, which ${field(keys, "first")} already binds; a response variable is bound to one interaction only`,
-    rule: "binding-unique",
-    source:
-      "reading 92: https://www.imsglobal.org/spec/qti/v3p0/info#Data_ResponseDeclaration (§5.115: 'Each response variable declared may be bound to one and only one interaction'): no two interactions of an item name one response variable",
   },
   BindingFit: {
     explain: (keys, grammar) =>
@@ -5623,116 +5573,69 @@ const ownLaws = {
           .filter(({ kind }) => kind === field(keys, "kind"))
           .map(({ baseType, cardinality }) => `${baseType} ${cardinality}`),
       )}`,
-    rule: "binding-fit",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4, each interaction's 'must be bound to a response variable with a base-type of … and … cardinality', as §2.4.1.1 https://www.imsglobal.org/spec/qti/v3p0/info#ChoiceInt) (expression.ts BindingFit)",
   },
   "Branch forward": {
     explain: (keys) =>
       `a branch rule of ${field(keys, "owner")} names ${field(keys, "target")}, which does not lie after it and no shuffle orders the two`,
-    rule: "branch-forward",
-    source:
-      "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'the test jumps forward to the item, section or part referred to by the target identifier', 'the target must refer to an item or section in the same test-part that has not yet been presented'): a target lies after its source's end in the assembled test, unless the section that orders the two shuffles (§5.98: the child elements of an invisible section not kept together 'are mixed into the parent's selection prior to shuffling'); fixed is not read, a recorded limit (tests.ts Branch_forward)",
   },
   "Branch target": {
     explain: (keys) =>
       `a branch rule of ${field(keys, "owner")} names ${field(keys, "target")}, which is no exit and no part of its kind in its test part that its placement may reach`,
-    rule: "branch-target",
-    source:
-      "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
   },
   "Choice bounds": {
     explain: (keys) =>
       field(keys, "choices") === ""
         ? `${field(keys, "min")} ${field(keys, "least")} exceeds ${field(keys, "max")} ${field(keys, "most")}`
         : `${field(keys, "attribute")} ${field(keys, "count")} exceeds the ${field(keys, "choices")} choices ${field(keys, "kind")} holds`,
-    rule: "choice-bounds",
-    source:
-      "reading 76: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_min-choices (§5.30.3: 'min-choices must be less than or equal to the limit imposed by max-choices'; §5.30.2: 'If max-choices is 0 then there is no restriction'), the same sentence for min-associations (§5.8.3, §5.57.2, §5.59.1, §5.60.1, §5.89.3), match-min (§5.7.9, §5.56.6, §5.58.6, §5.131.7), min-choices (§5.66.2, §5.68.1, §5.107.2, §5.128.1) and min-strings (§5.48.7, with reading 53's 0); reading 18: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_OrderInteraction.Attr_max-choices (§5.97.3, and §5.61.2 of the graphic order interaction: 'Used in conjunction with min-choices, if specified, max-choices must be greater than or equal to min-choices and must not exceed the number of choices available'; §5.97.2, §5.61.1: min-choices 'must not exceed the number of choices available. If unspecified, all of the choices must be ordered and max-choices is ignored'), with no 0 exemption, read only where min-choices is written (references.ts ChoiceBound's counted zero and ChoiceCount); the media interaction's plays by reading 9, the Schematron's rule 13Ba read by intent, max-plays 0 no limit (§5.92.3)",
   },
   "Choice identifier key": {
     explain: (keys) =>
       `${field(keys, "kind")}'s identifier ${field(keys, "identifier")} is the identifier of the ${field(keys, "kind")} at ${field(keys, "first")}; a choice's identifier names one choice of its class in its document`,
-    rule: "choice-identifier-distinct",
-    source:
-      'reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1: \'This identifier must not be used by any other choice or item variable\', each class naming its own noun) and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Identifier (§7.16: an identifier is \'a logical reference to another object in the item, such as an itemVariable or choice\'): no two choices of one kind in a document share an identifier, whichever interactions hold them, nor two hottexts of a document, compared collapsed (interactions.ts key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document", "identifier")))',
   },
   "Choice not variable": {
     explain: (keys) =>
       `${field(keys, "kind")}'s identifier ${field(keys, "identifier")} names ${field(keys, "variable") === "built-in" ? "a built-in variable" : "a variable its document declares"}; a choice's identifier names no item variable`,
-    rule: "choice-identifier-distinct",
-    source:
-      "reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1 and the other choice classes' identifier: 'This identifier must not be used by any other choice or item variable'), https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Variable (§7.47: a variable is one 'declared in a corresponding variable declaration or is one of the built-in variables'), https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ResponseDeclaration.Attr_identifier (§5.115.1, and §4.5.1 and §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'There is one built-in context variable named \"QTI_CONTEXT\" with record cardinality'): no choice or hottext bears the identifier of a declaration of its document, nor in an item that of a built-in variable, compared collapsed (interactions.ts ChoiceVariableName, Choice_not_variable)",
   },
   "Condition type": {
     explain: (keys) =>
       `the condition of ${field(keys, "parentKind")} is ${field(keys, "baseType")} ${field(keys, "cardinality")}, not boolean single`,
-    rule: "P21",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_ResponseCondition_qti-response-if (§5.114.1, and §5.114.2 and §5.117 of the response branches, §5.99.1, §5.99.2 and §5.101 of the outcome branches, and §5.149.1, §5.149.2 and §5.154 of the template branches: each 'consists of an expression which must have an effective base-type of boolean and single cardinality'), and https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateConstraint (§5.150: 'A templateConstraint contains an expression which must have an effective base-type of boolean and single cardinality') (expressions.ts Condition_type; the old checker's P21)",
   },
   "Context variable reference": {
     explain: (keys, grammar) => referenceExplained(keys, grammar),
-    rule: "context-variable-ref",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_PortableCustomInteraction_qti-context-variable (§5.106.6: 'This allows an item author to bind a context variable to the PCI instance'), https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'Context variables, variables declared by context declarations', and 'There is one built-in context variable named \"QTI_CONTEXT\" with record cardinality') and the Schematron's rule 20Ba (reading 9): a PCI's qti-context-variable names QTI_CONTEXT or a declared context variable (references.ts ContentReference)",
   },
   "Declaration base type": {
     explain: (keys) =>
       `${field(keys, "identifier")} is of cardinality ${JSON.stringify(field(keys, "cardinality"))} and base type ${JSON.stringify(field(keys, "baseType"))}, where a record declares no base type and every other variable declares one`,
-    rule: "declaration-type",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_base-type (§4.5.3, and §5.34.3, §5.115.3, §5.151.3: 'The value space from which the variable's value can be drawn (or in the case of containers, from which the individual values are drawn) is identified with a base-type', 'Variables with record cardinality have no base-type'): a record declares no base type (BaseType none), and every other variable declares one",
   },
   "Declaration key": {
     explain: (keys) => `a second declaration of ${field(keys, "identifier")}`,
-    rule: "declaration-key",
-    source:
-      "reading 74: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, and §5.34.1, §5.115.1, §5.151.1: 'All item variables declared in an item share the same namespace'); a response's and a context's identifier is a UniqueIdentifier (§5.115.1, §5.34.1; §7.43: 'unique within the scope of the instance'), though the 3.0.1 XSD types the context's an IdentifierDType, an xs:NCName, so DocumentId key counts it among the IDs",
   },
   "Declaration not reserved": {
     explain: (keys) =>
       `${field(keys, "identifier")} is a built-in session variable, which is declared implicitly and must not be declared`,
-    rule: "declaration-reserved",
-    source:
-      "reading 72: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, §5.115.1, §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration'), each spelled exactly, with no alias, the identifier compared collapsed (references.ts BuiltInVariable, its session variables); the context variable QTI_CONTEXT is Reserved type's",
   },
   Document: {
     explain: (keys) =>
       `the Document row's node ${field(keys, "documentRow")} is not the document node ${field(keys, "self")}`,
-    rule: "reachability",
-    source: "the XDM document node as the Document row (plan §1.4, fin.md D7)",
   },
   "Document entry": {
     explain: (keys) =>
       keys["href"] === undefined
         ? `the listed document ${field(keys, "path")} is no entry of the package`
         : `the section ref's href ${JSON.stringify(field(keys, "href"))} names no section document the package lists`,
-    rule: "entry-kind",
-    source:
-      "IMS Content Packaging 1.2: a listed document is an entry of the package, and one document: a resource names the document at its href, read as a document of its type (reading 93), so no path is listed as documents of two types (qti/package.ts, Document's key over package and path); and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: a section ref 'functions as a facade for the qti-assessment-section to which it refers'): a section ref's href names a section document the package lists, its path an entry (qti/tests.ts sectionRefPaths)",
   },
   "Document lang": {
     explain: (keys) =>
       `the document's xml:lang ${JSON.stringify(field(keys, "lang"))} states a language that its resource's LOM general categories ${inBraces(membersOf(keys["generals"]))} do not all list`,
-    rule: "document-lang",
-    source:
-      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1)",
   },
   "DocumentId key": {
     explain: (keys) =>
       `a second element purports the id ${field(keys, "id")}, which ${field(keys, "first")} already holds`,
-    rule: "document-key",
-    source:
-      "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): no id's [binding] has more than one member, an attribute's binding its element, an ID-typed element text's its parent (§3.15.5; reading 101; identity.ts IdBinding); reading 14; reading 74: a context declaration's identifier, a UniqueIdentifier (https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ContextDeclaration.Attr_identifier, §5.34.1), is one of the document's IDs, though the 3.0.1 XSD types it an IdentifierDType",
   },
   "E1 derived": {
     explain: (keys) =>
       `holds state ${field(keys, "state")}, ${field(keys, "elements")} elements, ancestry ${inBraces(membersOf(keys["ancestry"]))}, string value ${JSON.stringify(field(keys, "stringValue"))} and first and last characters ${JSON.stringify(field(keys, "first"))} and ${JSON.stringify(field(keys, "last"))}, where the closed relations, its children and its own characters derive state ${field(keys, "derivedState")}, ${field(keys, "derivedElements")} elements, ancestry ${inBraces(membersOf(keys["derivedAncestry"]))}, ${JSON.stringify(field(keys, "derivedStringValue"))} and ${JSON.stringify(field(keys, "derivedFirst"))} and ${JSON.stringify(field(keys, "derivedLast"))}`,
     node: true,
-    rule: "derived",
-    source:
-      "fin.md §17, E1: the fields closed relations determine, and the string value (folds.ts)",
   },
   "Equal tolerance": {
     explain: (keys) => {
@@ -5743,42 +5646,25 @@ const ownLaws = {
         ? `the qti-equal compares in ${field(keys, "mode")} mode and writes no tolerance, where an absolute or relative comparison names its bounds`
         : `the qti-equal's tolerance holds ${count} values${unsigned.length === 0 ? "" : `, of which ${inBraces(unsigned)} are numbers not above 0`}, where a tolerance is one or two values, each number among them above 0`;
     },
-    rule: "P36",
-    source:
-      "reading 121: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Equal.Attr_tolerance (§5.46.2: 'If the tolerance mode is absolute or relative then the tolerance must be specified. The tolerance consists of two positive numbers, t0 and t1, that define the lower and upper bounds. If only one value is given it is used for both') and #DataModel_ToleranceList (§9.1.5: 'a space separated list of either strings (must not contain a space) or numbers'): a qti-equal whose tolerance-mode is absolute or relative writes tolerance, every tolerance holds one or two values, and each value in xs:double's lexical space is above 0, a string naming a variable read at run time (operators.ts Tolerance, toleranceRequired, Equal_tolerance)",
   },
   "Feedback outcome type": {
     explain: (keys) =>
       `${field(keys, "kind")} names the outcome ${field(keys, "identifier")}, of base type ${JSON.stringify(field(keys, "baseType"))} and cardinality ${JSON.stringify(field(keys, "cardinality"))}, where a feedback outcome is an identifier of single or multiple cardinality`,
-    rule: "feedback-ref",
-    source:
-      "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier (§5.49.1, and §5.52.1, §5.93.1, §5.148.1, §5.157.2: 'The identifier of an outcome variable that must have a base-type of identifier and be of either single or multiple cardinality'); the built-in completionStatus is 'a single identifier' (§2.2.2.3)",
   },
   "Feedback reference": {
     explain: (keys, grammar) => referenceExplained(keys, grammar),
-    rule: "feedback-ref",
-    source:
-      "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier (§5.49.1, and §5.52.1, §5.93.1, §5.148.1, §5.157.2: 'The identifier of an outcome variable that must have a base-type of identifier and be of either single or multiple cardinality'), the built-in completionStatus among them (§2.2.2.3: 'a single identifier'); the outcome's base type and cardinality are Feedback outcome type's (references.ts ContentReference)",
   },
   "File exists": {
     explain: (keys) =>
       `${field(keys, "path")} is named by ${field(keys, "from")} and is no entry of the package`,
-    rule: "file-exists",
-    source:
-      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath)",
   },
   "File listed": {
     explain: (keys) => `${field(keys, "path")} is the href of no cp:file`,
-    rule: "file-listed",
-    source: "IMS Content Packaging 1.2 and QTI packaging: every file is described; reading 33",
   },
   "Foreign attribute class": {
     explain: (keys) =>
       `${field(keys, "kind")}'s attributes ${inBraces(membersOf(keys["wrong"]))} (slot:class:namespace) are not of the class their namespace has against the element's ${JSON.stringify(field(keys, "elementNamespace"))}: no-namespace for none, own-namespace for the element's, foreign for another`,
     node: true,
-    rule: "attribute-admission",
-    source:
-      "XML Schema 1.0 Part 1 §3.10.4 (Wildcard allows Namespace Name), with Namespaces in XML 1.0 §2 for the absent namespace: an open attribute's class agrees with its stored namespace against its element's",
   },
   "Foreign element class": {
     explain: (keys) =>
@@ -5786,188 +5672,110 @@ const ownLaws = {
         ? `${field(keys, "kind")} is written with the prefix ${field(keys, "prefix")}, where a name in no namespace has no prefix`
         : `${field(keys, "kind")} stores the namespace ${JSON.stringify(field(keys, "uri"))} under a parent in ${JSON.stringify(field(keys, "parentNamespace"))}, where no-namespace-element is for none, own-namespace-element for the parent's and foreign-element for another`,
     node: true,
-    rule: "unmodeled-vocabulary",
-    source:
-      "XML Schema 1.0 Part 1 §3.10.4 (Wildcard allows Namespace Name), with Namespaces in XML 1.0 §2 for the absent namespace: a foreign element's class agrees with its stored namespace against its parent's; and Namespaces in XML 1.0 §5 (Namespace constraint: No Prefix Undeclaring) with §6.2, a name in no namespace is unprefixed, so a no-namespace element is written with no prefix (C4)",
   },
   "Foreign simple content": {
     explain: (keys) =>
       `a foreign element governed by the simple type ${field(keys, "governs")} holds an element child, where a simple type's element holds text alone`,
     node: true,
-    rule: "child-set",
-    source:
-      "reading 60: https://www.w3.org/TR/xmlschema-1/#cvc-type (XML Schema 1.0 Part 1 §3.3.4, Element Locally Valid (Type), clause 3.1.2: an element a simple type governs holds no element child), over each foreign element whose xsi:type names a simple type (attributes.ts Governor, TypeText); its attributes are AL1's under the governor, the four xsi: names alone (clause 3.1.1), and its text TextDomain's under the type (clause 3.1.3)",
   },
   "Fragment context": {
     explain: (keys) =>
       `${field(keys, "path")} is placed inside ${field(keys, "first")} and inside ${field(keys, "second")}, and one written element is judged under one nearest interaction, a limit of the representation`,
-    rule: "fragment-context",
-    source:
-      "reading 117: https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_FlowGroup_include (§6.15.8, and the include attribute of each class §9.4.1 lists: 'This provides the insertion of markup from external files. … When using XML this is achieved using the 'XInclude' approach') and https://www.w3.org/TR/xinclude-11/#creating-result (XInclude 1.1 §4.7: 'The result infoset is a copy of the source infoset, with each xi:include element processed as follows'): an included fragment's content is judged in place, as the including document's result infoset holds it; it is one written element per node, judged under the union of the ancestries of the includes that place it and under one nearest interaction; a fragment two includes place inside different interactions, or one inside an interaction and one outside, would need two rows per node, so it is refused: a stated limit of the representation, not a law of the specification",
   },
   "Graphic gap match default hotspot": {
     explain: () =>
       "a qti-associable-hotspot of a qti-graphic-gap-match-interaction has shape default, where that interaction defines no default hotspot",
-    rule: "hotspot-default",
-    source:
-      "reading 80: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_GraphicGapMatchInteraction_qti-associable-hotspot (§5.60.9: 'The default hotspot must not be defined')",
   },
   "Href form": {
     explain: (keys) =>
       `the href ${field(keys, "href")} names no file the representation can read a name from${keys["limit"] === undefined ? "" : ` (${field(keys, "limit")})`}, a limit of the representation (#pantry/import/overlays/package.ts Limit)`,
-    rule: "href-form",
-    source:
-      "reading 102 (overlays/package.ts Limit): every href is resolved before its row is written, its value read by its whitespace class, its path merged with the xml:base in scope or its document's path, its dot segments removed and each segment percent-decoded (RFC 3986 §2.1, §5.2 and §6.2.2.2); a path with a scheme, a leading /, a climb above the package root or an external base is external (reading 35), admitted and never resolved where a cp:file or a content reference holds it, and refused where a law needs the href to name an entry; an empty path names its own document (§4.4). What stays refused is a stated limit of the representation, not a law of the specification: a % that starts no percent-encoding, octets that spell no UTF-8, a segment that decodes to / or U+0000, a backslash, a tab, line feed or carriage return a preserving type keeps, a : in the first segment of a path with no scheme, and a srcset of more than one candidate or with a descriptor",
   },
   "Href listed": {
     explain: (keys) =>
       `${field(keys, "identifier")}'s href ${field(keys, "href")} names a path that is the href of none of its files ${inBraces(membersOf(keys["files"]))}`,
-    rule: "href-listed",
-    source:
-      "imscp_infov1p2pd2.txt:770 (IMS Content Packaging 1.2, §6.6.2: 'A file reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same Resource'): a resource href names the file one of its own files names, compared by resolved path in the package and as written outside it, its launch parameters aside (reading 102)",
   },
   "Idref target": {
     explain: (keys) =>
       `${field(keys, "name")} names ${field(keys, "token")}, which no ID of the document holds`,
-    rule: "idref-target",
-    source:
-      "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14",
   },
   "Include fragment identifier": {
     explain: (keys) =>
       `the include ${field(keys, "node")} names ${field(keys, "href")}, with a fragment identifier, which XInclude makes a fatal error`,
-    rule: "include-href",
-    source:
-      "reading 115: https://www.w3.org/TR/xinclude-11/#include_element (XInclude 1.1 §3.1, href: 'Fragment identifiers must not be used; their appearance is a fatal error'): an xi:include's href carries no #, wherever it stands after the path",
   },
   "Include root": {
     explain: (keys) =>
       `the include ${field(keys, "node")} stands for ${field(keys, "root")}, the root of ${field(keys, "path")}, which ${field(keys, "parentKind")} does not admit where it admits the include`,
-    rule: "include-root",
-    source:
-      "reading 114: https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1, Include's parent classes, and 'This denotes the use of the XInclude feature [XInclude, 16]'), https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_FlowGroup_include (§6.15.8 and its siblings: 'This provides the insertion of markup from external files') and https://www.w3.org/TR/xinclude-11/#docii (XInclude 1.1 §4.2.1: an included document's 'set of top-level included items is the children of the acquired infoset's document information item'): an include under a parent whose model holds one stands for its fragment's root, which is one of its particle's choice-group alternatives, a kind whose position the parent's automaton follows and ends on as the include's",
   },
   "Include target": {
     explain: (keys) =>
       keys["path"] === undefined || field(keys, "path") === ""
         ? `the include ${field(keys, "node")} names no document of the package by an href this representation resolves`
         : `the include ${field(keys, "node")} names ${field(keys, "path")}, which is no document the manifest lists`,
-    rule: "include-target",
-    source:
-      "reading 115: https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1: 'This denotes the use of the XInclude feature [XInclude, 16]'); https://www.w3.org/TR/xinclude-11/#include_element (XInclude 1.1 §3.1: 'If the href attribute is absent when XML processing is specified, the xpointer or fragid attribute must be present', and reading 85 refuses xpointer, and the pinned XInclude.xsd declares no fragid), https://www.w3.org/TR/xinclude-11/#xml-included-items (§4.2: 'Resources that are unavailable for any reason … result in a resource error') and https://www.w3.org/TR/xinclude-11/#fallback_element (§3.2: 'If the xi:fallback element is missing, a resource error results in a fatal error'): an include the information model reads names, by an href this representation resolves, a document its package lists; one that holds a fallback is refused alike, since the representation applies no fallback, a stated limit",
   },
   "Inclusion cycle": {
     explain: (keys) =>
       `the section refs and includes ${inBraces(membersOf(keys["chain"]))} lead from ${field(keys, "path")} back to it, so its merged document never ends`,
-    rule: "inclusion-cycle",
-    source:
-      "reading 85: https://www.w3.org/TR/xinclude-11/#loops (XInclude 1.1 §4.2.7: 'it is a fatal error to process another xi:include element with an include location and xpointer attribute value that have already been processed in the inclusion chain'), the XInclude https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1) names, and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: the section ref 'functions as a facade for the qti-assessment-section to which it refers', the document that holds it, 'with the refered-to section merged in', behaving as 'a document that has all the same sections aggregated in one document', which a chain that returns to its own document has none of): no chain of qti-assessment-section-ref and xi:include hrefs, over the documents the manifest lists, returns to a document already on it",
   },
   "Item duration": {
     explain: (keys) =>
       `${field(keys, "kind")} reads duration in an item that is not time-dependent`,
-    rule: "item-duration",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'The value of duration for items that are not time dependent must not be used in any item or test-level expression', info.txt:8468) (expressions.ts Item_duration over ItemTiming; the UP audit's A62)",
   },
   "Item ref target": {
     explain: (keys) =>
       `the item ref ${field(keys, "node")} names ${field(keys, "path")}, which is no item document of the package`,
-    rule: "item-ref-target",
-    source:
-      "the UP audit's B2: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_AssessmentItemRef.Attr_href (§5.6.5: 'The URI used to refer to the item's file (e.g., elsewhere in the same content package)', info.txt:14764): an item ref's href names a document of the package, and that document's root is an item (tests.ts ItemRefTarget)",
   },
   "Key text bound": {
     explain: (keys) =>
       `its ${field(keys, "field")} holds ${field(keys, "bytes")} UTF-8 bytes, past the ${field(keys, "bound")} a key holds of its kind (#pantry/qti/limits.ts), a limit of the representation`,
-    rule: "key-text-bound",
-    source:
-      "src/qti/limits.ts: a text a key, a containment or a family's hidden columns hold takes its kind's one bound, the least every key of the kind leaves it under grizzle's representability rule, PostgreSQL's BTMaxItemSize (nbtree.h): a key text (keyText) at most keyTextBytes UTF-8 bytes, a namespace name (namespaceText) at most namespaceBytes, a local name at most localNameBytes, each what grizzle's keyTextBytes leaves beside its widest key's other fields; a stated limit of the representation, not a law of the specification",
   },
   "LOM learning resource type": {
     explain: (keys) =>
       `a learningResourceType of the LOM vocabulary (its source ${field(keys, "source") === "" ? "empty or not written, so the binding's default LOMv1.0" : JSON.stringify(field(keys, "source"))}) holds ${JSON.stringify(field(keys, "value"))}, which QTI 3.0 Metadata §2.7.5.1 forbids`,
-    rule: "lom-learning-resource-type",
-    source:
-      "reading 122: https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.5.1, Learning Resource Type: 'the LOM-defined values self assessment and exam are forbidden', normative by its §1.2): a learningResourceType of the LOM vocabulary holds neither, its term the LOM vocabulary's where its source is LOMv1.0, empty, or not written, which the loose binding defaults to LOMv1.0 (imsmd_loose_v1p3p2.xsd:1288); a term of another source is another vocabulary's, which the loose binding does not enforce (§3.6), and is not refused; source and value compared collapsed (metadata.ts LomResourceType, LomResourceTypeSource)",
   },
   "Label tools": {
     explain: (keys) =>
       `${field(keys, "kind")} carries a label, so the item's root must carry tool-name and tool-version, and it lacks ${inBraces(membersOf(keys["missing"]))}`,
-    rule: "label-tool",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'), of the label of each kind whose type takes it from one of those classes, in both versions (labels.ts toolLabelKinds), and not of ItemFileInfo's ('A human readable label/short description for the file', §5.80.2) or PrintedVariable's ('such as would be appropriate for a tooltip', §7.30.4), which state none; reading 128: https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html (QTI 3.0.1 §4.1.3, the item's label: 'If an item uses labels then values for the associated toolName and toolVersion attributes must also be provided'; ~/.cache/gr8des/qti301/info301.txt:11490) of a 3.0.1 item root's own label, where 3.0.0's §4.1.3 ('A human readable label that can be used to describe the Item', ~/.cache/gr8des/anyuri-specs/qti/info.txt:10162) states none; the version is the manifest's schemaversion (reading 67), and the sentence binds an item, not a stimulus or a test",
   },
   "Literal lexical": {
     explain: (keys) =>
       `a qti-base-value of base-type ${field(keys, "baseType")} holds ${JSON.stringify(field(keys, "text"))}, which is no lexical form of it`,
-    rule: "attribute-lexical",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a qti-base-value's text is a lexical form of its base-type, the same language as Typed value's (expression-types.ts BaseTypePattern; readings 7, 34, 45 and 71)",
   },
   LomObjectIdentifier: {
     explain: (keys) =>
       `the document ${field(keys, "identifier")} is named ${field(keys, "entries")} by its record`,
-    rule: "lom-identifier",
-    source:
-      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.1, Identifier: 'One of the values given for the identifier must have an entry that matches the identifier of the associated item, test or object bank', normative by its §1.2), over the general category's identifiers alone; info §4.1.1 and §4.4.1 ('MUST be the same'); reading 62 as UP's audit merges it (docs/research/up.md §2.2), the entry compared collapsed",
   },
   LomObjectTitle: {
     explain: (keys) =>
       `the document titled ${JSON.stringify(field(keys, "title"))} is titled ${field(keys, "strings")} by its record in its language`,
-    rule: "lom-title",
-    source:
-      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.2, Title: 'The title must have a value that matches the value of the title attribute of the associated item, test or object bank. The language used to interpret the title is taken from the language attribute of the associated item, test or object bank', normative by its §1.2); info §4.1.2 and §4.4.2; reading 62 as UP's audit merges it (docs/research/up.md §2.2). Titles compare in xs:normalizedString's value space and language tags without regard to case (RFC 5646 §2.1.1; metadata.ts)",
   },
   "Lookup table cardinality": {
     explain: (keys) =>
       `a ${field(keys, "kind")} of an outcome of ${field(keys, "cardinality")} cardinality, where a lookup table sets a single outcome value`,
-    rule: "lookup-cardinality",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_OutcomeDeclaration_lookupTable (§4.5.13: a lookup table maps 'a numeric source value to a single outcome value in the declared value set'): a qti-match-table's or qti-interpolation-table's outcome declaration is of single cardinality (mapping.ts Lookup_table_cardinality)",
   },
   "Lookup type": {
     explain: (keys) =>
       `qti-lookup-outcome-value looks up a ${field(keys, "baseType")} ${field(keys, "cardinality")} in ${field(keys, "identifier")}'s ${field(keys, "table") || "missing table"}; it takes a single integer, float or duration, a match table's an integer`,
-    rule: "P22",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_LookupOutcomeValue_expressionGroup (§5.87.2: 'An expression which must have single cardinality and an effective base-type of either integer, float or duration. Integer type is required when the associated table is a matchTable'), looked up in the outcome's table (§5.87: 'in the lookupTable associated with the outcome's declaration') (expressions.ts Lookup_type; the old checker's P22)",
   },
   "Manifest id space": {
     explain: (keys) => `${field(keys, "identifier")} is also the manifest's identifier`,
-    rule: "manifest-id-space",
-    source:
-      "IMS Content Packaging 1.2: the manifest's and its resources' identifiers are one xs:ID space",
   },
   "Map key": {
     explain: (keys) =>
       `a ${field(keys, "baseType")} mapping holds the key ${field(keys, "key")} twice, as written or as the value it names`,
-    rule: "map-key-unique",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88.4 and §7.21: 'The map is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float'), so a mapping is a function of its source value: no two of its entries share a key, compared as values of its base type where the schema holds one (an integer's canonical form, a float of grizzle's double form as its double, mapping.ts MapKeyInteger and MapKeyFloat) and as written otherwise (readings 7, 34 and 45)",
   },
   MappableBaseType: {
     explain: (keys, grammar) =>
       `a mapping of base type ${JSON.stringify(field(keys, "baseType"))}; MappableBaseType holds ${inBraces(
         grammar.mappableBaseType.rows.map(({ baseType }) => baseType),
       )}`,
-    rule: "mapping-base-type",
-    source:
-      "reading 78: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88, the Mapping class: \"A special class used to create a mapping from a source set of any base-type (except file and duration) to a single 'float'\") (expression.ts MappableBaseType)",
   },
   "Mapped response": {
     explain: (keys) =>
       `${field(keys, "kind")} names ${field(keys, "identifier")}, a ${field(keys, "declarationKind")} with no ${field(keys, "kind") === "qti-map-response-point" ? "qti-area-mapping of base-type point" : "qti-mapping"}`,
-    rule: "P27",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_MapResponse (§7.22, MapResponse: it 'transforms it using the associated mapping, which must have been declared'; §6.9.46, MapResponsePoint: it takes 'a response variable that must be of base-type point, and transforms it using the associated areaMapping', which §5.115.7 says 'may only be present in declarations of variables with base-type point') (expressions.ts Mapped_response; the old checker's P27)",
   },
   "Mastery range": {
     explain: (keys) =>
       `mastery-value ${field(keys, "masteryValue")} lies outside the normal range from ${JSON.stringify(field(keys, "normalMinimum"))} to ${JSON.stringify(field(keys, "normalMaximum"))}`,
-    rule: "mastery-range",
-    source:
-      "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both are written, as xs:double values (INF and -INF infinite), NaN ordered against nothing; a value outside grizzle's double lexical form (outer whitespace, over 15 significant digits, an exponent beyond 293) is not judged, a recorded limit",
   },
   "MathML arity": {
     explain: (keys) =>
@@ -5977,43 +5785,27 @@ const ownLaws = {
           `m:apply applies ${field(keys, "operator")} to ${field(keys, "arguments")} arguments, where its class (MathML 3 §${section}) takes ${min === max ? String(min) : `${String(min)} or ${String(max)}`}`,
       }),
     node: true,
-    rule: "math-arity",
-    source:
-      "reading 2 (expression.ts mathArities): https://www.w3.org/TR/MathML3/chapter4.html#contm.unary (MathML 3 §4.3.4.6: 'Unary operators take a single argument') and #contm.binary (§4.3.4.5: 'Binary operators take two arguments'), each operator's class from its syntax table in §4.4 (§4.1.5: the Class row 'indicate[s] how many arguments the operator represented by this element takes'); an apply with a qualifier or an interval beside its operator is not judged, and moment is left out, since §4.4.8.6's own example applies it to five arguments",
   },
   "MathML foreign element": {
     explain: (keys) =>
       `${field(keys, "node")} is a foreign element named {${field(keys, "namespace")}}${field(keys, "local")}, and no foreign element is in the MathML namespace: MathML content stands only inside m:math`,
-    rule: "unmodeled-vocabulary",
-    source:
-      "MathML 3 RelaxNG mathml3-common.rnc: start = math (line 15) and anyElement = element (* - m:*) (line 61); MathML 3 §2.2, 'All other MathML content must be contained in a math element'; reading 2",
   },
   "Media source src": {
     explain: (keys) =>
       `a source in ${field(keys, "parentKind") || "a media element"} carries no src, where a source of an audio or a video names its media resource`,
     node: true,
-    rule: "source-src",
-    source:
-      "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_src (§5.135.1: 'The value must be a valid non-empty URL potentially surrounded by spaces. This characteristic must be present'), read in a media element as the HTML Standard it restates splits it (https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element: where 'The source element's parent is a media element', 'This attribute must be present'; where it is a picture element, 'The src attribute must not be present'): a source whose parent is an audio or a video carries src (html.ts Media_source_src)",
   },
   "N1 one document node": {
     explain: (keys) => `${field(keys, "documentNodes")} nodes start at 0, where a document has one`,
-    rule: "reachability",
-    source: "XML 1.0 §2.1, one document entity; fin.md §12, entry 8",
   },
   "N1 sentinel": {
     explain: (keys) =>
       `the document node sits at slot ${field(keys, "at")} with parent ${field(keys, "parent")}, document ${field(keys, "document")}, nearest ${field(keys, "nearest")} (${field(keys, "nearestKind")}) and parentAncestry ${inBraces(membersOf(keys["parentAncestry"]))}, where it is its own at slot 0 and sits in no flag`,
     node: true,
-    rule: "reachability",
-    source:
-      "fin.md §12, entry 8: the document node is its own parent, document and nearest, at slot 0",
   },
   "N2 key": {
     explain: (keys) =>
       `${field(keys, "members")} children over ${field(keys, "slots")} distinct (parent, at) slots`,
-    rule: "reachability",
-    source: "fin.md §5.2, the ordered family's key (parent, at)",
   },
   "N2 mirrors": {
     explain: (keys) =>
@@ -6021,8 +5813,6 @@ const ownLaws = {
         ? `slot ${field(keys, "at")} under a parent of ${field(keys, "parentChildren")} children`
         : `${field(keys, "children")} children, none at slots ${inBraces(membersOf(keys["missing"]))}`,
     node: true,
-    rule: "reachability",
-    source: "fin.md §5.2, the ordered family: slots 0 to children − 1, each held",
   },
   "N4 kinds": {
     explain: (keys, grammar) =>
@@ -6032,8 +5822,6 @@ const ownLaws = {
         ),
       )}, SchemaVersion ${grammar.kinds.versions.has(field(keys, "version")) ? "holds" : "lacks"} ${field(keys, "version")}`,
     node: true,
-    rule: "admission",
-    source: "fin.md §17, the NodeKind and SchemaVersion rosters",
   },
   "N5 Follow": {
     explain: (keys, grammar) => {
@@ -6053,9 +5841,6 @@ const ownLaws = {
       )}`;
     },
     node: true,
-    rule: "ordering",
-    source:
-      "XML Schema Part 1 §3.8, each content model as its Glushkov automaton (content.ts Follow; the operator's ruling of 2026-11-05)",
   },
   "N5 admitted": {
     explain: (keys, grammar) =>
@@ -6068,8 +5853,6 @@ const ownLaws = {
           .map(({ child }) => child),
       )}`,
     node: true,
-    rule: "admission",
-    source: "the XSDs' content models as Admission (content.ts); reading 6 for wildcard content",
   },
   "N5 first slot": {
     explain: (keys) =>
@@ -6077,15 +5860,11 @@ const ownLaws = {
         ? `the first slot copies state ${field(keys, "was")} and ${field(keys, "elementsWas")} elements, where each fold starts at 0`
         : `the first attribute copies attrs ${inBraces(membersOf(keys["attrsWas"]))}, where the fold starts empty`,
     node: true,
-    rule: "ordering",
-    source: "fin.md §4.3, each fold's identity at slot 0",
   },
   "N5 fold": {
     explain: (keys) =>
       `copies state ${field(keys, "was")} and ${field(keys, "elementsWas")} elements, where its predecessor's fold is state ${field(keys, "predecessorState") || "none"} and ${field(keys, "predecessorElements") || "no"} elements`,
     node: true,
-    rule: "ordering",
-    source: "fin.md §4.5a, the predecessor copy",
   },
   "N6 ancestry": {
     explain: (keys, grammar) => {
@@ -6099,9 +5878,6 @@ const ownLaws = {
       )}`;
     },
     node: true,
-    rule: "ancestry-ban",
-    source:
-      "fin.md §13 P3 and §16: the information model's nesting rules as Banned and Needs (ancestry.ts, facets.ts); readings 25 and 38",
   },
   "N7 Counted": {
     explain: (keys, grammar) =>
@@ -6124,9 +5900,6 @@ const ownLaws = {
         })
         .join("; "),
     node: true,
-    rule: "child-set",
-    source:
-      "XML Schema Part 1 §3.9 occurrence bounds of 2 to n, which a position automaton relaxes (content.ts Counted), and the loose LOM binding's Schematron caps: each element the binding bounds to one inside an unbounded choice stands at most once in its family (lom/imsmd_loose_v1p3p2.xsd:18-21 and 85-92, its 94 asserts at 93-911; reading 130)",
   },
   "N7 Last": {
     explain: (keys, grammar) =>
@@ -6146,9 +5919,6 @@ const ownLaws = {
         ),
       )}`,
     node: true,
-    rule: "child-set",
-    source:
-      "XML Schema Part 1 §3.8, each content model as its Glushkov automaton (content.ts Last)",
   },
   "N7 barred by": {
     explain: (keys, grammar) =>
@@ -6161,23 +5931,16 @@ const ownLaws = {
         },
       ),
     node: true,
-    rule: "child-set",
-    source:
-      "the HTML Standard, colgroup: a span attribute bars col children (children.ts ChildBarredBy)",
   },
   "N7 empty family": {
     explain: (keys) =>
       `an empty family's end values are state ${field(keys, "childState")} and ${field(keys, "elementChildren")} elements, where each fold starts at 0`,
     node: true,
-    rule: "union-count",
-    source: "fin.md §5.2, an empty family's end values are each fold's identity",
   },
   "N7 last slot": {
     explain: (keys) =>
       `end values state ${field(keys, "childState")} and ${field(keys, "elementChildren")} elements, where its last child's fold is state ${field(keys, "lastState") || "none"} and ${field(keys, "lastElements") || "no"} elements`,
     node: true,
-    rule: "union-count",
-    source: "fin.md §5.2, the last-slot copy",
   },
   "N8 nearest": {
     explain: (keys, grammar) =>
@@ -6187,130 +5950,78 @@ const ownLaws = {
           : `the parent's nearest ${field(keys, "parentNearest")} is`
       }`,
     node: true,
-    rule: "owner-copy",
-    source: "plan-qti-pie N8, the nearest interaction (fin.md §15, rule 3)",
   },
   "Namespace family": {
     explain: (keys) =>
       `namespaces ${field(keys, "namespaces")} over ${field(keys, "declarations")} declarations`,
     node: true,
-    rule: "reachability",
-    source: "Namespaces in XML 1.0 §3, declarations in source order (fin.md §5.2)",
   },
   "Namespace name": {
     explain: (keys) =>
       `${field(keys, "node")} binds ${field(keys, "prefix") === "" ? "the default namespace" : `the prefix ${field(keys, "prefix")}`} to ${JSON.stringify(field(keys, "uri"))}, which is no RFC 3986 URI reference`,
-    rule: "namespace-name",
-    source:
-      "reading 131: https://www.w3.org/TR/xml-names/#ns-decl (Namespaces in XML 1.0 (Third Edition) §3: 'The attribute's normalized value MUST be either a URI reference — the namespace name identifying the namespace — or an empty string'; §2.1: 'An XML namespace is identified by a URI reference [RFC3986]'; a relative reference is deprecated, §2.2, not refused; §8 lets a processor leave it unchecked, which leaves the document's constraint standing): a namespace declaration's normalized value is RFC 3986's URI-reference (https://www.rfc-editor.org/rfc/rfc3986#appendix-A), the empty one a relative-ref of an empty path (chardata.ts NamespaceUri)",
   },
   "Node key": {
     explain: (keys) => `a second row holds the id ${field(keys, "id")}`,
     node: true,
-    rule: "reachability",
-    source: "trees.md §1, the tree relation's key, id",
   },
   "One base": {
     explain: (keys) =>
       `the operands of ${field(keys, "kind")} are of base types ${field(keys, "bases")} or cardinalities ${field(keys, "cardinalities")}, which it takes of one`,
-    rule: "P23",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-multiple (§6.9.13, and §6.9.14 Ordered: 'Although the sub-expressions may be of any base-type they must all be of the same base-type'; §5.113, Repeat: 'all of which must have either single or ordered cardinality and the same base-type'; §6.9.21, Match: 'which must both have the same base-type and cardinality'; §6.9.33, Member, and §6.9.20, Delete: 'which must both have the same base-type'; §6.9.25, Contains: 'which must both have the same base-type and cardinality - either multiple or ordered'), a type no declaration says aside (reading 4) (expressions.ts One_base; the old checker's P23)",
   },
   OpenElementName: {
     explain: (keys) =>
       `${field(keys, "names")} foreign names over ${field(keys, "foreignElements")} foreign elements`,
-    rule: "unmodeled-vocabulary",
-    source: "fin.md D2, a foreign element keeps its expanded name; reading 6",
   },
   "OpenElementName canonical": {
     explain: (keys) =>
       `${field(keys, "node")} is a foreign element named {${field(keys, "namespace")}}${field(keys, "local")}, the name of ${inBraces(membersOf(keys["kinds"]))}, which its parent admits there, so it is read as that kind`,
-    rule: "unmodeled-vocabulary",
-    source:
-      "https://www.w3.org/TR/xmlschema-1/#cvc-assess-elt (XML Schema 1.0 Part 1 §3.3.4, Schema-Validity Assessment (Element), clauses 1.1.1.2 and 1.1.1.3.2: an element is assessed against the declaration its context determines or its name resolves to, a particle's own or a top-level one a lax or strict wildcard finds, §3.10.4 clause 2), so an element whose expanded name its parent admits there is that declaration's kind and never a foreign element (shred.ts childReadingOf; install.ts KindByNameUnder, the names each (version, parent) admits, C8)",
   },
   "Operand fit": {
     explain: (keys) =>
       `an operand of ${field(keys, "kind")} is ${field(keys, "baseType")} ${field(keys, "cardinality")}, which it does not take there`,
-    rule: "P23",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-member (§6.9, ExpressionGroup, normative: each operator's sub-expression base types and cardinalities, as §6.9.33 qti-member and §6.9.20 qti-delete say: 'The first sub-expression must have single cardinality and the second must be a multiple or ordered container'), a type no declaration says aside (reading 4) (expression.ts expressionTypings, OperandBase, LeadCardinality and TailCardinality; the old checker's P23)",
   },
   "Outcome only": {
     explain: (keys) =>
       `${field(keys, "kind")} stands in ${field(keys, "language")} processing; only outcome processing admits it`,
-    rule: "P25",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-number-correct (§6.9.58 to §6.9.64 and §6.9.41, normative: qti-number-correct, qti-number-incorrect, qti-number-presented, qti-number-responded, qti-number-selected, qti-outcome-minimum, qti-outcome-maximum and qti-test-variables, each 'which can only be used in outcomes processing') (expressions.ts Outcome_only, its language Processing's; the old checker's P25)",
   },
   "Picture source srcset": {
     explain: () =>
       "a source in a picture carries no srcset, where a source of a picture names its image candidates",
     node: true,
-    rule: "source-srcset",
-    source:
-      "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_srcset (§5.135.3: \"This attribute is required when 'source' is used in 'picture'\"); https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element (where 'The source element's parent is a picture element', 'The srcset attribute must be present'): a source whose parent is a picture carries srcset (html.ts Picture_source_srcset)",
   },
   "Prefixed reference": {
     explain: (keys) =>
       `the test ${field(keys, "assembly")} reads the reference ${field(keys, "identifier")} in ${field(keys, "resolving")} ways, ${field(keys, "readings")}, where exactly one reading may name a scope of the test and a variable of it`,
-    rule: "prefixed-ref",
-    source:
-      "readings 48 and 88: https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Variable (§7.47: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; for an item 'allowed to be replaced (i.e. that have the with-replacement attribute set to \"true\")', 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1: 'Identifiers containing the period character are reserved for use in prefixing') and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_TimeLimits (§7.40: 'For qti-assessment-sections, qti-test-parts and whole qti-assessment-tests the time limits relate to the durations of all the item sessions plus any other time spent navigating that part of the test'), a part's or section's duration read by its identifier's prefix as an item's variables are (reading 48), over the assembled test (readings 4, 5 and 86): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
   },
   "Printed variable reference": {
     explain: (keys, grammar) => referenceExplained(keys, grammar),
-    rule: "printed-variable-ref",
-    source:
-      "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_PrintedVariable.Attr_identifier (§7.30.6: 'The outcome variable or template variable must have been defined. The values of response variables cannot be printed directly'), the built-in completionStatus among them (§2.2.2.3) (references.ts ContentReference)",
   },
   "Quotation punctuation": {
     explain: (keys) =>
       `the q has the quotation mark ${JSON.stringify(field(keys, "mark"))} ${field(keys, "position")}, where the user agent draws a q's quotation marks itself`,
-    rule: "q-punctuation",
-    source:
-      "reading 127: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Q (§5.111, Q: 'Quotation punctuation (such as quotation marks) that is quoting the contents of the tag must not appear immediately before, after, or inside q tags; they will be inserted into the rendering by the user agent'; ~/.cache/gr8des/anyuri-specs/qti/info.txt:38400, and the 3.0.1 model's ~/.cache/gr8des/qti301/info301.txt:55430): a q is refused where the last character of its sibling before it, the first of its sibling after it, or the first or last character of its own content is a quotation mark, one of \" « » ‘ ‚ ‛ “ ” „ ‟ ‹ › (main's set, which leaves out the apostrophes ' and ’), each read off a text, whitespace or entity reference row, so an element, a comment or an instruction beside the q holds no punctuation (quotation.ts Quotation_punctuation)",
   },
   "Record field key": {
     explain: (keys) => `a second field of one record value is named ${field(keys, "identifier")}`,
-    rule: "value-cardinality",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_CardinalityEnum (§8.16, CardinalityEnum, record: 'a special container that contains a set of independent values each identified by its own identifier and having its own base-type'): no two fields of one record value share a field-identifier, compared collapsed",
   },
   RecordBindingFit: {
     explain: (keys) =>
       `${field(keys, "kind")} binds the record ${field(keys, "identifier")}, which RecordBindingFit does not admit`,
-    rule: "record-binding-fit",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_TextEntryInteraction (§5.162: 'The textEntryInteraction must be bound to a response variable with single or record cardinality only') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_ExtendedTextInteraction (§5.48: 'The qti-extended-text-interaction must be bound to a response variable of single, multiple, ordered or record cardinality'); every other class's binding sentence names no record (§5.30 and BindingFit's others) (expression.ts RecordBindingFit)",
   },
   "Reference type": {
     explain: (keys) =>
       `${field(keys, "kind")}'s ${field(keys, "attribute")} names ${field(keys, "identifier")}, which is no ${field(keys, "base")} single template or outcome variable`,
-    rule: "P24",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Union_IntegerOrVariableRef (§9.3.3, §9.3.1 and §9.3.4: an integerOrVariableRef, floatOrVariableRef or stringOrVariableRef names a template or outcome variable of that base type, single) (expression.ts ReferenceBase; the old checker's P24)",
   },
   "Reserved type": {
     explain: (keys) =>
       `${field(keys, "identifier")} is declared by ${field(keys, "kind")} of base type ${JSON.stringify(field(keys, "baseType"))} and cardinality ${JSON.stringify(field(keys, "cardinality"))}, where the specification types it otherwise`,
-    rule: "reserved-type",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration: 'SCORE needs to be a float.', 'MAXSCORE needs to be a float.', 'PASSED needs to be a boolean.'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_AssessmentItem_qti-context-declaration (§4.1.10, and §4.4.7 of a test: 'An implementation MUST support the global variable \"QTI_CONTEXT\" with record cardinality') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'There is one built-in context variable named \"QTI_CONTEXT\" with record cardinality'), which the implementation guide, a document with no normative mark, declares explicitly (its §3.7.11, 'an explicit (though unnecessary) <qti-context-declaration> of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 74)",
   },
   RootOfType: {
     explain: (keys, grammar) =>
       `${field(keys, "path")} has root ${field(keys, "rootKind")} and is listed as ${field(keys, "type")}, which lists ${rootsExplained(grammar, field(keys, "type"))}`,
-    rule: "root-type-reverse",
-    source: "QTI 3 packaging: the document root of each resource type (package.ts)",
   },
   "Rounding figures": {
     explain: (keys) =>
       `${field(keys, "kind")} rounds to ${field(keys, "figures")} figures under ${field(keys, "mode")}, where that mode rounds to at least ${field(keys, "least")}`,
-    rule: "P10",
-    source:
-      "reading 119: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_EqualRounded.Attr_figures (§5.47.2: 'If roundingMode= 'significantFigures', the value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must be an integer greater than or equal to zero') and #DataCharacteristic_RoundTo.Attr_figures (§5.119.2, the same of rounding-mode), under the EqualRounded default significantFigures (§5.47.1): a figures whose collapsed form is an integer is at least 1 under significantFigures and at least 0 under decimalPlaces, a variable's name read at run time (operators.ts Rounding, Rounding_figures)",
   },
   "SSML lexicon reference": {
     explain: (keys) =>
@@ -6318,130 +6029,82 @@ const ownLaws = {
         ? `ssml:lookup names the lexicon ${field(keys, "ref")} outside every ssml:speak`
         : `ssml:lookup names the lexicon ${field(keys, "ref")}, which no ssml:lexicon of its ssml:speak defines`,
     node: true,
-    rule: "ssml-fragment",
-    source:
-      "reading 3: https://www.w3.org/TR/speech-synthesis11/#S3.1.5.2 (SSML 1.1 §3.1.5.2: 'The ref attribute specifies a name that references a lexicon document as assigned by the xml:id attribute of the lexicon element') and #S3.1.5.1 (§3.1.5.1: 'The scope of this name is the current SSML document'), the document being the lookup's nearest speak (identity.ts ssmlLexiconReference, through SsmlScope)",
   },
   "SSML trim mark": {
     explain: (keys) =>
       `ssml:speak trims at ${inBraces(membersOf(keys["unmarked"]))} (attribute=name:marks of that name in the speak), where each names exactly one of its marks`,
     node: true,
-    rule: "ssml-fragment",
-    source:
-      "reading 3: https://www.w3.org/TR/speech-synthesis11/#S3.1.1.1 (SSML 1.1 §3.1.1.1: 'Only markers defined once in the document, i.e. that are unique, are permitted as the value of either startmark or endmark'; 'It is an error if the value given for either startmark or endmark is not a valid mark in the document'), the document being the speak, each name an xs:token (§3.3.2) compared by its collapsed value (identity.ts ssmlTrimMark)",
   },
   "Section identifier target": {
     explain: (keys) =>
       `the section-identifier ${field(keys, "identifier")} names no single section or section ref of the test ${field(keys, "assembly")}`,
-    rule: "section-identifier-target",
-    source:
-      "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
   },
   "Selection bound": {
     explain: (keys) =>
       `selects ${field(keys, "select")} of the section's ${field(keys, "parts")} parts without replacement`,
-    rule: "selection-bounds",
-    source:
-      "reading 79: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select (§5.129.1: 'The number of children to select may exceed the number of child elements defined only if with-replacement is true'; 'Sub-sections always count as 1') (references.ts SectionPart)",
   },
   "Selection required": {
     explain: (keys) =>
       `selects ${field(keys, "select")} of the section's parts, fewer than its ${field(keys, "required")} required parts`,
-    rule: "selection-required",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_required (§4.2.2, and §5.6.2 of the item ref: 'If a child element is required it must appear (at least once) in the selection. It is an error if a section contains a selection rule that selects fewer child elements than the number of required elements it contains'): a section's parts whose required is true are at most its selection's select (tests.ts Selection_required)",
   },
   "Self dependency": {
     explain: (keys) =>
       `the resource ${field(keys, "identifier")} names itself in a cp:dependency, where a dependency names a sibling resource`,
-    rule: "self-dependency",
-    source:
-      "imscp_infov1p2pd2.txt:1105 (IMS Content Packaging 1.2, §6.11.5, the IdentifierRef class, rule B ii: an IdentifierRef child of a Dependency object 'Shall not reference the Dependency's parent Resource'): a cp:dependency's identifierref is not its own resource's identifier, compared as written (package.ts Self_dependency)",
   },
   "Set type": {
     explain: (keys) =>
       `${field(keys, "kind")} sets ${field(keys, "identifier")}, ${field(keys, "baseType")} ${field(keys, "cardinality")}, to a ${field(keys, "heldBase")} ${field(keys, "heldCardinality")}`,
-    rule: "P20",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_SetValue (§5.130, SetValue, normative, the class of every setter, outcome, response and template rules alike: 'floating point values can not be assigned to integer variables and vice-versa. The truncate, round or integerToFloat operators must be used to achieve numeric type conversion'; §5.130.2, its expression: 'The expression which must have an effective base-type and cardinality that matches the base-type and cardinality of the outcome variable being set') (expressions.ts Set_type; the old checker's P20)",
   },
   "Slider bounds": {
     explain: (keys) =>
       `qti-slider-interaction's upper-bound ${field(keys, "upper")} is below its lower-bound ${field(keys, "lower")}`,
-    rule: "slider-bounds",
-    source:
-      "reading 9, the Schematron's rule 14Ba (RULE_SET_INTERACTION_14B, ASI 3.0.1 XSD, on qti-slider-interaction: 'not(@upper-bound < @lower-bound)', 'The upper-bound attribute value must not be less than the lower-bound value'), its values read as xs:double; the information model (§5.134.1-2) states no order",
   },
   "Stimulus ref key": {
     explain: (keys) =>
       `two stimulus refs of one item share the identifier ${field(keys, "identifier")}`,
-    rule: "stimulus-ref-key",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_AssessmentStimulusRef.Attr_identifier (§7.6.1: 'The unique identifier for the stimulus reference'; §7.6.2: 'each reference must have a unique identifier'), compared collapsed: no two stimulus refs of one item share an identifier (tests.ts StimulusRef)",
   },
   "Stimulus ref target": {
     explain: (keys) =>
       `a stimulus ref names ${field(keys, "path")}, which is no stimulus document of the package`,
-    rule: "stimulus-ref-target",
-    source:
-      "info.txt:67012 and :67066 (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentStimulusRef, §7.6: the stimulus ref 'enables reference to a 'qti-assessment-stimulus' instance', and its href is 'The uri used to refer to the stimulus file'): a stimulus ref's href that resolves in the package names a listed document whose root is a qti-assessment-stimulus; an external href is not resolved (reading 35's reading of an absolute URI) (package.ts ReferencePath, the UP audit's B5)",
   },
   "Strictly held": {
     explain: (keys) =>
       `${field(keys, "kind")} stands under ${field(keys, "parentKind")} only by its strict wildcards and no type governs it, where such an element stands only under an xsi:type naming a type of its document's schema set or of XML Schema`,
     node: true,
-    rule: "unmodeled-vocabulary",
-    source:
-      "reading 81: https://www.w3.org/TR/xmlschema-1/#cvc-wildcard (XML Schema 1.0 Part 1 §3.10.4, Item Valid (Wildcard), clause 2: a strict wildcard's element has the context-determined declaration mustFind), with §3.3.4 clause 1.2 and §3.3.5 [validity] clause 1.1.3: an element only the strict wildcards of its parent's model hold (install.ts StrictlyHeld) stands only under an xsi:type naming a type of its document's schema set or a built-in, so its governing type is not none (C44; shred: strict-undeclared), but for reading 6's root whose declaration the wildcard finds (§3.10.4 clause 2, §3.3.4 clause 1.1.1.3.2), kept foreign and unrefused (install.ts HeldRootsUnder, C13)",
   },
   "Structure identifier": {
     explain: (keys) =>
       `${field(keys, "kind")} and ${field(keys, "other")} of one document share the identifier ${field(keys, "identifier")}`,
-    rule: "structure-identifier",
-    source:
-      "reading 86: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1: 'The identifier of the section or item reference must be unique within the test and must not be the identifier of any testPart') and §5.159.1 ('The identifier of the test part must be unique within the test and must not be the identifier of any qti-assessment-section or qti-assessment-item-ref'), compared collapsed: no two test parts, sections, section refs or item refs of one document share an identifier, whatever their roles (tests.ts Named)",
   },
   "T1 document order": {
     explain: (keys) =>
       `a second node of the document starts at ${field(keys, "start")}, where each start is one node's`,
     node: true,
-    rule: "reachability",
-    source: "trees.md §2, T1",
   },
   "T2 root": {
     explain: (keys) =>
       `${field(keys, "kind")} starts at ${field(keys, "start")} with parent ${field(keys, "parent")}, where the one self-parented row is the root, at start 0`,
     node: true,
-    rule: "reachability",
-    source: "trees.md §2, T2",
   },
   "T3 first child": {
     explain: (keys) =>
       `slot ${field(keys, "at")} starts at ${field(keys, "start")} with parentStart ${field(keys, "parentStart")} under a parent that starts at ${field(keys, "parentStartHeld") || "none"}, where its copy of the parent is the parent's fields and a first child starts one past its parent`,
     node: true,
-    rule: "reachability",
-    source: "trees.md §2, T3, with the merged parent copy (trees.md §6)",
   },
   "T4 next sibling": {
     explain: (keys) =>
       `starts at ${field(keys, "start")}, where its predecessor ends at ${field(keys, "predecessorEnd") || "no row"}`,
     node: true,
-    rule: "reachability",
-    source: "trees.md §2, T4",
   },
   "T5 last child": {
     explain: (keys) =>
       `ends at ${field(keys, "end")}, where its last child ends at ${field(keys, "lastEnd") || "no row"}`,
     node: true,
-    rule: "reachability",
-    source: "trees.md §2, T5",
   },
   "T6 nonempty and leaf": {
     explain: (keys) =>
       `holds [${field(keys, "start")}, ${field(keys, "end")}) over ${field(keys, "children")} children, where every interval is non-empty and a leaf's holds itself alone`,
     node: true,
-    rule: "reachability",
-    source: "trees.md §2, T6",
   },
   "Table headers": {
     explain: (keys) => {
@@ -6461,43 +6124,25 @@ const ownLaws = {
 
       return `the cell's headers ${broken.length === 0 ? "break no token rule" : broken.join(", and ")}, where each token is unique and names a th of the cell's own table`;
     },
-    rule: "table-headers",
-    source:
-      "reading 126: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TDH.Attr_headers (§5.140.1: \"an unordered set of unique space-separated tokens that are case-sensitive, each of which must have the value of an ID of a 'th' tag taking part in the same table as the 'td' or 'th' tag\"); https://html.spec.whatwg.org/multipage/tables.html#attr-tdth-headers: a cell's headers tokens are unique, and each is the id of a th whose nearest table is the cell's, a cell no table holds taking part in none (html.ts TableScope, TableHeader, tableHeaders)",
   },
   "Template default target": {
     explain: (keys) =>
       `the template default of ${field(keys, "itemRef")} names ${field(keys, "template")}, which its item declares as no template variable`,
-    rule: "template-default-target",
-    source:
-      "the UP audit's A37: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateDefault.Attr_template-identifier (§5.152.1: 'The identifier of the template variable affected'; §5.152: 'The default value of a template variable in an item can be overridden based on the test context'): a template default names a template declaration of the item its item ref names, compared collapsed (expressions.ts TemplateDefault, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no template of it (reading 110)",
   },
   "Template default type": {
     explain: (keys) =>
       `the template default of ${field(keys, "itemRef")} sets ${field(keys, "template")}, a ${field(keys, "declared")}, to a ${field(keys, "held")}`,
-    rule: "P20",
-    source:
-      "the UP audit's A38, the old checker's P20 for a setter: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_TemplateDefault_expressionGroup (§5.152.2: 'An expression which must result in a value with base-type and cardinality matching the declaration of the associated variable's qti-template-declaration'): a template default's expression fits its template variable's type, a type no declaration says aside (reading 4) (expressions.ts Template_default_type)",
   },
   "Template reads": {
     explain: (keys) =>
       `template processing's ${field(keys, "kind")} reads ${field(keys, "identifier")}, a response or outcome variable or a built-in but QTI_CONTEXT`,
-    rule: "P26",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_TemplateRuleGroup (§6.50: 'An expression used in a qti-template-rule must not refer to the value of a response variable or outcome variable. It may only refer to the values of the template variables'), with https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'Context variables may be referenced in template processing, in response processing, and in outcome processing'): template processing reads template and context variables, QTI_CONTEXT among them, and no response, outcome or built-in session variable (expressions.ts Template_reads; the old checker's P26)",
   },
   "Template reference": {
     explain: (keys, grammar) => referenceExplained(keys, grammar),
-    rule: "template-ref",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, and §5.155.1, §5.122.1, §5.124.1 and each choice's, as §5.132.3: 'The identifier of a template variable'), a template variable being one a template declaration declares (https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateDeclaration, §5.151: 'Template declarations declare item variables that are to be used specifically for the purposes of cloning items') (references.ts ContentReference)",
   },
   "Test name key": {
     explain: (keys) =>
       `${field(keys, "kind")} and ${field(keys, "other")} of the test ${field(keys, "test")}'s assembled documents share the identifier ${field(keys, "identifier")}`,
-    rule: "test-name-key",
-    source:
-      "reading 86: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1) and §5.159.1, read over the assembled test (reading 5): the test document and every section document its section refs and includes place; and §7.5.3 ('A test may refer to the same section multiple times within a test'), so a section document placed twice is one document and names nothing twice: no two written elements of one test share an identifier (tests.ts InstanceName, AssembledName)",
   },
   TextDomain: {
     explain: (keys, grammar) =>
@@ -6513,88 +6158,52 @@ const ownLaws = {
         field(keys, "value"),
         `${field(keys, "kind")}'s text in ${field(keys, "version")}`,
       ),
-    rule: "text-copy",
-    source:
-      "XML Schema Part 2, each simple-content kind's type compiled with its whiteSpace (domains.ts); reading 7; and https://www.w3.org/TR/xmlschema-2/#NOTATION (§3.2.19: 'The ·value space· of NOTATION is the set of QNames of notations declared in the current schema'), which no pinned XSD declares, so a text read in xs:NOTATION's empty domain is refused (reading 60, C47: attributes.ts emptyDomains)",
   },
   "Track srclang": {
     explain: (keys) =>
       `a track ${field(keys, "trackKind") === "" ? "that writes no kind, so in its missing value default, the subtitles state," : "whose kind is subtitles"} carries no srclang, where a track in the subtitles state names its language`,
     node: true,
-    rule: "track-srclang",
-    source:
-      'reading 125: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Track.Attr_srclang (§5.163.3: "This attribute must be present if the tag\'s kind attribute is in the subtitles state"); https://html.spec.whatwg.org/multipage/media.html#the-track-element (kind: "The attribute\'s missing value default is the subtitles state"): a track that writes no kind, or writes kind as subtitles, carries srclang (html.ts Track_srclang, subtitleTrackSrclang)',
   },
   "Typed attribute value": {
     explain: (keys) =>
       `an attribute value of base type ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "value"))}, which is no lexical form of it written without whitespace around it`,
-    rule: "attribute-lexical",
-    source:
-      "readings 7 and 8, and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a qti-map-entry's map-key is a value of its mapping's base type (§7.21.1, 'The source value'), and a lookup table entry's target-value and a table's default-value are values of its outcome's base type (§5.90.1, §5.78.1, §7.23.2, §7.18.3); each is written as its base type's lexical form with no whitespace around it unless the base type is string (mapping.ts Typed_attribute_value over expression-types.ts BaseTypePattern)",
   },
   "Typed value": {
     explain: (keys) =>
       `a value of base type ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "text"))}, which is no lexical form of it`,
-    rule: "typed-copy",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Value (§7.46, Value: 'The base-type is defined by the 'base-type' attribute of the declaration except in the case of variables with record cardinality') and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a qti-value's text is a lexical form of its base type, outer whitespace formatting but for string (reading 7): boolean true or false (reading 34), integer xs:integer unbounded (reading 45), float xs:double (reading 56) and duration xs:double (§8.13: 'Durations are represented using the 'xsd:double' datatype'), identifier IdentifierDType, uri xs:anyURI (reading 71), point two integers, pair and directedPair two identifiers; string and file any text",
   },
   "Usage typed value": {
     explain: (keys) =>
       `a usage value of baseType ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "text"))}, which is no lexical form of it`,
-    rule: "typed-copy",
-    source:
-      "reading 105: https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html (QTI 3.0 Usage Data binding §2.6.5, Value: 'A class that can represent a single value of any baseType'; §2.7.1, BaseTypeEnum) and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a ud:value that writes baseType holds a lexical form of that base type, read as a qti-value's text is (readings 7, 34, 45 and 71), and one that writes none is xs:normalizedString text (metadata.ts UsageValue over expression-types.ts BaseTypePattern)",
   },
   "Value cardinality": {
     explain: (keys) =>
       `a value set of ${JSON.stringify(field(keys, "cardinality"))} cardinality holds ${field(keys, "values")} values, ${field(keys, "fields")} of them with a field-identifier and ${field(keys, "typed")} with a base-type, where a record's values each carry both and any other's neither`,
-    rule: "value-cardinality",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_CardinalityEnum (§8.16, CardinalityEnum: single 'a single value'; record 'a set of independent values each identified by its own identifier and having its own base-type') and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Value (§7.46.1, §7.46.2: field-identifier and base-type are 'only used for' a value that forms part of a record): a single variable's default or correct value holds one qti-value, and a value is a record's field, with its field-identifier and base-type, exactly when its variable is a record",
   },
   "Variable declared": {
     explain: (keys) =>
       `${field(keys, "kind")} names ${field(keys, "identifier")}, which nothing declares and no built-in variable is`,
-    rule: "P8",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-variable (§6.9.40, qti-variable, normative: 'This expression looks up the value of an itemVariable that has been declared in a corresponding variableDeclaration or is one of the built-in variables'), https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Variable.Attr_identifier (§7.47.1, Variable's identifier: 'The identifier of the item variable that has been declared in a corresponding variable declaration or of the built-in variables') and https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SetValue.Attr_identifier (§5.130.1, a setter's: 'The identifier of the variable to be set') (references.ts); readings 4, 29 and 48",
   },
   "Variable kind": {
     explain: (keys) =>
       `${field(keys, "kind")} names ${field(keys, "identifier")}, a ${field(keys, "declarationKind")} variable, where it reads or sets only ${field(keys, "allowed")}`,
-    rule: "variable-kind",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info, each processing element's definition of the variable it reads or sets: §7.10.1 Correct ('The identifier of the associated response variable'), §7.22.1 MapResponse ('the associated Response variable'), §6.9.46 MapResponsePoint ('looks up the value of a response variable'), §5.87.1 and §6.32.1 LookupOutcomeValue ('the outcome variable to be set'), §6.32.3 and §6.39.4 SetOutcomeValue ('sets the value of an outcome variable'), §6.50.1 SetTemplateValue ('sets the value of a template variable'), §6.50.4 SetDefaultValue ('The response variable or outcome variable to have its default value set'), §6.50.5 SetCorrectResponse ('The response variable to have its correct value set'), and §7.47.1 Variable and §7.12.1 Default, any item variable (§2.2.2: 'context, response, outcome or template variables'): a reference by identifier names a declaration, or a built-in standing as one (BuiltInVariable), of a kind its element reads or sets; and a setter (§5.130.1 SetValue: 'The identifier of the variable to be set') sets a variable of its own document, which only an unsplit reading names, since an item's variables reach a test only to be looked up (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing'), reading 112 (expression-types.ts ReferenceDeclaration and setterKinds, over VariableRef and a test's Reading)",
   },
   "Variable mapping source": {
     explain: (keys) =>
       `the variable mapping of ${field(keys, "itemRef")} maps ${field(keys, "source")}, which its item declares as no outcome variable`,
-    rule: "variable-mapping-source",
-    source:
-      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSource, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it (reading 110)",
   },
   "Variable mapping target": {
     explain: (keys) =>
       `a variable mapping of ${field(keys, "itemRef")} names the target ${field(keys, "target")}, which another mapping of it or a built-in session variable already names`,
-    rule: "variable-mapping-target",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 74: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 97), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSource, its declared half)",
   },
   "Weighted base": {
     explain: (keys) =>
       `a qti-test-variables with a weight-identifier is of base-type ${field(keys, "baseType")}, not float`,
-    rule: "P29",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_TestVariables.Attr_weight-identifier (§7.39.5, TestVariables: 'The behaviour of this characterisic is only defined if the base-type attribute is float or omitted . When a weighting is specified the result of the expression always has base-type float'): with a weight-identifier, a base-type, where written, is float (expressions.ts Weighted_base; the old checker's P29)",
   },
   "XsiType available": {
     explain: (keys) =>
       `${field(keys, "kind")} is governed by ${field(keys, "governs")} under a parent in ${JSON.stringify(field(keys, "parentNamespace"))}, where its xsi:type names a type of its document's schema set or of XML Schema`,
     node: true,
-    rule: "xsi-type",
-    source:
-      "readings 60 and 81: https://www.w3.org/TR/xmlschema-1/#cvc-assess-elt (XML Schema 1.0 Part 1 §3.3.4, Schema-Validity Assessment (Element), clause 1.2: an element no declaration assesses is assessed against the type its xsi:type resolves to in the schema its document is assessed against), so a foreign element's governing type is none, one of XML Schema's own, or a type of a schema set its parent's namespace stands in (open.ts typeAvailable; install.ts TypeAvailable, C15 and C36); a parent in no vocabulary's namespace stands in documents of every set, and the document's own set is reading 81's recorded limit",
   },
   "XsiType derived": {
     explain: (keys, grammar) =>
@@ -6607,14 +6216,9 @@ const ownLaws = {
           .map(({ type }) => type),
       )}`,
     node: true,
-    rule: "xsi-type",
-    source:
-      "reading 47: https://www.w3.org/TR/xmlschema-1/#cvc-elt (XML Schema 1.0 Part 1 §3.3.4, Element Locally Valid (Element), clause 4.3: the local type definition 'must be validly derived from the {type definition}', §3.4.6 and §3.14.6), over the type that governs each element of a vocabulary kind (Node.governs: its xsi:type's, else its declared type; xsi.ts XsiType). Clauses 4.1 and 4.2, a value that is no QName in scope or names no type, are the codec's (shred: type-unresolved, type-unknown)",
   },
   "comment arm": {
     explain: (keys) => armExplained("comment", keys),
-    rule: "text-copy",
-    source: "the XDM comment nodes as rows (plan §1.4)",
   },
   "default hotspot last slot": {
     explain: (keys, grammar) =>
@@ -6624,29 +6228,18 @@ const ownLaws = {
           .map(({ source }) => source),
       )} puts it last`,
     node: true,
-    rule: "hotspot-default",
-    source:
-      "reading 80: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_HotspotInteraction_qti-hotspot-choice (§5.68.6, and the HotspotChoice class description, §5.67: 'The default hotspot, if defined, must appear last'), of qti-hotspot-choice only, since the AssociableHotspot class (§5.7) and the graphic associate interaction's hotspots (§5.59.4) state no such rule; last among its parent's element children, so whitespace, comments and instructions after it do not count (children.ts LastWhere, ruling D3)",
   },
   "doctype arm": {
     explain: (keys) => armExplained("doctype", keys),
-    rule: "text-copy",
-    source: "the XDM doctype as a row (plan §1.4)",
   },
   "entityRef arm": {
     explain: (keys) => armExplained("entityRef", keys),
-    rule: "text-copy",
-    source: "the XDM entity references as rows (plan §1.4)",
   },
   "pi arm": {
     explain: (keys) => armExplained("pi", keys),
-    rule: "text-copy",
-    source: "the XDM processing instructions as rows (plan §1.4)",
   },
   "text arm": {
     explain: (keys) => armExplained("text", keys),
-    rule: "text-copy",
-    source: "the XDM text nodes as rows (plan §1.4)",
   },
   "value domain": {
     explain: (keys, grammar) =>
@@ -6666,14 +6259,9 @@ const ownLaws = {
         field(keys, "lexical"),
         `${field(keys, "kind")}@${field(keys, "name")} in ${field(keys, "version")}`,
       )}`,
-    rule: "attribute-lexical",
-    source:
-      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash); and a usage statistic's lastUpdated, the usage data's DateDType (usagedata/imsqti_usagedatav3p0_v1p0.xsd:127-131, xs:date restricted by the pattern [0-9]{4}-[0-9]{2}-[0-9]{2}), the month lengths and the leap rule included (XML Schema 1.1 Part 2 §3.3.9, Day-of-month Representations), which StatisticDate.day restates as grizzle's lexical(date), whose pattern makes the generated date's cast total (Q5.12)",
   },
   "ws arm": {
     explain: (keys) => armExplained("ws", keys),
-    rule: "text-copy",
-    source: "the XDM whitespace nodes as rows (plan §1.4)",
   },
 } as const satisfies Readonly<Record<string, OracleLaw>>;
 
@@ -6717,7 +6305,7 @@ export const nodeLawNames: readonly NodeLawName[] = lawNames.filter(
  */
 export const lawSources: Readonly<Record<LawName, string>> = pipe(
   oracleLaws,
-  Rec.map(({ source }) => source),
+  Rec.map((_, law) => lawTable[law].source),
 );
 
 /**
@@ -6726,7 +6314,7 @@ export const lawSources: Readonly<Record<LawName, string>> = pipe(
  * @param law - The law.
  * @returns Its rule.
  */
-export const ruleOf = (law: LawName): OracleRule => oracleLaws[law].rule;
+export const ruleOf = (law: LawName): OracleRule => lawTable[law].rule;
 
 /**
  * Name the verdict a judgment predicts.

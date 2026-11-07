@@ -85,6 +85,108 @@ const offences = (files: readonly string[], forbidden: readonly string[]): reado
 const oracleModule = "#pantry/test/oracle.ts";
 
 /**
+ * Collect the module specifiers a TypeScript module's values come from: {@link specifiers}, less
+ * the statements that are wholly `import type` or `export type`, which bring no value in.
+ *
+ * @param source - The text of a TypeScript module.
+ * @returns The specifiers, in source order.
+ */
+const valueSpecifiers = (source: string): readonly string[] =>
+  specifiers(source.replaceAll(/^[ \t]*(?:import|export)\s+type\b[^;]*;/gmu, ""));
+
+/**
+ * The modules the law oracle is made of: {@link oracleModule} and every module of `src/test/` it
+ * reaches through a static or dynamic import, relative to `src`.
+ *
+ * @param read - Reads a module's text by its path relative to `src`.
+ * @returns The modules, sorted.
+ */
+const oracleModules = (read: (file: string) => string): readonly string[] => {
+  const seen = new Set<string>();
+  const unread = [oracleModule];
+  while (unread.length > 0) {
+    const file = (unread.pop() ?? oracleModule).slice("#pantry/".length);
+    if (!seen.has(file)) {
+      seen.add(file);
+      unread.push(...specifiers(read(file)).filter((next) => next.startsWith("#pantry/test/")));
+    }
+  }
+
+  return [...seen].toSorted();
+};
+
+/**
+ * The prefixes of the modules that state the schema's laws or the importer's and exporter's
+ * judgments, and grizzle, which builds statements: the law oracle reads none of their values, so
+ * it never decides a breach by a selection or a check the schema states. It reads the law catalog
+ * (`#pantry/vocab/laws.ts`), which is data, and the stated bounds of `#pantry/qti/limits.ts`
+ * ({@link oracleDataModules}).
+ */
+const oracleForbidden = [
+  "#pantry/qti/",
+  "#pantry/import/",
+  "#pantry/export/",
+  "#pantry/db/",
+  "@bjornpagen/grizzle",
+];
+
+/**
+ * The modules under {@link oracleForbidden}'s prefixes that hold data and no statement, which the
+ * oracle may read: the bounds a key's text and a name are held to.
+ */
+const oracleDataModules: ReadonlySet<string> = new Set(["#pantry/qti/limits.ts"]);
+
+/**
+ * The oracle's reads of a statement module today, each `module: specifier`. The list only shrinks:
+ * a module of the oracle that starts reading one fails the test, and one that stops fails it until
+ * its entry goes.
+ *
+ * - `test/key-copies.ts` reads the composed `Qti` to find the fields a key text is written into.
+ * - `test/oracle.ts` reads `splicingParents` from `#pantry/qti/tests.ts`, the kinds whose include
+ *   splices its document.
+ *
+ * Each affects a judgment, so a defect in it would be the schema's and the oracle's alike, and no
+ * differential would see it: each is owed a derivation of the oracle's own, held equal to the
+ * schema's by a test, and its entry goes in the same commit. Only metadata is shared, through the
+ * law catalog.
+ */
+const oracleStatementReads: readonly string[] = [
+  "test/key-copies.ts: #pantry/qti/schema.ts",
+  "test/oracle.ts: #pantry/qti/tests.ts",
+];
+
+/**
+ * Read a module's text by its path relative to `src`.
+ *
+ * @param file - The module's path relative to `src`.
+ * @returns Its text.
+ */
+const readSourceModule = (file: string): string =>
+  readFileSync(path.join(sourceRoot, file), "utf-8");
+
+/**
+ * Find the law oracle's reads of a statement module: each value import of one of its modules that
+ * names an {@link oracleForbidden} prefix and is no {@link oracleDataModules} module.
+ *
+ * @param read - Reads a module's text by its path relative to `src`.
+ * @returns Each read as `module: specifier`, sorted.
+ */
+const statementReads = (read: (file: string) => string): readonly string[] =>
+  [
+    ...new Set(
+      oracleModules(read).flatMap((file) =>
+        valueSpecifiers(read(file))
+          .filter(
+            (specifier) =>
+              oracleForbidden.some((prefix) => specifier.startsWith(prefix)) &&
+              !oracleDataModules.has(specifier),
+          )
+          .map((specifier) => `${file}: ${specifier}`),
+      ),
+    ),
+  ].toSorted();
+
+/**
  * Decide whether a module may import the law oracle: a test named for it, `*.oracle.test.ts` or
  * `*.oracle.db.test.ts`, or a module of the test support under `src/test/`.
  *
@@ -168,6 +270,46 @@ describe("the test helpers", () => {
         (offence) => !mayReachOracle(offence.split(": ")[0] ?? ""),
       ),
       [],
+    );
+  });
+
+  it("leave the law oracle reading no statement of the schema, the importer or grizzle", () => {
+    assert.deepStrictEqual(statementReads(readSourceModule), oracleStatementReads);
+  });
+
+  it("find a law of the oracle that reads a schema statement, and no type import or data module", () => {
+    // Oracle: the rule above on a planted module graph. Live: the oracle's own module and a law
+    // module it reaches, each reading a schema statement, one of them by a dynamic import. Stale: a
+    // type-only import of a schema module, a read of the data module, and of the law catalog. Wild:
+    // a module the oracle does not reach, which reads a statement and is no part of it.
+    const planted = new Map([
+      ["test/elsewhere.ts", 'import { Qti } from "#pantry/qti/schema.ts";'],
+      [
+        "test/oracle-laws.ts",
+        [
+          'import type { Interaction } from "#pantry/qti/interactions.ts";',
+          'import { keyTextBytes } from "#pantry/qti/limits.ts";',
+          'import { lawTable } from "#pantry/vocab/laws.ts";',
+          'const { itemInstances } = await import("#pantry/qti/tests.ts");',
+        ].join("\n"),
+      ],
+      [
+        "test/oracle.ts",
+        [
+          'import { addedLaws } from "#pantry/test/oracle-laws.ts";',
+          'import { Node } from "#pantry/qti/node.ts";',
+          'import { select } from "@bjornpagen/grizzle";',
+        ].join("\n"),
+      ],
+    ]);
+
+    assert.deepStrictEqual(
+      statementReads((file) => planted.get(file) ?? ""),
+      [
+        "test/oracle-laws.ts: #pantry/qti/tests.ts",
+        "test/oracle.ts: #pantry/qti/node.ts",
+        "test/oracle.ts: @bjornpagen/grizzle",
+      ],
     );
   });
 

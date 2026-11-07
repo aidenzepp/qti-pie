@@ -48,17 +48,16 @@ import {
   lawIdentity,
   lawNameOf,
   lawRules,
-  lawTable,
   limitRules,
   owedRules,
   patternLawsOf,
-  precedence,
   refusalOfLaws,
   ruleOfError,
   ruleOfLaws,
   statedLaws,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
+import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import type { ReadRefusal, Rule } from "#pantry/import/refusal.ts";
 import {
   NotQti3,
@@ -68,7 +67,6 @@ import {
 } from "#pantry/model/shred.ts";
 import { PackageReadError } from "#pantry/package/read.ts";
 import { ZipRefusal } from "#pantry/package/zip.ts";
-import { lawNames as oracleLawNames, lawSources, ruleOf } from "#pantry/test/oracle.ts";
 
 /**
  * The composed grammar of production, whose rows `install.ts` installs: the constants an
@@ -840,16 +838,6 @@ const crossTier = nonEmpty("the cross-tier laws", [
 ]);
 
 describe("the law table", () => {
-  it("keeps every law of the oracle under its name, with the oracle's rule and source", () => {
-    for (const name of oracleLawNames) {
-      assert.isTrue(Object.hasOwn(lawTable, name), name);
-
-      const entry = lawTable[name];
-      assert.strictEqual(entry.rule, ruleOf(name), name);
-      assert.strictEqual(entry.source, lawSources[name], name);
-    }
-  });
-
   it.effect(
     "ranks every rule a law keeps once, and owes each rule no law keeps yet to the slice that states it",
     (ctx) =>

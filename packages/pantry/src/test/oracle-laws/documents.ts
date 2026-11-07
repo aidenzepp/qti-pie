@@ -12,8 +12,8 @@
  *   language.
  * - **The laws the oracle declares here** ({@link addedLaws}): `Adaptive feedback` (§5.49, §5.52),
  *   `Max strings required` (§5.48.6), `Dependency target` (IMS Content Packaging 1.2) and `XML
- *   production` (XML 1.0's productions over the stored texts), each with the schema's rule and
- *   source (`#pantry/import/refusal.ts` `lawTable`), word for word.
+ *   production` (XML 1.0's productions over the stored texts), each under the law catalog's name,
+ *   whose rule and source it keeps (`#pantry/vocab/laws.ts` `lawTable`).
  */
 import { Option } from "effect";
 import { rowOf, step } from "#pantry/grammar/ancestry.ts";
@@ -63,39 +63,26 @@ export type DocumentLaw = (typeof documentLaws)[number];
 type Breach = LawBreach<DocumentLaw>;
 
 /**
- * The laws the schema states (`#pantry/import/refusal.ts` `lawTable`) that the law oracle had not
- * declared, which this module declares and produces, each in one place: its rule, its source, the
- * schema's word for word, and its explanation from a breach's keys. The oracle merges them with its
- * own (`#pantry/test/oracle.ts` `oracleLaws`).
+ * The laws of the catalog (`#pantry/vocab/laws.ts` `lawTable`) that the law oracle had not
+ * declared, which this module declares and produces, each with its explanation from a breach's
+ * keys. The oracle merges them with its own (`#pantry/test/oracle.ts` `oracleLaws`).
  */
 export const addedLaws = {
   "Adaptive feedback": {
     explain: (keys) =>
       `${field(keys, "kind")} binds ${field(keys, "identifier")} inside feedback, which a non-adaptive item's feedback may not hold`,
-    rule: "adaptive-feedback",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_FeedbackBlock (§5.49, FeedbackBlock, and §5.52, FeedbackInline: 'A feedback element that forms part of a Non-adaptive Item must not contain an interaction object, either directly or indirectly'), plan §1.7 O3 (Q5.09): a non-adaptive item binds no response variable whose interaction stands inside feedback, select(BoundVariable, response, adaptive = false) contained in the interactions outside every feedback flag",
   },
   "Dependency target": {
     explain: (keys) =>
       `a dependency names ${field(keys, "identifier")}, which no resource of its manifest is`,
-    rule: "idref-target",
-    source:
-      'IMS Content Packaging 1.2: a dependency\'s identifierref names a resource of its manifest, contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")) (Q5.06)',
   },
   "Max strings required": {
     explain: (keys) =>
       `the extended text interaction binds the ${field(keys, "cardinality")} response ${field(keys, "identifier")} and writes no max-strings`,
-    rule: "max-strings-required",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BindingDeclaration, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
   },
   "XML production": {
     explain: (keys) =>
       `the stored ${field(keys, "production")} ${JSON.stringify(field(keys, "value"))} is outside its XML production`,
-    rule: "well-formedness",
-    source:
-      "XML 1.0 §2.2 Char, §2.5 Comment, §2.6 PI, §2.8 doctypedecl and VersionNum, §4.3.3 EncName, and Namespaces in XML 1.0 §3 NCName: a stored text outside its production is no well-formed XML, which crust's reader refuses before any row exists, so only an importer defect reaches the law",
   },
 } as const satisfies Readonly<Record<string, OracleLaw>>;
 
