@@ -173,12 +173,17 @@ const holds = (name: string, row: Fields): boolean => holdsOver(checkOf(name), r
  * refusal table reads them: those whose law names one of the module's stored relations.
  */
 const ownLaws = statedLaws.filter(([law]) =>
-  /"(?:MathRank|ShareTarget)"/u.test(JSON.stringify(law)),
+  /"(?:MathRank|PlacedMathRank|PlacedShareTarget|ShareTarget)"/u.test(JSON.stringify(law)),
 );
 
 describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
   it("declares the rank and the share target, composed into Qti under their own names", () => {
-    assert.deepStrictEqual(Object.keys(shareRelations).toSorted(), ["MathRank", "ShareTarget"]);
+    assert.deepStrictEqual(Object.keys(shareRelations).toSorted(), [
+      "MathRank",
+      "PlacedMathRank",
+      "PlacedShareTarget",
+      "ShareTarget",
+    ]);
     for (const relation of Object.values(shareRelations)) {
       assert.strictEqual(
         Object.getOwnPropertyDescriptor(Qti.relations, relation.name)?.value,
@@ -187,9 +192,11 @@ describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
     }
   });
 
-  it("keys each relation by its node, the rank's fields in key order", () => {
+  it("keys each relation by its node, a placed one by its instance and node, fields in key order", () => {
     assert.deepStrictEqual(shareRelations.MathRank.primaryKey, ["node"]);
     assert.deepStrictEqual(shareRelations.ShareTarget.primaryKey, ["node"]);
+    assert.deepStrictEqual(shareRelations.PlacedMathRank.primaryKey, ["instance", "node"]);
+    assert.deepStrictEqual(shareRelations.PlacedShareTarget.primaryKey, ["instance", "node"]);
     for (const relation of Object.values(shareRelations)) {
       const fields = Object.keys(relation.fields);
 
@@ -209,14 +216,20 @@ describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
     }
   });
 
-  it("names its one check by its law of the refusal table, spaces written as underscores, so lawOfCheck maps it", () => {
+  it("names its checks by their laws of the refusal table, spaces written as underscores, so lawOfCheck maps them", () => {
     // Oracle: the refusal table's own law list (`#pantry/import/refusal.ts` lawNames), which
     // `refusal.test.ts` holds equal to the oracle's.
     const named = shareLaws.flatMap((statement) =>
       statement.kind === "check" ? [statement.name] : [],
     );
 
-    assert.deepStrictEqual(named.toSorted(), ["E1_derived", "MathML_share_cycle"]);
+    assert.deepStrictEqual(named.toSorted(), [
+      "E1_derived",
+      "E1_derived",
+      "E1_derived",
+      "MathML_share_cycle",
+      "MathML_share_cycle",
+    ]);
     assert.isTrue(Option.isSome(lawOfCheck("MathML_share_cycle")));
     assert.isTrue(lawNames.some((known) => known === "MathML share cycle"));
     assert.strictEqual(lawTable["MathML share cycle"].rule, "document-key");
@@ -224,7 +237,8 @@ describe("qti/mathml-share.ts, declared", { timeout: buildTimeout }, () => {
       shareLaws.filter(
         (statement) => statement.kind === "check" && statement.name === "MathML_share_cycle",
       ).length,
-      1,
+      2,
+      "one over ShareTarget, one over PlacedShareTarget",
     );
   });
 

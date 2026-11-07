@@ -1015,6 +1015,8 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("MathCell", "node"), "E1 derived"],
   [primaryKeyOf("MathDir", "node"), "E1 derived"],
   [primaryKeyOf("MathRank", "node"), "E1 derived"],
+  [primaryKeyOf("PlacedMathRank", "instance", "node"), "E1 derived"],
+  [primaryKeyOf("PlacedShareTarget", "instance", "node"), "E1 derived"],
   [primaryKeyOf("ShareTarget", "node"), "E1 derived"],
 ];
 

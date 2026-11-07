@@ -484,10 +484,22 @@ export const IdrefTarget = relation(
  * written (C18), and `id`, the text after the `#`, which an {@link IdrefTarget} of the document
  * names under "Idref target". A `src` with any text before its `#`, or no text after it, is no
  * same-document fragment and has no row.
+ *
+ * Two fields are not the share's own: `assembled`, its document's `assembled` (as
+ * {@link IdrefTarget}'s is), which tells a document in no assembly, whose share resolves in its own
+ * IDs, from one in an assembly, whose share resolves once per instance; and `placements`, the count
+ * of its `PlacedShareTarget` rows (`#pantry/qti/mathml-share.ts`).
  */
 export const ShareFragment = relation(
   "ShareFragment",
-  { document: uuid, id: keyText, node: uuid, src: keyText },
+  {
+    assembled: pg.boolean,
+    document: uuid,
+    id: keyText,
+    node: uuid,
+    placements: drawn(natural),
+    src: keyText,
+  },
   ["node"],
 );
 
@@ -1119,6 +1131,7 @@ export const identityLawsByName = {
       ),
     ),
     contained(on(IdrefTarget, "document", "assembled"), on(Document, "node", "assembled")),
+    contained(on(ShareFragment, "document", "assembled"), on(Document, "node", "assembled")),
     idrefTargetFamily,
     documentIdFamily,
     placedIdFamily,

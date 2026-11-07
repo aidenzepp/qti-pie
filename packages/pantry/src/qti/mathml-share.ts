@@ -19,22 +19,39 @@
  *   `parentRank` states nothing. A target no `m:math` holds has a chain that ends at the document
  *   node instead, the one node that is its own parent: its row states nothing either. `E1_derived`
  *   holds each of those two tops' rank free and every other row's rank below its `parentRank`.
- * - **{@link ShareTarget}**, one row per `m:share` with a same-document fragment, keyed by the
- *   share's node: its `document` and `id` as {@link ShareFragment} holds them, `target`, the
- *   element that carries the id (an {@link IdBinding} owner), and the two ranks, `shareRank` copied
- *   from the share's {@link MathRank} row and `targetRank` from the target's. `MathML_share_cycle`
- *   is the check over it: the share's rank is above its target's.
+ * - **{@link ShareTarget}**, one row per `m:share` of a document in no assembly with a same-document
+ *   fragment, keyed by the share's node: its `document` and `id` as {@link ShareFragment} holds
+ *   them, `target`, the element that carries the id (an {@link IdBinding} owner), and the two
+ *   ranks, `shareRank` copied from the share's {@link MathRank} row and `targetRank` from the
+ *   target's. `MathML_share_cycle` is the check over it: the share's rank is above its target's.
+ *
+ * A document in an assembly resolves its shares in its assembly, once per instance (spec reading
+ * 117), as its IDREFs do, so the two scopes are stated apart:
+ *
+ * - **{@link PlacedMathRank}**, {@link MathRank} per instance, keyed by the instance and the node.
+ *   The host ranks each assembly's merged graph: each instance's child edges, the edge from an
+ *   include's parent element to each top-level element of the instance it splices, and each share's
+ *   edge to its target. The database proves the order of the edges it ties, the child edges.
+ * - **{@link PlacedShareTarget}**, one row per `m:share` of an assembled document under each instance
+ *   of it (`ShareFragment.placements` counts them, and a test document's `instances` is the count
+ *   each share must reach), keyed by the instance and the share's node: its `target` resolved over
+ *   the assembly's {@link AssembledId} bindings, the instance that holds the target, and the two
+ *   ranks copied from {@link PlacedMathRank} under the right instances. Its own
+ *   `MathML_share_cycle` check compares them.
+ *
+ * A fragment placed in two items is ranked once per instance, so share edges that close a cycle
+ * only across the two assemblies refuse nothing.
  *
  * Every element a cycle runs through has a row: a row's parent has one, so the rows of a share's
  * and a target's ancestors are written up to the root, and a share with a fragment has a
- * {@link ShareTarget} row, both ways. A document with a share and a `MathRank` row its host omits
- * for the share or its target is refused by those containments. The ranks are the host's, and
- * only their order is proved. A target that is no MathML element has no {@link MathRank} row
- * unless the host writes one, and a cycle that crosses a foreign element between two MathML
- * elements is not followed (the phase-6 audit list).
+ * {@link ShareTarget} or {@link PlacedShareTarget} row, both ways. A document with a share and a
+ * rank row its host omits for the share or its target is refused by those containments. The ranks
+ * are the host's, and only their order is proved. A target that is no MathML element has no
+ * {@link MathRank} row unless the host writes one, and a cycle that crosses a foreign element
+ * between two MathML elements is not followed (the phase-6 audit list).
  *
- * Every statement but the check is a restatement of the tree, "E1 derived"; the check is named by
- * its law, as `#pantry/qti/expressions.ts` names `Arity`.
+ * Every statement but the checks is a restatement of the tree, "E1 derived"; the share check is
+ * named by its law, as `#pantry/qti/expressions.ts` names `Arity`.
  *
  * @see {@link https://www.w3.org/TR/MathML3/chapter4.html#contm.share | MathML 3 §4.2.7, share}
  */
@@ -42,6 +59,8 @@ import {
   check,
   closedId,
   contained,
+  counted,
+  fin,
   mirrors,
   natural,
   on,
@@ -50,9 +69,10 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
-import { IdBinding, ShareFragment } from "#pantry/qti/identity.ts";
+import { AssembledId, IdBinding, ShareFragment } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { nodeRef } from "#pantry/qti/node.ts";
+import { Node, nodeRef } from "#pantry/qti/node.ts";
+import { Instance, TestDocument, testKind } from "#pantry/qti/tests.ts";
 
 /**
  * One MathML element a share can dominate or be dominated through, keyed by its node.
@@ -106,16 +126,110 @@ export const ShareTarget = relation(
 );
 
 /**
+ * One MathML element of an instance of an assembly that a placed share stands on or names, or that
+ * lies on such an element's chain, keyed by the instance and the element's node. It is
+ * {@link MathRank} per instance (spec reading 117): the same element is ranked once under each
+ * instance of its document, in that instance's assembly.
+ *
+ * - **the host's:** the `nodeRef` tuple's `node`, `document`, `kind` and `parent`, proved by
+ *   containment, the `instance` and its `assembly`, proved against {@link Instance}, and `rank`,
+ *   its dominance rank in its assembly's merged graph;
+ * - **copied from the parent's row:** `parentRank`, the parent's `rank` under the same instance. An
+ *   `m:math` and the document node have no tied parent, and their `parentRank` is not read.
+ *
+ * Its fields are declared in key order, which the lint's `sort-keys` holds and which is column
+ * order.
+ */
+export const PlacedMathRank = relation(
+  "PlacedMathRank",
+  {
+    assembly: uuid,
+    document: uuid,
+    instance: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+    parent: uuid,
+    parentRank: natural,
+    rank: natural,
+  },
+  ["instance", "node"],
+);
+
+/**
+ * One `m:share` of an assembled document under one instance of it, keyed by the instance and the
+ * share's node: the element its fragment names in that instance's assembly and the two ranks the
+ * law compares.
+ *
+ * - **the host's:** `node`, `document` and `id`, the share's fragment as {@link ShareFragment} holds
+ *   it, the `instance` with its `assembly` and `assemblyKind`, `target` and `targetCopy`, the
+ *   binding of the id in the assembly ({@link AssembledId}'s `owner` and `copy`), and
+ *   `targetDocument` and `targetInstance`, the document that holds the target and an instance of it
+ *   in the assembly. Outside a test's assembly `targetCopy` is `targetInstance`; under a test's
+ *   assembly it is the target's document, written once there (reading 86), and `targetInstance` an
+ *   instance of it;
+ * - **copied from {@link PlacedMathRank}:** `shareRank`, the share's rank under `instance`, and
+ *   `targetRank`, the target's rank under `targetInstance`.
+ *
+ * Its fields are declared in key order, which the lint's `sort-keys` holds and which is column
+ * order.
+ */
+export const PlacedShareTarget = relation(
+  "PlacedShareTarget",
+  {
+    assembly: uuid,
+    assemblyKind: closedId(NodeKind),
+    document: uuid,
+    id: keyText,
+    instance: uuid,
+    node: uuid,
+    shareRank: natural,
+    target: uuid,
+    targetCopy: uuid,
+    targetDocument: uuid,
+    targetInstance: uuid,
+    targetRank: natural,
+  },
+  ["instance", "node"],
+);
+
+/**
  * The {@link MathRank} rows below a chain's top: every row but an `m:math`'s and the document
  * node's (the one node that is its own parent), each tied to its parent's row.
  */
 const innerRanks = select(MathRank, (r) => r.and(r.ne(r.kind, "m:math"), r.ne(r.node, r.parent)));
 
 /**
+ * The {@link PlacedMathRank} rows below a chain's top, each tied to its parent's row under the same
+ * instance.
+ */
+const innerPlacedRanks = select(PlacedMathRank, (r) =>
+  r.and(r.ne(r.kind, "m:math"), r.ne(r.node, r.parent)),
+);
+
+/**
+ * The shares of a document in an assembly, the ones {@link PlacedShareTarget} places once under
+ * each instance.
+ */
+const assembledShares = select(ShareFragment, (f) => f.eq(f.assembled, true));
+
+/**
+ * The shares of a document in no assembly, the ones {@link ShareTarget} holds.
+ */
+const unassembledShares = select(ShareFragment, (f) => f.eq(f.assembled, false));
+
+/**
+ * Each share's placements, counted by `ShareFragment.placements`.
+ */
+export const placedShareFamily = counted(
+  on(PlacedShareTarget, "node"),
+  fin(ShareFragment, "placements"),
+);
+
+/**
  * The relations the share law declares, each under its own name, as `#pantry/qti/schema.ts`
  * composes them.
  */
-export const shareRelations = { MathRank, ShareTarget };
+export const shareRelations = { MathRank, PlacedMathRank, PlacedShareTarget, ShareTarget };
 
 /**
  * Every statement over the module's relations, the check named by its law:
@@ -127,7 +241,12 @@ export const shareRelations = { MathRank, ShareTarget };
  * - **the targets:** a {@link ShareTarget} row for each {@link ShareFragment} and no other (both
  *   ways), its `target` an owner of its id under {@link IdBinding}, its two ranks copied from the
  *   {@link MathRank} rows of the share and of the target, and `MathML_share_cycle`: the share's
- *   rank is above its target's.
+ *   rank is above its target's;
+ * - **the placed ranks and targets:** the same per instance of an assembled document: each
+ *   {@link PlacedMathRank} row's tuple and instance proved by containment, its `(parent,
+ *   parentRank)` tied under its instance, a {@link PlacedShareTarget} row for each share under
+ *   every instance of its document, its target resolved over {@link AssembledId}, its ranks copied
+ *   from the rows under the right instances, and a second `MathML_share_cycle` check.
  */
 export const shareLaws = [
   contained(
@@ -139,9 +258,62 @@ export const shareLaws = [
     r.or(r.eq(r.kind, "m:math"), r.eq(r.node, r.parent), r.lt(r.rank, r.parentRank)),
   ),
 
-  mirrors(on(ShareTarget, "node", "document", "id"), on(ShareFragment, "node", "document", "id")),
+  mirrors(
+    on(ShareTarget, "node", "document", "id"),
+    on(unassembledShares, "node", "document", "id"),
+  ),
   contained(on(ShareTarget, "document", "id", "target"), on(IdBinding, "document", "id", "owner")),
   contained(on(ShareTarget, "node", "shareRank"), on(MathRank, "node", "rank")),
   contained(on(ShareTarget, "target", "targetRank"), on(MathRank, "node", "rank")),
   check("MathML_share_cycle", ShareTarget, (s) => s.gt(s.shareRank, s.targetRank)),
+
+  contained(
+    on(PlacedMathRank, "node", "document", "kind", "parent"),
+    on(Node, "id", "document", "kind", "parent"),
+  ),
+  contained(
+    on(PlacedMathRank, "instance", "document", "assembly"),
+    on(Instance, "id", "document", "assembly"),
+  ),
+  contained(
+    on(innerPlacedRanks, "instance", "parent", "parentRank"),
+    on(PlacedMathRank, "instance", "node", "rank"),
+  ),
+  check("E1_derived", PlacedMathRank, (r) =>
+    r.or(r.eq(r.kind, "m:math"), r.eq(r.node, r.parent), r.lt(r.rank, r.parentRank)),
+  ),
+
+  contained(
+    on(PlacedShareTarget, "node", "document", "id"),
+    on(ShareFragment, "node", "document", "id"),
+  ),
+  contained(
+    on(PlacedShareTarget, "instance", "document", "assembly", "assemblyKind"),
+    on(Instance, "id", "document", "assembly", "assemblyKind"),
+  ),
+  placedShareFamily,
+  contained(on(assembledShares, "document", "placements"), on(TestDocument, "node", "instances")),
+  contained(
+    on(PlacedShareTarget, "assembly", "id", "target", "targetCopy"),
+    on(AssembledId, "assembly", "id", "owner", "copy"),
+  ),
+  contained(
+    on(PlacedShareTarget, "targetInstance", "targetDocument", "assembly"),
+    on(Instance, "id", "document", "assembly"),
+  ),
+  check("E1_derived", PlacedShareTarget, (s) =>
+    s.or(
+      s.and(s.ne(s.assemblyKind, testKind), s.eq(s.targetCopy, s.targetInstance)),
+      s.and(s.eq(s.assemblyKind, testKind), s.eq(s.targetCopy, s.targetDocument)),
+    ),
+  ),
+  contained(
+    on(PlacedShareTarget, "instance", "node", "shareRank"),
+    on(PlacedMathRank, "instance", "node", "rank"),
+  ),
+  contained(
+    on(PlacedShareTarget, "targetInstance", "target", "targetRank"),
+    on(PlacedMathRank, "instance", "node", "rank"),
+  ),
+  check("MathML_share_cycle", PlacedShareTarget, (s) => s.gt(s.shareRank, s.targetRank)),
 ];
