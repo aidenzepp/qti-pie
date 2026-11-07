@@ -25,8 +25,8 @@ import { overlayRowsOf, unionOf } from "#pantry/import/overlays/index.ts";
 import { namedDocuments, rowsOf as packageRowsOf } from "#pantry/import/overlays/package.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
-import { ruleOfError } from "#pantry/import/refusal.ts";
-import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { dataSsmlFaultIn } from "#pantry/import/data-ssml.ts";
+import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
 import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
   DocumentLayerRows,
@@ -105,14 +105,32 @@ export const declaredVersionOf = (manifest: XmlDocument): Option.Option<string> 
 };
 
 /**
- * Read and shred one document of the package.
+ * Read and shred one document of the package, and judge its `data-ssml` values.
+ *
+ * A `data-ssml` is judged here, not by the database: the database holds it as text and does not
+ * re-prove its form (spec reading R7-a), so a value Data-SSML 1.0 does not admit is refused under
+ * `attribute-lexical`, the rule of a value its domain refuses.
  *
  * @param file - Its entry.
  * @param version - The version the manifest declares.
- * @returns Its tree; the reader's or the codec's refusal.
+ * @returns Its tree; the reader's, the codec's or the `data-ssml` refusal.
  */
 const shredFile = (file: PackageFile, version: (typeof versions)[number]) =>
-  Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar)));
+  Effect.flatMap(
+    Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar))),
+    (tree) => {
+      const fault = dataSsmlFaultIn(tree);
+
+      return fault === undefined
+        ? Effect.succeed(tree)
+        : Effect.fail(
+            new ImportRefused({
+              detail: `${file.path} at ${fault.path}: ${fault.detail}`,
+              rule: "attribute-lexical",
+            }),
+          );
+    },
+  );
 
 /**
  * Read the package at `dir` and list its documents: the manifest, then each document its resources
