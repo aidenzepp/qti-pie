@@ -807,6 +807,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    141,
+    {
+      owner:
+        "crust's decoder and encoder (`packages/crust/src/decode.ts` `rows`, `asciiRow` and `decodeRow`, rule `encoding-mismatch`; `packages/crust/src/encode.ts` `encoders`): a document is read in the row of XML 1.0 Appendix F.1 its first bytes are in, under a label that row admits, and each UTF-16 scheme is written with the opening it is read by; held by `packages/crust/src/decode.detection.test.ts` against `packages/crust/src/test/appendix-f.ts`, and by `src/test/genetic-codec.test.ts`'s fixed seeds N3 and N4",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
