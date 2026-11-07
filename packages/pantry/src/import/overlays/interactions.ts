@@ -77,7 +77,6 @@ import type {
   SectionTemplateRef,
   Slider,
   TemplateRef,
-  VarRef,
 } from "#pantry/qti/interactions.ts";
 
 /**
@@ -128,7 +127,6 @@ export interface InteractionRows {
   readonly SectionTemplateName: ReadonlyMap<string, Addition<typeof SectionTemplateName>>;
   readonly Slider: ReadonlyMap<string, Addition<typeof Slider>>;
   readonly TemplateRef: ReadonlyMap<string, Addition<typeof TemplateRef>>;
-  readonly VarRef: ReadonlyMap<string, Addition<typeof VarRef>>;
 }
 
 /**
@@ -1023,7 +1021,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
         ? [[context.document, { adaptive: context.adaptive, document: context.document }]]
         : [],
     ),
-    PrintedVariableRef: referencesOf(context, read, references.printed, always),
+    PrintedVariableRef: new Map([
+      ...referencesOf(context, read, references.printed, always),
+      ...referencesOf(context, read, references.variable, namesVariable),
+    ]),
     ReferringDocument: new Map(
       referringRoots.every((root) => root !== context.rootKind)
         ? [[context.document, { document: context.document }]]
@@ -1035,7 +1036,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     SectionTemplateName: sectionNamesOf(context, read, sectionTemplates, unfragmentedRoots),
     Slider: slidersOf(context),
     TemplateRef: referencesOf(context, read, references.template, always),
-    VarRef: referencesOf(context, read, references.variable, namesVariable),
   };
 };
 

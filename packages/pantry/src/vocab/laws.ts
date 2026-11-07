@@ -56,7 +56,6 @@ export const precedence = [
   "slider-bounds",
   "max-strings-required",
   "aria-value-range",
-  "varref-copy",
   "adaptive-feedback",
   // HTML content.
   "source-srcset",
@@ -869,11 +868,6 @@ export const lawTable = {
     rule: "variable-mapping-target",
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 74: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 97), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSourceDeclaration, its declared half)",
-  },
-  "Variable reference copy": {
-    rule: "varref-copy",
-    source:
-      "plan §1.7 O3, the varref-copy rule (Q5.09): every printed variable base or index that names a variable has its VarRef row, which resolves it; the XSD's union of xs:integer and VariableStringDType on those attributes decides what names a variable",
   },
   "Weighted base": {
     rule: "P29",

@@ -126,7 +126,6 @@ import {
   SectionTemplateRef,
   Slider,
   TemplateRef,
-  VarRef,
 } from "#pantry/qti/interactions.ts";
 import {
   Digits,
@@ -888,7 +887,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     SectionTemplateRef,
     Slider,
     TemplateRef,
-    VarRef,
   ].map(
     ({ name, primaryKey }) =>
       [

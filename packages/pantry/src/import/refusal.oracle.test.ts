@@ -607,7 +607,6 @@ const tiers: readonly (readonly Rule[])[] = [
     "slider-bounds",
     "max-strings-required",
     "aria-value-range",
-    "varref-copy",
     "adaptive-feedback",
     "P2",
     "P8",
@@ -1127,13 +1126,8 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ["max-strings-required", "aria-value-range", "O3: QTI's counts before ARIA's range (reading 91)"],
   [
     "aria-value-range",
-    "varref-copy",
-    "O3: an attribute's own range before a copied variable reference (reading 48)",
-  ],
-  [
-    "varref-copy",
     "adaptive-feedback",
-    "O3: a reference's copy before the item's adaptive flag (Q5.09)",
+    "O3: an attribute's own range (reading 48) before the item's adaptive flag (Q5.09)",
   ],
   ["adaptive-feedback", "source-srcset", "the tiers: O3 before the HTML content (plan §1.7)"],
   ["source-srcset", "source-src", "reading 124: a picture's source, then a media element's"],
