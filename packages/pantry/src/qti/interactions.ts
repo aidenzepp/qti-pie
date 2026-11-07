@@ -18,10 +18,13 @@
  *   objects and interactions"), so the item-only laws read {@link BoundVariable}.
  * - {@link BoundVariable}: each attribute by which an item's interaction binds a response variable,
  *   its `response-identifier` and its `string-identifier` (§5.48.2, §5.162.3: "binding the
- *   interaction to a second response variable (of base-type string)"), with the variable's
- *   declaration, through `declarationRef`. `key(document, identifier)` is "Binding unique" (reading
- *   92: "Each response variable declared may be bound to one and only one interaction"), so an
- *   interaction whose string identifier is its response identifier, the old
+ *   interaction to a second response variable (of base-type string)"), and beside it, where a
+ *   response declaration of the item holds the name, its {@link BindingDeclaration}: the variable's
+ *   declaration, through `declarationRef`. A binding with none is "Binding declared"'s, and the fit
+ *   laws read the declaration row, so they judge only a declared variable (lane NIL's audit, B1: a
+ *   missing value is a row of its own relation, never a sentinel). `key(document, identifier)` is
+ *   "Binding unique" (reading 92: "Each response variable declared may be bound to one and only one
+ *   interaction"), so an interaction whose string identifier is its response identifier, the old
  *   `string-identifier-distinct`, breaks that key.
  * - {@link Choice}: every choice, its `interaction` its nearest interaction (N8), the `Gap` rows
  *   among them, with its identifier distinct among its document's choices of its kind (§5.132.1 and
@@ -557,14 +560,40 @@ export const Binding = relation(
  * Its fields, every one written by the host:
  *
  * - `kind`, the interaction's; `document`, and `identifier`, the attribute's value collapsed;
- * - `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration it names, copied
- *   through `declarationRef`;
  * - `adaptive`, whether its item is adaptive, copied from {@link ItemMode}.
+ *
+ * The variable it binds is its {@link BindingDeclaration}'s, which a name no response declaration
+ * of the item holds has none of.
  */
 export const BoundVariable = relation(
   "BoundVariable",
   {
     adaptive: pg.boolean,
+    attribute: closedId(AttributeName),
+    document: uuid,
+    identifier: keyText,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
+  ["node", "attribute"],
+);
+
+/**
+ * The response declaration an item's binding names, keyed as its {@link BoundVariable} is, and
+ * written only where a response declaration of the item holds the binding's name: a binding to an
+ * undeclared name, an outcome's, a template's or a built-in variable's has no row, which "Binding
+ * declared" refuses.
+ *
+ * Its fields, every one written by the host:
+ *
+ * - `node`, `attribute`, `kind`, `document` and `identifier`, its binding's, copied from
+ *   {@link BoundVariable};
+ * - `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration's, copied through
+ *   `declarationRef`.
+ */
+export const BindingDeclaration = relation(
+  "BindingDeclaration",
+  {
     attribute: closedId(AttributeName),
     baseType: closedId(BaseType),
     cardinality: closedId(Cardinality),
@@ -605,13 +634,38 @@ export const BindingName = relation(
  * correctly bound to response variables declared in the items", information model §2.12).
  *
  * Its fields, every one written by the host: `instance`, `document` and `assembly`, the instance's;
- * `node`, `attribute`, `kind` and `identifier`, its {@link BindingName}'s; the declaration it names
- * among the assembly's, through `declarationRef`; and `adaptive`, whether the item is adaptive.
+ * `node`, `attribute`, `kind` and `identifier`, its {@link BindingName}'s; and `adaptive`, whether
+ * the item is adaptive. The variable it binds among the assembly's declarations is its
+ * {@link PlacedBindingDeclaration}'s.
  */
 export const PlacedBinding = relation(
   "PlacedBinding",
   {
     adaptive: pg.boolean,
+    assembly: uuid,
+    attribute: closedId(AttributeName),
+    document: uuid,
+    identifier: keyText,
+    instance: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
+  ["instance", "node", "attribute"],
+);
+
+/**
+ * The response declaration a {@link PlacedBinding} names among its assembly's, keyed as the
+ * binding is, and written only where a response declaration of the item holds the name, as
+ * {@link BindingDeclaration} is for an item's own bindings.
+ *
+ * Its fields, every one written by the host: `instance`, `node`, `attribute`, `assembly`,
+ * `document`, `kind` and `identifier`, its binding's, copied from `PlacedBinding`; and
+ * `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration's, copied through
+ * `declarationRef`.
+ */
+export const PlacedBindingDeclaration = relation(
+  "PlacedBindingDeclaration",
+  {
     assembly: uuid,
     attribute: closedId(AttributeName),
     baseType: closedId(BaseType),
@@ -1206,6 +1260,7 @@ export const interactionRelations = {
   AriaRange,
   AriaValue,
   Binding,
+  BindingDeclaration,
   BindingName,
   BoundVariable,
   Choice,
@@ -1218,6 +1273,7 @@ export const interactionRelations = {
   InteractionAttribute,
   ItemMode,
   PlacedBinding,
+  PlacedBindingDeclaration,
   PlacedChoice,
   PlacedHottext,
   PrintedVariableRef,
@@ -1665,15 +1721,16 @@ const sectionPlacements = select(Instance, (i) =>
  *   responses twice, as its merged document does), "Binding cardinality" and "AdaptiveFeedback",
  *   whose feedback ancestry an included fragment inherits from its context.
  * - **bindings:** each interaction's {@link Binding} (its node's, of an interaction kind, its
- *   identifier its `response-identifier`'s); each item binding's {@link BoundVariable}, whose
- *   declaration is a response declaration ("Binding declared", reading 75) of a type `BindingFit`
- *   or `RecordBindingFit` admits, the custom and portable custom interactions of any type, and a
- *   string binding's of base type string ("BindingFit"); "Binding unique" (`key(document,
- *   identifier)`); "Binding cardinality" (a single response takes a most of 1);
- *   `max-strings-required`, which carries `kind` beside `node` so that its containment into
- *   `CountBound` is a statement of its own, not "Binding cardinality"'s: a refusal names a law by
- *   its relations and terms, never its selection (C22); and "AdaptiveFeedback", an interaction
- *   inside feedback is in an adaptive item.
+ *   identifier its `response-identifier`'s); each item binding's {@link BoundVariable}, which has
+ *   its {@link BindingDeclaration} ("Binding declared", reading 75), a response declaration's,
+ *   whose fields are the binding's and back; each declaration of a type `BindingFit` or
+ *   `RecordBindingFit` admits, the custom and portable custom interactions of any type, and a
+ *   string binding's of base type string ("BindingFit"), each fit law over the declaration rows
+ *   alone; "Binding unique" (`key(document, identifier)`); "Binding cardinality" (a single response
+ *   takes a most of 1); `max-strings-required`, which carries `kind` beside `node` so that its
+ *   containment into `CountBound` is a statement of its own, not "Binding cardinality"'s: a refusal
+ *   names a law by its relations and terms, never its selection (C22); and "AdaptiveFeedback", an
+ *   interaction inside feedback is in an adaptive item.
  * - **choices:** the counted family under `Binding`, each choice's interaction its nearest; its
  *   identifier distinct among its document's choices of its kind; each hottext's nearest kind, and
  *   its identifier distinct among its document's hottexts (reading 104); and in place (spec reading
@@ -1738,8 +1795,13 @@ export const interactionLaws = [
   ),
   contained(on(BoundVariable, "node", "kind"), on(Binding, "node", "kind")),
   contained(
+    on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
+    on(BindingDeclaration, "node", "attribute", "kind", "document", "identifier"),
+  ),
+  contained(on(BindingDeclaration, "node", "attribute"), on(BoundVariable, "node", "attribute")),
+  contained(
     on(
-      BoundVariable,
+      BindingDeclaration,
       "declaration",
       "document",
       "identifier",
@@ -1749,12 +1811,12 @@ export const interactionLaws = [
     ),
     declarationRef,
   ),
-  check("Binding_declared", BoundVariable, (r) =>
+  check("Binding_declared", BindingDeclaration, (r) =>
     r.eq(r.declarationKind, "qti-response-declaration"),
   ),
   contained(
     on(
-      select(BoundVariable, (r) =>
+      select(BindingDeclaration, (r) =>
         r.and(
           r.eq(r.attribute, "response-identifier"),
           r.ne(r.cardinality, "record"),
@@ -1769,7 +1831,7 @@ export const interactionLaws = [
   ),
   contained(
     on(
-      select(BoundVariable, (r) =>
+      select(BindingDeclaration, (r) =>
         r.and(
           r.eq(r.attribute, "response-identifier"),
           r.eq(r.cardinality, "record"),
@@ -1780,13 +1842,13 @@ export const interactionLaws = [
     ),
     on(RecordBindingFit, "kind"),
   ),
-  check("BindingFit", BoundVariable, (r) =>
+  check("BindingFit", BindingDeclaration, (r) =>
     r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
   ),
   key(on(BoundVariable, "document", "identifier")),
   contained(
     on(
-      select(BoundVariable, (r) =>
+      select(BindingDeclaration, (r) =>
         r.and(
           r.eq(r.attribute, "response-identifier"),
           r.in(r.kind, cardinalityKinds),
@@ -1802,7 +1864,7 @@ export const interactionLaws = [
   ),
   contained(
     on(
-      select(BoundVariable, (r) =>
+      select(BindingDeclaration, (r) =>
         r.and(
           r.eq(r.attribute, "response-identifier"),
           r.eq(r.kind, extendedTextKind),
@@ -1847,6 +1909,32 @@ export const interactionLaws = [
   contained(
     on(
       PlacedBinding,
+      "instance",
+      "node",
+      "attribute",
+      "assembly",
+      "document",
+      "kind",
+      "identifier",
+    ),
+    on(
+      PlacedBindingDeclaration,
+      "instance",
+      "node",
+      "attribute",
+      "assembly",
+      "document",
+      "kind",
+      "identifier",
+    ),
+  ),
+  contained(
+    on(PlacedBindingDeclaration, "instance", "node", "attribute"),
+    on(PlacedBinding, "instance", "node", "attribute"),
+  ),
+  contained(
+    on(
+      PlacedBindingDeclaration,
       "declaration",
       "assembly",
       "identifier",
@@ -1856,12 +1944,12 @@ export const interactionLaws = [
     ),
     declarationRef,
   ),
-  check("Binding_declared", PlacedBinding, (r) =>
+  check("Binding_declared", PlacedBindingDeclaration, (r) =>
     r.eq(r.declarationKind, "qti-response-declaration"),
   ),
   contained(
     on(
-      select(PlacedBinding, (r) =>
+      select(PlacedBindingDeclaration, (r) =>
         r.and(
           r.eq(r.attribute, "response-identifier"),
           r.ne(r.cardinality, "record"),
@@ -1876,7 +1964,7 @@ export const interactionLaws = [
   ),
   contained(
     on(
-      select(PlacedBinding, (r) =>
+      select(PlacedBindingDeclaration, (r) =>
         r.and(
           r.eq(r.attribute, "response-identifier"),
           r.eq(r.cardinality, "record"),
@@ -1887,13 +1975,13 @@ export const interactionLaws = [
     ),
     on(RecordBindingFit, "kind"),
   ),
-  check("BindingFit", PlacedBinding, (r) =>
+  check("BindingFit", PlacedBindingDeclaration, (r) =>
     r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
   ),
   key(on(PlacedBinding, "assembly", "identifier")),
   contained(
     on(
-      select(PlacedBinding, (r) =>
+      select(PlacedBindingDeclaration, (r) =>
         r.and(
           r.eq(r.attribute, "response-identifier"),
           r.in(r.kind, cardinalityKinds),
@@ -1909,7 +1997,7 @@ export const interactionLaws = [
   ),
   contained(
     on(
-      select(PlacedBinding, (r) =>
+      select(PlacedBindingDeclaration, (r) =>
         r.and(
           r.eq(r.attribute, "response-identifier"),
           r.eq(r.kind, extendedTextKind),

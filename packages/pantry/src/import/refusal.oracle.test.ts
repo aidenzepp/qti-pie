@@ -827,7 +827,7 @@ const plannedAxes = nonEmpty("the planned axes", [
  * the QTI tier among them, so a set drawn from it meets every pair of tiers.
  */
 const crossTier = nonEmpty("the cross-tier laws", [
-  ...statedNamed("Binding declared"),
+  ...statedNamed("Binding declared", "Declaration(declaration"),
   ...statedNamed("Choice bounds"),
   { kind: "check", name: checkNameOf("MathML arity"), relation: "Node" } satisfies Law,
   ...statedNamed("AL1 owner", "Attribute(node, kind"),

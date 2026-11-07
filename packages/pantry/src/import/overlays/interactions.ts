@@ -52,6 +52,7 @@ import type {
   AriaRange,
   AriaValue,
   Binding,
+  BindingDeclaration,
   BindingName,
   BoundVariable,
   Choice,
@@ -64,6 +65,7 @@ import type {
   InteractionAttribute,
   ItemMode,
   PlacedBinding,
+  PlacedBindingDeclaration,
   PlacedChoice,
   PlacedHottext,
   PrintedVariableRef,
@@ -108,6 +110,7 @@ export interface InteractionRows {
   readonly AriaRange: ReadonlyMap<string, Addition<typeof AriaRange>>;
   readonly AriaValue: ReadonlyMap<string, Addition<typeof AriaValue>>;
   readonly Binding: ReadonlyMap<string, Addition<typeof Binding>>;
+  readonly BindingDeclaration: ReadonlyMap<string, Addition<typeof BindingDeclaration>>;
   readonly BindingName: ReadonlyMap<string, Addition<typeof BindingName>>;
   readonly BoundVariable: ReadonlyMap<string, Addition<typeof BoundVariable>>;
   readonly Choice: ReadonlyMap<string, Addition<typeof Choice>>;
@@ -483,6 +486,27 @@ const resolve = (
 ): DeclaredVariable => resolveIn(context.declared, identifier, allowed);
 
 /**
+ * Find the response declaration a binding names among its item's declarations. A built-in
+ * variable, a declaration of another kind and a name no declaration holds bind no response
+ * variable, so each has none, and its binding no declaration row.
+ *
+ * @param declared - The item's declarations.
+ * @param identifier - The name, collapsed.
+ * @returns The response declaration, or none.
+ */
+const responseIn = (
+  declared: Context["declared"],
+  identifier: string,
+): Option.Option<DeclaredVariable> =>
+  Option.fromNullishOr(
+    declared.find(
+      (declaration) =>
+        declaration.identifier === identifier &&
+        declaration.declarationKind === "qti-response-declaration",
+    ),
+  );
+
+/**
  * Build the read attributes: each attribute O3 reads, its lexical form and its pieces.
  *
  * @param context - The document.
@@ -516,16 +540,18 @@ const interactionAttributesOf = (context: Context) =>
   );
 
 /**
- * Build each interaction's binding, and in an item each of its bound variables.
+ * Build each interaction's binding, and in an item each of its bound variables and the response
+ * declaration each names, where one does.
  *
  * @param context - The document.
  * @returns The `Binding` rows, keyed by node, and the `BindingName` rows of every document and
- *   the `BoundVariable` rows of an item, each keyed by (node, attribute).
+ *   the `BoundVariable` and `BindingDeclaration` rows of an item, each keyed by (node, attribute).
  */
 const bindingsOf = (context: Context) => {
   const bindings = new Map<string, Addition<typeof Binding>>();
   const names = new Map<string, Addition<typeof BindingName>>();
   const bound = new Map<string, Addition<typeof BoundVariable>>();
+  const declarations = new Map<string, Addition<typeof BindingDeclaration>>();
   for (const node of context.rows.nodes.filter(({ kind }) => interactions.has(kind))) {
     for (const identifier of Option.toArray(valueOf(context, node.id, "response-identifier"))) {
       bindings.set(node.id, { ...tupleOf(context, node), identifier, rootKind: context.rootKind });
@@ -545,24 +571,28 @@ const bindingsOf = (context: Context) => {
 
     for (const attribute of context.rootKind === itemRoot ? bindingAttributes : []) {
       for (const identifier of Option.toArray(valueOf(context, node.id, attribute))) {
-        const variable = resolve(context, identifier, ["qti-response-declaration"]);
-        bound.set(keyOf([node.id, attribute]), {
-          adaptive: context.adaptive,
+        const binding = {
           attribute,
-          baseType: variable.baseType,
-          cardinality: variable.cardinality,
-          declaration: variable.node,
-          declarationKind: "qti-response-declaration",
           document: context.document,
           identifier,
           kind: node.kind,
           node: node.id,
-        });
+        };
+        bound.set(keyOf([node.id, attribute]), { ...binding, adaptive: context.adaptive });
+        for (const variable of Option.toArray(responseIn(context.declared, identifier))) {
+          declarations.set(keyOf([node.id, attribute]), {
+            ...binding,
+            baseType: variable.baseType,
+            cardinality: variable.cardinality,
+            declaration: variable.node,
+            declarationKind: variable.declarationKind,
+          });
+        }
       }
     }
   }
 
-  return { bindings, bound, names };
+  return { bindings, bound, declarations, names };
 };
 
 /**
@@ -957,7 +987,7 @@ const sectionPrints = [
 export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): InteractionRows => {
   const context = contextOf(doc, ids);
   const read = interactionAttributesOf(context);
-  const { bindings, bound, names } = bindingsOf(context);
+  const { bindings, bound, declarations, names } = bindingsOf(context);
   const choices = choicesOf(context);
   const hottexts = hottextsOf(context);
   const aria = ariaOf(context);
@@ -967,6 +997,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     AriaRange: aria.ranges,
     AriaValue: aria.values,
     Binding: bindings,
+    BindingDeclaration: declarations,
     BindingName: names,
     BoundVariable: bound,
     Choice: choices,
@@ -1161,6 +1192,7 @@ export const sectionRowsOf = (input: {
 export interface PlacedBindingRows {
   readonly ChoiceVariableName: ReadonlyMap<string, Addition<typeof ChoiceVariableName>>;
   readonly PlacedBinding: ReadonlyMap<string, Addition<typeof PlacedBinding>>;
+  readonly PlacedBindingDeclaration: ReadonlyMap<string, Addition<typeof PlacedBindingDeclaration>>;
   readonly PlacedChoice: ReadonlyMap<string, Addition<typeof PlacedChoice>>;
   readonly PlacedHottext: ReadonlyMap<string, Addition<typeof PlacedHottext>>;
 }
@@ -1169,11 +1201,11 @@ export interface PlacedBindingRows {
  * Build each instance of an item's assembly's bindings (spec reading 117): under the item's own
  * instance and each fragment it places, every binding attribute of the instance's document,
  * resolved among the item's declarations as `BoundVariable` resolves an item's own, and carrying
- * the item's `adaptive`. A name no response declaration of the item holds resolves to the nil
- * declaration, which `declarationRef` refuses. Under each instance of every assembly, its
- * document's choices and hottexts, which count among the assembly's, and each identifier they bear
- * as a {@link ChoiceVariableName} of the assembly's root document, which "Choice not variable"
- * holds to the root's declarations.
+ * the item's `adaptive`, and its {@link PlacedBindingDeclaration} where a response declaration of
+ * the item holds the name: a name none holds has none, which "Binding declared" refuses. Under each
+ * instance of every assembly, its document's choices and hottexts, which count among the
+ * assembly's, and each identifier they bear as a {@link ChoiceVariableName} of the assembly's root
+ * document, which "Choice not variable" holds to the root's declarations.
  *
  * @param input - The package's rows the bindings read.
  * @param input.adaptive - Every item's mode ({@link rowsOf}'s `ItemMode`).
@@ -1199,6 +1231,7 @@ export const placedBindingRowsOf = (input: {
   const choicesByDocument = Map.groupBy(input.choices, ({ document }) => document);
   const hottextsByDocument = Map.groupBy(input.hottexts, ({ document }) => document);
   const placed = new Map<string, Addition<typeof PlacedBinding>>();
+  const placedDeclarations = new Map<string, Addition<typeof PlacedBindingDeclaration>>();
   const choices = new Map<string, Addition<typeof PlacedChoice>>();
   const hottexts = new Map<string, Addition<typeof PlacedHottext>>();
   const named = new Map<string, Addition<typeof ChoiceVariableName>>();
@@ -1242,20 +1275,25 @@ export const placedBindingRowsOf = (input: {
   for (const root of roots) {
     for (const { assembly, instance } of root.assemblyKind === itemRoot ? instancesOf(root) : []) {
       for (const name of names.get(instance.document) ?? []) {
-        const variable = resolveIn(declared.get(assembly) ?? [], name.identifier, [
-          "qti-response-declaration",
-        ]);
-        placed.set(keyOf([instance.id, name.node, name.attribute]), {
+        const binding = {
           ...name,
-          adaptive: adaptive.get(assembly) ?? false,
           assembly,
-          baseType: variable.baseType,
-          cardinality: variable.cardinality,
-          declaration: variable.node,
-          declarationKind: "qti-response-declaration",
           document: instance.document,
           instance: instance.id,
-        });
+        };
+        const key = keyOf([instance.id, name.node, name.attribute]);
+        placed.set(key, { ...binding, adaptive: adaptive.get(assembly) ?? false });
+        for (const variable of Option.toArray(
+          responseIn(declared.get(assembly) ?? [], name.identifier),
+        )) {
+          placedDeclarations.set(key, {
+            ...binding,
+            baseType: variable.baseType,
+            cardinality: variable.cardinality,
+            declaration: variable.node,
+            declarationKind: variable.declarationKind,
+          });
+        }
       }
     }
   }
@@ -1263,6 +1301,7 @@ export const placedBindingRowsOf = (input: {
   return {
     ChoiceVariableName: named,
     PlacedBinding: placed,
+    PlacedBindingDeclaration: placedDeclarations,
     PlacedChoice: choices,
     PlacedHottext: hottexts,
   };

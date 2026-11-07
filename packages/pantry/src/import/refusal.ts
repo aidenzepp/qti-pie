@@ -89,6 +89,7 @@ import {
   AriaRange,
   AriaValue,
   Binding,
+  BindingDeclaration,
   BindingName,
   BoundVariable,
   Choice,
@@ -102,6 +103,7 @@ import {
   interactionLaws,
   ItemMode,
   PlacedBinding,
+  PlacedBindingDeclaration,
   PlacedChoice,
   PlacedHottext,
   PrintedVariableRef,
@@ -749,7 +751,7 @@ export const lawTable = {
   "Max strings required": {
     rule: "max-strings-required",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BoundVariable, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BindingDeclaration, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
   },
   "Media source src": {
     rule: "source-src",
@@ -2585,8 +2587,22 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [generatedOf(StatisticDate, "date"), "value domain"],
   [
     containedIn(
+      sideOf("BoundVariable", "node", "attribute", "kind", "document", "identifier"),
+      sideOf("BindingDeclaration", "node", "attribute", "kind", "document", "identifier"),
+    ),
+    "Binding declared",
+  ],
+  [
+    containedIn(
+      sideOf("BindingDeclaration", "node", "attribute"),
+      sideOf("BoundVariable", "node", "attribute"),
+    ),
+    "E1 derived",
+  ],
+  [
+    containedIn(
       sideOf(
-        "BoundVariable",
+        "BindingDeclaration",
         "declaration",
         "document",
         "identifier",
@@ -2608,19 +2624,51 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ],
   [
     containedIn(
-      sideOf("BoundVariable", "baseType", "cardinality", "kind"),
+      sideOf("BindingDeclaration", "baseType", "cardinality", "kind"),
       sideOf("BindingFit", "baseType", "cardinality", "kind"),
     ),
     "BindingFit",
   ],
   [
-    containedIn(sideOf("BoundVariable", "kind"), sideOf("RecordBindingFit", "kind")),
+    containedIn(sideOf("BindingDeclaration", "kind"), sideOf("RecordBindingFit", "kind")),
     "RecordBindingFit",
   ],
   [
     containedIn(
       sideOf(
         "PlacedBinding",
+        "instance",
+        "node",
+        "attribute",
+        "assembly",
+        "document",
+        "kind",
+        "identifier",
+      ),
+      sideOf(
+        "PlacedBindingDeclaration",
+        "instance",
+        "node",
+        "attribute",
+        "assembly",
+        "document",
+        "kind",
+        "identifier",
+      ),
+    ),
+    "Binding declared",
+  ],
+  [
+    containedIn(
+      sideOf("PlacedBindingDeclaration", "instance", "node", "attribute"),
+      sideOf("PlacedBinding", "instance", "node", "attribute"),
+    ),
+    "E1 derived",
+  ],
+  [
+    containedIn(
+      sideOf(
+        "PlacedBindingDeclaration",
         "declaration",
         "assembly",
         "identifier",
@@ -2642,32 +2690,35 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ],
   [
     containedIn(
-      sideOf("PlacedBinding", "baseType", "cardinality", "kind"),
+      sideOf("PlacedBindingDeclaration", "baseType", "cardinality", "kind"),
       sideOf("BindingFit", "baseType", "cardinality", "kind"),
     ),
     "BindingFit",
   ],
   [
-    containedIn(sideOf("PlacedBinding", "kind"), sideOf("RecordBindingFit", "kind")),
+    containedIn(sideOf("PlacedBindingDeclaration", "kind"), sideOf("RecordBindingFit", "kind")),
     "RecordBindingFit",
   ],
   [keyOver(sideOf("PlacedBinding", "assembly", "identifier")), "Binding unique"],
   [
-    containedIn(sideOf("PlacedBinding", "node"), sideOf("CountBound", "node")),
+    containedIn(sideOf("PlacedBindingDeclaration", "node"), sideOf("CountBound", "node")),
     "Binding cardinality",
   ],
   [
-    containedIn(sideOf("PlacedBinding", "node", "kind"), sideOf("CountBound", "node", "kind")),
+    containedIn(
+      sideOf("PlacedBindingDeclaration", "node", "kind"),
+      sideOf("CountBound", "node", "kind"),
+    ),
     "Max strings required",
   ],
   [containedIn(sideOf("PlacedBinding", "node"), sideOf("Node", "id")), "Adaptive feedback"],
   [keyOver(sideOf("BoundVariable", "document", "identifier")), "Binding unique"],
   [
-    containedIn(sideOf("BoundVariable", "node"), sideOf("CountBound", "node")),
+    containedIn(sideOf("BindingDeclaration", "node"), sideOf("CountBound", "node")),
     "Binding cardinality",
   ],
   [
-    containedIn(sideOf("BoundVariable", "node", "kind"), sideOf("CountBound", "node", "kind")),
+    containedIn(sideOf("BindingDeclaration", "node", "kind"), sideOf("CountBound", "node", "kind")),
     "Max strings required",
   ],
   [containedIn(sideOf("BoundVariable", "node"), sideOf("Node", "id")), "Adaptive feedback"],
@@ -2778,6 +2829,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     AriaRange,
     AriaValue,
     Binding,
+    BindingDeclaration,
     BindingName,
     BoundVariable,
     Choice,
@@ -2790,6 +2842,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     InteractionAttribute,
     ItemMode,
     PlacedBinding,
+    PlacedBindingDeclaration,
     PlacedChoice,
     PlacedHottext,
     PrintedVariableRef,

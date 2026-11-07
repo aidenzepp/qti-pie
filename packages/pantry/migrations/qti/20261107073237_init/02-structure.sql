@@ -189,6 +189,24 @@ CREATE TABLE "qti"."binding" (
   CONSTRAINT "__binding_key_node_root_kind_identifier_7yqssz554g" UNIQUE NULLS DISTINCT ("node", "root_kind", "identifier")
 );
 
+CREATE TABLE "qti"."binding_declaration" (
+  "attribute" "qti"."attribute_name" NOT NULL,
+  "base_type" "qti"."base_type" NOT NULL,
+  "cardinality" "qti"."cardinality" NOT NULL,
+  "declaration" "pg_catalog"."uuid" NOT NULL,
+  "declaration_kind" "qti"."declaration_kind" NOT NULL,
+  "document" "pg_catalog"."uuid" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "kind" "qti"."node_kind" NOT NULL,
+  "node" "pg_catalog"."uuid" NOT NULL,
+  CONSTRAINT "__binding_declaration_pk_jvfyvs6lit" PRIMARY KEY ("node", "attribute"),
+  CONSTRAINT "binding_fit" CHECK (("attribute" <> 78::smallint OR "base_type" = 3::smallint) IS TRUE),
+  CONSTRAINT "binding_declared" CHECK (("declaration_kind" = 1::smallint) IS TRUE),
+  CONSTRAINT "__binding_declaration_check_binding_declaration_kind_yyitockgct" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" = 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_xvmgsamjvy"(), "kind" + 1, 1)::integer = 1) IS TRUE),
+  CONSTRAINT "__binding_declaration_check_binding_declaration_kind_tzf5hoyfow" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" <> 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_s4yes4w2dp"(), ("base_type" * 4 + "cardinality") * 644 + "kind" + 1, 1)::integer = 1) IS TRUE),
+  CONSTRAINT "__binding_declaration_key_node_attribute_kind_cfz6qtibon" UNIQUE NULLS DISTINCT ("node", "attribute", "kind", "document", "identifier")
+);
+
 CREATE TABLE "qti"."binding_name" (
   "attribute" "qti"."attribute_name" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
@@ -203,20 +221,12 @@ CREATE TABLE "qti"."binding_name" (
 CREATE TABLE "qti"."bound_variable" (
   "adaptive" boolean NOT NULL,
   "attribute" "qti"."attribute_name" NOT NULL,
-  "base_type" "qti"."base_type" NOT NULL,
-  "cardinality" "qti"."cardinality" NOT NULL,
-  "declaration" "pg_catalog"."uuid" NOT NULL,
-  "declaration_kind" "qti"."declaration_kind" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__bound_variable_pk_iz45qegzkf" PRIMARY KEY ("node", "attribute"),
   CONSTRAINT "__bound_variable_key_document_identifier_poylxocl4p" UNIQUE NULLS DISTINCT ("document", "identifier"),
-  CONSTRAINT "binding_fit" CHECK (("attribute" <> 78::smallint OR "base_type" = 3::smallint) IS TRUE),
-  CONSTRAINT "binding_declared" CHECK (("declaration_kind" = 1::smallint) IS TRUE),
-  CONSTRAINT "__bound_variable_check_bound_variable_kind_attribute_4jjaajwa5m" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" = 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_xvmgsamjvy"(), "kind" + 1, 1)::integer = 1) IS TRUE),
-  CONSTRAINT "__bound_variable_check_bound_variable_kind_attribute_7zsy2o5xwx" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" <> 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_s4yes4w2dp"(), ("base_type" * 4 + "cardinality") * 644 + "kind" + 1, 1)::integer = 1) IS TRUE),
   CONSTRAINT "__bound_variable_key_node_attribute_kind_document_grf63knftr" UNIQUE NULLS DISTINCT ("node", "attribute", "kind", "document", "identifier")
 );
 
@@ -1577,6 +1587,18 @@ CREATE TABLE "qti"."placed_binding" (
   "adaptive" boolean NOT NULL,
   "assembly" "pg_catalog"."uuid" NOT NULL,
   "attribute" "qti"."attribute_name" NOT NULL,
+  "document" "pg_catalog"."uuid" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "instance" "pg_catalog"."uuid" NOT NULL,
+  "kind" "qti"."node_kind" NOT NULL,
+  "node" "pg_catalog"."uuid" NOT NULL,
+  CONSTRAINT "__placed_binding_pk_kvet6cuoq5" PRIMARY KEY ("instance", "node", "attribute"),
+  CONSTRAINT "__placed_binding_key_assembly_identifier_3sykzofz5f" UNIQUE NULLS DISTINCT ("assembly", "identifier")
+);
+
+CREATE TABLE "qti"."placed_binding_declaration" (
+  "assembly" "pg_catalog"."uuid" NOT NULL,
+  "attribute" "qti"."attribute_name" NOT NULL,
   "base_type" "qti"."base_type" NOT NULL,
   "cardinality" "qti"."cardinality" NOT NULL,
   "declaration" "pg_catalog"."uuid" NOT NULL,
@@ -1586,12 +1608,12 @@ CREATE TABLE "qti"."placed_binding" (
   "instance" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  CONSTRAINT "__placed_binding_pk_kvet6cuoq5" PRIMARY KEY ("instance", "node", "attribute"),
-  CONSTRAINT "__placed_binding_key_assembly_identifier_3sykzofz5f" UNIQUE NULLS DISTINCT ("assembly", "identifier"),
+  CONSTRAINT "__placed_binding_declaration_pk_55r2hs74bx" PRIMARY KEY ("instance", "node", "attribute"),
   CONSTRAINT "binding_fit" CHECK (("attribute" <> 78::smallint OR "base_type" = 3::smallint) IS TRUE),
   CONSTRAINT "binding_declared" CHECK (("declaration_kind" = 1::smallint) IS TRUE),
-  CONSTRAINT "__placed_binding_check_placed_binding_kind_attribute_pdxlqzdqni" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" = 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_xvmgsamjvy"(), "kind" + 1, 1)::integer = 1) IS TRUE),
-  CONSTRAINT "__placed_binding_check_placed_binding_kind_attribute_ajzarq5qh5" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" <> 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_s4yes4w2dp"(), ("base_type" * 4 + "cardinality") * 644 + "kind" + 1, 1)::integer = 1) IS TRUE)
+  CONSTRAINT "__placed_binding_declaration_key_instance_node_otkicbas2v" UNIQUE NULLS DISTINCT ("instance", "node", "attribute", "assembly", "document", "kind", "identifier"),
+  CONSTRAINT "__placed_binding_declaration_check_placed_binding_wgdnyancxq" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" = 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_xvmgsamjvy"(), "kind" + 1, 1)::integer = 1) IS TRUE),
+  CONSTRAINT "__placed_binding_declaration_check_placed_binding_pzuzm5qlka" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" <> 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_s4yes4w2dp"(), ("base_type" * 4 + "cardinality") * 644 + "kind" + 1, 1)::integer = 1) IS TRUE)
 );
 
 CREATE TABLE "qti"."placed_choice" (
@@ -2955,21 +2977,21 @@ ALTER TABLE "qti"."binding" ADD COLUMN "__node_gfaeb4prff" "pg_catalog"."uuid" G
 
 ALTER TABLE "qti"."binding" ADD COLUMN "__pred_choices_w4bygwsb7b" bigint GENERATED ALWAYS AS (CASE WHEN "choices" > 0::bigint THEN "choices"::numeric - (1::bigint)::numeric END) STORED;
 
+ALTER TABLE "qti"."binding_declaration" ADD COLUMN "__tag_max_written_true_6phmyjuam6" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
+
+ALTER TABLE "qti"."binding_declaration" ADD COLUMN "__tag_most_value_1_potsaavtbt" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL;
+
+ALTER TABLE "qti"."binding_declaration" ADD COLUMN "__kind_wpz27h2czt" smallint GENERATED ALWAYS AS (CASE WHEN "cardinality" IN (1::smallint, 2::smallint) AND "attribute" = 76::smallint AND "kind" = 131::smallint THEN "kind" END) STORED;
+
+ALTER TABLE "qti"."binding_declaration" ADD COLUMN "__node_6hhkc3nqmt" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "cardinality" IN (1::smallint, 2::smallint) AND "attribute" = 76::smallint AND "kind" = 131::smallint THEN "node" END) STORED;
+
+ALTER TABLE "qti"."binding_declaration" ADD COLUMN "__node_zk4w23iiot" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (133::smallint, 127::smallint, 119::smallint, 125::smallint, 121::smallint, 122::smallint, 129::smallint, 120::smallint, 187::smallint, 124::smallint) AND "attribute" = 76::smallint AND "cardinality" = 0::smallint THEN "node" END) STORED;
+
 ALTER TABLE "qti"."binding_name" ADD COLUMN "__copy_bindings_pble3k2v23" bigint NOT NULL;
 
 ALTER TABLE "qti"."binding_name" ADD COLUMN "__index_bindings_crowx3f6zn" bigint NOT NULL;
 
 ALTER TABLE "qti"."binding_name" ADD COLUMN "__predecessor_bindings_o6hyynvl6x" bigint GENERATED ALWAYS AS (CASE WHEN "__index_bindings_crowx3f6zn" > 0::bigint THEN "__index_bindings_crowx3f6zn"::numeric - (1::bigint)::numeric END) STORED;
-
-ALTER TABLE "qti"."bound_variable" ADD COLUMN "__tag_max_written_true_6phmyjuam6" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
-
-ALTER TABLE "qti"."bound_variable" ADD COLUMN "__tag_most_value_1_potsaavtbt" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL;
-
-ALTER TABLE "qti"."bound_variable" ADD COLUMN "__kind_wpz27h2czt" smallint GENERATED ALWAYS AS (CASE WHEN "cardinality" IN (1::smallint, 2::smallint) AND "attribute" = 76::smallint AND "kind" = 131::smallint THEN "kind" END) STORED;
-
-ALTER TABLE "qti"."bound_variable" ADD COLUMN "__node_6hhkc3nqmt" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "cardinality" IN (1::smallint, 2::smallint) AND "attribute" = 76::smallint AND "kind" = 131::smallint THEN "node" END) STORED;
-
-ALTER TABLE "qti"."bound_variable" ADD COLUMN "__node_zk4w23iiot" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (133::smallint, 127::smallint, 119::smallint, 125::smallint, 121::smallint, 122::smallint, 129::smallint, 120::smallint, 187::smallint, 124::smallint) AND "attribute" = 76::smallint AND "cardinality" = 0::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."bound_variable" ADD COLUMN "__node_nqyr3apalb" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "adaptive" = false AND "attribute" = 76::smallint THEN "node" END) STORED;
 
@@ -3945,10 +3967,6 @@ ALTER TABLE "qti"."package" ADD COLUMN "__pred_entries_px24b3j7no" bigint GENERA
 
 ALTER TABLE "qti"."pi" ADD COLUMN "__tag_kind_pi_57j5bswims" smallint GENERATED ALWAYS AS (8::smallint) STORED NOT NULL;
 
-ALTER TABLE "qti"."placed_binding" ADD COLUMN "__tag_max_written_true_6phmyjuam6" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
-
-ALTER TABLE "qti"."placed_binding" ADD COLUMN "__tag_most_value_1_potsaavtbt" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL;
-
 ALTER TABLE "qti"."placed_binding" ADD COLUMN "__tag_assembly_kind_qti_assessment_item_qf7qyzopnq" smallint GENERATED ALWAYS AS (299::smallint) STORED NOT NULL;
 
 ALTER TABLE "qti"."placed_binding" ADD COLUMN "__copy_bindings_kwl5kzlngt" bigint NOT NULL;
@@ -3957,13 +3975,17 @@ ALTER TABLE "qti"."placed_binding" ADD COLUMN "__index_bindings_suu7esbrdb" bigi
 
 ALTER TABLE "qti"."placed_binding" ADD COLUMN "__predecessor_bindings_js2gjd6wam" bigint GENERATED ALWAYS AS (CASE WHEN "__index_bindings_suu7esbrdb" > 0::bigint THEN "__index_bindings_suu7esbrdb"::numeric - (1::bigint)::numeric END) STORED;
 
-ALTER TABLE "qti"."placed_binding" ADD COLUMN "__kind_wpz27h2czt" smallint GENERATED ALWAYS AS (CASE WHEN "cardinality" IN (1::smallint, 2::smallint) AND "attribute" = 76::smallint AND "kind" = 131::smallint THEN "kind" END) STORED;
-
-ALTER TABLE "qti"."placed_binding" ADD COLUMN "__node_6hhkc3nqmt" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "cardinality" IN (1::smallint, 2::smallint) AND "attribute" = 76::smallint AND "kind" = 131::smallint THEN "node" END) STORED;
-
-ALTER TABLE "qti"."placed_binding" ADD COLUMN "__node_zk4w23iiot" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (133::smallint, 127::smallint, 119::smallint, 125::smallint, 121::smallint, 122::smallint, 129::smallint, 120::smallint, 187::smallint, 124::smallint) AND "attribute" = 76::smallint AND "cardinality" = 0::smallint THEN "node" END) STORED;
-
 ALTER TABLE "qti"."placed_binding" ADD COLUMN "__node_nqyr3apalb" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "adaptive" = false AND "attribute" = 76::smallint THEN "node" END) STORED;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD COLUMN "__tag_max_written_true_6phmyjuam6" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD COLUMN "__tag_most_value_1_potsaavtbt" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD COLUMN "__kind_wpz27h2czt" smallint GENERATED ALWAYS AS (CASE WHEN "cardinality" IN (1::smallint, 2::smallint) AND "attribute" = 76::smallint AND "kind" = 131::smallint THEN "kind" END) STORED;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD COLUMN "__node_6hhkc3nqmt" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "cardinality" IN (1::smallint, 2::smallint) AND "attribute" = 76::smallint AND "kind" = 131::smallint THEN "node" END) STORED;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD COLUMN "__node_zk4w23iiot" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (133::smallint, 127::smallint, 119::smallint, 125::smallint, 121::smallint, 122::smallint, 129::smallint, 120::smallint, 187::smallint, 124::smallint) AND "attribute" = 76::smallint AND "cardinality" = 0::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."placed_choice" ADD COLUMN "__copy_placed_choices_4brkzfmt4c" bigint NOT NULL;
 
@@ -5246,6 +5268,10 @@ CREATE TRIGGER "__isolation"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."binding_declaration"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."binding_name"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
@@ -5583,6 +5609,10 @@ CREATE TRIGGER "__isolation"
 
 CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."placed_binding"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."placed_binding_declaration"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
@@ -6023,21 +6053,25 @@ ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_pred_choices_wzjxq
 
 ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_xxhavdhtdz" FOREIGN KEY ("__node_gfaeb4prff") REFERENCES "qti"."count_bound" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."binding_declaration" ADD CONSTRAINT "__binding_declaration_fk_declaration_document_72vmrzu6ky" FOREIGN KEY ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."binding_declaration" ADD CONSTRAINT "__binding_declaration_fk_node_attribute_ri6ze7ovno" FOREIGN KEY ("node", "attribute") REFERENCES "qti"."bound_variable" ("node", "attribute") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."binding_declaration" ADD CONSTRAINT "__binding_declaration_fk_node_kind_tag_max_written_5gg6err4rk" FOREIGN KEY ("__node_6hhkc3nqmt", "__kind_wpz27h2czt", "__tag_max_written_true_6phmyjuam6") REFERENCES "qti"."count_bound" ("node", "kind", "max_written") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."binding_declaration" ADD CONSTRAINT "__binding_declaration_fk_node_tag_most_value_1_gspfr6u5q7" FOREIGN KEY ("__node_zk4w23iiot", "__tag_most_value_1_potsaavtbt") REFERENCES "qti"."count_bound" ("node", "most_value") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."binding_name" ADD CONSTRAINT "__binding_name_fk_document_copy_bindings_f5f6ysw45x" FOREIGN KEY ("document", "__copy_bindings_pble3k2v23") REFERENCES "qti"."document" ("node", "bindings") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."binding_name" ADD CONSTRAINT "__binding_name_fk_document_predecessor_bindings_n2gppjob32" FOREIGN KEY ("document", "__predecessor_bindings_o6hyynvl6x") REFERENCES "qti"."binding_name" ("document", "__index_bindings_crowx3f6zn") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."binding_name" ADD CONSTRAINT "__binding_name_fk_node_kind_cixeammmbj" FOREIGN KEY ("node", "kind") REFERENCES "qti"."binding" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."bound_variable" ADD CONSTRAINT "__bound_variable_fk_declaration_document_identifier_udsitvgc5x" FOREIGN KEY ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE "qti"."bound_variable" ADD CONSTRAINT "__bound_variable_fk_document_adaptive_glyrkbpi4r" FOREIGN KEY ("document", "adaptive") REFERENCES "qti"."item_mode" ("document", "adaptive") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."bound_variable" ADD CONSTRAINT "__bound_variable_fk_node_attribute_kind_document_hjzo3ysz2w" FOREIGN KEY ("node", "attribute", "kind", "document", "identifier") REFERENCES "qti"."binding_declaration" ("node", "attribute", "kind", "document", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."bound_variable" ADD CONSTRAINT "__bound_variable_fk_node_kind_ecgzutnkph" FOREIGN KEY ("node", "kind") REFERENCES "qti"."binding" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."bound_variable" ADD CONSTRAINT "__bound_variable_fk_node_kind_tag_max_written_true_kyi3yt5y4q" FOREIGN KEY ("__node_6hhkc3nqmt", "__kind_wpz27h2czt", "__tag_max_written_true_6phmyjuam6") REFERENCES "qti"."count_bound" ("node", "kind", "max_written") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."bound_variable" ADD CONSTRAINT "__bound_variable_fk_node_tag_most_value_1_g3bxxfwd2r" FOREIGN KEY ("__node_zk4w23iiot", "__tag_most_value_1_potsaavtbt") REFERENCES "qti"."count_bound" ("node", "most_value") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."bound_variable" ADD CONSTRAINT "__bound_variable_fk_node_asri5fv7iv" FOREIGN KEY ("__node_nqyr3apalb") REFERENCES "qti"."node" ("__id_i3372l665q") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6769,9 +6803,9 @@ ALTER TABLE "qti"."pi" ADD CONSTRAINT "__pi_fk_node_tag_kind_pi_kbji54wjpu" FORE
 
 ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_assembly_adaptive_o75ju3n4ke" FOREIGN KEY ("assembly", "adaptive") REFERENCES "qti"."item_mode" ("document", "adaptive") MATCH SIMPLE;
 
-ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_declaration_assembly_identifier_4csanlsw3k" FOREIGN KEY ("declaration", "assembly", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_instance_document_assembly_tag_hesskxaybw" FOREIGN KEY ("instance", "document", "assembly", "__tag_assembly_kind_qti_assessment_item_qf7qyzopnq") REFERENCES "qti"."instance" ("id", "document", "assembly", "assembly_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_instance_node_attribute_assembly_2px7e5svab" FOREIGN KEY ("instance", "node", "attribute", "assembly", "document", "kind", "identifier") REFERENCES "qti"."placed_binding_declaration" ("instance", "node", "attribute", "assembly", "document", "kind", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_instance_copy_bindings_fqjn5duwal" FOREIGN KEY ("instance", "__copy_bindings_kwl5kzlngt") REFERENCES "qti"."instance" ("id", "bindings") MATCH SIMPLE ON UPDATE CASCADE;
 
@@ -6779,11 +6813,15 @@ ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_instance_
 
 ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_node_attribute_document_kind_vii6zy44yb" FOREIGN KEY ("node", "attribute", "document", "kind", "identifier") REFERENCES "qti"."binding_name" ("node", "attribute", "document", "kind", "identifier") MATCH SIMPLE;
 
-ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_node_kind_tag_max_written_true_efbmt2ree4" FOREIGN KEY ("__node_6hhkc3nqmt", "__kind_wpz27h2czt", "__tag_max_written_true_6phmyjuam6") REFERENCES "qti"."count_bound" ("node", "kind", "max_written") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_node_tag_most_value_1_a7ffxujq3a" FOREIGN KEY ("__node_zk4w23iiot", "__tag_most_value_1_potsaavtbt") REFERENCES "qti"."count_bound" ("node", "most_value") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_fk_node_of2jpbuqxv" FOREIGN KEY ("__node_nqyr3apalb") REFERENCES "qti"."node" ("__id_i3372l665q") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD CONSTRAINT "__placed_binding_declaration_fk_declaration_assembly_vk5rjqthtr" FOREIGN KEY ("declaration", "assembly", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD CONSTRAINT "__placed_binding_declaration_fk_instance_node_szfcpoghq5" FOREIGN KEY ("instance", "node", "attribute") REFERENCES "qti"."placed_binding" ("instance", "node", "attribute") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD CONSTRAINT "__placed_binding_declaration_fk_node_kind_tag_max_vhzd67j2xm" FOREIGN KEY ("__node_6hhkc3nqmt", "__kind_wpz27h2czt", "__tag_max_written_true_6phmyjuam6") REFERENCES "qti"."count_bound" ("node", "kind", "max_written") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."placed_binding_declaration" ADD CONSTRAINT "__placed_binding_declaration_fk_node_tag_most_value_u6bjipksnw" FOREIGN KEY ("__node_zk4w23iiot", "__tag_most_value_1_potsaavtbt") REFERENCES "qti"."count_bound" ("node", "most_value") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."placed_choice" ADD CONSTRAINT "__placed_choice_fk_assembly_identifier_copy_placed_7i2wxmzede" FOREIGN KEY ("assembly", "identifier", "__copy_placed_choices_4brkzfmt4c") REFERENCES "qti"."choice_variable_name" ("document", "identifier", "placed_choices") MATCH SIMPLE ON UPDATE CASCADE;
 
