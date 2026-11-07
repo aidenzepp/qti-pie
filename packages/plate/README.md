@@ -302,7 +302,7 @@ export const step = (
 ## Records
 
 The host stores two records as JSON and hands each back on the next request. plate writes both.
-Each function that reads one back checks that it has version 1, that each field has its type, and
+Each function that reads one back checks that it has version 2, that each field has its type, and
 that each value is well formed. `restore` also checks that each response and outcome in an item's
 record fits the item's declarations, as `results` does. `decodeSession` also checks that the
 session names the test you pass it and that test's document. It does not check the session's items
@@ -310,10 +310,10 @@ against the test's item refs, so keep the stored session where only your server 
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
-| `StoredRecord`, `version: 1` | One item's attempts, responses and outcomes | `score` | `score`, `restore`, `results` |
-| `StoredTestSession`, `version: 1` | A test session, with its items' records and saved responses, its position and its parts | `encodeSession` | `decodeSession`, `results` |
+| `StoredRecord`, `version: 2` | One item's seed, template values, attempts, responses and outcomes, with the correct responses and defaults its template processing set | `score` | `score`, `restore`, `results` |
+| `StoredTestSession`, `version: 2` | A test session, with its items' records and saved responses, its position and its parts | `encodeSession` | `decodeSession`, `results` |
 
-plate reads only version 1, and refuses a record of another version with `InvalidRecord` or
+plate reads only version 2, and refuses a record of another version with `InvalidRecord` or
 `InvalidSession`. A change to either form is a changelog entry. The TSDoc on each type documents
 its fields.
 
