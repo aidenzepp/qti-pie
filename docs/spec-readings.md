@@ -2186,22 +2186,40 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `q` is judged by its own neighbours and content. This binds pantry and plate alike. This is not a case of
      documents in conflict. (Decided 2026-11-06 by RV seat Q, on the review of PR #46, under the operator's standing
      ruling of 2026-11-05 that the spec wins.)
-128. **A QTI 3.0.1 item's own `label` asks for the tool that labelled it, as a body element's `label` does in both
-     versions.** The 3.0.1 information model says of the item's `label` "The label characteristic provides authoring
-     systems with a mechanism for labelling elements of the content model with application specific data. If an item
-     uses labels then values for the associated toolName and toolVersion attributes must also be provided" (section
-     4.1.3, https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html). The
-     3.0 information model says of the same characteristic only "A human readable label that can be used to describe
-     the Item" (section 4.1.3), and both versions say of each body element's `label` "If an item uses labels then
-     values for the associated toolName and toolVersion characteristics must also be provided" (sections 5.15.5 to
-     5.21.5 and 5.79.4). So an item whose body carries a `label`, in either version, or whose root carries one in a
-     3.0.1 document, carries both `tool-name` and `tool-version` on its root, and is refused under `label-tool`
-     otherwise; a 3.0.0 item root's own `label` asks for nothing. A document's version is the `schemaversion` its
-     manifest names (reading 67). The stimulus's `label` states no such sentence in either version ("A human readable
-     label that can be used to describe the Stimulus", section 4.3.3), and the sentence binds an item, so no stimulus,
-     section or test is asked for tools. This binds pantry and plate alike. This is not a case of documents in
-     conflict: each version's text is read for its own documents. (Decided 2026-11-06 by RV seat I, on the review of
-     PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+128. **A `label` asks for the tool that labelled it where its own characteristic's description says so: a body
+     element's in both versions, and a QTI 3.0.1 item's own.** The information model states the sentence "If an
+     item uses labels then values for the associated toolName and toolVersion characteristics must also be
+     provided" in the description of one `label` characteristic per class, and each label is read by its own:
+     - both versions state it of BasePromptInteraction's `label` (section 5.15.5), of the BaseSequence family's
+       (sections 5.16.5 to 5.21.5) and of ItemBody's (section 5.79.4), so a `label` on any kind whose type takes it
+       from one of those classes asks for tools;
+     - the 3.0.1 information model states it of the item's own `label` too ("The label characteristic provides
+       authoring systems with a mechanism for labelling elements of the content model with application specific
+       data. If an item uses labels then values for the associated toolName and toolVersion attributes must also be
+       provided", section 4.1.3,
+       https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html), where
+       3.0's says only "A human readable label that can be used to describe the Item" (section 4.1.3);
+     - four descriptions state no such sentence in either version, and their labels ask for nothing: the stimulus's
+       ("A human readable label that can be used to describe the Stimulus", section 4.3.3), ItemFileInfo's, the type
+       of `qti-calculator-info` and `qti-digital-material` ("A human readable label/short description for the
+       file", section 5.80.2; ItemFileInfo derives from no class and is no body element), and PrintedVariable's
+       ("The label attribute represents information for the element that can be used to identify it or its
+       functionality, such as would be appropriate for a tooltip", section 7.30.4).
+
+     So an item one of whose elements carries a `label` its characteristic asks a tool for, in either version, or
+     whose root carries one in a 3.0.1 document, carries both `tool-name` and `tool-version` on its root, and is
+     refused under `label-tool` otherwise. A 3.0.0 item root's own `label`, a digital material's, a calculator's
+     info's and a printed variable's ask for nothing. The kinds are read from the types the ASI XSDs declare: a
+     kind's `label` asks for its tool exactly when its declared type is one of the eight above or derives from one,
+     which is also exactly the kinds whose `label` the XSD declares inside one of them (`src/grammar/labels.ts`). A
+     document's version is the `schemaversion` its manifest names (reading 67), and the sentence binds an item, so no
+     stimulus, section or test is asked for tools. In the corpus, `testWithLti`'s labelled `qti-digital-material`
+     asks for nothing, and the package is still refused, under `resource-type` (reading 67). This binds pantry and
+     plate alike. This is not a case of documents in conflict: each characteristic's text is read for its own
+     elements, and each version's for its own documents. (Decided 2026-11-06 by RV seat I, on the review of PR #46;
+     amended 2026-11-06 by RV seat VD (`d389fca9`) on the corpus verdict review, the ItemFileInfo and printed-variable
+     labels read by their own descriptions; both under the operator's standing ruling of 2026-11-05 that the spec wins.)
+
 129. **`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags, well-formed as RFC 5646 defines them.**
      XML 1.0 says of `xml:lang` "The values of the attribute are language identifiers as defined by [IETF BCP 47], Tags
      for the Identification of Languages; in addition, the empty string may be specified" (section 2.12). The
