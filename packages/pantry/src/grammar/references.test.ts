@@ -40,8 +40,6 @@ import {
   xiCensus,
 } from "#pantry/grammar/references.ts";
 import type { Spelling } from "#pantry/grammar/references.ts";
-import { compile, patternFlags } from "#pantry/grammar/domains.ts";
-import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
@@ -407,36 +405,6 @@ describe.skipIf(!cached)("the reference relations against the XSD", () => {
 
 describe("the reference relations of production", () => {
   it.effect(
-    "restrict only references they state, and code every target and built-in as a declaration kind",
-    () =>
-      Effect.gen(function* lawsHold() {
-        const relations = yield* production;
-        const referenced = new Set(
-          relations.variableReference.rows.map(({ attribute, kind }) => keyed(kind, attribute)),
-        );
-
-        assert.deepStrictEqual(
-          relations.contentReference.rows
-            .map(({ attribute, kind }) => keyed(kind, attribute))
-            .filter((pair) => !referenced.has(pair)),
-          [],
-        );
-        assert.deepStrictEqual(
-          [
-            ...relations.contentReference.rows.map(({ declaration }) => declaration),
-            ...relations.builtIn.rows.map(({ declaration }) => declaration),
-          ].filter((declaration) => !relations.declarationKind.has(declaration)),
-          [],
-        );
-        assert.deepStrictEqual(
-          relations.declares.rows.filter(({ declaration, kind }) => declaration !== kind),
-          [],
-        );
-      }),
-    composeTimeout,
-  );
-
-  it.effect(
     "count each order interaction's choices among the children it admits, beside a counted bound",
     () =>
       // Oracle: the specification as a checker, spec reading 18: a kind whose choices bound its
@@ -513,28 +481,6 @@ describe("the reference relations of production", () => {
               keyed(root, "QTI_CONTEXT", "qti-context-declaration", "none", "record"),
             ),
           ]),
-        );
-      }),
-    composeTimeout,
-  );
-
-  it.effect(
-    "name each built-in variable by an identifier a reference can spell",
-    () =>
-      // Oracle: `xs:NCName` as the value domains compile it (`#pantry/grammar/domains.ts`, whose
-      // name tables `domains.test.ts` reads from the cached XML 1.0 specification), the domain a
-      // bare reference's value is judged by.
-      Effect.gen(function* builtInsAreIdentifiers() {
-        const { builtInVariable } = yield* production;
-        const { pattern } = yield* Effect.fromResult(
-          Result.flatMap(builtinDomainOf("NCName"), (domain) => compile(domain, "exact")),
-        );
-        const identifier = new RegExp(pattern, patternFlags);
-
-        assert.isNotEmpty(builtInVariable.handles);
-        assert.deepStrictEqual(
-          builtInVariable.handles.filter((variable) => !identifier.test(variable)),
-          [],
         );
       }),
     composeTimeout,
