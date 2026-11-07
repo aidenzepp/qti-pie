@@ -721,7 +721,18 @@ export const generatedRecorded: readonly Recorded[] = [
   {
     class: "attribute-value",
     detail: new RegExp(
-      `^value domain at \\S+: xml:lang: "(?!${bcp47Space}(?:${bcp47Tag})${bcp47Space}")(?:[^"\\\\]|\\\\.)*" is outside \\S+ \\(reading 129\\), whose pattern is `,
+      [
+        `^value domain at (?:`,
+        // An item's or a stimulus's xml:lang: a tag, its whitespace collapsed, never empty.
+        `\\S*\\/(?:qti-assessment-item|qti-assessment-stimulus)(?:\\[\\d+\\])?: xml:lang: "(?!${bcp47Space}(?:${bcp47Tag})${bcp47Space}")`,
+        // Any other xml:lang: a tag, its whitespace collapsed, or empty.
+        `|\\S+: xml:lang: "(?!${bcp47Space}(?:${bcp47Tag})?${bcp47Space}")`,
+        // A track's srclang: a tag as written, never empty.
+        `|\\S*\\/track(?:\\[\\d+\\])?: srclang: "(?!(?:${bcp47Tag})")`,
+        // A lang: a tag as written, or empty.
+        `|\\S+: lang: "(?!(?:${bcp47Tag})?")`,
+        `)(?:[^"\\\\]|\\\\.)*" is outside \\S+ \\(reading 129\\)(?: \\(\\d+\\))?, whose pattern is `,
+      ].join(""),
       "u",
     ),
     direction: "oracle-only",
@@ -729,7 +740,33 @@ export const generatedRecorded: readonly Recorded[] = [
       _tag: "reading",
       reading: 129,
       says: "`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags, well-formed as RFC 5646 defines them.",
-      why: "xml:lang is a BCP 47 tag (XML 1.0 2.12), and never empty on an item or a stimulus; xml.xsd types it as xs:language, RFC 3066's pattern, or empty",
+      why: "xml:lang is a BCP 47 tag or empty (XML 1.0 2.12), never empty on an item or a stimulus, a lang a tag or empty and a track's srclang a tag, both as written; xml.xsd types xml:lang as xs:language, RFC 3066's pattern, or empty, and the XSD lang and srclang as xs:normalizedString",
+    },
+    rule: "attribute-lexical",
+  },
+  {
+    class: "content",
+    detail:
+      /^N7 Counted at \S*\/lom:[\w.]+(?:\[\d+\])?: \d+ children at position \d+, which Counted bounds to \d+ to \d+$/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 130,
+      says: "A LOM element repeats no more than the loose binding's Schematron allows.",
+      why: "the loose LOM binding's Schematron caps each LOM element's repeats; its XSD leaves them unbounded",
+    },
+    rule: "child-set",
+  },
+  {
+    class: "attribute-value",
+    detail:
+      /^value domain at \S*\/source(?:\[\d+\])?: src: "(?:\\[tnr]| )*" is outside URLDType \(reading 124\)/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 124,
+      says: "A `source` in a `picture` carries `srcset`, and one in an `audio` or a `video` carries `src`.",
+      why: "the information model says a source's src is a valid non-empty URL potentially surrounded by spaces (5.135.1); the XSD types src as a URL that may be blank",
     },
     rule: "attribute-lexical",
   },
