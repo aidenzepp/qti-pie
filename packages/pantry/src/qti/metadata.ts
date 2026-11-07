@@ -371,6 +371,18 @@ export const LomStringLanguage = relation("LomStringLanguage", { language: keyTe
 
 /**
  * Each string's `language`, counted by {@link LomString}'s `languages`.
+ *
+ * The family's owner axis, the copy's `(node, languages)` into its string, is a foreign key
+ * PostgreSQL checks at the copy's INSERT, so grizzle writes the string first. The string's own
+ * `language` is therefore held by a containment from the copy into the string, `(node, language)`:
+ * with the count and `E1_derived` (`languages = 1` or no language), it says what a containment the
+ * other way would, that a string with a copy has the copy's language. The other way round, from
+ * `select(LomString, languages = 1)` into the copy, its target holding no field beyond the two it
+ * names, it is a foreign key grizzle installs immediate as well: README "Direct SQL access" defers
+ * one "that lies on a cycle of foreign keys", and grizzle reads that cycle among the laws' own
+ * foreign keys, leaving a family's owner axis out (engine `laws/model/model.ts` `#deferral`). So
+ * the string's INSERT met it before its copy existed and refused every string with a `language`
+ * (23503), a finding recorded beside this law.
  */
 export const lomStringLanguages = counted(
   on(LomStringLanguage, "node"),
@@ -442,7 +454,9 @@ export const AssessmentObject = relation(
 export const ObjectLang = relation("ObjectLang", { lang: keyText, node: uuid }, ["node"]);
 
 /**
- * Each object's `xml:lang`, counted by {@link AssessmentObject}'s `langs`.
+ * Each object's `xml:lang`, counted by {@link AssessmentObject}'s `langs`. The object's `lang` is
+ * held from the copy into the object, as {@link lomStringLanguages} states a string's language, and
+ * for the same reason.
  */
 export const objectLangs = counted(on(ObjectLang, "node"), fin(AssessmentObject, "langs"));
 
@@ -742,13 +756,16 @@ const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
  *   whose three tuples are its nodes', whose pieces concatenate to its text, and whose `named` is
  *   its record's for a general category's entry, else `none`.
  * - **the titles and strings:** each `lom:title` has its {@link LomTitle} with its record's `named`;
- *   each `lom:string` its {@link LomString}, whose `languages` counts its copied `language`; and
- *   each title's string its {@link LomTitleString}, whose `text` is its string value, whose
- *   `language` is its {@link LomString}'s, and whose compared forms are those two's ("E1
- *   derived").
+ *   each `lom:string` its {@link LomString}, whose `languages` counts its copied `language`, and
+ *   whose own `language` is that copy's (stated from the copy, the member, into its owner: a
+ *   containment from the owner into its own family's member would run against the order the
+ *   member's owner axis writes them in, see {@link lomStringLanguages}); and each title's string
+ *   its {@link LomTitleString}, whose `text` is its string value, whose `language` is its
+ *   {@link LomString}'s, and whose compared forms are those two's ("E1 derived").
  * - **the objects:** each item's and test's root has its {@link AssessmentObject}, one per document,
- *   with its `identifier` (in pieces), `title` and `xml:lang` copied, `langs` counting the last,
- *   and its title's and language's compared forms ("E1 derived").
+ *   with its `identifier` (in pieces), `title` and `xml:lang` copied, `langs` counting the last and
+ *   its `lang` the copy's, stated from the copy into its owner as the strings' is, and its title's
+ *   and language's compared forms ("E1 derived").
  * - **`lom-identifier`:** a general entry of a naming record makes its record's
  *   {@link LomObjectIdentifier} exist, whose document is its record's object's, whose identifier is
  *   that document's, and whose entry is a general entry of the record with that token.
@@ -893,14 +910,7 @@ export const metadataLaws = [
     on(stringLanguageAttributes, "node", "lexical"),
     on(LomStringLanguage, "node", "language"),
   ),
-  contained(
-    on(
-      select(LomString, (s) => s.eq(s.languages, 1n)),
-      "node",
-      "language",
-    ),
-    on(LomStringLanguage, "node", "language"),
-  ),
+  contained(on(LomStringLanguage, "node", "language"), on(LomString, "node", "language")),
   check("E1_derived", LomString, (s) => s.or(s.eq(s.languages, 1n), s.eq(s.language, ""))),
 
   contained(
@@ -934,14 +944,7 @@ export const metadataLaws = [
   objectLangs,
   key(on(objectLangAttributes, "node")),
   contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
-  contained(
-    on(
-      select(AssessmentObject, (o) => o.eq(o.langs, 1n)),
-      "node",
-      "lang",
-    ),
-    on(ObjectLang, "node", "lang"),
-  ),
+  contained(on(ObjectLang, "node", "lang"), on(AssessmentObject, "node", "lang")),
   check("E1_derived", AssessmentObject, (o) =>
     o.and(
       o.in(o.kind, objectKinds),
