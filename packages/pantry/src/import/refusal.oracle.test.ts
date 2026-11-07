@@ -1668,10 +1668,7 @@ describe("the refusals made before the database", () => {
           "entity-expansion",
         ] as const
       ).map((rule) => [new ReaderRefusal({ detail: "d", rule }), "reader-refusal"] as const),
-      [
-        new WellFormednessError({ afterSubstitution: false, column: 1, line: 1, message: "m" }),
-        "well-formedness",
-      ],
+      [new WellFormednessError({ column: 1, line: 1, message: "m" }), "well-formedness"],
     ];
 
     for (const [error, rule] of cases) {

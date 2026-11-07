@@ -3,11 +3,10 @@ import { Data } from "effect";
 /**
  * The parser refused the text because it is not well-formed XML.
  *
- * `line` and `column` give the position the parser reported, `message` says what it found there,
- * and `afterSubstitution` is true when an entity substitution preceded that position.
+ * `line` and `column` give the position the parser reported, in the text with the declared entities
+ * substituted, and `message` says what it found there.
  */
 export class WellFormednessError extends Data.TaggedError("WellFormednessError")<{
-  readonly afterSubstitution: boolean;
   readonly column: number;
   readonly line: number;
   readonly message: string;

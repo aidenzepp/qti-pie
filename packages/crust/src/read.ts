@@ -3,7 +3,7 @@ import { SaxesParser } from "saxes";
 import { decode } from "#crust/decode.ts";
 import type { Decoded } from "#crust/decode.ts";
 import { lexProlog, positionOf, substitute, undeclaredEntity } from "#crust/dtd.ts";
-import type { AttlistEntry, Prolog, Substituted, ValuePiece } from "#crust/dtd.ts";
+import type { AttlistEntry, Prolog, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import { NAME_CHAR, NAME_START, isNCName, productionViolation } from "#crust/names.ts";
 import { namespacesVersionOf, resolved, rootScope } from "#crust/namespaces.ts";
@@ -21,13 +21,11 @@ import type {
 } from "#crust/tree.ts";
 
 /**
- * Where the parser stood when it had read an element's start tag: the line and column it reports,
- * and its offset in code points.
+ * Where the parser stood when it had read an element's start tag: the line and column it reports.
  */
 interface StartTag {
   readonly column: number;
   readonly line: number;
-  readonly position: number;
 }
 
 /**
@@ -124,20 +122,19 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
  *   `ReaderRefusal` for one the treatment refuses.
  */
 const assignSentinels = (
-  substituted: Substituted,
+  substituted: string,
   prolog: Prolog,
 ): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal | WellFormednessError> =>
   Effect.suspend(
     (): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal | WellFormednessError> => {
-      const scanned = scanReferences(substituted.body.slice(prolog.bodyStart), prolog.entities);
+      const scanned = scanReferences(substituted.slice(prolog.bodyStart), prolog.entities);
       if (Option.isSome(scanned.colon)) {
         const { name, offset } = scanned.colon.value;
         const at = prolog.bodyStart + offset;
-        const position = positionOf(substituted.body, at);
+        const position = positionOf(substituted, at);
 
         return Effect.fail(
           new WellFormednessError({
-            afterSubstitution: substituted.afterSubstitution(at),
             ...position,
             message: `${String(position.line)}:${String(position.column)}: entity reference: ${Option.getOrElse(productionViolation(name, "NCName"), () => name)}.`,
           }),
@@ -176,18 +173,6 @@ const assignSentinels = (
       return Effect.succeed(sentinels);
     },
   );
-
-/**
- * The UTF-16 index in `text` of the code point at `position`, which `saxes` counts in code points.
- */
-const utf16Offset = (text: string, position: number): number => {
-  let index = 0;
-  for (let seen = 0; seen < position && index < text.length; seen += 1) {
-    index += (text.codePointAt(index) ?? 0) > 0xff_ff ? 2 : 1;
-  }
-
-  return index;
-};
 
 /**
  * The unresolved tree attribute for one written attribute: its name as written, its value the
@@ -234,7 +219,7 @@ export interface ReadOptions {
 }
 
 /**
- * Run `saxes` over `substituted.body` and build the root element with the comments and processing
+ * Run `saxes` over `substituted` and build the root element with the comments and processing
  * instructions around it, its names unresolved.
  *
  * `saxes` reads without namespaces: a namespace declaration may come from an attribute-list
@@ -254,7 +239,7 @@ export interface ReadOptions {
  *   `WellFormednessError` for the first error `saxes` raises.
  */
 const parse = (
-  substituted: Substituted,
+  substituted: string,
   sentinels: ReadonlyMap<string, string>,
   elementDepth: number,
 ): Effect.Effect<Built, WellFormednessError | ReaderRefusal> => {
@@ -268,9 +253,6 @@ const parse = (
       error instanceof ReaderRefusal
         ? error
         : new WellFormednessError({
-            afterSubstitution: substituted.afterSubstitution(
-              utf16Offset(substituted.body, parser.position),
-            ),
             column: parser.column,
             line: parser.line,
             message: error instanceof Error ? error.message : String(error),
@@ -304,7 +286,7 @@ const parse = (
           attributes: Object.entries(tag.attributes).map(toAttribute),
           children: [],
           qname: tag.name,
-          start: { column: parser.column, line: parser.line, position: parser.position },
+          start: { column: parser.column, line: parser.line },
         });
       });
       parser.on("closetag", () => {
@@ -353,7 +335,7 @@ const parse = (
 
         place({ data: body, kind: "pi", target });
       });
-      parser.write(substituted.body).close();
+      parser.write(substituted).close();
 
       if (root === undefined) {
         throw new Error("the document has no root element");
@@ -521,18 +503,12 @@ const restoredText = (value: string, names: ReadonlyMap<string, string>): readon
  * Build the error for a namespace constraint an element breaks, at the position its start tag
  * ended, where `saxes` itself reports a well-formedness error a start tag holds.
  *
- * @param substituted - The document text with its declared entities substituted.
  * @param start - Where the element's start tag ended.
  * @param message - What the element breaks.
  * @returns The error.
  */
-const violationAt = (
-  substituted: Substituted,
-  start: StartTag,
-  message: string,
-): WellFormednessError =>
+const violationAt = (start: StartTag, message: string): WellFormednessError =>
   new WellFormednessError({
-    afterSubstitution: substituted.afterSubstitution(utf16Offset(substituted.body, start.position)),
     column: start.column,
     line: start.line,
     message: `${String(start.line)}:${String(start.column)}: ${message}.`,
@@ -546,8 +522,6 @@ const violationAt = (
  * declarations, written or defaulted, included ({@link resolved}); and it puts every stand-in
  * character of the content back as the `EntityRef` it stands for.
  *
- * @param substituted - The document text with its declared entities substituted, for a
- *   violation's position.
  * @param decoded - The decoded bytes, for the charset label.
  * @param prolog - The prolog, for its declaration, DOCTYPE and ATTLIST tables.
  * @param built - The root element, the comments and processing instructions around it, and where
@@ -557,7 +531,6 @@ const violationAt = (
  *   breaks, in document order.
  */
 const assemble = (
-  substituted: Substituted,
   decoded: Decoded,
   prolog: Prolog,
   built: Built,
@@ -570,7 +543,7 @@ const assemble = (
     }),
   );
   // Every element of the built tree has its start tag, set when it closed.
-  const documentStart: StartTag = { column: 0, line: 1, position: 0 };
+  const documentStart: StartTag = { column: 0, line: 1 };
   const root = rebuild<Scope, WellFormednessError>(
     built.root,
     rootScope,
@@ -584,7 +557,7 @@ const assemble = (
           scope,
           namespaces,
         ),
-        (message) => violationAt(substituted, built.starts.get(element) ?? documentStart, message),
+        (message) => violationAt(built.starts.get(element) ?? documentStart, message),
       ),
     (leaf) =>
       Result.succeed(
@@ -634,8 +607,8 @@ const assemble = (
  * @param options - How to read it: the element depth it is refused past.
  * @returns The tree; a `ReaderRefusal` from decoding, the prolog, an entity reference or the
  *   element depth, or a `WellFormednessError` whose position is the parser's, or the end of the
- *   start tag of an element that breaks a namespace constraint, and whose `afterSubstitution` says
- *   whether a substitution precedes it.
+ *   start tag of an element that breaks a namespace constraint, in the text with its declared
+ *   entities substituted.
  */
 export const readXml = Effect.fn("xml.read")(function* readXml(
   bytes: Uint8Array,
@@ -648,5 +621,5 @@ export const readXml = Effect.fn("xml.read")(function* readXml(
   const built = yield* parse(substituted, sentinels, options.elementDepth ?? defaultElementDepth);
   const names = new Map([...sentinels].map(([name, sentinel]) => [sentinel, name]));
 
-  return yield* assemble(substituted, decoded, prolog, built, names);
+  return yield* assemble(decoded, prolog, built, names);
 });

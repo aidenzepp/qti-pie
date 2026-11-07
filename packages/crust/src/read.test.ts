@@ -168,16 +168,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
 
       assert.strictEqual(error._tag, "WellFormednessError");
       assert.strictEqual(error._tag === "WellFormednessError" && error.line, 2);
-      assert.strictEqual(error._tag === "WellFormednessError" && error.afterSubstitution, false);
-    }),
-  );
-
-  suite.effect("flags an error after an entity substitution", () =>
-    Effect.gen(function* readSubstituted() {
-      const text = '<!DOCTYPE a [<!ENTITY e "<b>">]><a>&e;</c></a>';
-      const error = yield* Effect.flip(readText(text));
-
-      assert.strictEqual(error._tag === "WellFormednessError" && error.afterSubstitution, true);
     }),
   );
 
