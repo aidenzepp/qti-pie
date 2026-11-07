@@ -278,7 +278,7 @@ const foreignKeyOf = (client: Client, name: string) =>
        FROM pg_catalog.pg_constraint c
        JOIN pg_catalog.pg_namespace s ON s.oid = c.connamespace
        JOIN pg_catalog.pg_class t ON t.oid = c.confrelid
-       CROSS JOIN LATERAL pg_catalog.unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(src, dst, n)
+       CROSS JOIN LATERAL ROWS FROM (pg_catalog.unnest(c.conkey), pg_catalog.unnest(c.confkey)) WITH ORDINALITY AS k(src, dst, n)
        JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.src
        JOIN pg_catalog.pg_attribute b ON b.attrelid = c.confrelid AND b.attnum = k.dst
       WHERE s.nspname = $1 AND c.conname = $2 AND c.contype = 'f'
