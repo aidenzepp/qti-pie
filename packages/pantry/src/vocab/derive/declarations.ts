@@ -47,17 +47,18 @@ import { typeHandle } from "#pantry/grammar/xsi.ts";
 import {
   attributeNameDirective,
   attributeOf,
+  attributeRowsOf,
   attributeWildcardOf,
   declaredType,
-  entryOfType,
   firstXs,
   loadSchema,
   qualify,
   refuse,
+  textTypeOf,
   valueTypeOf,
   XsdReadingError,
 } from "#pantry/vocab/derive/derive.ts";
-import type { AttributeRow, KindSpec, XsdSchema } from "#pantry/vocab/derive/derive.ts";
+import type { AttributeRow, AttributeUse, XsdSchema } from "#pantry/vocab/derive/derive.ts";
 import { builtinBases, valueDomainOf } from "#pantry/vocab/derive/domains.ts";
 import type { DomainError } from "#pantry/vocab/derive/domains.ts";
 import {
@@ -100,10 +101,11 @@ import {
  * text type.
  */
 interface KindReading {
-  readonly attributes: readonly (AttributeRow & {
-    readonly domain: Domain;
-    readonly source: Source;
-  })[];
+  readonly attributes: readonly (AttributeUse &
+    ValueType & {
+      readonly domain: Domain;
+      readonly source: Source;
+    })[];
   readonly text: Option.Option<{ readonly domain: Domain; readonly type: ValueType }>;
   readonly wildcard: Option.Option<Pick<AttributeWildcard, "namespace" | "processing">>;
 }
@@ -296,7 +298,6 @@ export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
  * @param view - The schema the type is in.
  * @param owner - What the type is read for, a kind's handle or a type's, which a refusal names it
  *   by.
- * @param spec - The kind's handle and element, and the name the entry records for its type.
  * @param definition - The `xs:complexType` element, named or anonymous.
  * @returns The reading, or a {@link DomainError}.
  */
@@ -304,38 +305,42 @@ const complexReadingOf = (
   world: World,
   view: SchemaView,
   owner: string,
-  spec: KindSpec,
   definition: Element,
 ): Result.Result<KindReading, DomainError> =>
   Result.gen(function* complexReadingOfBody() {
-    const entry = yield* entryOfType(view.schema, spec, definition);
+    const rows = yield* attributeRowsOf(view.schema, definition);
     const wildcard = yield* attributeWildcardOf(view.schema, definition);
-    const attributes: (AttributeRow & { readonly domain: Domain; readonly source: Source })[] = [];
+    const attributes: KindReading["attributes"][number][] = [];
 
-    for (const row of lastOfEach(entry.attributes)) {
+    for (const row of lastOfEach(rows)) {
       const source = yield* view.sourceOf(row.declaration);
+      const use: AttributeUse = {
+        declaration: row.declaration,
+        default: row.default,
+        name: row.name,
+        use: row.use,
+      };
 
-      if (row.name.startsWith(xmlPrefix)) {
+      if (row._tag === "xml") {
         const global = yield* globalAttributeOf(world, row.name);
 
-        attributes.push({ ...row, ...global.type, domain: global.domain, source });
+        attributes.push({ ...use, ...global.type, domain: global.domain, source });
       } else {
+        const type: ValueType = { inline: row.inline, type: row.type, whiteSpace: row.whiteSpace };
+
         attributes.push({
-          ...row,
-          domain: yield* valueDomainOf(view.schema, row, `attribute ${row.name} of ${owner}`),
+          ...use,
+          ...type,
+          domain: yield* valueDomainOf(view.schema, type, `attribute ${row.name} of ${owner}`),
           source,
         });
       }
     }
 
-    const text: Option.Option<ValueType> =
-      entry.content._tag === "text"
-        ? Option.some({
-            inline: entry.content.inline,
-            type: entry.content.type,
-            whiteSpace: entry.content.whiteSpace,
-          })
-        : Option.none();
+    const simple = firstXs(definition, "simpleContent");
+    const text: Option.Option<ValueType> = Option.isSome(simple)
+      ? Option.some(yield* textTypeOf(view.schema, simple.value))
+      : Option.none();
 
     return {
       attributes,
@@ -396,13 +401,7 @@ const readingOf = (
       };
     }
 
-    return yield* complexReadingOf(
-      world,
-      view,
-      kind,
-      { element: declared.local, handle: kind, type: type.name },
-      type.definition,
-    );
+    return yield* complexReadingOf(world, view, kind, type.definition);
   });
 
 /**
@@ -524,16 +523,7 @@ const governingReadingOf = (
         );
 
         if (view !== undefined && Option.isSome(definition) && !governors.has(owner)) {
-          governors.set(
-            owner,
-            yield* complexReadingOf(
-              world,
-              view,
-              owner,
-              { element: name.local, handle: owner, type: name.local },
-              definition.value,
-            ),
-          );
+          governors.set(owner, yield* complexReadingOf(world, view, owner, definition.value));
         }
       }
     }

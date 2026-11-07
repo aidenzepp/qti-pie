@@ -12,19 +12,23 @@ import { asi as asiFacet } from "#pantry/grammar/facets.ts";
 import {
   arityOf,
   attributeOf,
-  contentOf,
+  attributeRowsOf,
+  contentParticles,
   elementsOf,
-  entriesOf,
-  entryOf,
+  firstXs,
   includesOf,
   indexSchema,
   indexSchemas,
+  isCompositor,
   isXs,
-  leaves,
   mathmlSource,
+  mixedOf,
+  particlesOf,
   resolve,
+  soleTypeOf,
+  textTypeOf,
 } from "#pantry/vocab/derive/derive.ts";
-import type { AttributeRow, Content, Entry, XsdSchema } from "#pantry/vocab/derive/derive.ts";
+import type { AttributeRow, XsdSchema } from "#pantry/vocab/derive/derive.ts";
 import {
   checkCache,
   readSource,
@@ -35,7 +39,7 @@ import {
   XsdSourceMissing,
 } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
-import type { InlineType, TypeReading, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
+import type { InlineType, TypeReading, ValueType } from "#pantry/vocab/inventory/types.ts";
 
 /**
  * The package folder, `packages/pantry`.
@@ -135,9 +139,37 @@ interface Host {
 }
 
 /**
+ * The element names particles reference, as written: each `xs:element`'s `ref`, through group
+ * references and nested compositors.
+ *
+ * @param schema - The schema the particles are in.
+ * @param particles - The particles.
+ * @returns The names, in document order.
+ */
+const referencesIn = (schema: XsdSchema, particles: readonly Element[]): readonly string[] =>
+  particles.flatMap((particle) => {
+    if (isXs(particle, "element")) {
+      return Option.toArray(attributeOf(particle, "ref"));
+    }
+
+    if (isXs(particle, "group")) {
+      const group = Option.flatMap(attributeOf(particle, "ref"), (ref) =>
+        Option.fromNullishOr(schema.groups.get(valueOf(resolve(schema, ref)).local)),
+      );
+
+      return Option.match(group, {
+        onNone: () => assert.fail("a group reference names no group"),
+        onSome: (held) => referencesIn(schema, particlesOf(held)),
+      });
+    }
+
+    return isCompositor(particle) ? referencesIn(schema, particlesOf(particle)) : [];
+  });
+
+/**
  * The elements whose declared type's content references an element name: each pair of an element
- * and a named complex type of the schema it is declared with, read through the deriver's content
- * reading and keyed by the pair.
+ * and a named complex type of the schema it is declared with, its particles walked to their
+ * references, and keyed by the pair.
  *
  * @param schema - The schema the elements are declared in.
  * @param name - The referenced name as the schema writes it, such as `m3:math`.
@@ -154,7 +186,7 @@ const hostsOf = (schema: XsdSchema, name: string): ReadonlyMap<string, Host> =>
             : Option.none<Element>();
 
         return Option.toArray(complexType).flatMap((held) =>
-          valueOf(contentOf(schema, held)).references.some((reference) => reference.name === name)
+          referencesIn(schema, valueOf(contentParticles(schema, held))).includes(name)
             ? [[`${element} ${type}`, { element, type }] as const]
             : [],
         );
@@ -190,31 +222,6 @@ const failureOf = <A, E>(result: Result.Result<A, E>): string =>
     onFailure: String,
     onSuccess: () => assert.fail("the derivation succeeded"),
   });
-
-/**
- * Read the content of one named complex type of an inline schema.
- *
- * @param schema - The schema.
- * @param type - The type's name.
- * @returns The reading.
- */
-const contentOfType = (schema: XsdSchema, type: string) =>
-  Option.match(Option.fromNullishOr(schema.complexTypes.get(type)), {
-    onNone: () => assert.fail(`no complex type ${type}`),
-    onSome: (complexType) => valueOf(contentOf(schema, complexType)),
-  });
-
-/**
- * The entry of a kind among derived entries, failing the test when they hold none.
- *
- * @param entries - The entries.
- * @param handle - The kind.
- * @returns Its entry.
- */
-const entryNamed = (entries: readonly Entry[], handle: string): Entry =>
-  Option.getOrElse(Option.fromNullishOr(entries.find((entry) => entry.handle === handle)), () =>
-    assert.fail(`no entry ${handle}`),
-  );
 
 /**
  * Read an inline schema that includes one location, as `mathml/mathml3.xsd` would.
@@ -270,27 +277,58 @@ describe("vocab/derive/sources.ts", () => {
 });
 
 /**
- * Read the entry of one complex type of an inline schema in the namespace `urn:t`, as a kind of
- * the type's name.
+ * One named complex type of a schema, failing the test when the schema has none.
  *
- * @param schema - The schema, which binds `t` to its target namespace.
+ * @param schema - The schema.
  * @param type - The type's local name.
- * @returns The entry.
+ * @returns The `xs:complexType` element.
  */
-const entryOfType = (schema: XsdSchema, type: string): Entry =>
-  valueOf(entryOf(schema, { element: type, handle: type, type: `t:${type}` }));
+const complexTypeNamed = (schema: XsdSchema, type: string): Element =>
+  Option.getOrElse(Option.fromNullishOr(schema.complexTypes.get(type)), () =>
+    assert.fail(`no complex type ${type}`),
+  );
 
 /**
- * The attribute row of one name in an entry, failing the test when the entry has none.
+ * The complex type a schema declares an element with, its one type.
  *
- * @param entry - The entry.
+ * @param schema - The schema.
+ * @param element - The element's name.
+ * @returns The `xs:complexType` element.
+ */
+const typeOfElement = (schema: XsdSchema, element: string): Element =>
+  complexTypeNamed(schema, valueOf(resolve(schema, valueOf(soleTypeOf(schema, element)))).local);
+
+/**
+ * The declared attribute row of one name among a type's rows, failing the test when they hold
+ * none, or hold the name as a reference.
+ *
+ * @param rows - The rows.
  * @param name - The attribute's name.
  * @returns The row.
  */
-const rowOf = (entry: Entry, name: string): AttributeRow =>
-  Option.getOrElse(Option.fromNullishOr(entry.attributes.find((row) => row.name === name)), () =>
-    assert.fail(`${entry.handle} has no attribute ${name}`),
+const rowOf = (rows: readonly AttributeRow[], name: string): AttributeRow & ValueType =>
+  Option.getOrElse(
+    Option.fromNullishOr(
+      rows.find(
+        (row): row is Extract<AttributeRow, { readonly _tag: "declared" }> =>
+          row.name === name && row._tag === "declared",
+      ),
+    ),
+    () => assert.fail(`no declared attribute ${name}`),
   );
+
+/**
+ * The type a complex type's simple content holds.
+ *
+ * @param schema - The schema the type is in.
+ * @param complexType - The `xs:complexType` element.
+ * @returns The text's type.
+ */
+const textOfType = (schema: XsdSchema, complexType: Element): ValueType =>
+  Option.match(firstXs(complexType, "simpleContent"), {
+    onNone: () => assert.fail("the type has no simple content"),
+    onSome: (simple) => valueOf(textTypeOf(schema, simple)),
+  });
 
 /**
  * The enumeration values a type reading states, in document order: a restriction's base's, then
@@ -317,20 +355,6 @@ const enumerationsOf = (type: TypeReading): readonly string[] =>
  * @returns The reference.
  */
 const named = (name: string): TypeReading => ({ _tag: "named", name });
-
-/**
- * The content class of text of a named type.
- *
- * @param type - The type's designator.
- * @param whiteSpace - Its class.
- * @returns The `text` class.
- */
-const textOf = (type: string, whiteSpace: WhiteSpace): Content => ({
-  _tag: "text",
-  inline: Option.none(),
-  type,
-  whiteSpace,
-});
 
 /**
  * An anonymous restriction of a named type by enumeration, as the deriver reads one.
@@ -387,17 +411,20 @@ const declaredTypesOf = (
 };
 
 /**
- * Check entries' attribute types against the declarations of the XSD they were read from.
+ * Check complex types' attribute rows against the declarations of the XSD they were read from.
  *
  * A row of a name the XSD declares only with anonymous types keeps an anonymous definition, a row
- * of a name it declares only with named types keeps none, and every definition kept states the
- * enumeration values of one of the name's anonymous declarations.
+ * of a name it declares only with named types, or only references, keeps none, and every
+ * definition kept states the enumeration values of one of the name's anonymous declarations.
  *
- * @param entries - The entries.
- * @param roots - The `xs:schema` elements of the documents the entries were read from.
+ * @param owners - Each complex type's rows, by a name for the type.
+ * @param roots - The `xs:schema` elements of the documents the types were read from.
  * @returns How many rows kept an anonymous definition.
  */
-const checkInlineTypes = (entries: readonly Entry[], roots: readonly Element[]): number => {
+const checkInlineTypes = (
+  owners: readonly (readonly [string, readonly AttributeRow[]])[],
+  roots: readonly Element[],
+): number => {
   const declared = new Map<string, readonly Option.Option<string[]>[]>();
 
   for (const root of roots) {
@@ -408,26 +435,27 @@ const checkInlineTypes = (entries: readonly Entry[], roots: readonly Element[]):
 
   let kept = 0;
 
-  for (const entry of entries) {
-    for (const row of entry.attributes) {
-      const types = declared.get(row.name) ?? [];
-      const where = `${entry.handle} ${row.name}`;
+  for (const [owner, rows] of owners) {
+    for (const row of rows) {
+      const stated = declared.get(row.name) ?? [];
+      const where = `${owner} ${row.name}`;
+      const inline = row._tag === "declared" ? row.inline : Option.none();
 
-      if (types.length > 0 && types.every(Option.isSome)) {
-        assert.isTrue(Option.isSome(row.inline), `${where} keeps its anonymous type`);
+      if (stated.length > 0 && stated.every(Option.isSome)) {
+        assert.isTrue(Option.isSome(inline), `${where} keeps its anonymous type`);
       }
 
-      if (types.every(Option.isNone)) {
-        assert.isTrue(Option.isNone(row.inline), `${where} has a named type`);
+      if (stated.every(Option.isNone)) {
+        assert.isTrue(Option.isNone(inline), `${where} has a named type`);
       }
 
-      if (Option.isSome(row.inline)) {
-        const values = enumerationsOf(row.inline.value);
+      if (Option.isSome(inline)) {
+        const values = enumerationsOf(inline.value);
 
         kept += 1;
         assert.isTrue(
-          types.some((type) =>
-            Option.exists(type, (stated) => stated.join(" ") === values.join(" ")),
+          stated.some((type) =>
+            Option.exists(type, (enumerated) => enumerated.join(" ") === values.join(" ")),
           ),
           `${where} states the values ${values.join(" ")}, which no declaration of it does`,
         );
@@ -497,40 +525,6 @@ describe("vocab/derive/derive.ts over inline schemas", () => {
     }),
   );
 
-  it.effect(
-    "reads a substitution group head as its members, as one choice unless a choice holds it",
-    () =>
-      Effect.gen(function* substitution() {
-        const schema = valueOf(
-          indexSchema(
-            yield* parse(
-              `${schemaTag()}<xs:element name="head" abstract="true"/><xs:element name="a" substitutionGroup="t:head"/><xs:element name="b" substitutionGroup="t:head"/><xs:element name="c"/>` +
-                `<xs:complexType name="Run"><xs:sequence><xs:element ref="t:head" maxOccurs="unbounded"/></xs:sequence></xs:complexType>` +
-                `<xs:complexType name="Pick"><xs:choice><xs:element ref="t:head"/><xs:element ref="t:c"/></xs:choice></xs:complexType>` +
-                `<xs:complexType name="Local"><xs:sequence><xs:element name="d"/></xs:sequence></xs:complexType></xs:schema>`,
-            ),
-          ),
-        );
-        const many = { max: Option.none(), min: 1 };
-        const one = { max: Option.some(1), min: 1 };
-
-        assert.deepStrictEqual(contentOfType(schema, "Run"), {
-          choices: [{ names: ["t:a", "t:b"], occurs: many }],
-          references: [
-            { name: "t:a", occurs: many },
-            { name: "t:b", occurs: many },
-          ],
-          wildcard: false,
-        });
-        assert.deepStrictEqual(contentOfType(schema, "Pick").choices, [
-          { names: ["t:a", "t:b", "t:c"], occurs: one },
-        ]);
-        assert.deepStrictEqual(contentOfType(schema, "Local").references, [
-          { name: "t:d", occurs: one },
-        ]);
-      }),
-  );
-
   it.effect("keeps an anonymous type's definition and spells each built-in xs:", () =>
     Effect.gen(function* inlineTypes() {
       const schema = valueOf(
@@ -547,9 +541,9 @@ describe("vocab/derive/derive.ts over inline schemas", () => {
           ),
         ),
       );
-      const entry = entryOfType(schema, "Holder");
+      const rows = valueOf(attributeRowsOf(schema, complexTypeNamed(schema, "Holder")));
       const typed = (name: string) => {
-        const { inline, type, whiteSpace } = rowOf(entry, name);
+        const { inline, type, whiteSpace } = rowOf(rows, name);
 
         return { inline: Option.getOrNull(inline), type, whiteSpace };
       };
@@ -564,7 +558,7 @@ describe("vocab/derive/derive.ts over inline schemas", () => {
         type: "xs:token",
         whiteSpace: "collapse",
       });
-      assert.deepStrictEqual(rowOf(entry, "pick").default, Option.some("b"));
+      assert.deepStrictEqual(rowOf(rows, "pick").default, Option.some("b"));
       assert.deepStrictEqual(typed("sizes"), {
         inline: {
           _tag: "restriction",
@@ -614,11 +608,11 @@ describe("vocab/derive/derive.ts over inline schemas", () => {
         );
 
         assert.deepStrictEqual(
-          forms.map(({ name }) => entryOfType(schema, name).content),
-          forms.map(({ mixed }) => (mixed ? { _tag: "mixed" } : { _tag: "element" })),
+          forms.map(({ name }) => valueOf(mixedOf(schema, complexTypeNamed(schema, name)))),
+          forms.map(({ mixed }) => mixed),
         );
         assert.include(
-          failureOf(entryOf(schema, { element: "Yes", handle: "Yes", type: "t:Yes" })),
+          failureOf(mixedOf(schema, complexTypeNamed(schema, "Yes"))),
           `an xs:complexType has mixed="yes", which is no xs:boolean`,
         );
       }),
@@ -635,43 +629,46 @@ describe("vocab/derive/derive.ts over inline schemas", () => {
       );
 
       assert.include(
-        failureOf(entryOf(schema, { element: "Holder", handle: "Holder", type: "t:Holder" })),
+        failureOf(attributeRowsOf(schema, complexTypeNamed(schema, "Holder"))),
         "an xs:restriction holds an xs:assertion, which is no XSD facet",
       );
     }),
   );
 
-  it.effect("classes content as text, mixed, element, wildcard or empty", () =>
-    Effect.gen(function* contentClasses() {
-      const schema = valueOf(
-        indexSchema(
-          yield* parse(
-            `${schemaTag()}<xs:complexType name="Text"><xs:simpleContent><xs:extension base="xs:normalizedString"><xs:attribute name="a" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>` +
-              `<xs:complexType name="Inherited"><xs:simpleContent><xs:extension base="t:Text"/></xs:simpleContent></xs:complexType>` +
-              `<xs:complexType name="Mixed" mixed="true"><xs:sequence><xs:element name="e"/></xs:sequence></xs:complexType>` +
-              `<xs:complexType name="Elements"><xs:sequence><xs:element name="e"/><xs:any namespace="##other"/></xs:sequence></xs:complexType>` +
-              `<xs:complexType name="Wild"><xs:sequence><xs:any namespace="##other" maxOccurs="unbounded"/></xs:sequence></xs:complexType>` +
-              `<xs:complexType name="Empty"><xs:attribute name="a" type="xs:string"/></xs:complexType>` +
-              `</xs:schema>`,
+  it.effect(
+    "reads simple content's text as the type its extension extends, through a complex base's",
+    () =>
+      Effect.gen(function* simpleContent() {
+        const schema = valueOf(
+          indexSchema(
+            yield* parse(
+              `${schemaTag()}<xs:complexType name="Text"><xs:simpleContent><xs:extension base="xs:normalizedString"><xs:attribute name="a" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>` +
+                `<xs:complexType name="Inherited"><xs:simpleContent><xs:extension base="t:Text"/></xs:simpleContent></xs:complexType>` +
+                `<xs:complexType name="Restricted"><xs:simpleContent><xs:restriction base="t:Text"/></xs:simpleContent></xs:complexType>` +
+                `</xs:schema>`,
+            ),
           ),
-        ),
-      );
-      const text = textOf("xs:normalizedString", "replace");
+        );
+        const text: ValueType = {
+          inline: Option.none(),
+          type: "xs:normalizedString",
+          whiteSpace: "replace",
+        };
 
-      assert.deepStrictEqual(
-        ["Text", "Inherited", "Mixed", "Elements", "Wild", "Empty"].map(
-          (type) => entryOfType(schema, type).content,
-        ),
-        [
-          text,
-          text,
-          { _tag: "mixed" },
-          { _tag: "element" },
-          { _tag: "wildcard" },
-          { _tag: "empty" },
-        ],
-      );
-    }),
+        assert.deepStrictEqual(
+          ["Text", "Inherited"].map((type) => textOfType(schema, complexTypeNamed(schema, type))),
+          [text, text],
+        );
+        assert.include(
+          failureOf(
+            textTypeOf(
+              schema,
+              Option.getOrThrow(firstXs(complexTypeNamed(schema, "Restricted"), "simpleContent")),
+            ),
+          ),
+          "a simpleContent restriction is not read",
+        );
+      }),
   );
 });
 
@@ -742,36 +739,48 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/derive.ts over the pinned 
         }),
     );
 
-    cached.effect("keeps the anonymous attribute types of the ASI leaves as declared", () =>
+    cached.effect("keeps the anonymous attribute types of every ASI complex type as declared", () =>
       Effect.gen(function* inlineTypesFromXsd() {
         const { asi301, documents } = yield* Schemas;
         const asiDocument = Option.getOrElse(
           Option.fromNullishOr(documents.get("imsqti_asiv3p0p1_v1p0.xsd")),
           () => assert.fail("the ASI 3.0.1 XSD was not read"),
         );
-        const kept = leaves.map((leaf) =>
-          checkInlineTypes(valueOf(entriesOf(asi301, leaf)), [asiDocument.root]),
+        const types = under(asiDocument.root)
+          .filter((node) => isXs(node, "complexType"))
+          .map(
+            (complexType, at) =>
+              [
+                Option.getOrElse(attributeOf(complexType, "name"), () => `anonymous ${String(at)}`),
+                valueOf(attributeRowsOf(asi301, complexType)),
+              ] as const,
+          );
+        assert.deepStrictEqual(
+          [types.length, checkInlineTypes(types, [asiDocument.root])],
+          [208, 1413],
         );
-        assert.deepStrictEqual(kept, [635, 1133, 38]);
       }),
     );
 
     cached.effect("reads simple content's text type and inline enumerations' values", () =>
       Effect.gen(function* textAndValues() {
         const { asi301 } = yield* Schemas;
-        const asi = leaves.flatMap((leaf) => valueOf(entriesOf(asi301, leaf)));
-        const values = (entries: readonly Entry[], handle: string, name: string) =>
-          rowOf(entryNamed(entries, handle), name).inline.pipe(Option.map(enumerationsOf));
+        const values = (element: string, name: string) =>
+          rowOf(valueOf(attributeRowsOf(asi301, typeOfElement(asi301, element))), name).inline.pipe(
+            Option.map(enumerationsOf),
+          );
+        assert.deepStrictEqual(textOfType(asi301, typeOfElement(asi301, "qti-value")), {
+          inline: Option.none(),
+          type: "xs:normalizedString",
+          whiteSpace: "replace",
+        });
+        assert.deepStrictEqual(textOfType(asi301, typeOfElement(asi301, "qti-base-value")), {
+          inline: Option.none(),
+          type: "xs:string",
+          whiteSpace: "preserve",
+        });
         assert.deepStrictEqual(
-          entryNamed(asi, "qti-value").content,
-          textOf("xs:normalizedString", "replace"),
-        );
-        assert.deepStrictEqual(
-          entryNamed(asi, "qti-base-value").content,
-          textOf("xs:string", "preserve"),
-        );
-        assert.deepStrictEqual(
-          values(asi, "qti-value", "base-type"),
+          values("qti-value", "base-type"),
           Option.some([
             "boolean",
             "directedPair",
@@ -786,7 +795,7 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/derive.ts over the pinned 
             "uri",
           ]),
         );
-        assert.deepStrictEqual(values(asi, "p", "dir"), Option.some(["ltr", "rtl", "auto"]));
+        assert.deepStrictEqual(values("p", "dir"), Option.some(["ltr", "rtl", "auto"]));
       }),
     );
 
