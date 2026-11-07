@@ -568,7 +568,9 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
 
       it.effect("refuses each reference row law's breach by its law, and keeps its control", () =>
         // Oracle: PostgreSQL, each CHECK of `VariableRef`, against the old checker's rules (P8,
-        // P20, P22, P24, P26, P27) and the UP audit's A62.
+        // P20, P22, P24, P26, P27) and the UP audit's A62. An item's built-in `duration` is a
+        // response variable, the declaration kind `E1_derived` states of it, so its breach is
+        // lawful there and breaks `Item_duration` alone.
         // Bound: one breach of each law, beside the same row with the breach repaired.
         Effect.gen(function* referenceLaws() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -648,6 +650,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               broken: referenceRow({
                 baseType: "float",
                 cardinality: "single",
+                declarationKind: "qti-response-declaration",
                 elementBase: "float",
                 elementCardinality: "single",
                 identifier: "duration",
@@ -762,7 +765,8 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, the
           // information model's §2.2.2.2 time-dependence sentence (A62), P24 (A66) and §7.27.1's
-          // `section-identifier` (A61), here a `qti-number-correct`'s, which reads a section.
+          // `section-identifier` (A61), here a `qti-number-correct`'s, which reads a section. An
+          // item's built-in `duration` reads as a response variable, as `E1_derived` states it.
           // Bound: one breach of each law, beside the same row with the breach repaired, each
           // with its reference's owners.
           Effect.gen(function* readingLaws() {
@@ -791,6 +795,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                   ...throughItem,
                   ...undeclared,
                   declaration: nodeOf(70),
+                  declarationKind: "qti-response-declaration",
                   identifier: "a.duration",
                   source: "builtIn",
                   variable: "duration",
