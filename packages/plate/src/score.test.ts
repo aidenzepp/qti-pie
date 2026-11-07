@@ -553,6 +553,91 @@ const builtInDefaults = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 /**
+ * Write a hand-built item document whose template processing sets the single identifier template
+ * variable `BLOCK` to `NO`, so its record hides the template block shown when `BLOCK` holds `YES`.
+ * Its response `R2` of identifiers has the correct response `C1`, then `C2` where it is not single,
+ * and its response processing sets `SCORE` to 1 when `R2` matches it, else to 0.
+ *
+ * @param interaction The interaction bound to `R2`, as its markup.
+ * @param cardinality `R2`'s cardinality.
+ * @param hidden Whether the interaction sits in that hidden template block, rather than in the
+ *   item body outside any template block.
+ * @returns The item document.
+ */
+const blockDocument = (
+  interaction: string,
+  cardinality: "ordered" | "single",
+  hidden: boolean,
+): string => `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="hidden-block" title="Hidden block" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="R2" cardinality="${cardinality}" base-type="identifier">
+    <qti-correct-response><qti-value>C1</qti-value>${cardinality === "single" ? "" : "<qti-value>C2</qti-value>"}</qti-correct-response>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>
+  <qti-template-declaration identifier="BLOCK" cardinality="single" base-type="identifier"/>
+  <qti-template-processing>
+    <qti-set-template-value identifier="BLOCK"><qti-base-value base-type="identifier">NO</qti-base-value></qti-set-template-value>
+  </qti-template-processing>
+  <qti-item-body>
+    <p>Intro</p>
+    ${hidden ? `<qti-template-block identifier="YES" template-identifier="BLOCK" show-hide="show"><qti-content-body>${interaction}</qti-content-body></qti-template-block>` : interaction}
+  </qti-item-body>
+  <qti-response-processing>
+    <qti-response-condition>
+      <qti-response-if>
+        <qti-match><qti-variable identifier="R2"/><qti-correct identifier="R2"/></qti-match>
+        <qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>
+      </qti-response-if>
+      <qti-response-else>
+        <qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">0</qti-base-value></qti-set-outcome-value>
+      </qti-response-else>
+    </qti-response-condition>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
+
+/**
+ * An Order bound to `R2` over the choices `C1` and `C2`: an interaction the renderer shows as a
+ * notice, so it binds no response on the page.
+ */
+const orderOfTwo =
+  '<qti-order-interaction response-identifier="R2"><qti-simple-choice identifier="C1">One</qti-simple-choice><qti-simple-choice identifier="C2">Two</qti-simple-choice></qti-order-interaction>';
+
+/**
+ * A single Choice bound to `R2` over the choices `C1` and `C2`: an interaction the renderer shows.
+ */
+const choiceOfTwo =
+  '<qti-choice-interaction response-identifier="R2" max-choices="1"><qti-simple-choice identifier="C1">One</qti-simple-choice><qti-simple-choice identifier="C2">Two</qti-simple-choice></qti-choice-interaction>';
+
+/**
+ * Open a hand-built item document, which `check` must accept (with or without unsupported
+ * features), and score one attempt that posts `R2` over its first record, which `begin` starts.
+ *
+ * @param document The item document, a {@link blockDocument}.
+ * @param posted The value posted for `R2`.
+ * @returns The record `score` returned, in the form the host stores.
+ */
+const scoredInBlock = Effect.fnUntraced(function* scoredInBlock(document: string, posted: Value) {
+  const verdict = yield* open("items/hidden-block.xml", new TextEncoder().encode(document));
+  const opened = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+  );
+  const started = yield* Effect.fromResult(begin(opened, { instance: "q1", seed: "7" }));
+
+  return yield* Effect.fromResult(score(opened, { R2: posted }, started));
+});
+
+/**
+ * Give the identifiers a stored record holds for one response.
+ *
+ * @param stored The stored record.
+ * @param identifier The response.
+ * @returns Its stored identifiers, none for NULL or a record that lacks it.
+ */
+const responseOf = (stored: StoredRecord, identifier: string): readonly unknown[] =>
+  stored.responses[identifier]?.values.map((single) => single.value) ?? [];
+
+/**
  * Hand `score` and `checkResponses` a hand-built item, which their types refuse: the type tests
  * are the `@ts-expect-error`s below, which `tsc` fails on if a call ever type-checks. No test calls
  * it.
@@ -950,6 +1035,39 @@ describe("score", () => {
       }),
   );
 
+  it.effect(
+    "[I-5] fails InvalidRecord at decode when the record of an item whose template processing runs holds no value for a declared template variable, and scores begin's own record",
+    () =>
+      Effect.gen(function* refusesTemplateGap() {
+        const started = yield* Effect.fromResult(begin(templated, { instance: "q1", seed: "7" }));
+        const emptied: StoredRecord = { ...started, templates: {} };
+        const scored = yield* Effect.fromResult(
+          score(templated, { RESPONSE: identifiers("single", "B") }, started),
+        );
+        const unrun = acceptForTest({
+          ...templatedItem,
+          document: "items/unrun.xml",
+          identifier: "unrun",
+          templateProcessing: Option.none(),
+        });
+        const unrunStarted = yield* Effect.fromResult(begin(unrun, { instance: "q1", seed: "7" }));
+
+        assert.deepStrictEqual(
+          Option.map(
+            failureOf(score(templated, { RESPONSE: identifiers("single", "B") }, emptied)),
+            (failure) =>
+              failure._tag === "InvalidRecord" ? [failure._tag, failure.stage] : [failure._tag],
+          ),
+          Option.some(["InvalidRecord", "decode"]),
+        );
+        assert.deepStrictEqual(outcomeOf(scored, "SCORE"), [1]);
+        assert.isTrue(
+          Result.isSuccess(score(unrun, {}, { ...unrunStarted, templates: {} })),
+          "an item whose template processing does not run takes a record with no template value",
+        );
+      }),
+  );
+
   it("[I-9a] fails InvalidRecord at decode for a mistyped stored completionStatus, naming the built-in rather than a declaration (D7-2)", () => {
     const stored = Result.getOrThrow(encodeRecord(fresh(item, "")));
     const counted: StoredRecord = {
@@ -1050,6 +1168,50 @@ describe("score over the content a templated item's record shows", () => {
 
         assert.deepStrictEqual(outcomeOf(scored, "ECHO"), ["3"]);
         assert.deepStrictEqual(outcomeOf(scored, "SCORE"), [0]);
+      }),
+  );
+});
+
+describe("score over a response an interaction the renderer shows as a notice binds", () => {
+  it.effect(
+    "[I-5] stores the record's NULL for a response only an Order in a hidden template block binds, whatever is posted, and scores it",
+    () =>
+      Effect.gen(function* dropsHiddenNotice() {
+        const stored = yield* scoredInBlock(
+          blockDocument(orderOfTwo, "ordered", true),
+          identifiers("ordered", "C1", "C2"),
+        );
+
+        assert.deepStrictEqual(responseOf(stored, "R2"), []);
+        assert.deepStrictEqual(outcomeOf(stored, "SCORE"), [0]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] stores the record's NULL for a response only a Choice in a hidden template block binds, whatever is posted, and scores it",
+    () =>
+      Effect.gen(function* dropsHiddenChoice() {
+        const stored = yield* scoredInBlock(
+          blockDocument(choiceOfTwo, "single", true),
+          identifiers("single", "C1"),
+        );
+
+        assert.deepStrictEqual(responseOf(stored, "R2"), []);
+        assert.deepStrictEqual(outcomeOf(stored, "SCORE"), [0]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] scores the posted value of a response only an Order on content the page sees binds, in no template block (D8-3)",
+    () =>
+      Effect.gen(function* passesShownNotice() {
+        const stored = yield* scoredInBlock(
+          blockDocument(orderOfTwo, "ordered", false),
+          identifiers("ordered", "C1", "C2"),
+        );
+
+        assert.deepStrictEqual(responseOf(stored, "R2"), ["C1", "C2"]);
+        assert.deepStrictEqual(outcomeOf(stored, "SCORE"), [1]);
       }),
   );
 });
