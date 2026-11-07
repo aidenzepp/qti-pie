@@ -42,8 +42,11 @@ import {
   dependentField,
   fin,
   idField,
+  prefixHandle,
   roster,
+  rowsAt,
   sourced,
+  sourceIn,
   valueField,
 } from "#pantry/grammar/closed.ts";
 import type {
@@ -71,7 +74,7 @@ import {
   namespaceClassesUnder,
 } from "#pantry/vocab/namespaces.ts";
 import { automatonOf } from "#pantry/vocab/sequencing.ts";
-import type { Automaton } from "#pantry/vocab/sequencing.ts";
+import type { Automaton, Position } from "#pantry/vocab/sequencing.ts";
 
 /**
  * A spec reading that edits a content model where it says more than the XSD: a kind admitted beside
@@ -409,15 +412,6 @@ interface Edited {
 }
 
 /**
- * Key a family by the version and parent of a key prefix.
- *
- * @param prefix - The prefix's values.
- * @returns The family's key.
- */
-const familyOf = (prefix: Readonly<Record<string, string>>): string =>
-  `${prefix["version"] ?? ""} ${prefix["parent"] ?? ""}`;
-
-/**
  * Collect the element and wildcard particles within a particle, in document order.
  *
  * @param particle - The particle.
@@ -752,6 +746,15 @@ const emptyLanguage: Automaton = {
 };
 
 /**
+ * A position of a model in one of its versions: the position, and where its particle is stated in
+ * the version.
+ */
+interface Placed {
+  readonly position: Position;
+  readonly source: Source;
+}
+
+/**
  * Find a state from which one kind leads to two positions, so that no state decides the child's
  * position: a breach of determinism over the kind alphabet. An XSD's Unique Particle Attribution
  * rules it out wherever a kind carries what the XSD tells particles apart by, as a foreign kind
@@ -763,11 +766,14 @@ const emptyLanguage: Automaton = {
  */
 const undecidedKindOf = (
   automaton: Automaton,
-  symbols: ReadonlyMap<string, readonly number[]>,
+  symbols: ReadonlyMap<string, readonly Placed[]>,
 ): Option.Option<string> =>
-  Arr.findFirst([...symbols], ([, numbers]) =>
+  Arr.findFirst([...symbols], ([, placed]) =>
     automaton.next.some(
-      (next) => [...new Set(numbers)].filter((number) => next.has(number)).length > 1,
+      (next) =>
+        [...new Set(placed.map(({ position }) => position.number))].filter((number) =>
+          next.has(number),
+        ).length > 1,
     ),
   ).pipe(Option.map(([kind]) => kind));
 
@@ -783,22 +789,50 @@ interface Installed {
   readonly data: readonly string[];
   readonly parent: string;
   /**
-   * The model's source in its version, and each position's, position n at index n.
+   * Each position of the model, with its particle's source in the version.
    */
-  readonly sources: readonly [Source, ...Source[]];
+  readonly positions: readonly Placed[];
+  /**
+   * The automaton's signature ({@link signatureOf}), one per model, which its versions share.
+   */
+  readonly signature: string;
+  /**
+   * The model's source in its version.
+   */
+  readonly source: Source;
   /**
    * The foreign kinds only `strict` wildcards of the model admit.
    */
-  readonly strictly: readonly string[];
-  readonly symbols: ReadonlyMap<string, readonly number[]>;
+  readonly strictly: ReadonlySet<string>;
+  /**
+   * The positions each kind the model admits is named at, in position order.
+   */
+  readonly symbols: ReadonlyMap<string, readonly Placed[]>;
   readonly version: SchemaVersion;
 }
+
+/**
+ * A child the content models admit under a parent, at its position, with the source of the
+ * position: its particle's where one position names it, its model's at 0.
+ */
+export type AdmittedRow = AdmittedChild & {
+  readonly position: number;
+  readonly source: Source;
+};
 
 /**
  * The handle of the shared model no shared kind is in: `SharedModelOf`'s value for a family whose
  * kinds each name one position.
  */
 export const noSharedModel = "none";
+
+/**
+ * A (version, parent) family.
+ */
+interface Family {
+  readonly parent: string;
+  readonly version: SchemaVersion;
+}
 
 /**
  * Every (version, parent) family, in code order: the rosters' product, version first.
@@ -811,7 +845,7 @@ export const noSharedModel = "none";
 const familiesOf = (rosters: {
   readonly kinds: Roster<string>;
   readonly versions: Roster<SchemaVersion>;
-}): readonly { readonly parent: string; readonly version: SchemaVersion }[] =>
+}): readonly Family[] =>
   rosters.versions.handles.flatMap((version) =>
     rosters.kinds.handles.map((parent) => ({ parent, version })),
   );
@@ -835,55 +869,88 @@ const signatureOf = (automaton: Automaton): string =>
   ].join("|");
 
 /**
- * Models read off the families they hold: each model with its handle and its first family's
- * value, in first-family order, and the handle of each family a model holds, by
- * `<version> <parent>`.
+ * The signature of {@link emptyLanguage}, the model of every family no content model holds.
  */
-interface Models<V> {
-  readonly handles: readonly string[];
-  readonly models: readonly { readonly handle: string; readonly value: V }[];
-  readonly of: ReadonlyMap<string, string>;
+const emptySignature = signatureOf(emptyLanguage);
+
+/**
+ * A family's model as {@link modelsOf} reads it: the signature that makes two families one model,
+ * and the value the model states.
+ */
+interface Signed<V> {
+  readonly family: Family;
+  readonly signature: string;
+  readonly value: V;
 }
 
 /**
- * Read the (version, parent) families as models: two families are one model exactly when their
- * signatures are equal (rule 0: identical facts are one fact), and the model states its first
- * family's rows, which every family of it states alike. A model is named by its first family's
- * parent kind, or by `<version> <parent>` where an earlier model took that name, so every handle is
- * a kind's or a family's and at most 63 bytes.
- *
- * @param rosters - The versions and the kinds, whose product the families are.
- * @param rosters.versions - The `SchemaVersion` roster.
- * @param rosters.kinds - The `NodeKind` roster.
- * @param read - A family's signature and the value its model states, none for a family no model
- *   holds; read once per family, by `<version> <parent>`.
- * @returns The models and each family's, families read in (version, parent) code order.
+ * Models read off the families they hold: each model with its handle and its first family's
+ * value, in first-family order, and each family with its model's handle, in the families' order.
  */
-const modelsOf = <V>(
-  rosters: { readonly kinds: Roster<string>; readonly versions: Roster<SchemaVersion> },
-  read: (family: string) => Option.Option<{ readonly signature: string; readonly value: V }>,
-): Models<V> => {
+interface Models<V> {
+  readonly families: readonly (Family & { readonly model: string })[];
+  readonly handles: readonly string[];
+  readonly models: readonly { readonly handle: string; readonly value: V }[];
+}
+
+/**
+ * Read families as models: two families are one model exactly when their signatures are equal
+ * (rule 0: identical facts are one fact), and the model states its first family's rows, which
+ * every family of it states alike. A model is named by its first family's parent kind, or by
+ * `<version> <parent>` where an earlier model took that name, so every handle is a kind's or a
+ * family's and at most 63 bytes.
+ *
+ * @param signed - Each family a model holds, with its signature and the value its model states, in
+ *   (version, parent) code order.
+ * @returns The models and each family's.
+ */
+const modelsOf = <V>(signed: readonly Signed<V>[]): Models<V> => {
   const models: { readonly handle: string; readonly value: V }[] = [];
   const bySignature = new Map<string, string>();
   const named = new Set<string>();
-  const of = new Map<string, string>();
-  for (const { parent, version } of familiesOf(rosters)) {
-    const family = `${version} ${parent}`;
-    for (const { signature, value } of Option.toArray(read(family))) {
-      const known = bySignature.get(signature);
-      const handle = known ?? (named.has(parent) ? family : parent);
-      if (known === undefined) {
-        bySignature.set(signature, handle);
-        named.add(handle);
-        models.push({ handle, value });
-      }
+  const families = signed.map(({ family, signature, value }) => {
+    const handle = bySignature.getOrInsertComputed(signature, () => {
+      const fresh = named.has(family.parent) ? `${family.version} ${family.parent}` : family.parent;
+      named.add(fresh);
+      models.push({ handle: fresh, value });
 
-      of.set(family, handle);
-    }
-  }
+      return fresh;
+    });
 
-  return { handles: models.map(({ handle }) => handle), models, of };
+    return { ...family, model: handle };
+  });
+
+  return { families, handles: models.map(({ handle }) => handle), models };
 };
+
+/**
+ * Read a count a generator states for every handle of a roster.
+ *
+ * @param counts - The counts, by handle.
+ * @param handle - The handle.
+ * @param relation - The relation the counts are, as the defect's message names it.
+ * @returns The handle's count.
+ * @throws {Error} When the counts hold none for the handle, which every handle of the roster has.
+ */
+const countOf = (counts: ReadonlyMap<string, number>, handle: string, relation: string): number =>
+  Option.getOrThrowWith(
+    Option.fromNullishOr(counts.get(handle)),
+    () =>
+      new Error(
+        `${relation} states no count for ${handle}, and it states one for every model of its roster. Count ${handle}'s positions.`,
+      ),
+  );
+
+/**
+ * A particle's greatest number of occurrences, `Infinity` for `unbounded`: `{max occurs}` is
+ * "either a non-negative integer or unbounded" (XML Schema 1.0 Part 1, §3.9.1), and the IR holds
+ * `unbounded` as none.
+ *
+ * @param occurs - The particle's bounds.
+ * @returns Its maximum.
+ */
+export const maxOccursOf = (occurs: Occurs): number =>
+  Option.match(occurs.max, { onNone: () => Number.POSITIVE_INFINITY, onSome: (most) => most });
 
 /**
  * Install the automata of content models, and project their admitted triples with each child's
@@ -913,7 +980,7 @@ export const contentOf = (input: {
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<
   {
-    readonly admitted: readonly (AdmittedChild & { readonly position: number })[];
+    readonly admitted: readonly AdmittedRow[];
     readonly content: ContentGrammar;
   },
   ContentError
@@ -925,6 +992,13 @@ export const contentOf = (input: {
         .flatMap((facet) => facet.roots)
         .map(({ kinds, namespace }) => [namespace, new Set<string>(kinds)] as const),
     );
+    // A namespace a facet states the roots of admits those kinds alone through a wildcard, and any
+    // other namespace every kind it declares globally.
+    const rootAdmits = (kind: string): boolean =>
+      Option.match(Option.fromNullishOr(rootsOf.get(input.namespaceOf(kind))), {
+        onNone: () => true,
+        onSome: (roots) => roots.has(kind),
+      });
     const installed: Installed[] = [];
     const used = new Set<ModelEdit>();
     for (const model of [...input.models, ...input.facets.flatMap((facet) => facet.models)]) {
@@ -950,28 +1024,36 @@ export const contentOf = (input: {
       }
 
       const caps = yield* cappedBy(automaton, edits, model.kind);
+      const signature = signatureOf(automaton);
 
-      for (const version of model.versions) {
+      for (const [at, version] of model.versions.entries()) {
         const named = new Set(
           automaton.positions.flatMap(({ symbol }) =>
             symbol._tag === "kinds" ? symbol.kinds : [],
           ),
         );
-        const symbols = new Map<string, number[]>();
+        // `sources` are aligned with the model's versions, so this version's is at its index.
+        const positions = automaton.positions.map((position): Placed => ({
+          position,
+          source: sourceIn(
+            position.sources,
+            at,
+            `Position ${String(position.number)} of the content model of ${model.kind}`,
+          ),
+        }));
+        const symbols = new Map<string, Placed[]>();
         // The processing of each wildcard position that admits a foreign kind.
         const processings = new Map<string, string[]>();
-        const hold = (kind: string, processing: string) => {
-          processings.set(kind, [...(processings.get(kind) ?? []), processing]);
-        };
-        const admit = (kind: string, position: number) => {
-          symbols.set(kind, [...(symbols.get(kind) ?? []), position]);
+        const admit = (kind: string, placed: Placed) => {
+          symbols.getOrInsertComputed(kind, () => []).push(placed);
         };
         // `automatonOf` gives no position to a particle that never occurs, or sits in a group that
         // never does, so every position is one some family reaches.
-        for (const { number, symbol } of automaton.positions) {
+        for (const placed of positions) {
+          const { symbol } = placed.position;
           if (symbol._tag === "kinds") {
             for (const kind of symbol.kinds) {
-              admit(kind, number);
+              admit(kind, placed);
             }
           } else {
             if (symbol.processing !== "skip") {
@@ -979,10 +1061,10 @@ export const contentOf = (input: {
                 if (
                   !named.has(kind) &&
                   !input.foreignRoots.has(kind) &&
-                  (rootsOf.get(input.namespaceOf(kind))?.has(kind) ?? true) &&
+                  rootAdmits(kind) &&
                   admitsNamespace(symbol.namespace, own, input.namespaceOf(kind))
                 ) {
-                  admit(kind, number);
+                  admit(kind, placed);
                 }
               }
             }
@@ -992,8 +1074,10 @@ export const contentOf = (input: {
             // element stands only with an `xsi:type` its document's schema set can resolve
             // (§3.3.4, clause 1.2; spec reading 81), which `StrictlyHeld` marks for the reader.
             for (const namespaceClass of namespaceClassesUnder[symbol.namespace]) {
-              admit(foreignKinds[namespaceClass], number);
-              hold(foreignKinds[namespaceClass], symbol.processing);
+              admit(foreignKinds[namespaceClass], placed);
+              processings
+                .getOrInsertComputed(foreignKinds[namespaceClass], () => [])
+                .push(symbol.processing);
             }
           }
         }
@@ -1008,20 +1092,18 @@ export const contentOf = (input: {
           );
         }
 
-        // `sources` are aligned with the model's versions, so this version's is at its index.
-        const at = model.versions.indexOf(version);
-        const inVersion = (sources: Sources): Source => sources[at] ?? sources[0];
         installed.push({
           automaton,
           caps,
           data,
           parent: model.kind,
-          sources: [
-            inVersion(model.sources),
-            ...automaton.positions.map((held) => inVersion(held.sources)),
-          ],
-          strictly: [...processings].flatMap(([kind, held]) =>
-            held.every((processing) => processing === "strict") ? [kind] : [],
+          positions,
+          signature,
+          source: sourceIn(model.sources, at, `The content model of ${model.kind}`),
+          strictly: new Set(
+            [...processings].flatMap(([kind, held]) =>
+              held.every((processing) => processing === "strict") ? [kind] : [],
+            ),
           ),
           symbols,
           version,
@@ -1070,57 +1152,102 @@ export const contentOf = (input: {
     const byFamily = new Map<string, Installed>(
       installed.map((entry) => [`${entry.version} ${entry.parent}`, entry]),
     );
-    const sizes = new Map(
-      installed.map(({ automaton, parent: held, version: in_ }) => [
-        `${in_} ${held}`,
-        automaton.next.length,
-      ]),
-    );
-    // A family's positions are 0, its start, then its model's own: the dependent sum Σ (P + 1).
-    const sizeOf = (prefix: Readonly<Record<string, string>>) => sizes.get(familyOf(prefix)) ?? 1;
-    const position = dependentField("position", positions, sizeOf);
+    const installedAt = (family: {
+      readonly parent: string;
+      readonly version: string;
+    }): Option.Option<Installed> =>
+      Option.fromNullishOr(byFamily.get(`${family.version} ${family.parent}`));
+    // A family no content model holds reads the empty language: its start alone.
+    const automatonAt = (family: {
+      readonly parent: string;
+      readonly version: string;
+    }): Automaton =>
+      Option.match(installedAt(family), {
+        onNone: () => emptyLanguage,
+        onSome: ({ automaton }) => automaton,
+      });
+    // Each child a family's model admits, at its position: the one position its kind names, with
+    // that position's source, or 0 with the model's, for a kind several positions name and for
+    // character data the model gives no position, which carries its predecessor's state.
+    const admittedOf = (entry: Installed): readonly AdmittedRow[] => [
+      ...[...entry.symbols].map(([child, placed]) => {
+        const [only, ...rest] = new Map(
+          placed.map((held) => [held.position.number, held]),
+        ).values();
+
+        return only !== undefined && rest.length === 0
+          ? {
+              child,
+              parent: entry.parent,
+              position: only.position.number,
+              source: only.source,
+              version: entry.version,
+            }
+          : {
+              child,
+              parent: entry.parent,
+              position: 0,
+              source: entry.source,
+              version: entry.version,
+            };
+      }),
+      ...entry.data
+        .filter((child) => !entry.symbols.has(child))
+        .map((child) => ({
+          child,
+          parent: entry.parent,
+          position: 0,
+          source: entry.source,
+          version: entry.version,
+        })),
+    ];
     // Each family's kinds that several positions of its model name, with those positions.
     const sharedOf = (entry: Installed) =>
-      [...entry.symbols].flatMap(([kind, numbers]) => {
-        const distinct = [...new Set(numbers)].toSorted((left, right) => left - right);
+      [...entry.symbols].flatMap(([kind, placed]) => {
+        const distinct = [...new Set(placed.map(({ position }) => position.number))].toSorted(
+          (left, right) => left - right,
+        );
 
         return distinct.length > 1 ? [{ kind, numbers: distinct }] : [];
       });
     // The models, read once per family in (version, parent) code order: a family's automaton is its
-    // model's whenever an earlier family's has the same positions, `Follow` and `Last`. A model's
-    // versions share its automaton, so each is signed once.
-    const signatures = new Map<Automaton, string>();
-    const signed = (automaton: Automaton): string => {
-      const known = signatures.get(automaton) ?? signatureOf(automaton);
-      signatures.set(automaton, known);
-
-      return known;
-    };
-    const contentModels = modelsOf(input, (held) =>
-      Option.some(
-        Option.match(Option.fromNullishOr(byFamily.get(held)), {
-          onNone: () => ({ signature: signed(emptyLanguage), value: emptyLanguage }),
-          onSome: (entry) => ({ signature: signed(entry.automaton), value: entry.automaton }),
+    // model's whenever an earlier family's has the same positions, `Follow` and `Last`.
+    const contentModels = modelsOf(
+      familiesOf(input).map((family) =>
+        Option.match(installedAt(family), {
+          onNone: () => ({ family, signature: emptySignature, value: emptyLanguage }),
+          onSome: (entry) => ({ family, signature: entry.signature, value: entry.automaton }),
         }),
       ),
     );
-    const sharedModels = modelsOf(input, (held) =>
-      Option.flatMap(Option.fromNullishOr(byFamily.get(held)), (entry) => {
-        const shared = sharedOf(entry);
+    const sharedModels = modelsOf(
+      familiesOf(input).flatMap((family) =>
+        Option.toArray(installedAt(family)).flatMap((entry) => {
+          const shared = sharedOf(entry);
 
-        return shared.length === 0
-          ? Option.none()
-          : Option.some({
-              signature: [
-                entry.parent,
-                String(entry.automaton.next.length),
-                ...shared
-                  .flatMap(({ kind, numbers }) => numbers.map((number) => `${kind}:${number}`))
-                  .toSorted(),
-              ].join(" "),
-              value: { positions: entry.automaton.next.length, shared },
-            });
-      }),
+          return shared.length === 0
+            ? []
+            : [
+                {
+                  family,
+                  signature: [
+                    entry.parent,
+                    String(entry.automaton.next.length),
+                    ...shared
+                      .flatMap(({ kind, numbers }) => numbers.map((number) => `${kind}:${number}`))
+                      .toSorted(),
+                  ].join(" "),
+                  value: { positions: entry.automaton.next.length, shared },
+                },
+              ];
+        }),
+      ),
+    );
+    const sharedModelAt = new Map(
+      sharedModels.families.map(({ model, parent: held, version: in_ }) => [
+        `${in_} ${held}`,
+        model,
+      ]),
     );
     const model = idField("model", yield* roster("ContentModel", contentModels.handles));
     const sharedModel = idField(
@@ -1133,82 +1260,73 @@ export const contentOf = (input: {
     const sharedSizes = new Map(
       sharedModels.models.map(({ handle, value }) => [handle, value.positions]),
     );
+    // A family's positions are 0, its start, then its model's own: the dependent sum Σ (P + 1).
+    const position = dependentField(
+      "position",
+      positions,
+      (prefix) =>
+        automatonAt({
+          parent: prefixHandle(prefix, "parent"),
+          version: prefixHandle(prefix, "version"),
+        }).next.length,
+    );
     const modelPosition = <const Name extends string>(name: Name) =>
-      dependentField(name, positions, (prefix) => modelSizes.get(prefix["model"] ?? "") ?? 0);
-    const admitted = installed.flatMap(({ data, parent: held, symbols, version: in_ }) => [
-      ...[...symbols].map(([child, numbers]) => {
-        const [only, ...rest] = new Set(numbers);
-
-        return {
-          child,
-          parent: held,
-          position: only !== undefined && rest.length === 0 ? only : 0,
-          version: in_,
-        };
-      }),
-      // Character data a model gives a position, as spec reading 40 gives SSML's text, is admitted
-      // there; the rest carries its predecessor's state.
-      ...data
-        .filter((child) => !symbols.has(child))
-        .map((child) => ({ child, parent: held, position: 0, version: in_ })),
-    ]);
+      dependentField(name, positions, (prefix) =>
+        countOf(modelSizes, prefixHandle(prefix, "model"), "ModelPositions"),
+      );
+    const admitted = installed.flatMap(admittedOf);
     // A bound of 2…n the automaton relaxes is the particle's; a cap is its reading's, at most one
     // child where the model's enclosing group repeats the particle.
-    const countedRows = installed.flatMap(({ automaton, caps, parent: held, version: in_ }) => [
-      ...automaton.positions.flatMap(({ number, occurs }) => {
-        const max = Option.getOrElse(occurs.max, () => Number.POSITIVE_INFINITY);
+    const countedRows = installed.flatMap(
+      ({ caps, parent: held, positions: placed, version: in_ }) => [
+        ...placed.flatMap(({ position: { number, occurs }, source }) => {
+          const max = maxOccursOf(occurs);
 
-        return occurs.min >= 2 || (max >= 2 && Number.isFinite(max))
-          ? [{ max, min: occurs.min, parent: held, position: String(number), version: in_ }]
-          : [];
-      }),
-      ...caps.map(({ position: at }) => ({
-        max: 1,
-        min: 0,
-        parent: held,
-        position: String(at),
-        version: in_,
-      })),
-    ]);
-    const capSources = new Map(
-      installed.flatMap(({ caps, parent: held, version: in_ }) =>
-        caps.map(
-          ({ position: at, source }) =>
-            [`${in_} ${held} ${String(at)}`, { _tag: "spec", cite: source } as const] as const,
-        ),
-      ),
+          return occurs.min >= 2 || (max >= 2 && Number.isFinite(max))
+            ? [
+                {
+                  row: {
+                    max,
+                    min: occurs.min,
+                    parent: held,
+                    position: String(number),
+                    version: in_,
+                  },
+                  source,
+                },
+              ]
+            : [];
+        }),
+        ...caps.map(({ position: at, source }) => ({
+          row: { max: 1, min: 0, parent: held, position: String(at), version: in_ },
+          source: { _tag: "spec", cite: source } as const,
+        })),
+      ],
     );
     const sourceOf = (key: {
       readonly parent: string;
       readonly position: string;
       readonly version: SchemaVersion;
     }): Option.Option<Source> =>
-      Option.fromNullishOr(
-        byFamily.get(`${key.version} ${key.parent}`)?.sources[Number(key.position)],
-      );
-    // Every row a relation states is at a position of its family's model, so a row with none is a
-    // defect here.
-    const sourceAt = (key: {
-      readonly parent: string;
-      readonly position: string;
-      readonly version: SchemaVersion;
-    }): Source =>
-      Option.getOrThrowWith(
-        sourceOf(key),
-        () =>
-          new Error(
-            `The content grammar states position ${key.position} of ${key.parent} in ${key.version}, which its model has not.`,
-          ),
-      );
+      Option.flatMap(installedAt(key), (entry) => {
+        const number = Number(key.position);
+
+        return number === 0
+          ? Option.some(entry.source)
+          : Arr.findFirst(entry.positions, ({ position: held }) => held.number === number).pipe(
+              Option.map(({ source }) => source),
+            );
+      });
     const symbol = yield* closed({
       key: [
         sharedModel,
         idField("kind", input.kinds),
-        dependentField(
-          "position",
-          positions,
-          (prefix) => sharedSizes.get(prefix["model"] ?? "") ?? 0,
-        ),
+        dependentField("position", positions, (prefix) => {
+          const shared = prefixHandle(prefix, "model");
+
+          // `none` has no block: no kind of its families names several positions.
+          return shared === noSharedModel ? 0 : countOf(sharedSizes, shared, "SharedPositions");
+        }),
       ],
       name: "Symbol",
       payload: [],
@@ -1224,7 +1342,10 @@ export const contentOf = (input: {
       payload: [sharedModel],
       rows: familiesOf(input).map((held) => ({
         ...held,
-        model: sharedModels.of.get(`${held.version} ${held.parent}`) ?? noSharedModel,
+        model: Option.match(
+          Option.fromNullishOr(sharedModelAt.get(`${held.version} ${held.parent}`)),
+          { onNone: () => noSharedModel, onSome: (shared) => shared },
+        ),
       })),
     });
     // `Symbol`'s positions by shared model and kind, for the host's step.
@@ -1237,29 +1358,23 @@ export const contentOf = (input: {
           key: [version, parent],
           name: "ContentModelOf",
           payload: [model],
-          rows: familiesOf(input).map((held) => ({
-            ...held,
-            model: contentModels.of.get(`${held.version} ${held.parent}`) ?? "",
-          })),
+          rows: contentModels.families,
         }),
-        counted: sourced(
-          yield* closed({
-            key: [version, parent, position],
-            name: "Counted",
-            payload: [
-              valueField(
-                "min",
-                countedRows.map(({ min }) => min),
-              ),
-              valueField(
-                "max",
-                countedRows.map(({ max }) => max),
-              ),
-            ],
-            rows: countedRows,
-          }),
-          (row) => capSources.get(`${row.version} ${row.parent} ${row.position}`) ?? sourceAt(row),
-        ),
+        counted: yield* sourced({
+          key: [version, parent, position],
+          name: "Counted",
+          payload: [
+            valueField(
+              "min",
+              countedRows.map(({ row }) => row.min),
+            ),
+            valueField(
+              "max",
+              countedRows.map(({ row }) => row.max),
+            ),
+          ],
+          rows: countedRows,
+        }),
         follow: yield* closed({
           key: [model, modelPosition("from"), modelPosition("to")],
           name: "Follow",
@@ -1298,29 +1413,21 @@ export const contentOf = (input: {
           Option.match(sharedModelOf.lookup({ parent: held, version: in_ }), {
             onNone: () => [],
             onSome: ({ model: shared }) =>
-              (sharedAt.get(`${shared} ${kind}`) ?? []).map((row) => Number(row.position)),
+              rowsAt(sharedAt, `${shared} ${kind}`).map((row) => Number(row.position)),
           }),
         sourceOf,
-        strictlyHeld: sourced(
-          yield* closed({
-            key: [version, parent, idField("child", input.kinds)],
-            name: "StrictlyHeld",
-            payload: [],
-            rows: installed.flatMap(({ parent: held, strictly, version: in_ }) =>
-              strictly.map((child) => ({ child, parent: held, version: in_ })),
+        strictlyHeld: yield* sourced({
+          key: [version, parent, idField("child", input.kinds)],
+          name: "StrictlyHeld",
+          payload: [],
+          rows: installed.flatMap((entry) =>
+            admittedOf(entry).flatMap(({ child, parent: held, source, version: in_ }) =>
+              entry.strictly.has(child)
+                ? [{ row: { child, parent: held, version: in_ }, source }]
+                : [],
             ),
-          }),
-          ({ child, parent: held, version: in_ }) =>
-            sourceAt({
-              parent: held,
-              position: String(
-                admitted.find(
-                  (row) => row.version === in_ && row.parent === held && row.child === child,
-                )?.position ?? 0,
-              ),
-              version: in_,
-            }),
-        ),
+          ),
+        }),
         symbol,
       },
     };

@@ -18,6 +18,7 @@ import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
 import { ResourceType } from "#pantry/grammar/install.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
+import type { ListedTarget } from "#pantry/import/context.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -52,8 +53,9 @@ import type {
 } from "#pantry/qti/metadata.ts";
 
 /**
- * The ids a document's rows are written under: its package's, and each of its tree's nodes', drawn
- * by the number `flatten` gives the node, in document order from the document node's 0.
+ * The ids a document's rows are written under: its package's, each of its tree's nodes', drawn by
+ * the number `flatten` gives the node, in document order from the document node's 0, and the
+ * document a resource names at each path of its package.
  *
  * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
  * the tree's rows name each node by one id.
@@ -66,6 +68,15 @@ export interface MetadataIds {
   readonly documentType: (typeof ResourceType.handles)[number];
   readonly idOf: (index: number) => NodeId;
   readonly package: Uuid;
+  /**
+   * The document a resource names at a path of the package, none where no resource names one
+   * there, the manifest's included: a resource names a document only where its `href` names one
+   * ({@link LomResource}'s `named`).
+   *
+   * @param path - A path in the package, as `ResourceHref` compares it.
+   * @returns The document's node.
+   */
+  readonly targetAt: (path: string) => Option.Option<Pick<ListedTarget, "node">>;
 }
 
 /**
@@ -118,6 +129,13 @@ const spelledTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
  * The resource types whose LOM record names its document, as a set.
  */
 const naming: ReadonlySet<string> = new Set(objectTypes);
+
+/**
+ * The `named` of a resource, a record and a general category that name no document: `none`,
+ * `ResourceType`'s null object (`#pantry/grammar/install.ts`), which no lexical form spells and no
+ * `TypedHref` carries.
+ */
+export const namesNoDocument = "none" satisfies ResourceTypeHandle;
 
 /**
  * The kinds of an assessment object's root, as a set.
@@ -307,24 +325,40 @@ const treeOf = (doc: XdmDocument<Composed>, ids: MetadataIds): Tree => {
 
 /**
  * Build a document's {@link LomResource} rows: one per `cp:resource`, `named` the handle its `type`
- * spells where it has an `href` and that handle is an item's or a test's, its `TypedHref`'s; else
- * `none`, a resource that names no assessment object, a type spelling nothing among them.
+ * spells where that handle is an item's or a test's, its `TypedHref`'s, and its `href` names a
+ * document a resource names (`targetAt` at the path its `ResourceHref` compares it by, readings 93
+ * and 102); else `none`, a resource that names no assessment object, a type spelling nothing, a
+ * resource with no `href` and one whose `href` names no document among them. An item's or a test's
+ * `href` that names no document is refused under "Document entry", and its records name nothing
+ * for a law to read.
  *
  * @param tree - The document's tree.
+ * @param paths - Each resource's href's path, by the resource's node (`resourcePathsOf`).
+ * @param targetAt - The document a resource names at each path.
  * @returns The rows, by their node's id.
  */
-const resourceRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomResource>> =>
+const resourceRowsOf = (
+  tree: Tree,
+  paths: ReadonlyMap<NodeId, string>,
+  targetAt: MetadataIds["targetAt"],
+): ReadonlyMap<string, Addition<typeof LomResource>> =>
   new Map(
     tree.nodes.flatMap((node) => {
       if (node.kind !== "cp:resource") {
         return [];
       }
 
-      const object = Option.filter(typeOf(tree.valueOf(node, "type") ?? ""), (type) =>
-        naming.has(type),
+      // The type of the document it names: its `type`'s handle, an item's or a test's, where a
+      // resource names a document at its `href`'s path.
+      const object = Option.zipWith(
+        Option.fromNullishOr(tree.valueOf(node, "type")).pipe(
+          Option.flatMap(typeOf),
+          Option.filter((type) => naming.has(type)),
+        ),
+        Option.fromNullishOr(paths.get(node.id)).pipe(Option.flatMap(targetAt)),
+        (type) => type,
       );
-      const named: ResourceTypeHandle =
-        tree.valueOf(node, "href") === undefined ? "none" : Option.getOrElse(object, () => "none");
+      const named = Option.match(object, { onNone: () => namesNoDocument, onSome: (type) => type });
 
       return [[node.id, { named, node: node.id }] as const];
     }),
@@ -775,7 +809,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
     return { ...noRecordRows, ...everyDocument };
   }
 
-  const resources = resourceRowsOf(tree);
+  const resources = resourceRowsOf(tree, resourcePathsOf(flatten(doc, ids.idOf)), ids.targetAt);
   const records = recordRowsOf(tree, resources);
   const generals = generalRowsOf(tree, records);
   const titles = titleRowsOf(tree, records);
@@ -901,10 +935,11 @@ const titleRowOf = (
  * Each witness is the first, in document order, that names the document (an entry whose token is
  * its identifier; a title string in its language whose text is its title), or the first of its
  * kind when none does, so the law refuses the record. A title with no string has no string to name,
- * so its row names the title itself, which no title string is. A resource whose `href` names no
- * document gets the manifest as its document, which the record's containments refuse. An href's
- * path is the one its `ResourceHref` row compares it by, resolved as the package overlays resolve
- * it (`resourcePathsOf`, readings 102 and 103).
+ * so its row names the title itself, which no title string is. A record names a document only where
+ * its resource's `href` names one ({@link LomResource}'s `named`), so a record whose `href` names
+ * none has no row here, and "Document entry" refuses the href. An href's path is the one its
+ * `ResourceHref` row compares it by, resolved as the package overlays resolve it
+ * (`resourcePathsOf`, readings 102 and 103).
  *
  * @param manifest - The manifest's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -929,13 +964,12 @@ export const objectRowsOfPackage = (
 
   for (const record of metadata.LomRecord.values()) {
     const path = paths.get(record.ownerParent);
-    if (record.named === "none" || path === undefined) {
+    const target = path === undefined ? undefined : documents.get(path);
+    if (record.named === namesNoDocument || path === undefined || target === undefined) {
       continue;
     }
 
-    const target = documents.get(path);
-    const object = target?.object;
-    const document = target?.document ?? record.document;
+    const { document, object } = target;
     named.LomObject.set(record.node, {
       document,
       package: ids.package,

@@ -553,15 +553,24 @@ describe("closed relations against a naive tuple-set model", () => {
                   // Each row's source is its own stated index, so a key that answers another
                   // row's source names the wrong row.
                   const indexOf = new Map(model.rows.map((row, index) => [row, index]));
-                  const withSources = sourced(relation, (row) => ({
-                    _tag: "spec",
-                    cite: String(indexOf.get(row) ?? -1),
-                  }));
+                  const withSources = Result.getOrThrow(
+                    sourced({
+                      key: model.key,
+                      name: "Toy",
+                      payload: model.payload,
+                      rows: model.rows.map((row, index) => ({
+                        row,
+                        source: { _tag: "spec", cite: String(index) } as const,
+                      })),
+                    }),
+                  );
+                  assert.deepStrictEqual(withSources.rows, relation.rows);
                   for (const probe of probes) {
                     const expected = Option.flatMap(model.keyOf(probe), (point) =>
                       Option.fromNullishOr(model.seen.get(point)),
                     );
                     assert.deepStrictEqual(relation.lookup(model.keyRowOf(probe)), expected);
+                    assert.deepStrictEqual(withSources.lookup(model.keyRowOf(probe)), expected);
                     assert.deepStrictEqual(
                       withSources.sourceOf(model.keyRowOf(probe)),
                       expected.pipe(

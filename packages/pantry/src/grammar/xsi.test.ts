@@ -75,9 +75,7 @@ const derivations: readonly TypeDerivation[] = [
 /**
  * The toy kinds' namespace, the toy types' own.
  */
-const toyNamespaces: ReadonlyMap<string, string> = new Map(
-  ["k0", "k1", "k2"].map((kind) => [kind, "urn:toy"] as const),
-);
+const toyNamespace = "urn:toy";
 
 /**
  * The namespaces of four vocabularies, as `#pantry/vocab/namespaces.ts` writes them: the curriculum
@@ -117,20 +115,21 @@ describe("XsiType", () => {
               // its declared type or a type derived from it, and nothing for an anonymous type.
               const kinds = yield* Effect.fromResult(roster("NodeKind", ["k0", "k1", "k2"]));
               const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
-              const models: readonly ContentModel[] = declared.map((at, index) => ({
-                content: { _tag: "empty" },
-                kind: `k${String(index)}`,
-                sources: toySources(schemaVersions),
-                type: Option.fromNullishOr(types[at]),
-                versions: schemaVersions,
-              }));
+              const models: readonly (ContentModel & { readonly namespace: string })[] =
+                declared.map((at, index) => ({
+                  content: { _tag: "empty" },
+                  kind: `k${String(index)}`,
+                  namespace: toyNamespace,
+                  sources: toySources(schemaVersions),
+                  type: Option.fromNullishOr(types[at]),
+                  versions: schemaVersions,
+                }));
               c.note(declared.includes(-1) ? "anonymous" : "typed");
 
               const result = xsiTypesOf({
                 derivations,
                 kinds,
                 models,
-                namespaceOf: toyNamespaces,
                 versions,
               });
               assert.isTrue(Result.isSuccess(result));
@@ -180,12 +179,12 @@ describe("XsiType", () => {
             {
               content: { _tag: "empty" },
               kind: "csmd:GUID",
+              namespace: setNamespaces.csmd,
               sources: toySources(schemaVersions),
               type: Option.some(declared),
               versions: schemaVersions,
             },
           ],
-          namespaceOf: new Map([["csmd:GUID", setNamespaces.csmd]]),
           versions,
         }),
       ),
@@ -215,12 +214,12 @@ describe("XsiType", () => {
             {
               content: { _tag: "empty" },
               kind: "k0",
+              namespace: toyNamespace,
               sources: toySources(schemaVersions),
               type: Option.some({ local: "Lost", namespace: "urn:toy" }),
               versions: schemaVersions,
             },
           ],
-          namespaceOf: toyNamespaces,
           versions,
         }),
       ),

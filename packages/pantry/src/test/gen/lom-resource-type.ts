@@ -28,6 +28,7 @@ import type { Swarm } from "@grizzle/testing/swarm";
 import { collapse } from "#pantry/grammar/domains.ts";
 import { rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataRows } from "#pantry/import/overlays/metadata.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { rootInsertOf } from "#pantry/import/write.ts";
 import type { NodeMember, NodeRoot } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -562,7 +563,8 @@ export interface DocumentRows {
 
 /**
  * Build a manifest's rows as the importer will: the builder's overlay rows and the tree's insert,
- * under one id per node, the manifest's type `none`.
+ * under one id per node, the manifest's type `none`, in a package where a resource names no
+ * document, which no learning resource type's rows read.
  *
  * @param tree - The manifest's tree.
  * @param idOf - Its ids.
@@ -576,8 +578,11 @@ export const documentRowsOf = (
     documentType: "none",
     idOf,
     package: "00000000-0000-4000-8000-00000000c0de" satisfies Uuid,
+    targetAt: () => Option.none(),
   });
-  const nodes = writtenNodes(rootInsertOf(tree, { documentType: "none", idOf }));
+  const nodes = writtenNodes(
+    rootInsertOf(tree, { context: ownContext(idOf(0)), documentType: "none", idOf }),
+  );
   const folded = new Map<string, string>();
   for (const node of nodes) {
     folded.set(node.parent, `${folded.get(node.parent) ?? ""}${node.stringPiece}`);

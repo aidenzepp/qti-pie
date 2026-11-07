@@ -28,6 +28,7 @@ import {
   elementsOf,
   firstXs,
   isXs,
+  listAttributeOf,
   refuse,
   requireComponent,
   resolve,
@@ -223,12 +224,31 @@ export const builtinBases: ReadonlyMap<string, Option.Option<string>> = new Map(
 ]);
 
 /**
- * The lexical grammar a primitive's own definition gives as patterns, where the specification
- * states it as one: `anyURI`'s (spec reading 71). Every other primitive's lexical space is its
- * datatype's, which the domain's primitive names.
+ * The lexical grammar each primitive's own definition gives as patterns: `anyURI`'s, where the
+ * specification states it as one (spec reading 71), and no pattern set for every other primitive,
+ * whose lexical space is its datatype's, which the domain's primitive names.
  */
-const primitivePatterns: Readonly<Partial<Record<Primitive, readonly (readonly string[])[]>>> = {
+const primitivePatterns: Readonly<Record<Primitive, readonly (readonly string[])[]>> = {
+  NOTATION: [],
+  QName: [],
+  anySimpleType: [],
   anyURI: [[anyUriPattern]],
+  base64Binary: [],
+  boolean: [],
+  date: [],
+  dateTime: [],
+  decimal: [],
+  double: [],
+  duration: [],
+  float: [],
+  gDay: [],
+  gMonth: [],
+  gMonthDay: [],
+  gYear: [],
+  gYearMonth: [],
+  hexBinary: [],
+  string: [],
+  time: [],
 };
 
 /**
@@ -289,11 +309,11 @@ const lengthRuleSections: Readonly<Record<LengthRule, string>> = {
 /**
  * Spell a facet as a refusal names it: its name and its value as written, quoted.
  *
- * @param held - The facet, none for no facet.
- * @returns The spelling, empty for none.
+ * @param held - The facet.
+ * @returns The spelling.
  */
-const spellFacet = (held: { readonly facet: string; readonly value: string } | undefined): string =>
-  held === undefined ? "" : `${held.facet} ${JSON.stringify(held.value)}`;
+const spellFacet = (held: { readonly facet: string; readonly value: string }): string =>
+  `${held.facet} ${JSON.stringify(held.value)}`;
 
 /**
  * The XSD states a simple type whose length facets XML Schema 1.0 Part 2 makes an error, so the
@@ -317,23 +337,24 @@ export class InvalidLengthFacets extends Schema.TaggedError<InvalidLengthFacets>
    * The type, the facets and the rule they break, and what to change.
    */
   override get message(): string {
-    const [first, second] = this.facets;
+    // The facets in the order the rule names them: one for a value's rule, two for the others.
+    const spelled = this.facets.map(spellFacet);
     const stated = ((): string => {
       switch (this.rule) {
         case "Single Facet Value": {
-          return `${spellFacet(first)} and ${spellFacet(second)} in one restriction step`;
+          return `${spelled.join(" and ")} in one restriction step`;
         }
         case "value is a nonNegativeInteger": {
-          return `${spellFacet(first)}, which is no nonNegativeInteger`;
+          return `${spelled.join(", ")}, which is no nonNegativeInteger`;
         }
         case "length valid restriction":
         case "maxLength valid restriction":
         case "minLength valid restriction": {
-          return `${spellFacet(first)} where its base type states ${spellFacet(second)}`;
+          return spelled.join(" where its base type states ");
         }
         case "length and minLength or maxLength":
         case "minLength <= maxLength": {
-          return `${spellFacet(first)} beside ${spellFacet(second)}`;
+          return spelled.join(" beside ");
         }
         default: {
           return this.rule satisfies never;
@@ -540,7 +561,7 @@ const primitiveDomain = (primitive: Primitive): Domain => ({
   _tag: "atomic",
   builtin: primitive,
   facets: [facet("whiteSpace", primitiveWhiteSpace(primitive))],
-  patterns: primitivePatterns[primitive] ?? [],
+  patterns: primitivePatterns[primitive],
   primitive,
 });
 
@@ -728,10 +749,7 @@ export const domainOf = (
     if (isXs(step, "union")) {
       const members: Domain[] = [];
 
-      for (const lexical of Option.match(attributeOf(step, "memberTypes"), {
-        onNone: () => [],
-        onSome: (value) => value.split(/\s+/u).filter((member) => member !== ""),
-      })) {
+      for (const lexical of listAttributeOf(step, "memberTypes")) {
         members.push(yield* domainOf(schema, { _tag: "Named", lexical }, seen));
       }
 

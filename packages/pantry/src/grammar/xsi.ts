@@ -29,16 +29,16 @@
  * domain (clause 3.1.3, `TextDomain`). A complex type is spec reading 50's unchecked limit.
  */
 import { Option, Result, Schema } from "effect";
-import { closed, idField, roster, sourced } from "#pantry/grammar/closed.ts";
-import type { ClosedRelationError, IdField, Roster, Sourced } from "#pantry/grammar/closed.ts";
-import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { idField, roster, sourced, sourceIn } from "#pantry/grammar/closed.ts";
 import type {
-  ContentModel,
-  ExpandedName,
-  Source,
-  Sources,
-  TypeDerivation,
-} from "#pantry/vocab/inventory/types.ts";
+  ClosedRelationError,
+  IdField,
+  Roster,
+  Sourced,
+  SourcedRow,
+} from "#pantry/grammar/closed.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import type { ContentModel, ExpandedName, TypeDerivation } from "#pantry/vocab/inventory/types.ts";
 import { vocabularyNamespaces, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { typeAvailable } from "#pantry/vocab/open.ts";
 
@@ -129,6 +129,14 @@ export type XsiType = Sourced<
 >;
 
 /**
+ * One `XsiType` row, with the source of the model it reads.
+ */
+type XsiTypeRow = SourcedRow<
+  readonly [IdField<"version", SchemaVersion>, IdField<"kind", string>, IdField<"type", string>],
+  readonly []
+>;
+
+/**
  * The `xsi:type` law's relations of a composition.
  */
 export interface XsiTypes {
@@ -186,15 +194,6 @@ export class UnderivedType extends Schema.TaggedError<UnderivedType>()("Underive
  * The ways the `xsi:type` relations have no constant.
  */
 export type XsiTypeError = ClosedRelationError | UnderivedType;
-
-/**
- * Read a version's source of a row whose sources are aligned with its versions.
- *
- * @param sources - The sources.
- * @param at - The version's index.
- * @returns The version's source.
- */
-const sourceIn = (sources: Sources, at: number): Source => sources[at] ?? sources[0];
 
 /**
  * The derivations read for lookup: each (version, type)'s derived names, the `TypeName` roster's
@@ -258,9 +257,8 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
  * @param input - The rosters, the models and the derivations.
  * @param input.derivations - The named types validly derived from each type, per version.
  * @param input.kinds - The `NodeKind` roster.
- * @param input.models - The content models, each with its declared type.
- * @param input.namespaceOf - The namespace of each modeled kind, empty for a kind of no
- *   vocabulary.
+ * @param input.models - The content models, each with its declared type and its kind's namespace,
+ *   empty for a kind of no vocabulary.
  * @param input.versions - The `SchemaVersion` roster.
  * @returns The relations, or the first model whose type no derivation lists, or the first row no
  *   constant can hold.
@@ -268,28 +266,22 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
 export const xsiTypesOf = (input: {
   readonly derivations: readonly TypeDerivation[];
   readonly kinds: Roster<string>;
-  readonly models: readonly ContentModel[];
-  readonly namespaceOf: ReadonlyMap<string, string>;
+  readonly models: readonly (ContentModel & { readonly namespace: string })[];
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<XsiTypes, XsiTypeError> =>
   Result.gen(function* generateXsiTypes() {
     const { derivedFrom, names, namesIn } = derivationIndexOf(input.derivations);
-    const rows: {
-      readonly kind: string;
-      readonly source: Source;
-      readonly type: string;
-      readonly version: SchemaVersion;
-    }[] = [];
+    const rows: XsiTypeRow[] = [];
     const declared = new Map<string, string>();
-    for (const { kind, sources, type, versions } of input.models) {
+    for (const { kind, namespace, sources, type, versions } of input.models) {
       for (const [at, version] of versions.entries()) {
-        const source = sourceIn(sources, at);
+        const source = sourceIn(sources, at, `The content model of ${kind}`);
         declared.set(
           `${version} ${kind}`,
           Option.match(type, { onNone: () => noType, onSome: typeHandle }),
         );
         if (Option.isNone(type)) {
-          rows.push({ kind, source, type: noType, version });
+          rows.push({ row: { kind, type: noType, version }, source });
         }
 
         for (const named of Option.toArray(type)) {
@@ -300,43 +292,33 @@ export const xsiTypesOf = (input: {
             );
           }
 
-          const namespace = input.namespaceOf.get(kind) ?? "";
           rows.push(
             ...derived
               .filter(
                 (held) => held.namespace === namespace || typeAvailable(namespace, held.namespace),
               )
-              .map((held) => ({ kind, source, type: typeHandle(held), version })),
+              .map((held) => ({ row: { kind, type: typeHandle(held), version }, source })),
           );
         }
       }
     }
 
     const typeName = yield* roster("TypeName", names);
-    const sourceOf = new Map(
-      rows.map(({ kind, source, type, version }) => [`${version} ${kind} ${type}`, source]),
-    );
-    const relation = yield* closed({
-      key: [
-        idField("version", input.versions),
-        idField("kind", input.kinds),
-        idField("type", typeName),
-      ],
-      name: "XsiType",
-      payload: [],
-      rows: rows.map(({ kind, type, version }) => ({ kind, type, version })),
-    });
 
     return {
       declaredType: (version, kind) => declared.get(`${version} ${kind}`) ?? noType,
-      definedIn: (version, handle) => namesIn.get(version)?.has(handle) ?? false,
+      definedIn: (version, handle) =>
+        Option.exists(Option.fromNullishOr(namesIn.get(version)), (held) => held.has(handle)),
       typeName,
-      // Every row is stated with its model's source, so a row without one is a defect here.
-      xsiType: sourced(relation, ({ kind, type, version }) =>
-        Option.getOrThrowWith(
-          Option.fromNullishOr(sourceOf.get(`${version} ${kind} ${type}`)),
-          () => new Error(`XsiType states ${type} on ${kind} in ${version} with no source.`),
-        ),
-      ),
+      xsiType: yield* sourced({
+        key: [
+          idField("version", input.versions),
+          idField("kind", input.kinds),
+          idField("type", typeName),
+        ],
+        name: "XsiType",
+        payload: [],
+        rows,
+      }),
     };
   });

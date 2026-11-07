@@ -37,21 +37,23 @@ export const namespacesVersionOf = (xmlVersion: string): NamespacesVersion =>
   xmlVersion === "1.1" ? "1.1" : "1.0";
 
 /**
- * The namespace bindings in scope at an element, from prefix to namespace name, the empty prefix
- * standing for the default namespace and the empty name for none. A prefix with no binding is
- * absent.
+ * The namespace bindings in scope at an element: the default namespace, which every scope has, the
+ * empty name for none, and each prefix bound, from prefix to namespace name. A prefix with no
+ * binding is absent.
  */
-export type Scope = Readonly<Record<string, string>>;
+export interface Scope {
+  readonly defaultNamespace: string;
+  readonly prefixes: Readonly<Record<string, string>>;
+}
 
 /**
- * The bindings in scope above the root element: the `xml` and `xmlns` prefixes, bound by
- * definition, and no default namespace.
+ * The bindings in scope above the root element: no default namespace, and the `xml` and `xmlns`
+ * prefixes, bound by definition.
  */
-export const rootScope = {
-  "": "",
-  xml: XML_NAMESPACE,
-  xmlns: XMLNS_NAMESPACE,
-} as const satisfies Scope;
+export const rootScope: Scope = {
+  defaultNamespace: "",
+  prefixes: { xml: XML_NAMESPACE, xmlns: XMLNS_NAMESPACE },
+};
 
 /**
  * Check a namespace declaration's binding against Namespaces in XML's constraint Reserved Prefixes
@@ -122,19 +124,28 @@ const declaredPrefix = (qname: string): Option.Option<string> => {
 };
 
 /**
- * Apply one declaration to a scope: bind its prefix to its value, or undeclare a prefix whose
- * value is empty, which only an XML 1.1 document may (the default namespace's empty value names
- * none and stays a binding).
+ * Apply one declaration to a scope: set the default namespace to its value (an empty value names
+ * none), bind its prefix to its value, or undeclare a prefix whose value is empty, which only an
+ * XML 1.1 document may.
  *
  * @param scope - The scope so far.
- * @param prefix - The prefix declared.
+ * @param prefix - The prefix declared, empty for the default namespace.
  * @param name - The declaration's normalized value.
  * @returns The scope with the declaration applied.
  */
-const bound = (scope: Scope, prefix: string, name: string): Scope =>
-  prefix !== "" && name === ""
-    ? Object.fromEntries(Object.entries(scope).filter(([held]) => held !== prefix))
-    : { ...scope, [prefix]: name };
+const bound = (scope: Scope, prefix: string, name: string): Scope => {
+  if (prefix === "") {
+    return { ...scope, defaultNamespace: name };
+  }
+
+  return {
+    ...scope,
+    prefixes:
+      name === ""
+        ? Object.fromEntries(Object.entries(scope.prefixes).filter(([held]) => held !== prefix))
+        : { ...scope.prefixes, [prefix]: name },
+  };
+};
 
 /**
  * The scope an element's children see: its parent's, with each namespace declaration among the
@@ -183,7 +194,9 @@ const declared = (
  * @returns The namespace name; `None` when the prefix is unbound.
  */
 const namespaceOf = (name: QName, scope: Scope, unprefixed: string): Option.Option<string> =>
-  name.prefix === "" ? Option.some(unprefixed) : Option.fromUndefinedOr(scope[name.prefix]);
+  name.prefix === ""
+    ? Option.some(unprefixed)
+    : Option.fromUndefinedOr(scope.prefixes[name.prefix]);
 
 /**
  * Resolve an element's names and its attributes' names against the scope its parent gives it,
@@ -230,7 +243,7 @@ export const resolved = (
       );
     }
 
-    const namespace = namespaceOf(name.value, inner, inner[""] ?? "");
+    const namespace = namespaceOf(name.value, inner, inner.defaultNamespace);
     if (Option.isNone(namespace)) {
       return Result.fail(
         `the prefix of element ${element.qname} is not declared (Namespaces in XML section 5)`,

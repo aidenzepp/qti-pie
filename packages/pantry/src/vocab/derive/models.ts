@@ -44,7 +44,7 @@
  *   both, its sources aligned with the versions.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, Console, Effect, Layer, Match, Option, Order, Result } from "effect";
+import { Array as Arr, Console, Effect, Layer, Match, Option, Order, pipe, Result } from "effect";
 import { Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
@@ -53,8 +53,11 @@ import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import {
   attributeOf,
   contentParticles,
+  derivationOf,
+  elementNamespaceOf,
   elementsOf,
   firstXs,
+  groupedBy,
   indexSchemas,
   isAbstract,
   isCompositor,
@@ -67,6 +70,7 @@ import {
   requireAttribute,
   requireComponent,
   resolve,
+  wildcardOf,
 } from "#pantry/vocab/derive/derive.ts";
 import type { XsdReadingError, XsdSchema } from "#pantry/vocab/derive/derive.ts";
 import { decidedHandleOf, isDecided } from "#pantry/vocab/derive/naming.ts";
@@ -79,16 +83,15 @@ import type {
   ContentModel,
   ContentType,
   ExpandedName,
-  NamespaceConstraint,
   Occurs,
   Particle,
-  Processing,
   Source,
   Sources,
   TypeDerivation,
 } from "#pantry/vocab/inventory/types.ts";
 import {
   handlePrefixOf,
+  noNamespace,
   vocabularyNamespaces,
   xmlNamespace,
   xsNamespace,
@@ -189,11 +192,14 @@ const anyTypeContent: ContentType = {
 /**
  * The complex type a schema's type name stands for: its redefinition where one replaces it.
  *
+ * Public, and stable while the vocabularies are derived: the declarations deriver reads a governing
+ * type's definition with it.
+ *
  * @param view - The schema.
  * @param local - The type's local name in the schema's target namespace.
  * @returns The `xs:complexType` element, `None` for a name that is no complex type here.
  */
-const complexTypeIn = (view: SchemaView, local: string): Option.Option<Element> =>
+export const complexTypeIn = (view: SchemaView, local: string): Option.Option<Element> =>
   Option.fromNullishOr(
     view.schema.complexTypes.get(view.redefined.has(local) ? redefinitionKey(local) : local),
   );
@@ -243,19 +249,15 @@ const holds = (node: Element, target: Element): boolean =>
  *
  * @param view - The schema the declaration is in.
  * @param declaration - The `xs:element` declaration.
+ * @param namespace - The namespace of the element it declares ({@link elementNamespaceOf}).
  * @returns The name its type goes by in a naming decision.
  */
-const anonymousNameOf = (view: SchemaView, declaration: Element): string => {
-  const { schema } = view;
-  const form = Option.getOrElse(attributeOf(declaration, "form"), () =>
-    schema.qualified ? "qualified" : "unqualified",
-  );
-  const namespace = form === "qualified" ? schema.targetNamespace : "";
+const anonymousNameOf = (view: SchemaView, declaration: Element, namespace: string): string => {
   const decided = Option.exists(attributeOf(declaration, "name"), (local) =>
     isDecided(namespace, local),
   );
   const within = decided
-    ? Arr.findFirst([...schema.groups], ([, group]) => holds(group, declaration))
+    ? Arr.findFirst([...view.schema.groups], ([, group]) => holds(group, declaration))
     : Option.none();
 
   return Option.match(within, {
@@ -269,11 +271,14 @@ const anonymousNameOf = (view: SchemaView, declaration: Element): string => {
  *
  * @param view - The schema the declaration is in.
  * @param declaration - The `xs:element` declaration.
+ * @param namespace - The namespace of the element it declares ({@link elementNamespaceOf}), which
+ *   names an anonymous type in a naming decision.
  * @returns The type, or an {@link XsdReadingError} for a type name the schema does not declare.
  */
 export const declaredOf = (
   view: SchemaView,
   declaration: Element,
+  namespace: string,
 ): Result.Result<Declared, XsdReadingError> =>
   Result.gen(function* declaredOfBody() {
     const inPlace = firstXs(declaration, "complexType");
@@ -282,7 +287,7 @@ export const declaredOf = (
       return {
         _tag: "complex",
         definition: inPlace.value,
-        name: anonymousNameOf(view, declaration),
+        name: anonymousNameOf(view, declaration, namespace),
         named: Option.none(),
       } as const;
     }
@@ -331,7 +336,7 @@ export const declaredOf = (
       return yield* refuse(`the substitution group head ${head.value} is not declared`);
     }
 
-    return yield* declaredOf(view, headDeclaration.value);
+    return yield* declaredOf(view, headDeclaration.value, view.schema.targetNamespace);
   });
 
 /**
@@ -377,17 +382,15 @@ export const declarationsIn = (
       Result.gen(function* visitBody() {
         const name = isXs(node, "element") ? attributeOf(node, "name") : Option.none();
 
-        if (Option.isSome(name) && !(global && isAbstract(node))) {
-          const form = Option.getOrElse(attributeOf(node, "form"), () =>
-            schema.qualified ? "qualified" : "unqualified",
-          );
+        if (Option.isSome(name) && !(global && (yield* isAbstract(node)))) {
+          const namespace = yield* elementNamespaceOf(schema, node, global);
 
           found.push({
             declaration: node,
             global,
             local: name.value,
-            namespace: global || form === "qualified" ? schema.targetNamespace : "",
-            type: yield* declaredOf(view, node),
+            namespace,
+            type: yield* declaredOf(view, node, namespace),
           });
         }
 
@@ -443,7 +446,8 @@ export const handleOf = (
  * @param local - Its local name.
  * @param seen - The heads being read around it, so a circular group, which XML Schema forbids,
  *   ends.
- * @returns The kinds.
+ * @returns The kinds, or an {@link XsdReadingError} for a name the schema declares no top-level
+ *   element of.
  */
 const substitutesOf = (
   view: SchemaView,
@@ -452,20 +456,32 @@ const substitutesOf = (
 ): Result.Result<readonly string[], XsdReadingError> =>
   Result.gen(function* substitutesOfBody() {
     const { schema } = view;
-    const declaration = Option.fromNullishOr(schema.elements.get(local));
+    // `substitutions` holds every top-level element, its members none when it heads no group.
+    const declared = Option.all([
+      Option.fromNullishOr(schema.elements.get(local)),
+      Option.fromNullishOr(schema.substitutions.get(local)),
+    ]);
+
+    if (Option.isNone(declared)) {
+      return yield* refuse(
+        `a reference names {${schema.targetNamespace}}${local}, which its schema declares no top-level element of`,
+      );
+    }
+
+    const [declaration, members] = declared.value;
     const kinds: string[] = [];
 
-    if (Option.isSome(declaration) && !isAbstract(declaration.value)) {
+    if (!(yield* isAbstract(declaration))) {
       kinds.push(
         yield* handleOf(
           schema.targetNamespace,
           local,
-          typeNameOf(yield* declaredOf(view, declaration.value)),
+          typeNameOf(yield* declaredOf(view, declaration, schema.targetNamespace)),
         ),
       );
     }
 
-    for (const member of schema.substitutions.get(local) ?? []) {
+    for (const member of members) {
       if (!seen.has(member)) {
         kinds.push(...(yield* substitutesOf(view, member, new Set([...seen, local]))));
       }
@@ -494,13 +510,14 @@ const kindsOf = (
     let kinds: readonly string[];
 
     if (Option.isSome(named)) {
-      const form = Option.getOrElse(attributeOf(particle, "form"), () =>
-        view.schema.qualified ? "qualified" : "unqualified",
-      );
-      const namespace = form === "qualified" ? view.schema.targetNamespace : "";
+      const namespace = yield* elementNamespaceOf(view.schema, particle, false);
 
       kinds = [
-        yield* handleOf(namespace, named.value, typeNameOf(yield* declaredOf(view, particle))),
+        yield* handleOf(
+          namespace,
+          named.value,
+          typeNameOf(yield* declaredOf(view, particle, namespace)),
+        ),
       ];
     } else {
       const ref = yield* requireAttribute(particle, "ref");
@@ -521,57 +538,18 @@ const kindsOf = (
   });
 
 /**
- * The namespace constraints an `xs:any` may write, which the IR keeps as written.
- */
-const namespaceConstraints: readonly NamespaceConstraint[] = ["##any", "##local", "##other"];
-
-/**
- * The `processContents` values.
- */
-const processings: readonly Processing[] = ["lax", "skip", "strict"];
-
-/**
- * Read one value of a closed set an XSD attribute holds.
- *
- * @param node - The construct.
- * @param name - The attribute.
- * @param fallback - Its XSD default.
- * @param values - The values the reading covers.
- * @returns The value, or an {@link XsdReadingError} for one outside them.
- */
-const closedValueOf = <A extends string>(
-  node: Element,
-  name: string,
-  fallback: A,
-  values: readonly A[],
-): Result.Result<A, XsdReadingError> => {
-  const value = Option.getOrElse(attributeOf(node, name), () => fallback);
-
-  return Option.match(
-    Arr.findFirst(values, (known) => known === value),
-    {
-      onNone: () => refuse(`an ${node.qname} has ${name}="${value}", which the IR does not read`),
-      onSome: Result.succeed,
-    },
-  );
-};
-
-/**
  * The compositors, by their element names.
  */
 const compositors: readonly Compositor[] = ["all", "choice", "sequence"];
 
 /**
- * The compositor a compositor element is.
+ * The compositor an element is.
  *
- * @param node - An `xs:sequence`, `xs:choice` or `xs:all`.
- * @returns Its compositor.
+ * @param node - An element of a content model.
+ * @returns Its compositor, `None` for an element that is no `xs:sequence`, `xs:choice` or `xs:all`.
  */
-const compositorOf = (node: Element): Compositor =>
-  Option.getOrElse(
-    Arr.findFirst(compositors, (compositor) => isXs(node, compositor)),
-    () => "sequence" as const,
-  );
+const compositorOf = (node: Element): Option.Option<Compositor> =>
+  Arr.findFirst(compositors, (compositor) => isXs(node, compositor));
 
 /**
  * Read one particle to the IR.
@@ -602,13 +580,9 @@ const particleOf = (
     }
 
     if (isXs(node, "any")) {
-      return {
-        _tag: "any",
-        namespace: yield* closedValueOf(node, "namespace", "##any", namespaceConstraints),
-        occurs,
-        processing: yield* closedValueOf(node, "processContents", "strict", processings),
-        sources,
-      } as const;
+      const { namespace, processing } = yield* wildcardOf(node);
+
+      return { _tag: "any", namespace, occurs, processing, sources } as const;
     }
 
     if (isXs(node, "group")) {
@@ -616,23 +590,26 @@ const particleOf = (
       const held = particlesOf(
         yield* requireComponent(view.schema, view.schema.groups, "group", ref),
       );
-      const [compositor] = held;
+      const compositor =
+        held.length === 1 ? Option.filter(Arr.head(held), isCompositor) : Option.none();
 
-      if (held.length !== 1 || compositor === undefined || !isCompositor(compositor)) {
+      if (Option.isNone(compositor)) {
         return yield* refuse(`the group ${ref} holds ${held.length} particles, not one compositor`);
       }
 
-      return { ...(yield* particleOf(world, view, compositor, occurs)), sources };
+      return { ...(yield* particleOf(world, view, compositor.value, occurs)), sources };
     }
 
-    if (isCompositor(node)) {
+    const compositor = compositorOf(node);
+
+    if (Option.isSome(compositor)) {
       const particles: Particle[] = [];
 
       for (const particle of particlesOf(node)) {
         particles.push(yield* particleOf(world, view, particle, yield* occursOf(particle)));
       }
 
-      return { _tag: "group", compositor: compositorOf(node), occurs, particles, sources } as const;
+      return { _tag: "group", compositor: compositor.value, occurs, particles, sources } as const;
     }
 
     return yield* refuse(`an ${node.qname} stands where a particle is read`);
@@ -846,7 +823,7 @@ export const modelsOf = (
 
         if (holdsWildcard(content) && namespace !== view.schema.targetNamespace) {
           return yield* refuse(
-            `the element {${namespace}}${local} holds a wildcard written in a schema whose target namespace is ${view.schema.targetNamespace === "" ? "absent" : view.schema.targetNamespace}, but the IR reads a wildcard's target namespace as its element's`,
+            `the element {${namespace}}${local} holds a wildcard written in a schema whose target namespace is ${view.schema.targetNamespace === noNamespace ? "absent" : view.schema.targetNamespace}, but the IR reads a wildcard's target namespace as its element's`,
           );
         }
 
@@ -870,6 +847,14 @@ export const modelsOf = (
   });
 
 /**
+ * The key of an expanded name in a map.
+ *
+ * @param name - The name.
+ * @returns `{namespace}local`.
+ */
+const nameKey = ({ local, namespace }: ExpandedName): string => `{${namespace}}${local}`;
+
+/**
  * Merge the versions' readings into rows: each kind's model once for the versions that agree on
  * its structure and its type, each particle's and the model's sources aligned with those versions.
  *
@@ -879,61 +864,46 @@ export const modelsOf = (
 export const rowsOf = (
   readings: readonly (readonly [SchemaVersion, ReadonlyMap<string, Modeled>])[],
 ): readonly ContentModel[] => {
-  const rows: ContentModel[] = [];
-  const kinds = Arr.sort(
-    Arr.dedupe(readings.flatMap(([, models]) => [...models.keys()])),
-    Order.String,
+  const byKind = groupedBy(
+    readings.flatMap(([version, models]) =>
+      [...models].map(([kind, modeled]) => ({ kind, modeled, version })),
+    ),
+    ({ kind }) => kind,
   );
 
-  for (const kind of kinds) {
-    const held: {
-      content: ContentType;
-      readonly sources: Source[];
-      readonly structure: string;
-      readonly type: Option.Option<ExpandedName>;
-      readonly versions: SchemaVersion[];
-    }[] = [];
+  return Arr.sort(
+    [...byKind],
+    Order.mapInput(Order.String, ([kind]: readonly [string, unknown]) => kind),
+  ).flatMap(([kind, held]) =>
+    [
+      ...groupedBy(
+        held,
+        ({ modeled }) =>
+          `${structureOf(modeled.content)} ${Option.match(modeled.type, { onNone: () => anonymous, onSome: nameKey })}`,
+      ).values(),
+    ].map((same) => {
+      const [{ modeled: first }, ...later] = same;
+      let { content } = first;
 
-    for (const [version, models] of readings) {
-      const modeled = models.get(kind);
-
-      if (modeled !== undefined) {
-        const structure = `${structureOf(modeled.content)} ${JSON.stringify(Option.getOrNull(modeled.type))}`;
-        const same = held.find((row) => row.structure === structure);
-
-        if (same === undefined) {
-          held.push({
-            content: modeled.content,
-            sources: [modeled.source],
-            structure,
-            type: modeled.type,
-            versions: [version],
-          });
-        } else {
-          same.content = joinedContent(same.content, modeled.content);
-          same.sources.push(modeled.source);
-          same.versions.push(version);
-        }
+      for (const { modeled } of later) {
+        content = joinedContent(content, modeled.content);
       }
-    }
 
-    for (const { content, sources, type, versions } of held) {
-      const [first, ...rest] = versions;
-      const [firstSource, ...restSources] = sources;
-
-      if (first !== undefined && firstSource !== undefined) {
-        rows.push({
-          content,
-          kind,
-          sources: [firstSource, ...restSources],
-          type,
-          versions: [first, ...rest],
-        });
-      }
-    }
-  }
-
-  return rows;
+      return {
+        content,
+        kind,
+        sources: pipe(
+          same,
+          Arr.map(({ modeled }) => modeled.source),
+        ),
+        type: first.type,
+        versions: pipe(
+          same,
+          Arr.map(({ version }) => version),
+        ),
+      };
+    }),
+  );
 };
 
 /**
@@ -1002,21 +972,10 @@ const baseOf = (
 > =>
   Result.gen(function* baseOfBody() {
     if (isXs(definition, "complexType")) {
-      const content = Option.orElse(firstXs(definition, "complexContent"), () =>
-        firstXs(definition, "simpleContent"),
-      );
-
-      if (Option.isNone(content)) {
-        return { base: anyTypeName, method: "restriction" } as const;
-      }
-
-      const step = Arr.findFirst(
-        elementsOf(content.value),
-        (node) => isXs(node, "extension") || isXs(node, "restriction"),
-      );
+      const step = yield* derivationOf(definition);
 
       if (Option.isNone(step)) {
-        return yield* refuse(`a ${content.value.qname} holds no derivation step`);
+        return { base: anyTypeName, method: "restriction" } as const;
       }
 
       const { local, namespace } = yield* resolve(
@@ -1055,14 +1014,6 @@ const baseOf = (
   });
 
 /**
- * The key of an expanded name in a map.
- *
- * @param name - The name.
- * @returns `{namespace}local`.
- */
-const nameKey = ({ local, namespace }: ExpandedName): string => `{${namespace}}${local}`;
-
-/**
  * Order expanded names by namespace, then local name.
  */
 const byName: Order.Order<ExpandedName> = Order.combine(
@@ -1071,41 +1022,64 @@ const byName: Order.Order<ExpandedName> = Order.combine(
 );
 
 /**
- * The derivation methods each named type of some documents forbids its derivations: its own
- * `final`, or its document's `finalDefault` (XML Schema 1.0 Part 1, §3.4.2, §3.14.2).
+ * The key of a derivation a `final` forbids: the base type's {@link nameKey} and the method.
+ *
+ * @param base - The base type.
+ * @param method - The derivation method.
+ * @returns `{namespace}local method`.
+ */
+const forbiddenKey = (base: ExpandedName, method: string): string => `${nameKey(base)} ${method}`;
+
+/**
+ * The derivations the named types of some documents forbid: each type's own `final`, or when it
+ * states none its document's `finalDefault` (XML Schema 1.0 Part 1, §3.4.2 and §3.14.2,
+ * `{final}`), as the type and each method the value forbids.
  *
  * @param documents - The documents, each with its schema.
- * @returns The methods, by the type's {@link nameKey}, for each type that forbids any.
+ * @returns The forbidden derivations, by {@link forbiddenKey}.
  */
 const finalsIn = (
   documents: readonly (readonly [SchemaView, XmlDocument])[],
-): ReadonlyMap<string, ReadonlySet<string>> => {
-  const finals = new Map<string, ReadonlySet<string>>();
+): ReadonlySet<string> => {
+  const forbidden = new Set<string>();
 
   for (const [view, document] of documents) {
-    const fallback = attributeOf(document.root, "finalDefault");
+    const finalDefault = attributeOf(document.root, "finalDefault");
 
     for (const component of elementsOf(document.root).flatMap((node) =>
       isXs(node, "redefine") ? elementsOf(node) : [node],
     )) {
       const local = attributeOf(component, "name");
-      const final = Option.orElse(attributeOf(component, "final"), () => fallback);
+      const final = Option.orElse(attributeOf(component, "final"), () => finalDefault);
 
       if (
         (isXs(component, "complexType") || isXs(component, "simpleType")) &&
         Option.isSome(local) &&
         Option.isSome(final)
       ) {
-        finals.set(
-          nameKey({ local: local.value, namespace: view.schema.targetNamespace }),
-          finalOf(final.value),
-        );
+        for (const method of finalOf(final.value)) {
+          forbidden.add(
+            forbiddenKey({ local: local.value, namespace: view.schema.targetNamespace }, method),
+          );
+        }
       }
     }
   }
 
-  return finals;
+  return forbidden;
 };
+
+/**
+ * One type in XML Schema's type hierarchy, as {@link derivationsOf} links it: its name and
+ * {@link nameKey}, its base's name, `None` for `xs:anyType`, and the types derived from it in one
+ * step.
+ */
+interface TypeNode {
+  readonly base: Option.Option<ExpandedName>;
+  readonly children: TypeNode[];
+  readonly key: string;
+  readonly name: ExpandedName;
+}
 
 /**
  * Read one version's type derivations: for every named type of its schemas and every built-in,
@@ -1153,7 +1127,7 @@ export const derivationsOf = (
           const name = { local, namespace: view.schema.targetNamespace };
           const { base, method } = yield* baseOf(view, definition);
 
-          if (finals.get(nameKey(base))?.has(method) === true) {
+          if (finals.has(forbiddenKey(base, method))) {
             return yield* refuse(
               `the type ${nameKey(name)} derives by ${method} from ${nameKey(base)}, whose final forbids it`,
             );
@@ -1164,29 +1138,43 @@ export const derivationsOf = (
       }
     }
 
-    const children = new Map<string, ExpandedName[]>();
+    const nodes: readonly TypeNode[] = [...bases].map(([key, [name, base]]) => ({
+      base,
+      children: [],
+      key,
+      name,
+    }));
+    const byKey = new Map(nodes.map((node) => [node.key, node] as const));
 
-    for (const [name, base] of bases.values()) {
-      for (const held of Option.toArray(base)) {
-        children.set(nameKey(held), [...(children.get(nameKey(held)) ?? []), name]);
+    for (const node of nodes) {
+      for (const base of Option.toArray(node.base)) {
+        const parent = Option.fromNullishOr(byKey.get(nameKey(base)));
+
+        if (Option.isNone(parent)) {
+          return yield* refuse(
+            `the type ${nameKey(node.name)} derives from ${nameKey(base)}, which no schema of the version declares`,
+          );
+        }
+
+        parent.value.children.push(node);
       }
     }
 
     const derivations = new Map<string, TypeDerivationReading>();
 
-    for (const [key, [name]] of bases) {
-      const derived: ExpandedName[] = [name];
-      let level: readonly ExpandedName[] = [name];
+    for (const node of nodes) {
+      const derived: ExpandedName[] = [];
+      let level: readonly TypeNode[] = [node];
 
       while (level.length > 0) {
         level = Arr.sort(
-          level.flatMap((held) => children.get(nameKey(held)) ?? []),
-          byName,
+          level.flatMap((held) => held.children),
+          Order.mapInput(byName, (held: TypeNode) => held.name),
         );
-        derived.push(...level);
+        derived.push(...level.map((held) => held.name));
       }
 
-      derivations.set(key, { derived: [name, ...derived.slice(1)], type: name });
+      derivations.set(node.key, { derived: [node.name, ...derived], type: node.name });
     }
 
     return derivations;
@@ -1208,34 +1196,27 @@ export interface TypeDerivationReading {
  */
 export const derivationRowsOf = (
   readings: readonly (readonly [SchemaVersion, ReadonlyMap<string, TypeDerivationReading>])[],
-): readonly TypeDerivation[] => {
-  const held = new Map<string, { reading: TypeDerivationReading; versions: SchemaVersion[] }>();
-
-  for (const [version, derivations] of readings) {
-    for (const reading of derivations.values()) {
-      const key = JSON.stringify([reading.type, reading.derived]);
-      const same = held.get(key);
-
-      if (same === undefined) {
-        held.set(key, { reading, versions: [version] });
-      } else {
-        same.versions.push(version);
-      }
-    }
-  }
-
-  return Arr.sort(
-    [...held.values()].flatMap(({ reading, versions }) => {
-      const [first, ...rest] = versions;
-
-      return first === undefined ? [] : [{ ...reading, versions: [first, ...rest] as const }];
-    }),
+): readonly TypeDerivation[] =>
+  Arr.sort(
+    [
+      ...groupedBy(
+        readings.flatMap(([version, derivations]) =>
+          [...derivations.values()].map((reading) => ({ reading, version })),
+        ),
+        ({ reading }) => JSON.stringify([reading.type, reading.derived]),
+      ).values(),
+    ].map((same) => ({
+      ...Arr.headNonEmpty(same).reading,
+      versions: pipe(
+        same,
+        Arr.map(({ version }) => version),
+      ),
+    })),
     Order.combine(
       Order.mapInput(byName, ({ type }: TypeDerivation) => type),
       Order.mapInput(Order.String, ({ versions }: TypeDerivation) => versions[0]),
     ),
   );
-};
 
 /**
  * The documents one version's schemas are read from, each with its file and the lines of its start
@@ -1433,18 +1414,22 @@ const commonOccurs: ReadonlyMap<string, string> = new Map([
 const occursName = ({ max, min }: Occurs): string => {
   const range = `${min}..${Option.match(max, { onNone: () => "n", onSome: String })}`;
 
-  return (
-    commonOccurs.get(range) ??
-    Option.match(max, {
-      onNone: () => `atLeast${min}`,
-      onSome: (bound) => `between${min}And${bound}`,
-    })
-  );
+  return Option.match(Option.fromNullishOr(commonOccurs.get(range)), {
+    onNone: () =>
+      Option.match(max, {
+        onNone: () => `atLeast${min}`,
+        onSome: (bound) => `between${min}And${bound}`,
+      }),
+    onSome: (name) => name,
+  });
 };
 
 /**
  * The stem of a namespace's constant in the leaf: XML Schema's and XML's own, or the vocabulary's
  * name from `namespaces.ts`.
+ *
+ * Every type a model names is a built-in or a named type of a schema of the version, each in XML
+ * Schema's namespace, XML's or a vocabulary's, so {@link renderModels} finds a stem for each.
  *
  * @param namespace - The namespace.
  * @returns The stem, `None` for a namespace no vocabulary names.
@@ -1784,7 +1769,7 @@ export const sourcesWriter = (): SourcesWriter => {
         return `spec(${JSON.stringify(cite)})`;
       },
       xsd: ({ file, line }) => {
-        const name = files.get(file) ?? camelOf(file);
+        const name = camelOf(file);
 
         files.set(file, name);
 
@@ -1860,11 +1845,16 @@ const versionsExpression = (versions: readonly SchemaVersion[]): string =>
  *   leaf.
  */
 export const renderModels = ({ derivations, models: rows }: ModelsLeaf): string => {
-  const uses = new Map<string, number>();
+  const seen = new Set<string>();
+  const recurring = new Set<string>();
   const count = (particle: Particle): void => {
     const key = JSON.stringify(particle);
 
-    uses.set(key, (uses.get(key) ?? 0) + 1);
+    if (seen.has(key)) {
+      recurring.add(key);
+    }
+
+    seen.add(key);
     if (particle._tag === "group") {
       for (const inner of particle.particles) {
         count(inner);
@@ -1906,7 +1896,7 @@ export const renderModels = ({ derivations, models: rows }: ModelsLeaf): string 
         `${compositor}(${[occurs, sources, ...particles.map((inner) => expression(inner, owner))].join(", ")})`,
     });
 
-    if (hoistable(particle) && (uses.get(key) ?? 0) > 1) {
+    if (hoistable(particle) && recurring.has(key)) {
       const stem = `${camelOf(owner)}Particle`;
       let name = stem;
 
@@ -1936,10 +1926,13 @@ export const renderModels = ({ derivations, models: rows }: ModelsLeaf): string 
     });
   const namespaceNames = new Map<string, string>();
   const nameExpression = ({ local, namespace }: ExpandedName): string => {
-    const known = [...namespaceNames].find(([held]) => held === namespace);
-    const written =
-      known?.[1] ??
-      `${Option.getOrElse(namespaceNameOf(namespace), () => `namespace${namespaceNames.size + 1}`)}Namespace`;
+    const written = `${Option.getOrThrowWith(
+      namespaceNameOf(namespace),
+      () =>
+        new Error(
+          `The models leaf names a type in the namespace "${namespace}", which neither XML Schema, XML nor any vocabulary of src/vocab/namespaces.ts is in, so it has no constant to write the name with. Add the namespace's vocabulary to vocabularyNamespaces.`,
+        ),
+    )}Namespace`;
 
     namespaceNames.set(namespace, written);
 
@@ -2047,7 +2040,7 @@ export const renderModels = ({ derivations, models: rows }: ModelsLeaf): string 
       [...namespaceNames],
       Order.mapInput(Order.String, ([, name]: readonly [string, string]) => name),
     ).flatMap(([namespace, name]) => [
-      ...commentOf([[`The namespace ${namespace === "" ? "of no name" : namespace}.`]]),
+      ...commentOf([[`The namespace ${namespace}.`]]),
       `const ${name} = ${JSON.stringify(namespace)};`,
       "",
     ]),

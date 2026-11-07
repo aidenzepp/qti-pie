@@ -16,6 +16,7 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
+import { ownContext } from "#pantry/import/fold.ts";
 import {
   floatValueOf,
   integerValueOf,
@@ -77,9 +78,10 @@ const typedOf = (baseType: string, key: string): string => {
 };
 
 /**
- * The ids every case writes its rows under, each node's by its number.
+ * The ids every case writes its rows under, each node's by its number, in the context of a
+ * document no site names.
  */
-const ids: MappingIds = { idOf };
+const ids: MappingIds = { context: ownContext(idOf(0)), idOf };
 
 /**
  * One map entry of a generated mapping: its key and its mapped value, as written.

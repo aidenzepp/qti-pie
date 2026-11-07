@@ -126,6 +126,24 @@ const thresholds: Readonly<Record<EncoderClass, Option.Option<number>>> = {
 export const threshold = (cls: EncoderClass): Option.Option<number> => thresholds[cls];
 
 /**
+ * Read the code point of one character of a string's iteration, a lone surrogate counting as one.
+ *
+ * A string's iterator never yields the empty string, the one input `codePointAt(0)` gives no number
+ * for, so an empty `character` is its caller's defect and is thrown as one.
+ *
+ * @param character - One character, as a string's iterator or a one-character match yields it.
+ * @returns Its code point.
+ */
+export const codePointOf = (character: string): number => {
+  const point = character.codePointAt(0);
+  if (point === undefined) {
+    throw new RangeError("codePointOf reads one character, and was given the empty string.");
+  }
+
+  return point;
+};
+
+/**
  * Test whether `text` holds a code point above `limit`.
  *
  * @param limit - The highest code point the label's encoder writes as a single byte.
@@ -134,7 +152,7 @@ export const threshold = (cls: EncoderClass): Option.Option<number> => threshold
  */
 const holdsAbove = (limit: number, text: string): boolean => {
   for (const character of text) {
-    if ((character.codePointAt(0) ?? 0) > limit) {
+    if (codePointOf(character) > limit) {
       return true;
     }
   }

@@ -12,6 +12,18 @@ import { Option } from "effect";
 import type { NamespaceConstraint } from "#pantry/vocab/inventory/types.ts";
 
 /**
+ * The namespace name of a name in no namespace: crust's `Element.namespace` and
+ * `Attribute.namespace` for an unqualified name. An unprefixed QName with no default namespace in
+ * scope is in no namespace (Namespaces in XML 1.0, §6.2), and a schema document with no
+ * `targetNamespace` has an absent `{target namespace}` (XML Schema 1.0 Part 1, §3.15.2), whose
+ * components are in no namespace.
+ *
+ * @see {@link https://www.w3.org/TR/xml-names/#scoping-defaulting | Namespaces in XML 1.0, §6.2}
+ * @see {@link https://www.w3.org/TR/xmlschema-1/#declare-schema | XML Schema 1.0 Part 1, §3.15.2}
+ */
+export const noNamespace = "";
+
+/**
  * The XML Schema namespace, which every XSD construct and every built-in simple type is in.
  */
 export const xsNamespace = "http://www.w3.org/2001/XMLSchema";
@@ -157,7 +169,7 @@ export type NamespaceClass = (typeof namespaceClasses)[number];
  * @returns Its class.
  */
 export const namespaceClassOf = (namespace: string, target: string): NamespaceClass => {
-  if (namespace === "") {
+  if (namespace === noNamespace) {
     return "absent";
   }
 

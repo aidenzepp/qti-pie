@@ -338,8 +338,10 @@ export const TestFlag = relation(
 );
 
 /**
- * A test part, section, section ref or item ref, keyed by its node: the elements whose identifiers
- * are one namespace across the assembled test (reading 86), and among which branch rules jump.
+ * A test part, section, section ref or item ref that writes an identifier, keyed by its node: the
+ * elements whose identifiers are one namespace across the assembled test (reading 86), and among
+ * which branch rules jump. One that writes none names nothing and has no row: AL3 refuses it alone
+ * (reading 147).
  *
  * - **the host's:** its {@link nodeRef} tuple; `end`, its node's; `parentKind`, its parent's kind;
  *   `identifier`, its collapsed identifier ({@link TestToken}); and its scope in its own document:
@@ -888,8 +890,9 @@ export const VariableMapping = relation(
 );
 
 /**
- * An item's stimulus ref, keyed by its node (information model §7.6): its {@link nodeRef} tuple
- * and its collapsed `identifier`.
+ * An item's stimulus ref that writes an identifier, keyed by its node (information model §7.6):
+ * its {@link nodeRef} tuple and its collapsed `identifier`. One that writes none has no row: AL3
+ * refuses it alone (reading 147).
  */
 export const StimulusRef = relation(
   "StimulusRef",
@@ -1533,9 +1536,9 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   names and branch rules counted;
  * - **the copies** ({@link TestToken}, {@link TestFlag}): each identifier and target copied and
  *   collapsed, each boolean copied and read (`E1_derived`);
- * - **the names** ({@link Named}): one per test part, section, section ref and item ref, with its
- *   collapsed identifier and its scope in its document, no two of one document sharing an
- *   identifier (A4, "Structure identifier");
+ * - **the names** ({@link Named}): one per test part, section, section ref and item ref that writes
+ *   an identifier (reading 147), with its collapsed identifier and its scope in its document, no
+ *   two of one document sharing an identifier (A4, "Structure identifier");
  * - **the sections** ({@link Section}, {@link SectionMember}, {@link SectionSelection},
  *   {@link SectionOrdering}): their parts counted (C15), any number of them, none included (spec
  *   reading 26: §4.2.15's `sectionPart` is [0..unbounded]), their required parts folded
@@ -1553,7 +1556,8 @@ const flagCopies = flagCarriers.map(flagCopy);
  * - **the branch rules** ({@link BranchRule}): each one that names no exit;
  * - **the mappings** ({@link VariableMapping}): no two of one item ref name one target, and none a
  *   session variable (reading 97, `Variable_mapping_target`);
- * - **the stimulus refs** ({@link StimulusRef}): no two of one item share an identifier (B16);
+ * - **the stimulus refs** ({@link StimulusRef}): one per stimulus ref that writes an identifier
+ *   (reading 147), no two of one item sharing an identifier (B16);
  * - **the assembly** ({@link Instance}): one tree per document of a test or a section, one child per
  *   site, so an inclusion cycle has no finite tree (reading 85);
  * - **the namespace** ({@link InstanceName}, {@link AssembledName}): `Test_name_key`, each written
@@ -2176,13 +2180,7 @@ export const testLawsByName = {
     ),
     contained(on(Named, "node", "end"), on(Node, "id", "end")),
     contained(on(Named, "parent", "parentKind"), on(Node, "id", "kind")),
-    contained(
-      on(
-        select(Node, (n) => n.in(n.kind, namedKinds)),
-        "id",
-      ),
-      on(Named, "node"),
-    ),
+    contained(on(attributesOf("identifier", namedKinds), "node"), on(Named, "node")),
     contained(on(Named, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
     contained(
       on(
@@ -2395,7 +2393,8 @@ export const testLawsByName = {
       on(StimulusRef, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
-    mirrors(on(StimulusRef, "node"), on(nodesOf(stimulusRefKind), "id")),
+    contained(on(StimulusRef, "node"), on(nodesOf(stimulusRefKind), "id")),
+    contained(on(attributesOf("identifier", [stimulusRefKind]), "node"), on(StimulusRef, "node")),
     contained(on(StimulusRef, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
     contained(on(assembledDocuments, "node"), on(TestDocument, "node")),
   ],

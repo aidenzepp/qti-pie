@@ -41,7 +41,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { contextAt, contextsOf } from "#pantry/import/context.ts";
-import { foldOf, governorOf, ownContext, textDomainOf } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, governorOf, textDomainOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
@@ -161,6 +161,28 @@ export interface PackageIds {
 }
 
 /**
+ * The ids of one document, each drawn the first time its number is asked for.
+ *
+ * @param mint - Draws a fresh uuid.
+ * @returns The document's `idOf`: the same id for the same number ever after.
+ */
+const drawnBy = (mint: () => NodeId): ((index: number) => NodeId) => {
+  const drawn = new Map<number, NodeId>();
+
+  return (index) => {
+    const held = drawn.get(index);
+    if (held !== undefined) {
+      return held;
+    }
+
+    const id = mint();
+    drawn.set(index, id);
+
+    return id;
+  };
+};
+
+/**
  * Mint the ids of one package: one fresh uuid for the package, and one for each XDM node and each
  * attribute of every document, drawn the first time its number is asked for and the same ever
  * after, as an import mints them each time it runs. So the same package imported twice is two
@@ -185,71 +207,49 @@ export const nodeIdsOf = (
   const entryPaths: ReadonlySet<string> = new Set(entries);
   const entryAt = (path: string): boolean => entryPaths.has(path);
   const packageId = mint();
-  const idOfs = documents.map(() => {
-    const drawn = new Map<number, NodeId>();
-
-    return (index: number): NodeId => {
-      const held = drawn.get(index);
-      if (held !== undefined) {
-        return held;
-      }
-
-      const id = mint();
-      drawn.set(index, id);
-
-      return id;
-    };
-  });
+  const listed = documents.map((document) => ({ document, idOf: drawnBy(mint) }));
   const placed = new Map<string, NodeId>();
   const targets = new Map<string, Omit<ListedTarget, "context">>();
-  for (const [at, { path, resourceType, tree }] of documents.entries()) {
-    const idOf = idOfs[at];
-    if (idOf !== undefined && !placed.has(path)) {
-      placed.set(path, idOf(0));
+  for (const { document, idOf } of listed) {
+    if (!placed.has(document.path)) {
+      placed.set(document.path, idOf(0));
     }
 
-    if (idOf !== undefined && resourceType !== "none" && !targets.has(path)) {
-      targets.set(path, { node: idOf(0), rootKind: tree.root.kind });
+    if (document.resourceType !== "none" && !targets.has(document.path)) {
+      targets.set(document.path, { node: idOf(0), rootKind: document.tree.root.kind });
     }
   }
 
   const documentAt = (path: string): Option.Option<NodeId> =>
-    Option.fromNullishOr(placed.get(path));
+    Option.fromUndefinedOr(placed.get(path));
   const { assembled, contexts, targeted } = contextsOf(
-    documents.flatMap(({ path, resourceType, tree }, at) => {
-      const idOf = idOfs[at];
-
-      return idOf === undefined ? [] : [{ idOf, named: resourceType !== "none", path, tree }];
-    }),
+    listed.map(({ document: { path, resourceType, tree }, idOf }) => ({
+      idOf,
+      named: resourceType !== "none",
+      path,
+      tree,
+    })),
   );
   const targetAt = (path: string): Option.Option<ListedTarget> =>
-    Option.map(Option.fromNullishOr(targets.get(path)), ({ node, rootKind }) => ({
+    Option.map(Option.fromUndefinedOr(targets.get(path)), ({ node, rootKind }) => ({
       context: contextAt(contexts, node),
       node,
       rootKind,
     }));
 
   return {
-    documents: documents.flatMap(({ path, resourceType }, at) => {
-      const idOf = idOfs[at];
-
-      return idOf === undefined
-        ? []
-        : [
-            {
-              assembled: assembled.has(idOf(0)),
-              context: contextAt(contexts, idOf(0)),
-              documentAt,
-              documentType: resourceType,
-              entryAt,
-              idOf,
-              package: packageId,
-              path,
-              targetAt,
-              targeted: targeted.has(idOf(0)),
-            },
-          ];
-    }),
+    documents: listed.map(({ document: { path, resourceType }, idOf }) => ({
+      assembled: assembled.has(idOf(0)),
+      context: contextAt(contexts, idOf(0)),
+      documentAt,
+      documentType: resourceType,
+      entryAt,
+      idOf,
+      package: packageId,
+      path,
+      targetAt,
+      targeted: targeted.has(idOf(0)),
+    })),
     package: packageId,
   };
 };
@@ -358,22 +358,15 @@ type PositionHandle = Addition<typeof Node>["state"];
 const keyOf = (...values: readonly string[]): string => values.join(" ");
 
 /**
- * The attribute grammar `AttributeGrammar` and `AttributeSlotOf` install, by `version governor
- * name`.
- */
-const attributeGrammarAt = new Map(
-  attributeRows.map((row) => [keyOf(row.version, row.governor, row.name), row] as const),
-);
-
-/**
- * The installed `ValueIdentity`, by domain.
+ * The installed `ValueIdentity`, by domain: total over the domains, `none` for one of no identity.
  */
 const identityAt: ReadonlyMap<string, string> = new Map(
   ValueIdentity.rows.map(({ domain, identity }) => [domain, identity]),
 );
 
 /**
- * The installed `KindNamespace`, by kind: the namespace name an element of the kind is written in.
+ * The installed `KindNamespace`, by kind: the namespace name an element of the kind is written in,
+ * for every element kind but the foreign ones, whose name their `OpenElementName` row holds.
  */
 const namespaceAt: ReadonlyMap<string, string> = new Map(
   KindNamespace.rows.map(({ kind, namespace }) => [kind, namespace]),
@@ -426,6 +419,44 @@ const boundedPatterns: ReadonlyMap<string, RegExp> = new Map(
 );
 
 /**
+ * What the host writes of an attribute its governor admits, read once from the attribute grammar
+ * (`AttributeGrammar`, `AttributeSlotOf`) and its domain's rows: its slot's position, whether its
+ * domain is an `xs:IDREF` or `xs:IDREFS` (`ValueIdentity`), so it holds its IDREF pieces, and its
+ * domain's lexical space where a bound judges the domain ({@link boundedPatterns}).
+ */
+interface AdmittedAttribute {
+  readonly idrefs: boolean;
+  readonly lexicalSpace: Option.Option<RegExp>;
+  readonly position: (typeof attributeRows)[number]["position"];
+}
+
+/**
+ * The attribute grammar, by `version governor name`, each row as the host writes it.
+ *
+ * @throws {Error} When `ValueIdentity` holds no row of an admitted attribute's domain: it is total
+ *   over the domains (`#pantry/grammar/install.ts`), so a miss is a defect of the grammar.
+ */
+const attributeGrammarAt: ReadonlyMap<string, AdmittedAttribute> = new Map(
+  attributeRows.map(({ domain, governor, name, position, version }) => {
+    const identity = identityAt.get(domain);
+    if (identity === undefined) {
+      throw new Error(
+        `ValueIdentity holds no row of the domain ${domain}, and it is total over the domains. Regenerate the grammar's ValueIdentity.`,
+      );
+    }
+
+    return [
+      keyOf(version, governor, name),
+      {
+        idrefs: identity === "IDREF" || identity === "IDREFS",
+        lexicalSpace: Option.fromUndefinedOr(boundedPatterns.get(domain)),
+        position,
+      },
+    ] as const;
+  }),
+);
+
+/**
  * The whitespace `xs:double`'s `collapse` reads around a value: XML's `S`.
  */
 const doubleSpace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
@@ -469,6 +500,15 @@ const idrefSpace = /[\t\n\r ]+/gu;
 type SpaceText = IdrefInsert["before"];
 
 /**
+ * State that a run the split cut at whitespace is the whitespace around a token: `Space`'s
+ * pattern, `^[\t\n\r ]*$`, the language the type `SpaceText` spells.
+ *
+ * @param text - A run of {@link idrefSpace}'s matches, or the empty text.
+ * @returns Whether it is XML whitespace, possibly none.
+ */
+const isSpace = (text: string): text is SpaceText => /^[\t\n\r ]*$/u.test(text);
+
+/**
  * Hold a run the split cut at whitespace to the type of the whitespace around a token.
  *
  * @param text - A run of {@link idrefSpace}'s matches, or the empty text.
@@ -476,10 +516,8 @@ type SpaceText = IdrefInsert["before"];
  * @throws {Error} When the run holds anything but whitespace, which the split never cuts.
  */
 const spaceOf = (text: string): SpaceText => {
-  if (/^[\t\n\r ]*$/u.test(text)) {
-    // SAFETY: the test above is the language of `Space`'s pattern, `^[\t\n\r ]*$`, which is the type `SpaceText` spells.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-    return text as SpaceText;
+  if (isSpace(text)) {
+    return text;
   }
 
   throw new Error(
@@ -529,78 +567,187 @@ export const idrefPiecesOf = (lexical: string): readonly IdrefInsert[] => {
 };
 
 /**
- * Index one list of rows by the node or attribute it belongs to, keeping the list's order within
- * each group.
- *
- * @param rows - The rows.
- * @param owner - Each row's owner.
- * @returns The groups.
+ * The namespace name of the one node in no namespace that is a parent, the document node, as
+ * `ForeignNamespace` writes none (`#pantry/qti/chardata.ts`): the empty text, which is no namespace
+ * name (Namespaces in XML 1.0, §2.2: "The empty string, though it is a legal URI reference, cannot
+ * be used as a namespace name").
  */
-const groupedBy = <R>(rows: readonly R[], owner: (row: R) => string): ReadonlyMap<string, R[]> =>
-  Map.groupBy(rows, owner);
+const noNamespace = "";
+
+/**
+ * Read the record a row of `flatten`'s names as its owner.
+ *
+ * @param records - The records, by their owner's id.
+ * @param owner - The id the row names.
+ * @param what - What the row is, for the defect's message.
+ * @returns The owner's record.
+ * @throws {Error} When no record has the id: `flatten` writes a row only of a node or an attribute
+ *   it writes, so a miss is its defect, never the document's.
+ */
+const ownerIn = <V>(records: ReadonlyMap<string, V>, owner: string, what: string): V => {
+  const record = records.get(owner);
+  if (record === undefined) {
+    throw new Error(
+      `flatten names ${owner} as the owner of ${what}, and writes no node or attribute ${owner}. Correct flatten.`,
+    );
+  }
+
+  return record;
+};
+
+/**
+ * Read an element's namespace name: a foreign element's from its `OpenElementName` row, any other
+ * element's from `KindNamespace`, which holds every element kind but the foreign ones.
+ *
+ * @param kind - The element's kind.
+ * @param foreign - Its `OpenElementName` row's namespace name, where it has the row.
+ * @returns The namespace name.
+ * @throws {Error} When the element has neither: `flatten` writes an `OpenElementName` row of every
+ *   foreign element, so a miss is a defect of `flatten` or of the grammar's `KindNamespace`.
+ */
+const elementNamespaceOf = (kind: string, foreign: Option.Option<string>): string =>
+  Option.getOrThrowWith(
+    foreignKinds.has(kind) ? foreign : Option.fromUndefinedOr(namespaceAt.get(kind)),
+    () =>
+      new Error(
+        `An element of kind ${kind} has no namespace name, and flatten writes an OpenElementName row of every foreign element while KindNamespace holds every other element kind. Correct flatten or the grammar's KindNamespace.`,
+      ),
+  );
+
+/**
+ * An attribute as the walk gathers it: its row, and its entity references and open names, each in
+ * the order `flatten` writes them.
+ */
+interface GatheredAttribute {
+  readonly entities: FlatRows<Composed>["attributeEntities"][number][];
+  readonly openNames: OpenNameRow[];
+  readonly row: AttributeRow<Composed>;
+}
+
+/**
+ * A node below the document node as the walk gathers it: its row; its attributes and namespace
+ * declarations, in slot order; its characters, `chars`, a text or whitespace node's own and an
+ * entity reference's `&name;`, empty for a node that holds none; `text`, its children's characters
+ * in document order, its string value where its text is checked, which a bounded text's typed value
+ * is read from; and its namespace name where it is a foreign element.
+ */
+interface Gathered {
+  readonly attributes: GatheredAttribute[];
+  chars: string;
+  foreignNamespace: Option.Option<string>;
+  readonly namespaces: FlatRows<Composed>["namespaces"][number][];
+  readonly node: NodeRow<Composed>;
+  text: string;
+}
+
+/**
+ * Gather each node below the document node with its own rows: every row `flatten` writes of a node
+ * or an attribute is put on its owner's record, so the walk reads each record whole.
+ *
+ * @param rows - The document's rows, as `flatten` writes them.
+ * @returns Each node below the document node, in document order.
+ * @throws {Error} When a row names an owner `flatten` wrote no row of ({@link ownerIn}).
+ */
+const gatheredOf = (rows: FlatRows<Composed>): Iterable<Gathered> => {
+  const self = rows.document.node;
+  const nodes = new Map<string, Gathered>(
+    rows.nodes.flatMap((node) =>
+      node.id === self
+        ? []
+        : [
+            [
+              node.id,
+              {
+                attributes: [],
+                chars: "",
+                foreignNamespace: Option.none(),
+                namespaces: [],
+                node,
+                text: "",
+              },
+            ] as const,
+          ],
+    ),
+  );
+  const attributes = new Map<string, GatheredAttribute>();
+  for (const row of rows.attributes) {
+    const attribute: GatheredAttribute = { entities: [], openNames: [], row };
+    ownerIn(nodes, row.node, `attribute ${row.id}`).attributes.push(attribute);
+    attributes.set(row.id, attribute);
+  }
+
+  for (const entity of rows.attributeEntities) {
+    ownerIn(attributes, entity.attribute, "an entity reference").entities.push(entity);
+  }
+
+  for (const name of rows.openNames) {
+    ownerIn(attributes, name.attribute, "an open name").openNames.push(name);
+  }
+
+  for (const declaration of rows.namespaces) {
+    ownerIn(nodes, declaration.node, "a namespace declaration").namespaces.push(declaration);
+  }
+
+  for (const { node, value } of [...rows.texts, ...rows.whitespace]) {
+    ownerIn(nodes, node, "characters").chars = value;
+  }
+
+  for (const { name, node } of rows.entityRefs) {
+    ownerIn(nodes, node, "an entity reference node").chars = `&${name};`;
+  }
+
+  for (const { namespace, node } of rows.openElementNames) {
+    ownerIn(nodes, node, "an open element name").foreignNamespace = Option.some(namespace);
+  }
+
+  for (const { chars, node } of nodes.values()) {
+    if (node.parent !== self) {
+      ownerIn(nodes, node.parent, `node ${node.id}, its child`).text += chars;
+    }
+  }
+
+  return nodes.values();
+};
 
 /**
  * Write one attribute as its element's family nests it.
  *
- * @param attribute - The attribute's row.
- * @param element - Its element: its version, kind, governing type and namespace name.
- * @param element.governs - The element's governing type.
- * @param element.kind - Its kind.
- * @param element.namespace - Its namespace name.
- * @param element.version - Its version.
- * @param rows - The document's rows, indexed by attribute.
- * @param rows.entities - Each attribute's entity references, in offset order.
- * @param rows.openNames - Each open-class attribute's exact name.
+ * @param attribute - The attribute, gathered.
+ * @param element - Its element, gathered: its version, kind, governing type and namespace name.
  * @returns The attribute: its slot under its element's governor (empty for a name the governor
  *   does not admit, which AL1 refuses), its IDREF pieces where its domain is an `xs:IDREF` or
  *   `xs:IDREFS`, its typed value where its domain is bounded and its lexical form is in the
  *   domain's lexical space, its entity references and its open name.
  */
-const attributeOf = (
-  attribute: AttributeRow<Composed>,
-  element: {
-    readonly governs: string;
-    readonly kind: string;
-    readonly namespace: string;
-    readonly version: string;
-  },
-  rows: {
-    readonly entities: ReadonlyMap<
-      string,
-      readonly FlatRows<Composed>["attributeEntities"][number][]
-    >;
-    readonly openNames: ReadonlyMap<string, readonly OpenNameRow[]>;
-  },
-): AttributeInsert => {
-  const admitted = Option.getOrUndefined(
-    Option.flatMap(governorOf(element.version, element.kind, element.governs), (governor) =>
-      Option.fromNullishOr(
-        attributeGrammarAt.get(keyOf(element.version, governor, attribute.name)),
-      ),
-    ),
+const attributeOf = (attribute: GatheredAttribute, element: Gathered): AttributeInsert => {
+  const { row } = attribute;
+  const { governs, kind, version } = element.node;
+  const admitted = Option.flatMap(governorOf(version, kind, governs), (governor) =>
+    Option.fromUndefinedOr(attributeGrammarAt.get(keyOf(version, governor, row.name))),
   );
-  const identity = admitted === undefined ? undefined : identityAt.get(admitted.domain);
-  const lexicalSpace = admitted === undefined ? undefined : boundedPatterns.get(admitted.domain);
+  const lexicalSpace = admitted.pipe(Option.flatMap((admits) => admits.lexicalSpace));
 
   return {
-    doubleValue:
-      lexicalSpace?.test(attribute.lexical) === true
-        ? [{ value: doubleOf(attribute.lexical) }]
-        : [],
-    entities: (rows.entities.get(attribute.id) ?? []).map(({ name, offset }) => ({ name, offset })),
-    id: attribute.id,
-    idrefs: identity === "IDREF" || identity === "IDREFS" ? idrefPiecesOf(attribute.lexical) : [],
-    lexical: attribute.lexical,
-    name: attribute.name,
-    openName: openNames.has(attribute.name)
-      ? (rows.openNames.get(attribute.id) ?? []).map(({ local, uri }) => ({
-          elementNamespace: element.namespace,
+    doubleValue: Option.exists(lexicalSpace, (space) => space.test(row.lexical))
+      ? [{ value: doubleOf(row.lexical) }]
+      : [],
+    entities: attribute.entities.map(({ name, offset }) => ({ name, offset })),
+    id: row.id,
+    idrefs: Option.exists(admitted, ({ idrefs }) => idrefs) ? idrefPiecesOf(row.lexical) : [],
+    lexical: row.lexical,
+    name: row.name,
+    openName: openNames.has(row.name)
+      ? attribute.openNames.map(({ local, uri }) => ({
+          elementNamespace: elementNamespaceOf(kind, element.foreignNamespace),
           local,
           uri,
         }))
       : [],
-    prefix: attribute.prefix,
-    slot: Bits.of(AttributeSlot, admitted === undefined ? [] : [admitted.position]),
+    prefix: row.prefix,
+    slot: Bits.of(
+      AttributeSlot,
+      Option.toArray(admitted.pipe(Option.map(({ position }) => position))),
+    ),
   };
 };
 
@@ -613,75 +760,49 @@ interface WrittenMember {
 }
 
 /**
- * Write one node below the document node from its row, its fold and its own rows.
+ * Write one node below the document node from its gathered rows and its fold.
  *
- * @param node - Its row, as `flatten` writes it.
+ * @param gathered - The node, gathered with its own rows.
  * @param folded - Its fold (`foldOf`): its ancestry, its nearest interaction, its state, and
  *   whether its characters are its `stringPiece`.
- * @param own - Its own rows: its attributes and declarations, its characters, its namespace name
- *   and the document's version and type, with the attribute families' rows indexed.
- * @param own.attributes - Its attributes, in slot order.
- * @param own.chars - Its characters, empty for a node that holds none.
- * @param own.documentType - The type of the resource that lists its document.
- * @param own.indexed - The document's open names and entity references, by attribute.
- * @param own.indexed.entities - The entity references.
- * @param own.indexed.openNames - The open names.
- * @param own.namespace - Its namespace name, empty for a node that is no element.
- * @param own.namespaces - Its namespace declarations, in slot order.
- * @param own.text - Its children's characters, its string value where its text is checked, which
- *   a bounded text's typed value is read from.
- * @param own.version - The document's version.
+ * @param documentType - The type of the resource that lists its document.
  * @returns The member, with the list its children are nested in.
  */
 const memberOf = (
-  node: NodeRow<Composed>,
+  gathered: Gathered,
   folded: Folded,
-  own: {
-    readonly attributes: readonly AttributeRow<Composed>[];
-    readonly chars: string;
-    readonly documentType: ListedDocument["resourceType"];
-    readonly indexed: Parameters<typeof attributeOf>[2];
-    readonly namespace: string;
-    readonly namespaces: readonly FlatRows<Composed>["namespaces"][number][];
-    readonly text: string;
-    readonly version: Composed["version"];
-  },
+  documentType: ListedDocument["resourceType"],
 ): WrittenMember => {
+  const { node } = gathered;
   const { kind, version } = node;
-  const ends = endsOf(own.chars);
+  const ends = endsOf(gathered.chars);
   const children: NodeMember[] = [];
   const textSpace = Option.flatMap(textDomainOf(version, kind, node.governs), (domain) =>
-    Option.fromNullishOr(boundedPatterns.get(domain)),
+    Option.fromUndefinedOr(boundedPatterns.get(domain)),
   );
 
   return {
     children,
     member: {
       ancestry: Bits.of(Flag, [...folded.ancestry]),
-      attributes: own.attributes.map((attribute) =>
-        attributeOf(
-          attribute,
-          { governs: node.governs, kind, namespace: own.namespace, version },
-          own.indexed,
-        ),
-      ),
-      chars: own.chars,
+      attributes: gathered.attributes.map((attribute) => attributeOf(attribute, gathered)),
+      chars: gathered.chars,
       children,
-      documentType: own.documentType,
-      doubleValue: Option.exists(textSpace, (space) => space.test(own.text))
-        ? [{ value: doubleOf(own.text) }]
+      documentType,
+      doubleValue: Option.exists(textSpace, (space) => space.test(gathered.text))
+        ? [{ value: doubleOf(gathered.text) }]
         : [],
       first: ends.first,
       governs: node.governs,
       id: node.id,
       kind,
       last: ends.last,
-      namespaces: own.namespaces.map(({ prefix, uri }) => ({ prefix, uri })),
+      namespaces: gathered.namespaces.map(({ prefix, uri }) => ({ prefix, uri })),
       nearest: folded.nearest,
       nearestKind: folded.nearestKind,
       prefix: node.prefix,
       state: positionHandle(folded.state),
-      stringPiece: folded.copiesText ? own.chars : "",
+      stringPiece: folded.copiesText ? gathered.chars : "",
       version,
     },
   };
@@ -704,47 +825,29 @@ const memberOf = (
  * - `documentType`, the document's type (`NodeIds.documentType`), every node's alike, which its
  *   `Document` row and the tree's owner axis prove.
  *
- * The walk reads `flatten`'s rows in document order, each node nested in its parent's list, so a
+ * The walk reads the gathered nodes in document order, each nested in its parent's list, so a
  * tree of any depth is written without recursion.
  *
  * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under, and its type.
+ * @param ids - The ids its rows are written under, its type, and the context it is judged in
+ *   (`ownContext` of its document node for a document no site names).
  * @returns The document node, with its tree nested.
  */
 export const rootInsertOf = (
   doc: XdmDocument<Composed>,
-  ids: Pick<NodeIds, "documentType" | "idOf"> & Partial<Pick<NodeIds, "context">>,
+  ids: Pick<NodeIds, "context" | "documentType" | "idOf">,
 ): NodeRoot => {
-  const { documentType } = ids;
+  const { context, documentType } = ids;
   const rows = flatten(doc, ids.idOf);
   const { version } = doc;
-  const chars = new Map<string, string>([
-    ...rows.texts.map(({ node, value }) => [node, value] as const),
-    ...rows.whitespace.map(({ node, value }) => [node, value] as const),
-    ...rows.entityRefs.map(({ name, node }) => [node, `&${name};`] as const),
-  ]);
-  const attributes = groupedBy(rows.attributes, ({ node }) => node);
-  const namespaces = groupedBy(rows.namespaces, ({ node }) => node);
-  const indexed = {
-    entities: groupedBy(rows.attributeEntities, ({ attribute }) => attribute),
-    openNames: groupedBy(rows.openNames, ({ attribute }) => attribute),
-  };
-  const foreignNamespace = new Map(
-    rows.openElementNames.map(({ namespace, node }) => [node, namespace] as const),
-  );
   const self = rows.document.node;
-  const context = ids.context ?? ownContext(self);
   const folds = foldOf(rows.nodes, context);
-  const texts = new Map<NodeId, string>();
-  for (const node of rows.nodes.slice(1)) {
-    texts.set(node.parent, `${texts.get(node.parent) ?? ""}${chars.get(node.id) ?? ""}`);
-  }
-
+  const rootChildren: NodeMember[] = [];
   const root: NodeRoot = {
     ancestry: Bits.of(Flag, [...context.ancestry]),
     attributes: [],
     chars: "",
-    children: [],
+    children: rootChildren,
     document: self,
     documentType,
     doubleValue: [],
@@ -761,33 +864,18 @@ export const rootInsertOf = (
     stringPiece: "",
     version,
   };
-  const children = new Map<NodeId, NodeMember[]>([
-    // SAFETY: `root.children` is the array this map's entry fills, built here as a fresh empty array; its readonly type is the nested write's, and only this walk appends to it.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-    [self, root.children as NodeMember[]],
-  ]);
+  const children = new Map<NodeId, NodeMember[]>([[self, rootChildren]]);
 
-  for (const node of rows.nodes.slice(1)) {
+  for (const gathered of gatheredOf(rows)) {
+    const { node } = gathered;
     const siblings = children.get(node.parent);
-    const folded = folds.get(node.id);
-    if (siblings === undefined || folded === undefined) {
+    if (siblings === undefined) {
       throw new Error(
         `flatten wrote node ${node.id} before its parent ${node.parent}, and it writes nodes in document order. Correct flatten.`,
       );
     }
 
-    const written = memberOf(node, folded, {
-      attributes: attributes.get(node.id) ?? [],
-      chars: chars.get(node.id) ?? "",
-      documentType,
-      indexed,
-      namespace: foreignKinds.has(node.kind)
-        ? (foreignNamespace.get(node.id) ?? "")
-        : (namespaceAt.get(node.kind) ?? ""),
-      namespaces: namespaces.get(node.id) ?? [],
-      text: texts.get(node.id) ?? "",
-      version,
-    });
+    const written = memberOf(gathered, foldAt(folds, node.id), documentType);
     siblings.push(written.member);
     children.set(node.id, written.children);
   }
@@ -798,24 +886,31 @@ export const rootInsertOf = (
 /**
  * Write a document's flat rows of the document layer: its `Document` row, each comment's,
  * instruction's and doctype's row, and each foreign element's `OpenElementName` row with its
- * node's tuple (C18) and its parent's kind and namespace name.
+ * node's tuple (C18) and its parent's kind and namespace name, the document node's none.
  *
  * @param document - The document as the importer lists it.
- * @param ids - The ids its rows are written under.
+ * @param ids - The ids its rows are written under, whether it is in an assembly, and the context
+ *   it is judged in (`ownContext` of its document node for a document no site names).
  * @returns Its rows, each keyed by its node's id.
+ * @throws {Error} When `flatten` writes an `OpenElementName` row of a node, or a node of a parent,
+ *   that it wrote no row of ({@link ownerIn}).
  */
 export const documentRowsOf = (
   document: ListedDocument,
-  ids: Pick<NodeIds, "idOf" | "package"> & Partial<Pick<NodeIds, "assembled" | "context">>,
+  ids: Pick<NodeIds, "assembled" | "context" | "idOf" | "package">,
 ): DocumentLayerRows => {
   const rows = flatten(document.tree, ids.idOf);
   const self = rows.document.node;
-  const context = ids.context ?? ownContext(self);
+  const { context } = ids;
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const foreignNamespace = new Map(
     rows.openElementNames.map(({ namespace, node }) => [node, namespace] as const),
   );
   const folds = foldOf(rows.nodes, context);
+  const namespaceOf = (parent: NodeRow<Composed>): string =>
+    parent.id === self
+      ? noNamespace
+      : elementNamespaceOf(parent.kind, Option.fromUndefinedOr(foreignNamespace.get(parent.id)));
 
   return {
     Comment: new Map(rows.comments.map(({ node, value }) => [node, { node, value }] as const)),
@@ -825,7 +920,7 @@ export const documentRowsOf = (
         self,
         {
           ...rows.document,
-          assembled: ids.assembled ?? false,
+          assembled: ids.assembled,
           contextNearest: context.nearest,
           contextNearestKind: context.nearestKind,
           nodeChildren: BigInt(
@@ -845,35 +940,27 @@ export const documentRowsOf = (
       ],
     ]),
     OpenElementName: new Map(
-      rows.openElementNames.flatMap(({ local, namespace, node }) => {
-        const row = byId.get(node);
-        const parent = row === undefined ? undefined : byId.get(row.parent);
-        const folded = folds.get(node);
-        if (row === undefined || parent === undefined || folded === undefined) {
-          return [];
-        }
+      rows.openElementNames.map(({ local, namespace, node }) => {
+        const row = ownerIn(byId, node, "an open element name");
+        const parent = ownerIn(byId, row.parent, `node ${node}, its child`);
 
         return [
-          [
+          node,
+          {
+            document: self,
+            governs: row.governs,
+            kind: row.kind,
+            local,
+            namespace,
+            nearest: foldAt(folds, node).nearest,
             node,
-            {
-              document: self,
-              governs: row.governs,
-              kind: row.kind,
-              local,
-              namespace,
-              nearest: folded.nearest,
-              node,
-              parent: parent.id,
-              parentKind: parent.kind,
-              parentNamespace: foreignKinds.has(parent.kind)
-                ? (foreignNamespace.get(parent.id) ?? "")
-                : (namespaceAt.get(parent.kind) ?? ""),
-              start: row.start,
-              version: row.version,
-            },
-          ] as const,
-        ];
+            parent: parent.id,
+            parentKind: parent.kind,
+            parentNamespace: namespaceOf(parent),
+            start: row.start,
+            version: row.version,
+          },
+        ] as const;
       }),
     ),
     Pi: new Map(rows.pis.map(({ data, node, target }) => [node, { data, node, target }] as const)),

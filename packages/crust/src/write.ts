@@ -1,4 +1,5 @@
 import { Effect, Option } from "effect";
+import { codePointOf } from "#crust/charset.ts";
 import { EncodeError } from "#crust/errors.ts";
 import { preorder, tour } from "#crust/tour.ts";
 import type { Step } from "#crust/tour.ts";
@@ -37,7 +38,7 @@ const characterReference = (codePoint: number): string =>
  * Whether `character` lies above the threshold; with no threshold nothing does.
  */
 const isAbove = (character: string, threshold: number): boolean =>
-  (character.codePointAt(0) ?? 0) > threshold;
+  codePointOf(character) > threshold;
 
 /**
  * Escape an attribute value, writing each code point above `threshold` as a character reference.
@@ -47,7 +48,7 @@ const escapeAttribute = (value: string, threshold: number): string => {
 
   for (const character of value) {
     escaped += isAbove(character, threshold)
-      ? characterReference(character.codePointAt(0) ?? 0)
+      ? characterReference(codePointOf(character))
       : (attributeEscapes.get(character) ?? character);
   }
 
@@ -92,7 +93,7 @@ const escapeText = (value: string, threshold: number, before: string): string =>
 
   for (const character of value) {
     if (isAbove(character, threshold)) {
-      escaped += characterReference(character.codePointAt(0) ?? 0);
+      escaped += characterReference(codePointOf(character));
     } else if (character === "&") {
       escaped += "&amp;";
     } else if (character === "<") {
@@ -131,7 +132,7 @@ const renderCdata = (value: string, threshold: number): string => {
   for (const character of value) {
     if (isAbove(character, threshold) || character === "\r") {
       rendered += current === "" ? "" : section(current);
-      rendered += characterReference(character.codePointAt(0) ?? 0);
+      rendered += characterReference(codePointOf(character));
       current = "";
     } else {
       current += character;
@@ -248,7 +249,7 @@ const renderDeclaration = (declaration: XmlDeclaration): string => {
 const firstAbove = (value: string, threshold: number): number | undefined => {
   for (const character of value) {
     if (isAbove(character, threshold)) {
-      return character.codePointAt(0);
+      return codePointOf(character);
     }
   }
 

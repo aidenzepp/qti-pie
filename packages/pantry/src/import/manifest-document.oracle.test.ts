@@ -39,12 +39,6 @@ import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
- * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
- * describe: a hang guard, never a budget. Measured 2026-11-07: 20.0 s, its slowest test.
- */
-const testTimeoutMs = 600_000;
-
-/**
  * The oracle's law tables over the composed grammar.
  */
 const laws = lawsOf(grammar);
@@ -233,6 +227,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("the manifest", (it) =>
           );
         }).pipe(Effect.scoped),
       ),
-    testTimeoutMs,
+    600_000,
   );
 });

@@ -16,9 +16,14 @@
 import { Option, Result, Schema } from "effect";
 import type { Admission } from "#pantry/grammar/admission.ts";
 import { UnadmittedChild } from "#pantry/grammar/admission.ts";
-import { closed, idField, sourced } from "#pantry/grammar/closed.ts";
-import type { ClosedRelationError, IdField, Roster, Sourced } from "#pantry/grammar/closed.ts";
-import type { Source } from "#pantry/vocab/inventory/types.ts";
+import { idField, sourced } from "#pantry/grammar/closed.ts";
+import type {
+  ClosedRelationError,
+  IdField,
+  Roster,
+  Sourced,
+  SourcedRow,
+} from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 
 /**
@@ -71,6 +76,14 @@ export type BarredBy = Sourced<
 >;
 
 /**
+ * One `ChildBarredBy` row, with the reading that states its barring.
+ */
+type BarredByRow = SourcedRow<
+  readonly [IdField<"version", SchemaVersion>, IdField<"parent", string>],
+  readonly [IdField<"name", string>, IdField<"position", string>]
+>;
+
+/**
  * A barring's kinds hold several positions, or none, so one position cannot stand for them.
  */
 export class SplitMembers extends Schema.TaggedError<SplitMembers>()("SplitMembers", {
@@ -115,13 +128,7 @@ export const barredByOf = (input: {
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<BarredBy, ChildError> =>
   Result.gen(function* generateBarredBy() {
-    const rows: {
-      readonly name: string;
-      readonly parent: string;
-      readonly position: string;
-      readonly version: SchemaVersion;
-    }[] = [];
-    const sources = new Map<string, Source>();
+    const rows: BarredByRow[] = [];
     for (const { kinds, name, parents, source, versions } of input.facets.flatMap(
       (facet) => facet.barrings,
     )) {
@@ -151,24 +158,18 @@ export const barredByOf = (input: {
             );
           }
 
-          rows.push({ name, parent, position, version });
-          sources.set(`${version} ${parent}`, { _tag: "spec", cite: source });
+          rows.push({
+            row: { name, parent, position, version },
+            source: { _tag: "spec", cite: source },
+          });
         }
       }
     }
 
-    const relation = yield* closed({
+    return yield* sourced({
       key: [idField("version", input.versions), idField("parent", input.kinds)],
       name: "ChildBarredBy",
       payload: [idField("name", input.attributes), idField("position", input.positions)],
       rows,
     });
-
-    // Every row is pushed with its barring's source, so a row without one is a defect here.
-    return sourced(relation, ({ parent, version }) =>
-      Option.getOrThrowWith(
-        Option.fromNullishOr(sources.get(`${version} ${parent}`)),
-        () => new Error(`ChildBarredBy states ${parent} in ${version} with no barring's source.`),
-      ),
-    );
   });

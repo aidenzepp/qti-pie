@@ -28,7 +28,7 @@ import type { Kind } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import { Flag, grammar } from "#pantry/grammar/install.ts";
 import { isSiteKind } from "#pantry/import/context.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import {
@@ -90,14 +90,15 @@ import type {
  */
 export interface TestIds {
   /**
-   * Whether the document is in an assembly, as the importer's contexts read it; where none is
-   * given, a test, a section, or a document that holds a site or that a site names.
+   * Whether the document is in an assembly, as the importer's contexts read it
+   * (`#pantry/import/context.ts` `contextsOf`): a test, a section, or a document that holds a site
+   * or that a site names.
    */
-  readonly assembled?: boolean;
+  readonly assembled: boolean;
   /**
-   * The document's context (spec reading 117), its own where none is given.
+   * The document's context (spec reading 117).
    */
-  readonly context?: DocumentContext;
+  readonly context: DocumentContext;
   readonly documentAt: (path: string) => Option.Option<NodeId>;
   /**
    * The document's type, the resource's that lists it, which each site copies from its include's
@@ -105,22 +106,17 @@ export interface TestIds {
    */
   readonly documentType: Addition<typeof Site>["documentType"];
   /**
-   * Whether the package holds an entry at a path; where none is given, exactly where it holds a
-   * document.
+   * Whether the package holds an entry at a path.
    */
-  readonly entryAt?: (path: string) => boolean;
+  readonly entryAt: (path: string) => boolean;
   readonly idOf: (index: number) => NodeId;
   readonly package: Uuid;
   readonly path: string;
   /**
-   * The document a site's href names, with its root's kind and context; where none is given, the
-   * document at the path, with the document node's own kind as its root.
+   * The document a site's href names, with its root's kind and context, none where the path names
+   * no listed document.
    */
-  readonly targetAt?: (path: string) => Option.Option<ListedTarget>;
-  /**
-   * Whether a site names the document, so it is an instance where it is placed; none read as no.
-   */
-  readonly targeted?: boolean;
+  readonly targetAt: (path: string) => Option.Option<ListedTarget>;
 }
 
 /**
@@ -262,7 +258,7 @@ const viewOf = (doc: XdmDocument<Composed>, ids: TestIds): View => {
     attributes.set(node, named);
   }
 
-  const folds = foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node));
+  const folds = foldOf(rows.nodes, ids.context);
 
   return {
     attributes,
@@ -309,7 +305,7 @@ const kindOf = (view: View, id: NodeId): Kind => view.byId.get(id)?.kind ?? "doc
 const tupleOf = (view: View, node: NodeRow<Composed>) => ({
   document: view.document,
   kind: node.kind,
-  nearest: view.folds.get(node.id)?.nearest ?? view.document,
+  nearest: foldAt(view.folds, node.id).nearest,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -514,8 +510,9 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
 };
 
 /**
- * Write a document's names: each test part, section, section ref and item ref, with its collapsed
- * identifier and its scope in the document.
+ * Write a document's names: each test part, section, section ref and item ref that writes an
+ * identifier, with its collapsed identifier and its scope in the document. One that writes none
+ * names nothing, so it has no row, and AL3 refuses it alone (spec reading 147).
  *
  * @param view - The document.
  * @param token - Each node's tokens.
@@ -530,24 +527,31 @@ const namedOf = (
   new Map(
     view.rows.nodes
       .filter(({ kind }) => among(namedKinds, kind))
-      .map((node) => {
+      .flatMap((node) => {
+        const identifier = token(node, "identifier");
+        if (identifier === undefined) {
+          return [];
+        }
+
         const own = scopes.get(node.id);
         const above = aboveOf(view, scopes, node);
         const isPart = node.kind === partKind;
 
         return [
-          node.id,
-          {
-            ...tupleOf(view, node),
-            end: node.end,
-            identifier: token(node, "identifier") ?? "",
-            looseChain: own?.looseChain ?? false,
-            mixes: own?.mixes ?? false,
-            parentKind: kindOf(view, node.parent),
-            part: isPart ? node.id : (own?.part ?? above.part),
-            replaced: !isPart && above.replaced,
-          },
-        ] as const;
+          [
+            node.id,
+            {
+              ...tupleOf(view, node),
+              end: node.end,
+              identifier,
+              looseChain: own?.looseChain ?? false,
+              mixes: own?.mixes ?? false,
+              parentKind: kindOf(view, node.parent),
+              part: isPart ? node.id : (own?.part ?? above.part),
+              replaced: !isPart && above.replaced,
+            },
+          ] as const,
+        ];
       }),
   );
 
@@ -718,38 +722,6 @@ export const itemRefPathsOf = (doc: XdmDocument<Composed>, ids: TestIds): readon
     : [];
 
 /**
- * Read whether the package holds an entry at a path a site's href names: the importer's entries,
- * and with no `entryAt`, its documents.
- *
- * @param view - The site's document.
- * @param path - The path.
- * @returns Whether an entry is there.
- */
-const entryOf = (view: View, path: string): boolean =>
-  view.ids.entryAt === undefined
-    ? Option.isSome(view.ids.documentAt(path))
-    : view.ids.entryAt(path);
-
-/**
- * Read the document a site's href names: the listed document there, with its root's kind and its
- * context, and with no `targetAt`, the document at the path with the document node's own kind as
- * its root. None where the path names no listed document: the site then has no
- * {@link SiteTarget}, and "Include target" refuses it (spec reading 115).
- *
- * @param view - The site's document.
- * @param path - The path its href names.
- * @returns The target, if any.
- */
-const targetOf = (view: View, path: string): Option.Option<ListedTarget> =>
-  view.ids.targetAt === undefined
-    ? Option.map(view.ids.documentAt(path), (node): ListedTarget => ({
-        context: ownContext(node),
-        node,
-        rootKind: "document",
-      }))
-    : view.ids.targetAt(path);
-
-/**
  * Write a document's sites, each with the scope it is placed in, whether or not it writes an href,
  * and `external` where its href resolves outside the package.
  *
@@ -777,12 +749,12 @@ const sitesOf = (
           node.id,
           {
             ...tupleOf(view, node),
-            ancestry: Bits.of(Flag, [...(view.folds.get(node.id)?.ancestry ?? [])]),
+            ancestry: Bits.of(Flag, [...foldAt(view.folds, node.id).ancestry]),
             children: BigInt(view.childrenOf.get(node.id)?.length ?? 0),
             documentType: view.ids.documentType,
             external: hrefs.get(node.id)?.external ?? false,
             governs: node.governs,
-            nearestKind: view.folds.get(node.id)?.nearestKind ?? "document",
+            nearestKind: foldAt(view.folds, node.id).nearestKind,
             parentKind,
             parentLooseChain: parentKind === sectionKind && above.parentLooseChain,
             parentMixes: above.parentMixes,
@@ -820,7 +792,7 @@ const sitePathsOf = (
             [
               site.node,
               {
-                entry: entryOf(view, href.path),
+                entry: view.ids.entryAt(href.path),
                 kind: site.kind,
                 node: site.node,
                 package: href.package,
@@ -852,7 +824,7 @@ const siteTargetsOf = (
     [...sites.values()].flatMap((site) =>
       Option.match(
         Option.flatMap(Option.fromNullishOr(paths.get(site.node)), (href) =>
-          Option.map(targetOf(view, href.path), (target) => ({ href, target })),
+          Option.map(view.ids.targetAt(href.path), (target) => ({ href, target })),
         ),
         {
           onNone: () => [],
@@ -962,7 +934,8 @@ const mappingsOf = (
 
 /**
  * Write a document's stimulus refs, each with its collapsed identifier, whatever the document's
- * root: a stimulus ref sits in an item.
+ * root: a stimulus ref sits in an item. One that writes no identifier has no row, and AL3 refuses
+ * it alone (spec reading 147).
  *
  * @param view - The document.
  * @param token - Each node's tokens.
@@ -975,19 +948,19 @@ const stimulusRefsOf = (
   new Map(
     view.rows.nodes
       .filter(({ kind }) => kind === stimulusRefKind)
-      .map(
-        (node) =>
-          [
-            node.id,
-            { ...tupleOf(view, node), identifier: token(node, "identifier") ?? "" },
-          ] as const,
-      ),
+      .flatMap((node) => {
+        const identifier = token(node, "identifier");
+
+        return identifier === undefined
+          ? []
+          : [[node.id, { ...tupleOf(view, node), identifier }] as const];
+      }),
   );
 
 /**
- * Keep a relation's rows where the document is a test's or a section's, and none otherwise.
+ * Keep a relation's rows where the document is in an assembly, and none otherwise.
  *
- * @param assembled - Whether the document's root is a test or a section.
+ * @param assembled - Whether the document is in an assembly ({@link TestIds}' `assembled`).
  * @param rows - The rows.
  * @returns The rows kept.
  */
@@ -995,13 +968,13 @@ const keptIf = <A>(assembled: boolean, rows: ReadonlyMap<string, A>): ReadonlyMa
   assembled ? rows : new Map();
 
 /**
- * Build the overlay rows of one document: its tokens and flags whatever its root, since every
- * include's `href` is copied, an item's among them; and every other overlay's where its root is a
- * test or a section, none otherwise.
+ * Build the overlay rows of one document: its tokens, flags, sites and stimulus refs whatever its
+ * root, since every include's `href` is copied, an item's among them; and every other overlay's
+ * where the document is in an assembly, none otherwise.
  *
  * An absent required attribute leaves out the row whose copy proves it (an item ref's or a site's
- * `href`, a selection's `select`), or leaves its field at its null value (an identifier's empty
- * value, a section's `visible` false), and AL3 refuses the element either way.
+ * `href`, a selection's `select`, a name's or a stimulus ref's `identifier`), or leaves its field
+ * at its null value (a section's `visible` false), and AL3 refuses the element either way.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -1020,23 +993,21 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: TestIds): TestRows => {
   const sites = sitesOf(view, hrefs, sections.scopes);
   const paths = sitePathsOf(view, sites, hrefs);
   const targets = siteTargetsOf(view, sites, paths);
-  const assembled =
-    ids.assembled ?? (among(assembledRoots, root) || sites.size > 0 || ids.targeted === true);
 
   return {
-    BranchRule: keptIf(assembled, rulesOf(view, token)),
+    BranchRule: keptIf(ids.assembled, rulesOf(view, token)),
     Inclusion: inclusionsOf(targets),
-    Named: keptIf(assembled, namedOf(view, token, sections.scopes)),
-    Section: keptIf(assembled, sections.rows),
-    SectionMember: keptIf(assembled, membersOf(view, flag)),
-    SectionOrdering: keptIf(assembled, orderingsOf(view, flag)),
-    SectionSelection: keptIf(assembled, selectionsOf(view, flag)),
+    Named: keptIf(ids.assembled, namedOf(view, token, sections.scopes)),
+    Section: keptIf(ids.assembled, sections.rows),
+    SectionMember: keptIf(ids.assembled, membersOf(view, flag)),
+    SectionOrdering: keptIf(ids.assembled, orderingsOf(view, flag)),
+    SectionSelection: keptIf(ids.assembled, selectionsOf(view, flag)),
     Site: sites,
     SitePath: paths,
     SiteTarget: targets,
     StimulusRef: stimulusRefsOf(view, token),
     TestDocument: keptIf(
-      assembled,
+      ids.assembled,
       new Map([
         [
           view.document,
@@ -1051,7 +1022,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: TestIds): TestRows => {
     ),
     TestFlag: flags,
     TestToken: tokens,
-    VariableMapping: keptIf(assembled, mappingsOf(view, token)),
+    VariableMapping: keptIf(ids.assembled, mappingsOf(view, token)),
   };
 };
 

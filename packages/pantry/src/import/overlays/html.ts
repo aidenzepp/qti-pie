@@ -11,7 +11,7 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -20,14 +20,15 @@ import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by
- * the number `flatten` gives it, and the document's context (spec reading 117), its own where none
- * is given, whose interaction an included fragment's nodes take as their nearest.
+ * the number `flatten` gives it, and the document's context (spec reading 117), whose interaction
+ * an included fragment's nodes take as their nearest: `ownContext` of its document node for a
+ * document no site names.
  *
  * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
  * the tree's rows name each node by one id.
  */
 export interface HtmlIds {
-  readonly context?: DocumentContext;
+  readonly context: DocumentContext;
   readonly idOf: (index: number) => NodeId;
 }
 
@@ -67,10 +68,18 @@ type Spacing = HeaderTokenInsert["before"];
 /**
  * Decide whether a text is XML whitespace, possibly none, the language of {@link Spacing}.
  *
- * @param text - The text.
- * @returns Whether every character of it is a tab, a line feed, a carriage return or a space.
+ * @param text - The text, none where a regex group did not take part.
+ * @returns Whether it is a text every character of which is a tab, a line feed, a carriage return
+ *   or a space.
  */
-const isSpacing = (text: string): text is Spacing => /^[\t\n\r ]*$/u.test(text);
+const isSpacing = (text: string | undefined): text is Spacing =>
+  text !== undefined && /^[\t\n\r ]*$/u.test(text);
+
+/**
+ * A token of a `headers` value with the whitespace before it: every run the global match takes,
+ * each starting where the last ended, so the runs cover the value up to its trailing whitespace.
+ */
+const tokenRun = /(?<before>[\t\n\r ]*)(?<token>[^\t\n\r ]+)/gu;
 
 /**
  * Split a `headers` value into its tokens, each with the whitespace written before it, and the
@@ -79,19 +88,25 @@ const isSpacing = (text: string): text is Spacing => /^[\t\n\r ]*$/u.test(text);
  *
  * @param lexical - The attribute's lexical form.
  * @returns Its pieces, in order; none for a value of whitespace alone, an empty list.
+ * @throws {Error} When a run of {@link tokenRun} lacks its `before` or `token` group, or the text
+ *   after the last run is no whitespace, which the pattern rules out: a defect of this splitter,
+ *   never of the document.
  */
 export const headerPiecesOf = (lexical: string): readonly HeaderTokenInsert[] => {
-  const runs = [...lexical.matchAll(/(?<before>[\t\n\r ]*)(?<token>[^\t\n\r ]+)/gu)];
+  const runs = [...lexical.matchAll(tokenRun)];
   const tail = runs.reduce((end, run) => end + run[0].length, 0);
 
-  return runs.flatMap((run, at): readonly HeaderTokenInsert[] => {
-    const before = run.groups?.["before"] ?? "";
-    const token = run.groups?.["token"] ?? "";
+  return runs.map((run, at): HeaderTokenInsert => {
+    const before = run.groups?.["before"];
+    const token = run.groups?.["token"];
     const after = at === runs.length - 1 ? lexical.slice(tail) : "";
+    if (!isSpacing(before) || token === undefined || !isSpacing(after)) {
+      throw new Error(
+        `The headers value ${JSON.stringify(lexical)} split into a run ${JSON.stringify(run[0])} with no whitespace before its token, no token, or no whitespace after it, which the token pattern rules out. Correct headerPiecesOf's pattern.`,
+      );
+    }
 
-    return isSpacing(before) && isSpacing(after)
-      ? [{ after, before, piece: `${before}${token}${after}`, token }]
-      : [];
+    return { after, before, piece: `${before}${token}${after}`, token };
   });
 };
 
@@ -112,6 +127,9 @@ interface TableWalk {
  * @param document - The document node.
  * @param element - The element.
  * @returns The walk, the element first, and its table.
+ * @throws {Error} When an element on the walk has a parent that is neither the document node nor
+ *   one of the document's nodes, which `flatten` rules out: a defect of the caller, never of the
+ *   document.
  */
 const tableWalkOf = (
   byId: ReadonlyMap<NodeId, NodeRow<Composed>>,
@@ -119,17 +137,25 @@ const tableWalkOf = (
   element: NodeRow<Composed>,
 ): TableWalk => {
   const walk: NodeRow<Composed>[] = [];
-  let at: NodeRow<Composed> | undefined = element;
-  while (at !== undefined) {
+  for (let at = element; ;) {
     walk.push(at);
     if (at.kind === "table") {
       return { table: at.id, walk };
     }
 
-    at = at.parent === document ? undefined : byId.get(at.parent);
-  }
+    if (at.parent === document) {
+      return { table: document, walk };
+    }
 
-  return { table: document, walk };
+    const parent = byId.get(at.parent);
+    if (parent === undefined) {
+      throw new Error(
+        `Node ${at.id}'s parent ${at.parent} is not among its document's nodes, but flatten writes every parent. Walk the rows of the document the node is flattened in.`,
+      );
+    }
+
+    at = parent;
+  }
 };
 
 /**
@@ -160,14 +186,14 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
   }
 
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
-  const folds = foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node));
+  const folds = foldOf(rows.nodes, ids.context);
   const tableOf = (cell: NodeRow<Composed>): NodeId => {
     const { table, walk } = tableWalkOf(byId, document, cell);
     for (const node of walk) {
       scopes.set(node.id, {
         document,
         kind: node.kind,
-        nearest: folds.get(node.id)?.nearest ?? document,
+        nearest: foldAt(folds, node.id).nearest,
         node: node.id,
         parent: node.parent,
         start: node.start,

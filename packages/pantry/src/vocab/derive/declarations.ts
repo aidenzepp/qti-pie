@@ -37,7 +37,18 @@
  *   whose declarations disagree on them is refused.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, Console, Effect, Equal, Layer, Match, Option, Order, Result } from "effect";
+import {
+  Array as Arr,
+  Console,
+  Effect,
+  Equal,
+  Layer,
+  Match,
+  Option,
+  Order,
+  pipe,
+  Result,
+} from "effect";
 import { Argument, Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
@@ -46,14 +57,15 @@ import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { typeHandle } from "#pantry/grammar/xsi.ts";
 import {
   attributeNameDirective,
-  attributeOf,
   attributeRowsOf,
   attributeWildcardOf,
   declaredType,
   firstXs,
+  groupedBy,
   loadSchema,
   qualify,
   refuse,
+  requireAttribute,
   textTypeOf,
   valueTypeOf,
   XsdReadingError,
@@ -62,6 +74,7 @@ import type { AttributeRow, AttributeUse, XsdSchema } from "#pantry/vocab/derive
 import { builtinBases, valueDomainOf } from "#pantry/vocab/derive/domains.ts";
 import type { DomainError } from "#pantry/vocab/derive/domains.ts";
 import {
+  complexTypeIn,
   declarationsIn,
   derivationsOf,
   handleOf,
@@ -146,7 +159,7 @@ const xlinkSource = "xlink/xlink.xsd" satisfies SourcePath;
 /**
  * Read a global attribute of a schema as the schema declares it.
  *
- * @param schema - The schema, or none where the version reads no such schema.
+ * @param schema - The schema.
  * @param file - The schema's file, which a refusal names.
  * @param prefix - The prefix its handles carry, such as `xml:` or `xlink:`.
  * @param name - The handle, such as `xml:lang` or `xlink:href`.
@@ -154,28 +167,43 @@ const xlinkSource = "xlink/xlink.xsd" satisfies SourcePath;
  *   declare.
  */
 const globalAttributeIn = (
-  schema: Option.Option<XsdSchema>,
+  schema: XsdSchema,
   file: string,
   prefix: string,
   name: string,
 ): Result.Result<GlobalAttributeDeclaration, DomainError> =>
   Result.gen(function* globalAttributeInBody() {
     const local = name.slice(prefix.length);
-    const declaration = schema.pipe(
-      Option.flatMap((held) => Option.fromNullishOr(held.attributes.get(local))),
-    );
+    const declaration = Option.fromNullishOr(schema.attributes.get(local));
 
-    if (Option.isNone(schema) || Option.isNone(declaration)) {
+    if (Option.isNone(declaration)) {
       return yield* refuse(`${file} declares no global attribute ${local}`);
     }
 
-    const type = yield* declaredType(schema.value, declaration.value);
+    const type = yield* declaredType(schema, declaration.value);
 
     return {
-      domain: yield* valueDomainOf(schema.value, type, `attribute ${name}`),
+      domain: yield* valueDomainOf(schema, type, `attribute ${name}`),
       name,
       type,
     };
+  });
+
+/**
+ * The pin of the XML namespace's attribute declarations.
+ */
+const xmlSource = "w3/xml.xsd" satisfies SourcePath;
+
+/**
+ * The schema of the XML namespace a version reads, `w3/xml.xsd`.
+ *
+ * @param world - The version's schemas.
+ * @returns The schema, or an {@link XsdReadingError} when the version reads none.
+ */
+const xmlSchemaOf = (world: World): Result.Result<XsdSchema, XsdReadingError> =>
+  Option.match(Option.fromNullishOr(world.get(xmlNamespace)), {
+    onNone: () => refuse(`the version reads no ${xmlSource}, which declares the xml: attributes`),
+    onSome: ({ schema }) => Result.succeed(schema),
   });
 
 /**
@@ -183,18 +211,15 @@ const globalAttributeIn = (
  *
  * @param world - The version's schemas, `xml.xsd` among them.
  * @param name - The handle, such as `xml:lang`.
- * @returns Its value type and domain, or an {@link XsdReadingError} for a name `xml.xsd` does not
- *   declare.
+ * @returns Its value type and domain, or an {@link XsdReadingError} for a version that reads no
+ *   `xml.xsd`, or a name it does not declare.
  */
 export const globalAttributeOf = (
   world: World,
   name: string,
 ): Result.Result<GlobalAttributeDeclaration, DomainError> =>
-  globalAttributeIn(
-    Option.map(Option.fromNullishOr(world.get(xmlNamespace)), ({ schema }) => schema),
-    "xml.xsd",
-    xmlPrefix,
-    name,
+  Result.flatMap(xmlSchemaOf(world), (schema) =>
+    globalAttributeIn(schema, xmlSource, xmlPrefix, name),
   );
 
 /**
@@ -240,12 +265,8 @@ const openType: ValueType = {
 export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
   function* loadGlobalAttributes() {
     const { world } = yield* loadWorld("3.0.1");
-    const xml = Option.fromNullishOr(world.get(xmlNamespace));
+    const xml = yield* Effect.fromResult(xmlSchemaOf(world));
     const xlink = yield* loadSchema(xlinkSource);
-
-    if (Option.isNone(xml)) {
-      return yield* new XsdReadingError({ detail: "no version reads w3/xml.xsd" });
-    }
 
     if (xlink.targetNamespace !== xlinkNamespace) {
       return yield* new XsdReadingError({
@@ -255,15 +276,17 @@ export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
 
     const globals: GlobalAttributeDeclaration[] = [];
 
-    for (const local of xml.value.schema.attributes.keys()) {
-      globals.push(yield* Effect.fromResult(globalAttributeOf(world, `${xmlPrefix}${local}`)));
+    for (const local of xml.attributes.keys()) {
+      globals.push(
+        yield* Effect.fromResult(
+          globalAttributeIn(xml, xmlSource, xmlPrefix, `${xmlPrefix}${local}`),
+        ),
+      );
     }
 
     for (const [name, type] of instanceAttributes) {
       globals.push({
-        domain: yield* Effect.fromResult(
-          valueDomainOf(xml.value.schema, type, `attribute ${name}`),
-        ),
+        domain: yield* Effect.fromResult(valueDomainOf(xml, type, `attribute ${name}`)),
         name,
         type,
       });
@@ -272,7 +295,7 @@ export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
     for (const local of xlink.attributes.keys()) {
       globals.push(
         yield* Effect.fromResult(
-          globalAttributeIn(Option.some(xlink), xlinkSource, xlinkPrefix, `${xlinkPrefix}${local}`),
+          globalAttributeIn(xlink, xlinkSource, xlinkPrefix, `${xlinkPrefix}${local}`),
         ),
       );
     }
@@ -280,9 +303,7 @@ export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
     return {
       globals,
       open: {
-        domain: yield* Effect.fromResult(
-          valueDomainOf(xml.value.schema, openType, "an open attribute name"),
-        ),
+        domain: yield* Effect.fromResult(valueDomainOf(xml, openType, "an open attribute name")),
         name: "xs:anySimpleType",
         type: openType,
       } satisfies GlobalAttributeDeclaration,
@@ -384,10 +405,9 @@ const readingOf = (
       const anonymous = firstXs(declared.declaration, "simpleType");
       const text = yield* Option.match(anonymous, {
         onNone: () =>
-          valueTypeOf(view.schema, {
-            _tag: "Named",
-            lexical: Option.getOrElse(attributeOf(declared.declaration, "type"), () => ""),
-          }),
+          Result.flatMap(requireAttribute(declared.declaration, "type"), (lexical) =>
+            valueTypeOf(view.schema, { _tag: "Named", lexical }),
+          ),
         onSome: (definition) => valueTypeOf(view.schema, { _tag: "Anonymous", definition }),
       });
 
@@ -405,6 +425,15 @@ const readingOf = (
   });
 
 /**
+ * One kind of a version's roster: its element's local name, and the names of the attributes it
+ * declares, which every declaration of the kind in the version agrees on.
+ */
+interface RosterEntry {
+  readonly attributes: readonly string[];
+  readonly local: string;
+}
+
+/**
  * What one version's XSDs declare: each kind's reading, by kind in first-declaration order, the
  * kinds declared globally, each roster's kinds by namespace, and the named types an `xsi:type` may
  * give an element ({@link GoverningReading}).
@@ -412,7 +441,7 @@ const readingOf = (
 interface VersionReading {
   readonly globals: ReadonlySet<string>;
   readonly kinds: ReadonlyMap<string, KindReading>;
-  readonly rosters: ReadonlyMap<string, ReadonlyMap<string, string>>;
+  readonly rosters: ReadonlyMap<string, ReadonlyMap<string, RosterEntry>>;
   readonly types: GoverningReading;
 }
 
@@ -430,12 +459,16 @@ const versionReadingOf = (
   Result.gen(function* versionReadingOfBody() {
     const kinds = new Map<string, KindReading>();
     const globals = new Set<string>();
-    const rosters = new Map<string, Map<string, string>>();
+    const declared: (RosterEntry & { readonly kind: string; readonly namespace: string })[] = [];
 
     for (const [view, document] of documents) {
-      for (const declared of yield* declarationsIn(view, document.root)) {
-        const kind = yield* handleOf(declared.namespace, declared.local, typeNameOf(declared.type));
-        const reading = yield* readingOf(world, view, kind, declared);
+      for (const declaration of yield* declarationsIn(view, document.root)) {
+        const kind = yield* handleOf(
+          declaration.namespace,
+          declaration.local,
+          typeNameOf(declaration.type),
+        );
+        const reading = yield* readingOf(world, view, kind, declaration);
         const known = kinds.get(kind);
 
         if (known === undefined) {
@@ -449,18 +482,32 @@ const versionReadingOf = (
           return yield* refuse(`the declarations of ${kind} declare different attributes`);
         }
 
-        if (declared.global) {
+        if (declaration.global) {
           globals.add(kind);
         }
 
-        const roster = rosters.get(declared.namespace) ?? new Map<string, string>();
-
-        roster.set(kind, declared.local);
-        rosters.set(declared.namespace, roster);
+        declared.push({
+          attributes: reading.attributes.map((row) => row.name),
+          kind,
+          local: declaration.local,
+          namespace: declaration.namespace,
+        });
       }
     }
 
-    return { globals, kinds, rosters };
+    return {
+      globals,
+      kinds,
+      rosters: new Map(
+        [...groupedBy(declared, ({ namespace }) => namespace)].map(
+          ([namespace, entries]) =>
+            [
+              namespace,
+              new Map(entries.map(({ attributes, kind, local }) => [kind, { attributes, local }])),
+            ] as const,
+        ),
+      ),
+    };
   });
 
 /**
@@ -511,19 +558,39 @@ const governingReadingOf = (
     const governors = new Map<string, KindReading>();
 
     for (const expanded of declared) {
-      for (const name of derivations.get(expanded)?.derived.slice(1) ?? []) {
-        const owner = typeHandle(name);
-        const view = world.get(name.namespace);
-        const definition = Option.flatMap(Option.fromNullishOr(view), (held) =>
-          Option.fromNullishOr(
-            held.schema.complexTypes.get(
-              held.redefined.has(name.local) ? redefinitionKey(name.local) : name.local,
-            ),
-          ),
-        );
+      const derivation = Option.fromNullishOr(derivations.get(expanded));
 
-        if (view !== undefined && Option.isSome(definition) && !governors.has(owner)) {
-          governors.set(owner, yield* complexReadingOf(world, view, owner, definition.value));
+      if (Option.isNone(derivation)) {
+        return yield* refuse(
+          `an element is declared with the type ${expanded}, which derivationsOf reads no derivations of`,
+        );
+      }
+
+      // A built-in derived from a declared type is a simple type, which governs no attributes.
+      for (const name of derivation.value.derived.slice(1)) {
+        if (name.namespace !== xsNamespace) {
+          const view = Option.fromNullishOr(world.get(name.namespace));
+
+          if (Option.isNone(view)) {
+            return yield* refuse(
+              `the type {${name.namespace}}${name.local} derives from ${expanded} in a namespace the version reads no schema of`,
+            );
+          }
+
+          const owner = typeHandle(name);
+          const definition = complexTypeIn(view.value, name.local);
+
+          // A named simple type governs text alone, which `simple` below reads.
+          if (Option.isSome(definition) && !governors.has(owner)) {
+            governors.set(
+              owner,
+              yield* complexReadingOf(world, view.value, owner, definition.value),
+            );
+          } else if (Option.isNone(definition) && !view.value.schema.simpleTypes.has(name.local)) {
+            return yield* refuse(
+              `the type {${name.namespace}}${name.local} derives from ${expanded}, but its schema declares no complex or simple type of that name`,
+            );
+          }
         }
       }
     }
@@ -600,6 +667,50 @@ export const loadDeclarations = Effect.fn("vocab.loadDeclarations")(function* lo
 });
 
 /**
+ * One version's row of a fact, by the key no two rows of the version share.
+ */
+interface Keyed<A> {
+  readonly key: string;
+  readonly row: A;
+  readonly version: SchemaVersion;
+}
+
+/**
+ * Group each fact's rows over the versions: by key, then within a key by agreeing rows, each group
+ * in first-seen order.
+ *
+ * @param readings - Each version's rows of one fact, by key.
+ * @param agree - Whether two rows of one key state the same fact.
+ * @returns The groups of agreeing rows, each key's in turn, each group's rows in version order.
+ */
+const agreeing = <A>(
+  readings: readonly (readonly [SchemaVersion, ReadonlyMap<string, A>])[],
+  agree: (left: A, right: A) => boolean,
+): readonly Arr.NonEmptyReadonlyArray<Keyed<A>>[] =>
+  [
+    ...groupedBy(
+      readings.flatMap(([version, rows]) =>
+        [...rows].map(([key, row]): Keyed<A> => ({ key, row, version })),
+      ),
+      ({ key }) => key,
+    ).values(),
+  ].flatMap((sameKey) => {
+    const groups: Arr.NonEmptyArray<Keyed<A>>[] = [];
+
+    for (const held of sameKey) {
+      const same = groups.find(([first]) => agree(first.row, held.row));
+
+      if (same === undefined) {
+        groups.push([held]);
+      } else {
+        same.push(held);
+      }
+    }
+
+    return groups;
+  });
+
+/**
  * State rows once for the versions that agree on them.
  *
  * @param readings - Each version's rows of one fact, by a key no two rows of a version share.
@@ -610,28 +721,14 @@ const merged = <A>(
 ): readonly {
   readonly row: A;
   readonly versions: readonly [SchemaVersion, ...SchemaVersion[]];
-}[] => {
-  const held = new Map<string, { row: A; versions: SchemaVersion[] }[]>();
-
-  for (const [version, rows] of readings) {
-    for (const [key, row] of rows) {
-      const known = held.get(key) ?? [];
-      const same = known.find((other) => Equal.equals(other.row, row));
-
-      if (same === undefined) {
-        held.set(key, [...known, { row, versions: [version] }]);
-      } else {
-        same.versions.push(version);
-      }
-    }
-  }
-
-  return [...held.values()].flat().flatMap(({ row, versions }) => {
-    const [first, ...rest] = versions;
-
-    return first === undefined ? [] : [{ row, versions: [first, ...rest] as const }];
-  });
-};
+}[] =>
+  agreeing(readings, (left, right) => Equal.equals(left, right)).map((same) => ({
+    row: Arr.headNonEmpty(same).row,
+    versions: pipe(
+      same,
+      Arr.map(({ version }) => version),
+    ),
+  }));
 
 /**
  * State rows once for the versions that agree on them, whatever lines each version states them on,
@@ -647,38 +744,18 @@ const mergedWithSources = <A>(
   readonly row: A;
   readonly sources: Sources;
   readonly versions: readonly [SchemaVersion, ...SchemaVersion[]];
-}[] => {
-  const held = new Map<string, { row: A; sources: Source[]; versions: SchemaVersion[] }[]>();
-
-  for (const [version, rows] of readings) {
-    for (const [key, [row, source]] of rows) {
-      const known = held.get(key) ?? [];
-      const same = known.find((other) => Equal.equals(other.row, row));
-
-      if (same === undefined) {
-        held.set(key, [...known, { row, sources: [source], versions: [version] }]);
-      } else {
-        same.sources.push(source);
-        same.versions.push(version);
-      }
-    }
-  }
-
-  return [...held.values()].flat().flatMap(({ row, sources, versions }) => {
-    const [first, ...rest] = versions;
-    const [firstSource, ...restSources] = sources;
-
-    return first === undefined || firstSource === undefined
-      ? []
-      : [
-          {
-            row,
-            sources: [firstSource, ...restSources] as const,
-            versions: [first, ...rest] as const,
-          },
-        ];
-  });
-};
+}[] =>
+  agreeing(readings, ([left], [right]) => Equal.equals(left, right)).map((same) => ({
+    row: Arr.headNonEmpty(same).row[0],
+    sources: pipe(
+      same,
+      Arr.map(({ row: [, source] }) => source),
+    ),
+    versions: pipe(
+      same,
+      Arr.map(({ version }) => version),
+    ),
+  }));
 
 /**
  * The rosters, one per vocabulary, in `namespaces.ts`'s order: each namespace's kinds in the order
@@ -692,27 +769,26 @@ export const rostersOf = (
   readings: readonly (readonly [SchemaVersion, VersionReading])[],
 ): readonly VocabularyRoster[] =>
   Object.entries(vocabularyNamespaces).map(([name, { namespace }]) => {
-    const kinds = new Map<string, string>();
-
-    for (const [, { rosters }] of readings) {
-      for (const [handle, local] of rosters.get(namespace) ?? []) {
-        if (!kinds.has(handle)) {
-          kinds.set(handle, local);
-        }
-      }
-    }
-
-    const attributes = Arr.dedupe(
-      [...kinds.keys()].flatMap((handle) =>
-        readings.flatMap(([, reading]) =>
-          (reading.kinds.get(handle)?.attributes ?? []).map((row) => row.name),
-        ),
+    // A version that declares no kind in the namespace adds none to its roster.
+    const kinds = groupedBy(
+      readings.flatMap(([, { rosters }]) =>
+        Option.toArray(Option.fromNullishOr(rosters.get(namespace))).flatMap((roster) => [
+          ...roster,
+        ]),
       ),
+      ([handle]) => handle,
     );
 
     return {
-      attributes,
-      kinds: [...kinds].map(([handle, local]) => ({ handle, local })),
+      attributes: Arr.dedupe(
+        [...kinds.values()].flatMap((entries) =>
+          entries.flatMap(([, { attributes }]) => attributes),
+        ),
+      ),
+      kinds: [...kinds].map(([handle, entries]) => ({
+        handle,
+        local: Arr.headNonEmpty(entries)[1].local,
+      })),
       name,
       namespace,
     };
@@ -1127,6 +1203,17 @@ const facetsExpression = (facets: readonly Facet[]): string =>
   `[${facets.map(({ facet, value }) => `[${JSON.stringify(facet)}, ${JSON.stringify(value)}]`).join(", ")}]`;
 
 /**
+ * Write an attribute list where a declaration states it: by its constant's name when one is
+ * stated, else written out.
+ *
+ * @param rows - The list's rows, each as the leaf writes it.
+ * @param list - The constant that states the list, `None` for one written out.
+ * @returns The expression.
+ */
+const listExpression = (rows: readonly string[], list: Option.Option<string>): string =>
+  Option.match(list, { onNone: () => `[${rows.join(", ")}]`, onSome: (name) => name });
+
+/**
  * Write the attributes leaf, unformatted.
  *
  * The module states each distinct value type once as a constant, then each kind's attribute list,
@@ -1226,11 +1313,6 @@ export const renderAttributes = (
 
     return name;
   };
-  const groups = new Map<
-    string,
-    { kind: string; rows: string[]; versions: readonly SchemaVersion[] }
-  >();
-
   const writtenOf = (row: Omit<AttributeDeclaration, "kind">): string => {
     const stem = Option.isSome(row.type.inline) ? row.name : row.type.type;
     const type = typeOf(row.type, stem);
@@ -1245,51 +1327,65 @@ export const renderAttributes = (
     });
   };
 
-  for (const row of declarations) {
-    const key = `${row.kind} ${row.versions.join(" ")}`;
-    const written = writtenOf(row);
-    const group = groups.get(key) ?? { kind: row.kind, rows: [], versions: row.versions };
+  // Each row is written in declaration order, which names the types and domains it states first.
+  const groups = [
+    ...groupedBy(
+      declarations.map((row) => ({ row, written: writtenOf(row) })),
+      ({ row }) => `${row.kind} ${row.versions.join(" ")}`,
+    ).values(),
+  ].map((same) => ({
+    ...Arr.headNonEmpty(same).row,
+    rows: pipe(
+      same,
+      Arr.map(({ written }) => written),
+    ),
+  }));
+  const seenLists = new Set<string>();
+  const sharedLists = new Set<string>();
 
-    group.rows.push(written);
-    groups.set(key, group);
-  }
-
-  const listUses = new Map<string, number>();
-
-  for (const { rows } of groups.values()) {
+  for (const { rows } of groups) {
     const key = rows.join("\n");
 
-    listUses.set(key, (listUses.get(key) ?? 0) + 1);
+    if (seenLists.has(key)) {
+      sharedLists.add(key);
+    }
+
+    seenLists.add(key);
   }
 
   const listNames = new Map<string, string>();
   const listLines: string[] = [];
-  const declares = [...groups.values()].map(({ kind, rows, versions }) => {
+  const listNameOf = (kind: string, rows: readonly string[]): Option.Option<string> => {
     const key = rows.join("\n");
-    const shared = (listUses.get(key) ?? 0) > 1;
-    let list = listNames.get(key);
+    const known = listNames.get(key);
 
-    if (shared && list === undefined) {
-      const stem = `${camelOf(kind)}Attributes`;
-
-      list = stem;
-      for (let suffix = 2; taken.has(list); suffix += 1) {
-        list = `${stem}${suffix}`;
-      }
-
-      taken.add(list);
-      listNames.set(key, list);
-      listLines.push(
-        ...commentOf([[`The attributes \`${kind}\` declares, which other kinds declare alike.`]]),
-        `const ${list} = [`,
-        ...rows.map((row) => `  ${row},`),
-        "] as const;",
-        "",
-      );
+    if (known !== undefined || !sharedLists.has(key)) {
+      return Option.fromNullishOr(known);
     }
 
-    return `  ...declares(${JSON.stringify(kind)}, ${versionsExpression(versions)}, ${list ?? `[${rows.join(", ")}]`}),`;
-  });
+    const stem = `${camelOf(kind)}Attributes`;
+    let list = stem;
+
+    for (let suffix = 2; taken.has(list); suffix += 1) {
+      list = `${stem}${suffix}`;
+    }
+
+    taken.add(list);
+    listNames.set(key, list);
+    listLines.push(
+      ...commentOf([[`The attributes \`${kind}\` declares, which other kinds declare alike.`]]),
+      `const ${list} = [`,
+      ...rows.map((row) => `  ${row},`),
+      "] as const;",
+      "",
+    );
+
+    return Option.some(list);
+  };
+  const declares = groups.map(
+    ({ kind, rows, versions }) =>
+      `  ...declares(${JSON.stringify(kind)}, ${versionsExpression(versions)}, ${listExpression(rows, listNameOf(kind, rows))}),`,
+  );
   const globalRows = globals.globals.map(
     ({ domain, name, type }) =>
       `  global(${JSON.stringify(name)}, ${typeOf(type, name)}, ${domainOfRow(domain, name)}),`,
@@ -1299,23 +1395,21 @@ export const renderAttributes = (
     ({ domain, kind, type, versions }) =>
       `  text(${JSON.stringify(kind)}, ${versionsExpression(versions)}, ${typeOf(type, `${kind} text`)}, ${domainOfRow(domain, `${kind} text`)}),`,
   );
-  const ownerGroups = new Map<
-    string,
-    { owner: string; rows: string[]; versions: readonly SchemaVersion[] }
-  >();
+  // A governing type's list is a kind's constant where one states the same rows, else written out.
+  const typeDeclares = [
+    ...groupedBy(
+      governing.declarations.map((row) => ({ row, written: writtenOf(row) })),
+      ({ row }) => `${row.owner} ${row.versions.join(" ")}`,
+    ).values(),
+  ].map((same) => {
+    const { owner, versions } = Arr.headNonEmpty(same).row;
+    const rows = pipe(
+      same,
+      Arr.map(({ written }) => written),
+    );
 
-  for (const row of governing.declarations) {
-    const key = `${row.owner} ${row.versions.join(" ")}`;
-    const group = ownerGroups.get(key) ?? { owner: row.owner, rows: [], versions: row.versions };
-
-    group.rows.push(writtenOf(row));
-    ownerGroups.set(key, group);
-  }
-
-  const typeDeclares = [...ownerGroups.values()].map(
-    ({ owner, rows, versions }) =>
-      `  ...typeDeclares(${JSON.stringify(owner)}, ${versionsExpression(versions)}, ${listNames.get(rows.join("\n")) ?? `[${rows.join(", ")}]`}),`,
-  );
+    return `  ...typeDeclares(${JSON.stringify(owner)}, ${versionsExpression(versions)}, ${listExpression(rows, Option.fromNullishOr(listNames.get(rows.join("\n"))))}),`;
+  });
   const typeWildcardRows = governing.wildcards.map(
     ({ namespace, owner, processing, versions }) =>
       `  typeWildcard(${JSON.stringify(owner)}, ${versionsExpression(versions)}, ${JSON.stringify(namespace)}, ${JSON.stringify(processing)}),`,

@@ -27,6 +27,7 @@ import {
   GoverningOf,
   grammar,
   interactionKinds,
+  NodeKind,
   nonElementKinds,
   TextDomain,
 } from "#pantry/grammar/install.ts";
@@ -70,6 +71,15 @@ interface Held extends Omit<Folded, "elementChildren"> {
 }
 
 /**
+ * What the fold keeps of a node's children so far, its cursor as each child is folded: the state
+ * of the child folded last, {@link startState} before the first, and the elements among them.
+ */
+interface Under {
+  elements: bigint;
+  state: number;
+}
+
+/**
  * A key of the installed closed relations' row maps: its fields' values, space separated.
  *
  * @param values - The key's values, in the relation's key order.
@@ -107,13 +117,51 @@ const textDomainAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * The flags each kind enters for its descendants, the installed `Enters`.
+ * Read the installed `Enters` as the flags each node kind enters for its descendants: every kind
+ * of the `NodeKind` roster a key, so a kind that enters none holds no flag rather than no entry.
+ *
+ * @returns The flags, by kind.
+ * @throws {Error} When `Enters` names a kind outside the roster, a defect of the grammar.
  */
-const entersAt: ReadonlyMap<string, readonly FlagHandle[]> = new Map(
-  [...Map.groupBy(Enters.rows, ({ kind }) => kind)].map(
-    ([kind, rows]) => [kind, rows.map(({ flag }) => flag)] as const,
-  ),
-);
+const enteredFlags = (): ReadonlyMap<string, readonly FlagHandle[]> => {
+  const flags = new Map<string, FlagHandle[]>(NodeKind.handles.map((kind) => [kind, []]));
+  for (const { flag, kind } of Enters.rows) {
+    const entered = flags.get(kind);
+    if (entered === undefined) {
+      throw new Error(
+        `Enters names the kind ${kind}, which the NodeKind roster does not hold. Regenerate the grammar's Enters.`,
+      );
+    }
+
+    entered.push(flag);
+  }
+
+  return flags;
+};
+
+/**
+ * The flags each node kind enters for its descendants ({@link enteredFlags}).
+ */
+const entersAt = enteredFlags();
+
+/**
+ * Read the flags a node's kind enters for its descendants.
+ *
+ * @param kind - The node's kind.
+ * @returns Its flags, none for a kind that enters none.
+ * @throws {Error} When the kind is outside the `NodeKind` roster, which holds every kind shred
+ *   writes: a defect of the caller's rows, never of the document.
+ */
+const flagsEnteredBy = (kind: string): readonly FlagHandle[] => {
+  const flags = entersAt.get(kind);
+  if (flags === undefined) {
+    throw new Error(
+      `A node of kind ${kind} was folded, and the NodeKind roster holds no such kind. Fold the rows flatten writes of a shredded document.`,
+    );
+  }
+
+  return flags;
+};
 
 /**
  * The interaction kinds, whose children take them as their nearest interaction (N8).
@@ -167,12 +215,19 @@ const checksText = (version: string, kind: string, governs: string): boolean =>
   Option.exists(textDomainOf(version, kind, governs), (domain) => !universal.has(domain));
 
 /**
+ * The state a family's automaton starts in, before its first member: position 0, the family's
+ * model as a whole (`#pantry/grammar/content.ts`, `ContentGrammar`'s positions), which
+ * `placedStep` steps a first member from, and the document node's own state.
+ */
+const startState = 0;
+
+/**
  * The state a member claims by its placement: an `at` member's one position, a `shared` member's
  * first, a `carries` member's predecessor's. It is the state written where no position follows, so
  * that `N5_Follow` refuses the member by name; a `carries` member always steps to it.
  *
  * @param placement - The member's placement.
- * @param was - Its predecessor's state, 0 for the first member.
+ * @param was - Its predecessor's state, {@link startState} for the first member.
  * @returns The state.
  */
 const claimedState = (placement: Placement, was: number): number =>
@@ -194,7 +249,7 @@ const claimedState = (placement: Placement, was: number): number =>
  * @param key.child - The member's kind.
  * @param key.parent - The parent's kind.
  * @param key.version - The version.
- * @param was - Its predecessor's state, 0 for the first member.
+ * @param was - Its predecessor's state, {@link startState} for the first member.
  * @returns The state.
  */
 const stateOf = (
@@ -227,16 +282,36 @@ export const ownContext = (self: NodeId): DocumentContext => ({
 });
 
 /**
+ * Read one node's fold: total, since {@link foldOf} folds every node it is given or throws.
+ *
+ * @param folds - A document's folds, as {@link foldOf} gives them.
+ * @param node - The id of a node of that document.
+ * @returns The node's fold.
+ * @throws {Error} When the node is no node of the folded document: a defect of the caller, which
+ *   read a node of one document in another's folds.
+ */
+export const foldAt = (folds: ReadonlyMap<NodeId, Folded>, node: NodeId): Folded => {
+  const folded = folds.get(node);
+  if (folded === undefined) {
+    throw new Error(
+      `Node ${node} is no node of the folded document, and foldOf folds every node it is given. Read each node in the folds of its own document.`,
+    );
+  }
+
+  return folded;
+};
+
+/**
  * Fold a document's nodes under its context.
  *
  * The nodes come in document order, so each node's parent is folded before it, and its siblings
  * before it in slot order. The document node, its own parent, folds from the context alone; every
- * other node from its parent's fold and the state of the parent's child folded last, 0 for its
- * first child.
+ * other node from its parent's fold and the state of the parent's child folded last,
+ * {@link startState} for its first child.
  *
  * @param nodes - The document's node rows as `flatten` writes them, in document order.
  * @param context - The document's context.
- * @returns Each node's fold, by its id.
+ * @returns Each node's fold, by its id, which {@link foldAt} reads.
  * @throws {Error} When a node comes before its parent, which `flatten`'s document order rules out:
  *   a defect of the caller, never of the document.
  */
@@ -244,60 +319,59 @@ export const foldOf = (
   nodes: readonly NodeRow<Composed>[],
   context: DocumentContext,
 ): ReadonlyMap<NodeId, Folded> => {
-  const folded = new Map<NodeId, Held>();
-  const was = new Map<NodeId, number>();
-  const elementsUnder = new Map<NodeId, bigint>();
+  const folded = new Map<NodeId, { readonly held: Held; readonly under: Under }>();
 
   for (const node of nodes) {
     const { governs, id, kind, version } = node;
     if (node.parent === id) {
       folded.set(id, {
-        ancestry: context.ancestry,
-        copiesText: false,
-        elements: 0n,
-        governs,
-        kind,
-        nearest: context.nearest,
-        nearestKind: context.nearestKind,
-        parentKind: kind,
-        state: 0,
+        held: {
+          ancestry: context.ancestry,
+          copiesText: false,
+          elements: 0n,
+          governs,
+          kind,
+          nearest: context.nearest,
+          nearestKind: context.nearestKind,
+          parentKind: kind,
+          state: startState,
+        },
+        under: { elements: 0n, state: startState },
       });
       continue;
     }
 
-    const parent = folded.get(node.parent);
-    if (parent === undefined) {
+    const parentFold = folded.get(node.parent);
+    if (parentFold === undefined) {
       throw new Error(
         `Node ${id} comes before its parent ${node.parent}, but a document's nodes are folded in document order. Fold flatten's rows as it writes them.`,
       );
     }
 
+    const { held: parent, under } = parentFold;
     const fromInteraction = interactions.has(parent.kind);
-    const state = stateOf({ child: kind, parent: parent.kind, version }, was.get(node.parent) ?? 0);
-    was.set(node.parent, state);
-
-    const elements = (elementsUnder.get(node.parent) ?? 0n) + (nonElements.has(kind) ? 0n : 1n);
-    elementsUnder.set(node.parent, elements);
+    under.state = stateOf({ child: kind, parent: parent.kind, version }, under.state);
+    under.elements += nonElements.has(kind) ? 0n : 1n;
     folded.set(id, {
-      ancestry: new Set([...parent.ancestry, ...(entersAt.get(kind) ?? [])]),
-      copiesText:
-        checksText(version, parent.kind, parent.governs) ||
-        copied.has(parent.kind) ||
-        copiedUnder(parent.kind, parent.parentKind),
-      elements,
-      governs,
-      kind,
-      nearest: fromInteraction ? node.parent : parent.nearest,
-      nearestKind: fromInteraction ? parent.kind : parent.nearestKind,
-      parentKind: parent.kind,
-      state,
+      held: {
+        ancestry: new Set([...parent.ancestry, ...flagsEnteredBy(kind)]),
+        copiesText:
+          checksText(version, parent.kind, parent.governs) ||
+          copied.has(parent.kind) ||
+          copiedUnder(parent.kind, parent.parentKind),
+        elements: under.elements,
+        governs,
+        kind,
+        nearest: fromInteraction ? node.parent : parent.nearest,
+        nearestKind: fromInteraction ? parent.kind : parent.nearestKind,
+        parentKind: parent.kind,
+        state: under.state,
+      },
+      under: { elements: 0n, state: startState },
     });
   }
 
   return new Map(
-    [...folded].map(([id, held]) => [
-      id,
-      { ...held, elementChildren: elementsUnder.get(id) ?? 0n },
-    ]),
+    [...folded].map(([id, { held, under }]) => [id, { ...held, elementChildren: under.elements }]),
   );
 };

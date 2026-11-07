@@ -25,6 +25,7 @@ import { inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { placementOf } from "#pantry/grammar/content.ts";
 import { grammar } from "#pantry/grammar/install.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { unionOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
@@ -236,10 +237,10 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
 const roundTripOf = (tree: XdmDocument<Composed>, ids: (index: number) => NodeId) =>
   assemble(
     flatRowsOf(
-      rootInsertOf(tree, { documentType: "none", idOf: ids }),
+      rootInsertOf(tree, { context: ownContext(ids(0)), documentType: "none", idOf: ids }),
       documentRowsOf(
         { path: "item.xml", resourceType: "none", tree },
-        { idOf: ids, package: packageId },
+        { assembled: false, context: ownContext(ids(0)), idOf: ids, package: packageId },
       ),
     ),
   );
@@ -465,7 +466,12 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
         const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(familiesItem)));
         const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
         const insertOf = (root: XdmClosedElement<Composed>) =>
-          nodesOf(rootInsertOf({ ...tree, root }, { documentType: "imsqti_item_xmlv3p0", idOf }));
+          nodesOf(
+            rootInsertOf(
+              { ...tree, root },
+              { context: ownContext(idOf(0)), documentType: "imsqti_item_xmlv3p0", idOf },
+            ),
+          );
         const held = statesOf(insertOf(tree.root));
         const slots = unadmittedSlotsOf(tree);
         assert.includeMembers(
@@ -590,7 +596,11 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
               const byId = new Map(folded.nodes.map((node) => [node.id, node] as const));
               const attributes = new Map(folded.attributes.map((row) => [row.id, row] as const));
               for (const node of nodesOf(
-                rootInsertOf(generated.document, { documentType: "imsqti_item_xmlv3p0", idOf }),
+                rootInsertOf(generated.document, {
+                  context: ownContext(idOf(0)),
+                  documentType: "imsqti_item_xmlv3p0",
+                  idOf,
+                }),
               )) {
                 const expected = byId.get(node.id);
                 if (expected === undefined) {
