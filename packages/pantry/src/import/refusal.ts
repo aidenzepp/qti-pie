@@ -518,18 +518,36 @@ const patternLaws = (
   );
 
 /**
- * The names of the primary keys of `tests.ts`'s relations that are no overlay's: the assembled
- * test's instances, its names and its branch resolutions (Q5.13).
+ * The law each primary key of `tests.ts`'s relations is named by: an overlay's "Test overlay", and
+ * the assembled test's instances', its names' and its branch resolutions' (Q5.13) the law their
+ * key states. The record is total over `testRelations`, so a relation `tests.ts` gains is named
+ * here or fails to compile.
  */
-const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
-  ["AssembledName", "Test name key"],
-  ["BranchResolution", "Branch target"],
-  ["BranchShuffle", "Branch forward"],
-  ["BranchTarget", "Branch target"],
-  ["Instance", "Inclusion cycle"],
-  ["InstanceName", "Test name key"],
-  ["ItemRefTarget", "Item ref target"],
-]);
+const testKeyNames = {
+  AssembledName: "Test name key",
+  BranchResolution: "Branch target",
+  BranchRule: "Test overlay",
+  BranchShuffle: "Branch forward",
+  BranchTarget: "Branch target",
+  Inclusion: "Test overlay",
+  Instance: "Inclusion cycle",
+  InstanceName: "Test name key",
+  ItemRefDocument: "Test overlay",
+  ItemRefTarget: "Item ref target",
+  Named: "Test overlay",
+  Section: "Test overlay",
+  SectionMember: "Test overlay",
+  SectionOrdering: "Test overlay",
+  SectionSelection: "Test overlay",
+  Site: "Test overlay",
+  SitePath: "Test overlay",
+  SiteTarget: "Test overlay",
+  StimulusRef: "Test overlay",
+  TestDocument: "Test overlay",
+  TestFlag: "Test overlay",
+  TestToken: "Test overlay",
+  VariableMapping: "Test overlay",
+} as const satisfies { readonly [Name in keyof typeof testRelations]: LawName };
 
 /**
  * The laws written out row by row, each as its outcome names it, with its name in {@link lawTable}:
@@ -688,7 +706,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ({ name, primaryKey }) =>
       [
         { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
-        testKeyNames.get(name) ?? "Test overlay",
+        testKeyNames[name],
       ] as const,
   ),
   ...patternLaws([[SelectForm, "E1 derived"]]),
@@ -1051,11 +1069,6 @@ export const lawNameOf = (law: Law): Option.Option<LawName> =>
   Option.fromUndefinedOr(namesByIdentity.get(lawIdentity(law)));
 
 /**
- * Each rule's place in {@link precedence}.
- */
-const ranks: ReadonlyMap<Rule, number> = new Map(precedence.map((rule, rank) => [rule, rank]));
-
-/**
  * Name the one rule a refusal that names `laws` is refused under: the most specific rule among
  * theirs, by {@link precedence}.
  *
@@ -1070,9 +1083,9 @@ export const ruleOfLaws = (laws: Arr.NonEmptyReadonlyArray<Law>): Option.Option<
   Arr.head(
     Arr.sort(
       laws.flatMap((law) =>
-        Option.toArray(Option.map(lawNameOf(law), (name): Rule => lawTable[name].rule)),
+        Option.toArray(Option.map(lawNameOf(law), (name) => lawTable[name].rule)),
       ),
-      Order.mapInput(Order.Number, (rule: Rule) => ranks.get(rule) ?? precedence.length),
+      Order.mapInput(Order.Number, (rule: (typeof precedence)[number]) => precedence.indexOf(rule)),
     ),
   );
 
@@ -1207,7 +1220,6 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
   }
 
   const { admission, content } = constants;
-  const symbols = Map.groupBy(content.symbol.rows, ({ model }) => model);
   const index: ContentIndex = {
     ends: grouped(content.last.rows.map(({ model, position }) => [model, position] as const)),
     kinds: grouped([
@@ -1215,11 +1227,15 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
         ({ child, parent, position, version }) =>
           [positionKey(version, parent, position), child] as const,
       ),
+      // Each family's shared model's symbols, joined on the model in each side's own order: a
+      // scan, run once per grammar, so the index holds no lookup that can miss.
       ...content.sharedModelOf.rows.flatMap(({ model, parent, version }) =>
         model === noSharedModel
           ? []
-          : (symbols.get(model) ?? []).map(
-              ({ kind, position }) => [positionKey(version, parent, position), kind] as const,
+          : content.symbol.rows.flatMap((symbol) =>
+              symbol.model === model
+                ? [[positionKey(version, parent, symbol.position), symbol.kind] as const]
+                : [],
             ),
       ),
     ]),
@@ -1253,10 +1269,10 @@ const byPosition = Order.mapInput(Order.Number, Number);
 
 /**
  * The state a content-order law broke at, read from a row: the version, the model's kind and the
- * state, and the node's own kind.
+ * state, and the node's own kind where the row holds it.
  */
 interface BrokenState {
-  readonly kind: string;
+  readonly kind: Option.Option<string>;
   readonly law: LawName;
   readonly parent: string;
   readonly state: string;
@@ -1284,25 +1300,48 @@ const brokenStateOf = (law: LawName, witness: RefusalWitness): Option.Option<Bro
 
   return version === undefined || parent === undefined || state === undefined
     ? Option.none()
-    : Option.some({ kind: values["kind"] ?? parent, law, parent, state, version });
+    : Option.some({
+        kind: Option.fromUndefinedOr(values["kind"]),
+        law,
+        parent,
+        state,
+        version,
+      });
 };
+
+/**
+ * Read the values a grouping of the index holds under a key: none where the grouping holds no
+ * group of it, as a relation's image of a key no row has is empty.
+ *
+ * @param groups - The grouping.
+ * @param key - The key.
+ * @returns Its values, in the grouping's order.
+ */
+const groupAt = (groups: ReadonlyMap<string, readonly string[]>, key: string): readonly string[] =>
+  Option.toArray(Option.fromUndefinedOr(groups.get(key))).flat();
 
 /**
  * Name the positions a model allows after a state, with their kinds and sources.
  *
  * @param broken - The state.
  * @param constants - The installed grammar's rows.
- * @returns The positions, ascending by code.
+ * @returns The positions, ascending by code, and the parent's content model; none where the
+ *   grammar holds no content model of the parent in its version.
  */
-const allowedAfter = (broken: BrokenState, constants: RefusalConstants): readonly Allowed[] => {
+const allowedAfter = (
+  broken: BrokenState,
+  constants: RefusalConstants,
+): Option.Option<{ readonly allowed: readonly Allowed[]; readonly model: string }> => {
   const index = contentIndexOf(constants);
   const { parent, state, version } = broken;
-  const model = index.models.get(`${version} ${parent}`) ?? "";
 
-  return Arr.sort(index.next.get(`${model} ${state}`) ?? [], byPosition).map((position) => ({
-    kinds: index.kinds.get(positionKey(version, parent, position)) ?? [],
-    position,
-    source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
+  return Option.map(Option.fromUndefinedOr(index.models.get(`${version} ${parent}`)), (model) => ({
+    allowed: Arr.sort(groupAt(index.next, `${model} ${state}`), byPosition).map((position) => ({
+      kinds: groupAt(index.kinds, positionKey(version, parent, position)),
+      position,
+      source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
+    })),
+    model,
   }));
 };
 
@@ -1318,10 +1357,13 @@ const allowedText = (allowed: readonly Allowed[]): string =>
     : allowed
         .map(
           ({ kinds, position, source }) =>
-            `${position} (${kinds.join(" ") || "no kind"}${Option.match(source, {
-              onNone: () => "",
-              onSome: (text) => `, ${text}`,
-            })})`,
+            `${position} (${kinds.length === 0 ? "no kind" : kinds.join(" ")}${Option.match(
+              source,
+              {
+                onNone: () => "",
+                onSome: (text) => `, ${text}`,
+              },
+            )})`,
         )
         .join("; ");
 
@@ -1330,24 +1372,26 @@ const allowedText = (allowed: readonly Allowed[]): string =>
  * or where its family ends in its own, and what the model allows next.
  *
  * @param broken - The state.
- * @param allowed - What the model allows after it.
+ * @param after - What the model allows after it, and the model.
+ * @param after.allowed - The positions it allows.
+ * @param after.model - The parent's content model.
  * @param constants - The installed grammar's rows.
  * @returns The sentence.
  */
 const brokenStateText = (
   broken: BrokenState,
-  allowed: readonly Allowed[],
+  after: { readonly allowed: readonly Allowed[]; readonly model: string },
   constants: RefusalConstants,
 ): string => {
   const { kind, parent, state, version } = broken;
+  const { allowed, model } = after;
   if (broken.law === "N7 Last") {
-    const index = contentIndexOf(constants);
-    const ends = index.ends.get(index.models.get(`${version} ${parent}`) ?? "") ?? [];
+    const ends = Arr.sort(groupAt(contentIndexOf(constants).ends, model), byPosition);
 
-    return `${parent}'s children end in state ${state} of its content model in ${version}, which ends only in ${Arr.sort(ends, byPosition).join(", ") || "no state"}; after state ${state} it needs one of ${allowedText(allowed)}`;
+    return `${parent}'s children end in state ${state} of its content model in ${version}, which ends only in ${ends.length === 0 ? "no state" : ends.join(", ")}; after state ${state} it needs one of ${allowedText(allowed)}`;
   }
 
-  return `${kind} follows state ${state} of ${parent}'s content model in ${version}, which allows next ${allowedText(allowed)}`;
+  return `${Option.match(kind, { onNone: () => "A child", onSome: (own) => own })} follows state ${state} of ${parent}'s content model in ${version}, which allows next ${allowedText(allowed)}`;
 };
 
 /**
@@ -1395,7 +1439,8 @@ export const explain = (
       Option.toArray(name.pipe(Option.flatMap((law) => brokenStateOf(law, witness)))),
     ),
   );
-  const next = broken.pipe(Option.map((state) => allowedAfter(state, constants)));
+  const after = broken.pipe(Option.flatMap((state) => allowedAfter(state, constants)));
+  const next = after.pipe(Option.map(({ allowed }) => allowed));
   const lawText = named
     .map(({ identity, name }) =>
       Option.match(name, {
@@ -1404,9 +1449,10 @@ export const explain = (
       }),
     )
     .join("; ");
-  const stateText = Option.match(Option.all({ allowed: next, broken }), {
+  const stateText = Option.match(Option.all({ after, broken }), {
     onNone: () => "",
-    onSome: ({ allowed, broken: state }) => `. ${brokenStateText(state, allowed, constants)}`,
+    onSome: ({ after: allowed, broken: state }) =>
+      `. ${brokenStateText(state, allowed, constants)}`,
   });
   const modelSources = Option.match(broken, {
     onNone: () => [],
@@ -1414,7 +1460,9 @@ export const explain = (
       ...Option.toArray(
         Option.map(constants.content.sourceOf({ parent, position: "0", version }), sourceText),
       ),
-      ...Option.getOrElse(next, () => []).flatMap(({ source }) => Option.toArray(source)),
+      ...Option.toArray(next)
+        .flat()
+        .flatMap(({ source }) => Option.toArray(source)),
     ],
   });
   const [first, ...rest] = Arr.dedupe([
