@@ -3,15 +3,16 @@ import { Effect, Option, Result } from "effect";
 import { attr, el, text } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { evaluateExpression, runRules } from "#plate/engine/evaluate.ts";
-import type { Variables } from "#plate/engine/evaluate.ts";
+import type { Declarations, Variables } from "#plate/engine/evaluate.ts";
 import { drawStream } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
+import type { ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type { Expression, LiteralOrRef } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
-import type { Item } from "#plate/model/item.ts";
+import type { Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import { outcomeDefaults } from "#plate/model/record.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ModelledBaseType, Value } from "#plate/model/values.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import {
   assertKindType,
@@ -851,4 +852,290 @@ describe("the references family's evaluators of qti-random-integer and qti-rando
         }
       }),
   );
+});
+
+/**
+ * Construct an outcome declaration with no reporting attributes.
+ *
+ * @param named Its identifier.
+ * @param baseType Its base type.
+ * @param cardinality Its cardinality.
+ * @param declaredDefault Its declared default, if any.
+ * @returns The declaration.
+ */
+const outcomeOf = (
+  named: string,
+  baseType: ModelledBaseType,
+  cardinality: Value["cardinality"] = "single",
+  declaredDefault: Option.Option<Value> = Option.none(),
+): OutcomeDeclaration => ({
+  baseType,
+  cardinality,
+  defaultValue: declaredDefault,
+  identifier: named,
+  interpretation: Option.none(),
+  longInterpretation: Option.none(),
+  lookupTable: Option.none(),
+  masteryValue: Option.none(),
+  normalMaximum: Option.none(),
+  normalMinimum: Option.none(),
+  view: Option.none(),
+});
+
+/**
+ * A single identifier response, `RESPONSE`, whose correct response is `A` and whose mapping maps
+ * `A` to 1.5 and `B` to 0.5, every other value to 0.
+ */
+const mappedResponse: ResponseDeclaration = {
+  areaMapping: Option.none(),
+  baseType: "identifier",
+  cardinality: "single",
+  correct: Option.some(identifier("A")),
+  defaultValue: Option.none(),
+  identifier: "RESPONSE",
+  mapping: Option.some({
+    defaultValue: 0,
+    entries: [
+      { caseSensitive: true, key: { baseType: "identifier", value: "A" }, value: 1.5 },
+      { caseSensitive: true, key: { baseType: "identifier", value: "B" }, value: 0.5 },
+    ],
+    lowerBound: Option.none(),
+    upperBound: Option.none(),
+  }),
+};
+
+/**
+ * A multiple point response, `POINT`, whose area mapping maps a point in the rectangle from (0, 0)
+ * to (10, 10) to 2, and every other point to 0.25.
+ */
+const pointResponse: ResponseDeclaration = {
+  areaMapping: Option.some({
+    defaultValue: 0.25,
+    // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+    entries: [{ coords: [0, 0, 10, 10], mappedValue: 2, shape: "rect" }],
+    lowerBound: Option.none(),
+    percent: false,
+    upperBound: Option.none(),
+  }),
+  baseType: "point",
+  cardinality: "multiple",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier: "POINT",
+  mapping: Option.none(),
+};
+
+/**
+ * The declarations of each item below: the responses `RESPONSE` and `POINT`, a float outcome
+ * `SCORE` whose declared default is 0.5, an integer outcome `N` and a multiple integer outcome
+ * `LIST`.
+ */
+const itemDeclarations: Declarations = {
+  outcomes: new Map([
+    ["LIST", outcomeOf("LIST", "integer", "multiple")],
+    ["N", outcomeOf("N", "integer")],
+    ["SCORE", outcomeOf("SCORE", "float", "single", Option.some(float(0.5)))],
+  ]),
+  responses: new Map([
+    ["POINT", pointResponse],
+    ["RESPONSE", mappedResponse],
+  ]),
+  templates: new Map(),
+};
+
+/**
+ * A presented item, `ITEM1`: its record holds the response `A`, the points (5, 5) and (20, 20),
+ * `SCORE` 1.5, `N` 3 and `LIST` {1, 2}, and a template-set default of `SCORE`, 0.25. Its item ref
+ * weights `W` by 2 and `HALF` by 0.5.
+ */
+const firstItem: ScopeItem = {
+  categories: [],
+  declarations: itemDeclarations,
+  mappings: new Map(),
+  numAttempts: 1,
+  presented: true,
+  record: {
+    correct: {},
+    defaults: { SCORE: float(0.25) },
+    outcomes: {
+      LIST: {
+        baseType: "integer",
+        cardinality: "multiple",
+        values: [
+          { baseType: "integer", value: 1n },
+          { baseType: "integer", value: 2n },
+        ],
+      },
+      N: integer(3n),
+      SCORE: float(1.5),
+    },
+    responses: {
+      POINT: {
+        baseType: "point",
+        cardinality: "multiple",
+        values: [
+          { baseType: "point", value: [5n, 5n] },
+          { baseType: "point", value: [20n, 20n] },
+        ],
+      },
+      RESPONSE: identifier("A"),
+    },
+    templates: {},
+  },
+  ref: "ITEM1",
+  unheld: new Map(),
+  weights: new Map([
+    ["HALF", 0.5],
+    ["W", 2],
+  ]),
+};
+
+/**
+ * A second item, `ITEM2`, whose record holds the response `B`, no template-set default, and the
+ * correct response `B` its template processing set.
+ */
+const secondItem: ScopeItem = {
+  ...firstItem,
+  record: {
+    ...firstItem.record,
+    correct: { RESPONSE: identifier("B") },
+    defaults: {},
+    responses: { ...firstItem.record.responses, RESPONSE: identifier("B") },
+  },
+  ref: "ITEM2",
+};
+
+/**
+ * A test's declarations holder: its float outcome `TOTAL`, and no response or template variable.
+ */
+const testHolder: Declarations = {
+  outcomes: new Map([["TOTAL", outcomeOf("TOTAL", "float")]]),
+  responses: new Map(),
+  templates: new Map(),
+};
+
+/**
+ * The test scope of `ITEM1` and `ITEM2`, in one part `P1`.
+ */
+const testScope: TestScope = {
+  declared: new Set(["TOTAL"]),
+  duration: Option.some(60),
+  items: [firstItem, secondItem],
+  parts: new Map([["P1", ["ITEM1", "ITEM2"]]]),
+  sections: new Map(),
+};
+
+/**
+ * The variables of a test's run: its outcome `TOTAL` at 7 and its test scope.
+ */
+const testRun: Variables = { outcomes: { TOTAL: float(7) }, responses: {}, test: testScope };
+
+/**
+ * Construct a `qti-variable`, weighted when a weight identifier is given.
+ *
+ * @param named The variable's identifier.
+ * @param weight Its `weight-identifier`, if any.
+ * @returns The expression.
+ */
+const variableOf = (named: string, weight?: string): Expression => ({
+  identifier: named,
+  kind: "variable",
+  operands: [],
+  weightIdentifier: Option.fromUndefinedOr(weight),
+});
+
+/**
+ * Give the value of an expression in a test's run, after checking that it succeeded.
+ *
+ * @param expression The expression.
+ * @returns Its value.
+ */
+const inTest = (expression: Expression): Value => {
+  const result = evaluateExpression(expression, testHolder, testRun);
+  assert.isTrue(Result.isSuccess(result), `qti-${expression.kind} failed in the test's run`);
+
+  return Result.getOrThrow(result);
+};
+
+describe("the references family's evaluators in a test's run, each read through its item ref [T-9]", () => {
+  it("[T-9] qti-variable gives a weighted ITEM1.SCORE read through its item ref as its value times the weight, a single float", () => {
+    assert.deepStrictEqual(inTest(variableOf("ITEM1.SCORE", "W")), float(3));
+  });
+
+  it("[T-9] qti-variable gives a weighted integer read through its item ref as a single float, the value times the weight", () => {
+    assert.deepStrictEqual(inTest(variableOf("ITEM1.N", "HALF")), float(1.5));
+  });
+
+  it("[T-9] qti-variable gives a weighted multiple integer read through its item ref as a multiple float, each value times the weight", () => {
+    assert.deepStrictEqual(inTest(variableOf("ITEM1.LIST", "W")), {
+      baseType: "float",
+      cardinality: "multiple",
+      values: [
+        { baseType: "float", value: 2 },
+        { baseType: "float", value: 4 },
+      ],
+    });
+  });
+
+  it("[T-9] qti-variable gives a weighted identifier variable read through its item ref unweighted", () => {
+    assert.deepStrictEqual(inTest(variableOf("ITEM1.RESPONSE", "W")), identifier("A"));
+  });
+
+  it("[T-9] qti-variable gives a weight its item ref does not define as 1.0, read through its item ref: an integer reads as a float", () => {
+    assert.deepStrictEqual(inTest(variableOf("ITEM1.N", "MISSING")), float(3));
+  });
+
+  it("[T-9] qti-variable gives a weighted NULL integer read through its item ref as NULL of a single float", () => {
+    assert.deepStrictEqual(inTest(variableOf("ITEM1.2.N", "W")), nullOf("float", "single"));
+  });
+
+  it("[T-9] qti-variable gives an unprefixed weighted name the test's own variable unweighted, with no read through its item ref (G-R3, pending)", () => {
+    assert.deepStrictEqual(inTest(variableOf("TOTAL", "W")), float(7));
+  });
+
+  it("[T-9] qti-correct of ITEM1.RESPONSE gives the item's correct response read through its item ref, the template-set one first", () => {
+    assert.deepStrictEqual(
+      [
+        inTest({ identifier: "ITEM1.RESPONSE", kind: "correct", operands: [] }),
+        inTest({ identifier: "ITEM2.RESPONSE", kind: "correct", operands: [] }),
+      ],
+      [identifier("A"), identifier("B")],
+    );
+  });
+
+  it("[T-9] qti-default of ITEM1.SCORE gives the template-set default read through its item ref, before the declaration's", () => {
+    assert.deepStrictEqual(
+      [
+        inTest(defaultOf("ITEM1.SCORE")),
+        inTest(defaultOf("ITEM2.SCORE")),
+        inTest(defaultOf("ITEM1.N")),
+      ],
+      [float(0.25), float(0.5), nullOf("integer", "single")],
+    );
+  });
+
+  it("[T-9] a test's run maps ITEM1.RESPONSE read through its item ref by the item's qti-mapping", () => {
+    const rules = [
+      {
+        expression: { identifier: "ITEM2.RESPONSE", kind: "map-response", operands: [] },
+        identifier: "TOTAL",
+        kind: "set-outcome",
+      },
+    ] as const;
+
+    assert.deepStrictEqual(
+      [
+        inTest({ identifier: "ITEM1.RESPONSE", kind: "map-response", operands: [] }),
+        Result.getOrThrow(runRules(rules, testHolder, testRun)).outcomes["TOTAL"],
+      ],
+      [float(1.5), float(0.5)],
+    );
+  });
+
+  it("[T-9] qti-map-response-point of ITEM1.POINT maps the item's points read through its item ref by its qti-area-mapping", () => {
+    assert.deepStrictEqual(
+      inTest({ identifier: "ITEM1.POINT", kind: "map-response-point", operands: [] }),
+      float(2.25),
+    );
+  });
 });
