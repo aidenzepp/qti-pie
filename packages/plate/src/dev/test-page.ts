@@ -735,7 +735,7 @@ const postSession = Effect.fn("playground.session.post")(function* postSession(
     return failurePage(document.failure);
   }
 
-  const post = postOf(document.success, view.instance, entries.value);
+  const post = postOf(document.success, view.instance, entries.value, view.record);
   if (post.malformed.size > 0) {
     const messages = checkResponses(
       document.success,

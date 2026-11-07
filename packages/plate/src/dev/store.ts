@@ -1,13 +1,16 @@
 /**
- * The dev playground's store of test sessions: each session it has started, under the id it drew
- * for it, held in the form the host stores.
+ * The dev playground's stores: the test sessions it has started and the items it holds open, each
+ * under the id it drew for it.
  *
- * The library keeps no session of its own (rule `a9d04969`); this store is the playground's, an
- * example host's. It lives in memory for the handler's life and keeps at most
- * {@link sessionLimit} sessions, evicting the one started first when a new one would pass the
- * bound, so a long run of starts cannot grow it without end. It holds a session only as the
+ * The library keeps no session or record of its own (rule `a9d04969`); these stores are the
+ * playground's, an example host's. Each lives in memory for the handler's life and keeps at most
+ * {@link entryLimit} entries, evicting the one stored first when a new one would pass the bound, so
+ * a long run of starts or opens cannot grow it without end. A test session is held only as the
  * {@link StoredTestSession} `encodeSession` writes, never the plain session, so each request reads
- * it back through `decodeSession`, as a host that keeps sessions elsewhere would.
+ * it back through `decodeSession`; an open item's record is held only as the `StoredRecord`
+ * `begin` or `score` returned, so each request reads it back through `restore`, as a host that
+ * keeps them elsewhere would. Neither leaves the server: the page holds only the item rendered
+ * from it (H5).
  *
  * @module
  */
@@ -15,9 +18,9 @@ import { Option } from "effect";
 import type { StoredTestSession } from "#plate/codec/session.ts";
 
 /**
- * The most sessions a store keeps; the one started first is evicted first (OD-10's placeholder).
+ * The most entries a store keeps; the one stored first is evicted first (OD-10's placeholder).
  */
-const sessionLimit = 100;
+const entryLimit = 100;
 
 /**
  * One session the playground holds: the package the test came from, the test's href in that
@@ -39,32 +42,32 @@ export interface SessionEntry {
 }
 
 /**
- * The playground's test sessions, by session id, at most {@link sessionLimit} of them.
+ * Entries the playground holds by id, at most {@link entryLimit} of them.
  */
-export interface SessionStore {
+export interface Store<Entry> {
   /**
    * The entry held under an id.
    *
-   * @param id The session id, as {@link newSessionId} drew it.
-   * @returns The entry, or none when the store holds none under `id`, never started or evicted.
+   * @param id The id the entry was stored under.
+   * @returns The entry, or none when the store holds none under `id`, never stored or evicted.
    */
-  readonly get: (id: string) => Option.Option<SessionEntry>;
+  readonly get: (id: string) => Option.Option<Entry>;
   /**
-   * The ids the store holds, in the order their sessions were started, so the playground's index
-   * can resume each.
+   * The ids the store holds, in the order their entries were first stored, so the playground's
+   * index can resume each session.
    *
    * @returns The ids, none evicted.
    */
   readonly ids: () => readonly string[];
   /**
    * Hold an entry under an id, replacing any held there. A new id that would take the store past
-   * {@link sessionLimit} evicts the entry stored first; an id already held keeps its place, so
-   * eviction follows the order sessions were started.
+   * {@link entryLimit} evicts the entry stored first; an id already held keeps its place, so
+   * eviction follows the order entries were first stored.
    *
-   * @param id The session id.
+   * @param id The id.
    * @param entry The entry.
    */
-  readonly set: (id: string, entry: SessionEntry) => void;
+  readonly set: (id: string, entry: Entry) => void;
   /**
    * How many entries the store holds.
    */
@@ -72,12 +75,17 @@ export interface SessionStore {
 }
 
 /**
+ * The playground's test sessions, by session id.
+ */
+export type SessionStore = Store<SessionEntry>;
+
+/**
  * Construct an empty store.
  *
  * @returns The store.
  */
-export const sessionStore = (): SessionStore => {
-  const entries = new Map<string, SessionEntry>();
+export const boundedStore = <Entry>(): Store<Entry> => {
+  const entries = new Map<string, Entry>();
 
   return {
     get: (id) => Option.fromUndefinedOr(entries.get(id)),
@@ -85,7 +93,7 @@ export const sessionStore = (): SessionStore => {
     set: (id, entry) => {
       entries.set(id, entry);
       for (const oldest of entries.keys()) {
-        if (entries.size <= sessionLimit) {
+        if (entries.size <= entryLimit) {
           break;
         }
 
@@ -97,6 +105,13 @@ export const sessionStore = (): SessionStore => {
     },
   };
 };
+
+/**
+ * Construct an empty store of test sessions.
+ *
+ * @returns The store.
+ */
+export const sessionStore = (): SessionStore => boundedStore();
 
 /**
  * Draw a new session id: `s-` followed by a random UUID.

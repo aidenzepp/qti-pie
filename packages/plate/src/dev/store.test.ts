@@ -1,14 +1,21 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
+import { begin } from "#plate/begin.ts";
+import type { StoredRecord } from "#plate/codec/record.ts";
 import { decodeSession, encodeSession } from "#plate/codec/session.ts";
 import type { SessionTest } from "#plate/codec/session.ts";
-import { newSessionId, sessionStore } from "#plate/dev/store.ts";
+import { boundedStore, newSessionId, sessionStore } from "#plate/dev/store.ts";
 import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
+import { attr, doc, el } from "#plate/document/source.ts";
+import { firstAttempt } from "#plate/engine/attempt.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import { fresh } from "#plate/model/record.ts";
 import { isNcName, nullOf } from "#plate/model/values.ts";
+import { restore } from "#plate/restore.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { bg007Item, integer } from "#plate/test/fixtures.ts";
+import { tables } from "#plate/validate/tables.ts";
+import { acceptedItem, check } from "#plate/validate/verdict.ts";
 
 /**
  * The test the sessions below belong to, as `decodeSession` checks them against it.
@@ -118,6 +125,79 @@ describe("sessionStore", () => {
       );
     }
   });
+});
+
+/**
+ * A hand-built item whose template processing draws the integer template variable `N` from 0 to
+ * 999,999, so the record `begin` starts for it holds a drawn value.
+ */
+const templated = Option.getOrElse(
+  acceptedItem(
+    check(
+      doc(
+        "items/sitting.xml",
+        el(
+          "qti-assessment-item",
+          [
+            attr("identifier", "sitting"),
+            attr("time-dependent", "false"),
+            attr("title", "Sitting"),
+          ],
+          [
+            el("qti-response-declaration", [
+              attr("base-type", "integer"),
+              attr("cardinality", "single"),
+              attr("identifier", "RESPONSE"),
+            ]),
+            el("qti-template-declaration", [
+              attr("base-type", "integer"),
+              attr("cardinality", "single"),
+              attr("identifier", "N"),
+            ]),
+            el(
+              "qti-template-processing",
+              [],
+              [
+                el(
+                  "qti-set-template-value",
+                  [attr("identifier", "N")],
+                  [el("qti-random-integer", [attr("max", "999999"), attr("min", "0")])],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      tables,
+    ),
+  ),
+  () => assert.fail("the hand-built templated item is not accepted"),
+);
+
+describe("boundedStore", () => {
+  it.effect(
+    "[I-5] keeps a sitting's record: the record begin stored comes back as stored, and restore reads its seed and template values from it",
+    () =>
+      Effect.gen(function* keepsRecord() {
+        const store = boundedStore<{ readonly record: StoredRecord }>();
+        const start = { instance: "sitting", seed: "42" };
+        const stored = yield* Effect.fromResult(begin(templated, start));
+        store.set(start.instance, { record: stored });
+
+        const held = Option.getOrElse(store.get(start.instance), () =>
+          assert.fail("the store holds no sitting under its instance"),
+        );
+        const { record } = yield* Effect.fromResult(restore(templated, held.record));
+
+        assert.strictEqual(held.record, stored);
+        assert.strictEqual(record.seed, start.seed);
+        assert.isDefined(record.templates["N"], "the record holds no drawn template value");
+        assert.deepStrictEqual(
+          record,
+          yield* Effect.fromResult(firstAttempt(templated.item, start)),
+        );
+      }),
+  );
 });
 
 describe("newSessionId", () => {
