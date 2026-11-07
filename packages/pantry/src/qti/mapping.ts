@@ -611,9 +611,8 @@ export const mappingLaws = [
     on(
       select(MapKey, (k) => k.ne(k.caseText, "")),
       "node",
-      "caseText",
     ),
-    on(caseAttributes, "node", "lexical"),
+    on(caseAttributes, "node"),
   ),
   check("E1_derived", MapKey, (k) => {
     const matchedCase = k.and(
