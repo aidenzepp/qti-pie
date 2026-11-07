@@ -655,6 +655,8 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     (overlay) => [primaryKeyOf(overlay, "node"), "Manifest overlay"] as const,
   ),
   [primaryKeyOf("ResourceHref", "node"), "Manifest overlay"],
+  [primaryKeyOf("ResourceTyped", "node"), "E1 derived"],
+  [primaryKeyOf("TypedHref", "node"), "E1 derived"],
   [primaryKeyOf("NamedHref", "package", "path", "type"), "RootOfType"],
   [primaryKeyOf("FileHref", "package", "scope", "path"), "File listed"],
   [primaryKeyOf("ResourceFile", "resource", "scope", "path"), "Href listed"],

@@ -104,16 +104,18 @@ const manifestHrefOf = (href: string, bases: readonly string[]) => {
 };
 
 /**
- * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle, and the `NamedHref`
- * of its compared path and type.
+ * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle; and where its type
+ * spells a handle, its `TypedHref` and the `NamedHref` of its compared path and type.
  *
  * @param expected - The walk's rows so far.
- * @param resource - The resource's href, node, package and type, and the bases in scope.
+ * @param resource - The resource's href, node, package, type and its lexical form, and the bases
+ *   in scope.
  * @param resource.bases - The `xml:base` values in scope, its own last.
  * @param resource.href - Its href.
  * @param resource.node - Its node.
  * @param resource.pkg - Its package.
- * @param resource.type - Its type.
+ * @param resource.type - The handle its type spells, none where it spells none.
+ * @param resource.typeLexical - Its type as written.
  */
 const expectHref = (
   expected: Expected,
@@ -122,13 +124,51 @@ const expectHref = (
     readonly href: string;
     readonly node: NodeId;
     readonly pkg: string;
-    readonly type: string;
+    readonly type: Option.Option<string>;
+    readonly typeLexical: string;
   },
 ): void => {
-  const { bases, href, node, pkg, type } = resource;
+  const { bases, href, node, pkg, type, typeLexical } = resource;
   const { path: at, scope } = manifestHrefOf(href, bases);
-  expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope, type });
-  expected.NamedHref.set(heading([pkg, at, type]), { package: pkg, path: at, type });
+  expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope, typeLexical });
+  for (const code of Option.toArray(type)) {
+    expected.TypedHref.set(node, { node, package: pkg, path: at, scope, type: code });
+    expected.NamedHref.set(heading([pkg, at, code]), { package: pkg, path: at, type: code });
+  }
+};
+
+/**
+ * Expect a resource's rows: its `Resource`; its `ResourceTyped` where its type spells a handle; and
+ * its href's rows where it writes one ({@link expectHref}).
+ *
+ * @param expected - The walk's rows so far.
+ * @param resource - The resource's row, its href if written, the bases in scope and the spelled
+ *   types.
+ * @param resource.bases - The `xml:base` values in scope, its own last.
+ * @param resource.href - Its href, none where unwritten.
+ * @param resource.row - Its `Resource` row.
+ * @param resource.spelled - The lexical forms a handle spells.
+ */
+const expectResource = (
+  expected: Expected,
+  resource: {
+    readonly bases: readonly string[];
+    readonly href: string | undefined;
+    readonly row: { readonly node: NodeId; readonly package: string; readonly typeLexical: string };
+    readonly spelled: ReadonlySet<string>;
+  },
+): void => {
+  const { bases, href, row, spelled } = resource;
+  const { node, package: pkg, typeLexical } = row;
+  const type = spelled.has(typeLexical) ? Option.some(typeLexical) : Option.none();
+  expected.Resource.set(node, row);
+  for (const code of Option.toArray(type)) {
+    expected.ResourceTyped.set(node, { node, package: pkg, type: code, typeLexical });
+  }
+
+  if (href !== undefined) {
+    expectHref(expected, { bases, href, node, pkg, type, typeLexical });
+  }
 };
 
 /**
@@ -149,6 +189,8 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     Resource: new Map(),
     ResourceFile: new Map(),
     ResourceHref: new Map(),
+    ResourceTyped: new Map(),
+    TypedHref: new Map(),
   };
   const document = ids.idOf(0);
   const interactions = new Set<string>(interactionKinds);
@@ -194,22 +236,18 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     }
 
     if (kind === "cp:resource") {
-      const typeLexical = valueOf("type") ?? "";
-      const type = spelled.has(typeLexical) ? typeLexical : "none";
-      const href = valueOf("href");
       identifiers.set(id, valueOf("identifier") ?? "");
-      expected.Resource.set(id, {
+
+      const row = {
         ...tuple,
         identifier: valueOf("identifier") ?? "",
         manifestIdentifier,
         package: pkg,
         parent: parent.id,
-        type,
-        typeLexical,
-      });
-      if (href !== undefined) {
-        expectHref(expected, { bases, href, node: id, pkg, type });
-      }
+        typeLexical: valueOf("type") ?? "",
+      };
+
+      expectResource(expected, { bases, href: valueOf("href"), row, spelled });
     }
 
     const fileHref = kind === "cp:file" ? valueOf("href") : undefined;

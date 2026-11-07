@@ -31,7 +31,7 @@ const measured = {
   names: 35,
   nodeAxes: 5,
   nodeKeys: 42,
-  tables: 170,
+  tables: 172,
 } as const;
 
 /**

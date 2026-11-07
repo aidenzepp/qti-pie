@@ -529,7 +529,7 @@ export const known = {
       fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
       owner: "NIL",
     },
-  "import-only-law: E1 derived, contained LomResource(node, type) in Resource(node, type)": {
+  "import-only-law: E1 derived, contained LomResource(node) in Resource(node)": {
     files: [
       [
         "example.xml",

@@ -228,6 +228,8 @@ CREATE INDEX "__lom_record_ix_owner_parent_v_5_upyxkd_5_f_named_2_7a6t4hd2ih" ON
 
 CREATE INDEX "__lom_record_ix_parent_document_owner_owner_start_3e5gpkmcp5" ON "qti"."lom_record" USING btree ("parent", "document", "owner", "owner_start", "nearest", "version", "owner_parent");
 
+CREATE INDEX "__lom_resource_ix_node_uylg_5_h_7_nr_5_named_quw_3_jelkqwgkj6" ON "qti"."lom_resource" USING btree ("__node_uylg5h7nr5", "__named_quw3gqg6g5");
+
 CREATE INDEX "__lom_resource_type_ix_node_dzmkpyu_5_uh_xlkqyn3rx3" ON "qti"."lom_resource_type" USING btree ("__node_dzmkpyu5uh");
 
 CREATE INDEX "__lom_string_ix_node_najnjopqcl_language_cbidl_4_e7ous4i46d" ON "qti"."lom_string" USING btree ("__node_najnjopqcl", "__language_cbidl4nwet");
@@ -428,11 +430,13 @@ CREATE INDEX "__reference_path_ix_document_package_ft7vjozed2" ON "qti"."referen
 
 CREATE INDEX "__reference_path_ix_package_path_3negrpmqjv" ON "qti"."reference_path" USING btree ("package", "path");
 
+CREATE INDEX "__resource_ix_node_ypb_7_qf_2_gry_cyo3jsl7dx" ON "qti"."resource" USING btree ("__node_ypb7qf2gry");
+
 CREATE INDEX "__resource_ix_document_package_4v6ha45foo" ON "qti"."resource" USING btree ("document", "package");
 
 CREATE INDEX "__resource_ix_package_manifest_identifier_aeo4ekfra7" ON "qti"."resource" USING btree ("package", "manifest_identifier");
 
-CREATE INDEX "__resource_href_ix_package_tydw_4_wv_6_km_path_dkr7f5il4v" ON "qti"."resource_href" USING btree ("__package_tydw4wv6km", "__path_kcbijnm36h", "__type_izv7wmxts7");
+CREATE INDEX "__resource_href_ix_node_ypb_7_qf_2_gry_b22xwn3nfo" ON "qti"."resource_href" USING btree ("__node_ypb7qf2gry");
 
 CREATE INDEX "__rounding_ix_node_n_3_wznir_2_nw_b735ps3dez" ON "qti"."rounding" USING btree ("__node_n3wznir2nw");
 
@@ -535,6 +539,8 @@ CREATE INDEX "__test_token_ix_node_fhyljg_3_ztm_rh65lv2f3s" ON "qti"."test_token
 CREATE INDEX "__test_token_ix_node_l_7_omvxv_2_od_tskzgdxw2x" ON "qti"."test_token" USING btree ("__node_l7omvxv2od");
 
 CREATE INDEX "__text_idref_ix_document_token_r43v6t4zvp" ON "qti"."text_idref" USING btree ("document", "token");
+
+CREATE INDEX "__typed_href_ix_package_tydw_4_wv_6_km_path_kcbijnm_gest4ish2j" ON "qti"."typed_href" USING btree ("__package_tydw4wv6km", "__path_kcbijnm36h", "__type_izv7wmxts7");
 
 CREATE INDEX "__value_ix_node_5_ghh_4_hcv_2_e_base_type_qsgdvyxok_qp72tpyizx" ON "qti"."value" USING btree ("__node_5ghh4hcv2e", "__base_type_qsgdvyxok2");
 

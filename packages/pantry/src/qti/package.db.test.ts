@@ -29,7 +29,6 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { AttributeName, Flag, NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
-import { LomResource } from "#pantry/qti/metadata.ts";
 import {
   Dependency,
   File,
@@ -42,6 +41,8 @@ import {
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceTyped,
+  TypedHref,
 } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { bitsText } from "#pantry/test/bits.ts";
@@ -117,7 +118,7 @@ const containedIn =
 const resourceRow = (
   fields: Pick<
     Fact<typeof Resource>,
-    "identifier" | "manifestIdentifier" | "type" | "typeLexical" | "version"
+    "identifier" | "manifestIdentifier" | "typeLexical" | "version"
   >,
 ): Fact<typeof Resource> => ({
   document: stray,
@@ -298,39 +299,41 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a resource's row by its own laws: its code and its manifest's identifier",
         () =>
-          // Oracle: PostgreSQL, the resource row's CHECKs, judged as it is inserted: C17's "E1
-          // derived" (a code its lexical form does not spell), and P4 "Manifest id space". Which
-          // types a version admits is the `type` attribute's value domain's (spec reading 67), a
-          // law of `Attribute`, so no law of the row reads it.
+          // Oracle: PostgreSQL, the resource rows' CHECKs, judged as they are inserted: C17's "E1
+          // derived" on its type (a code its lexical form does not spell), and P4 "Manifest id
+          // space" on the resource. Which types a version admits is the `type` attribute's value
+          // domain's (spec reading 67), a law of `Attribute`, so no law of the row reads it.
           // Bound: one row per law, every other law of the row kept.
           Effect.gen(function* resourceChecks() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const cases = [
               {
-                law: checkNamed("Resource", "E1_derived"),
+                changes: ChangeSet.empty(Author).insert(ResourceTyped, [
+                  {
+                    node: stray,
+                    package: stray,
+                    type: "imsqti_item_xmlv3p0",
+                    typeLexical: "webcontent",
+                  },
+                ]),
+                law: checkNamed("ResourceTyped", "E1_derived"),
                 name: "E1 derived",
-                row: resourceRow({
-                  identifier: "r1",
-                  manifestIdentifier: "m",
-                  type: "imsqti_item_xmlv3p0",
-                  typeLexical: "webcontent",
-                  version: "3.0.1",
-                }),
               },
               {
+                changes: ChangeSet.empty(Author).insert(Resource, [
+                  resourceRow({
+                    identifier: "m",
+                    manifestIdentifier: "m",
+                    typeLexical: "webcontent",
+                    version: "3.0.1",
+                  }),
+                ]),
                 law: checkNamed("Resource", "Manifest_id_space"),
                 name: "manifest-id-space",
-                row: resourceRow({
-                  identifier: "m",
-                  manifestIdentifier: "m",
-                  type: "webcontent",
-                  typeLexical: "webcontent",
-                  version: "3.0.1",
-                }),
               },
             ];
-            for (const { law, name, row } of cases) {
-              const outcome = yield* db.apply(ChangeSet.empty(Author).insert(Resource, [row]), {});
+            for (const { changes, law, name } of cases) {
+              const outcome = yield* db.apply(changes, {});
 
               assert.isTrue(rejectedBy(outcome, law), `${name}: ${outcome.kind}`);
             }
@@ -428,18 +431,14 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               target: "a.png",
               trail: "",
             } as const;
-            const named = { package: stray, path: "a.xml", type: "webcontent" } as const;
-            const resourceHref = { ...named, href: "a.xml", node: stray, scope: "entry" } as const;
-            // The resource each href is the one `href` of, the owner of `LomResource.hrefs`, which a
-            // change inserts beside its member: lawful on its own CHECK (`E1_derived`: an item's or
-            // a test's names its own type, any other type names none).
-            const resourceOf = (type: Fact<typeof LomResource>["type"]) =>
-              ({
-                named:
-                  type === "imsqti_item_xmlv3p0" || type === "imsqti_test_xmlv3p0" ? type : "none",
-                node: stray,
-                type,
-              }) as const;
+            const resourceHref = {
+              href: "a.xml",
+              node: stray,
+              package: stray,
+              path: "a.xml",
+              scope: "entry",
+              typeLexical: "webcontent",
+            } as const;
             const fileOf = (path: string, scope: "entry" | "unresolved") =>
               ChangeSet.empty(Author)
                 .insert(FileHref, [{ package: stray, path, scope }])
@@ -452,12 +451,9 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 law: checkNamed("ResourceHref", "E1_derived"),
                 name: "resource href resolved to a path with a dot segment",
                 outcome: db.apply(
-                  ChangeSet.empty(Author)
-                    .insert(LomResource, [resourceOf("webcontent")])
-                    .insert(NamedHref, [{ ...named, path: "b/../a.xml" }])
-                    .insert(ResourceHref, [
-                      { ...resourceHref, href: "b/../a.xml", path: "b/../a.xml" },
-                    ]),
+                  ChangeSet.empty(Author).insert(ResourceHref, [
+                    { ...resourceHref, href: "b/../a.xml", path: "b/../a.xml" },
+                  ]),
                   {},
                 ),
               },
@@ -465,28 +461,24 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 law: checkNamed("ResourceHref", "Href_form"),
                 name: "resource href the importer reads no name from",
                 outcome: db.apply(
-                  ChangeSet.empty(Author)
-                    .insert(LomResource, [resourceOf("webcontent")])
-                    .insert(NamedHref, [{ ...named, path: "a%zz.xml" }])
-                    .insert(ResourceHref, [
-                      { ...resourceHref, href: "a%zz.xml", path: "a%zz.xml", scope: "unresolved" },
-                    ]),
+                  ChangeSet.empty(Author).insert(ResourceHref, [
+                    { ...resourceHref, href: "a%zz.xml", path: "a%zz.xml", scope: "unresolved" },
+                  ]),
                   {},
                 ),
               },
               {
-                law: checkNamed("ResourceHref", "Document_entry"),
+                law: checkNamed("TypedHref", "Document_entry"),
                 name: "document-typed resource href outside the package",
                 outcome: db.apply(
                   ChangeSet.empty(Author)
-                    .insert(LomResource, [resourceOf("imsqti_item_xmlv3p0")])
                     .insert(NamedHref, [
-                      { ...named, path: "http://x.org/a.xml", type: "imsqti_item_xmlv3p0" },
+                      { package: stray, path: "http://x.org/a.xml", type: "imsqti_item_xmlv3p0" },
                     ])
-                    .insert(ResourceHref, [
+                    .insert(TypedHref, [
                       {
-                        ...resourceHref,
-                        href: "http://x.org/a.xml",
+                        node: stray,
+                        package: stray,
                         path: "http://x.org/a.xml",
                         scope: "external",
                         type: "imsqti_item_xmlv3p0",
@@ -618,20 +610,12 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           //   (information model §7.6, the UP audit's B5).
           // Bound: one stray row per containment, written to its table with every column a direct
           // writer fills (README, "Direct SQL access"), after the owners its families' owner axes
-          // read, which PostgreSQL judges at the member's INSERT: an href's NamedHref and
-          // LomResource, a file's FileHref and ResourceFile, each lawful on its own CHECKs and
-          // counting the one member.
+          // read, which PostgreSQL judges at the member's INSERT: a typed href's NamedHref, a
+          // file's FileHref and ResourceFile, each lawful on its own CHECKs and counting the one
+          // member.
           Effect.gen(function* containments() {
             const client = yield* loginSession;
             const itemHref: readonly Stated[] = [
-              {
-                fact: { package: stray, path: "item.xml", type: "imsqti_item_xmlv3p0" },
-                relation: NamedHref,
-              },
-              {
-                fact: { named: "imsqti_item_xmlv3p0", node: stray, type: "imsqti_item_xmlv3p0" },
-                relation: LomResource,
-              },
               {
                 fact: {
                   href: "item.xml",
@@ -639,9 +623,25 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                   package: stray,
                   path: "item.xml",
                   scope: "entry",
-                  type: "imsqti_item_xmlv3p0",
+                  typeLexical: "imsqti_item_xmlv3p0",
                 },
                 relation: ResourceHref,
+              },
+            ];
+            const typedItemHref: readonly Stated[] = [
+              {
+                fact: { package: stray, path: "item.xml", type: "imsqti_item_xmlv3p0" },
+                relation: NamedHref,
+              },
+              {
+                fact: {
+                  node: stray,
+                  package: stray,
+                  path: "item.xml",
+                  scope: "entry",
+                  type: "imsqti_item_xmlv3p0",
+                },
+                relation: TypedHref,
               },
             ];
             const cases = [
@@ -652,9 +652,9 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 table: "resource_href",
               },
               {
-                comment: "foreign key ResourceHref(package where",
-                inserts: itemHref,
-                table: "resource_href",
+                comment: "foreign key TypedHref(package where",
+                inserts: typedItemHref,
+                table: "typed_href",
               },
               {
                 comment: "foreign key Document(package, path) to Entry(package, path)",

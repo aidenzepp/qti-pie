@@ -39,8 +39,10 @@ import type {
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceTyped,
   TextReference,
   TextReferencePath,
+  TypedHref,
 } from "#pantry/qti/package.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
@@ -70,6 +72,8 @@ export interface PackageRows {
   readonly Resource: ReadonlyMap<string, Addition<typeof Resource>>;
   readonly ResourceFile: ReadonlyMap<string, Addition<typeof ResourceFile>>;
   readonly ResourceHref: ReadonlyMap<string, Addition<typeof ResourceHref>>;
+  readonly ResourceTyped: ReadonlyMap<string, Addition<typeof ResourceTyped>>;
+  readonly TypedHref: ReadonlyMap<string, Addition<typeof TypedHref>>;
 }
 
 /**
@@ -88,13 +92,15 @@ export const noPackageRows: PackageRows = {
   Resource: new Map(),
   ResourceFile: new Map(),
   ResourceHref: new Map(),
+  ResourceTyped: new Map(),
+  TypedHref: new Map(),
 };
 
 /**
  * The `ResourceType` handle a `cp:resource`'s `type` names: every handle but the null object is
  * spelled exactly as its lexical form (C17).
  */
-type ResourceTypeHandle = Addition<typeof Resource>["type"];
+type ResourceTypeHandle = Addition<typeof ResourceTyped>["type"];
 
 /**
  * The `ResourceType` handles a lexical form can spell: every one but the null object `none`, which
@@ -110,13 +116,15 @@ const spelledTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
 const documentTyped: ReadonlySet<string> = new Set(documentTypes);
 
 /**
- * Read the code of a resource's `type` from its lexical form.
+ * Read the code of a resource's `type` from its lexical form, as written: the attribute's type is
+ * an `xs:string` enumeration, whose whitespace is preserved (XSD 1.1 Part 2, §4.3.6).
  *
  * @param lexical - The `type` attribute's lexical form, as written.
- * @returns The handle it spells, or `none` for a form no handle spells, which the attribute's
- *   value domain refuses as `attribute-lexical` (spec reading 67).
+ * @returns The handle it spells; none for a form no handle spells, which has no code anywhere and
+ *   which the attribute's value domain refuses as `attribute-lexical` alone (spec reading 67).
  */
-const typeOf = (lexical: string): ResourceTypeHandle => spelledTypes.get(lexical) ?? "none";
+const typeOf = (lexical: string): Option.Option<ResourceTypeHandle> =>
+  Option.fromUndefinedOr(spelledTypes.get(lexical));
 
 /**
  * An href's `params` piece, as `ResourceHref` and `Reference` type it: empty, or from a `?` or `#`.
@@ -696,6 +704,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
   const resources = new Map<string, Addition<typeof Resource>>();
   const resourceFiles = new Map<string, Addition<typeof ResourceFile>>();
   const resourceHrefs = new Map<string, Addition<typeof ResourceHref>>();
+  const resourceTypes = new Map<string, Addition<typeof ResourceTyped>>();
+  const typedHrefs = new Map<string, Addition<typeof TypedHref>>();
   const resourceIdentifiers = new Map<NodeId, string>();
 
   for (const node of rows.nodes) {
@@ -720,9 +730,16 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
         manifestIdentifier,
         package: ids.package,
         parent: node.parent,
-        type,
         typeLexical,
       });
+      for (const code of Option.toArray(type)) {
+        resourceTypes.set(node.id, {
+          node: node.id,
+          package: ids.package,
+          type: code,
+          typeLexical,
+        });
+      }
 
       if (href !== undefined) {
         const resolution = resolve(node.id, href);
@@ -733,9 +750,22 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
           package: ids.package,
           path,
           scope: resolution.scope,
-          type,
+          typeLexical,
         });
-        namedHrefs.set(headingKey([ids.package, path, type]), { package: ids.package, path, type });
+        for (const code of Option.toArray(type)) {
+          typedHrefs.set(node.id, {
+            node: node.id,
+            package: ids.package,
+            path,
+            scope: resolution.scope,
+            type: code,
+          });
+          namedHrefs.set(headingKey([ids.package, path, code]), {
+            package: ids.package,
+            path,
+            type: code,
+          });
+        }
       }
     }
 
@@ -783,6 +813,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     Resource: resources,
     ResourceFile: resourceFiles,
     ResourceHref: resourceHrefs,
+    ResourceTyped: resourceTypes,
+    TypedHref: typedHrefs,
   };
 };
 
@@ -802,7 +834,7 @@ export const namedDocuments = (
   rows: PackageRows,
 ): ReadonlyMap<string, { readonly path: string; readonly type: ResourceTypeHandle }> =>
   new Map(
-    [...rows.ResourceHref.values()].flatMap(({ path, scope, type }) =>
+    [...rows.TypedHref.values()].flatMap(({ path, scope, type }) =>
       scope === "entry" && documentTyped.has(type)
         ? [[headingKey([path, type]), { path, type }] as const]
         : [],

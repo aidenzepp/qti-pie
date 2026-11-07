@@ -192,8 +192,10 @@ import {
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceTyped,
   TextReference,
   TextReferencePath,
+  TypedHref,
 } from "#pantry/qti/package.ts";
 import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
 import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
@@ -339,8 +341,10 @@ const packageRelations = {
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceTyped,
   TextReference,
   TextReferencePath,
+  TypedHref,
 };
 
 /**

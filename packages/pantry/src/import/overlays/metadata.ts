@@ -13,6 +13,7 @@
  * it is, and its field's pattern refuses it under the schema's limit law.
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import { Option } from "effect";
 import { BaseType, ResourceType } from "#pantry/grammar/install.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
@@ -90,7 +91,7 @@ export interface ObjectRows {
 /**
  * The `ResourceType` handle a `cp:resource`'s `type` names.
  */
-type ResourceTypeHandle = Addition<typeof LomResource>["type"];
+type ResourceTypeHandle = Addition<typeof LomResource>["named"];
 
 /**
  * The `ResourceType` handles a lexical form can spell: every one but the null object `none`, which
@@ -212,12 +213,14 @@ export const lowerAscii = (text: string): string =>
   text.replaceAll(/[A-Z]/gu, (capital) => capital.toLowerCase());
 
 /**
- * Read the code of a resource's `type` from its lexical form.
+ * Read the code of a resource's `type` from its lexical form, as written: an `xs:string`
+ * enumeration, whose whitespace is preserved (XSD 1.1 Part 2, §4.3.6).
  *
  * @param lexical - The `type` attribute's lexical form, as written.
- * @returns The handle it spells, or `none` for a form no handle spells.
+ * @returns The handle it spells; none for a form no handle spells.
  */
-const typeOf = (lexical: string): ResourceTypeHandle => spelledTypes.get(lexical) ?? "none";
+const typeOf = (lexical: string): Option.Option<ResourceTypeHandle> =>
+  Option.fromUndefinedOr(spelledTypes.get(lexical));
 
 /**
  * Compute each element's string value as `Node.stringValue` folds it for the kinds an overlay
@@ -317,8 +320,9 @@ const treeOf = (doc: XdmDocument<Composed>, ids: MetadataIds): Tree => {
 };
 
 /**
- * Build a document's {@link LomResource} rows: one per `cp:resource`, its type the handle its
- * lexical form spells, and `named` its type where it has an `href` and is an item or a test.
+ * Build a document's {@link LomResource} rows: one per `cp:resource`, `named` the handle its `type`
+ * spells where it has an `href` and that handle is an item's or a test's, its `TypedHref`'s; else
+ * `none`, a resource that names no assessment object, a type spelling nothing among them.
  *
  * @param tree - The document's tree.
  * @returns The rows, by their node's id.
@@ -330,10 +334,13 @@ const resourceRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomReso
         return [];
       }
 
-      const type = typeOf(tree.valueOf(node, "type") ?? "");
-      const named = tree.valueOf(node, "href") !== undefined && naming.has(type) ? type : "none";
+      const object = Option.filter(typeOf(tree.valueOf(node, "type") ?? ""), (type) =>
+        naming.has(type),
+      );
+      const named: ResourceTypeHandle =
+        tree.valueOf(node, "href") === undefined ? "none" : Option.getOrElse(object, () => "none");
 
-      return [[node.id, { named, node: node.id, type }] as const];
+      return [[node.id, { named, node: node.id }] as const];
     }),
   );
 

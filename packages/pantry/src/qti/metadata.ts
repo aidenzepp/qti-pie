@@ -124,7 +124,7 @@ import { Document } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
-import { Resource, ResourceHref } from "#pantry/qti/package.ts";
+import { Resource, TypedHref } from "#pantry/qti/package.ts";
 
 /**
  * The resource types whose LOM record names its document (reading 62): an item's and a test's.
@@ -198,29 +198,29 @@ export const identifierPattern = `^[${xmlNonSpace}]+$`;
 const Space = str.regex("^[\\t\\n\\r ]*$");
 
 /**
- * A resource as the LOM laws read it, keyed by its `cp:resource` node: its type, its count of
- * `href`s (0 or 1, `ResourceHref` being keyed by the resource), and `named`, the type of the
- * assessment object document its `href` names: its own type where it has an `href` and is an item
- * or a test, else `none`.
- *
- * The count is the one total fact of whether an optional `href` exists, which no containment can
- * state of its absence.
+ * A resource as the LOM laws read it, keyed by its `cp:resource` node: `named`, the type of the
+ * assessment object document its `href` names: its type where it has a {@link TypedHref} of an item
+ * or a test, else `none`. A resource whose `type` spells nothing names no document.
  */
 export const LomResource = relation(
   "LomResource",
   {
-    hrefs: drawn(natural),
     named: closedId(ResourceType),
     node: uuid,
-    type: closedId(ResourceType),
   },
   ["node"],
 );
 
 /**
- * Each resource's `href`, counted by {@link LomResource}'s `hrefs`.
+ * The typed hrefs of an assessment object's resources, an item's or a test's: each is its
+ * resource's `named`.
  */
-export const lomResourceHrefs = counted(on(ResourceHref, "node"), fin(LomResource, "hrefs"));
+const objectHrefs = select(TypedHref, (h) => h.in(h.type, objectTypes));
+
+/**
+ * The resources that name an assessment object: each has its {@link objectHrefs} row.
+ */
+const namingResources = select(LomResource, (r) => r.ne(r.named, "none"));
 
 /**
  * A LOM record, keyed by its `lom:lom` node: its {@link nodeRef} tuple, its owner's kind, start and
@@ -250,7 +250,7 @@ export const LomRecord = relation(
 
 /**
  * The document a naming record names, keyed by the record: the record's resource and type, the
- * resource's package and the `path` its `href` names (`ResourceHref`'s, the href less its query or
+ * resource's package and the `path` its `href` names (`TypedHref`'s, the href less its query or
  * fragment, reading 102), and the document at that path. Every record whose `named` is not `none`
  * has one, so each law over a record reads its document here.
  */
@@ -788,9 +788,8 @@ const usageRecordValues = select(Node, (n) =>
 /**
  * Every statement over the metadata overlays, each `check` named by its oracle law:
  *
- * - **the resources:** each `Resource` has its {@link LomResource}, both ways, with its type; its
- *   `hrefs` counts its `ResourceHref`; and its `named` is its type when it has an `href` and is an
- *   item or a test, else `none` ("E1 derived").
+ * - **the resources:** each `Resource` has its {@link LomResource}, both ways; and its `named` is its
+ *   {@link TypedHref}'s type where that is an item's or a test's, else `none` ("E1 derived").
  * - **the records:** each `lom:lom` has its {@link LomRecord}; its tuple and its owner's are its
  *   nodes'; its `named` is its resource's where its owner is a resource's metadata, else `none`;
  *   and each naming record has its {@link LomObject}, the document at its resource's `href`'s
@@ -841,14 +840,9 @@ export const metadataLawsByName = {
     key(on(usageBaseTypes, "node")),
   ],
   "E1 derived": [
-    mirrors(on(LomResource, "node", "type"), on(Resource, "node", "type")),
-    lomResourceHrefs,
-    check("E1_derived", LomResource, (r) =>
-      r.or(
-        r.and(r.eq(r.hrefs, 1n), r.in(r.type, objectTypes), r.eq(r.named, r.type)),
-        r.and(r.or(r.eq(r.hrefs, 0n), r.not(r.in(r.type, objectTypes))), r.eq(r.named, "none")),
-      ),
-    ),
+    mirrors(on(LomResource, "node"), on(Resource, "node")),
+    contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named")),
+    contained(on(namingResources, "node", "named"), on(objectHrefs, "node", "type")),
     contained(
       on(LomRecord, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
@@ -881,7 +875,7 @@ export const metadataLawsByName = {
     ),
     contained(
       on(LomObject, "resource", "package", "path", "type"),
-      on(ResourceHref, "node", "package", "path", "type"),
+      on(TypedHref, "node", "package", "path", "type"),
     ),
     contained(
       on(LomObject, "package", "path", "document"),
