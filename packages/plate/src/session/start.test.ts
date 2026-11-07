@@ -24,6 +24,7 @@ import {
 } from "#plate/session/start.ts";
 import type { Current, ItemView } from "#plate/session/start.ts";
 import { open } from "#plate/validate/open.ts";
+import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
@@ -729,6 +730,74 @@ describe("startTest", () => {
         assert.strictEqual(failureTagged(badTime, "InvalidTime").argument, "context.now");
       }),
     { tags: ["corpus"] },
+  );
+
+  it.effect(
+    "[T-1] starts each test outcome at its declared default, else its starting value, with no outcome processing run and no item's template defaults",
+    () =>
+      Effect.gen(function* startsOutcomes() {
+        const delivery = yield* builtDelivery(
+          "outcomes",
+          [
+            [
+              "first",
+              itemXml("first", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+            ],
+            [
+              "second",
+              itemXml("second", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+            ],
+          ],
+          [
+            '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">',
+            "<qti-default-value><qti-value>2.5</qti-value></qti-default-value>",
+            "</qti-outcome-declaration>",
+            '<qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer">',
+            "<qti-default-value><qti-value>9007199254740993</qti-value></qti-default-value>",
+            "</qti-outcome-declaration>",
+            '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="integer"/>',
+            '<qti-outcome-declaration identifier="MEAN" cardinality="single" base-type="float"/>',
+            '<qti-outcome-declaration identifier="GRADE" cardinality="single" base-type="identifier"/>',
+          ],
+        );
+        const session = started(delivery, yield* configure({}));
+
+        assert.deepStrictEqual(session.outcomes, {
+          COUNT: integer(2n ** 53n + 1n),
+          GRADE: nullOf("identifier", "single"),
+          MEAN: float(0),
+          SCORE: float(2.5),
+          TOTAL: integer(0n),
+        });
+        assert.strictEqual(session.outcomeRuns, 0);
+        assert.deepStrictEqual(
+          session.items.map((item) => item.templateDefaults),
+          [Option.none(), Option.none()],
+        );
+        assert.deepStrictEqual(throughHost(delivery.test, session), session);
+      }),
+  );
+
+  it.effect(
+    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 3 keeps either",
+    () =>
+      Effect.gen(function* keepsShuffleSeed() {
+        const delivery = yield* builtDelivery("shuffled", [
+          [
+            "first",
+            itemXml("first", { choices: ["A", "B", "C"], defaultValue: false, shuffle: true }),
+          ],
+        ]);
+        const seeded = started(delivery, yield* configure({ seed: "7" }));
+        const unseeded = started(delivery, yield* configure({}));
+
+        assert.deepStrictEqual(
+          [seeded.shuffleSeed, unseeded.shuffleSeed],
+          [Option.some("7"), Option.none()],
+        );
+        assert.deepStrictEqual(throughHost(delivery.test, seeded), seeded);
+        assert.deepStrictEqual(throughHost(delivery.test, unseeded), unseeded);
+      }),
   );
 });
 
