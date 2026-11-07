@@ -656,7 +656,7 @@ const itemPage = (
   return Result.match(
     Result.gen(function* composeItem() {
       const { record } = yield* restore(accepted, session.record);
-      const redacted = redact(accepted, record);
+      const redacted = redact(accepted, record, configuration);
       const title = redacted.title.trim();
       const status = yield* Option.match(view.status, {
         onNone: () => Result.succeed<readonly string[]>([]),

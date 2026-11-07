@@ -107,6 +107,7 @@ const notRoots = {
     "the count range the model builder, the structural walk and decodeRedacted read, kept apart from vocabulary.ts so decodeRedacted loads none of its tables",
   "src/index.ts": "the public entry, which re-exports the Schema side beside the browser modules",
   "src/messages.ts": "reached from the roots, so the scan checks it",
+  "src/output-budget.ts": "reached from the roots, so the scan checks it",
   "src/restore.ts": "the Schema side: decodes the stored record through Schema",
   "src/score.ts": "value-imports Schema to decode and encode the stored record",
   "src/seed.ts": "reached from the roots, so the scan checks it",

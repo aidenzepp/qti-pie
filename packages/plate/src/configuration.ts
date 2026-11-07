@@ -7,6 +7,7 @@
 import type { SchemaIssue } from "effect";
 import { Config, ConfigProvider, Effect, Match, Option, Schema } from "effect";
 import { locales } from "#plate/messages.ts";
+import { defaultOutputBudget, maximumOutputBudget } from "#plate/output-budget.ts";
 
 /**
  * The Schema of the renderer's configuration, which owns every field's constraint and default.
@@ -18,7 +19,9 @@ import { locales } from "#plate/messages.ts";
  * `h6`; it starts at 2 because the host owns `h1`. `assetBase` `""` resolves asset URLs relative to
  * the package. `outputBudget` bounds the characters of HTML one `render` returns, counted as a
  * string's `length` counts them (UTF-16 code units), and is 16,777,216 (16 MiB of ASCII) by
- * default; past it `render` fails. Its maximum, 536,870,888, is V8's longest string, the smallest
+ * default; past it `render` fails. `redact` takes the same budget as its last argument and stops
+ * printing an item's printed variables once their text passes it, so `render` fails then too. Its
+ * maximum, 536,870,888, is V8's longest string, the smallest
  * of the engines' limits, so no budget asks an engine for a string it cannot build. `seed` is a
  * string, used as given: it keys a shuffled Choice's order with the
  * instance and the response, and `startTest` keeps it as the session's seed, under which each
@@ -41,9 +44,9 @@ export const Configuration = Schema.Struct({
   maxAttempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(1)),
   ),
-  outputBudget: Schema.Int.check(Schema.isBetween({ maximum: 536_870_888, minimum: 1 })).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed(16_777_216)),
-  ),
+  outputBudget: Schema.Int.check(
+    Schema.isBetween({ maximum: maximumOutputBudget, minimum: 1 }),
+  ).pipe(Schema.withDecodingDefaultKey(Effect.succeed(defaultOutputBudget))),
   seed: Schema.optionalKey(Schema.String),
   showFeedback: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   showSolution: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),

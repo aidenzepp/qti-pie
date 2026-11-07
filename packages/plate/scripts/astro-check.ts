@@ -156,7 +156,7 @@ const expected = Effect.gen(function* expected() {
     });
   }
 
-  const redacted = redact(accepted.value);
+  const redacted = redact(accepted.value, undefined, configuration);
   const rendered = render(redacted, configuration, { instance });
   const [posting, ...others] = postings(redacted, instance);
 

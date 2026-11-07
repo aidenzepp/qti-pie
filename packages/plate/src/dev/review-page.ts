@@ -206,12 +206,16 @@ const itemPage = (
         { heading: mode, instance: view.instance },
         view.configuration,
       );
-      const item = yield* render(redact(document, view.record), view.configuration, {
-        assetBase: itemAssetBase(sitting, document),
-        instance: view.instance,
-        mode,
-        values: mode === "review" ? view.values : solution(document, view.record),
-      });
+      const item = yield* render(
+        redact(document, view.record, view.configuration),
+        view.configuration,
+        {
+          assetBase: itemAssetBase(sitting, document),
+          instance: view.instance,
+          mode,
+          values: mode === "review" ? view.values : solution(document, view.record),
+        },
+      );
       const { locale } = view.configuration;
 
       return page(

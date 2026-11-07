@@ -500,15 +500,15 @@ describe("README.md", () => {
     );
   });
 
-  it("passes the session item's record to redact in Start's test and the server action", () => {
+  it("passes the session item's record and configuration to redact in Start's test and the server action", () => {
     for (const heading of ["## Start", "### A plain server action"]) {
       const scripts = codeBlocks(sectionOf(heading)).map(scriptOf);
 
       assert.isTrue(
         scripts.some((script) =>
-          /redact\(items\.get\(shown\.ref\)!, shown\.record\)/u.test(script),
+          /redact\(items\.get\(shown\.ref\)!, shown\.record, shown\.configuration\)/u.test(script),
         ),
-        `${heading} passes shown.record to redact`,
+        `${heading} passes shown.record and shown.configuration to redact`,
       );
     }
   });
@@ -647,6 +647,22 @@ describe("README.md", () => {
           paragraph.includes("`OutputTooLarge`"),
       ),
       "the paragraph of Scoring that advises a time limit names outputBudget and OutputTooLarge",
+    );
+  });
+
+  it("names redact beside outputBudget in the paragraph of Scoring that advises a time limit", () => {
+    const paragraphs = sectionOf("## Scoring")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("time limit") &&
+          paragraph.includes("`outputBudget`") &&
+          paragraph.includes("`redact`"),
+      ),
+      "the paragraph of Scoring that advises a time limit names redact beside outputBudget",
     );
   });
 

@@ -10,7 +10,10 @@
  * an integer conversion, and a width, a precision or a whole text too long to hold. The defaults
  * here are drafted readings, each marked "G-R2, pending" where it is applied. The two size bounds
  * are approved: a text that would pass {@link fieldBound} or {@link textBound} is not printed at
- * all, and {@link formatPrinted} says so, so its caller can fail rather than show a blank slot.
+ * all, and {@link formatPrinted} says so, so its caller can fail rather than show a blank slot. A
+ * caller may hold a text to a smaller bound, as `redactItem` holds each printed text to what
+ * remains of its output budget, and the formatter stops building as soon as the text would pass
+ * it.
  * Every float reaches decimal digits through {@link shortestDecimal}, the one approximated
  * step, and is rounded or truncated as that decimal, never as the double's binary expansion, so a
  * page and Node print the same text.
@@ -139,7 +142,8 @@ const conversionPattern =
  * fails `OutputTooLarge` naming this bound and the printed variable rather than show its slot
  * blank. {@link fieldBound} holds each member's conversion, but a container holds up to 1,000,000
  * members, so 600 members of 999,999 characters, or 1,000,000 members of 600, would join past an
- * engine's longest string, and the engine must not throw.
+ * engine's longest string, and the engine must not throw. A caller's smaller bound
+ * ({@link formatPrinted}'s `bound`) takes its place; a larger one never does.
  */
 export const textBound = 1_000_000;
 
@@ -663,24 +667,26 @@ const shownOf = (value: Value, index: bigint | undefined): readonly Single[] => 
 
 /**
  * Join members' texts by a delimiter, printing each member only while the text so far stays within
- * {@link textBound}, so no text past it is ever built.
+ * a bound, so no text past it is ever built: the member that would pass it is the last printed.
  *
  * @param members The members to print, in order.
  * @param print The printer of one member.
  * @param delimiter The text between two members.
- * @returns The joined text, or none as soon as it would pass {@link textBound}.
+ * @param bound The most characters the joined text may hold, at most {@link textBound}.
+ * @returns The joined text, or none as soon as it would pass `bound`.
  */
 const joinedWithin = (
   members: readonly Single[],
   print: (single: Single) => string,
   delimiter: string,
+  bound: number,
 ): Option.Option<string> => {
   const texts: string[] = [];
   let length = 0;
   for (const member of members) {
     const text = print(member);
     length += (texts.length === 0 ? 0 : delimiter.length) + text.length;
-    if (length > textBound) {
+    if (length > bound) {
       return Option.none();
     }
 
@@ -699,25 +705,38 @@ const joinedWithin = (
  * can tell that from NULL's empty text and fail rather than show a blank slot (`render` fails
  * `OutputTooLarge`, naming the bound and the printed variable).
  *
+ * A caller that holds the text to fewer characters passes `bound`: the text is then held to the
+ * smaller of `bound` and {@link textBound}, the members are printed one by one only while the text
+ * so far stays within it, and none is given as soon as it would pass it, so no more than one
+ * member is printed past what fits. `redactItem` passes what remains of its output budget. A
+ * `bound` that is not a number below {@link textBound}, `NaN` included, holds the text to
+ * {@link textBound}.
+ *
  * Records are not modelled, so no record reaches it; `mappingIndicator` waits for them.
  *
  * @example
  *   formatPrinted(floatValue(2.675), { format: "Score: %.2f" }); // Option.some("Score: 2.68")
  *   formatPrinted(integerValue(5n), { format: "%1000001i" }); // Option.none()
+ *   formatPrinted(orderedIntegers([10n, 20n, 30n]), {}, 5); // Option.none(): "10;20;30" is 8
  *
  * @param value The variable's value.
  * @param options The printed variable's resolved attributes.
+ * @param bound The most characters the text may hold, {@link textBound} when absent or larger.
  * @returns Some text, empty for NULL; or none for a value under a conversion wider than
  *   1,000,000 characters, and for one whose text, delimiters included, would be longer than
- *   1,000,000 characters.
+ *   `bound` or 1,000,000 characters, whichever is fewer.
  */
-export const formatPrinted = (value: Value, options: PrintOptions = {}): Option.Option<string> => {
+export const formatPrinted = (
+  value: Value,
+  options: PrintOptions = {},
+  bound: number = textBound,
+): Option.Option<string> => {
   const shown = shownOf(value, options.index);
   if (shown.length === 0) {
     return Option.some("");
   }
 
   return Option.flatMap(printerOf(value.baseType, options), (print) =>
-    joinedWithin(shown, print, options.delimiter ?? ";"),
+    joinedWithin(shown, print, options.delimiter ?? ";", bound < textBound ? bound : textBound),
   );
 };

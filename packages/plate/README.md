@@ -47,7 +47,7 @@ const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xm
 const accepted = acceptedItem(verdict);
 if (Option.isSome(accepted)) {
   const configuration = await Effect.runPromise(configure({}));
-  const rendered = render(redact(accepted.value), configuration);
+  const rendered = render(redact(accepted.value, undefined, configuration), configuration);
   if (Result.isSuccess(rendered)) console.log(rendered.success.html);
 }
 ```
@@ -84,7 +84,7 @@ if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsuppo
       const instance = `s-${crypto.randomUUID()}`;
       const session = yield* startTest(test, items, configuration, { instance, now: new Date() });
       const shown = yield* itemView(test, session, configuration, 1);
-      const redacted = redact(items.get(shown.ref)!, shown.record);
+      const redacted = redact(items.get(shown.ref)!, shown.record, shown.configuration);
       const item = yield* render(redacted, shown.configuration, {
         instance: shown.instance,
         values: shown.values,
@@ -129,7 +129,8 @@ request. [Navigation](#navigation) moves the session on.
 
 `open`, `openPackage` and `configure` return Effects. Every other function is plain and returns
 its value, or a `Result` when it can fail. `redact`, `checkResponses` and `solution` take the
-item's record as an optional last argument. `render`'s `parts` option swaps a part for the host's
+item's record as an optional last argument, and `redact` takes the output budget after it.
+`render`'s `parts` option swaps a part for the host's
 own markup, built with `h`, and its `mode` option shows an item in `review` or `solution`. A host
 that builds its own Status part reads the fields `StatusInput` documents.
 [`src/index.ts`](src/index.ts) lists every export, and the TSDoc on each name is its reference.
@@ -294,7 +295,7 @@ export const step = (
     const responses: Record<string, Value> = {};
     if (shown.kind === "item") {
       const { own } = partition(entries, shown.instance);
-      const item = redact(items.get(shown.ref)!, shown.record);
+      const item = redact(items.get(shown.ref)!, shown.record, shown.configuration);
       for (const { binding, identifier, options } of postings(item, shown.instance)) {
         responses[identifier] = yield* decode(own, binding, options);
       }
@@ -453,7 +454,10 @@ example in a worker that you can stop. `render` writes at most the configuration
 characters of HTML, counted as a string's `length` counts them. `outputBudget` is 16,777,216 by
 default, and you can set it from 1 to 536,870,888. Past it, `render` returns `OutputTooLarge`,
 which names the budget and the item, and writes nothing, so a page never shows an item with a part
-left out.
+left out. `redact` takes the same budget as its last argument, as `{ outputBudget }` or the
+configuration itself. It stops printing once the item's printed variables pass the budget, and
+`render` then returns `OutputTooLarge`, which names the printed variable. Pass the same
+configuration to both.
 
 Where QTI makes an integer a float, an integer beyond the largest finite float becomes the largest
 finite float of its sign, not an infinity ([reading 45](../../docs/spec-readings.md)). The math
@@ -487,7 +491,7 @@ import { begin, redact, render, restore } from "@qti-pie/plate";
 const first = Result.gen(function* firstPage() {
   const stored = yield* begin(accepted, { instance: "q1" });
   const { record, values } = yield* restore(accepted, stored);
-  const redacted = redact(accepted, record);
+  const redacted = redact(accepted, record, configuration);
   const { html } = yield* render(redacted, configuration, { instance: "q1", values });
 
   return { html, stored };
@@ -658,7 +662,8 @@ export const prerender = false;
 const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xml")));
 const configuration = await Effect.runPromise(configure({}));
 const item = Option.getOrThrow(acceptedItem(verdict));
-const { html } = Result.getOrThrow(render(redact(item), configuration, { instance: "q1" }));
+const redacted = redact(item, undefined, configuration);
+const { html } = Result.getOrThrow(render(redacted, configuration, { instance: "q1" }));
 Astro.response.headers.set("cache-control", "no-store");
 ---
 <form method="POST" autocomplete="off">

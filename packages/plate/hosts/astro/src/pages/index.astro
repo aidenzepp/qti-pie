@@ -111,7 +111,7 @@ const program = Effect.gen(function* astroPage() {
   }
 
   const item = accepted.value;
-  const redacted = redact(item);
+  const redacted = redact(item, undefined, configuration);
 
   /**
    * Construct the item's page: the Status part when a post gave one, then the form around the
