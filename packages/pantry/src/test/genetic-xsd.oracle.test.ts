@@ -27,6 +27,7 @@ import { assert, describe, it as unit, layer } from "@effect/vitest";
 import { Console, Effect, FileSystem, Layer, Option, Result } from "effect";
 import { Digest } from "effect/crypto";
 import { encode } from "@qti-pie/crust/encode.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";
 import { floorSeed, rotatingSeed } from "@grizzle/testing/random";
 import { sample } from "@grizzle/testing/source";
@@ -74,7 +75,7 @@ import {
 } from "#pantry/test/xsd-differential.ts";
 import type { Recorded } from "#pantry/test/xsd-differential.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
-import { OracleLayer } from "#pantry/xml/oracle.ts";
+import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * Whether the XSD cache holds every pin, so `xmllint` can read them.
@@ -258,11 +259,23 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
             version,
           });
           const comparison = compareJudgments(xsd, law);
+          const rows = yield* rowsOf(bytes.value, version, input.grammar);
+          // The law oracle names a foreign element by its foreign kind; the element grain reads
+          // their expanded names from the rows' OpenElementName.
+          const foreign = new Set(
+            Option.match(rows, {
+              onNone: () => [],
+              onSome: ({ openElementNames }) =>
+                openElementNames.map(({ local, namespace }) =>
+                  namespace === "" ? local : `{${namespace}}${local}`,
+                ),
+            }),
+          );
           const differences = [
             ...comparison.differences,
-            ...elementGrainDifferences(xsd, law, comparison, input.grammar),
+            ...elementGrainDifferences(xsd, law, comparison, input.grammar, foreign),
           ];
-          // The classes read the document's rows and schema set, which only a difference needs.
+          // The classes read the document's names and schema set, which only a difference needs.
           if (differences.length > 0) {
             const names = yield* foreignNamesOf(bytes.value, version, input.grammar);
             const set = yield* schemaSetOf(version, root.namespace).pipe(
@@ -292,7 +305,7 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
             comparison,
             edits: genome.edits,
             law,
-            rows: yield* rowsOf(bytes.value, version, input.grammar),
+            rows,
             version,
             xsd,
           })) {
@@ -305,6 +318,23 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
     { concurrency: 1 },
   );
 });
+
+/**
+ * The documents every run judges as written, beside the bred ones: the reduced cases a ruling
+ * settled, each of which both oracles must judge alike from then on. The template inline's is VD's
+ * ruling of 2026-11-07 (an interaction its HTML holds is valid; only a template block refuses one
+ * at any depth, §5.145), which disagrees until the grammar's ban comes off the inline.
+ */
+const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
+  {
+    name: "an interaction in a template inline's span",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="string"/><qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/><qti-item-body><p><qti-template-inline template-identifier="T" identifier="x"><span><qti-text-entry-interaction response-identifier="R"/></span></qti-template-inline></p></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "an interaction in a template block's paragraph",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="string"/><qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/><qti-item-body><qti-template-block template-identifier="T" identifier="x"><p><qti-text-entry-interaction response-identifier="R"/></p></qti-template-block></qti-item-body></qti-assessment-item>',
+  },
+];
 
 /**
  * Write a document genome's document as a report shows it.
@@ -418,7 +448,21 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
             ].join("\n"),
           );
 
-          const reports: string[] = [];
+          const kept = yield* Effect.forEach(
+            keptDocuments,
+            ({ text }) =>
+              Effect.map(Effect.orDie(readXml(new TextEncoder().encode(text))), (doc) =>
+                seedGenome(doc, {}),
+              ),
+            { concurrency: 1 },
+          );
+          const keptJudgments = yield* judge(kept);
+          const reports: string[] = keptJudgments.flatMap(({ disagreements }, at) =>
+            disagreements.map(
+              ({ difference, version }) =>
+                `kept document "${keptDocuments[at]?.name ?? ""}" in ${version}: ${difference.direction} ${difference.class} ${difference.rule}: ${difference.detail.slice(0, 400)}`,
+            ),
+          );
           for (const [at, [signature, finding]] of found.entries()) {
             const { difference, version } = finding.disagreement;
             // Reduce while the test's budget allows, so every class is reported before its timeout.
@@ -537,4 +581,68 @@ describe("genetic-xsd.oracle.test.ts, reading 129's record", () => {
       );
     },
   );
+});
+
+/**
+ * The libxml2 control's toy schema: an attribute group G of an `##other` lax wildcard, referenced
+ * by a type of its own and, when `derived`, by a type that extends a base whose wildcard is
+ * `##any`.
+ *
+ * @param derived - Whether the extending type references G too.
+ * @returns The schema's text.
+ */
+const widenedSchema = (derived: boolean): string =>
+  [
+    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">',
+    '<xs:attributeGroup name="G"><xs:anyAttribute namespace="##other" processContents="lax"/></xs:attributeGroup>',
+    '<xs:attributeGroup name="H"><xs:anyAttribute namespace="##any" processContents="lax"/></xs:attributeGroup>',
+    '<xs:complexType name="Base"><xs:attributeGroup ref="H"/></xs:complexType>',
+    ...(derived
+      ? [
+          '<xs:complexType name="Derived"><xs:complexContent><xs:extension base="Base"><xs:attributeGroup ref="G"/></xs:extension></xs:complexContent></xs:complexType>',
+          '<xs:element name="derived" type="Derived"/>',
+        ]
+      : []),
+    '<xs:complexType name="Plain"><xs:attributeGroup ref="G"/></xs:complexType>',
+    '<xs:element name="plain" type="Plain"/>',
+    "</xs:schema>",
+  ].join("\n");
+
+/**
+ * The folder the libxml2 control writes its toy schemas to, the run's own.
+ */
+const controlRoot = fileScratchDirectory("genetic-xsd-control-");
+
+describe.skipIf(!cached)("genetic-xsd.oracle.test.ts, libxml2's widened ##other", () => {
+  layer(TestLayer, { excludeTestServices: true })("the control", (it) => {
+    it.effect(
+      "an attribute group's ##other admits an attribute in no namespace once a type extending an ##any base references the group, and not alone",
+      () =>
+        Effect.gen(function* widenedOther() {
+          const fs = yield* FileSystem.FileSystem;
+
+          yield* fs.makeDirectory(controlRoot, { recursive: true });
+          yield* fs.writeFileString(`${controlRoot}/widened.xsd`, widenedSchema(true));
+          yield* fs.writeFileString(`${controlRoot}/alone.xsd`, widenedSchema(false));
+          yield* fs.writeFileString(`${controlRoot}/plain.xml`, '<plain xmlns="urn:t" zz="1"/>');
+
+          const verdicts = yield* Effect.forEach(
+            ["widened", "alone"],
+            (name) =>
+              xmllintValidate({
+                paths: [`${controlRoot}/plain.xml`],
+                schema: `${controlRoot}/${name}.xsd`,
+              }),
+            { concurrency: 1 },
+          );
+
+          assert.deepStrictEqual(
+            verdicts.map((held) => held.map(({ _tag }) => _tag)),
+            [["Valid"], ["Invalid"]],
+            "libxml2 admits the no-namespace attribute only where a derived type shares the group",
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
 });
