@@ -1470,6 +1470,11 @@ target's UNIQUE are both representable, and only the source's index is refused.
 ### A counted family's `Monoid.or` end is re-read through the wrong text form (defect, fix pending in grizzle)
 
 - **Triage:** lane N2, at grizzle `27c4cd2`. The five files below are byte-identical at `4b155e8` and `30af956`.
+- **Checked at:** grizzle `30af956`, its newest `main` when N2 ran the pull-first check at 19:05 on 2026-11-06, from
+  tarballs packed from a `git archive` of it (grizzle `f10a6013…`, engine `c7d281ac…`). It still fails there:
+  `~/.cache/gr8des/n2/repro/fold-closed-row-30af956/run-30af956.out` has the case and the host-bits variant
+  `invariant-rejected` with the same DETAIL, and the sum control `accepted`. grizzle `main` has since moved to
+  `4ec7574`, and the reproduction was not re-run there.
 - **Cause:**
   - `bind.ts`'s `carried` refills the owner's fact from `recountValues` (`packages/engine/src/write/program/bind.ts:427`
     to `484`, the call at `:452`).
@@ -1495,15 +1500,23 @@ target's UNIQUE are both representable, and only the source's index is refused.
   `E1_derived` refuses the every-relation package's `qti-sum`. The CLI tier's "writes only live handles … bit(112) …
   a family's insert of Node raised 23514" is probably the same defect.
 - **Status:** relayed to the grizzle session (grizzle-c5) under the operator's order that it be fixed with a
-  search-based guard that keeps it from recurring: a round trip over every carrier, and the fold-end search over
-  monoids, carriers, family kinds and write forms, with the planted bug restored and shown caught. It is being fixed
-  before beta.1, so nothing is filed. qti-pie takes no workaround. The fixing commit is recorded here when it lands.
+  search-based guard that keeps it from recurring. grizzle-c5 confirmed the defect, and ruled at 19:25 on 2026-11-06
+  that the repair is by representation:
+  - the recount carries host values end to end and never re-parses a text it wrote;
+  - its lane FOLD audits and deletes every place grizzle reads back its own text;
+  - parameter text and output text become distinct types, so feeding one to the other's reader cannot compile.
 
-### A CHECK's refusal drops PostgreSQL's DETAIL row (a reporting limit, asked of grizzle)
+  The guard is a round trip over every carrier through PostgreSQL and the fold-end search over monoids, carriers,
+  family kinds and write forms, with planted bugs, `edit.ts:203` among them, restored and shown caught. It is being
+  fixed before beta.1, so nothing is filed. qti-pie takes no workaround. The fixing commit is recorded here when it
+  lands.
+
+### A CHECK's refusal drops PostgreSQL's DETAIL row (a reporting limit, accepted by grizzle)
 
 When a write breaks a CHECK, grizzle's refusal says "the database names no row", though PostgreSQL's error carries a
 DETAIL naming the failing row (as the server log above shows for a foreign key). This is a reporting limit, not a
-wrong verdict. It is asked of the grizzle session as a question, so nothing is filed.
+wrong verdict. Asked as a question, grizzle accepted it: a refused CHECK will carry the failing row's key from
+PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". Nothing is filed.
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
