@@ -21,7 +21,7 @@
  * law alone refuses it ("Inclusion cycle"), and a branch target with
  * no lawful candidate resolves to the first name that spells it, or to none.
  */
-import { Option } from "effect";
+import { Array as Arr, Option } from "effect";
 import { Bits } from "@bjornpagen/grizzle";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import type { Kind } from "#pantry/grammar/compose.ts";
@@ -31,12 +31,7 @@ import { isSiteKind } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
-import {
-  directoryOf,
-  entryPathOf,
-  hrefResolverOf,
-  referencePiecesOf,
-} from "#pantry/import/overlays/package.ts";
+import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -49,9 +44,11 @@ import {
   itemRefKind,
   mappingKind,
   namedKinds,
+  orderingKind,
   partKind,
   sectionKind,
   sectionParts,
+  selectionKind,
   splicingParents,
   stimulusRefKind,
   testKind,
@@ -174,21 +171,61 @@ export interface Pieces {
 }
 
 /**
+ * The XML whitespace characters (XML 1.0, production 3, `S`), which `collapse` strips.
+ */
+const spaceCharacters: ReadonlySet<string> = new Set(["\t", "\n", "\r", " "]);
+
+/**
+ * Count the XML whitespace a text starts with.
+ *
+ * @param text - The text.
+ * @returns The length of its leading run of XML whitespace.
+ */
+const leadingSpace = (text: string): number => {
+  let at = 0;
+  while (at < text.length && spaceCharacters.has(text.charAt(at))) {
+    at += 1;
+  }
+
+  return at;
+};
+
+/**
+ * Count the XML whitespace a text ends with.
+ *
+ * @param text - The text.
+ * @returns The length of its trailing run of XML whitespace.
+ */
+const trailingSpace = (text: string): number => {
+  let at = text.length;
+  while (at > 0 && spaceCharacters.has(text.charAt(at - 1))) {
+    at -= 1;
+  }
+
+  return text.length - at;
+};
+
+/**
  * Split a lexical form into the whitespace before it, its value and the whitespace after it, as
  * `TestToken`'s `E1_derived` proves: XML Schema's `collapse` strips the ends (Part 2, §4.3.6).
  *
  * @param lexical - The lexical form, as written.
  * @returns Its pieces; a form of whitespace alone is all lead, its value empty.
+ * @throws {Error} When a piece cut at a run of whitespace is not whitespace alone: a defect of the
+ *   split, never of the document.
  */
 export const piecesOf = (lexical: string): Pieces => {
-  const lead = /^[\t\n\r ]*/u.exec(lexical)?.[0] ?? "";
+  const lead = lexical.slice(0, leadingSpace(lexical));
   const rest = lexical.slice(lead.length);
-  const trail = /[\t\n\r ]*$/u.exec(rest)?.[0] ?? "";
-  const value = rest.slice(0, rest.length - trail.length);
+  const value = rest.slice(0, rest.length - trailingSpace(rest));
+  const trail = rest.slice(value.length);
+  if (!isSpace(lead) || !isSpace(trail)) {
+    throw new Error(
+      `The split of ${JSON.stringify(lexical)} cut ${JSON.stringify(lead)} and ${JSON.stringify(trail)} at runs of XML whitespace, yet one holds another character. Cut each piece at the whitespace it counts.`,
+    );
+  }
 
-  return isSpace(lead) && isSpace(trail)
-    ? { lead, trail, value }
-    : { lead: "", trail: "", value: lexical };
+  return { lead, trail, value };
 };
 
 /**
@@ -228,10 +265,14 @@ const splicesAt = (
  * One document as the builders read it: its flat rows and the indexes over them.
  */
 interface View {
+  /**
+   * Each node's attributes by name, a node that writes none absent.
+   */
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
-  readonly byId: ReadonlyMap<NodeId, NodeRow<Composed>>;
-  readonly childrenOf: ReadonlyMap<NodeId, readonly NodeRow<Composed>[]>;
-  readonly directory: string;
+  /**
+   * Each node's kind, and its children in document order, every node held.
+   */
+  readonly byId: ReadonlyMap<NodeId, Held>;
   readonly document: NodeId;
   /**
    * Each node's fold under the document's context: its ancestry and nearest interaction among
@@ -243,33 +284,63 @@ interface View {
 }
 
 /**
+ * A node as the view holds it: its kind, and its children in document order.
+ */
+interface Held {
+  readonly children: NodeRow<Composed>[];
+  readonly kind: Kind;
+}
+
+/**
+ * Read a node of the document: total, since {@link viewOf} holds every node, each parent before
+ * its children.
+ *
+ * @param byId - The document's nodes.
+ * @param id - The id of a node of the document.
+ * @returns The node as the view holds it.
+ * @throws {Error} When the document holds no node of that id: a defect of the caller, which read a
+ *   node of another document, or a parent before it was held.
+ */
+const heldAt = (byId: ReadonlyMap<NodeId, Held>, id: NodeId): Held => {
+  const held = byId.get(id);
+  if (held === undefined) {
+    throw new Error(
+      `Node ${id} is no node of the document read so far, and the view holds each node of its document, each parent before its children. Read each node in its own document's view, in document order.`,
+    );
+  }
+
+  return held;
+};
+
+/**
  * Read a document into its {@link View}.
  *
  * @param doc - The document's tree.
  * @param ids - The ids its rows are written under.
  * @returns The view.
+ * @throws {Error} When a node comes before its parent, which `flatten`'s document order rules out:
+ *   a defect of the caller, never of the document.
  */
 const viewOf = (doc: XdmDocument<Composed>, ids: TestIds): View => {
   const rows = flatten(doc, ids.idOf);
-  const attributes = new Map<NodeId, Map<string, string>>();
-  for (const { lexical, name, node } of rows.attributes) {
-    const named = attributes.get(node) ?? new Map<string, string>();
-    named.set(name, lexical);
-    attributes.set(node, named);
+  const byId = new Map<NodeId, Held>();
+  for (const node of rows.nodes) {
+    byId.set(node.id, { children: [], kind: node.kind });
+    if (node.parent !== node.id) {
+      heldAt(byId, node.parent).children.push(node);
+    }
   }
 
-  const folds = foldOf(rows.nodes, ids.context);
-
   return {
-    attributes,
-    byId: new Map(rows.nodes.map((node) => [node.id, node] as const)),
-    childrenOf: Map.groupBy(
-      rows.nodes.filter((node) => node.parent !== node.id),
-      ({ parent }) => parent,
+    attributes: new Map(
+      [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
+        ([node, held]) =>
+          [node, new Map(held.map(({ lexical, name }) => [name, lexical] as const))] as const,
+      ),
     ),
-    directory: directoryOf(ids.path).directory,
+    byId,
     document: rows.document.node,
-    folds,
+    folds: foldOf(rows.nodes, ids.context),
     ids,
     rows,
   };
@@ -281,19 +352,30 @@ const viewOf = (doc: XdmDocument<Composed>, ids: TestIds): View => {
  * @param view - The document.
  * @param node - The node.
  * @param name - The attribute's name.
- * @returns Its lexical form, or none.
+ * @returns Its lexical form, none where the node writes no such attribute.
  */
-const valueOf = (view: View, node: NodeRow<Composed>, name: string): string | undefined =>
-  view.attributes.get(node.id)?.get(name);
+const valueOf = (view: View, node: NodeRow<Composed>, name: string): Option.Option<string> =>
+  Option.fromNullishOr(view.attributes.get(node.id)?.get(name));
 
 /**
- * Read a node's kind by its id.
+ * Read a node's parent's kind: the document node's own for the document node, its own parent.
+ *
+ * @param view - The document.
+ * @param node - The node.
+ * @returns Its parent's kind.
+ */
+const parentKindOf = (view: View, node: NodeRow<Composed>): Kind =>
+  heldAt(view.byId, node.parent).kind;
+
+/**
+ * Read a node's children, in document order.
  *
  * @param view - The document.
  * @param id - The node's id.
- * @returns Its kind; the document node's for an id the document does not hold.
+ * @returns Its children, none for a leaf.
  */
-const kindOf = (view: View, id: NodeId): Kind => view.byId.get(id)?.kind ?? "document";
+const childrenOf = (view: View, id: NodeId): readonly NodeRow<Composed>[] =>
+  heldAt(view.byId, id).children;
 
 /**
  * A node's {@link nodeRef}-shaped tuple, as every overlay of it copies it.
@@ -346,18 +428,17 @@ const tokenCarriers: Readonly<Record<TokenName, readonly string[]>> = {
 const tokensOf = (view: View): ReadonlyMap<string, Addition<typeof TestToken>> =>
   new Map(
     view.rows.nodes.flatMap((node) =>
-      tokenNames.flatMap((name) => {
-        const lexical = valueOf(view, node, name);
-
-        return lexical !== undefined && among(tokenCarriers[name], node.kind)
-          ? [
-              [
-                keyOf([node.id, name]),
-                { ...piecesOf(lexical), lexical, name, node: node.id },
-              ] as const,
-            ]
-          : [];
-      }),
+      tokenNames.flatMap((name) =>
+        among(tokenCarriers[name], node.kind)
+          ? Option.toArray(valueOf(view, node, name)).map(
+              (lexical) =>
+                [
+                  keyOf([node.id, name]),
+                  { ...piecesOf(lexical), lexical, name, node: node.id },
+                ] as const,
+            )
+          : [],
+      ),
     ),
   );
 
@@ -370,25 +451,24 @@ const tokensOf = (view: View): ReadonlyMap<string, Addition<typeof TestToken>> =
 const flagsOf = (view: View): ReadonlyMap<string, Addition<typeof TestFlag>> =>
   new Map(
     view.rows.nodes.flatMap((node) =>
-      flagCarriers.flatMap(([name, carriers]) => {
-        const lexical = valueOf(view, node, name);
-
-        return lexical !== undefined && among(carriers, node.kind)
-          ? [
-              [
-                keyOf([node.id, name]),
-                {
-                  kind: node.kind,
-                  lexical,
-                  name,
-                  node: node.id,
-                  parentKind: kindOf(view, node.parent),
-                  value: Option.contains(booleanOf(lexical), true),
-                },
-              ] as const,
-            ]
-          : [];
-      }),
+      flagCarriers.flatMap(([name, carriers]) =>
+        among(carriers, node.kind)
+          ? Option.toArray(valueOf(view, node, name)).map(
+              (lexical) =>
+                [
+                  keyOf([node.id, name]),
+                  {
+                    kind: node.kind,
+                    lexical,
+                    name,
+                    node: node.id,
+                    parentKind: parentKindOf(view, node),
+                    value: Option.contains(booleanOf(lexical), true),
+                  },
+                ] as const,
+            )
+          : [],
+      ),
     ),
   );
 
@@ -413,6 +493,27 @@ interface Above {
 }
 
 /**
+ * Read a section's scope: total, since {@link sectionsOf} reads every section in document order,
+ * each after the sections above it.
+ *
+ * @param scopes - The sections' scopes so far.
+ * @param section - A section's id.
+ * @returns Its scope.
+ * @throws {Error} When the section has no scope yet: a defect of the caller, which read a section
+ *   before it, or a node of another document.
+ */
+const scopeAt = (scopes: ReadonlyMap<NodeId, Scope>, section: NodeId): Scope => {
+  const scope = scopes.get(section);
+  if (scope === undefined) {
+    throw new Error(
+      `Section ${section} has no scope yet, and the sections' scopes are read in document order, each section's before its descendants'. Read the scope of a section of this document after the section.`,
+    );
+  }
+
+  return scope;
+};
+
+/**
  * Read the scope a node sits in, from its parent: a section's own, a test part's (the part, no
  * replacement and no drawn order), or the document's (no part, and a loose chain that reaches the
  * section that places the document).
@@ -427,9 +528,10 @@ const aboveOf = (
   scopes: ReadonlyMap<NodeId, Scope>,
   node: NodeRow<Composed>,
 ): Above => {
-  const parentKind = kindOf(view, node.parent);
-  const above = scopes.get(node.parent);
-  if (parentKind === sectionKind && above !== undefined) {
+  const parentKind = parentKindOf(view, node);
+  if (parentKind === sectionKind) {
+    const above = scopeAt(scopes, node.parent);
+
     return {
       parentLooseChain: above.looseChain,
       parentMixes: above.mixes,
@@ -444,14 +546,40 @@ const aboveOf = (
 };
 
 /**
- * Read a node's flag of a name, absent where the node is absent or writes none.
+ * Read a node's flag of a name, none where it writes none.
  */
-type FlagOf = (node: NodeRow<Composed> | undefined, name: FlagName) => boolean | undefined;
+type FlagOf = (node: NodeRow<Composed>, name: FlagName) => Option.Option<boolean>;
 
 /**
- * Read a node's collapsed token of a name, absent where it writes none.
+ * Read a node's collapsed token of a name, none where it writes none.
  */
-type TokenOf = (node: NodeRow<Composed>, name: TokenName) => string | undefined;
+type TokenOf = (node: NodeRow<Composed>, name: TokenName) => Option.Option<string>;
+
+/**
+ * The value the ASI XSD gives each flag this module reads where its element writes none
+ * (`imsqti_asiv3p0_v1p0.xsd`): `keep-together="true"` on `AssessmentSectionDType`,
+ * `required="false"` on `AssessmentItemRefDType` and `AssessmentSectionDType` (a section ref or an
+ * include carries no `required`, so it is never a required part), `shuffle="false"` on
+ * `OrderingDType` and `with-replacement="false"` on `SelectionDType`. `visible`, which
+ * `AssessmentSectionDType` requires, has none.
+ */
+const flagDefaults = {
+  "keep-together": true,
+  required: false,
+  shuffle: false,
+  "with-replacement": false,
+} as const satisfies Partial<Record<FlagName, boolean>>;
+
+/**
+ * Read a node's flag of a name, or its XSD default where it writes none ({@link flagDefaults}).
+ *
+ * @param flag - Each node's flags.
+ * @param node - The node.
+ * @param name - The flag's name.
+ * @returns Its value.
+ */
+const flagOr = (flag: FlagOf, node: NodeRow<Composed>, name: keyof typeof flagDefaults): boolean =>
+  Option.getOrElse(flag(node, name), () => flagDefaults[name]);
 
 /**
  * A document's sections and their scopes.
@@ -473,14 +601,22 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
   const rows = new Map<string, Addition<typeof Section>>();
   const scopes = new Map<NodeId, Scope>();
   const childOf = (node: NodeRow<Composed>, kind: string) =>
-    (view.childrenOf.get(node.id) ?? []).find((child) => child.kind === kind);
+    Option.fromNullishOr(childrenOf(view, node.id).find((child) => child.kind === kind));
 
   for (const node of view.rows.nodes.filter(({ kind }) => kind === sectionKind)) {
     const above = aboveOf(view, scopes, node);
-    const visible = flag(node, "visible") ?? false;
-    const keepTogether = flag(node, "keep-together") ?? true;
-    const shuffle = flag(childOf(node, "qti-ordering"), "shuffle") ?? false;
-    const withReplacement = flag(childOf(node, "qti-selection"), "with-replacement") ?? false;
+    const visible = Option.getOrElse(flag(node, "visible"), () => false);
+    const keepTogether = flagOr(flag, node, "keep-together");
+    // A section with no ordering keeps its children's order, and one with no selection selects
+    // each child once (the XSD's OrderingDType and SelectionDType: "If no ordering rule is given,
+    // assume that the elements are to be ordered in the order in which they are defined", "If no
+    // selection rules are given it must be assumed that all elements are to be selected").
+    const shuffle = Option.exists(childOf(node, orderingKind), (child) =>
+      flagOr(flag, child, "shuffle"),
+    );
+    const withReplacement = Option.exists(childOf(node, selectionKind), (child) =>
+      flagOr(flag, child, "with-replacement"),
+    );
     const loose = !visible && !keepTogether;
     const scope: Scope = {
       looseChain: loose && above.parentLooseChain,
@@ -494,7 +630,7 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
       keepTogether,
       looseChain: scope.looseChain,
       mixes: scope.mixes,
-      parentKind: kindOf(view, node.parent),
+      parentKind: parentKindOf(view, node),
       parentLooseChain: above.parentLooseChain,
       parentMixes: above.parentMixes,
       part: scope.part,
@@ -527,32 +663,31 @@ const namedOf = (
   new Map(
     view.rows.nodes
       .filter(({ kind }) => among(namedKinds, kind))
-      .flatMap((node) => {
-        const identifier = token(node, "identifier");
-        if (identifier === undefined) {
-          return [];
-        }
+      .flatMap((node) =>
+        Option.toArray(token(node, "identifier")).map((identifier) => {
+          const above = aboveOf(view, scopes, node);
+          const isPart = node.kind === partKind;
+          // A section's own order and loose chain; every other kind's are false (`Named`).
+          const own =
+            node.kind === sectionKind
+              ? scopeAt(scopes, node.id)
+              : { looseChain: false, mixes: false };
 
-        const own = scopes.get(node.id);
-        const above = aboveOf(view, scopes, node);
-        const isPart = node.kind === partKind;
-
-        return [
-          [
+          return [
             node.id,
             {
               ...tupleOf(view, node),
               end: node.end,
               identifier,
-              looseChain: own?.looseChain ?? false,
-              mixes: own?.mixes ?? false,
-              parentKind: kindOf(view, node.parent),
-              part: isPart ? node.id : (own?.part ?? above.part),
+              looseChain: own.looseChain,
+              mixes: own.mixes,
+              parentKind: parentKindOf(view, node),
+              part: isPart ? node.id : above.part,
               replaced: !isPart && above.replaced,
             },
-          ] as const,
-        ];
-      }),
+          ] as const;
+        }),
+      ),
   );
 
 /**
@@ -566,13 +701,13 @@ const namedOf = (
 const membersOf = (view: View, flag: FlagOf): ReadonlyMap<string, Addition<typeof SectionMember>> =>
   new Map(
     view.rows.nodes
-      .filter((node) => kindOf(view, node.parent) === sectionKind && among(sectionParts, node.kind))
+      .filter((node) => parentKindOf(view, node) === sectionKind && among(sectionParts, node.kind))
       .map((node) => {
         const { parent, ...tuple } = tupleOf(view, node);
 
         return [
           node.id,
-          { ...tuple, required: flag(node, "required") ?? false, section: parent },
+          { ...tuple, required: flagOr(flag, node, "required"), section: parent },
         ] as const;
       }),
   );
@@ -592,32 +727,33 @@ const selectionsOf = (
 ): ReadonlyMap<string, Addition<typeof SectionSelection>> =>
   new Map(
     view.rows.nodes
-      .filter(({ kind }) => kind === "qti-selection")
-      .flatMap((node) => {
-        const lexical = valueOf(view, node, "select");
-        const pieces = piecesOf(lexical ?? "");
-        const parts = (view.childrenOf.get(node.parent) ?? []).filter((child) =>
-          among(sectionParts, child.kind),
-        );
+      .filter(({ kind }) => kind === selectionKind)
+      .flatMap((node) =>
+        Option.toArray(valueOf(view, node, "select")).flatMap((lexical) => {
+          const pieces = piecesOf(lexical);
+          const parts = childrenOf(view, node.parent).filter((child) =>
+            among(sectionParts, child.kind),
+          );
 
-        return lexical !== undefined && /^[+-]?[0-9]+$/u.test(pieces.value)
-          ? [
-              [
-                node.id,
-                {
-                  ...tupleOf(view, node),
-                  members: BigInt(parts.length),
-                  required: BigInt(parts.filter((part) => flag(part, "required") ?? false).length),
-                  selectForm: pieces.value,
-                  selectLead: pieces.lead,
-                  selectLexical: lexical,
-                  selectTrail: pieces.trail,
-                  withReplacement: flag(node, "with-replacement") ?? false,
-                },
-              ] as const,
-            ]
-          : [];
-      }),
+          return /^[+-]?[0-9]+$/u.test(pieces.value)
+            ? [
+                [
+                  node.id,
+                  {
+                    ...tupleOf(view, node),
+                    members: BigInt(parts.length),
+                    required: BigInt(parts.filter((part) => flagOr(flag, part, "required")).length),
+                    selectForm: pieces.value,
+                    selectLead: pieces.lead,
+                    selectLexical: lexical,
+                    selectTrail: pieces.trail,
+                    withReplacement: flagOr(flag, node, "with-replacement"),
+                  },
+                ] as const,
+              ]
+            : [];
+        }),
+      ),
   );
 
 /**
@@ -633,10 +769,10 @@ const orderingsOf = (
 ): ReadonlyMap<string, Addition<typeof SectionOrdering>> =>
   new Map(
     view.rows.nodes
-      .filter(({ kind }) => kind === "qti-ordering")
+      .filter(({ kind }) => kind === orderingKind)
       .map(
         (node) =>
-          [node.id, { ...tupleOf(view, node), shuffle: flag(node, "shuffle") ?? false }] as const,
+          [node.id, { ...tupleOf(view, node), shuffle: flagOr(flag, node, "shuffle") }] as const,
       ),
   );
 
@@ -649,13 +785,14 @@ const orderingsOf = (
  * @returns Whether it is.
  */
 const isSite = (view: View, node: NodeRow<Composed>): boolean =>
-  isSiteKind(node.kind, kindOf(view, node.parent));
+  isSiteKind(node.kind, parentKindOf(view, node));
 
 /**
  * An item ref's or a site's href, resolved as its `ReferencePath` is: its node and kind, its
- * package, the entry path it names, and whether it names one (`resolved`). A target this
- * representation does not resolve keeps its directory and target as written, which no
- * `ReferencePath` holds, so "Href form" refuses an item ref's; a site's has no {@link SitePath}.
+ * package, the path it is compared by, and whether that is the entry path it names (`resolved`).
+ * An href this representation does not resolve is compared by its path as written, as a manifest
+ * href is (`comparedPathOf`, reading 102), and no `ReferencePath` holds it, so "Href form" refuses
+ * an item ref's; a site's has no {@link SitePath}.
  */
 export interface ResolvedHref {
   readonly kind: string;
@@ -666,8 +803,8 @@ export interface ResolvedHref {
 }
 
 /**
- * Resolve a document's hrefs: each item ref's and site's that writes one, against the document's
- * directory, as `referenceRowsOf` resolves a `ReferencePath`. An item ref or a site with no href
+ * Resolve a document's hrefs: each item ref's and site's that writes one, against the base in
+ * scope, as `referenceRowsOf` resolves a `ReferencePath`. An item ref or a site with no href
  * has none: AL3 refuses an item ref or a section ref without one, and an include without one names
  * no document, which its site's existence law refuses ("Include target", spec reading 115).
  *
@@ -678,28 +815,24 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
   const resolve = hrefResolverOf(view.rows, view.ids.path);
 
   return new Map(
-    view.rows.nodes.flatMap((node) => {
-      const lexical = valueOf(view, node, "href");
-      if (lexical === undefined || !(node.kind === itemRefKind || isSite(view, node))) {
-        return [];
-      }
+    view.rows.nodes.flatMap((node) =>
+      node.kind === itemRefKind || isSite(view, node)
+        ? Option.toArray(valueOf(view, node, "href")).map((lexical) => {
+            const resolution = resolve(node.id, lexical);
 
-      const { target } = referencePiecesOf(lexical);
-      const path = entryPathOf(resolve(node.id, lexical));
-
-      return [
-        [
-          node.id,
-          {
-            kind: node.kind,
-            node: node.id,
-            package: view.ids.package,
-            path: path ?? `${view.directory}${target}`,
-            resolved: path !== undefined,
-          },
-        ] as const,
-      ];
-    }),
+            return [
+              node.id,
+              {
+                kind: node.kind,
+                node: node.id,
+                package: view.ids.package,
+                path: comparedPathOf(resolution, lexical),
+                resolved: entryPathOf(resolution) !== undefined,
+              },
+            ] as const;
+          })
+        : [],
+    ),
   );
 };
 
@@ -733,7 +866,7 @@ const sitesOf = (
         return [];
       }
 
-      const parentKind = kindOf(view, node.parent);
+      const parentKind = parentKindOf(view, node);
       const above = aboveOf(view, scopes, node);
 
       return [
@@ -742,7 +875,7 @@ const sitesOf = (
           {
             ...tupleOf(view, node),
             ancestry: Bits.of(Flag, [...foldAt(view.folds, node.id).ancestry]),
-            children: BigInt(view.childrenOf.get(node.id)?.length ?? 0),
+            children: BigInt(childrenOf(view, node.id).length),
             documentType: view.ids.documentType,
             governs: node.governs,
             nearestKind: foldAt(view.folds, node.id).nearestKind,
@@ -884,18 +1017,19 @@ const inclusionsOf = (
  */
 const rulesOf = (view: View, token: TokenOf): ReadonlyMap<string, Addition<typeof BranchRule>> =>
   new Map(
-    view.rows.nodes.flatMap((node) => {
-      const target = node.kind === branchRuleKind ? token(node, "target") : undefined;
-
-      return target !== undefined && !among(exits, target)
-        ? [
-            [
-              node.id,
-              { ...tupleOf(view, node), parentKind: kindOf(view, node.parent), target },
-            ] as const,
-          ]
-        : [];
-    }),
+    view.rows.nodes.flatMap((node) =>
+      node.kind === branchRuleKind
+        ? Option.toArray(token(node, "target"))
+            .filter((target) => !among(exits, target))
+            .map(
+              (target) =>
+                [
+                  node.id,
+                  { ...tupleOf(view, node), parentKind: parentKindOf(view, node), target },
+                ] as const,
+            )
+        : [],
+    ),
   );
 
 /**
@@ -911,14 +1045,18 @@ const mappingsOf = (
   token: TokenOf,
 ): ReadonlyMap<string, Addition<typeof VariableMapping>> =>
   new Map(
-    view.rows.nodes.flatMap((node) => {
-      const source = node.kind === mappingKind ? token(node, "source-identifier") : undefined;
-      const target = node.kind === mappingKind ? token(node, "target-identifier") : undefined;
-
-      return source !== undefined && target !== undefined
-        ? [[node.id, { ...tupleOf(view, node), source, target }] as const]
-        : [];
-    }),
+    view.rows.nodes.flatMap((node) =>
+      node.kind === mappingKind
+        ? Option.toArray(
+            Option.all({
+              source: token(node, "source-identifier"),
+              target: token(node, "target-identifier"),
+            }),
+          ).map(
+            ({ source, target }) => [node.id, { ...tupleOf(view, node), source, target }] as const,
+          )
+        : [],
+    ),
   );
 
 /**
@@ -937,13 +1075,11 @@ const stimulusRefsOf = (
   new Map(
     view.rows.nodes
       .filter(({ kind }) => kind === stimulusRefKind)
-      .flatMap((node) => {
-        const identifier = token(node, "identifier");
-
-        return identifier === undefined
-          ? []
-          : [[node.id, { ...tupleOf(view, node), identifier }] as const];
-      }),
+      .flatMap((node) =>
+        Option.toArray(token(node, "identifier")).map(
+          (identifier) => [node.id, { ...tupleOf(view, node), identifier }] as const,
+        ),
+      ),
   );
 
 /**
@@ -973,9 +1109,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: TestIds): TestRows => {
   const view = viewOf(doc, ids);
   const tokens = tokensOf(view);
   const flags = flagsOf(view);
-  const token: TokenOf = (node, name) => tokens.get(keyOf([node.id, name]))?.value;
+  const token: TokenOf = (node, name) =>
+    Option.map(Option.fromNullishOr(tokens.get(keyOf([node.id, name]))), ({ value }) => value);
   const flag: FlagOf = (node, name) =>
-    node === undefined ? undefined : flags.get(keyOf([node.id, name]))?.value;
+    Option.map(Option.fromNullishOr(flags.get(keyOf([node.id, name]))), ({ value }) => value);
   const root = doc.root.kind;
   const sections = sectionsOf(view, flag);
   const hrefs = hrefsOf(view);
@@ -1044,8 +1181,18 @@ export interface AssembledRows {
 }
 
 /**
- * One instance as the builder walks an assembly: its document, its scope, its parent, the site it
- * is placed at, and its interval in the tree's pre-order, which the tree draws the same way.
+ * A document that heads or joins an assembly: its `TestDocument` row and every row it writes.
+ */
+interface AssembledDocument {
+  readonly document: Addition<typeof TestDocument>;
+  readonly rows: TestRows;
+}
+
+/**
+ * One instance as the builder walks an assembly: its document and that document's rows, its
+ * scope, its parent and its parent's id (a root's own, as the instance tree writes a root's
+ * `parent`), the site it is placed at, and its interval in the tree's pre-order, which the tree
+ * draws the same way.
  */
 interface Walked {
   readonly document: NodeId;
@@ -1053,19 +1200,21 @@ interface Walked {
   readonly id: NodeId;
   readonly mixes: boolean;
   readonly parent: Walked | undefined;
+  readonly parentId: NodeId;
   readonly part: NodeId;
   readonly replaced: boolean;
+  readonly rows: TestRows;
   readonly siteStart: bigint;
   readonly start: number;
 }
 
 /**
- * The walk of one assembly: its root's kind, every document's rows, the ids it draws, and the
- * instances it has placed, in pre-order.
+ * The walk of one assembly: its root's kind, every document of the package that heads or joins
+ * one, the ids it draws, and the instances it has placed, in pre-order.
  */
 interface Walk {
   readonly assemblyKind: Kind;
-  readonly byDocument: ReadonlyMap<string, TestRows>;
+  readonly byDocument: ReadonlyMap<string, AssembledDocument>;
   readonly newId: () => NodeId;
   readonly walked: Walked[];
 }
@@ -1080,6 +1229,7 @@ interface Walk {
  * @param walk - The assembly's walk.
  * @param chain - The documents of the instance's ancestors.
  * @param parent - The instance's parent, none for the root.
+ * @param placed - The document it places.
  * @param fields - The instance's written fields but its children.
  * @returns The instance as its tree writes it.
  */
@@ -1087,6 +1237,7 @@ const place = (
   walk: Walk,
   chain: readonly NodeId[],
   parent: Walked | undefined,
+  placed: AssembledDocument,
   fields: Omit<InstanceMember, "children">,
 ): InstanceMember => {
   const self: Walked = {
@@ -1095,51 +1246,64 @@ const place = (
     id: fields.id,
     mixes: fields.mixes,
     parent,
+    parentId: parent === undefined ? fields.id : parent.id,
     part: fields.part,
     replaced: fields.replaced,
+    rows: placed.rows,
     siteStart: fields.siteStart,
     start: walk.walked.length,
   };
   walk.walked.push(self);
 
-  const rows = walk.byDocument.get(self.document);
-  const sites = [...(rows?.Site.values() ?? [])].toSorted((a, b) => (a.start < b.start ? -1 : 1));
+  const sites = [...self.rows.Site.values()].toSorted((a, b) => (a.start < b.start ? -1 : 1));
   const closing = new Set([...chain, self.document]);
-  const children = sites.flatMap((site) => {
-    const target = rows?.SiteTarget.get(site.node)?.target;
-
-    return target !== undefined && walk.byDocument.has(target) && !closing.has(target)
-      ? [
-          place(walk, [...chain, self.document], self, {
-            assemblyKind: walk.assemblyKind,
-            document: target,
-            id: walk.newId(),
-            mixes: site.parentMixes || (site.parentLooseChain && self.mixes),
-            part: site.part === self.document ? self.part : site.part,
-            replaced: site.replaced || self.replaced,
-            rootKind:
-              walk.byDocument.get(target)?.TestDocument.get(target)?.rootKind ?? sectionKind,
-            site: site.node,
-            siteLooseChain: site.parentLooseChain,
-            siteMixes: site.parentMixes,
-            sitePart: site.part,
-            siteReplaced: site.replaced,
-            siteStart: site.start,
-          }),
-        ]
-      : [];
-  });
+  const children = sites.flatMap((site) =>
+    Option.toArray(
+      Option.flatMap(Option.fromNullishOr(self.rows.SiteTarget.get(site.node)), ({ target }) =>
+        Option.fromNullishOr(walk.byDocument.get(target)),
+      ),
+    )
+      .filter(({ document }) => !closing.has(document.node))
+      .map((target) =>
+        place(walk, [...chain, self.document], self, target, {
+          assemblyKind: walk.assemblyKind,
+          document: target.document.node,
+          id: walk.newId(),
+          mixes: site.parentMixes || (site.parentLooseChain && self.mixes),
+          part: site.part === self.document ? self.part : site.part,
+          replaced: site.replaced || self.replaced,
+          rootKind: target.document.rootKind,
+          site: site.node,
+          siteLooseChain: site.parentLooseChain,
+          siteMixes: site.parentMixes,
+          sitePart: site.part,
+          siteReplaced: site.replaced,
+          siteStart: site.start,
+        }),
+      ),
+  );
   self.end = walk.walked.length;
 
   return { ...fields, children };
 };
 
 /**
- * A test's names: each instance's, and their projection.
+ * One name of one instance: the instance, the document's {@link Named} row and the
+ * {@link InstanceName} row the instance writes for it.
+ */
+interface PlacedName {
+  readonly instance: Walked;
+  readonly named: Addition<typeof Named>;
+  readonly row: Addition<typeof InstanceName>;
+}
+
+/**
+ * A test's names: each instance's, by `[instance, node]` in the walk's pre-order and each
+ * document's order, and their projection.
  */
 interface Names {
   readonly assembled: ReadonlyMap<string, Addition<typeof AssembledName>>;
-  readonly names: ReadonlyMap<string, Addition<typeof InstanceName>>;
+  readonly names: ReadonlyMap<string, PlacedName>;
 }
 
 /**
@@ -1151,31 +1315,35 @@ interface Names {
  * @returns The names by `[instance, node]`, and the projection by `[assembly, node]`.
  */
 const namesOf = (assembly: NodeId, walk: Walk): Names => {
-  const names = new Map<string, Addition<typeof InstanceName>>();
+  const names = new Map<string, PlacedName>();
   const assembled = new Map<string, Addition<typeof AssembledName>>();
 
   for (const instance of walk.walked) {
-    for (const name of walk.byDocument.get(instance.document)?.Named.values() ?? []) {
-      names.set(keyOf([instance.id, name.node]), {
-        assembly,
-        end: name.end,
-        identifier: name.identifier,
-        instance: instance.id,
-        kind: name.kind,
-        mixes: name.mixes || (name.looseChain && instance.mixes),
-        namedLooseChain: name.looseChain,
-        namedMixes: name.mixes,
-        namedPart: name.part,
-        namedReplaced: name.replaced,
-        node: name.node,
-        part: name.part === instance.document ? instance.part : name.part,
-        replaced: name.replaced || instance.replaced,
-        start: name.start,
+    for (const named of instance.rows.Named.values()) {
+      names.set(keyOf([instance.id, named.node]), {
+        instance,
+        named,
+        row: {
+          assembly,
+          end: named.end,
+          identifier: named.identifier,
+          instance: instance.id,
+          kind: named.kind,
+          mixes: named.mixes || (named.looseChain && instance.mixes),
+          namedLooseChain: named.looseChain,
+          namedMixes: named.mixes,
+          namedPart: named.part,
+          namedReplaced: named.replaced,
+          node: named.node,
+          part: named.part === instance.document ? instance.part : named.part,
+          replaced: named.replaced || instance.replaced,
+          start: named.start,
+        },
       });
-      assembled.set(keyOf([assembly, name.node]), {
+      assembled.set(keyOf([assembly, named.node]), {
         assembly,
-        identifier: name.identifier,
-        node: name.node,
+        identifier: named.identifier,
+        node: named.node,
       });
     }
   }
@@ -1184,12 +1352,22 @@ const namesOf = (assembly: NodeId, walk: Walk): Names => {
 };
 
 /**
+ * Whether a name's pre-order interval holds a point.
+ *
+ * @param name - The name.
+ * @param point - The point.
+ * @returns Whether it does.
+ */
+const holdsPoint = (name: Addition<typeof InstanceName>, point: bigint): boolean =>
+  name.start <= point && point < name.end;
+
+/**
  * The nearest name holding a source point and a target in the target's document, and its child
  * that holds the target.
  */
 interface Common {
-  readonly branch: Addition<typeof InstanceName>;
-  readonly common: Addition<typeof InstanceName>;
+  readonly branch: PlacedName;
+  readonly common: PlacedName;
 }
 
 /**
@@ -1197,30 +1375,24 @@ interface Common {
  * child that holds the target: the target's ancestors among the document's names, walked up until
  * one holds the point.
  *
- * @param walk - The assembly's walk.
  * @param names - The assembly's names by `[instance, node]`.
- * @param instance - The target's instance.
- * @param target - The target's name there.
+ * @param target - The target's name in its instance.
  * @param point - The source's start in the target's document: its owner's, or its site's.
  * @returns The common name and its branch, or none where no name holds both.
  */
 const commonOf = (
-  walk: Walk,
-  names: ReadonlyMap<string, Addition<typeof InstanceName>>,
-  instance: Walked,
-  target: Addition<typeof InstanceName>,
+  names: ReadonlyMap<string, PlacedName>,
+  target: PlacedName,
   point: bigint,
 ): Option.Option<Common> => {
-  const named = walk.byDocument.get(instance.document)?.Named;
   let branch = target;
   for (;;) {
-    const parent = named?.get(branch.node)?.parent;
-    const common = parent === undefined ? undefined : names.get(keyOf([instance.id, parent]));
+    const common = names.get(keyOf([branch.instance.id, branch.named.parent]));
     if (common === undefined) {
       return Option.none();
     }
 
-    if (common.start <= point && point < common.end) {
+    if (holdsPoint(common.row, point)) {
       return Option.some({ branch, common });
     }
 
@@ -1256,16 +1428,6 @@ const holdsInstance = (holder: Walked, held: Walked): boolean =>
   holder.start <= held.start && held.start < holder.end;
 
 /**
- * Whether a name's pre-order interval holds a point.
- *
- * @param name - The name.
- * @param point - The point.
- * @returns Whether it does.
- */
-const holdsPoint = (name: Addition<typeof InstanceName>, point: bigint): boolean =>
-  name.start <= point && point < name.end;
-
-/**
  * One branch rule of one instance, resolved: the rule and its source, its target where its
  * identifier names an element of an instance holding the rule's, and the shuffle that orders the
  * two where one does.
@@ -1285,109 +1447,103 @@ interface Resolved {
  * instance's count of resolutions refuses it; one whose target names nothing has no target, and the
  * resolution's existence law refuses it ("Branch target").
  *
- * @param walk - The assembly's walk.
- * @param names - The assembly's names by `[instance, node]`.
+ * @param names - The assembly's names by `[instance, node]`, in pre-order.
  * @param instance - The rule's instance.
  * @param rule - The rule.
  * @returns The resolution, its target and its shuffle, each as its writer writes it, or none.
  */
 const resolutionOf = (
-  walk: Walk,
-  names: ReadonlyMap<string, Addition<typeof InstanceName>>,
+  names: ReadonlyMap<string, PlacedName>,
   instance: Walked,
   rule: Addition<typeof BranchRule>,
 ): Option.Option<Resolved> =>
-  Option.map(Option.fromNullishOr(names.get(keyOf([instance.id, rule.parent]))), (owner) => {
-    const resolution: Addition<typeof BranchResolution> = {
-      instance: instance.id,
-      owner: rule.parent,
-      ownerEnd: owner.end,
-      ownerKind: rule.parentKind,
-      ownerPart: owner.part,
-      ownerStart: owner.start,
-      rule: rule.node,
-      target: rule.target,
-    };
-    const placed = Option.fromNullishOr(
-      walk.walked
-        .filter((holder) => holdsInstance(holder, instance))
-        .flatMap((holder) =>
-          [...(walk.byDocument.get(holder.document)?.Named.values() ?? [])]
-            .filter(({ identifier }) => identifier === rule.target)
-            .flatMap(({ node }) => {
-              const name = names.get(keyOf([holder.id, node]));
+  Option.map(
+    Option.fromNullishOr(names.get(keyOf([instance.id, rule.parent]))),
+    ({ row: owner }) => {
+      const resolution: Addition<typeof BranchResolution> = {
+        instance: instance.id,
+        owner: rule.parent,
+        ownerEnd: owner.end,
+        ownerKind: rule.parentKind,
+        ownerPart: owner.part,
+        ownerStart: owner.start,
+        rule: rule.node,
+        target: rule.target,
+      };
+      const placed = Arr.head(
+        [...names.values()].filter(
+          (name) => holdsInstance(name.instance, instance) && name.named.identifier === rule.target,
+        ),
+      );
+      const target = placed.pipe(
+        Option.map(({ instance: holder, row: name }) => {
+          const via = viaOf(instance, holder);
 
-              return name === undefined ? [] : [{ holder, name }];
-            }),
-        )[0],
-    );
-    const target = placed.pipe(
-      Option.map(({ holder, name }) => {
-        const via = viaOf(instance, holder);
+          return {
+            assembly: name.assembly,
+            instance: instance.id,
+            instanceStart: BigInt(instance.start),
+            ownerEnd: owner.end,
+            ownerKind: rule.parentKind,
+            ownerPart: owner.part,
+            ownerStart: owner.start,
+            rule: rule.node,
+            target: rule.target,
+            targetEnd: name.end,
+            targetInstance: holder.id,
+            targetInstanceEnd: BigInt(holder.end),
+            targetInstanceStart: BigInt(holder.start),
+            targetKind: name.kind,
+            targetMixes: name.mixes,
+            targetNode: name.node,
+            targetPart: name.part,
+            targetReplaced: name.replaced,
+            targetStart: name.start,
+            via: via.id,
+            viaEnd: BigInt(via.end),
+            viaParent: via.parentId,
+            viaSiteStart: via.siteStart,
+            viaStart: BigInt(via.start),
+          } satisfies Addition<typeof BranchTarget>;
+        }),
+      );
+      const shuffle = placed.pipe(
+        Option.flatMap((held) => {
+          const holder = held.instance;
+          const via = viaOf(instance, holder);
+          const point = holder === instance ? owner.start : via.siteStart;
 
-        return {
-          assembly: name.assembly,
-          instance: instance.id,
-          instanceStart: BigInt(instance.start),
-          ownerEnd: owner.end,
-          ownerKind: rule.parentKind,
-          ownerPart: owner.part,
-          ownerStart: owner.start,
-          rule: rule.node,
-          target: rule.target,
-          targetEnd: name.end,
-          targetInstance: holder.id,
-          targetInstanceEnd: BigInt(holder.end),
-          targetInstanceStart: BigInt(holder.start),
-          targetKind: name.kind,
-          targetMixes: name.mixes,
-          targetNode: name.node,
-          targetPart: name.part,
-          targetReplaced: name.replaced,
-          targetStart: name.start,
-          via: via.id,
-          viaEnd: BigInt(via.end),
-          viaParent: via.parent?.id ?? via.id,
-          viaSiteStart: via.siteStart,
-          viaStart: BigInt(via.start),
-        } satisfies Addition<typeof BranchTarget>;
-      }),
-    );
-    const shuffle = placed.pipe(
-      Option.flatMap(({ holder, name }) => {
-        const via = viaOf(instance, holder);
-        const point = holder === instance ? owner.start : via.siteStart;
+          return Option.flatMap(commonOf(names, held, point), ({ branch, common }) =>
+            common.row.mixes && !holdsPoint(branch.row, point)
+              ? Option.some({
+                  assembly: held.row.assembly,
+                  branch: branch.row.node,
+                  branchEnd: branch.row.end,
+                  branchParent: common.row.node,
+                  branchPart: branch.row.part,
+                  branchStart: branch.row.start,
+                  common: common.row.node,
+                  commonEnd: common.row.end,
+                  commonKind: common.row.kind,
+                  commonMixes: common.row.mixes,
+                  commonPart: common.row.part,
+                  commonReplaced: common.row.replaced,
+                  commonStart: common.row.start,
+                  instance: instance.id,
+                  ownerStart: owner.start,
+                  rule: rule.node,
+                  targetInstance: holder.id,
+                  targetStart: held.row.start,
+                  viaSiteStart: via.siteStart,
+                } satisfies Addition<typeof BranchShuffle>)
+              : Option.none(),
+          );
+        }),
+      );
 
-        return Option.flatMap(commonOf(walk, names, holder, name, point), ({ branch, common }) =>
-          common.mixes && !holdsPoint(branch, point)
-            ? Option.some({
-                assembly: name.assembly,
-                branch: branch.node,
-                branchEnd: branch.end,
-                branchParent: common.node,
-                branchPart: branch.part,
-                branchStart: branch.start,
-                common: common.node,
-                commonEnd: common.end,
-                commonKind: common.kind,
-                commonMixes: common.mixes,
-                commonPart: common.part,
-                commonReplaced: common.replaced,
-                commonStart: common.start,
-                instance: instance.id,
-                ownerStart: owner.start,
-                rule: rule.node,
-                targetInstance: holder.id,
-                targetStart: name.start,
-                viaSiteStart: via.siteStart,
-              } satisfies Addition<typeof BranchShuffle>)
-            : Option.none(),
-        );
-      }),
-    );
-
-    return { resolution, shuffle, target };
-  });
+      return { resolution, shuffle, target };
+    },
+  );
 
 /**
  * Build a package's assemblies from its documents' rows: one tree per document that heads one, and,
@@ -1409,13 +1565,11 @@ export const assembledRowsOf = (
       [...rows.SiteTarget.values()].filter(({ splices }) => splices).map(({ target }) => target),
     ),
   );
-  const heads = documents
-    .flatMap((rows) => [...rows.TestDocument.values()])
-    .filter(({ node }) => !spliced.has(node));
+  const assembledDocuments = documents.flatMap((rows) =>
+    [...rows.TestDocument.values()].map((document): AssembledDocument => ({ document, rows })),
+  );
   const byDocument = new Map(
-    documents.flatMap((rows) =>
-      [...rows.TestDocument.values()].map((row) => [row.node, rows] as const),
-    ),
+    assembledDocuments.map((assembled) => [assembled.document.node, assembled] as const),
   );
   const roots = new Map<string, InstanceRoot>();
   const names = new Map<string, Addition<typeof InstanceName>>();
@@ -1424,39 +1578,38 @@ export const assembledRowsOf = (
   const targets = new Map<string, Addition<typeof BranchTarget>>();
   const shuffles = new Map<string, Addition<typeof BranchShuffle>>();
 
-  for (const head of heads) {
-    const walk: Walk = { assemblyKind: head.rootKind, byDocument, newId, walked: [] };
-    const tree = place(walk, [], undefined, {
-      assemblyKind: head.rootKind,
-      document: head.node,
-      id: head.node,
+  for (const head of assembledDocuments.filter(({ document }) => !spliced.has(document.node))) {
+    const { node, rootKind } = head.document;
+    const walk: Walk = { assemblyKind: rootKind, byDocument, newId, walked: [] };
+    const tree = place(walk, [], undefined, head, {
+      assemblyKind: rootKind,
+      document: node,
+      id: node,
       mixes: false,
-      part: head.node,
+      part: node,
       replaced: false,
-      rootKind: head.rootKind,
-      site: head.node,
+      rootKind,
+      site: node,
       siteLooseChain: false,
       siteMixes: false,
-      sitePart: head.node,
+      sitePart: node,
       siteReplaced: false,
       siteStart: 0n,
     });
-    roots.set(head.node, { ...tree, assembly: head.node });
+    roots.set(node, { ...tree, assembly: node });
 
-    if (head.rootKind === testKind) {
-      const written = namesOf(head.node, walk);
-      for (const [at, row] of written.names) {
+    if (rootKind === testKind) {
+      const written = namesOf(node, walk);
+      for (const [at, { row }] of written.names) {
         names.set(at, row);
       }
       for (const [at, row] of written.assembled) {
         assembled.set(at, row);
       }
       for (const instance of walk.walked) {
-        for (const rule of byDocument.get(instance.document)?.BranchRule.values() ?? []) {
+        for (const rule of instance.rows.BranchRule.values()) {
           const at = keyOf([instance.id, rule.node]);
-          for (const resolved of Option.toArray(
-            resolutionOf(walk, written.names, instance, rule),
-          )) {
+          for (const resolved of Option.toArray(resolutionOf(written.names, instance, rule))) {
             resolutions.set(at, resolved.resolution);
             for (const target of Option.toArray(resolved.target)) {
               targets.set(at, target);

@@ -27,7 +27,13 @@ import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { contextsOf } from "#pantry/import/context.ts";
 import { ownContext } from "#pantry/import/fold.ts";
-import { assembledRowsOf, keyOf, piecesOf, rowsOf } from "#pantry/import/overlays/tests.ts";
+import {
+  assembledRowsOf,
+  itemRefPathsOf,
+  keyOf,
+  piecesOf,
+  rowsOf,
+} from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledRows,
   InstanceMember,
@@ -47,6 +53,7 @@ import type {
 import { exits, sectionParts } from "#pantry/qti/tests.ts";
 import type { BranchShuffle, BranchTarget } from "#pantry/qti/tests.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 
 /**
  * An element of a kind, with its attributes as (name, lexical) pairs and its children.
@@ -120,16 +127,16 @@ const listedTypeOf = (doc: XdmDocument<Composed>): TestIds["documentType"] =>
   grammar.package.rootOfType.rows.find(({ root }) => root === doc.root.kind)?.type ?? "none";
 
 /**
- * Read the rows of a package's documents, each under its own ids and its own context, every
- * site's target found among them by path, and each in an assembly as the importer's contexts read
- * it.
+ * Give each of a package's documents its ids: its own nodes' and its own context, every site's
+ * target found among the documents by path, and each in an assembly as the importer's contexts
+ * read it.
  *
  * @param documents - The documents by path, in order.
- * @returns Each document's rows, in the same order.
+ * @returns Each document with its ids, in the same order.
  */
-const rowsOfPackage = (
+const idsOfPackage = (
   documents: readonly (readonly [string, XdmDocument<Composed>])[],
-): readonly TestRows[] => {
+): readonly (readonly [XdmDocument<Composed>, TestIds])[] => {
   const listed = documents.map(([path, tree], n) => ({ idOf: idsOf(n), named: true, path, tree }));
   const { assembled } = contextsOf(listed);
   const roots = new Map(
@@ -137,8 +144,9 @@ const rowsOfPackage = (
   );
   const rootAt = (at: string) => Option.fromNullishOr(roots.get(at));
 
-  return listed.map(({ idOf: ids, path, tree }) =>
-    rowsOf(tree, {
+  return listed.map(({ idOf: ids, path, tree }) => [
+    tree,
+    {
       assembled: assembled.has(ids(0)),
       context: ownContext(ids(0)),
       documentAt: (at) => Option.map(rootAt(at), ({ node }) => node),
@@ -153,9 +161,19 @@ const rowsOfPackage = (
           node,
           rootKind: target.root.kind,
         })),
-    }),
-  );
+    },
+  ]);
 };
+
+/**
+ * Read the rows of a package's documents, each under its {@link idsOfPackage} ids.
+ *
+ * @param documents - The documents by path, in order.
+ * @returns Each document's rows, in the same order.
+ */
+const rowsOfPackage = (
+  documents: readonly (readonly [string, XdmDocument<Composed>])[],
+): readonly TestRows[] => idsOfPackage(documents).map(([tree, ids]) => rowsOf(tree, ids));
 
 /**
  * A `qti-selection`, an `xs:int` select and maybe a `with-replacement`, both possibly padded.
@@ -657,6 +675,120 @@ describe("import/overlays/tests.ts, names", () => {
                     ),
                 ),
                 documents.map(([, doc]) => identifiersByWalk(doc)),
+              );
+            }),
+        ),
+      ),
+  );
+});
+
+/**
+ * The paths a test of the hrefs box sits at: the package root and two directories below it.
+ */
+const hrefDocuments = ["t.xml", "d/t.xml", "d/e/t.xml"] as const;
+
+/**
+ * The item ref hrefs of the box: relative ones that resolve or climb out of the package, external
+ * ones with a scheme, an authority or a leading slash, one with params, one padded, one
+ * percent-encoded, and the empty one.
+ */
+const hrefForms = [
+  "i.xml",
+  "../i.xml",
+  "../../i.xml",
+  "./a/../i.xml",
+  "http://h/x.xml",
+  "//h/x.xml",
+  "/abs.xml",
+  "mailto:x",
+  "i.xml?q=1#f",
+  " i.xml ",
+  "%69.xml",
+  "",
+] as const;
+
+describe("import/overlays/tests.ts, hrefs", () => {
+  it.effect(
+    "compares an item ref's href by its entry path where it resolves, and by its path as written otherwise, at any directory",
+    (ctx) =>
+      // Oracle: a second implementation, the law oracle's own RFC 3986 resolver and its compared
+      // path (`#pantry/test/resolution.ts`), with reading 102: an href that resolves is compared
+      // by its entry path, and one that does not by its path as written, its params aside, as a
+      // manifest href is.
+      // Bound: a test at the root and two directories below it, its item ref writing each of 12
+      // hrefs, 36 cases.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "a test at t.xml, d/t.xml or d/e/t.xml whose item ref writes each of 12 hrefs",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<"entry" | "as written">(["entry", "as written"]),
+            generator: (source) => ({
+              document: source.draw(element(hrefDocuments)),
+              href: source.draw(element(hrefForms)),
+            }),
+            limit: 100,
+            literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the law oracle's RFC 3986 resolver and its compared path",
+            },
+            suite: "import/overlays-tests-hrefs",
+          },
+          ({ document, href }, c) =>
+            Effect.sync(() => {
+              const resolution = resolveAttribute({
+                bases: [],
+                document,
+                lexical: href,
+                srcset: false,
+                whiteSpace: "collapse",
+              });
+              const resolved = resolution.scope === "entry";
+              c.note(resolved ? "entry" : "as written");
+
+              const test = documentOf(
+                el(
+                  "qti-assessment-test",
+                  [["identifier", "T"]],
+                  [
+                    el(
+                      "qti-test-part",
+                      [
+                        ["identifier", "P"],
+                        ["navigation-mode", "linear"],
+                        ["submission-mode", "individual"],
+                      ],
+                      [
+                        el(
+                          "qti-assessment-section",
+                          [
+                            ["identifier", "S"],
+                            ["visible", "true"],
+                          ],
+                          [
+                            el("qti-assessment-item-ref", [
+                              ["identifier", "I"],
+                              ["href", href],
+                            ]),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+              assert.deepStrictEqual(
+                idsOfPackage([[document, test]]).flatMap(([tree, ids]) =>
+                  itemRefPathsOf(tree, ids).map(({ path, resolved: entry }) => ({ entry, path })),
+                ),
+                [
+                  {
+                    entry: resolved,
+                    path: comparedPath(resolution, oracleValueOf(href, "collapse")),
+                  },
+                ],
               );
             }),
         ),
