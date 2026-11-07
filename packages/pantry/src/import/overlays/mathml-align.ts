@@ -40,12 +40,12 @@
  * costs time linear in its nodes (decision 357).
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { interactionKinds, nonElementKinds } from "#pantry/grammar/install.ts";
+import { interactions, nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import type {
   CellLeaf,
   MathAction,
@@ -113,16 +113,6 @@ interface Scope {
 }
 
 /**
- * The kinds that are no element.
- */
-const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
-
-/**
  * The kinds that let an alignment group through to its cell whatever their direction
  * (MathML 3 §3.5.5.2): the cell itself, and an `maction`, whose selected child is the one judged.
  */
@@ -146,28 +136,9 @@ const directedKinds: ReadonlySet<string> = new Set(["m:mrow", "m:mstyle"]);
 const integerSpelling = new RegExp(integerForm, "u");
 
 /**
- * Read the `dir` and `selection` attributes each element writes, the first of each by name.
- *
- * @param attributes - A document's attribute rows.
- * @returns Each element's lexical forms, by its id.
+ * The attributes the alignment builder reads: `dir` and `selection`.
  */
-const writtenOf = (
-  attributes: FlatRows<Composed>["attributes"],
-): ReadonlyMap<NodeId, ReadonlyMap<string, string>> => {
-  const written = new Map<NodeId, Map<string, string>>();
-  for (const { lexical, name, node } of attributes) {
-    if (name === "dir" || name === "selection") {
-      const values = written.get(node) ?? new Map<string, string>();
-      if (!values.has(name)) {
-        values.set(name, lexical);
-      }
-
-      written.set(node, values);
-    }
-  }
-
-  return written;
-};
+const readAttributes: ReadonlySet<string> = new Set(["dir", "selection"]);
 
 /**
  * Read a `dir`'s lexical form as a direction.
@@ -485,7 +456,7 @@ export const rowsOf = (
 ): MathmlAlignRows => {
   const flat = flatten(tree, ids.idOf);
   const reading: Reading = {
-    attributes: writtenOf(flat.attributes),
+    attributes: writtenOf(flat.attributes, readAttributes),
     document: flat.document.node,
     owns: new Map<NodeId, Direction>([[flat.document.node, "ltr"]]),
     standing: new Map<NodeId, Scope>(),
