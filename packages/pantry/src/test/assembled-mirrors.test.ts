@@ -52,11 +52,20 @@ const rootCopy =
   "a tree root's copy along its own axis is the field's start value, which grizzle keeps in the field's builder and exports no reader of";
 
 /**
- * Why a typed map key's value is absent: PostgreSQL generates it from the map key's text
- * (`#pantry/qti/mapping.ts`), and the write's own statement compares the key over it.
+ * Why a generated field's value is absent: the host restores a generated field by evaluating its
+ * term, and this one holds a term the host's evaluator does not read.
+ *
+ * @param term - What the term holds.
+ * @returns Why a law that reads the field is not judged.
  */
-const typedKeyValue =
-  "a field PostgreSQL generates from the map key's text, which the write's own statement compares";
+const unreadGenerated = (term: string): string =>
+  `a field PostgreSQL generates by a term that holds ${term}, which the host's evaluator does not read`;
+
+/**
+ * Why a typed map key's value is absent: PostgreSQL generates it from the map key's text by a cast
+ * or a conditional (`#pantry/qti/mapping.ts`).
+ */
+const typedKeyValue = unreadGenerated("a cast or a conditional of the map key's text");
 
 /**
  * Every value the host does not restore that a law over the every-relation package's rows reads,
@@ -65,21 +74,9 @@ const typedKeyValue =
 const unjudged = {
   "AriaRange: a when term": unreadTerm("when"),
   "AssembledReference: a base term": unreadTerm("base"),
-  "Expression.leadCardinalities":
-    "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
-  "Expression.operandBaseTypes":
-    "a Monoid.or fold over Operand.baseTypeBit, a field PostgreSQL generates",
-  "Expression.operandCardinalities":
-    "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
-  "Expression.tailBaseTypes":
-    "a Monoid.or fold over Operand.baseTypeBit, a field PostgreSQL generates",
-  "Expression.tailCardinalities":
-    "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
   "Expression: a between term": unreadTerm("between"),
-  "Idref: a base term": unreadTerm("base"),
   "LeastCount: a base term": unreadTerm("base"),
   "LeastCount: a when term": unreadTerm("when"),
-  "MapKeyDirectedPair.value": typedKeyValue,
   "MapKeyFloat.value": typedKeyValue,
   "MapKeyInteger.value": typedKeyValue,
   "MapKeyPair.value": typedKeyValue,
@@ -103,7 +100,7 @@ const unjudged = {
   "Quotation: a base term": unreadTerm("base"),
   "Reference: a base term": unreadTerm("base"),
   "RoundingModeFigures: a when term": unreadTerm("when"),
-  "SectionSelection.select": "a field PostgreSQL generates, a cast of `selectForm`",
+  "SectionSelection.select": unreadGenerated("a cast of `selectForm`"),
   "SectionSelection: a base term": unreadTerm("base"),
   "Slider: a when term": unreadTerm("when"),
 } satisfies Readonly<Record<string, string>>;

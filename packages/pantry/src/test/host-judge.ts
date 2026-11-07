@@ -17,13 +17,16 @@
  *   and its members' running values in slot order, a member its step's selection does not hold
  *   stepping by the identity;
  * - **each copy along a family's axis**: an accumulated field of a member that a containment pairs,
- *   beside the member's group and the owner's primary key, with a field of the owner.
+ *   beside the member's group and the owner's primary key, with a field of the owner;
+ * - **each field PostgreSQL generates** (`relation.generated`): its term, as grizzle keeps it in the
+ *   relation's description, evaluated over the row's written fields as a predicate is.
  *
  * What it does not restore stays absent: a tree root's copies along the axis, whose start values
- * grizzle keeps in its own field builders; a copy along a last or a predecessor axis; a field
- * PostgreSQL generates. A float is read as grizzle's `float8` stores it, -0 as 0. A law that reads
- * an absent value on a row it reads is not judged, and {@link judge} names it with every absent
- * value, so a skip is always named by its cause.
+ * grizzle keeps in its own field builders; a copy along a last or a predecessor axis; a generated
+ * field whose term holds one the evaluator does not read, a cast or a conditional. A float is read
+ * as grizzle's `float8` stores it, -0 as 0. A law that reads an absent value on a row it reads is
+ * not judged, and {@link judge} names it with every absent value, so a skip is always named by its
+ * cause.
  */
 import type { Law } from "@bjornpagen/grizzle";
 import { Option, Predicate, Schema } from "effect";
@@ -33,6 +36,7 @@ import {
   closedRows,
   datumText,
   floatDatum,
+  generatedValueOf,
   judgedLaws,
   judgedSideOf,
   SideSchema,
@@ -55,11 +59,20 @@ type FilledRow = Record<string, Datum>;
 export type HostRows = ReadonlyMap<string, readonly HostRow[]>;
 
 /**
- * A stored relation as its descriptor holds it: its primary key, and each field's descriptor, whose
- * writing grizzle or PostgreSQL writes it by ({@link writingOf}). A field's descriptor is any
- * value: a `pg` scalar such as `pg.float8` is a function as well as a descriptor.
+ * A stored relation as its descriptor holds it: its primary key, each field's descriptor, whose
+ * writing grizzle or PostgreSQL writes it by ({@link writingOf}), and its description, which keeps
+ * each field's writing, a generated field's with the term PostgreSQL computes it by. A field's
+ * descriptor is any value: a `pg` scalar such as `pg.float8` is a function as well as a descriptor.
  */
 const RelationSchema = Schema.Struct({
+  desc: Schema.Struct({
+    fields: Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        writing: Schema.Struct({ expr: Schema.optionalKey(Schema.Unknown), kind: Schema.String }),
+      }),
+    ),
+  }),
   heading: Schema.Record(Schema.String, Schema.Unknown),
   kind: Schema.Literal("relation"),
   name: Schema.String,
@@ -88,23 +101,26 @@ const readElsewhere: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * A stored relation as the host models it: its primary key and its fields' writings.
+ * A stored relation as the host models it: each field PostgreSQL generates, its value over a row
+ * (`#pantry/test/key-copies.ts` `generatedValueOf`), its primary key and its fields' writings.
  */
 interface Modelled {
+  readonly generated: ReadonlyMap<string, (row: HostRow) => Datum | undefined>;
   readonly key: readonly string[];
   readonly writing: ReadonlyMap<string, string>;
 }
 
 /**
- * Read every member of a schema the host models: each stored relation's primary key and its
- * fields' writings, by name. A member the host can read neither as a stored relation nor as a kind
- * it reads elsewhere ({@link readElsewhere}) fails loudly, by name, since a relation that vanished
- * from the host's model would leave every law over it unjudged without a word.
+ * Read every member of a schema the host models: each stored relation's generated fields, primary
+ * key and fields' writings, by name. A member the host can read neither as a stored relation nor as
+ * a kind it reads elsewhere ({@link readElsewhere}) fails loudly, by name, since a relation that
+ * vanished from the host's model would leave every law over it unjudged without a word.
  *
  * @param members - The schema's members, `Qti.relations`' values.
  * @returns The stored relations by name.
  * @throws {Error} Naming each member the host cannot read: a defect of the host judge, which must
- *   learn the member's shape before it judges a schema that holds it.
+ *   learn the member's shape before it judges a schema that holds it; or where a generated field's
+ *   description holds no term ({@link generatedValueOf}).
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A schema's members are read here, by their shape.
 export const modelledRelations = (members: readonly unknown[]): ReadonlyMap<string, Modelled> => {
@@ -113,8 +129,13 @@ export const modelledRelations = (members: readonly unknown[]): ReadonlyMap<stri
   for (const member of members) {
     const decoded = Schema.decodeUnknownOption(RelationSchema)(member);
     if (Option.isSome(decoded)) {
-      const { heading, name, primaryKey } = decoded.value;
+      const { desc, heading, name, primaryKey } = decoded.value;
       modelled.set(name, {
+        generated: new Map(
+          Object.entries(desc.fields).flatMap(([field, { writing }]) =>
+            writing.kind === "generated" ? [[field, generatedValueOf(writing.expr)] as const] : [],
+          ),
+        ),
         key: primaryKey,
         writing: new Map(
           Object.entries(heading).flatMap(([field, descriptor]) =>
@@ -636,6 +657,15 @@ export const hostRowsOf = (inputs: PackageInputs): HostRows => {
     for (const [field, value] of Object.entries(written)) {
       if (isDatum(value) && row[field] === undefined) {
         row[field] = Predicate.isNumber(value) ? floatDatum(value) : value;
+      }
+    }
+
+    for (const { generated } of Option.toArray(Option.fromUndefinedOr(relations.get(relation)))) {
+      for (const [field, valueOf] of generated) {
+        const value = valueOf(row);
+        if (value !== undefined) {
+          row[field] = value;
+        }
       }
     }
 

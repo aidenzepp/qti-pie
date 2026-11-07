@@ -1516,6 +1516,24 @@ export const checkOf = (
   );
 
 /**
+ * Read a generated field's term as the host evaluates it: the term grizzle keeps at the field's
+ * writing in its relation's description (`relation.generated`), read as a predicate's terms are
+ * and evaluated over the row, as PostgreSQL computes the column from the row's written fields.
+ *
+ * @param expr - The term, as grizzle keeps it.
+ * @returns The field's value over a row: unknown where the term reads a field the row lacks, or
+ *   holds a term the host does not read, such as a cast or a conditional.
+ * @throws {Error} When grizzle keeps no term there: a defect of the host judge, which must learn
+ *   the description's shape before it restores the field.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A description's term is read here, by its shape.
+export const generatedValueOf = (expr: unknown): ((row: Row) => Datum | undefined) => {
+  const term = termOf(Schema.decodeUnknownSync(StoredTermSchema)(expr));
+
+  return (row) => evaluate(term, row, () => false);
+};
+
+/**
  * One side of a statement as the host judges it: its relation and its terms as an outcome names
  * them, the fields its selection reads and the terms of it the host cannot read, and its selection
  * in SQL's three-valued logic: true, false, or unknown where a field it reads is absent and no
