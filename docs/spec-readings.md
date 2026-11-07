@@ -1987,7 +1987,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
      102). `XInclude.xsd` types `href` an optional `xs:anyURI`, which admits all of these; XInclude itself makes them
      fatal errors. An include whose href is external (reading 102: it starts with a scheme or with `/`) names a resource
      the package does not hold, and is admitted: it is stored as written, with its element, and never fetched, and its
-     content is judged by no law, since there is no document to judge. That is a recorded under-check, not a law of the
+     content is judged by no law, since there is no document to judge. An IDREF of the including document that names an
+     ID only that resource could hold is refused under "Idref target", as one that names no ID is: the merged document
+     holds none of the resource's content, so its assembly binds no such ID (reading 117), and pantry cannot tell an ID
+     the resource holds from one it lacks. That is a recorded over-refusal with the same cause as the under-check below,
+     and the same fetch would lift it. That is a recorded under-check, not a law of the
      specification: the information model says an included fragment's content "must satisfy the requirements of the
      specification in the context of the item in which it is being included" (section 2.12, reading 117), which a
      fragment pantry never reads cannot be checked against. What would lift it is a fetch of the resource, which an
@@ -2008,7 +2012,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
      under the operator's standing ruling of 2026-11-05 that the spec wins; amended by the audit of PR #46, C B2.
      Amended 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from RV seat NIL
      (`25d16460`), on the review of the import's sentinel values: the schema's statement recorded; nothing it refuses
-     changed.) (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
+     changed.) (Amended 2026-11-07 by the Mind, decision 416, on audit e8db90e1's F9: the refusal of an IDREF into an
+     external include's content recorded; nothing it refuses changed.) (Proposed in phase 15, 2026-11-06, for the
+     operator; decision 321.)
 
 116. **A fragment's root is read by its name at its document's root, so the three kinds the composition splits by
      context never root a fragment: a stated limit.** The composition gives three element names two kinds each, by the
