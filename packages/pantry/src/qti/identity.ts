@@ -135,7 +135,7 @@ import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { LomGeneral, LomObject, LomRecord, ResourceLomGeneral } from "#pantry/qti/metadata.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
-import { Instance, testKind } from "#pantry/qti/tests.ts";
+import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
 
 /**
  * XML whitespace `S`, possibly none: what an ID's lexical form holds around its value.
@@ -161,13 +161,6 @@ export const idValuePattern = "^[^\\t\\n\\r ]+$";
  * replaces.
  */
 const nilUuid = "00000000-0000-0000-0000-000000000000";
-
-/**
- * The kind of an item document's root: the one element whose `tool-name` and `tool-version` a
- * label asks for, and whose own `label` asks for them only in a QTI 3.0.1 document
- * ({@link labelledRootVersion}).
- */
-const itemRoot = "qti-assessment-item";
 
 /**
  * The schema version whose item root's own `label` asks for the root's tools (spec reading 128):
@@ -711,7 +704,7 @@ const labelAttributes = select(Attribute, (a) =>
     a.eq(a.name, "label"),
     a.or(
       a.in(a.kind, toolLabelKinds),
-      a.and(a.eq(a.kind, itemRoot), a.eq(a.version, labelledRootVersion)),
+      a.and(a.eq(a.kind, itemKind), a.eq(a.version, labelledRootVersion)),
     ),
   ),
 );
@@ -720,14 +713,14 @@ const labelAttributes = select(Attribute, (a) =>
  * An item root's `tool-name`, one per item document.
  */
 const toolNames = select(Attribute, (a) =>
-  a.and(a.eq(a.name, "tool-name"), a.eq(a.kind, itemRoot)),
+  a.and(a.eq(a.name, "tool-name"), a.eq(a.kind, itemKind)),
 );
 
 /**
  * An item root's `tool-version`, one per item document.
  */
 const toolVersions = select(Attribute, (a) =>
-  a.and(a.eq(a.name, "tool-version"), a.eq(a.kind, itemRoot)),
+  a.and(a.eq(a.name, "tool-version"), a.eq(a.kind, itemKind)),
 );
 
 /**
@@ -788,7 +781,7 @@ const inheritedScopes = select(SsmlScope, (s) =>
 /**
  * The labels Label tools binds: those in a document whose root is an item's.
  */
-const itemLabels = select(LabelUse, (l) => l.eq(l.rootKind, itemRoot));
+const itemLabels = select(LabelUse, (l) => l.eq(l.rootKind, itemKind));
 
 /**
  * The IDs that bind each (document, id, owner), counted by `IdBinding.carriers`.

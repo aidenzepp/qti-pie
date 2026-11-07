@@ -1010,7 +1010,7 @@ const headDocuments = select(Document, (d) => d.and(d.eq(d.assembled, true), d.e
  * The instances of an item's assembly, each of which places its document's bindings (Q5.09's
  * `PlacedBinding`, spec reading 117).
  */
-const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
+export const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
 /**
  * The sites that are section refs, each naming a section document (information model §7.5).
@@ -2038,7 +2038,7 @@ export const branchLaws = [
  * The documents whose root is an item, the targets an item ref may name: a constant selection,
  * keyed by its node.
  */
-const itemDocuments = select(Document, (d) => d.eq(d.rootKind, "qti-assessment-item"));
+const itemDocuments = select(Document, (d) => d.eq(d.rootKind, itemKind));
 
 /**
  * The item refs that name an item.

@@ -1503,6 +1503,17 @@ export const ChoiceBound = closed.relation(
 );
 
 /**
+ * The last-slot rules the vocabularies state (`LastWhere` of `#pantry/grammar/children.ts`), each
+ * kind and parent read as a `NodeKind` handle once, here, for the default-hotspot law that reads
+ * them.
+ */
+export const lastWhereRules = grammar.lastWhere.map(({ kind, parents, ...rule }) => ({
+  ...rule,
+  kind: memberOf(grammar.kinds.nodeKind, kind),
+  parents: parents.map((parent) => memberOf(grammar.kinds.nodeKind, parent)),
+}));
+
+/**
  * `ChoiceCount`: kind → choice, the kind of the children whose number bounds both of the kind's
  * counts (spec reading 18).
  */
