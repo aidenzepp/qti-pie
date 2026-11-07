@@ -1142,27 +1142,31 @@ const flagsOf = (name: FlagName) => select(TestFlag, (f) => f.eq(f.name, name));
 const tokenCopy = (name: (typeof tokenNames)[number], kinds: readonly Kind[]) => {
   const source = attributesOf(name, kinds);
 
-  return [
-    key(on(source, "node")),
-    contained(on(source, "node", "name", "lexical"), on(TestToken, "node", "name", "lexical")),
-    contained(on(tokensOf(name), "node"), on(source, "node")),
-  ] as const;
+  return {
+    copies: [
+      contained(on(source, "node", "name", "lexical"), on(TestToken, "node", "name", "lexical")),
+      contained(on(tokensOf(name), "node"), on(source, "node")),
+    ] as const,
+    key: key(on(source, "node")),
+  };
 };
 
 /**
  * The copy of one attribute into {@link TestFlag}, as {@link tokenCopy} copies a token.
  *
  * @param carrier - The attribute's name and the kinds that carry it.
- * @returns The three statements.
+ * @returns Its key, the "DocumentId key" law's, and its two copies, the "Test overlay" law's.
  */
 const flagCopy = ([name, kinds]: (typeof flagCarriers)[number]) => {
   const source = attributesOf(name, kinds);
 
-  return [
-    key(on(source, "node")),
-    contained(on(source, "node", "name", "lexical"), on(TestFlag, "node", "name", "lexical")),
-    contained(on(flagsOf(name), "node"), on(source, "node")),
-  ] as const;
+  return {
+    copies: [
+      contained(on(source, "node", "name", "lexical"), on(TestFlag, "node", "name", "lexical")),
+      contained(on(flagsOf(name), "node"), on(source, "node")),
+    ] as const,
+    key: key(on(source, "node")),
+  };
 };
 
 /**
@@ -1227,433 +1231,6 @@ type SectionRow = RowScalars<typeof Section>;
  * @returns The predicate.
  */
 const loose = (s: SectionRow) => s.and(s.eq(s.visible, false), s.eq(s.keepTogether, false));
-
-/**
- * The statements over the documents' rows, law "Test overlay" but the named checks: the document,
- * its tokens and flags, its names, sections, parts, selections, orderings, sites and branch rules,
- * and each item ref's href resolved, each its element's row, copying its node's tuple and its
- * attributes' values, and each there exactly where its element is.
- */
-export const testOverlayLaws = [
-  contained(
-    on(TestDocument, "node", "package", "path", "rootKind"),
-    on(Document, "node", "package", "path", "rootKind"),
-  ),
-  contained(
-    on(
-      select(Document, (d) => d.in(d.rootKind, assembledRoots)),
-      "node",
-    ),
-    on(TestDocument, "node"),
-  ),
-  siteFamily,
-  nameFamily,
-  ruleFamily,
-
-  ...tokenCopy("identifier", [...namedKinds, stimulusRefKind]),
-  ...tokenCopy("source-identifier", [mappingKind]),
-  ...tokenCopy("target-identifier", [mappingKind]),
-  ...tokenCopy("target", [branchRuleKind]),
-  check("E1_derived", TestToken, (t) =>
-    t.and(
-      t.eq(t.lexical, Compute.concat(Compute.concat(t.lead, t.value), t.trail)),
-      Compute.matches(t.value, collapsedPattern),
-    ),
-  ),
-  ...flagCarriers.flatMap(flagCopy),
-  check("E1_derived", TestFlag, (f) =>
-    f.or(
-      f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTruePattern)),
-      f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTruePattern))),
-    ),
-  ),
-
-  contained(
-    on(Named, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(Named, "node", "end"), on(Node, "id", "end")),
-  contained(on(Named, "parent", "parentKind"), on(Node, "id", "kind")),
-  contained(
-    on(
-      select(Node, (n) => n.in(n.kind, namedKinds)),
-      "id",
-    ),
-    on(Named, "node"),
-  ),
-  contained(on(Named, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
-  key(on(Named, "document", "identifier")),
-  contained(
-    on(
-      select(Named, (n) => n.eq(n.kind, sectionKind)),
-      "node",
-      "part",
-      "replaced",
-      "mixes",
-      "looseChain",
-    ),
-    on(Section, "node", "part", "replaced", "mixes", "looseChain"),
-  ),
-  contained(
-    on(
-      select(Named, (n) => n.and(n.ne(n.kind, sectionKind), n.eq(n.parentKind, sectionKind))),
-      "parent",
-      "part",
-      "replaced",
-    ),
-    on(Section, "node", "part", "replacing"),
-  ),
-  check("E1_derived", Named, (n) =>
-    n.and(
-      n.in(n.kind, namedKinds),
-      n.or(n.eq(n.kind, sectionKind), n.and(n.eq(n.mixes, false), n.eq(n.looseChain, false))),
-      n.or(
-        n.eq(n.kind, sectionKind),
-        n.and(n.ne(n.kind, partKind), n.eq(n.parentKind, sectionKind)),
-        n.and(n.eq(n.kind, partKind), n.eq(n.part, n.node), n.eq(n.replaced, false)),
-        n.and(
-          n.ne(n.kind, partKind),
-          n.eq(n.parentKind, partKind),
-          n.eq(n.part, n.parent),
-          n.eq(n.replaced, false),
-        ),
-        n.and(
-          n.ne(n.kind, partKind),
-          n.ne(n.parentKind, partKind),
-          n.ne(n.parentKind, sectionKind),
-          n.eq(n.part, n.document),
-          n.eq(n.replaced, false),
-        ),
-      ),
-    ),
-  ),
-
-  contained(
-    on(Section, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  mirrors(on(Section, "node"), on(nodesOf(sectionKind), "id")),
-  contained(on(Section, "parent", "parentKind"), on(Node, "id", "kind")),
-  contained(on(Section, "node", "visible"), on(flagsOf("visible"), "node", "value")),
-  contained(on(flagsOf("keep-together"), "node", "value"), on(Section, "node", "keepTogether")),
-  contained(
-    on(
-      select(Section, (s) => s.eq(s.keepTogether, false)),
-      "node",
-    ),
-    on(flagsOf("keep-together"), "node"),
-  ),
-  contained(
-    on(
-      select(Section, (s) => s.eq(s.parentKind, sectionKind)),
-      "parent",
-      "part",
-      "replaced",
-      "parentMixes",
-      "parentLooseChain",
-    ),
-    on(Section, "node", "part", "replacing", "mixes", "looseChain"),
-  ),
-  check("E1_derived", Section, (s) =>
-    s.and(
-      s.or(
-        s.eq(s.parentKind, sectionKind),
-        s.and(
-          s.eq(s.parentKind, partKind),
-          s.eq(s.part, s.parent),
-          s.eq(s.replaced, false),
-          s.eq(s.parentMixes, false),
-          s.eq(s.parentLooseChain, false),
-        ),
-        s.and(
-          s.ne(s.parentKind, partKind),
-          s.ne(s.parentKind, sectionKind),
-          s.eq(s.part, s.document),
-          s.eq(s.replaced, false),
-          s.eq(s.parentMixes, false),
-          s.eq(s.parentLooseChain, true),
-        ),
-      ),
-      s.or(
-        s.and(s.eq(s.replacing, true), s.or(s.eq(s.replaced, true), s.eq(s.withReplacement, true))),
-        s.and(s.eq(s.replacing, false), s.eq(s.replaced, false), s.eq(s.withReplacement, false)),
-      ),
-      s.or(
-        s.and(
-          s.eq(s.mixes, true),
-          s.or(s.eq(s.shuffle, true), s.and(loose(s), s.eq(s.parentMixes, true))),
-        ),
-        s.and(
-          s.eq(s.mixes, false),
-          s.eq(s.shuffle, false),
-          s.or(s.not(loose(s)), s.eq(s.parentMixes, false)),
-        ),
-      ),
-      s.or(
-        s.and(s.eq(s.looseChain, true), loose(s), s.eq(s.parentLooseChain, true)),
-        s.and(s.eq(s.looseChain, false), s.or(s.not(loose(s)), s.eq(s.parentLooseChain, false))),
-      ),
-    ),
-  ),
-
-  sectionFamily,
-  contained(
-    on(SectionMember, "node", "document", "kind", "start", "nearest", "version", "section"),
-    nodeRef,
-  ),
-  contained(
-    on(
-      select(Node, (n) => n.and(n.eq(n.parentKind, sectionKind), n.in(n.kind, sectionParts))),
-      "id",
-    ),
-    on(SectionMember, "node"),
-  ),
-  check("E1_derived", SectionMember, (m) => m.in(m.kind, sectionParts)),
-  contained(on(TestFlag, "node", "kind", "parentKind"), on(Node, "id", "kind", "parentKind")),
-  key(on(requiredFlags, "node")),
-  contained(on(requiredMembers, "node"), on(requiredFlags, "node")),
-  key(on(requiredMembers, "node")),
-  contained(on(requiredParts, "node"), on(requiredMembers, "node")),
-  requiredFold,
-
-  contained(
-    on(SectionSelection, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  mirrors(on(SectionSelection, "node"), on(nodesOf(selectionKind), "id")),
-  key(on(attributesOf("select", [selectionKind]), "node")),
-  contained(
-    on(attributesOf("select", [selectionKind]), "node", "lexical"),
-    on(SectionSelection, "node", "selectLexical"),
-  ),
-  contained(on(SectionSelection, "node"), on(attributesOf("select", [selectionKind]), "node")),
-  contained(
-    on(flagsOf("with-replacement"), "node", "value"),
-    on(SectionSelection, "node", "withReplacement"),
-  ),
-  contained(
-    on(
-      select(SectionSelection, (s) => s.eq(s.withReplacement, true)),
-      "node",
-    ),
-    on(flagsOf("with-replacement"), "node"),
-  ),
-  key(on(SectionSelection, "parent")),
-  contained(
-    on(SectionSelection, "parent", "members", "required", "withReplacement"),
-    on(Section, "node", "members", "required", "withReplacement"),
-  ),
-  contained(
-    on(
-      select(Section, (s) => s.eq(s.withReplacement, true)),
-      "node",
-    ),
-    on(SectionSelection, "parent"),
-  ),
-  check("E1_derived", SectionSelection, (s) =>
-    s.eq(
-      s.selectLexical,
-      Compute.concat(Compute.concat(s.selectLead, s.selectForm), s.selectTrail),
-    ),
-  ),
-  check("Selection_bound", SectionSelection, (s) =>
-    s.or(s.eq(s.withReplacement, true), s.le(s.select, Compute.base(s.members))),
-  ),
-  check("Selection_required", SectionSelection, (s) => s.le(Compute.base(s.required), s.select)),
-
-  contained(
-    on(SectionOrdering, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  mirrors(on(SectionOrdering, "node"), on(nodesOf(orderingKind), "id")),
-  contained(on(flagsOf("shuffle"), "node", "value"), on(SectionOrdering, "node", "shuffle")),
-  contained(
-    on(
-      select(SectionOrdering, (o) => o.eq(o.shuffle, true)),
-      "node",
-    ),
-    on(flagsOf("shuffle"), "node"),
-  ),
-  key(on(SectionOrdering, "parent")),
-  contained(on(SectionOrdering, "parent", "shuffle"), on(Section, "node", "shuffle")),
-  contained(
-    on(
-      select(Section, (s) => s.eq(s.shuffle, true)),
-      "node",
-    ),
-    on(SectionOrdering, "parent"),
-  ),
-
-  contained(on(nodesOf(itemRefKind), "id"), on(hrefPaths, "node")),
-
-  contained(
-    on(
-      Site,
-      "node",
-      "children",
-      "ancestry",
-      "document",
-      "documentType",
-      "governs",
-      "kind",
-      "nearest",
-      "nearestKind",
-      "parentKind",
-      "start",
-      "version",
-    ),
-    nodeContext,
-  ),
-  contained(on(Site, "node", "parent"), on(Node, "id", "parent")),
-  contained(on(SitePath, "node", "kind"), on(Site, "node", "kind")),
-  contained(on(SitePath, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
-  check("File_exists", SitePath, (s) => s.eq(s.entry, true)),
-  contained(on(entryPaths, "package", "path"), on(Entry, "package", "path")),
-  contained(on(sectionRefSites, "node"), on(SitePath, "node")),
-  contained(on(includeSites, "node", "kind"), on(SitePath, "node", "kind")),
-  key(on(externalHrefs, "node")),
-  contained(on(externalSites, "node"), on(externalHrefs, "node")),
-  key(on(sectionDocuments, "package", "path")),
-  contained(
-    on(sectionRefTargets, "package", "path", "target"),
-    on(sectionDocuments, "package", "path", "node"),
-  ),
-  contained(on(sectionRefPaths, "package", "path"), on(sectionDocuments, "package", "path")),
-  contained(on(includePaths, "node"), on(SiteTarget, "node")),
-  contained(
-    on(
-      SiteTarget,
-      "node",
-      "ancestry",
-      "document",
-      "kind",
-      "nearest",
-      "nearestKind",
-      "parentKind",
-      "version",
-    ),
-    on(
-      Site,
-      "node",
-      "ancestry",
-      "document",
-      "kind",
-      "nearest",
-      "nearestKind",
-      "parentKind",
-      "version",
-    ),
-  ),
-  contained(on(SiteTarget, "node", "package", "path"), on(SitePath, "node", "package", "path")),
-  contained(
-    on(SiteTarget, "package", "path", "target", "targetRoot", "targetNearest", "targetNearestKind"),
-    on(Document, "package", "path", "node", "rootKind", "contextNearest", "contextNearestKind"),
-  ),
-  contained(on(nodesOf(sectionRefKind), "id"), on(Site, "node")),
-  contained(on(includes, "id"), on(Site, "node")),
-  siteTargetFamily,
-  contextFold,
-  splicedFold,
-  check("Fragment_context", SiteTarget, (s) =>
-    s.or(
-      s.and(s.eq(s.nearestKind, "document"), s.eq(s.targetNearestKind, "document")),
-      s.and(s.eq(s.nearest, s.targetNearest), s.eq(s.nearestKind, s.targetNearestKind)),
-    ),
-  ),
-  contained(
-    on(Inclusion, "node", "parentKind", "root", "version"),
-    on(SiteTarget, "node", "parentKind", "targetRoot", "version"),
-  ),
-  contained(on(includeTargets, "node"), on(Inclusion, "node")),
-  check("E1_derived", Inclusion, (i) =>
-    i.eq(IncludeParentKind.at("kind", i.includeParent), i.parentKind),
-  ),
-  contained(
-    on(Inclusion, "version", "includeParent", "root"),
-    on(IncludeRoot, "version", "parent", "kind"),
-  ),
-  contained(
-    on(
-      select(Site, (s) => s.eq(s.parentKind, sectionKind)),
-      "parent",
-      "part",
-      "replaced",
-      "parentMixes",
-      "parentLooseChain",
-    ),
-    on(Section, "node", "part", "replacing", "mixes", "looseChain"),
-  ),
-  check("E1_derived", Site, (s) =>
-    s.and(
-      s.or(
-        s.and(s.eq(s.kind, sectionRefKind), s.in(s.parentKind, [sectionKind, partKind])),
-        s.and(s.eq(s.kind, includeKind), s.in(s.parentKind, includeParentKinds)),
-      ),
-      s.or(
-        s.eq(s.parentKind, sectionKind),
-        s.and(
-          s.eq(s.parentKind, partKind),
-          s.eq(s.part, s.parent),
-          s.eq(s.replaced, false),
-          s.eq(s.parentMixes, false),
-          s.eq(s.parentLooseChain, false),
-        ),
-        s.and(
-          s.not(s.in(s.parentKind, [sectionKind, partKind])),
-          s.eq(s.part, s.document),
-          s.eq(s.replaced, false),
-          s.eq(s.parentMixes, false),
-          s.eq(s.parentLooseChain, false),
-        ),
-      ),
-    ),
-  ),
-
-  contained(
-    on(BranchRule, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(BranchRule, "parent", "parentKind"), on(Node, "id", "kind")),
-  contained(on(BranchRule, "node", "target"), on(tokensOf("target"), "node", "value")),
-  contained(
-    on(
-      select(TestToken, (t) => t.and(t.eq(t.name, "target"), t.not(t.in(t.value, exits)))),
-      "node",
-    ),
-    on(BranchRule, "node"),
-  ),
-  check("E1_derived", BranchRule, (b) =>
-    b.and(
-      b.eq(b.kind, branchRuleKind),
-      b.not(b.in(b.target, exits)),
-      b.in(b.parentKind, [itemRefKind, sectionKind, partKind]),
-    ),
-  ),
-
-  contained(
-    on(VariableMapping, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  mirrors(on(VariableMapping, "node"), on(nodesOf(mappingKind), "id")),
-  contained(
-    on(VariableMapping, "node", "source"),
-    on(tokensOf("source-identifier"), "node", "value"),
-  ),
-  contained(
-    on(VariableMapping, "node", "target"),
-    on(tokensOf("target-identifier"), "node", "value"),
-  ),
-  key(on(VariableMapping, "parent", "target")),
-  check("Variable_mapping_target", VariableMapping, (v) => v.not(v.in(v.target, sessionVariables))),
-
-  contained(
-    on(StimulusRef, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  mirrors(on(StimulusRef, "node"), on(nodesOf(stimulusRefKind), "id")),
-  contained(on(StimulusRef, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
-  key(on(StimulusRef, "document", "identifier")),
-] as const;
 
 /**
  * An `Instance` row as a row check reads it.
@@ -1808,303 +1385,6 @@ const shuffled = (b: ResolutionRow) =>
   );
 
 /**
- * The statements of reading 85's law, "Inclusion cycle": the instance tree, each instance's copy
- * of its parent's scope and of its site, one child per site, one root per head and none for any
- * other document, and two counts that make a chain returning to a document on it unrepresentable.
- *
- * - **A chain a head reaches:** the deferred foreign key `Instance(document, rootKind, children) →
- *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site under it.
- * - **A chain no head reaches**, such as two fragments each of which includes the other, which no
- *   head places, and any fragment only they place: `TestDocument.instances` above 0, since none of
- *   them is placed in any assembly. Its converse, every `Instance` row's document an assembled
- *   one's, is the foreign key above; the containment the other way, `TestDocument(node, rootKind,
- *   sites) ⊆ Instance(document, rootKind, children)`, has no key of `Instance` in its target's
- *   projection, which grizzle refuses, so the count states it.
- *
- * The heads are {@link splicingParents}'s, by `Document.spliced`, mirrored with the roots both
- * ways. Its `E1_derived` pins the root's fields and derives a member's scope.
- */
-export const inclusionLaws = [
-  instanceTree,
-  contained(
-    on(
-      instanceMembers,
-      "parent",
-      "assemblyKind",
-      "parentDocument",
-      "parentMixes",
-      "parentPart",
-      "parentReplaced",
-    ),
-    on(Instance, "id", "assemblyKind", "document", "mixes", "part", "replaced"),
-  ),
-  contained(
-    on(
-      instanceMembers,
-      "parentDocument",
-      "site",
-      "siteLooseChain",
-      "siteMixes",
-      "sitePart",
-      "siteReplaced",
-      "siteStart",
-    ),
-    on(Site, "document", "node", "parentLooseChain", "parentMixes", "part", "replaced", "start"),
-  ),
-  contained(on(instanceMembers, "site", "document"), on(SiteTarget, "node", "target")),
-  key(on(instanceMembers, "parent", "site")),
-  contained(
-    on(Instance, "document", "rootKind", "children"),
-    on(TestDocument, "node", "rootKind", "sites"),
-  ),
-  key(on(instanceRoots, "document")),
-  mirrors(on(headDocuments, "node"), on(instanceRoots, "document")),
-  documentInstanceFamily,
-  check("Inclusion_cycle", TestDocument, (d) => d.gt(d.instances, 0n)),
-  mirrors(on(assembledDocuments, "node"), on(TestDocument, "node")),
-  contained(
-    on(Instance, "document", "ids", "idrefTargets", "choices", "hottexts"),
-    on(Document, "node", "ids", "idrefTargets", "choices", "hottexts"),
-  ),
-  contained(
-    on(itemInstances, "document", "bindings", "langs", "variables"),
-    on(Document, "node", "bindings", "langs", "variables"),
-  ),
-  check("E1_derived", Instance, (i) =>
-    i.and(
-      i.or(i.eq(i.assemblyKind, testKind), i.and(i.eq(i.names, 0n), i.eq(i.rules, 0n))),
-      i.or(
-        i.eq(i.assemblyKind, itemKind),
-        i.and(i.eq(i.bindings, 0n), i.eq(i.langs, 0n), i.eq(i.variables, 0n)),
-      ),
-      i.or(
-        i.and(
-          i.eq(i.start, 0n),
-          i.eq(i.document, i.id),
-          i.eq(i.assemblyKind, i.rootKind),
-          i.eq(i.part, i.id),
-          i.eq(i.replaced, false),
-          i.eq(i.mixes, false),
-          i.eq(i.site, i.id),
-          i.eq(i.siteStart, 0n),
-          i.eq(i.sitePart, i.id),
-          i.eq(i.siteReplaced, false),
-          i.eq(i.siteMixes, false),
-          i.eq(i.siteLooseChain, false),
-        ),
-        i.and(i.gt(i.start, 0n), placedScope(i)),
-      ),
-    ),
-  ),
-] as const;
-
-/**
- * The statements of reading 86's law, "Test name key": each instance of a test's assembly holds
- * one name per name of its document, their projection holds each written element once, so a
- * section document placed twice names nothing twice, and no two written elements of one test share
- * an identifier. Its `E1_derived` derives each name's scope in the assembly.
- */
-export const testNameLaws = [
-  contained(on(testInstances, "document", "names"), on(TestDocument, "node", "names")),
-  instanceNameFamily,
-  contained(
-    on(
-      InstanceName,
-      "instance",
-      "assembly",
-      "document",
-      "instanceMixes",
-      "instancePart",
-      "instanceReplaced",
-    ),
-    on(Instance, "id", "assembly", "document", "mixes", "part", "replaced"),
-  ),
-  contained(
-    on(InstanceName, "document", "node", "identifier"),
-    on(Named, "document", "node", "identifier"),
-  ),
-  contained(
-    on(
-      InstanceName,
-      "node",
-      "end",
-      "kind",
-      "namedLooseChain",
-      "namedMixes",
-      "namedPart",
-      "namedReplaced",
-      "start",
-    ),
-    on(Named, "node", "end", "kind", "looseChain", "mixes", "part", "replaced", "start"),
-  ),
-  check("E1_derived", InstanceName, (n) =>
-    n.and(
-      n.or(
-        n.and(n.eq(n.namedPart, n.document), n.eq(n.part, n.instancePart)),
-        n.and(n.ne(n.namedPart, n.document), n.eq(n.part, n.namedPart)),
-      ),
-      n.or(
-        n.and(
-          n.eq(n.replaced, true),
-          n.or(n.eq(n.namedReplaced, true), n.eq(n.instanceReplaced, true)),
-        ),
-        n.and(
-          n.eq(n.replaced, false),
-          n.eq(n.namedReplaced, false),
-          n.eq(n.instanceReplaced, false),
-        ),
-      ),
-      n.or(
-        n.and(
-          n.eq(n.mixes, true),
-          n.or(
-            n.eq(n.namedMixes, true),
-            n.and(n.eq(n.namedLooseChain, true), n.eq(n.instanceMixes, true)),
-          ),
-        ),
-        n.and(
-          n.eq(n.mixes, false),
-          n.eq(n.namedMixes, false),
-          n.or(n.eq(n.namedLooseChain, false), n.eq(n.instanceMixes, false)),
-        ),
-      ),
-    ),
-  ),
-  assembledNameFamily,
-  contained(
-    on(InstanceName, "assembly", "node", "identifier"),
-    on(AssembledName, "assembly", "node", "identifier"),
-  ),
-  check("Test_name_key", AssembledName, (a) => a.gt(a.placements, 0n)),
-  key(on(AssembledName, "assembly", "identifier")),
-] as const;
-
-/**
- * The statements of reading 87's law, "Branch target": each instance of a test's assembly
- * resolves each of its document's branch rules that names a target once, each resolution copies
- * its rule, its source, its target and the names the ordering law reads. `Branch_target` judges
- * its target's kind, part and replacement and that its instance holds the rule's, and
- * `Branch_forward` that it lies after its source's end, unless the section that orders the two
- * shuffles.
- */
-export const branchLaws = [
-  contained(on(testInstances, "document", "rules"), on(TestDocument, "node", "rules")),
-  resolutionFamily,
-  contained(
-    on(BranchResolution, "instance", "assembly", "document", "instanceStart"),
-    on(Instance, "id", "assembly", "document", "start"),
-  ),
-  contained(
-    on(BranchResolution, "document", "rule", "target"),
-    on(BranchRule, "document", "node", "target"),
-  ),
-  contained(
-    on(BranchResolution, "rule", "owner", "ownerKind"),
-    on(BranchRule, "node", "parent", "parentKind"),
-  ),
-  contained(
-    on(BranchResolution, "instance", "owner", "ownerEnd", "ownerPart", "ownerStart"),
-    on(InstanceName, "instance", "node", "end", "part", "start"),
-  ),
-  contained(
-    on(BranchResolution, "targetInstance", "branch", "branchEnd", "branchPart", "branchStart"),
-    on(InstanceName, "instance", "node", "end", "part", "start"),
-  ),
-  contained(on(BranchResolution, "branch", "branchParent"), on(Named, "node", "parent")),
-  contained(
-    on(BranchResolution, "targetInstance", "targetNode", "target"),
-    on(InstanceName, "instance", "node", "identifier"),
-  ),
-  contained(
-    on(
-      BranchResolution,
-      "targetInstance",
-      "targetNode",
-      "assembly",
-      "targetEnd",
-      "targetKind",
-      "targetMixes",
-      "targetPart",
-      "targetReplaced",
-      "targetStart",
-    ),
-    on(
-      InstanceName,
-      "instance",
-      "node",
-      "assembly",
-      "end",
-      "kind",
-      "mixes",
-      "part",
-      "replaced",
-      "start",
-    ),
-  ),
-  contained(
-    on(
-      BranchResolution,
-      "targetInstance",
-      "common",
-      "assembly",
-      "commonEnd",
-      "commonKind",
-      "commonMixes",
-      "commonPart",
-      "commonReplaced",
-      "commonStart",
-    ),
-    on(
-      InstanceName,
-      "instance",
-      "node",
-      "assembly",
-      "end",
-      "kind",
-      "mixes",
-      "part",
-      "replaced",
-      "start",
-    ),
-  ),
-  contained(
-    on(BranchResolution, "targetInstance", "targetInstanceEnd", "targetInstanceStart"),
-    on(Instance, "id", "end", "start"),
-  ),
-  contained(
-    on(BranchResolution, "via", "viaEnd", "viaParent", "viaSiteStart", "viaStart"),
-    on(Instance, "id", "end", "parent", "siteStart", "start"),
-  ),
-  check("Branch_target", BranchResolution, (b) =>
-    b.and(
-      b.or(
-        b.and(b.eq(b.ownerKind, partKind), b.eq(b.targetKind, partKind)),
-        b.and(
-          b.ne(b.ownerKind, partKind),
-          b.in(b.targetKind, sectionTargets),
-          b.eq(b.targetPart, b.ownerPart),
-        ),
-      ),
-      b.not(b.and(b.eq(b.targetKind, itemRefKind), b.eq(b.targetReplaced, true))),
-      b.le(b.targetInstanceStart, b.instanceStart),
-      b.lt(b.instanceStart, b.targetInstanceEnd),
-      b.or(
-        b.and(sameInstance(b), b.eq(b.via, b.instance)),
-        b.and(
-          b.not(sameInstance(b)),
-          b.eq(b.viaParent, b.targetInstance),
-          b.le(b.viaStart, b.instanceStart),
-          b.lt(b.instanceStart, b.viaEnd),
-        ),
-      ),
-    ),
-  ),
-  check("Branch_forward", BranchResolution, (b) =>
-    b.or(forward(b), b.and(b.ne(b.ownerKind, partKind), b.not(nested(b)), shuffled(b))),
-  ),
-] as const;
-
-/**
  * The documents whose root is an item, the targets an item ref may name: a constant selection,
  * keyed by its node.
  */
@@ -2116,34 +1396,19 @@ const itemDocuments = select(Document, (d) => d.eq(d.rootKind, itemKind));
 const itemTargets = select(ItemRefTarget, (t) => t.eq(t.type, itemResourceType));
 
 /**
- * The statements of B2's and B3's law, "Item ref target": each item ref has one
- * {@link ItemRefTarget}, its href's path, named by a resource of the package of the item type or an
- * LTI type; and each that names an item has its {@link ItemRefDocument}, the document there, whose
- * root is an item.
+ * The token attributes {@link TestToken} copies, each attribute's key and its two copies.
  */
-export const itemRefLaws = [
-  mirrors(on(ItemRefTarget, "node"), on(nodesOf(itemRefKind), "id")),
-  contained(on(ItemRefTarget, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
-  contained(on(ItemRefTarget, "package", "path", "type"), on(NamedHref, "package", "path", "type")),
-  check("Item_ref_target", ItemRefTarget, (t) =>
-    t.in(t.type, [itemResourceType, ...linkResourceTypes]),
-  ),
-  key(on(itemTargets, "node")),
-  contained(
-    on(itemTargets, "node", "package", "path"),
-    on(ItemRefDocument, "node", "package", "path"),
-  ),
-  contained(
-    on(ItemRefDocument, "node", "package", "path"),
-    on(itemTargets, "node", "package", "path"),
-  ),
-  contained(
-    on(ItemRefDocument, "document", "package", "path"),
-    on(Document, "node", "package", "path"),
-  ),
-  key(on(itemDocuments, "node")),
-  contained(on(ItemRefDocument, "document"), on(itemDocuments, "node")),
-] as const;
+const tokenCopies = [
+  tokenCopy("identifier", [...namedKinds, stimulusRefKind]),
+  tokenCopy("source-identifier", [mappingKind]),
+  tokenCopy("target-identifier", [mappingKind]),
+  tokenCopy("target", [branchRuleKind]),
+];
+
+/**
+ * The flag attributes {@link TestFlag} copies, each as {@link tokenCopies} holds a token.
+ */
+const flagCopies = flagCarriers.map(flagCopy);
 
 /**
  * Every statement over tests and sections, each `check` named by its law:
@@ -2180,11 +1445,788 @@ export const itemRefLaws = [
  * - **the jumps** ({@link BranchResolution}): `Branch_target` and `Branch_forward` (reading 87);
  * - **the items** ({@link ItemRefTarget}, {@link ItemRefDocument}): each item ref's href names an
  *   item document of the package or an LTI link (B2, B3, "Item ref target").
+ *
+ * The statements by the laws they state:
+ *
+ * The statements over the documents' rows, law "Test overlay" but the named checks: the document,
+ * its tokens and flags, its names, sections, parts, selections, orderings, sites and branch rules,
+ * and each item ref's href resolved, each its element's row, copying its node's tuple and its
+ * attributes' values, and each there exactly where its element is.
+ *
+ * The statements of reading 85's law, "Inclusion cycle": the instance tree, each instance's copy
+ * of its parent's scope and of its site, one child per site, one root per head and none for any
+ * other document, and two counts that make a chain returning to a document on it unrepresentable.
+ *
+ * - **A chain a head reaches:** the deferred foreign key `Instance(document, rootKind, children) →
+ *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site under it.
+ * - **A chain no head reaches**, such as two fragments each of which includes the other, which no
+ *   head places, and any fragment only they place: `TestDocument.instances` above 0, since none of
+ *   them is placed in any assembly. Its converse, every `Instance` row's document an assembled
+ *   one's, is the foreign key above; the containment the other way, `TestDocument(node, rootKind,
+ *   sites) ⊆ Instance(document, rootKind, children)`, has no key of `Instance` in its target's
+ *   projection, which grizzle refuses, so the count states it.
+ *
+ * The heads are {@link splicingParents}'s, by `Document.spliced`, mirrored with the roots both
+ * ways. Its `E1_derived` pins the root's fields and derives a member's scope.
+ *
+ * The statements of reading 86's law, "Test name key": each instance of a test's assembly holds
+ * one name per name of its document, their projection holds each written element once, so a
+ * section document placed twice names nothing twice, and no two written elements of one test share
+ * an identifier. Its `E1_derived` derives each name's scope in the assembly.
+ *
+ * The statements of reading 87's law, "Branch target": each instance of a test's assembly
+ * resolves each of its document's branch rules that names a target once, each resolution copies
+ * its rule, its source, its target and the names the ordering law reads. `Branch_target` judges
+ * its target's kind, part and replacement and that its instance holds the rule's, and
+ * `Branch_forward` that it lies after its source's end, unless the section that orders the two
+ * shuffles.
+ *
+ * The statements of B2's and B3's law, "Item ref target": each item ref has one
+ * {@link ItemRefTarget}, its href's path, named by a resource of the package of the item type or an
+ * LTI type; and each that names an item has its {@link ItemRefDocument}, the document there, whose
+ * root is an item.
  */
-export const testLaws = [
-  ...testOverlayLaws,
-  ...inclusionLaws,
-  ...testNameLaws,
-  ...branchLaws,
-  ...itemRefLaws,
-] as const;
+export const testLawsByName = {
+  "Branch forward": [
+    check("Branch_forward", BranchResolution, (b) =>
+      b.or(forward(b), b.and(b.ne(b.ownerKind, partKind), b.not(nested(b)), shuffled(b))),
+    ),
+  ],
+  "Branch target": [
+    contained(on(testInstances, "document", "rules"), on(TestDocument, "node", "rules")),
+    resolutionFamily,
+    contained(
+      on(BranchResolution, "instance", "assembly", "document", "instanceStart"),
+      on(Instance, "id", "assembly", "document", "start"),
+    ),
+    contained(
+      on(BranchResolution, "document", "rule", "target"),
+      on(BranchRule, "document", "node", "target"),
+    ),
+    contained(
+      on(BranchResolution, "rule", "owner", "ownerKind"),
+      on(BranchRule, "node", "parent", "parentKind"),
+    ),
+    contained(
+      on(BranchResolution, "instance", "owner", "ownerEnd", "ownerPart", "ownerStart"),
+      on(InstanceName, "instance", "node", "end", "part", "start"),
+    ),
+    contained(
+      on(BranchResolution, "targetInstance", "branch", "branchEnd", "branchPart", "branchStart"),
+      on(InstanceName, "instance", "node", "end", "part", "start"),
+    ),
+    contained(on(BranchResolution, "branch", "branchParent"), on(Named, "node", "parent")),
+    contained(
+      on(BranchResolution, "targetInstance", "targetNode", "target"),
+      on(InstanceName, "instance", "node", "identifier"),
+    ),
+    contained(
+      on(
+        BranchResolution,
+        "targetInstance",
+        "targetNode",
+        "assembly",
+        "targetEnd",
+        "targetKind",
+        "targetMixes",
+        "targetPart",
+        "targetReplaced",
+        "targetStart",
+      ),
+      on(
+        InstanceName,
+        "instance",
+        "node",
+        "assembly",
+        "end",
+        "kind",
+        "mixes",
+        "part",
+        "replaced",
+        "start",
+      ),
+    ),
+    contained(
+      on(
+        BranchResolution,
+        "targetInstance",
+        "common",
+        "assembly",
+        "commonEnd",
+        "commonKind",
+        "commonMixes",
+        "commonPart",
+        "commonReplaced",
+        "commonStart",
+      ),
+      on(
+        InstanceName,
+        "instance",
+        "node",
+        "assembly",
+        "end",
+        "kind",
+        "mixes",
+        "part",
+        "replaced",
+        "start",
+      ),
+    ),
+    contained(
+      on(BranchResolution, "targetInstance", "targetInstanceEnd", "targetInstanceStart"),
+      on(Instance, "id", "end", "start"),
+    ),
+    contained(
+      on(BranchResolution, "via", "viaEnd", "viaParent", "viaSiteStart", "viaStart"),
+      on(Instance, "id", "end", "parent", "siteStart", "start"),
+    ),
+    check("Branch_target", BranchResolution, (b) =>
+      b.and(
+        b.or(
+          b.and(b.eq(b.ownerKind, partKind), b.eq(b.targetKind, partKind)),
+          b.and(
+            b.ne(b.ownerKind, partKind),
+            b.in(b.targetKind, sectionTargets),
+            b.eq(b.targetPart, b.ownerPart),
+          ),
+        ),
+        b.not(b.and(b.eq(b.targetKind, itemRefKind), b.eq(b.targetReplaced, true))),
+        b.le(b.targetInstanceStart, b.instanceStart),
+        b.lt(b.instanceStart, b.targetInstanceEnd),
+        b.or(
+          b.and(sameInstance(b), b.eq(b.via, b.instance)),
+          b.and(
+            b.not(sameInstance(b)),
+            b.eq(b.viaParent, b.targetInstance),
+            b.le(b.viaStart, b.instanceStart),
+            b.lt(b.instanceStart, b.viaEnd),
+          ),
+        ),
+      ),
+    ),
+  ],
+  "Document entry": [
+    contained(on(sectionRefSites, "node"), on(SitePath, "node")),
+    key(on(sectionDocuments, "package", "path")),
+    contained(
+      on(sectionRefTargets, "package", "path", "target"),
+      on(sectionDocuments, "package", "path", "node"),
+    ),
+    contained(on(sectionRefPaths, "package", "path"), on(sectionDocuments, "package", "path")),
+  ],
+  "DocumentId key": [
+    ...tokenCopies.map((copy) => copy.key),
+    ...flagCopies.map((copy) => copy.key),
+    key(on(attributesOf("select", [selectionKind]), "node")),
+  ],
+  "E1 derived": [
+    check("E1_derived", TestToken, (t) =>
+      t.and(
+        t.eq(t.lexical, Compute.concat(Compute.concat(t.lead, t.value), t.trail)),
+        Compute.matches(t.value, collapsedPattern),
+      ),
+    ),
+    check("E1_derived", TestFlag, (f) =>
+      f.or(
+        f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTruePattern)),
+        f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTruePattern))),
+      ),
+    ),
+    check("E1_derived", Named, (n) =>
+      n.and(
+        n.in(n.kind, namedKinds),
+        n.or(n.eq(n.kind, sectionKind), n.and(n.eq(n.mixes, false), n.eq(n.looseChain, false))),
+        n.or(
+          n.eq(n.kind, sectionKind),
+          n.and(n.ne(n.kind, partKind), n.eq(n.parentKind, sectionKind)),
+          n.and(n.eq(n.kind, partKind), n.eq(n.part, n.node), n.eq(n.replaced, false)),
+          n.and(
+            n.ne(n.kind, partKind),
+            n.eq(n.parentKind, partKind),
+            n.eq(n.part, n.parent),
+            n.eq(n.replaced, false),
+          ),
+          n.and(
+            n.ne(n.kind, partKind),
+            n.ne(n.parentKind, partKind),
+            n.ne(n.parentKind, sectionKind),
+            n.eq(n.part, n.document),
+            n.eq(n.replaced, false),
+          ),
+        ),
+      ),
+    ),
+    check("E1_derived", Section, (s) =>
+      s.and(
+        s.or(
+          s.eq(s.parentKind, sectionKind),
+          s.and(
+            s.eq(s.parentKind, partKind),
+            s.eq(s.part, s.parent),
+            s.eq(s.replaced, false),
+            s.eq(s.parentMixes, false),
+            s.eq(s.parentLooseChain, false),
+          ),
+          s.and(
+            s.ne(s.parentKind, partKind),
+            s.ne(s.parentKind, sectionKind),
+            s.eq(s.part, s.document),
+            s.eq(s.replaced, false),
+            s.eq(s.parentMixes, false),
+            s.eq(s.parentLooseChain, true),
+          ),
+        ),
+        s.or(
+          s.and(
+            s.eq(s.replacing, true),
+            s.or(s.eq(s.replaced, true), s.eq(s.withReplacement, true)),
+          ),
+          s.and(s.eq(s.replacing, false), s.eq(s.replaced, false), s.eq(s.withReplacement, false)),
+        ),
+        s.or(
+          s.and(
+            s.eq(s.mixes, true),
+            s.or(s.eq(s.shuffle, true), s.and(loose(s), s.eq(s.parentMixes, true))),
+          ),
+          s.and(
+            s.eq(s.mixes, false),
+            s.eq(s.shuffle, false),
+            s.or(s.not(loose(s)), s.eq(s.parentMixes, false)),
+          ),
+        ),
+        s.or(
+          s.and(s.eq(s.looseChain, true), loose(s), s.eq(s.parentLooseChain, true)),
+          s.and(s.eq(s.looseChain, false), s.or(s.not(loose(s)), s.eq(s.parentLooseChain, false))),
+        ),
+      ),
+    ),
+    check("E1_derived", SectionMember, (m) => m.in(m.kind, sectionParts)),
+    check("E1_derived", SectionSelection, (s) =>
+      s.eq(
+        s.selectLexical,
+        Compute.concat(Compute.concat(s.selectLead, s.selectForm), s.selectTrail),
+      ),
+    ),
+    siteTargetFamily,
+    contextFold,
+    splicedFold,
+    check("E1_derived", Inclusion, (i) =>
+      i.eq(IncludeParentKind.at("kind", i.includeParent), i.parentKind),
+    ),
+    check("E1_derived", Site, (s) =>
+      s.and(
+        s.or(
+          s.and(s.eq(s.kind, sectionRefKind), s.in(s.parentKind, [sectionKind, partKind])),
+          s.and(s.eq(s.kind, includeKind), s.in(s.parentKind, includeParentKinds)),
+        ),
+        s.or(
+          s.eq(s.parentKind, sectionKind),
+          s.and(
+            s.eq(s.parentKind, partKind),
+            s.eq(s.part, s.parent),
+            s.eq(s.replaced, false),
+            s.eq(s.parentMixes, false),
+            s.eq(s.parentLooseChain, false),
+          ),
+          s.and(
+            s.not(s.in(s.parentKind, [sectionKind, partKind])),
+            s.eq(s.part, s.document),
+            s.eq(s.replaced, false),
+            s.eq(s.parentMixes, false),
+            s.eq(s.parentLooseChain, false),
+          ),
+        ),
+      ),
+    ),
+    check("E1_derived", BranchRule, (b) =>
+      b.and(
+        b.eq(b.kind, branchRuleKind),
+        b.not(b.in(b.target, exits)),
+        b.in(b.parentKind, [itemRefKind, sectionKind, partKind]),
+      ),
+    ),
+    contained(on(instanceRoots, "document"), on(headDocuments, "node")),
+    contained(on(TestDocument, "node"), on(assembledDocuments, "node")),
+    contained(
+      on(Instance, "document", "ids", "idrefTargets", "choices", "hottexts"),
+      on(Document, "node", "ids", "idrefTargets", "choices", "hottexts"),
+    ),
+    contained(
+      on(itemInstances, "document", "bindings", "langs", "variables"),
+      on(Document, "node", "bindings", "langs", "variables"),
+    ),
+    check("E1_derived", Instance, (i) =>
+      i.and(
+        i.or(i.eq(i.assemblyKind, testKind), i.and(i.eq(i.names, 0n), i.eq(i.rules, 0n))),
+        i.or(
+          i.eq(i.assemblyKind, itemKind),
+          i.and(i.eq(i.bindings, 0n), i.eq(i.langs, 0n), i.eq(i.variables, 0n)),
+        ),
+        i.or(
+          i.and(
+            i.eq(i.start, 0n),
+            i.eq(i.document, i.id),
+            i.eq(i.assemblyKind, i.rootKind),
+            i.eq(i.part, i.id),
+            i.eq(i.replaced, false),
+            i.eq(i.mixes, false),
+            i.eq(i.site, i.id),
+            i.eq(i.siteStart, 0n),
+            i.eq(i.sitePart, i.id),
+            i.eq(i.siteReplaced, false),
+            i.eq(i.siteMixes, false),
+            i.eq(i.siteLooseChain, false),
+          ),
+          i.and(i.gt(i.start, 0n), placedScope(i)),
+        ),
+      ),
+    ),
+    check("E1_derived", InstanceName, (n) =>
+      n.and(
+        n.or(
+          n.and(n.eq(n.namedPart, n.document), n.eq(n.part, n.instancePart)),
+          n.and(n.ne(n.namedPart, n.document), n.eq(n.part, n.namedPart)),
+        ),
+        n.or(
+          n.and(
+            n.eq(n.replaced, true),
+            n.or(n.eq(n.namedReplaced, true), n.eq(n.instanceReplaced, true)),
+          ),
+          n.and(
+            n.eq(n.replaced, false),
+            n.eq(n.namedReplaced, false),
+            n.eq(n.instanceReplaced, false),
+          ),
+        ),
+        n.or(
+          n.and(
+            n.eq(n.mixes, true),
+            n.or(
+              n.eq(n.namedMixes, true),
+              n.and(n.eq(n.namedLooseChain, true), n.eq(n.instanceMixes, true)),
+            ),
+          ),
+          n.and(
+            n.eq(n.mixes, false),
+            n.eq(n.namedMixes, false),
+            n.or(n.eq(n.namedLooseChain, false), n.eq(n.instanceMixes, false)),
+          ),
+        ),
+      ),
+    ),
+    contained(
+      on(ItemRefTarget, "node", "package", "path"),
+      on(hrefPaths, "node", "package", "path"),
+    ),
+  ],
+  "File exists": [
+    check("File_exists", SitePath, (s) => s.eq(s.entry, true)),
+    contained(on(entryPaths, "package", "path"), on(Entry, "package", "path")),
+  ],
+  "Fragment context": [
+    check("Fragment_context", SiteTarget, (s) =>
+      s.or(
+        s.and(s.eq(s.nearestKind, "document"), s.eq(s.targetNearestKind, "document")),
+        s.and(s.eq(s.nearest, s.targetNearest), s.eq(s.nearestKind, s.targetNearestKind)),
+      ),
+    ),
+  ],
+  "Include root": [
+    contained(
+      on(Inclusion, "version", "includeParent", "root"),
+      on(IncludeRoot, "version", "parent", "kind"),
+    ),
+  ],
+  "Include target": [
+    contained(on(includeSites, "node", "kind"), on(SitePath, "node", "kind")),
+    contained(on(includePaths, "node"), on(SiteTarget, "node")),
+    contained(
+      on(
+        SiteTarget,
+        "package",
+        "path",
+        "target",
+        "targetRoot",
+        "targetNearest",
+        "targetNearestKind",
+      ),
+      on(Document, "package", "path", "node", "rootKind", "contextNearest", "contextNearestKind"),
+    ),
+  ],
+  "Inclusion cycle": [
+    instanceTree,
+    contained(
+      on(
+        instanceMembers,
+        "parent",
+        "assemblyKind",
+        "parentDocument",
+        "parentMixes",
+        "parentPart",
+        "parentReplaced",
+      ),
+      on(Instance, "id", "assemblyKind", "document", "mixes", "part", "replaced"),
+    ),
+    contained(
+      on(
+        instanceMembers,
+        "parentDocument",
+        "site",
+        "siteLooseChain",
+        "siteMixes",
+        "sitePart",
+        "siteReplaced",
+        "siteStart",
+      ),
+      on(Site, "document", "node", "parentLooseChain", "parentMixes", "part", "replaced", "start"),
+    ),
+    contained(on(instanceMembers, "site", "document"), on(SiteTarget, "node", "target")),
+    key(on(instanceMembers, "parent", "site")),
+    contained(
+      on(Instance, "document", "rootKind", "children"),
+      on(TestDocument, "node", "rootKind", "sites"),
+    ),
+    key(on(instanceRoots, "document")),
+    contained(on(headDocuments, "node"), on(instanceRoots, "document")),
+    documentInstanceFamily,
+    check("Inclusion_cycle", TestDocument, (d) => d.gt(d.instances, 0n)),
+  ],
+  "Item ref target": [
+    mirrors(on(ItemRefTarget, "node"), on(nodesOf(itemRefKind), "id")),
+    contained(
+      on(ItemRefTarget, "package", "path", "type"),
+      on(NamedHref, "package", "path", "type"),
+    ),
+    check("Item_ref_target", ItemRefTarget, (t) =>
+      t.in(t.type, [itemResourceType, ...linkResourceTypes]),
+    ),
+    key(on(itemTargets, "node")),
+    contained(
+      on(itemTargets, "node", "package", "path"),
+      on(ItemRefDocument, "node", "package", "path"),
+    ),
+    contained(
+      on(ItemRefDocument, "node", "package", "path"),
+      on(itemTargets, "node", "package", "path"),
+    ),
+    contained(
+      on(ItemRefDocument, "document", "package", "path"),
+      on(Document, "node", "package", "path"),
+    ),
+    key(on(itemDocuments, "node")),
+    contained(on(ItemRefDocument, "document"), on(itemDocuments, "node")),
+  ],
+  "Selection bound": [
+    check("Selection_bound", SectionSelection, (s) =>
+      s.or(s.eq(s.withReplacement, true), s.le(s.select, Compute.base(s.members))),
+    ),
+  ],
+  "Selection required": [
+    key(on(requiredFlags, "node")),
+    contained(on(requiredMembers, "node"), on(requiredFlags, "node")),
+    key(on(requiredMembers, "node")),
+    contained(on(requiredParts, "node"), on(requiredMembers, "node")),
+    requiredFold,
+    check("Selection_required", SectionSelection, (s) => s.le(Compute.base(s.required), s.select)),
+  ],
+  "Stimulus ref key": [key(on(StimulusRef, "document", "identifier"))],
+  "Structure identifier": [key(on(Named, "document", "identifier"))],
+  "Test name key": [
+    contained(on(testInstances, "document", "names"), on(TestDocument, "node", "names")),
+    instanceNameFamily,
+    contained(
+      on(
+        InstanceName,
+        "instance",
+        "assembly",
+        "document",
+        "instanceMixes",
+        "instancePart",
+        "instanceReplaced",
+      ),
+      on(Instance, "id", "assembly", "document", "mixes", "part", "replaced"),
+    ),
+    contained(
+      on(InstanceName, "document", "node", "identifier"),
+      on(Named, "document", "node", "identifier"),
+    ),
+    contained(
+      on(
+        InstanceName,
+        "node",
+        "end",
+        "kind",
+        "namedLooseChain",
+        "namedMixes",
+        "namedPart",
+        "namedReplaced",
+        "start",
+      ),
+      on(Named, "node", "end", "kind", "looseChain", "mixes", "part", "replaced", "start"),
+    ),
+    assembledNameFamily,
+    contained(
+      on(InstanceName, "assembly", "node", "identifier"),
+      on(AssembledName, "assembly", "node", "identifier"),
+    ),
+    check("Test_name_key", AssembledName, (a) => a.gt(a.placements, 0n)),
+    key(on(AssembledName, "assembly", "identifier")),
+  ],
+  "Test overlay": [
+    ...tokenCopies.flatMap((copy) => copy.copies),
+    ...flagCopies.flatMap((copy) => copy.copies),
+    contained(
+      on(TestDocument, "node", "package", "path", "rootKind"),
+      on(Document, "node", "package", "path", "rootKind"),
+    ),
+    contained(
+      on(
+        select(Document, (d) => d.in(d.rootKind, assembledRoots)),
+        "node",
+      ),
+      on(TestDocument, "node"),
+    ),
+    siteFamily,
+    nameFamily,
+    ruleFamily,
+    contained(
+      on(Named, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(Named, "node", "end"), on(Node, "id", "end")),
+    contained(on(Named, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(
+      on(
+        select(Node, (n) => n.in(n.kind, namedKinds)),
+        "id",
+      ),
+      on(Named, "node"),
+    ),
+    contained(on(Named, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
+    contained(
+      on(
+        select(Named, (n) => n.eq(n.kind, sectionKind)),
+        "node",
+        "part",
+        "replaced",
+        "mixes",
+        "looseChain",
+      ),
+      on(Section, "node", "part", "replaced", "mixes", "looseChain"),
+    ),
+    contained(
+      on(
+        select(Named, (n) => n.and(n.ne(n.kind, sectionKind), n.eq(n.parentKind, sectionKind))),
+        "parent",
+        "part",
+        "replaced",
+      ),
+      on(Section, "node", "part", "replacing"),
+    ),
+    contained(
+      on(Section, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    mirrors(on(Section, "node"), on(nodesOf(sectionKind), "id")),
+    contained(on(Section, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(on(Section, "node", "visible"), on(flagsOf("visible"), "node", "value")),
+    contained(on(flagsOf("keep-together"), "node", "value"), on(Section, "node", "keepTogether")),
+    contained(
+      on(
+        select(Section, (s) => s.eq(s.keepTogether, false)),
+        "node",
+      ),
+      on(flagsOf("keep-together"), "node"),
+    ),
+    contained(
+      on(
+        select(Section, (s) => s.eq(s.parentKind, sectionKind)),
+        "parent",
+        "part",
+        "replaced",
+        "parentMixes",
+        "parentLooseChain",
+      ),
+      on(Section, "node", "part", "replacing", "mixes", "looseChain"),
+    ),
+    sectionFamily,
+    contained(
+      on(SectionMember, "node", "document", "kind", "start", "nearest", "version", "section"),
+      nodeRef,
+    ),
+    contained(
+      on(
+        select(Node, (n) => n.and(n.eq(n.parentKind, sectionKind), n.in(n.kind, sectionParts))),
+        "id",
+      ),
+      on(SectionMember, "node"),
+    ),
+    contained(on(TestFlag, "node", "kind", "parentKind"), on(Node, "id", "kind", "parentKind")),
+    contained(
+      on(SectionSelection, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    mirrors(on(SectionSelection, "node"), on(nodesOf(selectionKind), "id")),
+    contained(
+      on(attributesOf("select", [selectionKind]), "node", "lexical"),
+      on(SectionSelection, "node", "selectLexical"),
+    ),
+    contained(on(SectionSelection, "node"), on(attributesOf("select", [selectionKind]), "node")),
+    contained(
+      on(flagsOf("with-replacement"), "node", "value"),
+      on(SectionSelection, "node", "withReplacement"),
+    ),
+    contained(
+      on(
+        select(SectionSelection, (s) => s.eq(s.withReplacement, true)),
+        "node",
+      ),
+      on(flagsOf("with-replacement"), "node"),
+    ),
+    key(on(SectionSelection, "parent")),
+    contained(
+      on(SectionSelection, "parent", "members", "required", "withReplacement"),
+      on(Section, "node", "members", "required", "withReplacement"),
+    ),
+    contained(
+      on(
+        select(Section, (s) => s.eq(s.withReplacement, true)),
+        "node",
+      ),
+      on(SectionSelection, "parent"),
+    ),
+    contained(
+      on(SectionOrdering, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    mirrors(on(SectionOrdering, "node"), on(nodesOf(orderingKind), "id")),
+    contained(on(flagsOf("shuffle"), "node", "value"), on(SectionOrdering, "node", "shuffle")),
+    contained(
+      on(
+        select(SectionOrdering, (o) => o.eq(o.shuffle, true)),
+        "node",
+      ),
+      on(flagsOf("shuffle"), "node"),
+    ),
+    key(on(SectionOrdering, "parent")),
+    contained(on(SectionOrdering, "parent", "shuffle"), on(Section, "node", "shuffle")),
+    contained(
+      on(
+        select(Section, (s) => s.eq(s.shuffle, true)),
+        "node",
+      ),
+      on(SectionOrdering, "parent"),
+    ),
+    contained(on(nodesOf(itemRefKind), "id"), on(hrefPaths, "node")),
+    contained(
+      on(
+        Site,
+        "node",
+        "children",
+        "ancestry",
+        "document",
+        "documentType",
+        "governs",
+        "kind",
+        "nearest",
+        "nearestKind",
+        "parentKind",
+        "start",
+        "version",
+      ),
+      nodeContext,
+    ),
+    contained(on(Site, "node", "parent"), on(Node, "id", "parent")),
+    contained(on(SitePath, "node", "kind"), on(Site, "node", "kind")),
+    contained(on(SitePath, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
+    key(on(externalHrefs, "node")),
+    contained(on(externalSites, "node"), on(externalHrefs, "node")),
+    contained(
+      on(
+        SiteTarget,
+        "node",
+        "ancestry",
+        "document",
+        "kind",
+        "nearest",
+        "nearestKind",
+        "parentKind",
+        "version",
+      ),
+      on(
+        Site,
+        "node",
+        "ancestry",
+        "document",
+        "kind",
+        "nearest",
+        "nearestKind",
+        "parentKind",
+        "version",
+      ),
+    ),
+    contained(on(SiteTarget, "node", "package", "path"), on(SitePath, "node", "package", "path")),
+    contained(on(nodesOf(sectionRefKind), "id"), on(Site, "node")),
+    contained(on(includes, "id"), on(Site, "node")),
+    contained(
+      on(Inclusion, "node", "parentKind", "root", "version"),
+      on(SiteTarget, "node", "parentKind", "targetRoot", "version"),
+    ),
+    contained(on(includeTargets, "node"), on(Inclusion, "node")),
+    contained(
+      on(
+        select(Site, (s) => s.eq(s.parentKind, sectionKind)),
+        "parent",
+        "part",
+        "replaced",
+        "parentMixes",
+        "parentLooseChain",
+      ),
+      on(Section, "node", "part", "replacing", "mixes", "looseChain"),
+    ),
+    contained(
+      on(BranchRule, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(BranchRule, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(on(BranchRule, "node", "target"), on(tokensOf("target"), "node", "value")),
+    contained(
+      on(
+        select(TestToken, (t) => t.and(t.eq(t.name, "target"), t.not(t.in(t.value, exits)))),
+        "node",
+      ),
+      on(BranchRule, "node"),
+    ),
+    contained(
+      on(VariableMapping, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    mirrors(on(VariableMapping, "node"), on(nodesOf(mappingKind), "id")),
+    contained(
+      on(VariableMapping, "node", "source"),
+      on(tokensOf("source-identifier"), "node", "value"),
+    ),
+    contained(
+      on(VariableMapping, "node", "target"),
+      on(tokensOf("target-identifier"), "node", "value"),
+    ),
+    contained(
+      on(StimulusRef, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    mirrors(on(StimulusRef, "node"), on(nodesOf(stimulusRefKind), "id")),
+    contained(on(StimulusRef, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
+    contained(on(assembledDocuments, "node"), on(TestDocument, "node")),
+  ],
+  "Variable mapping target": [
+    key(on(VariableMapping, "parent", "target")),
+    check("Variable_mapping_target", VariableMapping, (v) =>
+      v.not(v.in(v.target, sessionVariables)),
+    ),
+  ],
+} as const;
+
+/**
+ * {@link testLawsByName}'s statements in one list, the module's laws as the schema composes them.
+ */
+export const testLaws = Object.values(testLawsByName).flat();
