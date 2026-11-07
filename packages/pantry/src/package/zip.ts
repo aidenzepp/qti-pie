@@ -301,7 +301,7 @@ const isDirectory = (name: string, versionMadeBy: number, attributes: number): b
  * Find the end record and the central directory it points at.
  *
  * The central directory must end exactly where the end record begins: APPNOTE's overall layout
- * places nothing between them but the ZIP64 records (section 4.3.6, reading 140), which are not
+ * places nothing between them but the ZIP64 records (section 4.3.6, reading 139), which are not
  * read, so an archive with other bytes in that gap is not a zip.
  *
  * @param archive - The zip file's path, naming refusals.

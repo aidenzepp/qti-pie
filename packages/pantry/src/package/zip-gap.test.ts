@@ -1,5 +1,5 @@
 /**
- * A zip's central directory ends where its end record begins (reading 140): `readZip` reads an
+ * A zip's central directory ends where its end record begins (reading 139): `readZip` reads an
  * archive whose end record follows its directory exactly, and refuses one with any other bytes
  * between them, as APPNOTE 6.3.10's overall layout (section 4.3.6) leaves room there for the ZIP64
  * end record and locator alone, which are not read.
