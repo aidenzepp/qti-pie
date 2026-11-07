@@ -18,6 +18,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { GoverningOf } from "#pantry/grammar/install.ts";
+import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { placedShareRowsOf, rowsOf } from "#pantry/import/overlays/mathml-share.ts";
 import type {
@@ -156,9 +157,14 @@ const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => 
 
 /**
  * The ids every case's rows are written under, `idOf`, numbering nodes in document order, in a
- * package that holds no document at any path.
+ * package that holds no document at any path, the document listed as an item's, a type whose
+ * records a package does not read.
  */
-const ids = { documentAt: () => Option.none(), idOf };
+const ids = {
+  documentAt: () => Option.none(),
+  documentType: "imsqti_item_xmlv3p0",
+  idOf,
+} as const satisfies IdentityIds;
 
 /**
  * The nodes a row set holds, in key order.
@@ -494,11 +500,13 @@ interface Written {
  * The ids of a written document.
  *
  * @param written - The document.
- * @returns Its ids, `base` and the node's number in document order, in an assembly.
+ * @returns Its ids, `base` and the node's number in document order, in an assembly, listed as
+ *   an item's as {@link ids} is.
  */
-const assembledIds = ({ base }: Written) => ({
+const assembledIds = ({ base }: Written): IdentityIds => ({
   assembled: true,
   documentAt: () => Option.none<NodeId>(),
+  documentType: ids.documentType,
   idOf: (index: number) => idOf(base + index),
 });
 
