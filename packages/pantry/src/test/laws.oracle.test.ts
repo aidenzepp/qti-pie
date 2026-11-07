@@ -581,8 +581,12 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
       assert.isTrue(float.held, float.breaches);
       assert.isFalse(identifier.held, identifier.breaches);
       assert.isFalse(builtIn.held, builtIn.breaches);
-      assert.isTrue(numAttempts.held, numAttempts.breaches);
-      assert.isTrue(duration.held, duration.breaches);
+      // numAttempts and duration stand as responses, which a feedback may not name: "Feedback
+      // reference" alone refuses them, as the import's rows do (built-in-roots.oracle).
+      assert.isFalse(numAttempts.held, numAttempts.breaches);
+      assert.isFalse(duration.held, duration.breaches);
+      assert.include(numAttempts.breaches, "Feedback reference");
+      assert.include(duration.breaches, "Feedback reference");
     }),
   );
 
@@ -640,8 +644,8 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
 
       assert.strictEqual(float.length, 1, shown(float));
       assert.strictEqual(identifier.length, 0, shown(identifier));
-      assert.strictEqual(numAttempts.length, 1, shown(numAttempts));
-      assert.strictEqual(duration.length, 1, shown(duration));
+      assert.strictEqual(numAttempts.length, 0, shown(numAttempts));
+      assert.strictEqual(duration.length, 0, shown(duration));
       assert.strictEqual(completionStatus.length, 0, shown(completionStatus));
     }),
   );
@@ -673,8 +677,8 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
         assert.strictEqual(float.length, 1, shown(float));
         assert.strictEqual(identifier.length, 0, shown(identifier));
         assert.strictEqual(both.length, 1, shown(both));
-        assert.strictEqual(numAttempts.length, 1, shown(numAttempts));
-        assert.strictEqual(duration.length, 1, shown(duration));
+        assert.strictEqual(numAttempts.length, 0, shown(numAttempts));
+        assert.strictEqual(duration.length, 0, shown(duration));
         assert.strictEqual(completionStatus.length, 0, shown(completionStatus));
       }),
   );

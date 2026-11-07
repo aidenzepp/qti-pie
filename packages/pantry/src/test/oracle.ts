@@ -4267,10 +4267,12 @@ const overlayLaws: readonly ((
       ({ kind }) => kind === "qti-outcome-declaration",
     );
     if (outcome === undefined) {
-      // A built-in session variable's name has no declaration, and the schema types it by the table
-      // `builtInBase` states for its name, whichever root the document has (an item's `duration` a
-      // float, a test's a duration): `numAttempts` and `duration` name no identifier outcome, and
-      // `completionStatus` is a single identifier (reading 77).
+      // A built-in session variable's name has no declaration. A feedback may name only one that
+      // stands as an outcome ("Feedback reference", over `ContentReference`): of the item root's
+      // rows, `completionStatus`, a single identifier (reading 77), so this types nothing the
+      // reference law accepts. `numAttempts` and `duration` stand as responses and
+      // `QTI_CONTEXT` as the context, which "Feedback reference" alone refuses, as the import's
+      // rows do (the built-in-roots differential).
       const at = { root: "qti-assessment-item", variable: named.value };
       const builtIn = overlay.laws.grammar.references.builtIn.lookup(at);
       const builtInBase = Option.map(
@@ -4279,6 +4281,7 @@ const overlayLaws: readonly ((
       );
 
       return Option.isSome(builtIn) &&
+        builtIn.value.declaration === "qti-outcome-declaration" &&
         !(
           Option.contains(builtInBase, "identifier") &&
           (builtIn.value.cardinality === "single" || builtIn.value.cardinality === "multiple")

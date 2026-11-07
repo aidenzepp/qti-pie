@@ -827,17 +827,19 @@ const feedbackTypeOf = (
     return [];
   }
 
-  // A built-in session variable's name is declared by no test, and the schema types it by the table
-  // `builtInBase` states for its name (the item root's rows): `numAttempts` and `duration` name no
-  // identifier outcome, and `completionStatus` is a single identifier.
+  // A built-in session variable's name is declared by no test. A feedback may name only one that
+  // stands as an outcome ("Feedback reference"): of the item root's rows, `completionStatus`, a
+  // single identifier. Any other, `numAttempts` and `duration` among them, "Feedback reference"
+  // alone refuses, as the import's rows do.
   const at = { root: "qti-assessment-item", variable: named.value };
   const baseType = Option.map(grammar.references.builtInBaseType.lookup(at), (row) => row.baseType);
 
   return Option.toArray(grammar.references.builtIn.lookup(at))
     .filter(
-      ({ cardinality }) =>
-        !Option.contains(baseType, "identifier") ||
-        (cardinality !== "single" && cardinality !== "multiple"),
+      ({ cardinality, declaration }) =>
+        declaration === "qti-outcome-declaration" &&
+        (!Option.contains(baseType, "identifier") ||
+          (cardinality !== "single" && cardinality !== "multiple")),
     )
     .map(({ cardinality }) =>
       breachAt(rows, node, "Feedback outcome type", {
