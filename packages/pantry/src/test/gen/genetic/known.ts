@@ -61,64 +61,19 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    
-    <resource identifier="section-res" type="imsqti_section_xmlv3p0" href="section.xml">
-      
-      
-    </resource>
-    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "section.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd http://ltsc.ieee.org/xsd/LOM https://purl.imsglobal.org/spec/md/v1p3/schema/xsd/imsmd_loose_v1p3p2.xsd http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd http://www.imsglobal.org/xsd/imsqti_metadata_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_metadatav3p0_v1p0.xsd">
-    
-    
-    
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
       ],
       [
         "test.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  
-  
-  
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    
-    <qti-assessment-section identifier="second" title="Second" visible="true">
-      
-      
-      
-      <qti-assessment-section-ref identifier="placement" href="section.xml"/>
-    </qti-assessment-section>
-  </qti-test-part>
-  
-</qti-assessment-test>`,
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
       ],
     ],
     fix: "NS4: a test-level id with no copy is a row of its own relation, never the nil uuid",
@@ -130,268 +85,13 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    <schema>QTI Package</schema>
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  <organizations/>
-  <resources>
-    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="items/item.xml">
-      <metadata>
-        <imsqti:qtiMetadata>
-          <imsqti:interactionType>choiceInteraction</imsqti:interactionType>
-        </imsqti:qtiMetadata>
-        <imsmd:lom>
-          <imsmd:general>
-            <imsmd:identifier><imsmd:entry>item1</imsmd:entry></imsmd:identifier>
-            <imsmd:title><imsmd:string language="en">Every relation</imsmd:string></imsmd:title>
-            <imsmd:language>en</imsmd:language>
-          </imsmd:general>
-        </imsmd:lom>
-      </metadata>
-      <file href="items/item.xml"/>
-      <file href="items/media/pic.png"/>
-      <dependency identifierref="stimulus1-res"/>
-    </resource>
-    <resource identifier="item2-res" type="imsqti_item_xmlv3p0" href="items/item2.xml">
-      <metadata>
-        <imsmd:lom>
-          <imsmd:general>
-            <imsmd:identifier><imsmd:entry>item2</imsmd:entry></imsmd:identifier>
-            <imsmd:title><imsmd:string language="en">Templated</imsmd:string></imsmd:title>
-            <imsmd:language>en</imsmd:language>
-          </imsmd:general>
-        </imsmd:lom>
-      </metadata>
-      <file href="items/item2.xml"/>
-      <dependency identifierref="fragment-res"/>
-    </resource>
-    <resource identifier="fragment-res" type="imsqti_fragment_xmlv3p0" href="items/fragment.xml">
-      <file href="items/fragment.xml"/>
-    </resource>
-    
-    
-    <resource identifier="stimulus1-res" type="imsqti_stimulus_xmlv3p0" href="items/stimulus.xml">
-      <file href="items/stimulus.xml"/>
-    </resource>
-    <resource identifier="section-res" type="imsqti_section_xmlv3p0" href="section.xml">
-      <file href="section.xml"/>
-      <dependency identifierref="item2-res"/>
-    </resource>
-    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
-      <metadata>
-        <imsmd:lom>
-          <imsmd:general>
-            <imsmd:identifier><imsmd:entry>test1</imsmd:entry></imsmd:identifier>
-            <imsmd:title><imsmd:string>Every relation test</imsmd:string></imsmd:title>
-          </imsmd:general>
-        </imsmd:lom>
-      </metadata>
-      <file href="test.xml"/>
-      <dependency identifierref="item1-res"/>
-      <dependency identifierref="item2-res"/>
-      <dependency identifierref="section-res"/>
-    </resource>
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<!-- The every-relation item. -->
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item1" title="Every relation" adaptive="false" time-dependent="false" xml:lang="en" tool-name="every-relation" tool-version="1">
-  <qti-context-declaration identifier="CTX" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>1</qti-value></qti-default-value>
-  </qti-context-declaration>
-  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
-    <qti-correct-response><qti-value>ChoiceA</qti-value></qti-correct-response>
-    <qti-mapping default-value="0">
-      <qti-map-entry map-key="ChoiceA" mapped-value="2"/>
-      <qti-map-entry map-key="ChoiceB" mapped-value="1"/>
-    </qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="HOT" cardinality="single" base-type="identifier"/>
-  <qti-response-declaration identifier="AREA" cardinality="single" base-type="identifier"/>
-  <qti-response-declaration identifier="LEVER" cardinality="single" base-type="integer">
-    <qti-mapping default-value="0"><qti-map-entry map-key="3" mapped-value="1"/></qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="WIDGET" cardinality="single" base-type="string"/>
-  <qti-response-declaration identifier="PORTABLE" cardinality="single" base-type="string"/>
-  <qti-response-declaration identifier="REAL" cardinality="single" base-type="float">
-    <qti-mapping default-value="0"><qti-map-entry map-key="2.5" mapped-value="1"/></qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="PAIRS" cardinality="multiple">
-    <qti-mapping default-value="0"><qti-map-entry map-key="A B" mapped-value="1"/></qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="LINKS" cardinality="multiple" base-type="directedPair">
-    <qti-mapping default-value="0"><qti-map-entry map-key="A B" mapped-value="1"/></qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="SPOT" cardinality="single" base-type="point">
-    <qti-mapping default-value="0"><qti-map-entry map-key="10 20" mapped-value="1"/></qti-mapping>
-    <qti-area-mapping default-value="0">
-      <qti-area-map-entry shape="rect" coords="0,0,10,10" mapped-value="1"/>
-    </qti-area-mapping>
-  </qti-response-declaration>
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float" normal-maximum="10" normal-minimum="0" mastery-value="5">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="LEVEL" cardinality="single" base-type="string">
-    <qti-match-table default-value="none">
-      <qti-match-table-entry source-value="1" target-value="low"/>
-      <qti-match-table-entry source-value="2" target-value="high"/>
-    </qti-match-table>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="GRADE" cardinality="single" base-type="float">
-    <qti-interpolation-table default-value="0">
-      <qti-interpolation-table-entry source-value="0" target-value="0"/>
-      <qti-interpolation-table-entry source-value="2.5" target-value="1" include-boundary="false"/>
-    </qti-interpolation-table>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="SUMMARY" cardinality="record">
-    <qti-default-value>
-      <qti-value field-identifier="attempts" base-type="integer">1</qti-value>
-      <qti-value field-identifier="note" base-type="string">none</qti-value>
-    </qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>
-  <qti-outcome-declaration identifier="DIGITS" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>10</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/>
-  <qti-template-declaration identifier="N" cardinality="0" base-type="integer"/>
-  <qti-template-processing>
-    <qti-set-template-value identifier="N"><qti-random-integer min="5" max="10"/></qti-set-template-value>
-    <qti-set-template-value identifier="SHOWN"><qti-base-value base-type="identifier">yes</qti-base-value></qti-set-template-value>
-  </qti-template-processing>
-  <qti-assessment-stimulus-ref identifier="stimulus1" href="stimulus.xml"/>
-  <qti-companion-materials-info>
-    <qti-calculator>
-      <qti-calculator-type>basic</qti-calculator-type>
-      <qti-description xsi:type="xs:IDREF">lead</qti-description>
-    </qti-calculator>
-  </qti-companion-materials-info>
-  <qti-item-body>
-    <div id="lead" label="lead" data-every="relation" aria-labelledby="caption" aria-valuemin="0" aria-valuemax="10">
-      <span id="caption">Look at the picture.</span>
-      <img src="media/pic.png" alt="A picture"/>
-    </div>
-    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>
-    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>
-    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>
-    <p>It says <q>read this</q> and stops.</p>
-    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>
-    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
-      <qti-prompt>Which one?</qti-prompt>
-      <qti-simple-choice identifier="ChoiceA">Choice ChoiceA.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">Choice ChoiceB.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceC">Choice ChoiceC.</qti-simple-choice>
-    </qti-choice-interaction>
-    <qti-hottext-interaction response-identifier="HOT" max-choices="1">
-      <p>Pick <qti-hottext identifier="H1">word 1</qti-hottext> or <qti-hottext identifier="H2">word 2</qti-hottext>.</p>
-    </qti-hottext-interaction>
-    <qti-hotspot-interaction response-identifier="AREA" max-choices="1">
-      <img src="media/pic.png" alt="A picture" width="20" height="20"/>
-      <qti-hotspot-choice identifier="S1" shape="rect" coords="0,0,10,10"/>
-      <qti-hotspot-choice identifier="S2" shape="circle" coords="15,15,4"/>
-    </qti-hotspot-interaction>
-    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>
-    <qti-custom-interaction response-identifier="WIDGET">
-      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>
-    </qti-custom-interaction>
-    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">
-      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>
-      <qti-context-variable identifier="CTX"/>
-    </qti-portable-custom-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-sum>
-        <qti-map-response identifier="RESPONSE"/>
-        <qti-map-response-point identifier="SPOT"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-    <qti-set-outcome-value identifier="COUNT">
-      <qti-round><qti-variable identifier="SCORE"/></qti-round>
-    </qti-set-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-and>
-          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal-rounded>
-          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal>
-        </qti-and>
-        <qti-set-outcome-value identifier="SCORE">
-          <qti-round-to rounding-mode="significantFigures" figures="3">
-            <qti-variable identifier="SCORE"/>
-          </qti-round-to>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>
-    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match>
-          <qti-variable identifier="RESPONSE"/>
-          <qti-correct identifier="RESPONSE"/>
-        </qti-match>
-        <qti-set-outcome-value identifier="FEEDBACK">
-          <qti-base-value base-type="identifier">RIGHT</qti-base-value>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  <qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="PLACE" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>1</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="VERDICT" cardinality="single" base-type="identifier"/>
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        <qti-branch-rule target="ref2"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule>
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        <qti-template-default template-identifier="N"><qti-base-value base-type="integer">7</qti-base-value></qti-template-default>
-      </qti-assessment-item-ref>
-      <qti-assessment-item-ref identifier="ref2" href="items/item2.xml"/>
-    </qti-assessment-section>
-    <qti-assessment-section identifier="second" title="Second" visible="true">
-      <qti-selection select="1"/>
-      <qti-ordering shuffle="false"/>
-      <qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/>
-      <qti-assessment-section-ref identifier="placement" href="section.xml"/>
-    </qti-assessment-section>
-  </qti-test-part>
-  <qti-outcome-processing>
-    <qti-set-outcome-value identifier="TOTAL">
-      <qti-sum>
-        <qti-variable identifier="ref1.SCORE"/>
-        <qti-test-variables variable-identifier="SCORE" base-type="float" section-identifier="first"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-  </qti-outcome-processing>
-</qti-assessment-test>`,
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item2.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
       ],
     ],
     fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
@@ -519,268 +219,13 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    <schema>QTI Package</schema>
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  <organizations/>
-  <resources>
-    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="items/item.xml">
-      <metadata>
-        <imsqti:qtiMetadata>
-          <imsqti:interactionType>choiceInteraction</imsqti:interactionType>
-        </imsqti:qtiMetadata>
-        <imsmd:lom>
-          <imsmd:general>
-            <imsmd:identifier><imsmd:entry>item1</imsmd:entry></imsmd:identifier>
-            <imsmd:title><imsmd:string language="en">Every relation</imsmd:string></imsmd:title>
-            <imsmd:language>en</imsmd:language>
-          </imsmd:general>
-        </imsmd:lom>
-      </metadata>
-      <file href="items/item.xml"/>
-      <file href="items/media/pic.png"/>
-      <dependency identifierref="stimulus1-res"/>
-    </resource>
-    <resource identifier="item2-res" type="imsqti_item_xmlv3p0" href="items/item2.xml">
-      <metadata>
-        <imsmd:lom>
-          <imsmd:general>
-            <imsmd:identifier><imsmd:entry>item2</imsmd:entry></imsmd:identifier>
-            <imsmd:title><imsmd:string language="en">Templated</imsmd:string></imsmd:title>
-            <imsmd:language>en</imsmd:language>
-          </imsmd:general>
-        </imsmd:lom>
-      </metadata>
-      <file href="items/item2.xml"/>
-      <dependency identifierref="fragment-res"/>
-    </resource>
-    <resource identifier="fragment-res" type="imsqti_fragment_xmlv3p0" href="items/fragment.xml">
-      <file href="items/fragment.xml"/>
-    </resource>
-    
-    
-    <resource identifier="stimulus1-res" type="imsqti_stimulus_xmlv3p0" href="items/stimulus.xml">
-      <file href="items/stimulus.xml"/>
-    </resource>
-    <resource identifier="section-res" type="imsqti_section_xmlv3p0" href="section.xml">
-      <file href="section.xml"/>
-      <dependency identifierref="item2-res"/>
-    </resource>
-    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
-      <metadata>
-        <imsmd:lom>
-          <imsmd:general>
-            <imsmd:identifier><imsmd:entry>test1</imsmd:entry></imsmd:identifier>
-            <imsmd:title><imsmd:string>Every relation test</imsmd:string></imsmd:title>
-          </imsmd:general>
-        </imsmd:lom>
-      </metadata>
-      <file href="test.xml"/>
-      <dependency identifierref="item1-res"/>
-      <dependency identifierref="item2-res"/>
-      <dependency identifierref="section-res"/>
-    </resource>
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<!-- The every-relation item. -->
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item1" title="Every relation" adaptive="false" time-dependent="false" xml:lang="en" tool-name="every-relation" tool-version="1">
-  <qti-context-declaration identifier="CTX" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>1</qti-value></qti-default-value>
-  </qti-context-declaration>
-  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
-    <qti-correct-response><qti-value>ChoiceA</qti-value></qti-correct-response>
-    <qti-mapping default-value="0">
-      <qti-map-entry map-key="ChoiceA" mapped-value="2"/>
-      <qti-map-entry map-key="ChoiceB" mapped-value="1"/>
-    </qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="HOT" cardinality="single" base-type="identifier"/>
-  <qti-response-declaration identifier="AREA" cardinality="single" base-type="identifier"/>
-  <qti-response-declaration identifier="LEVER" cardinality="single" base-type="integer">
-    <qti-mapping default-value="0"><qti-map-entry map-key="3" mapped-value="1"/></qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="WIDGET" cardinality="single" base-type="string"/>
-  <qti-response-declaration identifier="PORTABLE" cardinality="single" base-type="string"/>
-  <qti-response-declaration identifier="REAL" cardinality="single" base-type="float">
-    <qti-mapping default-value="0"><qti-map-entry map-key="2.5" mapped-value="1"/></qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="PAIRS" cardinality="multiple">
-    <qti-mapping default-value="0"><qti-map-entry map-key="A B" mapped-value="1"/></qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="LINKS" cardinality="multiple" base-type="directedPair">
-    <qti-mapping default-value="0"><qti-map-entry map-key="A B" mapped-value="1"/></qti-mapping>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="SPOT" cardinality="single" base-type="point">
-    <qti-mapping default-value="0"><qti-map-entry map-key="10 20" mapped-value="1"/></qti-mapping>
-    <qti-area-mapping default-value="0">
-      <qti-area-map-entry shape="rect" coords="0,0,10,10" mapped-value="1"/>
-    </qti-area-mapping>
-  </qti-response-declaration>
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float" normal-maximum="10" normal-minimum="0" mastery-value="5">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="LEVEL" cardinality="single" base-type="string">
-    <qti-match-table default-value="none">
-      <qti-match-table-entry source-value="1" target-value="low"/>
-      <qti-match-table-entry source-value="2" target-value="high"/>
-    </qti-match-table>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="GRADE" cardinality="single" base-type="float">
-    <qti-interpolation-table default-value="0">
-      <qti-interpolation-table-entry source-value="0" target-value="0"/>
-      <qti-interpolation-table-entry source-value="2.5" target-value="1" include-boundary="false"/>
-    </qti-interpolation-table>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="SUMMARY" cardinality="record">
-    <qti-default-value>
-      <qti-value field-identifier="attempts" base-type="integer">1</qti-value>
-      <qti-value field-identifier="note" base-type="string">none</qti-value>
-    </qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>
-  <qti-outcome-declaration identifier="DIGITS" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>10</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/>
-  <qti-template-declaration identifier="N" cardinality="0" base-type="integer"/>
-  <qti-template-processing>
-    <qti-set-template-value identifier="N"><qti-random-integer min="5" max="10"/></qti-set-template-value>
-    <qti-set-template-value identifier="SHOWN"><qti-base-value base-type="identifier">yes</qti-base-value></qti-set-template-value>
-  </qti-template-processing>
-  <qti-assessment-stimulus-ref identifier="stimulus1" href="stimulus.xml"/>
-  <qti-companion-materials-info>
-    <qti-calculator>
-      <qti-calculator-type>basic</qti-calculator-type>
-      <qti-description xsi:type="xs:IDREF">lead</qti-description>
-    </qti-calculator>
-  </qti-companion-materials-info>
-  <qti-item-body>
-    <div id="lead" label="lead" data-every="relation" aria-labelledby="caption" aria-valuemin="0" aria-valuemax="10">
-      <span id="caption">Look at the picture.</span>
-      <img src="media/pic.png" alt="A picture"/>
-    </div>
-    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>
-    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>
-    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>
-    <p>It says <q>read this</q> and stops.</p>
-    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>
-    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
-      <qti-prompt>Which one?</qti-prompt>
-      <qti-simple-choice identifier="ChoiceA">Choice ChoiceA.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">Choice ChoiceB.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceC">Choice ChoiceC.</qti-simple-choice>
-    </qti-choice-interaction>
-    <qti-hottext-interaction response-identifier="HOT" max-choices="1">
-      <p>Pick <qti-hottext identifier="H1">word 1</qti-hottext> or <qti-hottext identifier="H2">word 2</qti-hottext>.</p>
-    </qti-hottext-interaction>
-    <qti-hotspot-interaction response-identifier="AREA" max-choices="1">
-      <img src="media/pic.png" alt="A picture" width="20" height="20"/>
-      <qti-hotspot-choice identifier="S1" shape="rect" coords="0,0,10,10"/>
-      <qti-hotspot-choice identifier="S2" shape="circle" coords="15,15,4"/>
-    </qti-hotspot-interaction>
-    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>
-    <qti-custom-interaction response-identifier="WIDGET">
-      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>
-    </qti-custom-interaction>
-    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">
-      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>
-      <qti-context-variable identifier="CTX"/>
-    </qti-portable-custom-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-sum>
-        <qti-map-response identifier="RESPONSE"/>
-        <qti-map-response-point identifier="SPOT"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-    <qti-set-outcome-value identifier="COUNT">
-      <qti-round><qti-variable identifier="SCORE"/></qti-round>
-    </qti-set-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-and>
-          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal-rounded>
-          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal>
-        </qti-and>
-        <qti-set-outcome-value identifier="SCORE">
-          <qti-round-to rounding-mode="significantFigures" figures="3">
-            <qti-variable identifier="SCORE"/>
-          </qti-round-to>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>
-    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match>
-          <qti-variable identifier="RESPONSE"/>
-          <qti-correct identifier="RESPONSE"/>
-        </qti-match>
-        <qti-set-outcome-value identifier="FEEDBACK">
-          <qti-base-value base-type="identifier">RIGHT</qti-base-value>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  <qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="PLACE" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>1</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="VERDICT" cardinality="single" base-type="identifier"/>
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        <qti-branch-rule target="ref2"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule>
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        <qti-template-default template-identifier="N"><qti-base-value base-type="integer">7</qti-base-value></qti-template-default>
-      </qti-assessment-item-ref>
-      <qti-assessment-item-ref identifier="ref2" href="items/item2.xml"/>
-    </qti-assessment-section>
-    <qti-assessment-section identifier="second" title="Second" visible="true">
-      <qti-selection select="1"/>
-      <qti-ordering shuffle="false"/>
-      <qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/>
-      <qti-assessment-section-ref identifier="placement" href="section.xml"/>
-    </qti-assessment-section>
-  </qti-test-part>
-  <qti-outcome-processing>
-    <qti-set-outcome-value identifier="TOTAL">
-      <qti-sum>
-        <qti-variable identifier="ref1.SCORE"/>
-        <qti-test-variables variable-identifier="SCORE" base-type="float" section-identifier="first"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-  </qti-outcome-processing>
-</qti-assessment-test>`,
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
       ],
     ],
     fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
@@ -792,64 +237,19 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    
-    <resource identifier="section-res" type="imsqti_section_xmlv3p0" href="section.xml">
-      
-      
-    </resource>
-    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "section.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd http://ltsc.ieee.org/xsd/LOM https://purl.imsglobal.org/spec/md/v1p3/schema/xsd/imsmd_loose_v1p3p2.xsd http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd http://www.imsglobal.org/xsd/imsqti_metadata_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_metadatav3p0_v1p0.xsd">
-    
-    
-    
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
       ],
       [
         "test.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  
-  
-  
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    
-    <qti-assessment-section identifier="second" title="Second" visible="true">
-      
-      
-      
-      <qti-assessment-section-ref identifier="placement" href="section.xml"/>
-    </qti-assessment-section>
-  </qti-test-part>
-  
-</qti-assessment-test>`,
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
       ],
     ],
     fix: "NS4: a test-level id with no copy is a row of its own relation, never the nil uuid",
@@ -971,142 +371,13 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="items/item.xml">
-      
-      
-      
-      
-    </resource>
-    
-    
-    
-    
-    
-    
-    
-    
-  </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
       ],
       [
         "items/item.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<!-- The every-relation item. -->
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item1" title="Every relation" adaptive="false" time-dependent="false" xml:lang="en" tool-name="every-relation" tool-version="1">
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <qti-assessment-stimulus-ref identifier="stimulus1" href="stimulus.xml"/>
-  <qti-companion-materials-info>
-    <qti-calculator>
-      <qti-calculator-type>basic</qti-calculator-type>
-      <qti-description xsi:type="xs:IDREF">lead</qti-description>
-    </qti-calculator>
-  </qti-companion-materials-info>
-  <qti-item-body>
-    <div id="lead" label="lead" data-every="relation" aria-labelledby="caption" aria-valuemin="0" aria-valuemax="10">
-      <span id="caption">Look at the picture.</span>
-      <img src="media/pic.png" alt="A picture"/>
-    </div>
-    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>
-    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>
-    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>
-    <p>It says <q>read this</q> and stops.</p>
-    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>
-    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
-      <qti-prompt>Which one?</qti-prompt>
-      <qti-simple-choice identifier="ChoiceA">Choice ChoiceA.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">Choice ChoiceB.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceC">Choice ChoiceC.</qti-simple-choice>
-    </qti-choice-interaction>
-    <qti-hottext-interaction response-identifier="HOT" max-choices="1">
-      <p>Pick <qti-hottext identifier="H1">word 1</qti-hottext> or <qti-hottext identifier="H2">word 2</qti-hottext>.</p>
-    </qti-hottext-interaction>
-    <qti-hotspot-interaction response-identifier="AREA" max-choices="1">
-      <img src="media/pic.png" alt="A picture" width="20" height="20"/>
-      <qti-hotspot-choice identifier="S1" shape="rect" coords="0,0,10,10"/>
-      <qti-hotspot-choice identifier="S2" shape="circle" coords="15,15,4"/>
-    </qti-hotspot-interaction>
-    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>
-    <qti-custom-interaction response-identifier="WIDGET">
-      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>
-    </qti-custom-interaction>
-    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">
-      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>
-      <qti-context-variable identifier="CTX"/>
-    </qti-portable-custom-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-sum>
-        <qti-map-response identifier="RESPONSE"/>
-        <qti-map-response-point identifier="SPOT"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-    <qti-set-outcome-value identifier="COUNT">
-      <qti-round><qti-variable identifier="SCORE"/></qti-round>
-    </qti-set-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-and>
-          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal-rounded>
-          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal>
-        </qti-and>
-        <qti-set-outcome-value identifier="SCORE">
-          <qti-round-to rounding-mode="significantFigures" figures="3">
-            <qti-variable identifier="SCORE"/>
-          </qti-round-to>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>
-    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match>
-          <qti-variable identifier="RESPONSE"/>
-          <qti-correct identifier="RESPONSE"/>
-        </qti-match>
-        <qti-set-outcome-value identifier="FEEDBACK">
-          <qti-base-value base-type="identifier">RIGHT</qti-base-value>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
       ],
     ],
     fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
@@ -1251,284 +522,13 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    
-    
-    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "items/fragment.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xml:lang="en">
-  
-  
-  
-  
-  
-</div>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<!-- The every-relation item. -->
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item1" title="Every relation" adaptive="false" time-dependent="false" xml:lang="en" tool-name="every-relation" tool-version="1">
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <qti-outcome-declaration identifier="GRADE" cardinality="single" base-type="float">
-    <qti-interpolation-table default-value="0">
-      <qti-interpolation-table-entry source-value="0" target-value="0"/>
-      <qti-interpolation-table-entry source-value="2.5" target-value="1" include-boundary="false"/>
-    </qti-interpolation-table>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="SUMMARY" cardinality="record">
-    <qti-default-value>
-      <qti-value field-identifier="attempts" base-type="integer">1</qti-value>
-      <qti-value field-identifier="note" base-type="string">none</qti-value>
-    </qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>
-  <qti-outcome-declaration identifier="DIGITS" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>10</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/>
-  <qti-template-declaration identifier="N" cardinality="single" base-type="integer"/>
-  <qti-template-processing>
-    <qti-set-template-value identifier="N"><qti-random-integer min="5" max="10"/></qti-set-template-value>
-    <qti-set-template-value identifier="SHOWN"><qti-base-value base-type="identifier">yes</qti-base-value></qti-set-template-value>
-  </qti-template-processing>
-  <qti-assessment-stimulus-ref identifier="stimulus1" href="item.xml"/>
-  <qti-companion-materials-info>
-    <qti-calculator>
-      <qti-calculator-type>basic</qti-calculator-type>
-      <qti-description xsi:type="xs:IDREF">lead</qti-description>
-    </qti-calculator>
-  </qti-companion-materials-info>
-  <qti-item-body>
-    <div id="lead" label="lead" data-every="relation" aria-labelledby="caption" aria-valuemin="0" aria-valuemax="10">
-      <span id="caption">Look at the picture.</span>
-      <img src="media/pic.png" alt="A picture"/>
-    </div>
-    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>
-    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>
-    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>
-    <p>It says <q>read this</q> and stops.</p>
-    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>
-    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
-      <qti-prompt>Which one?</qti-prompt>
-      <qti-simple-choice identifier="ChoiceA">Choice ChoiceA.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">Choice ChoiceB.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceC">Choice ChoiceC.</qti-simple-choice>
-    </qti-choice-interaction>
-    <qti-hottext-interaction response-identifier="HOT" max-choices="1">
-      <p>Pick <qti-hottext identifier="H1">word 1</qti-hottext> or <qti-hottext identifier="H2">word 2</qti-hottext>.</p>
-    </qti-hottext-interaction>
-    <qti-hotspot-interaction response-identifier="AREA" max-choices="1">
-      <img src="media/pic.png" alt="A picture" width="20" height="20"/>
-      <qti-hotspot-choice identifier="S1" shape="rect" coords="0,0,10,10"/>
-      <qti-hotspot-choice identifier="S2" shape="circle" coords="15,15,4"/>
-    </qti-hotspot-interaction>
-    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>
-    <qti-custom-interaction response-identifier="WIDGET">
-      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>
-    </qti-custom-interaction>
-    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">
-      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>
-      <qti-context-variable identifier="CTX"/>
-    </qti-portable-custom-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-sum>
-        <qti-map-response identifier="RESPONSE"/>
-        <qti-map-response-point identifier="SPOT"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-    <qti-set-outcome-value identifier="COUNT">
-      <qti-round><qti-variable identifier="SCORE"/></qti-round>
-    </qti-set-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-and>
-          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal-rounded>
-          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal>
-        </qti-and>
-        <qti-set-outcome-value identifier="SCORE">
-          <qti-round-to rounding-mode="significantFigures" figures="3">
-            <qti-variable identifier="SCORE"/>
-          </qti-round-to>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>
-    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match>
-          <qti-variable identifier="RESPONSE"/>
-          <qti-correct identifier="RESPONSE"/>
-        </qti-match>
-        <qti-set-outcome-value identifier="FEEDBACK">
-          <qti-base-value base-type="identifier">RIGHT</qti-base-value>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`,
-      ],
-      [
-        "items/item2.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item2" title="Templated" adaptive="false" time-dependent="false">
-  <qti-context-declaration identifier="CTX2" cardinality="single" base-type="integer"/>
-  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
-    <qti-correct-response><qti-value>ChoiceA</qti-value></qti-correct-response>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="TEXT" cardinality="single" base-type="string"/>
-  <qti-response-declaration identifier="WORD" cardinality="single" base-type="identifier"/>
-  <qti-response-declaration identifier="WIDGET2" cardinality="single" base-type="string"/>
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/>
-  <qti-item-body>
-    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
-      <qti-simple-choice identifier="ChoiceA">Yes.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">No.</qti-simple-choice>
-    </qti-choice-interaction>
-    <xi:include href="fragment.xml"/>
-  </qti-item-body>
-  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
-</qti-assessment-item>`,
-      ],
-      [
-        "items/item3.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item3" title="Ruled" adaptive="false" time-dependent="false">
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>
-  <qti-item-body><p>Scored by its included rule.</p></qti-item-body>
-  <qti-response-processing><xi:include href="rules.xml"/></qti-response-processing>
-</qti-assessment-item>`,
-      ],
-      [
-        "items/rules.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
-  <qti-response-if>
-    <qti-gte>
-      <qti-variable identifier="numAttempts"/>
-      <qti-base-value base-type="integer">1</qti-base-value>
-    </qti-gte>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-base-value base-type="float">1</qti-base-value>
-    </qti-set-outcome-value>
-  </qti-response-if>
-</qti-response-condition>`,
-      ],
-      [
-        "items/stimulus.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE qti-assessment-stimulus SYSTEM "stimulus.dtd">
-<!-- The every-relation stimulus. -->
-<?every-relation stimulus?>
-<qti-assessment-stimulus xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="stimulus1" title="A stimulus">
-  <qti-stimulus-body>
-    
-  </qti-stimulus-body>
-</qti-assessment-stimulus>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "test.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  <qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="PLACE" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>1</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="VERDICT" cardinality="single" base-type="identifier"/>
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        <qti-branch-rule target="ref2"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule>
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        <qti-template-default template-identifier="N"><qti-base-value base-type="integer">7</qti-base-value></qti-template-default>
-      </qti-assessment-item-ref>
-      <qti-assessment-item-ref identifier="ref2" href="items/item2.xml"/>
-    </qti-assessment-section>
-    <qti-assessment-section identifier="second" title="Second" visible="true">
-      <qti-selection select="1"/>
-      <qti-ordering shuffle="false"/>
-      <qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/>
-      <qti-assessment-section-ref identifier="placement" href="section.xml"/>
-    </qti-assessment-section>
-  </qti-test-part>
-  <qti-outcome-processing>
-    <qti-set-outcome-value identifier="TOTAL">
-      <qti-sum>
-        <qti-variable identifier="ref1.SCORE"/>
-        <qti-test-variables variable-identifier="SCORE" base-type="float" section-identifier="first"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-  </qti-outcome-processing>
-</qti-assessment-test>`,
-      ],
-      [
-        "usage.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<usageData xmlns="http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0">
-  <ordinaryStatistic name="P-value" context="http://example.org/contexts/every-relation" caseCount="10" stdError="0.01" lastUpdated="2026-11-06">
-    <targetObject identifier="item1"/>
-    <value baseType="float">0.5</value>
-  </ordinaryStatistic>
-</usageData>`,
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
       ],
     ],
     fix: "(4) a path a manifest lists or an include names with no entry is refused under one rule",
@@ -1541,414 +541,19 @@ export const known = {
           "imsmanifest.xml",
           "xml",
           `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    
-    <resource identifier="section-res" type="imsqti_section_xmlv3p0" href="section.xml">
-      
-      
-    </resource>
-    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
-        ],
-        [
-          "items/fragment.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xml:lang="en">
-  
-  
-  
-  
-  
-</div>`,
-        ],
-        [
-          "items/item.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<!-- The every-relation item. -->
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item1" title="Every relation" adaptive="false" time-dependent="false" xml:lang="en" tool-name="every-relation" tool-version="1">
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <qti-outcome-declaration identifier="LEVEL" cardinality="single" base-type="string">
-    <qti-match-table default-value="none">
-      <qti-match-table-entry source-value="1" target-value="low"/>
-      <qti-match-table-entry source-value="2" target-value="high"/>
-    </qti-match-table>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="GRADE" cardinality="single" base-type="float">
-    <qti-interpolation-table default-value="0">
-      <qti-interpolation-table-entry source-value="0" target-value="0"/>
-      <qti-interpolation-table-entry source-value="2.5" target-value="1" include-boundary="false"/>
-    </qti-interpolation-table>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="SUMMARY" cardinality="record">
-    <qti-default-value>
-      <qti-value field-identifier="attempts" base-type="integer">1</qti-value>
-      <qti-value field-identifier="note" base-type="string">none</qti-value>
-    </qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>
-  <qti-outcome-declaration identifier="DIGITS" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>10</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/>
-  <qti-template-declaration identifier="N" cardinality="single" base-type="integer"/>
-  <qti-template-processing>
-    <qti-set-template-value identifier="N"><qti-random-integer min="5" max="10"/></qti-set-template-value>
-    <qti-set-template-value identifier="SHOWN"><qti-base-value base-type="identifier">yes</qti-base-value></qti-set-template-value>
-  </qti-template-processing>
-  <qti-assessment-stimulus-ref identifier="stimulus1" href="stimulus.xml"/>
-  <qti-companion-materials-info>
-    <qti-calculator>
-      <qti-calculator-type>basic</qti-calculator-type>
-      <qti-description xsi:type="xs:IDREF">lead</qti-description>
-    </qti-calculator>
-  </qti-companion-materials-info>
-  <qti-item-body>
-    <div id="lead" label="lead" data-every="relation" aria-labelledby="caption" aria-valuemin="0" aria-valuemax="10">
-      <span id="caption">Look at the picture.</span>
-      <img src="media/pic.png" alt="A picture"/>
-    </div>
-    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>
-    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>
-    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>
-    <p>It says <q>read this</q> and stops.</p>
-    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>
-    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
-      <qti-prompt>Which one?</qti-prompt>
-      <qti-simple-choice identifier="ChoiceA">Choice ChoiceA.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">Choice ChoiceB.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceC">Choice ChoiceC.</qti-simple-choice>
-    </qti-choice-interaction>
-    <qti-hottext-interaction response-identifier="HOT" max-choices="1">
-      <p>Pick <qti-hottext identifier="H1">word 1</qti-hottext> or <qti-hottext identifier="H2">word 2</qti-hottext>.</p>
-    </qti-hottext-interaction>
-    <qti-hotspot-interaction response-identifier="AREA" max-choices="1">
-      <img src="media/pic.png" alt="A picture" width="20" height="20"/>
-      <qti-hotspot-choice identifier="S1" shape="rect" coords="0,0,10,10"/>
-      <qti-hotspot-choice identifier="S2" shape="circle" coords="15,15,4"/>
-    </qti-hotspot-interaction>
-    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>
-    <qti-custom-interaction response-identifier="WIDGET">
-      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>
-    </qti-custom-interaction>
-    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">
-      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>
-      <qti-context-variable identifier="CTX"/>
-    </qti-portable-custom-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-sum>
-        <qti-map-response identifier="RESPONSE"/>
-        <qti-map-response-point identifier="SPOT"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-    <qti-set-outcome-value identifier="COUNT">
-      <qti-round><qti-variable identifier="SCORE"/></qti-round>
-    </qti-set-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-and>
-          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal-rounded>
-          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal>
-        </qti-and>
-        <qti-set-outcome-value identifier="SCORE">
-          <qti-round-to rounding-mode="significantFigures" figures="3">
-            <qti-variable identifier="SCORE"/>
-          </qti-round-to>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>
-    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match>
-          <qti-variable identifier="RESPONSE"/>
-          <qti-correct identifier="RESPONSE"/>
-        </qti-match>
-        <qti-set-outcome-value identifier="FEEDBACK">
-          <qti-base-value base-type="identifier">RIGHT</qti-base-value>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`,
-        ],
-        [
-          "items/item2.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item2" title="Templated" adaptive="false" time-dependent="false">
-  <qti-context-declaration identifier="CTX2" cardinality="single" base-type="integer"/>
-  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
-    <qti-correct-response><qti-value>ChoiceA</qti-value></qti-correct-response>
-  </qti-response-declaration>
-  <qti-response-declaration identifier="TEXT" cardinality="single" base-type="string"/>
-  <qti-response-declaration identifier="WORD" cardinality="single" base-type="identifier"/>
-  <qti-response-declaration identifier="WIDGET2" cardinality="single" base-type="string"/>
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/>
-  <qti-item-body>
-    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
-      <qti-simple-choice identifier="ChoiceA">Yes.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">No.</qti-simple-choice>
-    </qti-choice-interaction>
-    <xi:include href="fragment.xml"/>
-  </qti-item-body>
-  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
-</qti-assessment-item>`,
-        ],
-        [
-          "items/item3.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item3" title="Ruled" adaptive="false" time-dependent="false">
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>
-  <qti-item-body><p>Scored by its included rule.</p></qti-item-body>
-  <qti-response-processing><xi:include href="rules.xml"/></qti-response-processing>
-</qti-assessment-item>`,
-        ],
-        [
-          "items/rules.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
-  <qti-response-if>
-    <qti-gte>
-      <qti-variable identifier="numAttempts"/>
-      <qti-base-value base-type="integer">1</qti-base-value>
-    </qti-gte>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-base-value base-type="float">1</qti-base-value>
-    </qti-set-outcome-value>
-  </qti-response-if>
-</qti-response-condition>`,
-        ],
-        [
-          "items/stimulus.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE qti-assessment-stimulus SYSTEM "stimulus.dtd">
-<!-- The every-relation stimulus. -->
-<?every-relation stimulus?>
-<qti-assessment-stimulus xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="stimulus1" title="A stimulus">
-  <qti-stimulus-body>
-    
-  </qti-stimulus-body>
-</qti-assessment-stimulus>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
         ],
         [
           "section.xml",
           "xml",
           `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd http://ltsc.ieee.org/xsd/LOM https://purl.imsglobal.org/spec/md/v1p3/schema/xsd/imsmd_loose_v1p3p2.xsd http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd http://www.imsglobal.org/xsd/imsqti_metadata_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_metadatav3p0_v1p0.xsd">
-    <metadata>
-        <schema>QTI Package</schema>
-        <schemaversion>3.0.0</schemaversion>
-        <imsmd:lom>
-            <imsmd:general>
-                <imsmd:title>
-                    <imsmd:string>Example Package</imsmd:string>
-                </imsmd:title>
-                <imsmd:language>en</imsmd:language>
-                <imsmd:description>
-                    <imsmd:string>This is an example Contentpackage containing a
-                        single QTI v3.0 item</imsmd:string>
-                </imsmd:description>
-            </imsmd:general>
-            <imsmd:lifeCycle>
-                <imsmd:version>
-                    <imsmd:string>3.0</imsmd:string>
-                </imsmd:version>
-                <imsmd:status>
-                    <imsmd:source>LOMv1.0</imsmd:source>
-                    <imsmd:value>Final</imsmd:value>
-                </imsmd:status>
-            </imsmd:lifeCycle>
-            <imsmd:metaMetadata>
-                <imsmd:metadataschema>LOMv1.0</imsmd:metadataschema>
-                <imsmd:metadataschema>QTIv3.0</imsmd:metadataschema>
-                <imsmd:language>en</imsmd:language>
-            </imsmd:metaMetadata>
-            <imsmd:technical>
-                <imsmd:format>text/x-imsqti-item-xml</imsmd:format>
-                <imsmd:format>image/png</imsmd:format>
-            </imsmd:technical>
-            <imsmd:rights>
-                <imsmd:description>
-                    <imsmd:string>(c) 2005, 2019 IMS Global Learning Consortium;
-                        individual items may have their own copyright statements.</imsmd:string>
-                </imsmd:description>
-            </imsmd:rights>
-        </imsmd:lom>
-    </metadata>
-    <organizations/>
-    <resources>
-        <resource identifier="choice" type="imsqti_item_xmlv3p0" href="choice.xml">
-            <metadata>
-                <imsqti:qtiMetadata>
-                    <imsqti:timeDependent>false</imsqti:timeDependent>
-                    <imsqti:interactionType>choiceInteraction</imsqti:interactionType>
-                    <imsqti:feedbackType>none</imsqti:feedbackType>
-                    <imsqti:solutionAvailable>true</imsqti:solutionAvailable>
-                </imsqti:qtiMetadata>
-                <imsmd:lom>
-                    <imsmd:general>
-                        <imsmd:identifier>
-                            <imsmd:entry>choice</imsmd:entry>
-                        </imsmd:identifier>
-                        <imsmd:title>
-                            <imsmd:string>Unattended Luggage</imsmd:string>
-                        </imsmd:title>
-                        <imsmd:description>
-                            <imsmd:string>This example illustrates the
-                                choiceInteraction being used to obtain a single response from the candidate.</imsmd:string>
-                        </imsmd:description>
-                    </imsmd:general>
-                    <imsmd:lifeCycle>
-                        <imsmd:version>
-                            <imsmd:string>3.0</imsmd:string>
-                        </imsmd:version>
-                        <imsmd:status>
-                            <imsmd:source>LOMv1.0</imsmd:source>
-                            <imsmd:value>Final</imsmd:value>
-                        </imsmd:status>
-                    </imsmd:lifeCycle>
-                    <imsmd:technical>
-                        <imsmd:format>text/x-imsqti-item-xml</imsmd:format>
-                        <imsmd:format>image/png</imsmd:format>
-                    </imsmd:technical>
-                    <imsmd:rights>
-                        <imsmd:description>
-                            <imsmd:string>This example has been adapted from the
-                                PET Handbook, copyright University of Cambridge ESOL Examinations .</imsmd:string>
-                        </imsmd:description>
-                    </imsmd:rights>
-                </imsmd:lom>
-            </metadata>
-            <file href="choice.xml"/>
-            <file href="images/sign.png"/>
-        </resource>
-        <resource identifier="r-controlfile" type="controlfile" href="control/item.xsd">
-            <file href="control/item.xsd"/>
-        </resource>
-        <resource identifier="r-pls" type="pls" href="speech/words.pls">
-            <file href="speech/words.pls"/>
-        </resource>
-        <resource identifier="r-css2" type="css2" href="css/two.css">
-            <file href="css/two.css"/>
-        </resource>
-        <resource identifier="r-css3" type="css3" href="css/three.css">
-            <file href="css/three.css"/>
-        </resource>
-        <resource identifier="r-app" type="associatedcontent/learning-application-resource" href="app/launch.xml">
-            <file href="app/launch.xml"/>
-        </resource>
-        <resource identifier="r-extension" type="extension" href="extra/notes.txt">
-            <file href="extra/notes.txt"/>
-        </resource>
-        <resource identifier="r-extmeta" type="resourceextmetadata/xml" href="meta/other.xml">
-            <file href="meta/other.xml"/>
-        </resource>
-        <resource identifier="r-fragment" type="imsqti_fragment_xmlv3p0" href="fragments/rtest01-fragment.xml">
-            <file href="fragments/rtest01-fragment.xml"/>
-        </resource>
-        <resource identifier="r-webcontent" type="webcontent" href="choice.xml">
-            <file href="choice.xml"/>
-        </resource>
-    </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"/>`,
         ],
         [
           "test.xml",
           "xml",
           `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  <qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="PLACE" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>1</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="VERDICT" cardinality="single" base-type="identifier"/>
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        <qti-branch-rule target="ref2"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule>
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        <qti-template-default template-identifier="N"><qti-base-value base-type="integer">7</qti-base-value></qti-template-default>
-      </qti-assessment-item-ref>
-      <qti-assessment-item-ref identifier="ref2" href="items/item2.xml"/>
-    </qti-assessment-section>
-    <qti-assessment-section identifier="second" title="Second" visible="true">
-      <qti-selection select="1"/>
-      <qti-ordering shuffle="false"/>
-      <qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/>
-      <qti-assessment-section-ref identifier="placement" href="section.xml"/>
-    </qti-assessment-section>
-  </qti-test-part>
-  <qti-outcome-processing>
-    <qti-set-outcome-value identifier="TOTAL">
-      <qti-sum>
-        <qti-variable identifier="ref1.SCORE"/>
-        <qti-test-variables variable-identifier="SCORE" base-type="float" section-identifier="first"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-  </qti-outcome-processing>
-</qti-assessment-test>`,
-        ],
-        [
-          "usage.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<usageData xmlns="http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0">
-  <ordinaryStatistic name="P-value" context="http://example.org/contexts/every-relation" caseCount="10" stdError="0.01" lastUpdated="2026-11-06">
-    <targetObject identifier="item1"/>
-    <value baseType="float">0.5</value>
-  </ordinaryStatistic>
-</usageData>`,
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
         ],
       ],
       fix: "(4) a path a manifest lists or an include names with no entry is refused under one rule",
@@ -2255,82 +860,19 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="items/item.xml">
-      
-      
-      
-      
-    </resource>
-    <resource identifier="item2-res" type="imsqti_item_xmlv3p0" href="items/item2.xml">
-      
-      
-      
-    </resource>
-    <resource identifier="fragment-res" type="imsqti_fragment_xmlv3p0" href="items/fragment.xml">
-      
-    </resource><resource identifier="fragment-res-twin" type="imsqti_outcomes_xmlv3p0" href="items/fragment.xml">
-      
-    </resource>
-    
-    
-    <resource identifier="stimulus1-res" type="imsqti_stimulus_xmlv3p0" href="items/stimulus.xml">
-      
-    </resource>
-    <resource identifier="section-res" type="imsqti_section_xmlv3p0" href="section.xml">
-      
-      
-    </resource>
-    
-    
-  </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/><resource type="imsqti_outcomes_xmlv3p0" href="items/fragment.xml"/></resources></manifest>`,
       ],
       [
         "items/fragment.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xml:lang="en">
-  
-  
-  
-  <qti-portable-custom-interaction response-identifier="WIDGET2" custom-interaction-type-identifier="urn:example:portable" module="portable">
-    
-    <qti-context-variable identifier="CTX2"/>
-  </qti-portable-custom-interaction>
-  
-</div>`,
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-portable-custom-interaction><qti-context-variable identifier="CTX2"/></qti-portable-custom-interaction></div>`,
       ],
       [
         "items/item2.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item2" title="Templated" adaptive="false" time-dependent="false">
-  <qti-context-declaration identifier="CTX2" cardinality="single" base-type="integer"/>
-  
-  
-  
-  <qti-response-declaration identifier="WIDGET2" cardinality="single" base-type="string"/>
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/>
-  <qti-item-body>
-    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
-      <qti-simple-choice identifier="ChoiceA">Yes.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">No.</qti-simple-choice>
-    </qti-choice-interaction>
-    <xi:include href="fragment.xml"/>
-  </qti-item-body>
-  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>
-</qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-context-declaration identifier="CTX2"/><qti-item-body><xi:include href="fragment.xml"/></qti-item-body></qti-assessment-item>`,
       ],
     ],
     fix: "a fragment listed under two resource types and included: the import heads it as an assembly of its own beside the splice, so its IDREF is judged against its own ids",
@@ -2564,142 +1106,13 @@ export const known = {
           "imsmanifest.xml",
           "xml",
           `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="items/item.xml">
-      
-      
-      
-      
-    </resource>
-    
-    
-    
-    
-    
-    
-    
-    
-  </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
         ],
         [
           "items/item.xml",
           "xml",
           `<?xml version="1.0" encoding="UTF-8"?>
-<!-- The every-relation item. -->
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item1" title="Every relation" adaptive="false" time-dependent="false" xml:lang="en" tool-name="every-relation" tool-version="1">
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <qti-assessment-stimulus-ref identifier="stimulus1" href="stimulus.xml"/>
-  <qti-companion-materials-info>
-    <qti-calculator>
-      <qti-calculator-type>basic</qti-calculator-type>
-      <qti-description xsi:type="xs:IDREF">lead</qti-description>
-    </qti-calculator>
-  </qti-companion-materials-info>
-  <qti-item-body>
-    <div id="lead" label="lead" data-every="relation" aria-labelledby="caption" aria-valuemin="0" aria-valuemax="10">
-      <span id="caption">Look at the picture.</span>
-      <img src="media/pic.png" alt="A picture"/>
-    </div>
-    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>
-    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>
-    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>
-    <p>It says <q>read this</q> and stops.</p>
-    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>
-    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
-      <qti-prompt>Which one?</qti-prompt>
-      <qti-simple-choice identifier="ChoiceA">Choice ChoiceA.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">Choice ChoiceB.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceC">Choice ChoiceC.</qti-simple-choice>
-    </qti-choice-interaction>
-    <qti-hottext-interaction response-identifier="HOT" max-choices="1">
-      <p>Pick <qti-hottext identifier="H1">word 1</qti-hottext> or <qti-hottext identifier="H2">word 2</qti-hottext>.</p>
-    </qti-hottext-interaction>
-    <qti-hotspot-interaction response-identifier="AREA" max-choices="1">
-      <img src="media/pic.png" alt="A picture" width="20" height="20"/>
-      <qti-hotspot-choice identifier="S1" shape="rect" coords="0,0,10,10"/>
-      <qti-hotspot-choice identifier="S2" shape="circle" coords="15,15,4"/>
-    </qti-hotspot-interaction>
-    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>
-    <qti-custom-interaction response-identifier="WIDGET">
-      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>
-    </qti-custom-interaction>
-    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">
-      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>
-      <qti-context-variable identifier="CTX"/>
-    </qti-portable-custom-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-sum>
-        <qti-map-response identifier="RESPONSE"/>
-        <qti-map-response-point identifier="SPOT"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-    <qti-set-outcome-value identifier="COUNT">
-      <qti-round><qti-variable identifier="SCORE"/></qti-round>
-    </qti-set-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-and>
-          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal-rounded>
-          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal>
-        </qti-and>
-        <qti-set-outcome-value identifier="SCORE">
-          <qti-round-to rounding-mode="significantFigures" figures="3">
-            <qti-variable identifier="SCORE"/>
-          </qti-round-to>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>
-    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match>
-          <qti-variable identifier="RESPONSE"/>
-          <qti-correct identifier="RESPONSE"/>
-        </qti-match>
-        <qti-set-outcome-value identifier="FEEDBACK">
-          <qti-base-value base-type="identifier">RIGHT</qti-base-value>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
         ],
       ],
       fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
@@ -2931,62 +1344,16 @@ export const known = {
   "lone-refusal: N5 admitted named attribute-lexical, witness unreported": {
     files: [
       [
-        "choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <qti-response-declaration base-type="identifier">
-        
-    </qti-response-declaration>
-    
-    
-    
-</qti-assessment-item>`,
-      ],
-      [
         "es/choice.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" time-dependent="false">
-    <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
-        
-    </qti-response-declaration>
-    
-    <qti-item-body>
-        
-        <p>
-            <img src="../images/sign.png" alt="NEVER LEAVE LUGGAGE UNATTENDED" aria-haspopup="x"/>
-        </p>
-        
-    </qti-item-body>
-    
-</qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><img aria-haspopup="x"/></p></qti-item-body></qti-assessment-item>`,
       ],
       [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2" xmlns:drd="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd http://ltsc.ieee.org/xsd/LOM https://purl.imsglobal.org/spec/md/v1p3/schema/xsd/imsmd_loose_v1p3p2.xsd http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd http://www.imsglobal.org/xsd/imsqti_metadata_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_metadatav3p0_v1p0.xsd">
-    <metadata>
-        
-        <schemaversion>3.0.1</schemaversion>
-        
-    </metadata>
-    
-    <resources>
-        <resource identifier="choice" type="imsqti_item_xmlv3p0" href="choice.xml">
-            
-            <file href="choice.xml"/>
-            
-            <cpx:variant identifier="v1" identifierref="choice_es">
-                
-            </cpx:variant>
-        </resource>
-        <resource identifier="choice_es" type="imsqti_item_xmlv3p0" href="es/choice.xml">
-            <file href="es/choice.xml"/>
-        </resource>
-    </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="choice"><cpx:variant/></resource><resource identifier="choice_es" type="imsqti_item_xmlv3p0" href="es/choice.xml"><file href="es/choice.xml"/></resource></resources></manifest>`,
       ],
     ],
     fix: "the variant class: a 3.0.1 cp:resource's cpx:variant has no Admission cell, so the oracle's fold keeps no rows of the manifest and raises N5 admitted alone; either 3.0.1's CP extension admits it (the grammar moves both sides) or the oracle judges the other documents' rows, so precedence picks among every breach",
@@ -3016,50 +1383,13 @@ export const known = {
         "choice.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="choice" title="Unattended Luggage" adaptive="false" time-dependent="false">
-    <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
-        
-    </qti-response-declaration>
-    
-    
-    
-</qti-assessment-item>`,
+<qti-assessment-item/>`,
       ],
       [
         "es/choice.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2" xmlns:drd="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd http://ltsc.ieee.org/xsd/LOM https://purl.imsglobal.org/spec/md/v1p3/schema/xsd/imsmd_loose_v1p3p2.xsd http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd http://www.imsglobal.org/xsd/imsqti_metadata_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_metadatav3p0_v1p0.xsd">
-    <metadata>
-        <schema>QTI Package</schema>
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata>
-    <organizations/>
-    <resources>
-        <resource identifier="choice" type="imsqti_item_xmlv3p0" href="choice.xml">
-            <metadata>
-                
-                <imsmd:lom>
-                    <imsmd:general>
-                        <imsmd:identifier>
-                            <imsmd:entry>choice</imsmd:entry>
-                        </imsmd:identifier>
-                        
-                        
-                    </imsmd:general>
-                    
-                    
-                    
-                </imsmd:lom>
-            </metadata>
-            
-            <file href="images/sign.png"/>
-            
-        </resource>
-        
-    </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources><resource identifier="choice" type="imsqti_item_xmlv3p0" href="choice.xml"><metadata><imsmd:lom><imsmd:general><imsmd:identifier><imsmd:entry/></imsmd:identifier></imsmd:general></imsmd:lom></metadata><file href="images/sign.png"/></resource></resources></manifest>`,
       ],
       [
         "images/sign.png",
@@ -3070,25 +1400,7 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2" xmlns:drd="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd http://ltsc.ieee.org/xsd/LOM https://purl.imsglobal.org/spec/md/v1p3/schema/xsd/imsmd_loose_v1p3p2.xsd http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd http://www.imsglobal.org/xsd/imsqti_metadata_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_metadatav3p0_v1p0.xsd">
-    <metadata>
-        <schema>QTI Package</schema>
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata>
-    <organizations/>
-    <resources>
-        <resource identifier="choice" type="imsqti_item_xmlv3p0" href="choice.xml">
-            
-            <file href="choice.xml"/>
-            <file href="images/sign.png"/>
-            
-        </resource>
-        <resource identifier="choice_es" type="imsqti_item_xmlv3p0" href="es/choice.xml">
-            <file href="es/choice.xml"/>
-        </resource>
-    </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources><resource identifier="choice" type="imsqti_item_xmlv3p0"><file href="choice.xml"/><file href="images/sign.png"/></resource><resource identifier="choice_es" type="imsqti_item_xmlv3p0" href="es/choice.xml"><file href="es/choice.xml"/></resource></resources></manifest>`,
       ],
     ],
     fix: "(3), its law half: the Manifest overlay selections read the manifest's cp:* attributes alone, as the import writes ManifestId and Resource from imsmanifest.xml alone",
@@ -3106,7 +1418,7 @@ export const known = {
         "item.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><resources><resource identifier="Ké𝔸語xx𝔸語x𝔸𝔸xxééé語𝔸語x語𝔸語語x𝔸語é𝔸𝔸語𝔸語語𝔸語語語x語𝔸語語x𝔸語x𝔸éxxx𝔸xx語xxx𝔸𝔸xx語𝔸x語xéxxéé語𝔸éé𝔸語𝔸語𝔸x語𝔸éx𝔸x𝔸語xéx𝔸𝔸xxé語𝔸語éé𝔸é𝔸𝔸𝔸語𝔸𝔸é語xxx語x𝔸𝔸xé語𝔸é𝔸語éxé𝔸éé語x𝔸𝔸語éxxéxé語x𝔸xx𝔸é𝔸語語éé語𝔸𝔸𝔸𝔸é𝔸𝔸語x語語語x𝔸é語é語語xxx語x𝔸𝔸𝔸語éé語é語é語語é語語𝔸語x語x𝔸語xxé語𝔸ééx語𝔸𝔸𝔸𝔸é𝔸語語xxééxé𝔸xé語語x𝔸語xx語語𝔸é𝔸x語語é𝔸x語𝔸𝔸éé𝔸語xé語語語xx語xxé語語語é語𝔸語xé語xé語é語x語語éxééé語語𝔸語x語𝔸𝔸éx𝔸語語é𝔸xxééé𝔸語xé語xéé𝔸𝔸x𝔸𝔸é𝔸éx𝔸x語ééééx語𝔸語xé語x𝔸語語xxxéé語é語x𝔸語𝔸é𝔸語x𝔸x語𝔸語語𝔸𝔸x語x語𝔸語𝔸語𝔸𝔸é𝔸𝔸𝔸𝔸𝔸éxééx語𝔸語𝔸é語語𝔸éxx𝔸ééx語éxé語x𝔸𝔸語xé𝔸𝔸xxé語xx語𝔸語語𝔸xéx語語𝔸x語x𝔸𝔸x語𝔸é語é語語𝔸語xéxxé𝔸éx語𝔸𝔸語x𝔸éé𝔸語xé𝔸x語xx語語語𝔸𝔸語語éx語éx語éxééé𝔸é𝔸x語𝔸é𝔸x語𝔸x語ééx語𝔸𝔸éxééé𝔸x𝔸語é𝔸語xéxxx𝔸語𝔸語éxxx𝔸é語𝔸語𝔸xxéx語xéx語é語𝔸𝔸𝔸𝔸𝔸éxxxé𝔸語語é語ééxéé語xéé𝔸xx語é𝔸𝔸𝔸𝔸éxé𝔸x語éx𝔸éé𝔸x語𝔸x語ééé𝔸𝔸𝔸éé語xé語𝔸é𝔸xx語é語𝔸x語é語éé語éxé𝔸𝔸x𝔸𝔸𝔸x𝔸𝔸é𝔸é𝔸éé𝔸éé語語xx𝔸𝔸xxééé𝔸xxé𝔸éx語語éxéx語語𝔸ééx語xx𝔸語語é𝔸x語𝔸é語éxééxé𝔸x語xxx語éxééé𝔸𝔸éx𝔸é語語x𝔸語語語é語éx語𝔸𝔸x語é𝔸語xxx𝔸語xéééx語語語𝔸éxéx語é𝔸éxx語é語xé𝔸𝔸x語é語xéx語語x語𝔸𝔸語xxé𝔸語xéxx語ééxé語𝔸語ééxé語é𝔸𝔸語xxéé𝔸xx𝔸éé語語éé語𝔸𝔸x語語x語xé語x𝔸éé語𝔸é𝔸xxé語x語x語語x𝔸xxxxx𝔸語xxxx語é𝔸é語é𝔸語x語xéé𝔸𝔸xxx𝔸𝔸𝔸𝔸x𝔸語語xxéxx語é語x語𝔸x語xé語éxxxxé語語語語x語𝔸語語é𝔸𝔸ééx𝔸é𝔸éx語é語𝔸xxxx語é𝔸éééx語xx語é語é𝔸𝔸é𝔸éx語語語語x𝔸éé𝔸ééé𝔸xééé𝔸xéé語xé語語xé𝔸xé𝔸éé𝔸x語𝔸éxééé語x語x𝔸𝔸xxxx𝔸xxx𝔸𝔸𝔸𝔸𝔸é語é語é語𝔸𝔸xéé語𝔸𝔸xx𝔸語ééé語éx語語𝔸x𝔸xxx"/></resources></manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><resources><resource identifier="Ké𝔸語xx𝔸語x𝔸𝔸xxééé語𝔸語x語𝔸語語x𝔸語é𝔸𝔸語𝔸語語𝔸語語語x語𝔸語語x𝔸語x𝔸éxxx𝔸xx語xxx𝔸𝔸xx語𝔸x語xéxxéé語𝔸éé𝔸語𝔸語𝔸x語𝔸éx𝔸x𝔸語xéx𝔸𝔸xxé語𝔸語éé𝔸é𝔸𝔸𝔸語𝔸𝔸é語xxx語x𝔸𝔸xé語𝔸é𝔸語éxé𝔸éé語x𝔸𝔸語éxxéxé語x𝔸xx𝔸é𝔸語語éé語𝔸𝔸𝔸𝔸é𝔸𝔸語x語語語x𝔸é語é語語xxx語x𝔸𝔸𝔸語éé語é語é語語é語語𝔸語x語x𝔸語xxé語𝔸ééx語𝔸𝔸𝔸𝔸é𝔸語語xxééxé𝔸xé語語x𝔸語xx語語𝔸é𝔸x語語é𝔸x語𝔸𝔸éé𝔸語xé語語語xx語xxé語語語é語𝔸語xé語xé語é語x語語éxééé語語𝔸語x語𝔸𝔸éx𝔸語語é𝔸xxééé𝔸語xé語xéé𝔸𝔸x𝔸𝔸é𝔸éx𝔸x語ééééx語𝔸語xé語x𝔸語語xxxéé語é語x𝔸語𝔸é𝔸語x𝔸x語𝔸語語𝔸𝔸x語x語𝔸語𝔸語𝔸𝔸é𝔸𝔸𝔸𝔸𝔸éxééx語𝔸語𝔸é語語𝔸éxx𝔸ééx語éxé語x𝔸𝔸語xé𝔸𝔸xxé語xx語𝔸語語𝔸xéx語語𝔸x語x𝔸𝔸x語𝔸é語é語語𝔸語xéxxé𝔸éx語𝔸𝔸語x𝔸éé𝔸語xé𝔸x語xx語語語𝔸𝔸語語éx語éx語éxééé𝔸é𝔸x語𝔸é𝔸x語𝔸x語ééx語𝔸𝔸éxééé𝔸x𝔸語é𝔸語xéxxx𝔸語𝔸語éxxx𝔸é語𝔸語𝔸xxéx語xéx語é語𝔸𝔸𝔸𝔸𝔸éxxxé𝔸語語é語ééxéé語xéé𝔸xx語é𝔸𝔸𝔸𝔸éxé𝔸x語éx𝔸éé𝔸x語𝔸x語ééé𝔸𝔸𝔸éé語xé語𝔸é𝔸xx語é語𝔸x語é語éé語éxé𝔸𝔸x𝔸𝔸𝔸x𝔸𝔸é𝔸é𝔸éé𝔸éé語語xx𝔸𝔸xxééé𝔸xxé𝔸éx語語éxéx語語𝔸ééx語xx𝔸語語é𝔸x語𝔸é語éxééxé𝔸x語xxx語éxééé𝔸𝔸éx𝔸é語語x𝔸語語語é語éx語𝔸𝔸x語é𝔸語xxx𝔸語xéééx語語語𝔸éxéx語é𝔸éxx語é語xé𝔸𝔸x語é語xéx語語x語𝔸𝔸語xxé𝔸語xéxx語ééxé語𝔸語ééxé語é𝔸𝔸語xxéé𝔸xx𝔸éé語語éé語𝔸𝔸x語語x語xé語x𝔸éé語𝔸é𝔸xxé語x語x語語x𝔸xxxxx𝔸語xxxx語é𝔸é語é𝔸語x語xéé𝔸𝔸xxx𝔸𝔸𝔸𝔸x𝔸語語xxéxx語é語x語𝔸x語xé語éxxxxé語語語語x語𝔸語語é𝔸𝔸ééx𝔸é𝔸éx語é語𝔸xxxx語é𝔸éééx語xx語é語é𝔸𝔸é𝔸éx語語語語x𝔸éé𝔸ééé𝔸xééé𝔸xéé語xé語語xé𝔸xé𝔸éé𝔸x語𝔸éxééé語x語x𝔸𝔸xxxx𝔸xxx𝔸𝔸𝔸𝔸𝔸é語é語é語𝔸𝔸xéé語𝔸𝔸xx𝔸語ééé語éx語語𝔸x𝔸xxx"/></resources></manifest>`,
       ],
     ],
     fix: "(3): no package record is written from a cp:* element outside imsmanifest.xml, and the oracle bounds no key text of one",
@@ -3171,145 +1483,13 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="items/item.xml">
-      
-      
-      
-      
-    </resource>
-    
-    
-    
-    
-    
-    
-    
-    
-  </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
       ],
       [
         "items/item.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<!-- The every-relation item. -->
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item1" title="Every relation" adaptive="false" time-dependent="false" xml:lang="en" tool-name="every-relation" tool-version="1">
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <qti-template-declaration identifier="N" cardinality="0" base-type="integer"/>
-  <qti-template-processing>
-    <qti-set-template-value identifier="N"><qti-random-integer min="5" max="10"/></qti-set-template-value>
-    <qti-set-template-value identifier="SHOWN"><qti-base-value base-type="identifier">yes</qti-base-value></qti-set-template-value>
-  </qti-template-processing>
-  <qti-assessment-stimulus-ref identifier="stimulus1" href="stimulus.xml"/>
-  <qti-companion-materials-info>
-    <qti-calculator>
-      <qti-calculator-type>basic</qti-calculator-type>
-      <qti-description xsi:type="xs:IDREF">lead</qti-description>
-    </qti-calculator>
-  </qti-companion-materials-info>
-  <qti-item-body>
-    <div id="lead" label="lead" data-every="relation" aria-labelledby="caption" aria-valuemin="0" aria-valuemax="10">
-      <span id="caption">Look at the picture.</span>
-      <img src="media/pic.png" alt="A picture"/>
-    </div>
-    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>
-    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>
-    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>
-    <p>It says <q>read this</q> and stops.</p>
-    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>
-    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
-      <qti-prompt>Which one?</qti-prompt>
-      <qti-simple-choice identifier="ChoiceA">Choice ChoiceA.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">Choice ChoiceB.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceC">Choice ChoiceC.</qti-simple-choice>
-    </qti-choice-interaction>
-    <qti-hottext-interaction response-identifier="HOT" max-choices="1">
-      <p>Pick <qti-hottext identifier="H1">word 1</qti-hottext> or <qti-hottext identifier="H2">word 2</qti-hottext>.</p>
-    </qti-hottext-interaction>
-    <qti-hotspot-interaction response-identifier="AREA" max-choices="1">
-      <img src="media/pic.png" alt="A picture" width="20" height="20"/>
-      <qti-hotspot-choice identifier="S1" shape="rect" coords="0,0,10,10"/>
-      <qti-hotspot-choice identifier="S2" shape="circle" coords="15,15,4"/>
-    </qti-hotspot-interaction>
-    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>
-    <qti-custom-interaction response-identifier="WIDGET">
-      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>
-    </qti-custom-interaction>
-    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">
-      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>
-      <qti-context-variable identifier="CTX"/>
-    </qti-portable-custom-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-sum>
-        <qti-map-response identifier="RESPONSE"/>
-        <qti-map-response-point identifier="SPOT"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-    <qti-set-outcome-value identifier="COUNT">
-      <qti-round><qti-variable identifier="SCORE"/></qti-round>
-    </qti-set-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-and>
-          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal-rounded>
-          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal>
-        </qti-and>
-        <qti-set-outcome-value identifier="SCORE">
-          <qti-round-to rounding-mode="significantFigures" figures="3">
-            <qti-variable identifier="SCORE"/>
-          </qti-round-to>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>
-    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match>
-          <qti-variable identifier="RESPONSE"/>
-          <qti-correct identifier="RESPONSE"/>
-        </qti-match>
-        <qti-set-outcome-value identifier="FEEDBACK">
-          <qti-base-value base-type="identifier">RIGHT</qti-base-value>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="N" cardinality="0"/><qti-template-processing><qti-set-template-value identifier="N"><qti-random-integer/></qti-set-template-value></qti-template-processing></qti-assessment-item>`,
       ],
     ],
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
@@ -3321,191 +1501,19 @@ export const known = {
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" identifier="every-relation-manifest">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    <resource identifier="item1-res" type="imsqti_item_xmlv3p0" href="items/item.xml">
-      
-      
-      
-      
-    </resource>
-    
-    
-    
-    
-    
-    
-    <resource identifier="test-res" type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
         "items/item.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<!-- The every-relation item. -->
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item1" title="Every relation" adaptive="false" time-dependent="false" xml:lang="en" tool-name="every-relation" tool-version="1">
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>
-  <qti-outcome-declaration identifier="DIGITS" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>10</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/>
-  <qti-template-declaration identifier="N" cardinality="0" base-type="integer"/>
-  <qti-template-processing>
-    <qti-set-template-value identifier="N"><qti-random-integer min="5" max="10"/></qti-set-template-value>
-    <qti-set-template-value identifier="SHOWN"><qti-base-value base-type="identifier">yes</qti-base-value></qti-set-template-value>
-  </qti-template-processing>
-  <qti-assessment-stimulus-ref identifier="stimulus1" href="stimulus.xml"/>
-  <qti-companion-materials-info>
-    <qti-calculator>
-      <qti-calculator-type>basic</qti-calculator-type>
-      <qti-description xsi:type="xs:IDREF">lead</qti-description>
-    </qti-calculator>
-  </qti-companion-materials-info>
-  <qti-item-body>
-    <div id="lead" label="lead" data-every="relation" aria-labelledby="caption" aria-valuemin="0" aria-valuemax="10">
-      <span id="caption">Look at the picture.</span>
-      <img src="media/pic.png" alt="A picture"/>
-    </div>
-    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>
-    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>
-    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>
-    <p>It says <q>read this</q> and stops.</p>
-    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>
-    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
-      <qti-prompt>Which one?</qti-prompt>
-      <qti-simple-choice identifier="ChoiceA">Choice ChoiceA.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceB">Choice ChoiceB.</qti-simple-choice>
-      <qti-simple-choice identifier="ChoiceC">Choice ChoiceC.</qti-simple-choice>
-    </qti-choice-interaction>
-    <qti-hottext-interaction response-identifier="HOT" max-choices="1">
-      <p>Pick <qti-hottext identifier="H1">word 1</qti-hottext> or <qti-hottext identifier="H2">word 2</qti-hottext>.</p>
-    </qti-hottext-interaction>
-    <qti-hotspot-interaction response-identifier="AREA" max-choices="1">
-      <img src="media/pic.png" alt="A picture" width="20" height="20"/>
-      <qti-hotspot-choice identifier="S1" shape="rect" coords="0,0,10,10"/>
-      <qti-hotspot-choice identifier="S2" shape="circle" coords="15,15,4"/>
-    </qti-hotspot-interaction>
-    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>
-    <qti-custom-interaction response-identifier="WIDGET">
-      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>
-    </qti-custom-interaction>
-    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">
-      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>
-      <qti-context-variable identifier="CTX"/>
-    </qti-portable-custom-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-set-outcome-value identifier="SCORE">
-      <qti-sum>
-        <qti-map-response identifier="RESPONSE"/>
-        <qti-map-response-point identifier="SPOT"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-    <qti-set-outcome-value identifier="COUNT">
-      <qti-round><qti-variable identifier="SCORE"/></qti-round>
-    </qti-set-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-and>
-          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal-rounded>
-          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">
-            <qti-variable identifier="SCORE"/>
-            <qti-base-value base-type="float">1.5</qti-base-value>
-          </qti-equal>
-        </qti-and>
-        <qti-set-outcome-value identifier="SCORE">
-          <qti-round-to rounding-mode="significantFigures" figures="3">
-            <qti-variable identifier="SCORE"/>
-          </qti-round-to>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>
-    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match>
-          <qti-variable identifier="RESPONSE"/>
-          <qti-correct identifier="RESPONSE"/>
-        </qti-match>
-        <qti-set-outcome-value identifier="FEEDBACK">
-          <qti-base-value base-type="identifier">RIGHT</qti-base-value>
-        </qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="N" cardinality="0"/></qti-assessment-item>`,
       ],
       [
         "test.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  <qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float">
-    <qti-default-value><qti-value>0</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="PLACE" cardinality="single" base-type="integer">
-    <qti-default-value><qti-value>1</qti-value></qti-default-value>
-  </qti-outcome-declaration>
-  <qti-outcome-declaration identifier="VERDICT" cardinality="single" base-type="identifier"/>
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        <qti-branch-rule target="ref2"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule>
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        <qti-template-default template-identifier="N"><qti-base-value base-type="integer">7</qti-base-value></qti-template-default>
-      </qti-assessment-item-ref>
-      <qti-assessment-item-ref identifier="ref2" href="items/item2.xml"/>
-    </qti-assessment-section>
-    <qti-assessment-section identifier="second" title="Second" visible="true">
-      <qti-selection select="1"/>
-      <qti-ordering shuffle="false"/>
-      <qti-assessment-item-ref identifier="ref3" href="items/item2.xml"/>
-      <qti-assessment-section-ref identifier="placement" href="section.xml"/>
-    </qti-assessment-section>
-  </qti-test-part>
-  <qti-outcome-processing>
-    <qti-set-outcome-value identifier="TOTAL">
-      <qti-sum>
-        <qti-variable identifier="ref1.SCORE"/>
-        <qti-test-variables variable-identifier="SCORE" base-type="float" section-identifier="first"/>
-      </qti-sum>
-    </qti-set-outcome-value>
-  </qti-outcome-processing>
-</qti-assessment-test>`,
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item.xml"><qti-template-default template-identifier="N"><qti-base-value/></qti-template-default></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
       ],
     ],
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
