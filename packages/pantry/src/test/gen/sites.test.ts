@@ -179,14 +179,21 @@ type Row = Readonly<Record<string, Datum>>;
 const fileExists = Option.getOrThrow(checkOf(Qti.statements, "SitePath", "File_exists"));
 
 /**
+ * Write the values a containment pairs as one key, each as its text, so a source tuple is sought
+ * among its target's.
+ *
+ * @param values - The values, a field a row lacks as none.
+ * @returns The key.
+ */
+const keyOf = (values: readonly (Datum | undefined)[]): string =>
+  JSON.stringify(values.map(datumText));
+
+/**
  * Every containment the schema states from a site or its path, read from the statements grizzle
  * keeps, selections included: the include's target and href, the section ref's document entry,
  * the file's existence and the href's reachability.
  */
-const siteContainments = [
-  ...containmentsOf(Qti.statements, "Site"),
-  ...containmentsOf(Qti.statements, "SitePath"),
-];
+const siteContainments = [...containmentsOf(Qti, "Site"), ...containmentsOf(Qti, "SitePath")];
 
 /**
  * Judge each site's rows by the schema's own statements, read from grizzle's: `File_exists` over
@@ -228,13 +235,18 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
       continue;
     }
 
-    const keyOf = (row: Row, fields: readonly string[]) =>
-      JSON.stringify(fields.map((field) => datumText(row[field])));
     const present = new Set(
-      targets.filter(containment.targeted).map((row) => keyOf(row, containment.toFields)),
+      targets
+        .filter(containment.targeted)
+        .map((row) => keyOf(containment.toFields.map((field) => row[field]))),
     );
     for (const row of held.get(containment.from) ?? []) {
-      if (containment.selected(row) && !present.has(keyOf(row, containment.fromFields))) {
+      const sought = keyOf(
+        containment.fromTerms.map((term) =>
+          term.kind === "constant" ? term.value : row[term.field],
+        ),
+      );
+      if (containment.selected(row) && !present.has(sought)) {
         breach(
           row["node"],
           Option.getOrElse(ruleOfLaws([containment.law]), () => "unnamed"),

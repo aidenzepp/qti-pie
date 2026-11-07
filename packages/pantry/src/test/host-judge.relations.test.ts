@@ -7,18 +7,19 @@
  * relation whose heading is no record, a relation of no primary key, and a member of a kind the
  * host does not know.
  *
- * And the laws it judges (`judgedLaws` of `#pantry/test/key-copies.ts`) are named as the refusal
- * names an outcome's (`lawNameOf` of `#pantry/import/refusal.ts`, by grizzle's `sameLaw`), so a
- * test that names the laws a package's rows break names each by its law, never by its shape. A law
- * whose sides' selections were left out was no law `sameLaw` knows, so every containment and key
- * over a selection went unnamed (6caa20ef).
+ * And the laws it judges (`judgedLaws` of `#pantry/test/key-copies.ts`), and each containment a
+ * test reads from one relation (`containmentsOf`), are named as the refusal names an outcome's
+ * (`lawNameOf` of `#pantry/import/refusal.ts`, by grizzle's `sameLaw`), so a test that names the
+ * laws a package's rows break names each by its law, never by its shape. A law whose sides'
+ * selections were left out was no law `sameLaw` knows, so every containment and key over a
+ * selection went unnamed (6caa20ef).
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
 import { lawNameOf } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { modelledRelations } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/key-copies.ts";
+import { containmentsOf, judgedLaws } from "#pantry/test/key-copies.ts";
 
 /**
  * The members planted beside the schema's, each one the host cannot read.
@@ -46,6 +47,18 @@ describe("the host judge's model of a schema", () => {
     );
 
     assert.deepStrictEqual(unnamed, [], "laws the refusal names none of");
+  });
+
+  it("names every containment a test reads from a relation as a refusal names an outcome's law", () => {
+    // Oracle: the refusal's own naming, as above. Bound: every containment Qti states, read from
+    // each of its relations.
+    const unnamed = Object.keys(Qti.relations).flatMap((from) =>
+      containmentsOf(Qti, from).flatMap(({ law }) =>
+        Option.isNone(lawNameOf(law)) ? [Formatter.format(law)] : [],
+      ),
+    );
+
+    assert.deepStrictEqual(unnamed, [], "containments the refusal names none of");
   });
 
   it("fails by name on each member it cannot read", () => {

@@ -1776,18 +1776,24 @@ const statedAs = (judged: JudgedLaw, laws: readonly Law[]): JudgedLaw => {
 };
 
 /**
- * Every law a schema states that the host judges over rows ({@link JudgedLaw}), in statement
- * order, each named as grizzle's `lawsOf` names its statement's law ({@link statedAs}).
+ * Each statement of a schema beside its laws, as grizzle's `lawsOf` names them.
  *
  * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
- * schema: a test file and `#pantry/test/host-judge.ts` share one compile.
+ * schema: {@link judgedLaws}, {@link containmentsOf}, `#pantry/test/host-judge.ts` and a test file
+ * share one compile.
+ */
+const statementLawsOf = Fn.memoize((schema: typeof Qti) => lawsOf(schema));
+
+/**
+ * Every law a schema states that the host judges over rows ({@link JudgedLaw}), in statement
+ * order, each named as grizzle's `lawsOf` names its statement's law ({@link statedAs}).
  *
  * @param schema - The schema, `Qti`.
  * @returns The laws.
  */
 export const judgedLaws: (schema: typeof Qti) => readonly JudgedLaw[] = Fn.memoize(
   (schema: typeof Qti): readonly JudgedLaw[] =>
-    lawsOf(schema).flatMap(({ laws, statement }) =>
+    statementLawsOf(schema).flatMap(({ laws, statement }) =>
       judgedOf(statement).map((judged) => statedAs(judged, laws)),
     ),
 );
@@ -1802,13 +1808,37 @@ export const closedRows = (relation: string): Option.Option<readonly Row[]> =>
   Option.map(factsOf(relation), ({ rows }) => rows);
 
 /**
- * A containment the schema states, read from the statement grizzle keeps for it: its law as an
- * outcome names it, each side's relation and fields, and each side's selection as SQL's `WHERE`
- * reads it.
+ * One term of a containment's source side as a row meets its target's field: the field the row
+ * holds there, a `pred` term's field among them, or the constant every row holds there.
+ */
+export type SourceTerm =
+  | { readonly field: string; readonly kind: "field" }
+  | { readonly kind: "constant"; readonly value: bigint | boolean | number | string };
+
+/**
+ * Read one term of a containment's stored source side ({@link SourceTerm}).
+ *
+ * @param term - The term.
+ * @returns The field it reads, or its constant.
+ */
+const sourceTermOf = (term: StoredSide["terms"][number]): SourceTerm => {
+  if (Predicate.isString(term)) {
+    return { field: term, kind: "field" };
+  }
+
+  return "field" in term
+    ? { field: term.field, kind: "field" }
+    : { kind: "constant", value: term.value };
+};
+
+/**
+ * A containment the schema states, read from the statement grizzle keeps for it: its law as
+ * grizzle's `lawsOf` names it, its sides' selections included, each side's relation, its source's
+ * terms and its target's fields, and each side's selection as SQL's `WHERE` reads it.
  */
 export interface Containment {
   readonly from: string;
-  readonly fromFields: readonly string[];
+  readonly fromTerms: readonly SourceTerm[];
   readonly law: Law;
   readonly selected: (row: Readonly<Record<string, Datum>>) => boolean;
   readonly targeted: (row: Readonly<Record<string, Datum>>) => boolean;
@@ -1819,17 +1849,16 @@ export interface Containment {
 /**
  * Read every containment the schema states from one relation, so a test can judge rows by the
  * schema's own statements, their selections included: a source row its selection holds must meet
- * a target row its selection holds on the paired fields.
+ * a target row its selection holds on the paired fields. Each law is its statement's own, read as
+ * {@link judgedLaws} reads it ({@link statedAs}), so `src/import/refusal.ts`'s `lawNameOf` names
+ * it.
  *
- * @param statements - The schema's statements.
+ * @param schema - The schema, `Qti`.
  * @param from - The source relation.
  * @returns The containments, in statement order.
  */
-export const containmentsOf = (
-  statements: typeof Qti.statements,
-  from: string,
-): readonly Containment[] =>
-  statements.flatMap((statement) =>
+export const containmentsOf = (schema: typeof Qti, from: string): readonly Containment[] =>
+  statementLawsOf(schema).flatMap(({ laws, statement }) =>
     Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
       onNone: () => [],
       onSome: (read): readonly Containment[] => {
@@ -1843,12 +1872,8 @@ export const containmentsOf = (
         return [
           {
             from: left.name,
-            fromFields: fieldsOf(read.left),
-            law: {
-              from: lawSourceSideOf(read.left),
-              kind: "contained",
-              to: lawSideOf(read.right),
-            },
+            fromTerms: read.left.terms.map(sourceTermOf),
+            law: statedAs(containedOf(read.left, read.right), laws).law,
             selected: selectedBy(left.predicate),
             targeted: selectedBy(right.predicate),
             to: right.name,
