@@ -2,9 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { composed, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { contentModelOf, contentEnds, contentStep } from "#pantry/grammar/content.ts";
+import { accepts, contentModelOf } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
-import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/test/probe.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
@@ -12,45 +11,6 @@ import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
  * The composed grammar of production, failing the test that reads it when a generator refuses.
  */
 const grammar = Effect.fromResult(composed());
-
-/**
- * Judge a family of child kinds by the installed automaton, as the database does: each child steps
- * from its predecessor's state (0 for the first), and the last state must be one `Last` holds.
- *
- * @param composedGrammar - The grammar.
- * @param version - The version.
- * @param parent - The parent's kind.
- * @param children - The children's kinds, in order.
- * @returns Whether the family's content is the model's.
- */
-const accepts = (
-  composedGrammar: Pick<ComposedGrammar, "admission" | "content">,
-  version: SchemaVersion,
-  parent: string,
-  children: readonly string[],
-): boolean => {
-  const positionOf = (key: {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: SchemaVersion;
-  }) => Option.map(composedGrammar.admission.lookup(key), ({ position }) => Number(position));
-  let state = 0;
-  for (const child of children) {
-    const next = contentStep(
-      composedGrammar.content,
-      positionOf,
-      { child, parent, version },
-      state,
-    );
-    if (Option.isNone(next)) {
-      return false;
-    }
-
-    state = next.value;
-  }
-
-  return contentEnds(composedGrammar.content, version, parent, state);
-};
 
 /**
  * The kinds whose model is `empty`, each with its version list, read from the composed models,

@@ -38,6 +38,7 @@ import type {
   PackageInputs,
 } from "#pantry/import/write.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
+import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { PackageReadError, readPackage } from "#pantry/package/read.ts";
@@ -127,6 +128,7 @@ const shredFile = (file: PackageFile, version: (typeof versions)[number]) =>
         : Effect.fail(
             new ImportRefused({
               detail: `${file.path} at ${fault.path}: ${fault.detail}`,
+              origin: readerOrigin,
               rule: "attribute-lexical",
             }),
           );

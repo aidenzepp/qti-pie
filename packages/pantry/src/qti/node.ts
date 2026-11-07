@@ -142,11 +142,11 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  *
  * - **the host's:** `id`, `document` (the root field, on the root alone, its own id), `kind`,
  *   `version`, `governs`, `prefix`, `nearest`, `nearestKind`, `state` (its content-automaton state,
- *   from `contentStep`), `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or
- *   whitespace node's characters, an entity reference's `&name;`, empty elsewhere), `first` and
- *   `last` (the first and last code points of its `chars`, empty where `chars` is) and
- *   `stringPiece` (its `chars` where its parent's text is checked or copied, empty elsewhere: the
- *   string value fold's step);
+ *   from `placedStep`), `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or whitespace
+ *   node's characters, an entity reference's `&name;`, empty elsewhere), `first` and `last` (the
+ *   first and last code points of its `chars`, empty where `chars` is) and `stringPiece` (its
+ *   `chars` where its parent's text is checked or copied, empty elsewhere: the string value fold's
+ *   step);
  * - **the tree's group:** `parent`, which the nesting supplies and the root holds as its own id;
  * - **drawn:** `at`, `children`, `start`, `end`, and the attribute and namespace family counts;
  * - **accumulated** by grizzle along the tree's axes: the parent copies (`parentParentKind` the
@@ -252,7 +252,7 @@ const positionOf = (n: NodeRow) => ChildGrammar.at("position", n.version, n.pare
  * as the document's doctype (position 1) and SSML's text in `ssml:speak` (spec reading 40) are.
  * Every other member is character data that carries its predecessor's state.
  *
- * The split is by position, not by kind, because `contentStep` steps every child whose position is
+ * The split is by position, not by kind, because `placedStep` steps every child whose position is
  * not 0, character data included.
  *
  * @param n - The row.
