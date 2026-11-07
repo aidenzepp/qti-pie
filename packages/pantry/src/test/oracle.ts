@@ -6642,7 +6642,7 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
   "Usage typed value": (keys) =>
     `a usage value of baseType ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "text"))}, which is no lexical form of it`,
   "Value cardinality": (keys) =>
-    `a value set of ${JSON.stringify(field(keys, "cardinality"))} cardinality holds ${field(keys, "values")} values, ${field(keys, "fields")} of them record fields`,
+    `a value set of ${JSON.stringify(field(keys, "cardinality"))} cardinality holds ${field(keys, "values")} values, ${field(keys, "fields")} of them with a field-identifier and ${field(keys, "typed")} with a base-type, where a record's values each carry both and any other's neither`,
   "Variable declared": (keys) =>
     `${field(keys, "kind")} names ${field(keys, "identifier")}, which nothing declares and no built-in variable is`,
   "Variable kind": (keys) =>

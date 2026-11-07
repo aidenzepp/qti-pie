@@ -302,14 +302,16 @@ const itemRefLawsOf = (
     .filter(({ node }) => node.kind === testKinds.itemRef)
     .flatMap(({ identifier, node }): readonly Breach[] => {
       const target = itemRefTargetOf(input, document.listed, node);
+      const item = itemRefDocument(input, document.listed, node);
+      // The href names an LTI link, or an item document the package holds: an item resource's
+      // href whose file is missing, or whose root is no item, names no item (§5.6.5).
       const named = Option.match(target, {
         onNone: () => [],
         onSome: ({ path, type }) =>
-          Option.exists(type, (held) => held === itemResourceType || isLinkType(held))
+          Option.exists(type, isLinkType) || Option.isSome(item)
             ? []
             : [breachAt(rows, node, "Item ref target", { path })],
       });
-      const item = itemRefDocument(input, document.listed, node);
       const declared = item.pipe(Option.map((listed) => declarationsOf(listed.rows, grammar)));
       const kindsOf = (name: string): readonly string[] =>
         Option.match(declared, { onNone: () => [], onSome: (held) => held.get(name) ?? [] });

@@ -445,6 +445,37 @@ const overlayCases: readonly LawCase[] = [
     name: "a section selecting more than it holds",
     rule: "selection-bounds",
   },
+  {
+    files: withItem("<qti-value>A</qti-value>", '<qti-value base-type="identifier">A</qti-value>'),
+    law: "Value cardinality",
+    name: "a single variable's value that writes a base-type, as only a record's field does",
+    rule: "value-cardinality",
+  },
+  {
+    files: withItem(
+      `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
+      `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="TALLY" cardinality="record"><qti-default-value><qti-value field-identifier="count">1</qti-value></qti-default-value></qti-outcome-declaration>`,
+    ),
+    law: "Value cardinality",
+    name: "a record's field that writes no base-type",
+    rule: "value-cardinality",
+  },
+  {
+    files: {
+      "imsmanifest.xml": manifestOf(
+        `${itemResource}<resource identifier="RG" type="imsqti_item_xmlv3p0" href="ghost.xml"><file href="ghost.xml"/></resource><resource identifier="RT" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>`,
+      ),
+      "item.xml": item,
+      "test.xml": edit(
+        edit(test, `select="1"`, `select="2"`),
+        `<qti-assessment-item-ref identifier="I" href="item.xml"/>`,
+        `<qti-assessment-item-ref identifier="I" href="item.xml"/><qti-assessment-item-ref identifier="G" href="ghost.xml"/>`,
+      ),
+    },
+    law: "Item ref target",
+    name: "an item ref to an item resource whose file the package does not hold",
+    rule: "item-ref-target",
+  },
 ];
 
 describe("the base packages", () => {
