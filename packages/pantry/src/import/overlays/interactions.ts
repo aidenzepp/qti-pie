@@ -651,7 +651,10 @@ const pciModuleFormsOf = (context: Context) => {
       forms.set(keyOf([node.id, String(false)]), { element: false, node: node.id });
     }
 
-    if (node.kind === modulesKind && context.facts.kindOf(node.parent) === pciKind) {
+    if (
+      node.kind === modulesKind &&
+      heldAt(context.kinds, node.parent, "the document's nodes") === pciKind
+    ) {
       forms.set(keyOf([node.parent, String(true)]), { element: true, node: node.parent });
     }
   }
