@@ -25,6 +25,7 @@ import {
   grammar,
   OperatorArity,
   ValueDomainOf,
+  VariableReference,
 } from "#pantry/grammar/install.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
@@ -465,6 +466,7 @@ interface StoredTerm {
   readonly arg?: StoredTerm;
   readonly args?: readonly StoredTerm[];
   readonly field?: string;
+  readonly fn?: string;
   readonly kind: string;
   readonly left?: StoredTerm;
   readonly op?: string;
@@ -475,12 +477,15 @@ interface StoredTerm {
 
 const ValueSchema = Schema.Union([Schema.Boolean, Schema.String]);
 
+const isText = Schema.is(Schema.String);
+
 const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
   arg: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   args: Schema.optionalKey(
     Schema.Array(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   ),
   field: Schema.optionalKey(Schema.String),
+  fn: Schema.optionalKey(Schema.String),
   kind: Schema.String,
   left: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   op: Schema.optionalKey(Schema.String),
@@ -530,6 +535,28 @@ const valueOf = (term: StoredTerm, row: Row): Value | undefined => {
         term.left !== undefined && term.right !== undefined
           ? (valueOf(term.left, row) === valueOf(term.right, row)) === (term.op === "eq")
           : undefined,
+    ],
+    [
+      "closedAt",
+      () => {
+        // A closed lookup of `VariableReference`'s spelling by a row's kind and attribute.
+        const [kind, attribute] = (term.args ?? []).map((arg) => valueOf(arg, row));
+
+        return term.field === "spelling"
+          ? VariableReference.rows.find((r) => r.kind === kind && r.attribute === attribute)
+              ?.spelling
+          : undefined;
+      },
+    ],
+    [
+      "compute",
+      () => {
+        const [text, pattern] = (term.args ?? []).map((arg) => valueOf(arg, row));
+
+        return term.fn === "matches" && isText(text) && isText(pattern)
+          ? new RegExp(pattern, "u").test(text)
+          : undefined;
+      },
     ],
     ["field", () => (term.field === undefined ? undefined : row[term.field])],
     [
@@ -586,6 +613,64 @@ const containmentsOf = (
         right.terms.every((term, at) => term === to[at + 1]),
     ),
   );
+
+const CheckSchema = Schema.Struct({
+  desc: Schema.Struct({ predicate: StoredTermSchema }),
+  kind: Schema.Literal("check"),
+  name: Schema.String,
+  relation: Schema.Struct({ name: Schema.String }),
+});
+
+describe("qti/expressions.ts, a test's braced reference that names no variable (reading R15-k)", () => {
+  // Oracle: information model §2.7.2 and §9.3.4, "if a string attribute appears to be a reference
+  // to a template or outcome variable but there is no variable with the given name it should be
+  // treated simply as string value", over the stored statements, evaluated on a row each.
+  const pattern = { attribute: "pattern", kind: "qti-pattern-match" } as const;
+  const bare = { attribute: "identifier", kind: "qti-variable" } as const;
+  const unresolved = { form: "unsplit", identifier: "NOSUCH", source: "none" } as const;
+  const [resolving, ...more] = containmentsOf(
+    ["AssembledReference", "assembly", "node", "attribute"],
+    ["Reading", "assembly", "node", "attribute"],
+  );
+  const [declared, ...moreChecks] = expressionLaws.flatMap((statement) =>
+    Option.toArray(Schema.decodeUnknownOption(CheckSchema)(statement)).filter(
+      ({ name, relation }) => name === "Variable_declared" && relation.name === "Reading",
+    ),
+  );
+
+  it("needs no resolving reading of a braced reference, and one of a bare one", () => {
+    assert.deepStrictEqual(more, []);
+    assert.isDefined(resolving, "the reference's resolving reading");
+    if (resolving !== undefined) {
+      const reference = { role: "variable" };
+
+      assert.isFalse(selects(resolving.left, { ...reference, ...pattern }), "a braced pattern");
+      assert.isTrue(selects(resolving.left, { ...reference, ...bare }), "a bare identifier");
+      assert.isFalse(
+        selects(resolving.left, {
+          ...reference,
+          attribute: "identifier",
+          kind: "qti-set-outcome-value",
+        }),
+        "a setter's is the other containment's",
+      );
+    }
+  });
+
+  it("declares a braced name no variable a string value, and a bare one still refused", () => {
+    assert.deepStrictEqual(moreChecks, []);
+    assert.isDefined(declared, "the reading's Variable_declared");
+    if (declared !== undefined) {
+      const holds = (row: Row) => valueOf(declared.desc.predicate, row) === true;
+
+      assert.isTrue(holds({ ...unresolved, ...pattern }), "a braced pattern naming nothing");
+      assert.isFalse(holds({ ...unresolved, ...bare }), "a bare identifier naming nothing");
+      assert.isTrue(holds({ ...unresolved, ...bare, source: "declared" }));
+      assert.isTrue(holds({ ...unresolved, ...bare, form: "split" }));
+      assert.isTrue(holds({ ...unresolved, ...bare, identifier: "A.B" }));
+    }
+  });
+});
 
 describe("qti/expressions.ts, an LTI item ref", () => {
   const [lti] = linkResourceTypes;

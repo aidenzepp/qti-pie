@@ -185,6 +185,55 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         }),
     );
 
+    judging.effect.skipIf(!tarballPresent)(
+      "a test's braced qti-pattern-match pattern that names no variable is a string value, and two readings of it are still refused (reading R15-k)",
+      () =>
+        Effect.gen(function* unresolvedTestPattern() {
+          const dir = yield* materialize("pattern-unresolved-test");
+          const files = yield* readPackage(dir);
+          const judgment = yield* judge(files, grammar, laws);
+
+          assert.deepStrictEqual(breachesOf(judgment), [], shown(breachesOf(judgment)));
+          assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+
+          // The same pattern naming `item034.completionStatus`, which the test declares itself
+          // and item034's session variable of that name is too: two readings, so Prefixed
+          // reference still refuses it.
+          const ambiguous = yield* judge(
+            files.map((file) =>
+              file.path === "rtest13.xml"
+                ? {
+                    ...file,
+                    bytes: new TextEncoder().encode(
+                      new TextDecoder()
+                        .decode(file.bytes)
+                        .replace("{NOSUCH}", "{item034.completionStatus}")
+                        .replace(
+                          "<qti-test-part ",
+                          '<qti-outcome-declaration identifier="item034.completionStatus" cardinality="single" base-type="string"/><qti-test-part ',
+                        ),
+                    ),
+                  }
+                : file,
+            ),
+            grammar,
+            laws,
+          );
+
+          assert.deepStrictEqual(
+            breachesOf(ambiguous)
+              .filter(({ law }) => law === "Prefixed reference")
+              .map(({ keys }) => keys["resolving"]),
+            ["2"],
+            shown(breachesOf(ambiguous)),
+          );
+          assert.deepStrictEqual(
+            breachesOf(ambiguous).filter(({ law }) => law === "Variable declared"),
+            [],
+          );
+        }),
+    );
+
     judging.effect(
       "a braced pattern that names a variable of the wrong kind or base type still breaks Reference type, and an unresolved bare reference still breaks Variable declared (reading R15-k)",
       () =>
