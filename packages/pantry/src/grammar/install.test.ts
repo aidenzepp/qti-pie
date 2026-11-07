@@ -341,7 +341,7 @@ const comparisons: readonly Comparison[] = [
           Option.toArray(cnPatternOf(form, base)).map((pattern) => ({
             base: String(base),
             form,
-            pattern,
+            pattern: `^(?:${pattern})$`,
           })),
         ),
       ),
@@ -712,12 +712,18 @@ describe("the MathML relations", () => {
     );
     assert.lengthOf(relationNamed("CnPattern").rows, 4 * 35);
 
-    const hexdouble = row("CnPattern", { base: "10", form: "hexdouble" });
-    assert.isTrue(Option.isSome(hexdouble));
-    assert.match(
-      "7ff8000000000000",
-      new RegExp(`^(?:${Option.getOrThrow(hexdouble)["pattern"]})$`, "u"),
-    );
+    for (const { pattern } of relationNamed("CnPattern").rows) {
+      assert.isTrue(String(pattern).startsWith("^(?:") && String(pattern).endsWith(")$"));
+    }
+
+    // PostgreSQL's `~` searches, so the payload is tried as a search, with no anchors of the test's own.
+    const search = (form: string, base: string, text: string) =>
+      new RegExp(String(Option.getOrThrow(row("CnPattern", { base, form }))["pattern"]), "u").test(
+        text,
+      );
+    assert.isTrue(search("hexdouble", "10", "7ff8000000000000"));
+    assert.isFalse(search("hexdouble", "10", "7F8000000000000000"));
+    assert.isFalse(search("integer", "10", "12abc"));
   });
 });
 
