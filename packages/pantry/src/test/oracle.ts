@@ -991,6 +991,35 @@ const heldRoot = (grammar: ComposedGrammar, view: View, node: FoldedNode<Compose
   );
 
 /**
+ * The choices an interaction encloses, which N8's choice clause reads: each a choice class's
+ * element whose parents in the information model are interactions, or for a gap one that "must only
+ * appear within a 'gapMatchInteraction'" (reading 38). A simple choice's are the choice and order
+ * interactions (§5.132), a simple associable choice's the associate interaction and the simple
+ * match set (§5.131), which the match interaction holds (§5.133), a hotspot choice's the graphic
+ * order and hotspot interactions (§5.67), an associable hotspot's the graphic associate and graphic
+ * gap match interactions (§5.7), a gap text's and a gap image's the gap choice (§5.58, §5.56),
+ * which the gap match and graphic gap match interactions hold (§6.17), and an inline choice's the
+ * inline choice interaction (§5.73); the gap's is §5.55's sentence. A hottext may stand outside a
+ * hottext interaction (reading 38), so it is none of them.
+ *
+ * The clause reads a choice that writes its `identifier` (multiplicity [1] in each class), the
+ * value its interaction's response names: one that writes none breaks AL3, and the content model
+ * (N5 to N7) places it as it places any element.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_SimpleChoice | QTI 3.0 information model, §5.132 SimpleChoice}
+ */
+const enclosedChoices: ReadonlySet<string> = new Set([
+  "qti-associable-hotspot",
+  "qti-gap",
+  "qti-gap-img",
+  "qti-gap-text",
+  "qti-hotspot-choice",
+  "qti-inline-choice",
+  "qti-simple-associable-choice",
+  "qti-simple-choice",
+]);
+
+/**
  * The laws of §1.3 and §1.5 over node rows, in the plan's notation and order, after the key of
  * `Node`, then N7's content laws: `Last` at the last slot, `Counted`'s bounds and `ChildBarredBy`.
  *
@@ -1279,6 +1308,18 @@ const nodeLaws: readonly NodeLaw[] = [
           parent: node.parent,
           parentNearest: node.parentNearest,
         }),
+      ),
+    law: "N8 nearest",
+    over: "members",
+  },
+  {
+    // N8's choice clause: a choice that writes its identifier lies in an interaction, its nearest.
+    breaks: (node, view, { grammar }) =>
+      unless(
+        !enclosedChoices.has(node.kind) ||
+          Option.isNone(valueOf(view, node.id, "identifier")) ||
+          Option.isSome(grammar.kinds.interaction.lookup({ kind: node.nearestKind })),
+        () => ({ nearest: node.nearest, nearestKind: node.nearestKind }),
       ),
     law: "N8 nearest",
     over: "members",
@@ -6413,11 +6454,13 @@ const ownLaws = {
   },
   "N8 nearest": {
     explain: (keys, grammar) =>
-      `nearest ${field(keys, "nearest")} (${field(keys, "nearestKind")}) under ${field(keys, "parent")}, a ${field(keys, "parentKind")}, where ${
-        Option.isSome(grammar.kinds.interaction.lookup({ kind: field(keys, "parentKind") }))
-          ? "an interaction parent is the nearest"
-          : `the parent's nearest ${field(keys, "parentNearest")} is`
-      }`,
+      keys["parent"] === undefined
+        ? `${field(keys, "kind")} writes its identifier, a choice, and its nearest ${field(keys, "nearest")} is a ${field(keys, "nearestKind")}, no interaction, where every choice lies in one`
+        : `nearest ${field(keys, "nearest")} (${field(keys, "nearestKind")}) under ${field(keys, "parent")}, a ${field(keys, "parentKind")}, where ${
+            Option.isSome(grammar.kinds.interaction.lookup({ kind: field(keys, "parentKind") }))
+              ? "an interaction parent is the nearest"
+              : `the parent's nearest ${field(keys, "parentNearest")} is`
+          }`,
     node: true,
   },
   "Namespace family": {

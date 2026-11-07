@@ -540,6 +540,7 @@ const ruleClasses: ReadonlyMap<string, LawClass> = new Map([
   ["idref-target", "identity"],
   ["not-qti3", "vocabulary"],
   ["ordering", "content"],
+  ["owner-copy", "content"],
   ["P2", "content"],
   ["P28", "content"],
   ["reachability", "internal"],

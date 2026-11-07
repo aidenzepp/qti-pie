@@ -202,8 +202,8 @@ export const choiceOwnerPackage = (drawn: ChoiceOwnerCase): PackageEntries => {
  * The rules the law oracle names a case by, sorted; none for a case it accepts:
  *
  * - `required-attribute`, AL3, where an interaction writes no `response-identifier`;
- * - `ancestry-ban`, N6, where the gap stands outside every gap-match: in the body, or in a fragment
- *   no include places, whose context holds no flag.
+ * - `ancestry-ban`, N6, and `owner-copy`, N8, where the gap stands outside every gap-match: in the
+ *   body, or in a fragment no include places, whose context holds no flag and no interaction.
  *
  * @param drawn - The case.
  * @returns The rules.
@@ -211,7 +211,7 @@ export const choiceOwnerPackage = (drawn: ChoiceOwnerCase): PackageEntries => {
 export const expectedRules = (drawn: ChoiceOwnerCase): readonly string[] =>
   [
     ...(drawn.interactions.some(({ named }) => !named) ? ["required-attribute"] : []),
-    ...(drawn.gap === "body" || drawn.gap === "unplaced" ? ["ancestry-ban"] : []),
+    ...(drawn.gap === "body" || drawn.gap === "unplaced" ? ["ancestry-ban", "owner-copy"] : []),
   ].toSorted();
 
 /**
