@@ -1549,6 +1549,35 @@ DETAIL naming the failing row (as the server log above shows for a foreign key).
 wrong verdict. Asked as a question, grizzle accepted it: a refused CHECK will carry the failing row's key from
 PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". Nothing is filed.
 
+### A law's key that closes a cycle with a family's owner axis is installed immediate, and no write can order it (grizzle defect, reproduction pending; lane DBT)
+
+- **Checked at:** grizzle `27c4cd2` and trunk `4ec7574`; both files are unchanged between them.
+- **Cause:**
+  - README "Direct SQL access" 23503 (`README.md:2441` at `27c4cd2`) defers a key that "lies on a cycle of foreign
+    keys".
+  - `#deferral` (`packages/engine/src/laws/model/model.ts:1053-1065`) builds that cycle from the laws' own keys
+    (`deferral === "rule"`) and period keys only, and leaves out owner axes, which are immediate (`:1526`).
+  - So `select(O, n=1)(node, language) → M(node, language)`, whose target `M` holds no other field, is immediate beside
+    `M`'s owner axis `M(node, copy) → O(node, n)`.
+  - The scheduler (`packages/engine/src/write/frontend/schedule.ts:48-51`, `:67-72`) drops one edge of the cycle, so
+    the write compiles, and then PostgreSQL refuses `O`'s INSERT with 23503 whenever both sides hold rows.
+- **Seen:** qti-pie's `LomString`→`LomStringLanguage` and `AssessmentObject`→`ObjectLang`, the `4b155e8` `_init`'s
+  only two cross-table cycles of immediate FKs. They refused `sharedMedia` and `metaData` in N2's tier at `5ca47304`.
+- **Reproduction:**
+  - schema: `O {node uuid, language text, n drawn(natural)}` keyed by `node`; `M {node uuid, language text}` keyed by
+    `node`;
+  - laws: `counted(on(M, 'node'), fin(O, 'n'))`; a check on `O` (`n = 1 or language = ''`);
+    `contained(select(O, n = 1)(node, language), M(node, language))`;
+  - write: insert `O` and `M` with `node` and `'en'`;
+  - expected: invariant-rejected 23503 on the containment's key at `O`'s INSERT, with generate drafting that key
+    without DEFERRABLE;
+  - control: the containment turned to `M` → `O` is accepted.
+- **Workaround in qti-pie:** both laws are stated member → owner (`a6d23fcc`), which is equivalent under the count and
+  E1. The guard `src/test/write-order.test.ts` restates the deferral rule over Qti's statements. It comes out once
+  grizzle fixes the gap.
+- **Status:** reproduction drafted, not yet run; N2 is running it now. The filing gate is at step 2, since the
+  reproduction hasn't run yet. Not filed. grizzle-c5 is told once it reproduces.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
