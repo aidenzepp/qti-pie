@@ -2772,8 +2772,10 @@ const unownedCodec: readonly {
 /**
  * R7-a's refused values: a closed `data-ssml` that Data-SSML 1.0 does not admit (an unknown name, a
  * value of the wrong type, a value outside an enumeration, text that is not JSON). The importer
- * refuses them under `attribute-lexical` and the oracle must agree, since both run the importer's
- * own checker; `src/vocab/data-ssml.test.ts` pins the same values.
+ * refuses them under `attribute-lexical` and the oracle must agree, the oracle with its own reader
+ * (`src/test/oracle-laws/data-ssml.ts`), written from the schema apart from the importer's
+ * (`src/vocab/data-ssml.ts`), which the purity guard keeps it from reading;
+ * `src/vocab/data-ssml.test.ts` pins the same values.
  */
 const unownedDataSsml: readonly {
   readonly files: Readonly<Record<string, string>>;

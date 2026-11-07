@@ -127,23 +127,37 @@ const oracleModules = (read: (file: string) => string): readonly string[] => {
 /**
  * The prefixes of the modules that state the schema's laws or the importer's and exporter's
  * judgments, and grizzle, which builds statements: the law oracle reads none of their values, so
- * it never decides a breach by a selection or a check the schema states. It reads the law catalog
- * (`#pantry/vocab/laws.ts`), which is data, and the stated bounds of `#pantry/qti/limits.ts`
- * ({@link oracleDataModules}).
+ * it never decides a breach by a selection or a check the schema states. `vocab/` holds judgments
+ * as well as data (the importer's `data-ssml` check among them), so its prefix is forbidden and its
+ * data modules are listed one by one ({@link oracleDataModules}), beside the stated bounds of
+ * `#pantry/qti/limits.ts`.
  */
 const oracleForbidden = [
   "#pantry/qti/",
   "#pantry/import/",
   "#pantry/export/",
   "#pantry/db/",
+  "#pantry/vocab/",
   "@bjornpagen/grizzle",
 ];
 
 /**
  * The modules under {@link oracleForbidden}'s prefixes that hold data and no statement, which the
- * oracle may read: the bounds a key's text and a name are held to.
+ * oracle may read:
+ *
+ * - `#pantry/qti/limits.ts` holds the bounds a key's text and a name are held to.
+ * - `#pantry/vocab/laws.ts` is the law catalog, where a law's rule and source live.
+ * - `#pantry/vocab/namespaces.ts` holds the namespace names.
+ * - `#pantry/vocab/inventory/attributes.ts` is the XSD inventory of attribute declarations.
+ * - `#pantry/vocab/derive/domains.ts` holds XML Schema's built-in domains, the grammar's data.
  */
-const oracleDataModules: ReadonlySet<string> = new Set(["#pantry/qti/limits.ts"]);
+const oracleDataModules: ReadonlySet<string> = new Set([
+  "#pantry/qti/limits.ts",
+  "#pantry/vocab/derive/domains.ts",
+  "#pantry/vocab/inventory/attributes.ts",
+  "#pantry/vocab/laws.ts",
+  "#pantry/vocab/namespaces.ts",
+]);
 
 /**
  * The oracle's reads of a statement module today, each `module: specifier`. The list only shrinks:
@@ -158,8 +172,16 @@ const oracleDataModules: ReadonlySet<string> = new Set(["#pantry/qti/limits.ts"]
  * differential would see it: each is owed a derivation of the oracle's own, held equal to the
  * schema's by a test, and its entry goes in the same commit. Only metadata is shared, through the
  * law catalog.
+ *
+ * - `test/oracle.ts` reads `dataName` and `typeAvailable` from `#pantry/vocab/open.ts`. `dataName` is
+ *   the regular expression the database check `AL4_data_name` states, and `typeAvailable` seeds the
+ *   grammar's `TypeAvailable` rows, so both judges share them. Like the key-copies entry, it is
+ *   owed an oracle-side derivation.
  */
-const oracleStatementReads: readonly string[] = ["test/key-copies.ts: #pantry/qti/schema.ts"];
+const oracleStatementReads: readonly string[] = [
+  "test/key-copies.ts: #pantry/qti/schema.ts",
+  "test/oracle.ts: #pantry/vocab/open.ts",
+];
 
 /**
  * Read a module's text by its path relative to `src`.
@@ -306,6 +328,7 @@ describe("the test helpers", () => {
           'import type { Interaction } from "#pantry/qti/interactions.ts";',
           'import { keyTextBytes } from "#pantry/qti/limits.ts";',
           'import { lawTable } from "#pantry/vocab/laws.ts";',
+          'import { dataSsmlFaultIn } from "#pantry/vocab/data-ssml.ts";',
           'const { itemInstances } = await import("#pantry/qti/tests.ts");',
         ].join("\n"),
       ],
@@ -323,6 +346,7 @@ describe("the test helpers", () => {
       statementReads((file) => planted.get(file) ?? ""),
       [
         "test/oracle-laws.ts: #pantry/qti/tests.ts",
+        "test/oracle-laws.ts: #pantry/vocab/data-ssml.ts",
         "test/oracle.ts: #pantry/qti/node.ts",
         "test/oracle.ts: @bjornpagen/grizzle",
       ],
