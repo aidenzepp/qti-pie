@@ -7,8 +7,7 @@
  * schema's statement of it (`src/qti/**`), so the oracle judges what the database judges:
  *
  * - `#pantry/test/oracle-laws/documents.ts`: the declarations (O2), the LOM title (O6), and the laws
- *   the schema states that the oracle had not declared, which it declares here
- *   ({@link addedLawNames});
+ *   the schema states that the oracle had not declared, which it declares here (`addedLaws`);
  * - `#pantry/test/oracle-laws/expressions.ts`: the expressions (O4);
  * - `#pantry/test/oracle-laws/tests.ts`: the tests and sections (O7).
  *
@@ -32,23 +31,15 @@ import {
   expressionLaws,
   expressionPackageBreaches,
 } from "#pantry/test/oracle-laws/expressions.ts";
-import { rowsOf } from "#pantry/test/oracle-laws/rows.ts";
-import type { LawBreach } from "#pantry/test/oracle-laws/rows.ts";
+import { viewOf } from "#pantry/test/oracle-view.ts";
+import type { LawBreach } from "#pantry/test/oracle-view.ts";
 import {
   testDocumentBreaches,
   testLaws,
   testPackageBreaches,
 } from "#pantry/test/oracle-laws/tests.ts";
 
-export {
-  addedExplainers,
-  addedLawNames,
-  addedLawRules,
-  addedLawSources,
-  addedRules,
-} from "#pantry/test/oracle-laws/documents.ts";
-
-export type { AddedLaw } from "#pantry/test/oracle-laws/documents.ts";
+export { addedLaws } from "#pantry/test/oracle-laws/documents.ts";
 
 /**
  * Every law this module's producers raise.
@@ -95,7 +86,7 @@ export const lawDocumentBreaches = (
   rows: FoldedRows<Composed>,
   grammar: ComposedGrammar,
 ): readonly LawBreach<ProducedLaw>[] => {
-  const indexed = rowsOf(path, rows);
+  const indexed = viewOf(path, rows);
 
   return [
     ...documentDocumentBreaches(indexed, grammar),
@@ -119,10 +110,10 @@ export const lawPackageBreaches = (
     documents: input.documents.map(({ path, resourceType, rows: folded }) => ({
       path,
       resourceType,
-      rows: rowsOf(path, folded),
+      rows: viewOf(path, folded),
     })),
     entries: new Set(input.entries),
-    manifest: rowsOf(input.manifest.path, input.manifest.rows),
+    manifest: viewOf(input.manifest.path, input.manifest.rows),
   };
 
   return [

@@ -10,9 +10,9 @@
  * - **The LOM title** (`src/qti/metadata.ts` `lom-title`, QTI 3.0 Metadata §2.7.1.2): a record that
  *   names a document and has a general title holds a title string with the document's title, in its
  *   language.
- * - **The laws the oracle declares here** ({@link addedLawNames}): `Adaptive feedback` (§5.49,
- *   §5.52), `Max strings required` (§5.48.6), `Dependency target` (IMS Content Packaging 1.2) and
- *   `XML production` (XML 1.0's productions over the stored texts), each with the schema's rule and
+ * - **The laws the oracle declares here** ({@link addedLaws}): `Adaptive feedback` (§5.49, §5.52),
+ *   `Max strings required` (§5.48.6), `Dependency target` (IMS Content Packaging 1.2) and `XML
+ *   production` (XML 1.0's productions over the stored texts), each with the schema's rule and
  *   source (`#pantry/import/refusal.ts` `lawTable`), word for word.
  */
 import { Option } from "effect";
@@ -24,8 +24,10 @@ import {
   collapsedOf,
   elementsOf,
   valueOf,
-} from "#pantry/test/oracle-laws/rows.ts";
-import type { LawBreach, PackageRows, Row, Rows } from "#pantry/test/oracle-laws/rows.ts";
+  field,
+} from "#pantry/test/oracle-view.ts";
+import type { LawBreach, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
+import type { OracleLaw } from "#pantry/test/oracle.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { ncNameForm, typedValueHolds } from "#pantry/test/oracle-laws/typed.ts";
 
@@ -59,75 +61,40 @@ type Breach = LawBreach<DocumentLaw>;
 
 /**
  * The laws the schema states (`#pantry/import/refusal.ts` `lawTable`) that the law oracle had not
- * declared, which this module declares and produces: each joins the oracle's `LawName`, its rule
- * its `oracleRules`, and its rule, source and explanation the oracle's tables, through
- * `#pantry/test/oracle-laws.ts`.
+ * declared, which this module declares and produces, each in one place: its rule, its source, the
+ * schema's word for word, and its explanation from a breach's keys. The oracle merges them with its
+ * own (`#pantry/test/oracle.ts` `oracleLaws`).
  */
-export const addedLawNames = [
-  "Adaptive feedback",
-  "Dependency target",
-  "Max strings required",
-  "XML production",
-] as const;
-
-/**
- * A law of {@link addedLawNames}.
- */
-export type AddedLaw = (typeof addedLawNames)[number];
-
-/**
- * The rules {@link addedLawNames} name that the oracle's `oracleRules` did not hold.
- */
-export const addedRules = ["adaptive-feedback", "max-strings-required"] as const;
-
-/**
- * The rule each added law's refusal is named by, the schema's (`lawTable`).
- */
-export const addedLawRules = {
-  "Adaptive feedback": "adaptive-feedback",
-  "Dependency target": "idref-target",
-  "Max strings required": "max-strings-required",
-  "XML production": "well-formedness",
-} as const satisfies Readonly<Record<AddedLaw, string>>;
-
-/**
- * The source each added law states, the schema's (`lawTable`), word for word.
- */
-export const addedLawSources = {
-  "Adaptive feedback":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#Data_FeedbackBlock (§5.49, FeedbackBlock, and §5.52, FeedbackInline: 'A feedback element that forms part of a Non-adaptive Item must not contain an interaction object, either directly or indirectly'), plan §1.7 O3 (Q5.09): a non-adaptive item binds no response variable whose interaction stands inside feedback, select(BoundVariable, response, adaptive = false) contained in the interactions outside every feedback flag",
-  "Dependency target":
-    'IMS Content Packaging 1.2: a dependency\'s identifierref names a resource of its manifest, contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")) (Q5.06)',
-  "Max strings required":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BindingDeclaration, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
-  "XML production":
-    "XML 1.0 §2.2 Char, §2.5 Comment, §2.6 PI, §2.8 doctypedecl and VersionNum, §4.3.3 EncName, and Namespaces in XML 1.0 §3 NCName: a stored text outside its production is no well-formed XML, which crust's reader refuses before any row exists, so only an importer defect reaches the law",
-} as const satisfies Readonly<Record<AddedLaw, string>>;
-
-/**
- * Read one key field of a breach.
- *
- * @param keys - The breach's keys.
- * @param name - The field's name.
- * @returns Its text, empty when the keys do not hold it.
- */
-const field = (keys: Readonly<Record<string, string>>, name: string): string => keys[name] ?? "";
-
-/**
- * Explain a breach of each added law from its keys.
- */
-export const addedExplainers = {
-  "Adaptive feedback": (keys: Readonly<Record<string, string>>) =>
-    `${field(keys, "kind")} binds ${field(keys, "identifier")} inside feedback, which a non-adaptive item's feedback may not hold`,
-  "Dependency target": (keys: Readonly<Record<string, string>>) =>
-    `a dependency names ${field(keys, "identifier")}, which no resource of its manifest is`,
-  "Max strings required": (keys: Readonly<Record<string, string>>) =>
-    `the extended text interaction binds the ${field(keys, "cardinality")} response ${field(keys, "identifier")} and writes no max-strings`,
-  "XML production": (keys: Readonly<Record<string, string>>) =>
-    `the stored ${field(keys, "production")} ${JSON.stringify(field(keys, "value"))} is outside its XML production`,
-} as const satisfies Readonly<
-  Record<AddedLaw, (keys: Readonly<Record<string, string>>, grammar: ComposedGrammar) => string>
->;
+export const addedLaws = {
+  "Adaptive feedback": {
+    explain: (keys) =>
+      `${field(keys, "kind")} binds ${field(keys, "identifier")} inside feedback, which a non-adaptive item's feedback may not hold`,
+    rule: "adaptive-feedback",
+    source:
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_FeedbackBlock (§5.49, FeedbackBlock, and §5.52, FeedbackInline: 'A feedback element that forms part of a Non-adaptive Item must not contain an interaction object, either directly or indirectly'), plan §1.7 O3 (Q5.09): a non-adaptive item binds no response variable whose interaction stands inside feedback, select(BoundVariable, response, adaptive = false) contained in the interactions outside every feedback flag",
+  },
+  "Dependency target": {
+    explain: (keys) =>
+      `a dependency names ${field(keys, "identifier")}, which no resource of its manifest is`,
+    rule: "idref-target",
+    source:
+      'IMS Content Packaging 1.2: a dependency\'s identifierref names a resource of its manifest, contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")) (Q5.06)',
+  },
+  "Max strings required": {
+    explain: (keys) =>
+      `the extended text interaction binds the ${field(keys, "cardinality")} response ${field(keys, "identifier")} and writes no max-strings`,
+    rule: "max-strings-required",
+    source:
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BindingDeclaration, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
+  },
+  "XML production": {
+    explain: (keys) =>
+      `the stored ${field(keys, "production")} ${JSON.stringify(field(keys, "value"))} is outside its XML production`,
+    rule: "well-formedness",
+    source:
+      "XML 1.0 §2.2 Char, §2.5 Comment, §2.6 PI, §2.8 doctypedecl and VersionNum, §4.3.3 EncName, and Namespaces in XML 1.0 §3 NCName: a stored text outside its production is no well-formed XML, which crust's reader refuses before any row exists, so only an importer defect reaches the law",
+  },
+} as const satisfies Readonly<Record<string, OracleLaw>>;
 
 /**
  * The kinds that hold a declaration's values: its default and its correct response (information
@@ -198,7 +165,7 @@ const below = (left: Option.Option<string>, right: Option.Option<string>): boole
  * @param node - The declaration.
  * @returns The breach, none where the range holds.
  */
-const masteryRangeOf = (rows: Rows, node: Row): readonly Breach[] => {
+const masteryRangeOf = (rows: View, node: Row): readonly Breach[] => {
   const mastery = valueOf(rows, node.id, "mastery-value");
   const low = valueOf(rows, node.id, "normal-minimum");
   const high = valueOf(rows, node.id, "normal-maximum");
@@ -226,7 +193,7 @@ const masteryRangeOf = (rows: Rows, node: Row): readonly Breach[] => {
  * @returns The breaches.
  */
 const valueSetLawsOf = (
-  rows: Rows,
+  rows: View,
   set: Row,
   cardinality: string,
   baseType: string,
@@ -289,7 +256,7 @@ const valueSetLawsOf = (
  * @returns The breaches.
  */
 const declarationLawsOf = (
-  rows: Rows,
+  rows: View,
   node: Row,
   sessionVariables: ReadonlySet<string>,
   grammar: ComposedGrammar,
@@ -343,7 +310,7 @@ const truePattern = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
  * @param grammar - The composed grammar.
  * @returns The breaches.
  */
-const interactionLawsOf = (rows: Rows, grammar: ComposedGrammar): readonly Breach[] => {
+const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breach[] => {
   const root = Option.getOrUndefined(rows.root);
   if (root?.kind !== "qti-assessment-item") {
     return [];
@@ -433,7 +400,7 @@ const productions = {
  * @param rows - The document.
  * @returns The breaches.
  */
-const productionLawsOf = (rows: Rows): readonly Breach[] => {
+const productionLawsOf = (rows: View): readonly Breach[] => {
   const { rows: folded } = rows;
   const at = (node: NodeId, production: string, value: string): readonly Breach[] => {
     const held = rows.byId.get(node);
@@ -485,7 +452,7 @@ const productionLawsOf = (rows: Rows): readonly Breach[] => {
  * @returns The breaches.
  */
 export const documentDocumentBreaches = (
-  rows: Rows,
+  rows: View,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
   const sessionVariables = new Set(
@@ -628,7 +595,7 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
  * @param manifest - The manifest.
  * @returns The breaches.
  */
-const dependencyLawsOf = (manifest: Rows): readonly Breach[] => {
+const dependencyLawsOf = (manifest: View): readonly Breach[] => {
   const resources = new Set(
     manifest.members.flatMap((node) =>
       node.kind === "cp:resource"

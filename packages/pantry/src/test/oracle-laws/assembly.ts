@@ -24,9 +24,8 @@
 import { Option } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { ancestorsOf, collapsedOf, elementsOf, valueOf } from "#pantry/test/oracle-laws/rows.ts";
-import type { ListedRows, PackageRows, Row, Rows } from "#pantry/test/oracle-laws/rows.ts";
-import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
+import { collapsedOf, elementsOf, hrefPathOf, valueOf } from "#pantry/test/oracle-view.ts";
+import type { ListedRows, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 
 /**
  * The kinds of a test's structure (information model §4.2, §5.6, §5.159, §7.5).
@@ -84,7 +83,7 @@ const truePattern = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
  * @param otherwise - Its value where the element writes none.
  * @returns The value.
  */
-const flagOf = (rows: Rows, node: NodeId, name: string, otherwise: boolean): boolean =>
+const flagOf = (rows: View, node: NodeId, name: string, otherwise: boolean): boolean =>
   Option.match(valueOf(rows, node, name), {
     onNone: () => otherwise,
     onSome: (lexical) => truePattern.test(lexical),
@@ -177,41 +176,6 @@ export interface TestDocument {
  * The reserved targets every branch rule may name (information model §5.23.1).
  */
 export const exits: ReadonlySet<string> = new Set(["EXIT_SECTION", "EXIT_TESTPART", "EXIT_TEST"]);
-
-/**
- * Read the `xml:base` values in scope at a node, outermost first: its ancestors' and its own.
- *
- * @param rows - The document.
- * @param node - The node.
- * @returns The bases, the root's first.
- */
-const basesAt = (rows: Rows, node: Row): readonly string[] =>
-  [node, ...ancestorsOf(rows, node)]
-    .toReversed()
-    .flatMap(({ id }) => Option.toArray(valueOf(rows, id, "xml:base")));
-
-/**
- * Resolve an element's `href` as a package path (readings 102 and 103): its `xs:anyURI` value
- * collapsed and resolved against its document's path and the `xml:base` values in scope, by the
- * oracle's own resolver, and the path it is compared by.
- *
- * @param rows - The document.
- * @param node - The element.
- * @returns The path, none where the element writes no href.
- */
-export const hrefPathOf = (rows: Rows, node: Row): Option.Option<string> =>
-  Option.map(valueOf(rows, node.id, "href"), (lexical) =>
-    comparedPath(
-      resolveAttribute({
-        bases: basesAt(rows, node),
-        document: rows.path,
-        lexical,
-        srcset: false,
-        whiteSpace: "collapse",
-      }),
-      oracleValueOf(lexical, "collapse"),
-    ),
-  );
 
 /**
  * Read a test or section document's structure.
@@ -548,7 +512,7 @@ export const testDocumentsOf = (
  * @param manifest - The manifest.
  * @returns Each resolved href path's resource types.
  */
-export const resourceTypesByPath = (manifest: Rows): ReadonlyMap<string, readonly string[]> => {
+export const resourceTypesByPath = (manifest: View): ReadonlyMap<string, readonly string[]> => {
   const byPath = new Map<string, string[]>();
   for (const node of manifest.members) {
     if (node.kind === "cp:resource") {

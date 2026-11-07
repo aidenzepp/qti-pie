@@ -46,20 +46,8 @@ import type {
   Rule,
   TestDocument,
 } from "#pantry/test/oracle-laws/assembly.ts";
-import {
-  breachAt,
-  collapsed,
-  collapsedOf,
-  elementsOf,
-  valueOf,
-} from "#pantry/test/oracle-laws/rows.ts";
-import type {
-  LawBreach,
-  ListedRows,
-  PackageRows,
-  Row,
-  Rows,
-} from "#pantry/test/oracle-laws/rows.ts";
+import { breachAt, collapsed, collapsedOf, elementsOf, valueOf } from "#pantry/test/oracle-view.ts";
+import type { LawBreach, ListedRows, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 
 /**
  * The laws this module produces.
@@ -160,7 +148,7 @@ type Breach = LawBreach<TestLaw>;
  * @returns Each declared identifier's declaration kinds, in document order.
  */
 const declarationsOf = (
-  rows: Rows,
+  rows: View,
   grammar: ComposedGrammar,
 ): ReadonlyMap<string, readonly string[]> => {
   const declared = new Map<string, string[]>();
@@ -891,7 +879,7 @@ const referenceLawsOf = (
  * @returns No breach.
  */
 export const testDocumentBreaches = (
-  _rows: Rows,
+  _rows: View,
   _grammar: ComposedGrammar,
 ): readonly Breach[] => [];
 
