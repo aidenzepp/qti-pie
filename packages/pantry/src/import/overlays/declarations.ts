@@ -13,7 +13,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
-import type { Folded } from "#pantry/import/fold.ts";
+import type { Folds } from "#pantry/import/fold.ts";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { spelledCardinalities } from "#pantry/grammar/compose.ts";
 import { DeclarationKind } from "#pantry/grammar/install.ts";
@@ -367,7 +367,7 @@ const charsOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, string> =>
  * for each node one of whose children holds any.
  */
 interface Derived {
-  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly folds: Folds;
   readonly text: ReadonlyMap<NodeId, string>;
 }
 
