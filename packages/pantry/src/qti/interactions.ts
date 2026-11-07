@@ -3015,13 +3015,13 @@ export const interactionLawsByName = {
     ),
   ],
   "Template variable type": [
-    check("Template_variable_type", TemplateRef, (r) =>
+    check("Template_variable_type", TemplateRefDeclaration, (r) =>
       r.or(
         r.eq(r.kind, templateVariableKind),
         r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
       ),
     ),
-    check("Template_variable_type", SectionTemplateRef, (r) =>
+    check("Template_variable_type", SectionTemplateRefDeclaration, (r) =>
       r.or(
         r.eq(r.kind, templateVariableKind),
         r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
