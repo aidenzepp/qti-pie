@@ -1298,7 +1298,11 @@ const sprawling: Item = {
 interface TooLarge {
   readonly budget: number;
   readonly item: string;
-  readonly printed: Option.Option<{ readonly bound: number; readonly identifier: string }>;
+  readonly printed: Option.Option<{
+    readonly bound: number;
+    readonly identifier: string;
+    readonly limit: "budget" | "text";
+  }>;
 }
 
 /**
@@ -1339,7 +1343,7 @@ describe("render, the output budget", () => {
           Option.some({
             budget: 16_777_216,
             item: "sprawling",
-            printed: Option.some({ bound: 16_777_216, identifier: "S" }),
+            printed: Option.some({ bound: 16_777_216, identifier: "S", limit: "budget" }),
           }),
         );
       }),
@@ -1380,7 +1384,7 @@ describe("render, the output budget", () => {
           Option.some({
             budget: 10_000,
             item: "slotted",
-            printed: Option.some({ bound: 10_000, identifier: "S" }),
+            printed: Option.some({ bound: 10_000, identifier: "S", limit: "budget" }),
           }),
         );
       }),
@@ -1583,7 +1587,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "widened",
-            printed: Option.some({ bound: 1_000_000, identifier: "N" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "N", limit: "text" }),
           }),
         );
       }),
@@ -1601,7 +1605,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "lengthy",
-            printed: Option.some({ bound: 1_000_000, identifier: "S" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "text" }),
           }),
         );
       }),
@@ -1619,7 +1623,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "passing",
-            printed: Option.some({ bound: 1_000_000, identifier: "P" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "P", limit: "text" }),
           }),
         );
       }),
@@ -1653,6 +1657,42 @@ describe("render, a printed text past its bound", () => {
 
         assert.include(textOf(rootOf(longest)), `Value: ${"y".repeat(1_000_000)}`);
         assert.notInclude(hidden.html, "yyy");
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge naming which limit S passed when both are 1,000,000: the budget when an outputBudget of 1,000,000 runs out across four slots of 300,000 characters, the text for one slot of 1,000,001 under the same budget",
+    () =>
+      Effect.gen(function* namesWhichLimit() {
+        const configuration = yield* configure({ outputBudget: 1_000_000 });
+        const quartered = acceptForTest({
+          ...sprawling,
+          body: [slotsOfS(4)],
+          identifier: "quartered",
+        });
+        const spent = redact(quartered, strings({ S: "y".repeat(300_000) }), configuration);
+        const long = redact(
+          acceptForTest(lengthy),
+          strings({ S: "y".repeat(1_000_001) }),
+          configuration,
+        );
+
+        assert.deepStrictEqual(
+          budgetFailure(render(spent, configuration, { instance })),
+          Option.some({
+            budget: 1_000_000,
+            item: "quartered",
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "budget" }),
+          }),
+        );
+        assert.deepStrictEqual(
+          budgetFailure(render(long, configuration, { instance })),
+          Option.some({
+            budget: 1_000_000,
+            item: "lengthy",
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "text" }),
+          }),
+        );
       }),
   );
 });

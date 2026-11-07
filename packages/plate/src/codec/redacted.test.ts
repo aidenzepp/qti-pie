@@ -1257,14 +1257,19 @@ describe("the codec on a printed text past its bound", () => {
           Option.some({
             bound: 1_000_000,
             identifier: "S",
+            limit: "text",
             path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
           }),
         );
-        assert.deepStrictEqual(json.unprinted, { bound: 1_000_000, identifier: "S" });
+        assert.deepStrictEqual(json.unprinted, {
+          bound: 1_000_000,
+          identifier: "S",
+          limit: "text",
+        });
         assert.deepStrictEqual(decoded, pathless(redacted));
         assert.deepStrictEqual(
           decoded.unprinted,
-          Option.some({ bound: 1_000_000, identifier: "S", path: "" }),
+          Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: "" }),
         );
         assert.deepStrictEqual(
           Result.getFailure(failed).pipe(
@@ -1272,7 +1277,7 @@ describe("the codec on a printed text past its bound", () => {
               failure._tag === "OutputTooLarge" ? failure.printed : failure._tag,
             ),
           ),
-          Option.some(Option.some({ bound: 1_000_000, identifier: "S" })),
+          Option.some(Option.some({ bound: 1_000_000, identifier: "S", limit: "text" })),
         );
       }),
   );
@@ -1295,7 +1300,7 @@ describe("the codec on a printed text past its bound", () => {
 
         for (const bound of [0, 1.5, "1000000"]) {
           const error = yield* failureOf(
-            decodeRedacted({ ...json, unprinted: { bound, identifier: "S" } }),
+            decodeRedacted({ ...json, unprinted: { bound, identifier: "S", limit: "text" } }),
           );
 
           assert.strictEqual(error.stage, "decode", String(bound));
@@ -1303,9 +1308,43 @@ describe("the codec on a printed text past its bound", () => {
 
         assert.isTrue(
           Result.isSuccess(
-            decodeRedacted({ ...json, unprinted: { bound: 1_000_000, identifier: "S" } }),
+            decodeRedacted({
+              ...json,
+              unprinted: { bound: 1_000_000, identifier: "S", limit: "text" },
+            }),
           ),
         );
+      }),
+  );
+
+  it.effect(
+    "[I-5] round-trips which limit an unprinted text passed, the budget or the text, and refuses an unprinted without it or with another value: InvalidRedacted at stage decode",
+    () =>
+      Effect.gen(function* roundTripsWhichLimit() {
+        const json = Result.getOrThrow(encodeRedacted(redact(acceptForTest(choiceItem))));
+
+        for (const limit of ["budget", "text"] as const) {
+          const unprinted = { bound: 1_000_000, identifier: "S", limit };
+          const decoded = Result.getOrThrow(decodeRedacted({ ...json, unprinted }));
+
+          assert.deepStrictEqual(decoded.unprinted, Option.some({ ...unprinted, path: "" }), limit);
+          assert.deepStrictEqual(
+            Result.getOrThrow(encodeRedacted(decoded)).unprinted,
+            unprinted,
+            limit,
+          );
+        }
+
+        for (const unprinted of [
+          { bound: 1_000_000, identifier: "S" },
+          { bound: 1_000_000, identifier: "S", limit: "length" },
+          { bound: 1_000_000, identifier: "S", limit: "Budget" },
+          { bound: 1_000_000, identifier: "S", limit: 1 },
+        ]) {
+          const error = yield* failureOf(decodeRedacted({ ...json, unprinted }));
+
+          assert.strictEqual(error.stage, "decode", JSON.stringify(unprinted));
+        }
       }),
   );
 });
