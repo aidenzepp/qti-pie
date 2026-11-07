@@ -1,20 +1,24 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { attr, el } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { evaluators } from "#plate/engine/evaluate.ts";
+import type { Variables } from "#plate/engine/evaluate.ts";
 import { expressionKinds } from "#plate/model/expression.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { buildItem } from "#plate/model/item.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import {
+  assertKindType,
   baseValueElement,
+  evaluateIn,
   expressionElement,
   outcomeDeclaration,
   processingItem,
   refusalsOf,
   responseDeclaration,
+  scopeOf,
   setOutcomeElement,
   variableElement,
 } from "#plate/test/processing.ts";
@@ -346,4 +350,151 @@ describe("the references family's qti-default and qti-null", () => {
         }
       }),
   );
+});
+
+/**
+ * The declarations of the items {@link readRandom} builds: a float outcome `OUT` the expression
+ * sets, the integer outcomes `LOW`, `HIGH` and `BY`, and the float outcomes `FLOOR` and `CEILING`,
+ * which a random kind's attributes may name.
+ */
+const randomDeclarations: readonly SourceElement[] = [
+  outcomeDeclaration("OUT", "float"),
+  outcomeDeclaration("LOW", "integer"),
+  outcomeDeclaration("HIGH", "integer"),
+  outcomeDeclaration("BY", "integer"),
+  outcomeDeclaration("FLOOR", "float"),
+  outcomeDeclaration("CEILING", "float"),
+];
+
+/**
+ * Build an item whose processing sets `OUT` to one random kind beside
+ * {@link randomDeclarations}, and give the expression it reads and the item.
+ *
+ * @param expression The expression element.
+ * @returns The expression the rule tree holds, none when the processing is none, and the item.
+ */
+const readRandom = (expression: SourceElement) =>
+  buildItem(processingItem(randomDeclarations, [setOutcomeElement("OUT", expression)])).pipe(
+    Effect.map((built) => ({
+      built,
+      read: built.processing.pipe(
+        Option.flatMap((tree) => Option.fromUndefinedOr(tree[0])),
+        Option.flatMap((rule) =>
+          rule.kind === "set-outcome" ? Option.some(rule.expression) : Option.none(),
+        ),
+      ),
+    })),
+  );
+
+/**
+ * The variables of an attempt in which the outcomes {@link randomDeclarations} declares hold a
+ * value each.
+ */
+const randomVariables: Variables = {
+  outcomes: {
+    BY: integer(2n),
+    CEILING: float(4.5),
+    FLOOR: float(1.5),
+    HIGH: integer(9n),
+    LOW: integer(3n),
+    OUT: float(0),
+  },
+  responses: {},
+};
+
+describe("the references family's qti-random-integer and qti-random-float", () => {
+  it.effect(
+    "[I-9a] read a qti-random-integer and a qti-random-float with their defaults: min 0 and step 1, and min 0",
+    () =>
+      Effect.gen(function* readsDefaults() {
+        const integerRead = yield* readRandom(
+          expressionElement("random-integer", [attr("max", " 10 ")]),
+        );
+        const floatRead = yield* readRandom(
+          expressionElement("random-float", [attr("max", "2.5")]),
+        );
+
+        assert.deepStrictEqual(
+          integerRead.read,
+          Option.some<Expression>({
+            kind: "random-integer",
+            max: { _tag: "literal", value: 10n },
+            min: { _tag: "literal", value: 0n },
+            operands: [],
+            step: { _tag: "literal", value: 1n },
+          }),
+        );
+        assert.deepStrictEqual(
+          floatRead.read,
+          Option.some<Expression>({
+            kind: "random-float",
+            max: { _tag: "literal", value: 2.5 },
+            min: { _tag: "literal", value: 0 },
+            operands: [],
+          }),
+        );
+        assert.deepStrictEqual(
+          [...integerRead.built.unsupported, ...floatRead.built.unsupported],
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-9a] read each attribute of a qti-random-integer and a qti-random-float that names a variable as a reference, and its evaluator agrees with its rule",
+    () =>
+      Effect.gen(function* readsReferences() {
+        const integerRead = yield* readRandom(
+          expressionElement("random-integer", [
+            attr("max", "HIGH"),
+            attr("min", "LOW"),
+            attr("step", "BY"),
+          ]),
+        );
+        const floatRead = yield* readRandom(
+          expressionElement("random-float", [attr("max", "CEILING"), attr("min", "FLOOR")]),
+        );
+
+        assert.deepStrictEqual(
+          integerRead.read,
+          Option.some<Expression>({
+            kind: "random-integer",
+            max: { _tag: "ref", identifier: "HIGH" },
+            min: { _tag: "ref", identifier: "LOW" },
+            operands: [],
+            step: { _tag: "ref", identifier: "BY" },
+          }),
+        );
+        assert.deepStrictEqual(
+          floatRead.read,
+          Option.some<Expression>({
+            kind: "random-float",
+            max: { _tag: "ref", identifier: "CEILING" },
+            min: { _tag: "ref", identifier: "FLOOR" },
+            operands: [],
+          }),
+        );
+
+        for (const { built, read } of [integerRead, floatRead]) {
+          const expression = Option.getOrThrow(read);
+          const value = evaluateIn(expression, scopeOf(built, randomVariables));
+
+          assert.isTrue(Result.isSuccess(value), `qti-${expression.kind} failed`);
+          assertKindType(Result.getOrThrow(value), expression.kind, []);
+        }
+      }),
+  );
+
+  it("[I-9a] type a qti-random-integer as a single integer and a qti-random-float as a single float", () => {
+    assert.deepStrictEqual(
+      {
+        float: kindRules["random-float"].resultType([], {}),
+        integer: kindRules["random-integer"].resultType([], {}),
+      },
+      {
+        float: { baseType: "float", cardinality: "single" },
+        integer: { baseType: "integer", cardinality: "single" },
+      },
+    );
+  });
 });
