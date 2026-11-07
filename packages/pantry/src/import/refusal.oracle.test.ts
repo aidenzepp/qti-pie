@@ -1303,7 +1303,7 @@ describe("the refusals made before the database", () => {
         [
           "decode",
           "bare-utf16",
-          "nul-or-surrogate",
+          "nul",
           "undeclared-entity",
           "entity-cycle",
           "entity-expansion",

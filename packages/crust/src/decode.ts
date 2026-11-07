@@ -274,31 +274,35 @@ const classDecoders: Readonly<Record<EncoderClass, ClassDecoder>> = {
 };
 
 /**
- * Refuse decoded text that holds U+0000 or an unpaired surrogate, neither of which XML 1.0
- * section 2.2 allows in a document.
+ * Refuse decoded text that holds U+0000, which XML 1.0 section 2.2 allows nowhere in a document.
+ *
+ * The decoded text holds no unpaired surrogate, the other code point section 2.2 leaves out, so
+ * nothing here looks for one. Every decoder above emits scalar values only:
+ *
+ * - `latin1` and `ascii` map a byte to U+0000 to U+00FF;
+ * - Every other decoder is a fatal `TextDecoder`. The WHATWG Encoding Standard's decoders produce no
+ *   surrogate (§4.1, process an item: "result does not contain any surrogates"). The UTF-8 decoder
+ *   errs on the bytes of one (§8.1.1: after 0xED the upper boundary is 0x9F). The shared UTF-16
+ *   decoder errs on a leading surrogate that no trailing one follows, and on a lone trailing one
+ *   (§14.2.1, steps 6.7 and 8). In fatal mode an error refuses the document as `decode`.
+ *
+ * `decode.test.ts` holds this to every lone surrogate.
  *
  * @param text - The decoded text.
- * @returns `text` itself; a `nul-or-surrogate` refusal naming the first offender and its offset.
+ * @returns `text` itself; a `nul` refusal naming the first U+0000's offset.
+ * @see {@link https://encoding.spec.whatwg.org/#concept-encoding-process | Encoding Standard, process an item}
  */
 const requireXmlCharacters = (text: string): Effect.Effect<string, ReaderRefusal> => {
-  const offenders = [text.indexOf("\0"), text.search(/\p{Cs}/u)].filter((offset) => offset !== -1);
+  const offset = text.indexOf("\0");
 
-  if (offenders.length === 0) {
-    return Effect.succeed(text);
-  }
-
-  const offset = Math.min(...offenders);
-  const unit = text.codePointAt(offset) ?? 0;
-  const name = `U+${unit.toString(16).toUpperCase().padStart(4, "0")}`;
-
-  return Effect.fail(
-    refuse(
-      "nul-or-surrogate",
-      unit === 0
-        ? `The decoded text holds ${name} at offset ${offset}, a character XML 1.0 forbids anywhere in a document. Remove it from the source.`
-        : `The decoded text holds the unpaired surrogate ${name} at offset ${offset}, which is not a character XML 1.0 allows. Re-save the document with the character spelled out.`,
-    ),
-  );
+  return offset === -1
+    ? Effect.succeed(text)
+    : Effect.fail(
+        refuse(
+          "nul",
+          `The decoded text holds U+0000 at offset ${offset}, a character XML 1.0 forbids anywhere in a document. Remove it from the source.`,
+        ),
+      );
 };
 
 /**
@@ -307,13 +311,13 @@ const requireXmlCharacters = (text: string): Effect.Effect<string, ReaderRefusal
  * The encoding is a byte order mark if the document starts with one, else the XML declaration's
  * `encoding` (found in UTF-16 too, by XML 1.0 Appendix F's patterns), else UTF-8; the declared
  * label is classified by `xml/charset.ts` and decoded with every error fatal, so no byte is ever
- * replaced with U+FFFD. The decoded text must hold neither U+0000 nor an unpaired surrogate.
+ * replaced with U+FFFD. The decoded text must hold no U+0000.
  *
  * @param bytes - The document as read from storage.
  * @returns The text, without its byte order mark, and the label as the document spelled it, which
  *   becomes the tree's `charset`; a `ReaderRefusal` whose rule is `decode` for a label the reader
  *   cannot decode or bytes that are not valid in it, `bare-utf16` for the label `UTF-16` without a
- *   byte order mark, and `nul-or-surrogate` for text with a character XML 1.0 forbids.
+ *   byte order mark, and `nul` for text that holds U+0000, which XML 1.0 forbids.
  */
 export const decode = Effect.fn("xml.decode")(function* decode(
   bytes: Uint8Array,

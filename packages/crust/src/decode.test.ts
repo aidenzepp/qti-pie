@@ -1,6 +1,11 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`, `US-ASCII`) the declarations under test carry. */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Result } from "effect";
+import { exhaust } from "@grizzle/testing/explore";
+import { requiredInSpace } from "@grizzle/testing/features";
+import { element, int } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { searched } from "@grizzle/testing/vitest";
+import { Duration, Effect, Formatter, Result } from "effect";
 import { decode } from "#crust/decode.ts";
 import type { ReaderRefusal } from "#crust/errors.ts";
 import { ascii, bytesOf, declared } from "#crust/test/bytes.ts";
@@ -199,7 +204,7 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesNul() {
       const refusal = yield* refusalOf(declared("UTF-8", [0x00]));
 
-      assert.strictEqual(refusal.rule, "nul-or-surrogate");
+      assert.strictEqual(refusal.rule, "nul");
       assert.include(refusal.detail, "U+0000");
     }),
   );
@@ -208,8 +213,141 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesLatin1Nul() {
       const refusal = yield* refusalOf(declared("ISO-8859-1", [0x00]));
 
-      assert.strictEqual(refusal.rule, "nul-or-surrogate");
+      assert.strictEqual(refusal.rule, "nul");
     }),
+  );
+});
+
+/**
+ * The ways a lone surrogate reaches `decode`: as a UTF-16 code unit under a byte order mark, or
+ * under a declared byte order with no mark, in either order, and as the three bytes CESU-8 writes
+ * for it.
+ */
+const loneForms = [
+  "UTF-16LE marked",
+  "UTF-16BE marked",
+  "UTF-16LE declared",
+  "UTF-16BE declared",
+  "CESU-8",
+] as const;
+
+/**
+ * Where the surrogate stands in the root's text: alone, before a letter, after one, or twice, so a
+ * leading surrogate is never followed by a trailing one.
+ */
+const lonePlaces = ["alone", "before a letter", "after a letter", "doubled"] as const;
+
+/**
+ * One case of the box: a form, a place and a surrogate code unit.
+ */
+interface LoneSurrogate {
+  readonly form: (typeof loneForms)[number];
+  readonly place: (typeof lonePlaces)[number];
+  readonly unit: number;
+}
+
+/**
+ * Every lone surrogate in every form and place: 5 forms, 4 places, 2,048 code units.
+ */
+const loneSurrogate: Gen<LoneSurrogate> = (source) => ({
+  form: source.draw(element(loneForms)),
+  place: source.draw(element(lonePlaces)),
+  unit: source.draw(int(0xd8_00, 0xdf_ff)),
+});
+
+/**
+ * The size of {@link loneSurrogate}'s box.
+ */
+const LONE_SURROGATES = loneForms.length * lonePlaces.length * 0x8_00;
+
+/**
+ * The document that carries a case: `<a>`, the surrogate where the case puts it, `</a>`.
+ *
+ * @param lone - The case.
+ * @returns Its bytes.
+ */
+const loneDocument = ({ form, place, unit }: LoneSurrogate): Uint8Array => {
+  const surrogate = String.fromCodePoint(unit);
+  const body = {
+    "after a letter": `b${surrogate}`,
+    alone: surrogate,
+    "before a letter": `${surrogate}b`,
+    doubled: `${surrogate}${surrogate}`,
+  }[place];
+  // The three bytes CESU-8 writes for the unit: 1110xxxx 10xxxxxx 10xxxxxx.
+  const cesu = [
+    0xe0 + Math.floor(unit / 0x10_00),
+    0x80 + (Math.floor(unit / 0x40) % 0x40),
+    0x80 + (unit % 0x40),
+  ];
+  const documents: Readonly<Record<LoneSurrogate["form"], () => Uint8Array>> = {
+    "CESU-8": () =>
+      bytesOf(
+        ascii("<a>"),
+        {
+          "after a letter": [0x62, ...cesu],
+          alone: cesu,
+          "before a letter": [...cesu, 0x62],
+          doubled: [...cesu, ...cesu],
+        }[place],
+        ascii("</a>"),
+      ),
+    "UTF-16BE declared": () =>
+      utf16Bare(`<?xml version="1.0" encoding="UTF-16BE"?><a>${body}</a>`, "be"),
+    "UTF-16BE marked": () => utf16(`<a>${body}</a>`, "be"),
+    "UTF-16LE declared": () =>
+      utf16Bare(`<?xml version="1.0" encoding="UTF-16LE"?><a>${body}</a>`, "le"),
+    "UTF-16LE marked": () => utf16(`<a>${body}</a>`, "le"),
+  };
+
+  return documents[form]();
+};
+
+describe("decode refuses every lone surrogate under decode", () => {
+  it.effect(
+    `for every surrogate code unit in every form and place, exhausted: ${String(LONE_SURROGATES)} documents`,
+    (ctx) =>
+      // Oracle: the WHATWG Encoding Standard. Its decoders emit scalar values only (§4.1, process
+      // an item), the UTF-8 decoder errs on a surrogate's bytes (§8.1.1) and the shared UTF-16
+      // decoder on a lone surrogate (§14.2.1, steps 6.7 and 8). decode runs each fatally, so every
+      // one is refused as `decode`, before decode.ts would have to look for a surrogate itself.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every surrogate code unit, in 5 forms and 4 places",
+            caseHang: Duration.minutes(1),
+            coverage: requiredInSpace<(typeof loneForms)[number] | (typeof lonePlaces)[number]>([
+              ...loneForms,
+              ...lonePlaces,
+            ]),
+            generator: loneSurrogate,
+            limit: LONE_SURROGATES,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "the WHATWG Encoding Standard's fatal decoders, §4.1, §8.1.1 and §14.2.1",
+            },
+            suite: "crust/decode/lone-surrogates",
+          },
+          (lone, c) =>
+            Effect.gen(function* refusesLone() {
+              c.note(lone.form);
+              c.note(lone.place);
+
+              const refusal = yield* refusalOf(loneDocument(lone));
+
+              assert.strictEqual(refusal.rule, "decode", Formatter.format(lone));
+            }),
+        ),
+      ).pipe(
+        Effect.tap((done) =>
+          Effect.sync(() => {
+            assert.strictEqual(done.cases, LONE_SURROGATES);
+          }),
+        ),
+      ),
+    120_000,
   );
 });
 
