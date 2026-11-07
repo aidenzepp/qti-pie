@@ -1614,7 +1614,12 @@ const namespacedDefault = (genome: CodecGenome): boolean =>
 
 /**
  * Whether a genome's internal subset holds an attribute-list default that references a general
- * entity the subset declares only after it.
+ * entity the subset declares only after it, directly or through the replacement text of an entity
+ * declared before it. A general entity reference in an entity value is bypassed at its declaration
+ * (XML 1.0 section 4.4.7) and included when the default is normalized (section 4.4.5), so the
+ * default's value reaches every reference those replacement texts hold, each entity bound by its
+ * first declaration (section 4.2); a reference to an entity the subset declares only after the
+ * attribute-list declaration is then one the default holds before its entity's declaration.
  *
  * @param genome - The genome.
  * @returns Whether it does.
@@ -1625,26 +1630,40 @@ const defaultBeforeEntity = (genome: CodecGenome): boolean => {
     Option.getOrElse((): readonly Declaration[] => []),
   );
 
-  return subset.some(
-    (declaration, at) =>
-      declaration._tag === "attlist" &&
-      declaration.default._tag === "value" &&
-      declaration.default.pieces.some(
-        (piece) =>
-          piece._tag === "ref" &&
-          subset
-            .slice(at + 1)
-            .some(
-              (later) => later._tag === "entity" && !later.parameter && later.name === piece.name,
-            ) &&
-          !subset
-            .slice(0, at)
-            .some(
-              (earlier) =>
-                earlier._tag === "entity" && !earlier.parameter && earlier.name === piece.name,
-            ),
-      ),
-  );
+  return subset.some((declaration, at) => {
+    if (declaration._tag !== "attlist" || declaration.default._tag !== "value") {
+      return false;
+    }
+
+    const bound = new Map<string, readonly Piece[]>();
+    for (const earlier of subset.slice(0, at)) {
+      if (earlier._tag === "entity" && !earlier.parameter && !bound.has(earlier.name)) {
+        bound.set(earlier.name, earlier.pieces);
+      }
+    }
+
+    const later = new Set(
+      subset
+        .slice(at + 1)
+        .flatMap((held) => (held._tag === "entity" && !held.parameter ? [held.name] : [])),
+    );
+    const seen = new Set<string>();
+    const pending = [...declaration.default.pieces];
+    for (let piece = pending.pop(); piece !== undefined; piece = pending.pop()) {
+      if (piece._tag === "ref" && !seen.has(piece.name)) {
+        seen.add(piece.name);
+
+        const included = bound.get(piece.name);
+        if (included === undefined && later.has(piece.name)) {
+          return true;
+        }
+
+        pending.push(...(included ?? []));
+      }
+    }
+
+    return false;
+  });
 };
 
 /**

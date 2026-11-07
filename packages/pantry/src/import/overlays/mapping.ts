@@ -10,8 +10,10 @@
  * them (`mappingLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
+import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { BaseType, Cardinality, Declares, interactionKinds } from "#pantry/grammar/install.ts";
+import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
+import { interactionKinds } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -86,36 +88,9 @@ type DeclarationCopy = Pick<
 type BaseTypeHandle = Addition<typeof Mapping>["baseType"];
 
 /**
- * A `Cardinality` handle.
- */
-type CardinalityHandle = Addition<typeof Mapping>["cardinality"];
-
-/**
  * A `DeclarationKind` handle.
  */
 type DeclarationKindHandle = Addition<typeof Mapping>["declarationKind"];
-
-/**
- * The `BaseType` handles a `base-type` can spell: every one but the null object `none`, which a
- * declaration with no `base-type` takes (C17).
- */
-const spelledBaseTypes: ReadonlyMap<string, BaseTypeHandle> = new Map(
-  BaseType.handles.flatMap((handle) => (handle === "none" ? [] : [[handle, handle] as const])),
-);
-
-/**
- * The `Cardinality` handles a `cardinality` spells.
- */
-const spelledCardinalities: ReadonlyMap<string, CardinalityHandle> = new Map(
-  Cardinality.handles.map((handle) => [handle, handle] as const),
-);
-
-/**
- * `Declares`: each declaration kind's `DeclarationKind`.
- */
-const declarationKindOf: ReadonlyMap<string, DeclarationKindHandle> = new Map(
-  Declares.rows.map(({ declaration, kind }) => [kind, declaration] as const),
-);
 
 /**
  * The interaction kinds, whose children take them as their nearest interaction (N8).
@@ -172,15 +147,6 @@ type IntegerParts = Pick<
   Addition<typeof MapKeyInteger>,
   "digits" | "negative" | "sign" | "value" | "zeros"
 >;
-
-/**
- * Strip XML whitespace from both ends of a text, as `Declaration.identifier` holds an identifier
- * without the whitespace written around it.
- *
- * @param text - The text.
- * @returns It without its leading and trailing spaces, tabs and line ends.
- */
-const trimmed = (text: string): string => text.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "");
 
 /**
  * Whether a text is a run of zeros, the language of `MapKeyInteger.zeros`.
@@ -482,11 +448,10 @@ const nearestOf = (
 /**
  * Build the mapping overlays' rows of one document.
  *
- * A declared overlay copies its parent's declaration fields as `Declaration`'s builder writes them:
- * the identifier without its outer whitespace, the base type the `base-type` spells or `none`, the
- * cardinality the `cardinality` spells, and `Declares` of the parent's kind. A parent that is no
- * declaration, which the content model never admits, leaves a copy no `Declaration` row holds, and
- * the database refuses it.
+ * A declared overlay copies its parent's declaration fields as `Declaration`'s builder writes them
+ * (`#pantry/import/overlays/declarations.ts` `declaredFieldsOf`). A parent that is no declaration,
+ * which the content model never admits, takes the response declaration's kind, so the copy is one
+ * no `Declaration` row holds, and the database refuses it.
  *
  * A map entry's `MapKey` row also holds how its key is matched: its `case-sensitive` as written
  * (empty where unwritten), `folded` where its mapping is of strings and the value is not true, and
@@ -526,13 +491,17 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     version: node.version,
   });
   const declarationOf = (node: NodeRow<Composed>): DeclarationCopy => {
-    const parentKind = byId.get(node.parent)?.kind ?? "";
+    const { declarationKind, ...fields } = declaredFieldsOf(
+      byId.get(node.parent)?.kind ?? "",
+      (name) => valueOf(node.parent, name),
+    );
 
     return {
-      baseType: spelledBaseTypes.get(valueOf(node.parent, "base-type") ?? "") ?? "none",
-      cardinality: spelledCardinalities.get(valueOf(node.parent, "cardinality") ?? "") ?? "single",
-      declarationKind: declarationKindOf.get(parentKind) ?? "qti-response-declaration",
-      identifier: trimmed(valueOf(node.parent, "identifier") ?? ""),
+      ...fields,
+      declarationKind: Option.getOrElse(
+        declarationKind,
+        (): DeclarationKindHandle => "qti-response-declaration",
+      ),
     };
   };
 
