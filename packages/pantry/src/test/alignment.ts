@@ -190,7 +190,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [23, { owner: "Q5.10 O4 (an ancestry flag)", status: "P" }],
   [24, { owner: "N5", status: "G" }],
   [25, { owner: "N6 (ancestry flag `test`)", status: "G" }],
-  [26, { owner: "the automaton (`readingStatements`)", status: "G" }],
+  [
+    26,
+    {
+      owner:
+        "the XSD's own section model, unedited, and no law: a section holds any number of parts, none included (§4.2.15)",
+      status: "G",
+    },
+  ],
   [27, { owner: "AL1", status: "G" }],
   [28, { owner: "Q5.10 O4 (D5)", status: "P" }],
   [
