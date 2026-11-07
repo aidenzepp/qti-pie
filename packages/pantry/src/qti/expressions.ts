@@ -142,6 +142,8 @@ import {
   ValueCardinality,
   ValueCardinalityBit,
   ValueCardinalityOf,
+  valueBaseOf,
+  valueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
@@ -1098,13 +1100,13 @@ const spells = (v: VariableRefRow) =>
  * The built-in variables, as the installed `BuiltInVariable` holds them (the UP audit's A63; spec
  * reading 29): each root's variables with the expression-typing codes of the base type and the
  * cardinality each stands as there, `ValueBaseOf`'s and `ValueCardinalityOf`'s images of its
- * declaration codes, so a record's `none` reads `unknown`.
+ * declaration codes ({@link valueBaseOf}, {@link valueCardinalityOf}), so a record's `none` reads
+ * `unknown`.
  */
 const builtIns = BuiltInVariable.rows.map(
   ({ baseType, cardinality, declaration, root, variable }) => ({
-    baseType: ValueBaseOf.rows.find((row) => row.baseType === baseType)?.value ?? "unknown",
-    cardinality:
-      ValueCardinalityOf.rows.find((row) => row.cardinality === cardinality)?.value ?? "unknown",
+    baseType: valueBaseOf(baseType),
+    cardinality: valueCardinalityOf(cardinality),
     declaration,
     root,
     variable,

@@ -1191,7 +1191,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
         const second = nodeIdsOf(listed, entries);
         const idsOf = (minted: typeof first) => [
           minted.package,
-          ...minted.documents.flatMap((ids) => Array.from({ length: 8 }, (_, at) => ids.idOf(at))),
+          ...minted.documents.flatMap(({ ids }) =>
+            Array.from({ length: 8 }, (_, at) => ids.idOf(at)),
+          ),
         ];
 
         assert.strictEqual(new Set(idsOf(first)).size, idsOf(first).length);
@@ -1200,7 +1202,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
           2 * idsOf(first).length,
         );
         assert.deepStrictEqual(idsOf(first), idsOf(first));
-        for (const ids of first.documents) {
+        for (const { ids } of first.documents) {
           assert.deepStrictEqual(ids.documentAt(ids.path), Option.some(ids.idOf(0)));
           assert.strictEqual(ids.package, first.package);
         }
@@ -1229,11 +1231,11 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
           const firstAt = (path: string, named: boolean) =>
             Option.fromUndefinedOr(
               minted.documents
-                .find((ids) => ids.path === path && (!named || ids.documentType !== "none"))
-                ?.idOf(0),
+                .find(({ ids }) => ids.path === path && (!named || ids.documentType !== "none"))
+                ?.ids.idOf(0),
             );
 
-          for (const ids of minted.documents) {
+          for (const { ids } of minted.documents) {
             const label = `${again.path} again, read at ${ids.path}`;
             assert.deepStrictEqual(ids.documentAt(ids.path), firstAt(ids.path, false), label);
             assert.deepStrictEqual(

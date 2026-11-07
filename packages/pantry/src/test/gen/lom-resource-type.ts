@@ -575,6 +575,7 @@ export const documentRowsOf = (
   idOf: (index: number) => NodeId,
 ): DocumentRows => {
   const rows: MetadataRows = rowsOf(tree, {
+    context: ownContext(idOf(0)),
     documentType: "none",
     idOf,
     package: "00000000-0000-4000-8000-00000000c0de" satisfies Uuid,

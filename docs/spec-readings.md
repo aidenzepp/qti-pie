@@ -2864,7 +2864,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      a rule whose owner it holds no name for. This sets aside the reading of an unwritten identifier as the empty one:
      the importer's, under which "Test overlay"'s copy of the identifier broke beside AL3, and the law oracle's
      (`testDocumentOf`'s empty default, `src/test/oracle-laws/assembly.ts`), under which two such elements of one
-     document break "Structure identifier". This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07
+     document broke "Structure identifier". This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07
      by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-TESTS.)
 
 148. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information

@@ -108,7 +108,9 @@ export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed>
       grammar.kinds.attributeName.has(spelling) ? closedNameOf(spelling) : Option.none(),
     declaredType: (version, kind) => grammar.xsi.declaredType(version, kind),
     heldRoot: (version, parent, name) =>
-      heldRoots.get(`${version} ${parent}`)?.test(expandedText(name)) ?? false,
+      Option.exists(Option.fromUndefinedOr(heldRoots.get(`${version} ${parent}`)), (names) =>
+        names.test(expandedText(name)),
+      ),
     named: (namespace, local) => named.has(`${namespace} ${local}`),
     qualified: (version, kind, governs, site) =>
       (site._tag === "text"

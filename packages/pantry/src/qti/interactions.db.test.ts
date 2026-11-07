@@ -1109,7 +1109,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const declared = {
               baseType: "identifier",
-              baseTypeLexical: "identifier",
               cardinality: "single",
               cardinalityLexical: "single",
               declarationKind: "qti-outcome-declaration",
@@ -1124,7 +1123,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               parent: stray,
               start: 2n,
               version: "3.0.1",
-            } satisfies Fact<typeof Declaration>;
+            } satisfies Addition<typeof Declaration>;
 
             const choice = yield* db.apply(
               ChangeSet.empty(Author)

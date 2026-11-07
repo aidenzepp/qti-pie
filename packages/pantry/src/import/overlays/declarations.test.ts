@@ -27,6 +27,7 @@ import {
   grammar,
   interactionKinds,
 } from "#pantry/grammar/install.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { piecesOf, rowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows, DocumentIds } from "#pantry/import/overlays/declarations.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -55,9 +56,10 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
 );
 
 /**
- * The ids every case writes its rows under: each node's by its number.
+ * The ids every case writes its rows under: each node's by its number, the document its own
+ * context.
  */
-const ids: DocumentIds = { idOf };
+const ids: DocumentIds = { context: ownContext(idOf(0)), idOf };
 
 /**
  * One overlay's expected rows: its relation and its rows by node id.
@@ -69,9 +71,15 @@ type Expected = { readonly [Relation in keyof DeclarationRows]: Map<string, obje
  */
 const relationNames = [
   "Declaration",
-  "OutcomeRange",
+  "DeclarationBaseType",
+  "MasteryCeiling",
+  "MasteryFloor",
+  "MasteryValue",
+  "NormalMaximum",
+  "NormalMinimum",
   "RecordField",
   "Value",
+  "ValueBaseType",
   "ValueSet",
 ] as const satisfies readonly (keyof DeclarationRows)[];
 
@@ -189,11 +197,12 @@ const walkedPieces = (lexical: string) => {
 };
 
 /**
- * Collect a declaration's expected rows, and its outcome range's, where it has them: its
- * identifier written and naming something once collapsed, its cardinality written and spelling a
- * handle, and its base type unwritten or spelling one. Any other declaration has no row, and no
- * value set, value or field below it either (lane NIL's audit, B10 and B11: a missing value is a
- * row of its own relation, never a sentinel).
+ * Collect a declaration's expected rows, where it has them: its identifier written and naming
+ * something once collapsed, its cardinality written and spelling a handle, and its base type
+ * unwritten or spelling one. Its base type's row is written where it writes one, and an outcome
+ * declaration's row of each scale attribute it writes, and of each pair of them it writes both
+ * of. Any other declaration has no row, and no value set, value or field below it either (lane
+ * NIL's audit, B10 and B11: a missing value is a row of its own relation, never a sentinel).
  *
  * @param expected - The rows so far.
  * @param met - The declaration's element.
@@ -222,7 +231,6 @@ const walkDeclaration = (
   const row = {
     ...tuple,
     baseType,
-    baseTypeLexical: baseTypeLexical ?? "",
     cardinality,
     cardinalityLexical,
     declarationKind: tuple.kind,
@@ -232,22 +240,37 @@ const walkDeclaration = (
     identifierTrail: trail,
   };
   expected.Declaration.set(tuple.node, row);
-
-  const [masteryValue, normalMaximum, normalMinimum] = [
-    "mastery-value",
-    "normal-maximum",
-    "normal-minimum",
-  ].map(valueOf);
-  if (
-    tuple.kind === "qti-outcome-declaration" &&
-    [masteryValue, normalMaximum, normalMinimum].some((value) => value !== undefined)
-  ) {
-    expected.OutcomeRange.set(tuple.node, {
-      masteryValue: masteryValue ?? "",
+  if (baseTypeLexical !== undefined) {
+    expected.DeclarationBaseType.set(tuple.node, {
+      baseType,
+      baseTypeLexical,
       node: tuple.node,
-      normalMaximum: normalMaximum ?? "",
-      normalMinimum: normalMinimum ?? "",
     });
+  }
+
+  const mastery = valueOf("mastery-value");
+  const minimum = valueOf("normal-minimum");
+  const maximum = valueOf("normal-maximum");
+  if (tuple.kind === "qti-outcome-declaration") {
+    const { node } = tuple;
+    const scale = [
+      [expected.MasteryValue, mastery],
+      [expected.NormalMinimum, minimum],
+      [expected.NormalMaximum, maximum],
+    ] as const;
+    for (const [rows, lexical] of scale) {
+      if (lexical !== undefined) {
+        rows.set(node, { lexical, node });
+      }
+    }
+
+    if (minimum !== undefined && mastery !== undefined) {
+      expected.MasteryFloor.set(node, { masteryValue: mastery, node, normalMinimum: minimum });
+    }
+
+    if (mastery !== undefined && maximum !== undefined) {
+      expected.MasteryCeiling.set(node, { masteryValue: mastery, node, normalMaximum: maximum });
+    }
   }
 
   return Option.some(row);
@@ -295,7 +318,8 @@ const textOf = (child: Met["child"]): string =>
     .join("");
 
 /**
- * Collect a value's expected row, and its field's where it is one.
+ * Collect a value's expected row, its own base type's where it writes one that spells a code, and
+ * its field's where it writes both a field identifier and a base type, whatever its set.
  *
  * @param expected - The rows so far.
  * @param met - The value's element.
@@ -304,26 +328,33 @@ const textOf = (child: Met["child"]): string =>
 const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: WalkedSet): void => {
   const fieldIdentifier = valueOf("field-identifier");
   const fieldBaseType = valueOf("base-type");
-  const ownBaseType = spelledBaseTypes.get(fieldBaseType ?? "") ?? "none";
+  const text = textOf(child);
   expected.Value.set(tuple.node, {
     ...tuple,
-    baseType: owner.baseType === "none" ? ownBaseType : owner.baseType,
-    setBaseType: owner.baseType,
-    text: textOf(child),
+    baseType: owner.baseType,
+    cardinality: owner.cardinality,
+    text,
   });
-  if (
-    owner.cardinality === "record" ||
-    fieldIdentifier !== undefined ||
-    fieldBaseType !== undefined
-  ) {
-    const { lead, name, trail } = walkedPieces(fieldIdentifier ?? "");
+
+  const ownBaseType = fieldBaseType === undefined ? undefined : spelledBaseTypes.get(fieldBaseType);
+  if (fieldBaseType !== undefined && ownBaseType !== undefined) {
+    expected.ValueBaseType.set(tuple.node, {
+      baseType: ownBaseType,
+      baseTypeLexical: fieldBaseType,
+      cardinality: owner.cardinality,
+      node: tuple.node,
+      text,
+    });
+  }
+
+  if (fieldIdentifier !== undefined && fieldBaseType !== undefined) {
+    const { lead, name, trail } = walkedPieces(fieldIdentifier);
     expected.RecordField.set(tuple.node, {
       ...tuple,
-      baseType: ownBaseType,
-      baseTypeLexical: fieldBaseType ?? "",
+      baseTypeLexical: fieldBaseType,
       identifier: name,
       identifierLead: lead,
-      identifierLexical: fieldIdentifier ?? "",
+      identifierLexical: fieldIdentifier,
       identifierTrail: trail,
     });
   }
@@ -340,9 +371,15 @@ const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: Wa
 const walk = (doc: XdmDocument<Composed>): Expected => {
   const expected: Expected = {
     Declaration: new Map(),
-    OutcomeRange: new Map(),
+    DeclarationBaseType: new Map(),
+    MasteryCeiling: new Map(),
+    MasteryFloor: new Map(),
+    MasteryValue: new Map(),
+    NormalMaximum: new Map(),
+    NormalMinimum: new Map(),
     RecordField: new Map(),
     Value: new Map(),
+    ValueBaseType: new Map(),
     ValueSet: new Map(),
   };
   const document = ids.idOf(0);
@@ -491,6 +528,7 @@ interface DeclarationCase {
   readonly identifier: string | undefined;
   readonly kind: (typeof generatedKinds)[number];
   readonly mastery: string | undefined;
+  readonly maximum: string | undefined;
   readonly minimum: string | undefined;
   readonly sets: readonly {
     readonly kind: "qti-correct-response" | "qti-default-value";
@@ -513,9 +551,11 @@ const piece: Gen<XdmChild<Composed>> = element<XdmChild<Composed>>([
  * The generated documents: an item of up to 3 declarations, each of any declaration kind, an
  * identifier with or without outer whitespace (named variant `padded`), a base type that is
  * written, unwritten (`no-base-type`) or names no handle (`unknown-base-type`), any cardinality
- * (`record`), an outcome's scale, and up to 2 value sets of up to 3 values, each text in up to 3
- * pieces (`split-text`) and a field identifier or base type written or not
- * (`field-outside-record`).
+ * (`record`), an outcome's scale, each attribute written or not and a pair both written
+ * (`mastery-pair`), and up to 2 value sets of up to 3 values, each text in up to 3 pieces
+ * (`split-text`), a field identifier or base type written or not (`field-outside-record`), and a
+ * field's base type spelling nothing (`unspelled-field-type`) or written alone
+ * (`half-field`).
  */
 const declarationsGen: Gen<readonly DeclarationCase[]> = array(
   (source) => ({
@@ -526,6 +566,7 @@ const declarationsGen: Gen<readonly DeclarationCase[]> = array(
     identifier: source.draw(element(["A", " B", "C\n", "\tD ", undefined, "", " "] as const)),
     kind: source.draw(element(generatedKinds)),
     mastery: source.draw(element(["0.5", undefined] as const)),
+    maximum: source.draw(element(["1", undefined] as const)),
     minimum: source.draw(element(["0", undefined] as const)),
     sets: source.draw(
       array(
@@ -534,7 +575,7 @@ const declarationsGen: Gen<readonly DeclarationCase[]> = array(
           values: inner.draw(
             array(
               (deep) => ({
-                baseType: deep.draw(element(["integer", undefined] as const)),
+                baseType: deep.draw(element(["integer", " integer", undefined] as const)),
                 field: deep.draw(element(["f", " g", undefined] as const)),
                 pieces: deep.draw(array(piece, { max: 3, min: 0 })),
               }),
@@ -557,11 +598,14 @@ type Situation =
   | "no-identifier"
   | "unspelled-cardinality"
   | "no-base-type"
+  | "half-field"
+  | "mastery-pair"
   | "outcome-range"
   | "padded"
   | "record"
   | "split-text"
-  | "unknown-base-type";
+  | "unknown-base-type"
+  | "unspelled-field-type";
 
 /**
  * Name the situations one generated document reaches.
@@ -606,9 +650,24 @@ const situationsOf = (input: readonly DeclarationCase[]): readonly Situation[] =
     [
       "outcome-range",
       input.some(
-        ({ kind, mastery, minimum }) =>
-          kind === "qti-outcome-declaration" && (mastery !== undefined || minimum !== undefined),
+        ({ kind, mastery, maximum, minimum }) =>
+          kind === "qti-outcome-declaration" &&
+          [mastery, maximum, minimum].some((lexical) => lexical !== undefined),
       ),
+    ],
+    [
+      "mastery-pair",
+      input.some(
+        ({ kind, mastery, maximum, minimum }) =>
+          kind === "qti-outcome-declaration" &&
+          mastery !== undefined &&
+          (maximum !== undefined || minimum !== undefined),
+      ),
+    ],
+    ["unspelled-field-type", values.some(({ baseType }) => baseType === " integer")],
+    [
+      "half-field",
+      values.some(({ baseType, field }) => (baseType === undefined) !== (field === undefined)),
     ],
   ];
 
@@ -626,7 +685,7 @@ const situationsOf = (input: readonly DeclarationCase[]): readonly Situation[] =
 const treeOf = (input: readonly DeclarationCase[]): XdmDocument<Composed> => {
   const ws: XdmChild<Composed> = { _tag: "ws", value: "\n" };
   const declarations = input.map(
-    ({ baseType, cardinality, identifier, kind, mastery, minimum, sets }) =>
+    ({ baseType, cardinality, identifier, kind, mastery, maximum, minimum, sets }) =>
       elementOf(
         kind,
         [
@@ -637,6 +696,7 @@ const treeOf = (input: readonly DeclarationCase[]): XdmDocument<Composed> => {
             ? ([
                 ["mastery-value", mastery],
                 ["normal-minimum", minimum],
+                ["normal-maximum", maximum],
               ] as const)
             : []),
         ],
@@ -689,8 +749,10 @@ describe("import/overlays/declarations.ts", () => {
     // document order and reads each element's attributes and children, against the builder's read
     // of the tree's flat rows; the codes against `BaseTypeLexical` and `CardinalityLexical`.
     // Bound: up to 3 declarations of 4 kinds, 7 identifiers (3 unwritten or naming nothing), 4
-    // base types (one spelling nothing) and 7 cardinalities (4 unwritten or spelling nothing), each
-    // with up to 2 value sets of 1 to 3 values of up to 3 text pieces, 300 runs.
+    // base types (one spelling nothing) and 7 cardinalities (4 unwritten or spelling nothing), an
+    // outcome's three scale attributes each written or not, each with up to 2 value sets of 1 to 3
+    // values of up to 3 text pieces, a field identifier of 3 and a field base type of 3 states
+    // (one spelling nothing), 300 runs.
     searched(
       ctx,
       explore(
@@ -708,6 +770,9 @@ describe("import/overlays/declarations.ts", () => {
               "split-text",
               "field-outside-record",
               "outcome-range",
+              "mastery-pair",
+              "unspelled-field-type",
+              "half-field",
             ],
             { cases: 200, sense: notesOnly },
           ),
@@ -854,18 +919,16 @@ const checkDocument = (path: string, tree: XdmDocument<Composed>): number => {
       declaration.cardinalityLexical,
       `${at} cardinality`,
     );
-    assert.strictEqual(
-      BaseTypeLexical.rows.find(({ code }) => code === declaration.baseType)?.lexical ?? "",
-      declaration.baseTypeLexical,
-      `${at} base-type`,
-    );
   }
 
-  for (const field of rows.RecordField.values()) {
+  for (const [at, typed] of [
+    ...[...rows.DeclarationBaseType.values()].map((row) => [`${path} base-type`, row] as const),
+    ...[...rows.ValueBaseType.values()].map((row) => [`${path} field base-type`, row] as const),
+  ]) {
     assert.strictEqual(
-      BaseTypeLexical.rows.find(({ code }) => code === field.baseType)?.lexical ?? "",
-      field.baseTypeLexical,
-      `${path} field base-type`,
+      BaseTypeLexical.rows.find(({ code }) => code === typed.baseType)?.lexical,
+      typed.baseTypeLexical,
+      at,
     );
   }
 

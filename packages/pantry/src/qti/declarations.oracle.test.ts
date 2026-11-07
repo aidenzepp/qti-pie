@@ -21,9 +21,14 @@ import {
   booleanValuePattern,
   contextVariable,
   Declaration,
+  DeclarationBaseType,
   declarationLaws,
   domainValues,
-  OutcomeRange,
+  MasteryCeiling,
+  MasteryFloor,
+  MasteryValue,
+  NormalMaximum,
+  NormalMinimum,
   pairValuePattern,
   pointValuePattern,
   RecordField,
@@ -31,6 +36,7 @@ import {
   sessionVariables,
   unjudgedBaseTypes,
   Value,
+  ValueBaseType,
   ValueSet,
 } from "#pantry/qti/declarations.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
@@ -41,7 +47,19 @@ import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
 /**
  * The O2 overlay relations, each under its own name.
  */
-const overlays = { Declaration, OutcomeRange, RecordField, Value, ValueSet };
+const overlays = {
+  Declaration,
+  DeclarationBaseType,
+  MasteryCeiling,
+  MasteryFloor,
+  MasteryValue,
+  NormalMaximum,
+  NormalMinimum,
+  RecordField,
+  Value,
+  ValueBaseType,
+  ValueSet,
+};
 
 describe("qti/declarations.ts, declared", () => {
   it("builds a schema of Qti's relations and the O2 overlays with every law, each statement once", () => {

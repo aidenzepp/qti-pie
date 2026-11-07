@@ -44,6 +44,7 @@ import {
   Symbol as ContentSymbol,
   TextDomain,
 } from "#pantry/grammar/install.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -1456,6 +1457,8 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                       }
 
                       const uses = identityRowsOf(tree, {
+                        assembled: false,
+                        context: ownContext(idOf(0)),
                         documentType: "imsqti_item_xmlv3p0",
                         idOf,
                         targetAt: () => Option.none(),

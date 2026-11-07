@@ -19,6 +19,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { GoverningOf } from "#pantry/grammar/install.ts";
 import { languageRowsOf, rowsOf } from "#pantry/import/overlays/identity.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
@@ -180,6 +181,8 @@ const documentOf = (
  * in a package that holds no document at any path a resource names, the document an item.
  */
 const ids = {
+  assembled: false,
+  context: ownContext(idOf(0)),
   documentType: "imsqti_item_xmlv3p0",
   idOf,
   targetAt: () => Option.none(),
@@ -1048,12 +1051,16 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               );
               const itemDocument = itemIdOf(0);
               const manifestRows = rowsOf(documentOf(manifest), {
+                assembled: false,
+                context: ownContext(idOf(0)),
                 documentType: "none",
                 idOf,
                 targetAt: (path) =>
                   path === itemPath ? Option.some({ node: itemDocument }) : Option.none(),
               });
               const itemRows = rowsOf(documentOf(item), {
+                assembled: false,
+                context: ownContext(itemIdOf(0)),
                 documentType: "imsqti_item_xmlv3p0",
                 idOf: itemIdOf,
                 targetAt: () => Option.none(),

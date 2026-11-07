@@ -26,10 +26,14 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { lowerAscii, namesNoDocument } from "#pantry/import/overlays/metadata.ts";
+import {
+  lowerAscii,
+  namesNoDocument,
+  piecesOf,
+  stringValuesOf,
+} from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
-import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -63,7 +67,7 @@ import type {
   TextIdref,
   XmlLang,
 } from "#pantry/qti/identity.ts";
-import { objectTypes, recordDocumentTypes } from "#pantry/qti/metadata.ts";
+import { noLanguage, objectTypes, recordDocumentTypes } from "#pantry/qti/metadata.ts";
 import { itemKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 
@@ -78,14 +82,15 @@ import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests
 export interface IdentityIds {
   /**
    * Whether the document is in an assembly (`Document.assembled`), so its IDREFs resolve per
-   * instance (spec reading 117); none read as no.
+   * instance (spec reading 117).
    */
-  readonly assembled?: boolean;
+  readonly assembled: boolean;
   /**
-   * The document's context (spec reading 117), its own where none is given: an included
-   * fragment's nodes take the interaction their includes stand in as their nearest.
+   * The document's context (spec reading 117): an included fragment's nodes take the interaction
+   * their includes stand in as their nearest, and every other document's is its own
+   * (`ownContext`).
    */
-  readonly context?: DocumentContext;
+  readonly context: DocumentContext;
   /**
    * The document's type, the resource's that lists it, `none` for the manifest: its LOM records
    * are read where it is of a type a package's records are read from (`recordDocumentTypes`).
@@ -181,27 +186,53 @@ const governorAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * The domains of the attribute grammar `AttributeGrammar` installs, keyed `version governor name`.
+ * The installed `ValueIdentity`, keyed by domain: the identity type of each value domain, `none`
+ * for a domain of no identity.
  */
-const domainAt: ReadonlyMap<string, string> = new Map(
+const identityAt: ReadonlyMap<string, string> = new Map(
+  ValueIdentity.rows.map(({ domain, identity }) => [domain, identity]),
+);
+
+/**
+ * Read the identity type of a value domain from `ValueIdentity`, which is total over the domains
+ * (`#pantry/grammar/install.ts`).
+ *
+ * @param domain - A domain the grammar installs.
+ * @returns `ID`, `IDREF`, `IDREFS` or `none`.
+ * @throws {Error} When `ValueIdentity` holds no row of the domain, which its totality rules out: a
+ *   defect of the grammar, never of a document.
+ */
+const identityIn = (domain: string): string => {
+  const identity = identityAt.get(domain);
+  if (identity === undefined) {
+    throw new Error(
+      `Value domain ${domain} has no ValueIdentity row, but ValueIdentity holds one for every domain the grammar installs. Install the grammar's ValueIdentity over every ValueDomain handle.`,
+    );
+  }
+
+  return identity;
+};
+
+/**
+ * The identity type of each attribute's value domain under the attribute grammar
+ * `AttributeGrammar` installs, keyed `version governor name`.
+ */
+const attributeIdentityAt: ReadonlyMap<string, string> = new Map(
   attributeRows.map(({ domain, governor, name, version }) => [
     `${version} ${governor} ${name}`,
-    domain,
+    identityIn(domain),
   ]),
 );
 
 /**
- * The installed `TextDomain`, keyed `version governor`: the domain a governor reads its text in.
+ * The identity type of the domain each governor reads its text in, under the installed
+ * `TextDomain`, keyed `version governor`.
  */
-const textDomainAt: ReadonlyMap<string, string> = new Map(
-  TextDomain.rows.map(({ domain, governor, version }) => [`${version} ${governor}`, domain]),
-);
-
-/**
- * The installed `ValueIdentity`, keyed by domain.
- */
-const identityAt: ReadonlyMap<string, string> = new Map(
-  ValueIdentity.rows.map(({ domain, identity }) => [domain, identity]),
+const textIdentityAt: ReadonlyMap<string, string> = new Map(
+  TextDomain.rows.map(({ domain, governor, version }) => [
+    `${version} ${governor}`,
+    identityIn(domain),
+  ]),
 );
 
 /**
@@ -255,15 +286,6 @@ const shareKind = "m:share";
 const headingKey = (values: readonly string[]): string => JSON.stringify(values);
 
 /**
- * Read the identity type of an attribute's or an element's value domain.
- *
- * @param domain - The domain, none where its owner's governor reads it under none.
- * @returns `ID`, `IDREF`, `IDREFS` or `none`.
- */
-const identityOf = (domain: string | undefined): string =>
-  domain === undefined ? "none" : (identityAt.get(domain) ?? "none");
-
-/**
  * Read an element's governor, as `GoverningOf` gives it.
  *
  * @param element - The element's node row.
@@ -271,6 +293,26 @@ const identityOf = (domain: string | undefined): string =>
  */
 const governorOf = (element: NodeRow<Composed>): string | undefined =>
   governorAt.get(`${element.version} ${element.kind} ${element.governs}`);
+
+/**
+ * Read the identity type of an attribute's value domain under its element's governor.
+ *
+ * @param attribute - The attribute row.
+ * @param element - Its element's node row.
+ * @returns `ID`, `IDREF`, `IDREFS` or `none`; none where `GoverningOf` gives the element no
+ *   governor, or the governor reads the attribute under no domain.
+ */
+const attributeIdentityOf = (
+  attribute: AttributeRow<Composed>,
+  element: NodeRow<Composed>,
+): Option.Option<string> =>
+  Option.fromUndefinedOr(governorOf(element)).pipe(
+    Option.flatMap((governor) =>
+      Option.fromUndefinedOr(
+        attributeIdentityAt.get(`${element.version} ${governor} ${attribute.name}`),
+      ),
+    ),
+  );
 
 /**
  * Decide whether an attribute's value is one of its document's IDs, as `identity.ts`'s
@@ -281,18 +323,9 @@ const governorOf = (element: NodeRow<Composed>): string | undefined =>
  * @param element - Its element's node row.
  * @returns Whether it is ID-typed.
  */
-const holdsId = (attribute: AttributeRow<Composed>, element: NodeRow<Composed>): boolean => {
-  const governor = governorOf(element);
-  const domain =
-    governor === undefined
-      ? undefined
-      : domainAt.get(`${element.version} ${governor} ${attribute.name}`);
-
-  return (
-    identityOf(domain) === "ID" ||
-    (element.kind === "qti-context-declaration" && attribute.name === "identifier")
-  );
-};
+const holdsId = (attribute: AttributeRow<Composed>, element: NodeRow<Composed>): boolean =>
+  Option.exists(attributeIdentityOf(attribute, element), (identity) => identity === "ID") ||
+  (element.kind === "qti-context-declaration" && attribute.name === "identifier");
 
 /**
  * Decide whether an attribute's value is IDREF tokens, as `write.ts` splits an attribute's
@@ -303,132 +336,94 @@ const holdsId = (attribute: AttributeRow<Composed>, element: NodeRow<Composed>):
  * @param element - Its element's node row.
  * @returns Whether it is.
  */
-const holdsIdref = (attribute: AttributeRow<Composed>, element: NodeRow<Composed>): boolean => {
-  const governor = governorOf(element);
-  const identity = identityOf(
-    governor === undefined
-      ? undefined
-      : domainAt.get(`${element.version} ${governor} ${attribute.name}`),
+const holdsIdref = (attribute: AttributeRow<Composed>, element: NodeRow<Composed>): boolean =>
+  Option.exists(
+    attributeIdentityOf(attribute, element),
+    (identity) => identity === "IDREF" || identity === "IDREFS",
   );
-
-  return identity === "IDREF" || identity === "IDREFS";
-};
 
 /**
  * Read the identity type of an element's text, as `identity.ts`'s `textIdentityOf` reads it: its
  * governor's text domain's.
  *
  * @param element - The element's node row.
- * @returns `ID`, `IDREF`, `IDREFS` or `none`.
+ * @returns `ID`, `IDREF` or `IDREFS`; none where its text is of no identity type, or `GoverningOf`
+ *   gives it no governor, or its governor reads its text in no domain.
  */
-const textIdentityOf = (element: NodeRow<Composed>): string => {
-  const governor = governorOf(element);
-
-  return identityOf(
-    governor === undefined ? undefined : textDomainAt.get(`${element.version} ${governor}`),
+const textIdentityOf = (element: NodeRow<Composed>): Option.Option<string> =>
+  Option.fromUndefinedOr(governorOf(element)).pipe(
+    Option.flatMap((governor) =>
+      Option.fromUndefinedOr(textIdentityAt.get(`${element.version} ${governor}`)),
+    ),
+    Option.filter((identity) => identity !== "none"),
   );
-};
-
-/**
- * The text `DocumentId.before` and `after` hold, and an IDREF piece's: XML whitespace, possibly
- * none.
- */
-type Spacing = Addition<typeof DocumentId>["before"];
-
-/**
- * Decide whether a text is XML whitespace, possibly none, the language of {@link Spacing}.
- *
- * @param text - The text.
- * @returns Whether every character of it is a tab, a line feed, a carriage return or a space.
- */
-const isSpacing = (text: string): text is Spacing => /^[\t\n\r ]*$/u.test(text);
-
-/**
- * Split a text around its value: the XML whitespace before it, the run between, and the
- * whitespace after. A form with whitespace inside its value keeps it in `value`, which the
- * database's `E1_derived` then refuses where the value must hold none, as AL1's lexical half does.
- *
- * @param text - The text as written.
- * @returns The three pieces, which concatenate to it; an all-whitespace text is all `before`.
- */
-const piecesOf = (
-  text: string,
-): Option.Option<{ readonly after: Spacing; readonly before: Spacing; readonly value: string }> => {
-  const before = /^[\t\n\r ]*/u.exec(text)?.[0] ?? "";
-  const rest = text.slice(before.length);
-  const after = /[\t\n\r ]*$/u.exec(rest)?.[0] ?? "";
-
-  return isSpacing(before) && isSpacing(after)
-    ? Option.some({ after, before, value: rest.slice(0, rest.length - after.length) })
-    : Option.none();
-};
 
 /**
  * Split an IDREF or IDREFS text into its tokens, each with the whitespace written before it, and
  * the last with the whitespace after it, so the pieces concatenate to the text and every token but
  * the first follows whitespace (`E1_derived` on `TextIdref`), as the importer splits an
- * attribute's.
+ * attribute's. Each run of whitespace and the token after it splits as {@link piecesOf} splits a
+ * text, and the whitespace after the last is the text's own trail.
  *
  * @param text - The element's string value.
  * @returns Its pieces, in order; none for a text with no token, which TextDomain refuses.
  */
 const idrefPiecesOf = (text: string): readonly TextIdrefInsert[] => {
-  const runs = [...text.matchAll(/(?<before>[\t\n\r ]*)(?<token>[^\t\n\r ]+)/gu)];
-  const tail = runs.reduce((end, run) => end + run[0].length, 0);
+  const { trail } = piecesOf(text);
+  const runs = [...text.matchAll(/[\t\n\r ]*[^\t\n\r ]+/gu)];
 
-  return runs.flatMap((run, at): readonly TextIdrefInsert[] => {
-    const before = run.groups?.["before"] ?? "";
-    const token = run.groups?.["token"] ?? "";
-    const after = at === runs.length - 1 ? text.slice(tail) : "";
+  return runs.map((run, at): TextIdrefInsert => {
+    const { lead: before, token } = piecesOf(run[0]);
+    const after = at === runs.length - 1 ? trail : "";
 
-    return isSpacing(before) && isSpacing(after)
-      ? [{ after, before, piece: `${before}${token}${after}`, token }]
-      : [];
+    return { after, before, piece: `${before}${token}${after}`, token };
   });
 };
 
 /**
  * A document's tree as the builders below read it: its flat rows, its document node and root kind,
- * each node by its id, each element's string value, and each element's attributes by name.
+ * each node a row names, each node's string value, and each element's attributes by name.
  */
 interface Tree {
-  readonly byId: ReadonlyMap<NodeId, NodeRow<Composed>>;
   readonly document: NodeId;
   /**
    * Each node's fold (`#pantry/import/fold.ts`): its nearest interaction among the rest, the
    * document node's its context's (spec reading 117).
    */
   readonly folds: ReadonlyMap<NodeId, Folded>;
+  /**
+   * Read the node a row of the tree names, its element or its parent, which `flatten` writes
+   * before every row that names it.
+   */
+  readonly nodeAt: (id: NodeId) => NodeRow<Composed>;
   readonly rootKind: Addition<typeof LabelUse>["rootKind"];
   readonly rows: FlatRows<Composed>;
+  readonly stringValueOf: (node: NodeId) => string;
   readonly valueOf: (node: NodeId, name: string) => string | undefined;
-  readonly values: ReadonlyMap<NodeId, string>;
 }
 
 /**
- * Split an ID's lexical form into its `DocumentId` row, bound to an owner.
+ * Split an ID's lexical form into its `DocumentId` row, bound to an owner: the whitespace before
+ * its value, its value, and the whitespace after (`piecesOf`). A form with whitespace inside its
+ * value keeps it in `id`, which the database's `E1_derived` then refuses where the value must hold
+ * none, as AL1's lexical half does.
  *
  * @param tree - The document's tree.
  * @param node - The element that carries the ID.
  * @param lexical - The ID's lexical form.
  * @param owner - The element its binding names: the attribute's element, or the text's parent.
- * @returns The row, none for a form whose pieces are not whitespace.
+ * @returns The row.
  */
 const documentIdOf = (
   tree: Tree,
   node: NodeId,
   lexical: string,
   owner: NodeId,
-): Option.Option<Addition<typeof DocumentId>> =>
-  Option.map(piecesOf(lexical), ({ after, before, value }) => ({
-    after,
-    before,
-    document: tree.document,
-    id: value,
-    lexical,
-    node,
-    owner,
-  }));
+): Addition<typeof DocumentId> => {
+  const { lead, token, trail } = piecesOf(lexical);
+
+  return { after: trail, before: lead, document: tree.document, id: token, lexical, node, owner };
+};
 
 /**
  * Build the rows a document's attributes give: each attribute ID's `DocumentId` and the `LabelUse`
@@ -443,16 +438,15 @@ const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUs
   const labels = new Map<string, Addition<typeof LabelUse>>();
 
   for (const attribute of tree.rows.attributes) {
-    const element = tree.byId.get(attribute.node);
+    const element = tree.nodeAt(attribute.node);
     const { lexical, name, node } = attribute;
-    if (element !== undefined && holdsId(attribute, element)) {
-      for (const row of Option.toArray(documentIdOf(tree, node, lexical, node))) {
-        documentIds.set(node, documentIds.get(node) ?? row);
-      }
+    // An element's first ID-typed attribute is its ID; XML Schema gives it no second, which
+    // "DocumentId key"'s key over the ID-typed attributes' node refuses.
+    if (holdsId(attribute, element) && !documentIds.has(node)) {
+      documentIds.set(node, documentIdOf(tree, node, lexical, node));
     }
 
     if (
-      element !== undefined &&
       name === "label" &&
       (toolLabelled.has(element.kind) ||
         (element.kind === itemKind && element.version === labelledRootVersion))
@@ -511,12 +505,13 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
   const identityTexts = new Map<string, IdentityTextRow>();
 
   for (const node of tree.rows.nodes) {
-    const text = tree.values.get(node.id) ?? "";
-    const identity = textIdentityOf(node);
-    if (identity === "none") {
+    const text = tree.stringValueOf(node.id);
+    const found = textIdentityOf(node);
+    if (Option.isNone(found)) {
       continue;
     }
 
+    const identity = found.value;
     identityTexts.set(node.id, {
       document: tree.document,
       governs: node.governs,
@@ -529,9 +524,7 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
     });
 
     if (identity === "ID") {
-      for (const row of Option.toArray(documentIdOf(tree, node.id, text, node.parent))) {
-        documentIds.set(node.id, row);
-      }
+      documentIds.set(node.id, documentIdOf(tree, node.id, text, node.parent));
     }
   }
 
@@ -577,16 +570,20 @@ const lomRowsOf = (
   const resourcePaths = resourcePathsOf(tree.rows);
 
   for (const node of tree.rows.nodes) {
-    const text = tree.values.get(node.id) ?? "";
-    const parent = tree.byId.get(node.parent);
-    if (node.kind === "lom:language" && parent?.kind === "lom:general") {
+    const parent = tree.nodeAt(node.parent);
+    if (node.kind === "lom:language" && parent.kind === "lom:general") {
+      const text = tree.stringValueOf(node.id);
       const tag = lowerAscii(text);
       lomLanguages.set(node.id, { general: node.parent, lang: text, node: node.id, tag });
       lomSets.set(headingKey([node.parent, tag]), { general: node.parent, lang: tag });
     }
 
-    const owner = parent?.kind === "lom:lom" ? tree.byId.get(parent.parent) : undefined;
-    if (node.kind !== "lom:general" || parent === undefined || owner?.kind !== resourceMetadata) {
+    if (node.kind !== "lom:general" || parent.kind !== "lom:lom") {
+      continue;
+    }
+
+    const owner = tree.nodeAt(parent.parent);
+    if (owner.kind !== resourceMetadata) {
       continue;
     }
 
@@ -651,17 +648,16 @@ interface ScopeWalk {
  */
 const scopeWalkOf = (tree: Tree, element: NodeRow<Composed>, scopeKind: string): ScopeWalk => {
   const walk: NodeRow<Composed>[] = [];
-  let at: NodeRow<Composed> | undefined = element;
-  while (at !== undefined) {
+  for (let at = element; ; at = tree.nodeAt(at.parent)) {
     walk.push(at);
     if (at.kind === scopeKind) {
       return { scope: at.id, walk };
     }
 
-    at = at.parent === tree.document ? undefined : tree.byId.get(at.parent);
+    if (at.parent === tree.document) {
+      return { scope: tree.document, walk };
+    }
   }
-
-  return { scope: tree.document, walk };
 };
 
 /**
@@ -714,7 +710,7 @@ const ssmlRowsOf = (
           document: tree.document,
           fragment,
           kind: node.kind,
-          nearest: tree.folds.get(node.id)?.nearest ?? tree.document,
+          nearest: foldAt(tree.folds, node.id).nearest,
           node: node.id,
           parent: node.parent,
           start: node.start,
@@ -803,28 +799,35 @@ const langRowsOf = (
 export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRows => {
   const rows = flatten(doc, ids.idOf);
   const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
+  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const tree: Tree = {
-    byId: new Map(rows.nodes.map((node) => [node.id, node] as const)),
     document: rows.document.node,
-    folds: foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node)),
+    folds: foldOf(rows.nodes, ids.context),
+    nodeAt: (id) => {
+      const node = byId.get(id);
+      if (node === undefined) {
+        throw new Error(
+          `A row of the document names node ${id}, which the document holds no row of, but flatten writes every node before a row that names it. Read the rows flatten writes as it writes them.`,
+        );
+      }
+
+      return node;
+    },
     rootKind: doc.root.kind,
     rows,
+    stringValueOf: stringValuesOf(rows),
     valueOf: (node, name) => lexicals.get(`${node} ${name}`),
-    values: stringValuesOf(rows),
   };
   const attributed = attributeRowsOf(tree);
   const texts = textRowsOf(tree);
   const documentIds = new Map([...texts.DocumentId, ...attributed.DocumentId]);
-  const assembled = ids.assembled ?? false;
-  const shares = shareFragmentsOf(tree, assembled);
+  const shares = shareFragmentsOf(tree, ids.assembled);
   const targets = [
-    ...rows.attributes.flatMap((attribute) => {
-      const element = tree.byId.get(attribute.node);
-
-      return element !== undefined && holdsIdref(attribute, element)
+    ...rows.attributes.flatMap((attribute) =>
+      holdsIdref(attribute, tree.nodeAt(attribute.node))
         ? idrefPiecesOf(attribute.lexical).map(({ token }) => token)
-        : [];
-    }),
+        : [],
+    ),
     ...[...texts.IdentityText.values()].flatMap(({ idrefs }) => idrefs.map(({ token }) => token)),
     ...[...shares.values()].map(({ id }) => id),
   ];
@@ -846,11 +849,38 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
     IdrefTarget: new Map(
       targets.map((id) => [
         headingKey([tree.document, id]),
-        { assembled, document: tree.document, id },
+        { assembled: ids.assembled, document: tree.document, id },
       ]),
     ),
     ShareFragment: shares,
   };
+};
+
+/**
+ * Pair each row of one set with each row of another that shares its key, as an inner join does:
+ * the left rows in their order, each with its partners in theirs. A left row no right row shares a
+ * key with pairs with none, and a right row no left row shares one with is in no pair.
+ *
+ * @param left - The left rows.
+ * @param right - The right rows.
+ * @param leftKey - A left row's key.
+ * @param rightKey - A right row's key.
+ * @returns The pairs.
+ */
+const joined = <Left, Right, Key>(
+  left: Iterable<Left>,
+  right: Iterable<Right>,
+  leftKey: (row: Left) => Key,
+  rightKey: (row: Right) => Key,
+): readonly (readonly [Left, Right])[] => {
+  const partners = Map.groupBy(right, rightKey);
+
+  return [...left].flatMap((row) =>
+    Option.match(Option.fromUndefinedOr(partners.get(leftKey(row))), {
+      onNone: () => [],
+      onSome: (group) => group.map((partner) => [row, partner] as const),
+    }),
+  );
 };
 
 /**
@@ -889,42 +919,49 @@ export const placedIdRowsOf = (input: {
   readonly instances: Iterable<InstanceRoot>;
   readonly targets: Iterable<Addition<typeof IdrefTarget>>;
 }): PlacedIdRows => {
-  const idsOf = Map.groupBy(input.ids, ({ document }) => document);
-  const targetsOf = Map.groupBy(input.targets, ({ document }) => document);
+  const placements = [...input.instances].flatMap((root) =>
+    instancesOf(root).map((instance) => ({ instance, root })),
+  );
   const placed = new Map<string, Addition<typeof PlacedId>>();
   const assembled = new Map<string, Addition<typeof AssembledId>>();
   const placedTargets = new Map<string, Addition<typeof PlacedIdref>>();
-  for (const root of input.instances) {
-    for (const instance of instancesOf(root)) {
-      const copy = root.assemblyKind === testKind ? instance.document : instance.id;
-      for (const { document, id, node, owner } of idsOf.get(instance.document) ?? []) {
-        placed.set(headingKey([instance.id, node]), {
-          assembly: root.assembly,
-          assemblyKind: root.assemblyKind,
-          copy,
-          document,
-          id,
-          instance: instance.id,
-          node,
-          owner,
-        });
-        assembled.set(headingKey([root.assembly, id, owner, copy]), {
-          assembly: root.assembly,
-          copy,
-          id,
-          owner,
-        });
-      }
+  for (const [{ instance, root }, { document, id, node, owner }] of joined(
+    placements,
+    input.ids,
+    (placement) => placement.instance.document,
+    (row) => row.document,
+  )) {
+    const copy = root.assemblyKind === testKind ? instance.document : instance.id;
+    placed.set(headingKey([instance.id, node]), {
+      assembly: root.assembly,
+      assemblyKind: root.assemblyKind,
+      copy,
+      document,
+      id,
+      instance: instance.id,
+      node,
+      owner,
+    });
+    assembled.set(headingKey([root.assembly, id, owner, copy]), {
+      assembly: root.assembly,
+      copy,
+      id,
+      owner,
+    });
+  }
 
-      for (const { document, id } of targetsOf.get(instance.document) ?? []) {
-        placedTargets.set(headingKey([instance.id, id]), {
-          assembly: root.assembly,
-          document,
-          id,
-          instance: instance.id,
-        });
-      }
-    }
+  for (const [{ instance, root }, { document, id }] of joined(
+    placements,
+    input.targets,
+    (placement) => placement.instance.document,
+    (row) => row.document,
+  )) {
+    placedTargets.set(headingKey([instance.id, id]), {
+      assembly: root.assembly,
+      document,
+      id,
+      instance: instance.id,
+    });
   }
 
   return { AssembledId: assembled, PlacedId: placed, PlacedIdref: placedTargets };
@@ -950,20 +987,17 @@ export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows
       ),
     ),
   );
-  const formsOf = Map.groupBy(
-    documents.flatMap((rows) => [...rows.DocumentLang.values()]),
-    ({ document }) => document,
-  );
   const witnesses = new Map<string, Addition<typeof GeneralLang>>();
 
-  for (const { document, general } of documents.flatMap((rows) => [
-    ...rows.GeneralObject.values(),
-  ])) {
-    for (const { lang } of formsOf.get(document) ?? []) {
-      const value = lowerAscii(collapse(lang));
-      if (value !== "" && listed.has(headingKey([general, value]))) {
-        witnesses.set(headingKey([general, lang]), { document, general, lang, value });
-      }
+  for (const [{ document, general }, { lang }] of joined(
+    documents.flatMap((rows) => [...rows.GeneralObject.values()]),
+    documents.flatMap((rows) => [...rows.DocumentLang.values()]),
+    (object) => object.document,
+    (form) => form.document,
+  )) {
+    const value = lowerAscii(collapse(lang));
+    if (value !== noLanguage && listed.has(headingKey([general, value]))) {
+      witnesses.set(headingKey([general, lang]), { document, general, lang, value });
     }
   }
 
@@ -987,10 +1021,6 @@ export const placedLanguageRowsOf = (
   documents: readonly IdentityRows[],
   instances: Iterable<InstanceRoot>,
 ): PlacedLanguageRows => {
-  const carriersOf = Map.groupBy(
-    documents.flatMap((rows) => [...rows.XmlLang.values()]),
-    ({ document }) => document,
-  );
   const listed = new Set(
     documents.flatMap((rows) =>
       [...rows.ResourceLomLanguageSet.values()].map(({ general, lang }) =>
@@ -998,45 +1028,49 @@ export const placedLanguageRowsOf = (
       ),
     ),
   );
-  const generalsOf = Map.groupBy(
-    documents.flatMap((rows) => [...rows.GeneralObject.values()]),
-    ({ document }) => document,
-  );
   const placed = new Map<string, Addition<typeof PlacedXmlLang>>();
   const placedBody = new Map<string, Addition<typeof PlacedBodyXmlLang>>();
   const assembled = new Map<string, Addition<typeof AssembledLang>>();
   const witnesses = new Map<string, Addition<typeof PlacedGeneralLang>>();
-  for (const root of instances) {
-    for (const instance of root.assemblyKind === itemKind ? instancesOf(root) : []) {
-      for (const { lang, node, scope } of carriersOf.get(instance.document) ?? []) {
-        placed.set(headingKey([instance.id, node]), {
-          assembly: root.assembly,
-          document: instance.document,
-          instance: instance.id,
-          lang,
-          node,
-          scope,
-        });
-        if (scope === instance.document) {
-          placedBody.set(headingKey([instance.id, node]), {
-            assembly: root.assembly,
-            document: instance.document,
-            instance: instance.id,
-            lang,
-            node,
-          });
-          assembled.set(headingKey([root.assembly, lang]), { assembly: root.assembly, lang });
-        }
-      }
+  for (const [{ instance, root }, { lang, node, scope }] of joined(
+    [...instances].flatMap((assembly) =>
+      assembly.assemblyKind === itemKind
+        ? instancesOf(assembly).map((member) => ({ instance: member, root: assembly }))
+        : [],
+    ),
+    documents.flatMap((rows) => [...rows.XmlLang.values()]),
+    (placement) => placement.instance.document,
+    (carrier) => carrier.document,
+  )) {
+    placed.set(headingKey([instance.id, node]), {
+      assembly: root.assembly,
+      document: instance.document,
+      instance: instance.id,
+      lang,
+      node,
+      scope,
+    });
+    if (scope === instance.document) {
+      placedBody.set(headingKey([instance.id, node]), {
+        assembly: root.assembly,
+        document: instance.document,
+        instance: instance.id,
+        lang,
+        node,
+      });
+      assembled.set(headingKey([root.assembly, lang]), { assembly: root.assembly, lang });
     }
   }
 
-  for (const { assembly, lang } of assembled.values()) {
+  for (const [{ assembly, lang }, { general }] of joined(
+    assembled.values(),
+    documents.flatMap((rows) => [...rows.GeneralObject.values()]),
+    (form) => form.assembly,
+    (object) => object.document,
+  )) {
     const value = lowerAscii(collapse(lang));
-    for (const { general } of generalsOf.get(assembly) ?? []) {
-      if (value !== "" && listed.has(headingKey([general, value]))) {
-        witnesses.set(headingKey([general, lang]), { assembly, general, lang, value });
-      }
+    if (value !== noLanguage && listed.has(headingKey([general, value]))) {
+      witnesses.set(headingKey([general, lang]), { assembly, general, lang, value });
     }
   }
 

@@ -74,6 +74,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 146-package box ran 20.0 s in FIX-MANIFEST's run of 2026-11-07, which recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/import/overlays/unwritten-identifier.oracle.test.ts",
+    "measurement owed: its 64-package box ran 46.0 s at a load average of 45 to 48 in FB-TESTS's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/test/census.migration.test.ts",
     "LANES.md: no lane touches census.migration.test.ts, so its timeout is named when its owner edits it",
   ],

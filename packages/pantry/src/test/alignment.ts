@@ -879,7 +879,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     147,
     {
       owner:
-        "the import's `Named` and `StimulusRef` rows, written only for an element that writes its identifier (`namedOf`, `stimulusRefsOf`, `src/import/overlays/tests.ts`), under \"Test overlay\"'s containment of each such element's identifier attribute in its row (`src/qti/tests.ts`), held by `src/import/overlays/tests.test.ts`'s names property",
+        "the import's `Named` and `StimulusRef` rows, written only for an element that writes its identifier (`namedOf`, `stimulusRefsOf`, `src/import/overlays/tests.ts`), under \"Test overlay\"'s containment of each such element's identifier attribute in its row (`src/qti/tests.ts`); the oracle's names, given only to an element that writes one (`testDocumentOf`, `src/test/oracle-laws/assembly.ts`); held by `src/import/overlays/tests.test.ts`'s names property and `src/import/overlays/unwritten-identifier.oracle.test.ts`",
       status: "G",
     },
   ],

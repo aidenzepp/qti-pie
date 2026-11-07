@@ -279,7 +279,7 @@ const expectedOf = Effect.fnUntraced(function* expectedOf(
       const lines = new TextDecoder().decode(canonical).split("\n").length;
 
       return differsAt(
-        `byte ${String(canonical.length)}, line ${String(lines + 1)}: record "", export ${JSON.stringify(comment)}`,
+        `byte ${String(canonical.length)}, line ${String(lines + 1)}: record ends, export ${JSON.stringify(comment)}`,
       );
     }
     case "flippedByte": {

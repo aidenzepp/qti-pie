@@ -4,7 +4,7 @@
  * after it, and finds the states where Unique Particle Attribution fails. `grammar/content.ts`
  * installs each model's automaton as the content grammar.
  */
-import { Array as Arr, Option } from "effect";
+import { Option } from "effect";
 import type {
   Compositor,
   NamespaceConstraint,
@@ -98,12 +98,26 @@ export interface Ambiguity {
 }
 
 /**
+ * A state of the automaton as the construction builds it: the positions a child may take next.
+ */
+interface State {
+  readonly follows: Set<PositionState>;
+}
+
+/**
+ * The state after a child at a position: the position, and the positions a child may take next.
+ */
+interface PositionState extends State {
+  readonly position: Position;
+}
+
+/**
  * What the construction reads of a particle: whether it matches the empty word, and its first and
  * last positions.
  */
 interface Reading {
-  readonly first: ReadonlySet<number>;
-  readonly last: ReadonlySet<number>;
+  readonly first: ReadonlySet<PositionState>;
+  readonly last: ReadonlySet<PositionState>;
   readonly nullable: boolean;
 }
 
@@ -197,7 +211,7 @@ const clashesIn = (
 const bodyOf = (
   compositor: Compositor,
   inner: readonly Reading[],
-  link: (from: ReadonlySet<number>, to: ReadonlySet<number>) => void,
+  link: (from: ReadonlySet<State>, to: ReadonlySet<PositionState>) => void,
 ): Reading => {
   switch (compositor) {
     case "choice": {
@@ -233,7 +247,7 @@ const bodyOf = (
         }
       }
 
-      const leading: ReadonlySet<number>[] = [];
+      const leading: ReadonlySet<PositionState>[] = [];
 
       for (const member of inner) {
         leading.push(member.first);
@@ -243,7 +257,7 @@ const bodyOf = (
         }
       }
 
-      const trailing: ReadonlySet<number>[] = [];
+      const trailing: ReadonlySet<PositionState>[] = [];
 
       for (const member of inner.toReversed()) {
         trailing.push(member.last);
@@ -279,13 +293,13 @@ export const automatonOf = (
   namespaceOf: (kind: string) => string,
   own: string,
 ): Automaton => {
-  const positions: Position[] = [];
-  // State 0, the start, then one state per position, each the state after a child there.
-  const next: Set<number>[] = [new Set()];
-  const link = (from: ReadonlySet<number>, to: ReadonlySet<number>): void => {
-    for (const at of from) {
+  // The start, before any child; then one state per position, the state after a child there.
+  const start: State = { follows: new Set() };
+  const states: PositionState[] = [];
+  const link = (from: ReadonlySet<State>, to: ReadonlySet<PositionState>): void => {
+    for (const state of from) {
       for (const taken of to) {
-        next[at]?.add(taken);
+        state.follows.add(taken);
       }
     }
   };
@@ -295,20 +309,22 @@ export const automatonOf = (
     }
 
     if (node._tag !== "group") {
-      const number = positions.length + 1;
+      const state: PositionState = {
+        follows: new Set(),
+        position: {
+          number: states.length + 1,
+          occurs: node.occurs,
+          sources: node.sources,
+          symbol:
+            node._tag === "element"
+              ? { _tag: "kinds", kinds: node.kinds }
+              : { _tag: "wildcard", namespace: node.namespace, processing: node.processing },
+        },
+      };
 
-      positions.push({
-        number,
-        occurs: node.occurs,
-        sources: node.sources,
-        symbol:
-          node._tag === "element"
-            ? { _tag: "kinds", kinds: node.kinds }
-            : { _tag: "wildcard", namespace: node.namespace, processing: node.processing },
-      });
-      next.push(new Set());
+      states.push(state);
 
-      const here = new Set([number]);
+      const here = new Set([state]);
 
       if (repeats(node.occurs)) {
         link(here, here);
@@ -330,11 +346,14 @@ export const automatonOf = (
     return { ...body, nullable: body.nullable || node.occurs.min === 0 };
   };
   const whole = visit(particle);
-  link(new Set([0]), whole.first);
+  link(new Set([start]), whole.first);
 
-  const ambiguous = next.flatMap((state, at) =>
+  // State 0 is the start; state `n` is the one after a child at position `n`.
+  const ordered: readonly State[] = [start, ...states];
+  const numberOf = ({ position }: PositionState): number => position.number;
+  const ambiguous = ordered.flatMap((state, at) =>
     clashesIn(
-      [...state].flatMap((number) => Option.toArray(Arr.get(positions, number - 1))),
+      [...state.follows].map(({ position }) => position),
       namespaceOf,
       own,
     ).map((pair): Ambiguity => ({ positions: pair, state: at })),
@@ -342,8 +361,8 @@ export const automatonOf = (
 
   return {
     ambiguous,
-    ends: new Set([...(whole.nullable ? [0] : []), ...whole.last]),
-    next,
-    positions,
+    ends: new Set([...(whole.nullable ? [0] : []), ...[...whole.last].map(numberOf)]),
+    next: ordered.map(({ follows }) => new Set([...follows].map(numberOf))),
+    positions: states.map(({ position }) => position),
   };
 };

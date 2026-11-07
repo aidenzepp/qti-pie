@@ -32,7 +32,12 @@ import type {
 import { BuiltInVariable, nonElementKinds } from "#pantry/grammar/install.ts";
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
-import { baseTypeOf, piecesOf, typedDeclarationOf } from "#pantry/import/overlays/declarations.ts";
+import {
+  heldBaseTypeOf,
+  piecesOf,
+  spelledBaseTypeOf,
+  typedDeclarationOf,
+} from "#pantry/import/overlays/declarations.ts";
 import { itemRefPathsOf, keyOf } from "#pantry/import/overlays/tests.ts";
 import type {
   AssembledRows,
@@ -637,7 +642,7 @@ const declarationsOf = (
         unnamed.add(name);
       } else if (!declarations.has(name)) {
         declarations.set(name, {
-          baseType: typed.value.baseType,
+          baseType: heldBaseTypeOf(typed.value),
           cardinality: typed.value.cardinality,
           kind: node.kind,
           node: node.id,
@@ -1000,12 +1005,15 @@ const expressionRowsOf = (
   if (node.kind === "qti-base-value") {
     const text = (doc.childrenOf.get(node.id) ?? []).map(({ id }) => charsOf(doc, id)).join("");
     built.Literal.set(node.id, { ...own, text });
-    if (type.baseType !== "unknown") {
+
+    // A literal is typed where its base-type spells a code, the one its type is (7230d050).
+    const typeCode = spelledBaseTypeOf(valueOf(doc, node.id, "base-type"));
+    if (type.baseType !== "unknown" && Option.isSome(typeCode)) {
       built.LiteralTyped.set(node.id, {
         baseType: type.baseType,
         node: node.id,
         text,
-        typeCode: baseTypeOf(valueOf(doc, node.id, "base-type")),
+        typeCode: typeCode.value,
       });
     }
   }

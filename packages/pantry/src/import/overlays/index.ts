@@ -81,7 +81,7 @@ import { rowsOf as quotationRowsOf } from "#pantry/import/overlays/quotation.ts"
 import type { QuotationRows } from "#pantry/import/overlays/quotation.ts";
 import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
-import type { ListedDocument, NodeIds } from "#pantry/import/write.ts";
+import type { PlacedDocument } from "#pantry/import/write.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { overlayNames } from "#pantry/import/roster.ts";
@@ -150,13 +150,7 @@ interface DocumentRows {
  * @param document.listed - The document as listed.
  * @returns Every builder's rows.
  */
-const documentRowsOf = ({
-  ids,
-  listed: { path, tree },
-}: {
-  readonly ids: NodeIds;
-  readonly listed: ListedDocument;
-}): DocumentRows => ({
+const documentRowsOf = ({ ids, listed: { path, tree } }: PlacedDocument): DocumentRows => ({
   catalog: catalogRowsOf(tree, ids),
   declarations: declarationRowsOf(tree, ids),
   expressions: expressionRowsOf(tree, ids),
@@ -196,17 +190,17 @@ export class OverlayConflict extends Schema.TaggedError<OverlayConflict>()("Over
  * equality) is one row, the first set's.
  *
  * @param relation - The relation's name, for the conflict.
- * @param sets - Its keyed sets, those a part gives it, in the parts' order.
+ * @param sets - Its keyed sets, those the parts that hold it give it, in the parts' order.
  * @returns The union; or the {@link OverlayConflict} of the first key, in the sets' order, met
  *   with two different rows.
  */
 export const unionOf = <Row>(
   relation: string,
-  sets: readonly (ReadonlyMap<string, Row> | undefined)[],
+  sets: readonly ReadonlyMap<string, Row>[],
 ): Result.Result<ReadonlyMap<string, Row>, OverlayConflict> => {
   const union = new Map<string, Row>();
   for (const set of sets) {
-    for (const [key, row] of set ?? []) {
+    for (const [key, row] of set) {
       const held = union.get(key);
       if (held === undefined) {
         union.set(key, row);
@@ -228,7 +222,8 @@ export const unionOf = <Row>(
 
 /**
  * Union every part's keyed sets, relation by relation: {@link unionOf} of each relation `names`
- * lists, in their order, so a relation no part holds is its empty set. The relations are a set of
+ * lists, in their order, over the parts that hold it, so a relation no part holds is its empty
+ * set. The relations are a set of
  * keys of one record type, `OverlayRows` or the document layer's, each of which
  * `#pantry/import/roster.ts` reads from the schema, so a relation the schema gains is unioned with
  * no edit here.
@@ -251,7 +246,11 @@ export const unionsOf = <R extends { readonly [K in keyof R]: ReadonlyMap<string
               name,
               unionOf(
                 name,
-                parts.map((part) => part[name]),
+                parts.flatMap((part) => {
+                  const set = part[name];
+
+                  return set === undefined ? [] : [set];
+                }),
               ),
             ] as const,
         ),
@@ -268,12 +267,14 @@ export const unionsOf = <R extends { readonly [K in keyof R]: ReadonlyMap<string
  * document, then those of the builders that read the whole package, each a part holding every
  * relation its builder writes.
  *
- * @param documents - The package's documents, each listed and under its ids.
+ * @param documents - The package's documents, each listed and under its ids, the manifest among
+ *   them, the one of resource type `none`.
  * @param mint - Draws a fresh uuid for each assembled instance but a root.
  * @returns The parts, in the order {@link overlayRowsOf} merges them.
+ * @throws {Error} When no document is the manifest: every package lists its own (`readProgram`).
  */
 export const overlayPartsOf = (
-  documents: readonly { readonly ids: NodeIds; readonly listed: ListedDocument }[],
+  documents: readonly PlacedDocument[],
   mint: () => NodeId,
 ): readonly Partial<OverlayRows>[] => {
   const documented = documents.map((document) => ({ document, rows: documentRowsOf(document) }));
@@ -307,6 +308,12 @@ export const overlayPartsOf = (
   }
 
   const manifest = built.find(({ document }) => document.listed.resourceType === "none");
+  if (manifest === undefined) {
+    throw new Error(
+      "overlayPartsOf was given no manifest, the one document of resource type none. Pass every document of the package, as readProgram lists them, its manifest first.",
+    );
+  }
+
   const placedIds = placedIdRowsOf({
     ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
     instances: assembled.Instance.values(),
@@ -358,9 +365,7 @@ export const overlayPartsOf = (
       references: built.flatMap(({ rows }) => [...rows.expressions.VariableRef.values()]),
       untyped: documents.flatMap(({ ids, listed }) => untypedNamesOf(listed.tree, ids)),
     }),
-    ...(manifest === undefined
-      ? []
-      : [objectRowsOfPackage(manifest.document.listed.tree, manifest.document.ids, named)]),
+    objectRowsOfPackage(manifest.document.listed.tree, manifest.document.ids, named),
     placedBindingRowsOf({
       adaptive: built.flatMap(({ rows }) => [...rows.interactions.ItemMode.values()]),
       choices: built.flatMap(({ rows }) => [...rows.interactions.Choice.values()]),
@@ -408,7 +413,7 @@ export const overlayPartsOf = (
  *   of two builders that give one key two rows.
  */
 export const overlayRowsOf = (
-  documents: readonly { readonly ids: NodeIds; readonly listed: ListedDocument }[],
+  documents: readonly PlacedDocument[],
   mint: () => NodeId,
 ): Result.Result<OverlayRows, OverlayConflict> =>
   unionsOf<OverlayRows>(overlayNames, overlayPartsOf(documents, mint));

@@ -39,10 +39,12 @@ import { describe, inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { grammar } from "#pantry/grammar/install.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { objectRowsOfPackage, rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataIds, NamedDocument } from "#pantry/import/overlays/metadata.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
+import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
@@ -85,13 +87,18 @@ const shredGrammar = shredGrammarOf(grammar);
  * @param documentType - The type it is listed under, `none` for the manifest.
  * @returns The ids.
  */
-const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => ({
-  documentType,
-  idOf: (index) =>
-    `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`,
-  package: "00000000-0000-4000-8000-00000000c0de",
-  targetAt: () => Option.none(),
-});
+const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => {
+  const idOf = (index: number): NodeId =>
+    `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`;
+
+  return {
+    context: ownContext(idOf(0)),
+    documentType,
+    idOf,
+    package: "00000000-0000-4000-8000-00000000c0de",
+    targetAt: () => Option.none(),
+  };
+};
 
 /**
  * Read the schema version a manifest declares.

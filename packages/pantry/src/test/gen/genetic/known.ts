@@ -201,24 +201,6 @@ export const known = {
     fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "import-only-law: E1 derived, check E1_derived on RecordField": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_outcomes_xmlv3p0" href="testoutcome01.xml"/></resources></manifest>`,
-      ],
-      [
-        "testoutcome01.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-outcome-declaration xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="SCORE" cardinality="single"><qti-default-value><qti-value base-type="integer"/></qti-default-value></qti-outcome-declaration>`,
-      ],
-    ],
-    fix: "B11: no RecordField is written outside a record declaration, and an absent field identifier is no row",
-    owner: "NIL",
-  },
   "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, identifierLexical)":
     {
       files: [
@@ -976,6 +958,24 @@ export const fixed = {
     ],
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
+  },
+  "import-only-law: E1 derived, check E1_derived on RecordField": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_outcomes_xmlv3p0" href="testoutcome01.xml"/></resources></manifest>`,
+      ],
+      [
+        "testoutcome01.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-outcome-declaration xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="SCORE" cardinality="single"><qti-default-value><qti-value base-type="integer"/></qti-default-value></qti-outcome-declaration>`,
+      ],
+    ],
+    fix: "a RecordField row only where a value writes both a field-identifier and a base-type, so a base-type written alone is refused under Value cardinality, never an empty field identifier's E1",
+    owner: "FIX-UNWRITTEN",
   },
   "import-only-law: E1 derived, contained Expression(kind, baseType) in ResultBase(kind, base)": {
     files: [

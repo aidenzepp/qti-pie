@@ -26,7 +26,7 @@
  * package written first, and arrive with the importer (Q5.15); probe P2 restates them.
  */
 import { ChangeSet, Db, lexicalForm, pg } from "@bjornpagen/grizzle";
-import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
+import type { Addition, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Option } from "effect";
 import { describe } from "vitest";
@@ -35,11 +35,14 @@ import { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import {
   contextVariable,
   Declaration,
+  DeclarationBaseType,
   declarationKinds,
-  OutcomeRange,
+  MasteryCeiling,
+  MasteryFloor,
   reservedBaseTypes,
   sessionVariables,
   Value,
+  ValueBaseType,
   ValueSet,
 } from "#pantry/qti/declarations.ts";
 import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
@@ -69,7 +72,6 @@ const strayDocument = strayNode(255);
  *
  * @param fields - The fields the case sets.
  * @param fields.baseType - Its base type.
- * @param fields.baseTypeLexical - Its `base-type` as written.
  * @param fields.cardinality - Its cardinality.
  * @param fields.cardinalityLexical - Its `cardinality` as written.
  * @param fields.identifier - Its collapsed identifier, written bare.
@@ -78,7 +80,6 @@ const strayDocument = strayNode(255);
  */
 const declarationRow = (fields: {
   readonly baseType?: string;
-  readonly baseTypeLexical?: string;
   readonly cardinality?: string;
   readonly cardinalityLexical?: string;
   readonly identifier?: string;
@@ -91,7 +92,6 @@ const declarationRow = (fields: {
 
   return {
     baseType,
-    baseTypeLexical: fields.baseTypeLexical ?? (baseType === "none" ? "" : baseType),
     cardinality,
     cardinalityLexical: fields.cardinalityLexical ?? cardinality,
     declarationKind: kind,
@@ -150,9 +150,11 @@ const declaredName: Addition<typeof ChoiceVariableName> = {
  * @param identifierLexical - Its identifier as written; its name is that collapsed.
  * @returns The fact.
  */
-const declarationFact = (node: number, identifierLexical: string): Fact<typeof Declaration> => ({
+const declarationFact = (
+  node: number,
+  identifierLexical: string,
+): Addition<typeof Declaration> => ({
   baseType: "float",
-  baseTypeLexical: "float",
   cardinality: "single",
   cardinalityLexical: "single",
   declarationKind: "qti-outcome-declaration",
@@ -193,9 +195,9 @@ const doubleForm = new RegExp(lexicalForm(pg["double precision"]), "u");
 
 /**
  * Read a scale attribute as the specification's model reads it: an `xs:double`, or none where it
- * is unwritten or outside the form `Mastery_range` judges (a recorded limit).
+ * is outside the form `Mastery_range` judges (a recorded limit).
  *
- * @param lexical - The lexical form, empty where unwritten.
+ * @param lexical - The lexical form, as written.
  * @returns The value.
  */
 const scaleValue = (lexical: string): Option.Option<number> => {
@@ -211,8 +213,8 @@ const scaleValue = (lexical: string): Option.Option<number> => {
 };
 
 /**
- * Whether one scale value is above another, both read as `xs:double`: false where either is
- * unwritten or unjudged, and where either is `NaN`, which orders against nothing.
+ * Whether one scale value is above another, both written and read as `xs:double`: false where
+ * either is unjudged, and where either is `NaN`, which orders against nothing.
  *
  * @param low - The lexical form that must not be above.
  * @param high - The lexical form that must not be below.
@@ -225,23 +227,11 @@ const above = (low: string, high: string): boolean =>
   });
 
 /**
- * Whether the Schematron's OUTCOMEDEC 1, read by its intent (spec reading 9), refuses a scale: a
- * written mastery value below a written minimum or above a written maximum, as `xs:double` values
- * order, `NaN` against nothing.
- *
- * @param minimum - `normal-minimum`'s lexical form.
- * @param mastery - `mastery-value`'s.
- * @param maximum - `normal-maximum`'s.
- * @returns Whether the range law refuses it.
+ * The scale texts of the mastery box, each written: ordinary values, both infinities, `NaN`, and a
+ * value with outer whitespace, outside the form the law judges. An unwritten attribute has no row,
+ * and no pair holds it.
  */
-const outOfRange = (minimum: string, mastery: string, maximum: string): boolean =>
-  above(minimum, mastery) || above(mastery, maximum);
-
-/**
- * The scale texts of the mastery box: unwritten, ordinary values, both infinities, `NaN`, and a
- * value with outer whitespace, outside the form the law judges.
- */
-const scaleTexts = ["", "0", "0.5", "1", "-INF", "INF", "NaN", " 0.5"] as const;
+const scaleTexts = ["0", "0.5", "1", "-INF", "INF", "NaN", " 0.5"] as const;
 
 /**
  * The texts of the typed-value box, each with the base types it is a value of, constructed from
@@ -399,37 +389,63 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         "refuses a code that disagrees with its lexical form, through direct SQL, by E1 derived",
         () =>
           // Oracle: the closed relations, `BaseTypeLexical` and `CardinalityLexical` (C17): a code
-          // is the handle its lexical form spells, `none` exactly where none is written, and
-          // `base-type` and `cardinality` restrict xs:string, so a padded form spells no handle.
-          // Bound: each kind of disagreement, named, and its control.
+          // is the handle its lexical form spells, and `base-type` and `cardinality` restrict
+          // xs:string, so a padded form spells no handle, and `none` none at all.
+          // Bound: each kind of disagreement, named, and its control, on a declaration's row and on
+          // a declaration's and a value's base type row.
           Effect.gen(function* codes() {
             const client = yield* loginSession;
+            const baseTypes = [
+              { baseType: "float", baseTypeLexical: "float", label: "control", refused: false },
+              {
+                baseType: "integer",
+                baseTypeLexical: "float",
+                label: "integer written float",
+                refused: true,
+              },
+              { baseType: "float", baseTypeLexical: " float", label: "padded", refused: true },
+              { baseType: "none", baseTypeLexical: "float", label: "none", refused: true },
+              { baseType: "float", baseTypeLexical: "", label: "empty", refused: true },
+            ];
+            for (const { baseType, baseTypeLexical, label, refused } of baseTypes) {
+              assertVerdict(
+                yield* judged(
+                  client,
+                  statedInserts([
+                    {
+                      fact: { baseType, baseTypeLexical, node: strayNode(1) },
+                      relation: DeclarationBaseType,
+                    },
+                  ]),
+                ),
+                "e_1_derived",
+                refused,
+                `declaration base type ${label}`,
+              );
+              assertVerdict(
+                yield* judged(
+                  client,
+                  statedInserts([
+                    {
+                      fact: {
+                        baseType,
+                        baseTypeLexical,
+                        cardinality: "record",
+                        node: strayNode(3),
+                        text: "1",
+                      },
+                      relation: ValueBaseType,
+                    },
+                  ]),
+                ),
+                "e_1_derived",
+                refused,
+                `value base type ${label}`,
+              );
+            }
+
             const cases = [
               { label: "control", refused: false, row: declarationRow({}) },
-              {
-                label: "base type integer written float",
-                refused: true,
-                row: declarationRow({ baseType: "integer", baseTypeLexical: "float" }),
-              },
-              {
-                label: "base type float written padded",
-                refused: true,
-                row: declarationRow({ baseTypeLexical: " float" }),
-              },
-              {
-                label: "base type none written float",
-                refused: true,
-                row: declarationRow({
-                  baseType: "none",
-                  baseTypeLexical: "float",
-                  cardinality: "record",
-                }),
-              },
-              {
-                label: "base type float written empty",
-                refused: true,
-                row: declarationRow({ baseTypeLexical: "" }),
-              },
               {
                 label: "cardinality single written multiple",
                 refused: true,
@@ -540,11 +556,14 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // readings 7, 34 and 45, xs:double and §8.13, as the free test's box: PostgreSQL's regex
           // engine judging the same patterns a JavaScript host checks there.
           // Bound: 8 judged base types against 13 texts, 104 cases, and each text under `string`,
-          // which admits every text, 13 more.
+          // which admits every text, 13 more; each as a single set's value, and as a value's own
+          // base type in a record's set, where it is judged, and in a single set, where it is not
+          // (§7.46.2: a value's base-type "is only used for" a record's field).
           Effect.gen(function* typedValue() {
             const client = yield* loginSession;
             for (const baseType of [...judgedBaseTypes, "string"]) {
               for (const { text, values } of typedTexts) {
+                const refused = baseType !== "string" && !values.includes(baseType);
                 assertVerdict(
                   yield* judged(
                     client,
@@ -552,12 +571,12 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                       {
                         fact: {
                           baseType,
+                          cardinality: "single",
                           document: strayDocument,
                           kind: "qti-value",
                           nearest: strayDocument,
                           node: strayNode(3),
                           parent: strayNode(2),
-                          setBaseType: baseType,
                           start: 3n,
                           text,
                           version: "3.0.1",
@@ -567,9 +586,31 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                     ]),
                   ),
                   "typed_value",
-                  baseType !== "string" && !values.includes(baseType),
+                  refused,
                   `${baseType} ${JSON.stringify(text)}`,
                 );
+                for (const cardinality of ["record", "single"]) {
+                  assertVerdict(
+                    yield* judged(
+                      client,
+                      statedInserts([
+                        {
+                          fact: {
+                            baseType,
+                            baseTypeLexical: baseType,
+                            cardinality,
+                            node: strayNode(3),
+                            text,
+                          },
+                          relation: ValueBaseType,
+                        },
+                      ]),
+                    ),
+                    "typed_value",
+                    cardinality === "record" && refused,
+                    `own ${baseType} in a ${cardinality} set ${JSON.stringify(text)}`,
+                  );
+                }
               }
             }
           }).pipe(Effect.scoped),
@@ -583,32 +624,40 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // (reading 9): `not(@mastery-value < @normal-minimum)` and `not(@mastery-value >
           // @normal-maximum)` over written values as xs:double, NaN ordered against nothing, a form
           // outside grizzle's double form unjudged (the recorded limit).
-          // Bound: every (minimum, mastery, maximum) over 8 texts, 512 cases.
+          // Bound: every pair (minimum, mastery) and (mastery, maximum) over 7 written texts, 98
+          // cases, each a row of the pair it is.
           Effect.gen(function* masteryRange() {
             const client = yield* loginSession;
-            for (const minimum of scaleTexts) {
-              for (const mastery of scaleTexts) {
-                for (const maximum of scaleTexts) {
-                  assertVerdict(
-                    yield* judged(
-                      client,
-                      statedInserts([
-                        {
-                          fact: {
-                            masteryValue: mastery,
-                            node: strayNode(1),
-                            normalMaximum: maximum,
-                            normalMinimum: minimum,
-                          },
-                          relation: OutcomeRange,
-                        },
-                      ]),
-                    ),
-                    "mastery_range",
-                    outOfRange(minimum, mastery, maximum),
-                    JSON.stringify([minimum, mastery, maximum]),
-                  );
-                }
+            for (const low of scaleTexts) {
+              for (const high of scaleTexts) {
+                assertVerdict(
+                  yield* judged(
+                    client,
+                    statedInserts([
+                      {
+                        fact: { masteryValue: high, node: strayNode(1), normalMinimum: low },
+                        relation: MasteryFloor,
+                      },
+                    ]),
+                  ),
+                  "mastery_range",
+                  above(low, high),
+                  `floor ${JSON.stringify([low, high])}`,
+                );
+                assertVerdict(
+                  yield* judged(
+                    client,
+                    statedInserts([
+                      {
+                        fact: { masteryValue: low, node: strayNode(1), normalMaximum: high },
+                        relation: MasteryCeiling,
+                      },
+                    ]),
+                  ),
+                  "mastery_range",
+                  above(low, high),
+                  `ceiling ${JSON.stringify([low, high])}`,
+                );
               }
             }
           }).pipe(Effect.scoped),

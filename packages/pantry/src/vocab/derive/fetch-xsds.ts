@@ -134,46 +134,56 @@ export const pinFaults = (pins: XsdPins): readonly PinFault[] =>
         liesInside(path, held) ||
         liesInside(held, path),
     );
-    const faults: (PinFault | undefined)[] = [
+    const faults: readonly (readonly PinFault[])[] = [
       digestForm.test(sha256)
-        ? undefined
-        : {
-            detail: `its sha256 ${JSON.stringify(sha256)} is not 64 lower-case hexadecimal digits`,
-            path,
-            rule: "digest",
-          },
+        ? []
+        : [
+            {
+              detail: `its sha256 ${JSON.stringify(sha256)} is not 64 lower-case hexadecimal digits`,
+              path,
+              rule: "digest",
+            },
+          ],
       parsed?.protocol === "https:" && parsed.href === url
-        ? undefined
-        : {
-            detail: `its url ${JSON.stringify(url)} is not an https URL written as the URL standard serializes it, the form an xs:include's resolved location is matched against`,
-            path,
-            rule: "url",
-          },
+        ? []
+        : [
+            {
+              detail: `its url ${JSON.stringify(url)} is not an https URL written as the URL standard serializes it, the form an xs:include's resolved location is matched against`,
+              path,
+              rule: "url",
+            },
+          ],
       sharer === undefined
-        ? undefined
-        : {
-            detail: `its url is also the url of ${sharer[0]}, so a location that resolves to it names two files`,
-            path,
-            rule: "url-shared",
-          },
+        ? []
+        : [
+            {
+              detail: `its url is also the url of ${sharer[0]}, so a location that resolves to it names two files`,
+              path,
+              rule: "url-shared",
+            },
+          ],
       isPortablePath(path)
-        ? undefined
-        : {
-            detail:
-              'it is not a relative path of segments of letters, digits, ".", "_" and "-", none "." or "..", ending in ".xsd"',
-            path,
-            rule: "path",
-          },
+        ? []
+        : [
+            {
+              detail:
+                'it is not a relative path of segments of letters, digits, ".", "_" and "-", none "." or "..", ending in ".xsd"',
+              path,
+              rule: "path",
+            },
+          ],
       collider === undefined
-        ? undefined
-        : {
-            detail: `it names the same file as ${collider}, or a file inside it or around it, on a case-insensitive file system`,
-            path,
-            rule: "path-collision",
-          },
+        ? []
+        : [
+            {
+              detail: `it names the same file as ${collider}, or a file inside it or around it, on a case-insensitive file system`,
+              path,
+              rule: "path-collision",
+            },
+          ],
     ];
 
-    return faults.filter((fault) => fault !== undefined);
+    return faults.flat();
   });
 
 /**
@@ -277,13 +287,17 @@ export class XsdFetchIncomplete extends Schema.TaggedError<XsdFetchIncomplete>()
     const missing = this.failures.length;
     const rest = this.pinned - missing;
     const repairs = [
-      this.failures.some((failure) => failure._tag === "XsdDownloadFailed")
-        ? `For a download that failed, check that its URL answers, then run \`${fetchCommand}\` again; it requests only the files still missing.`
-        : undefined,
-      this.failures.some((failure) => failure._tag === "XsdPublishedChanged")
-        ? "For a file that changed where it is published, review the change, then re-pin it in src/vocab/derive/sources.ts and run the deriver's tests again."
-        : undefined,
-    ].filter((repair) => repair !== undefined);
+      ...(this.failures.some((failure) => failure._tag === "XsdDownloadFailed")
+        ? [
+            `For a download that failed, check that its URL answers, then run \`${fetchCommand}\` again; it requests only the files still missing.`,
+          ]
+        : []),
+      ...(this.failures.some((failure) => failure._tag === "XsdPublishedChanged")
+        ? [
+            "For a file that changed where it is published, review the change, then re-pin it in src/vocab/derive/sources.ts and run the deriver's tests again.",
+          ]
+        : []),
+    ];
 
     return [
       `${String(missing)} of the ${String(this.pinned)} pinned XSDs could not be put in ${this.directory}:`,
@@ -340,14 +354,32 @@ const reasonOf = (error: HttpClientError.HttpClientError | Cause.TimeoutError): 
   }
 
   if (reason._tag === "TransportError") {
-    const cause = reason.cause instanceof Error ? reason.cause : undefined;
-    const detail = reason.description ?? cause?.message ?? "no detail";
-    const code =
-      cause?.cause instanceof Error && "code" in cause.cause
-        ? ` (${String(cause.cause.code)})`
-        : "";
+    const cause = Option.liftPredicate(
+      reason.cause,
+      (held): held is Error => held instanceof Error,
+    );
+    // The client's own description, else its cause's message; either may be missing.
+    const detail = Option.orElse(Option.fromNullishOr(reason.description), () =>
+      cause.pipe(Option.map(({ message }) => message)),
+    );
+    const code = cause.pipe(
+      Option.flatMap((held) =>
+        held.cause instanceof Error && "code" in held.cause
+          ? Option.some(String(held.cause.code))
+          : Option.none(),
+      ),
+    );
+    const said = Option.match(detail, {
+      onNone: () =>
+        Option.match(code, {
+          onNone: () => "the client gave no reason",
+          onSome: (held) => `the client gave only the code ${held}`,
+        }),
+      onSome: (held) =>
+        Option.match(code, { onNone: () => held, onSome: (named) => `${held} (${named})` }),
+    });
 
-    return `the request did not complete: ${detail}${code}`;
+    return `the request did not complete: ${said}`;
   }
 
   return `the answer could not be read: ${reason.message}`;
