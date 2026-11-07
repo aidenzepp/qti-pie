@@ -36,7 +36,7 @@ import { Array as Arr, Option, Result } from "effect";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
-import { int8Max } from "#pantry/grammar/closed.ts";
+import { int8Max, rowsAt } from "#pantry/grammar/closed.ts";
 import { composed, recordCardinality } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
@@ -599,6 +599,51 @@ const barredByFamily = onePerFamily("BarredOf", grammar.barredBy.rows);
 const naturalOf = (bound: number): bigint => (Number.isFinite(bound) ? BigInt(bound) : int8Max);
 
 /**
+ * `CountedOf`'s row of a family whose count is no law beside its automaton: position 0, bounded by
+ * nothing, min 0 and max `int8Max` (C25). A law reads the relation at every family, and grizzle
+ * refuses a row a read finds no row for (README, "Closed relations": `at` is "absent where no row
+ * holds the key, so a row check over it refuses that row"), so the relation is total.
+ */
+const uncounted = { max: int8Max, min: 0n, position: "0" } as const;
+
+/**
+ * `BarredOf`'s row of a family nothing bars: slot 0 and position 0 (C25), total for the reason
+ * {@link uncounted} is.
+ */
+const unbarred = { position: "0", slot: "0" } as const;
+
+/**
+ * Read the attribute slot a barring's attribute takes under its parent's own governor.
+ *
+ * @param barring - The barring's family and attribute.
+ * @param barring.name - The attribute whose presence bars.
+ * @param barring.parent - The parent kind.
+ * @param barring.version - The version.
+ * @returns The attribute's slot in the parent's `AttributeGrammar`.
+ * @throws {Error} When the parent admits no such attribute, so the barring names a slot it has
+ *   not; `ChildBarredBy` is stated only for attributes its parents declare.
+ */
+const barringSlot = (barring: {
+  readonly name: string;
+  readonly parent: string;
+  readonly version: Version;
+}): string =>
+  Option.getOrThrowWith(
+    Option.map(
+      grammar.attributes.admission.lookup({
+        kind: barring.parent,
+        name: barring.name,
+        version: barring.version,
+      }),
+      ({ position }) => position,
+    ),
+    () =>
+      new Error(
+        `BarredOf bars ${barring.parent}'s children by its attribute ${barring.name} in ${barring.version}, which ${barring.parent}'s attribute grammar does not admit, so the barring has no slot. Bar by an attribute ${barring.parent} declares.`,
+      ),
+  );
+
+/**
  * `CountedOf`: (version, parent) → (position, min, max), total: the one position of the family
  * whose count is a law beside its automaton, with its bounds, or position 0, min 0 and max
  * `int8Max` where none is (C25: `qti-simple-match-set` under `qti-match-interaction`).
@@ -614,17 +659,24 @@ export const CountedOf = closed.relation(
   },
   ["version", "parent"],
   grammar.kinds.versions.handles.flatMap((version) =>
-    grammar.kinds.nodeKind.handles.map((parent) => {
-      const counted = countedByFamily.get(`${version} ${parent}`);
-
-      return {
-        max: counted === undefined ? int8Max : naturalOf(counted.max),
-        min: counted === undefined ? 0n : naturalOf(counted.min),
-        parent,
-        position: counted?.position ?? "0",
-        version,
-      };
-    }),
+    grammar.kinds.nodeKind.handles.map((parent) =>
+      Option.match(Option.fromNullishOr(countedByFamily.get(`${version} ${parent}`)), {
+        onNone: () => ({
+          max: uncounted.max,
+          min: uncounted.min,
+          parent,
+          position: uncounted.position,
+          version,
+        }),
+        onSome: (counted) => ({
+          max: naturalOf(counted.max),
+          min: naturalOf(counted.min),
+          parent,
+          position: counted.position,
+          version,
+        }),
+      }),
+    ),
   ),
 );
 
@@ -675,22 +727,17 @@ export const BarredOf = closed.relation(
   },
   ["version", "parent"],
   grammar.kinds.versions.handles.flatMap((version) =>
-    grammar.kinds.nodeKind.handles.map((parent) => {
-      const barred = barredByFamily.get(`${version} ${parent}`);
-      const slotOf = Option.flatMap(Option.fromNullishOr(barred), ({ name }) =>
-        grammar.attributes.admission.lookup({ kind: parent, name, version }),
-      );
-
-      return {
-        parent,
-        position: barred?.position ?? "0",
-        slot: Option.match(slotOf, {
-          onNone: () => "0",
-          onSome: ({ position }) => position,
+    grammar.kinds.nodeKind.handles.map((parent) =>
+      Option.match(Option.fromNullishOr(barredByFamily.get(`${version} ${parent}`)), {
+        onNone: () => ({ parent, position: unbarred.position, slot: unbarred.slot, version }),
+        onSome: ({ name, position }) => ({
+          parent,
+          position,
+          slot: barringSlot({ name, parent, version }),
+          version,
         }),
-        version,
-      };
-    }),
+      }),
+    ),
   ),
 );
 
@@ -810,7 +857,11 @@ const governingRows = () => {
   const add = (version: Version, kind: Kind, governs: string) => {
     const at = `${version} ${kind} ${governs}`;
     const row = {
-      governor: governorAt.get(at) ?? kind,
+      // A triple the attribute grammar gives no governor is governed by its kind.
+      governor: Option.match(Option.fromNullishOr(governorAt.get(at)), {
+        onNone: (): string => kind,
+        onSome: (governor) => governor,
+      }),
       governs,
       kind,
       version,
@@ -903,29 +954,29 @@ const attributeModels = (() => {
   const models: { readonly handle: string; readonly rows: readonly AttributeRow[] }[] = [];
   const bySignature = new Map<string, string>();
   const named = new Set<string>();
-  const of = new Map<string, string>();
-  for (const version of grammar.kinds.versions.handles) {
-    for (const governor of Governor.handles) {
+  const families = grammar.kinds.versions.handles.flatMap((version) =>
+    Governor.handles.map((governor) => {
       const at = `${version} ${governor}`;
-      const rows = (byGovernor.get(at) ?? []).toSorted(
+      // A governor no attribute row names admits the empty set.
+      const rows = rowsAt(byGovernor, at).toSorted(
         (left, right) => Number(left.position) - Number(right.position),
       );
       const signature = rows
         .map(({ domain, name, position, use }) => `${position}:${name}:${domain}:${use}`)
         .join(" ");
-      const known = bySignature.get(signature);
-      const handle = known ?? (named.has(governor) ? at : governor);
-      if (known === undefined) {
-        bySignature.set(signature, handle);
-        named.add(handle);
-        models.push({ handle, rows });
-      }
+      const model = bySignature.getOrInsertComputed(signature, () => {
+        const fresh = named.has(governor) ? at : governor;
+        named.add(fresh);
+        models.push({ handle: fresh, rows });
 
-      of.set(at, handle);
-    }
-  }
+        return fresh;
+      });
 
-  return { models, of };
+      return { governor, model, version };
+    }),
+  );
+
+  return { families, models };
 })();
 
 /**
@@ -958,13 +1009,11 @@ export const AttributeModelOf = closed.relation(
     version: closedId(SchemaVersion),
   },
   ["version", "governor"],
-  grammar.kinds.versions.handles.flatMap((version) =>
-    Governor.handles.map((governor) => ({
-      governor,
-      model: asAttributeModel(attributeModels.of.get(`${version} ${governor}`) ?? ""),
-      version,
-    })),
-  ),
+  attributeModels.families.map(({ governor, model, version }) => ({
+    governor,
+    model: asAttributeModel(model),
+    version,
+  })),
 );
 
 /**
@@ -1115,7 +1164,14 @@ export const ValueIdentity = closed.relation(
   "ValueIdentity",
   { domain: closedId(ValueDomain), identity: closedId(Identity) },
   ["domain"],
-  ValueDomain.handles.map((domain) => ({ domain, identity: identityOf.get(domain) ?? none })),
+  ValueDomain.handles.map((domain) => ({
+    domain,
+    // A domain of no identity takes the roster's null object.
+    identity: Option.match(Option.fromNullishOr(identityOf.get(domain)), {
+      onNone: (): string => none,
+      onSome: (identity) => identity,
+    }),
+  })),
 );
 
 /**
@@ -1150,7 +1206,11 @@ export const TextDomain = closed.relation(
   ["version", "governor"],
   grammar.kinds.versions.handles.flatMap((version) =>
     Governor.handles.map((governor) => ({
-      domain: textDomainAt.get(`${version} ${governor}`) ?? anyTextDomain,
+      // A governor with no simple content reads its text as `xs:anySimpleType`.
+      domain: Option.match(Option.fromNullishOr(textDomainAt.get(`${version} ${governor}`)), {
+        onNone: () => anyTextDomain,
+        onSome: (domain) => domain,
+      }),
       governor,
       version,
     })),
