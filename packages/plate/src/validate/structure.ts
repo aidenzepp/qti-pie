@@ -625,8 +625,14 @@ const toleranceTokens = (lexical: string): boolean =>
  * it, so this pattern admits it, a difference from the qti package that awaits the operator (G-R2,
  * pending). The information model does not address text around the conversion; the pattern
  * refuses it as R38 does, so when the qti package narrows R38 this pattern follows it.
+ *
+ * The width cannot start with `0`, so no character can end the flags and start the width: R38's
+ * pattern lets both match `0`, and a refused `%`, a run of zeros and a letter that is no code then
+ * backtracks over every split of the run, quadratic time on an untrusted attribute (review
+ * `079e8c44` P2-13). A `0` after the flags is a flag here, so the pattern admits exactly the
+ * strings a width of any digits admits, and checks in linear time.
  */
-const printfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx]$/u;
+const printfFormat = /^%[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXx]$/u;
 
 /**
  * The shared readings this module applies over the XSD's rules, one row each.

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
 import {
   attr,
   doc,
@@ -21,6 +21,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import { tables as generatedTables } from "#plate/validate/tables.ts";
@@ -1144,6 +1145,53 @@ const formatDetail = (format: string) => ({
   source: "info.txt:70323",
   value: format,
 });
+
+/**
+ * The printed variable's `format` pattern as it stood before review `079e8c44` P2-13, kept as the
+ * oracle the check must agree with. Its flags and its width both match `0`, so a refused `%`, a run
+ * of zeros and a letter that is no code backtracks over every split of the run: quadratic time.
+ */
+const quadraticPrintfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx]$/u;
+
+/**
+ * The characters the `format` agreement check builds its strings from: the percent sign, every
+ * flag, the digits that start a width with and without a zero, the point, two codes and `d`, which
+ * is no code.
+ */
+const formatAlphabet = ["%", "#", "0", " ", "+", "-", "1", "9", ".", "f", "i", "d"] as const;
+
+/**
+ * List every string of at most `length` characters over an alphabet, shortest first.
+ *
+ * @param alphabet The characters.
+ * @param length The longest string's length.
+ * @returns The strings, the empty one first.
+ */
+const stringsUpTo = (alphabet: readonly string[], length: number): readonly string[] => {
+  const strings: string[] = [""];
+  let shorter: readonly string[] = [""];
+  for (let size = 1; size <= length; size += 1) {
+    shorter = shorter.flatMap((prefix) => alphabet.map((character) => `${prefix}${character}`));
+    for (const string of shorter) {
+      strings.push(string);
+    }
+  }
+
+  return strings;
+};
+
+/**
+ * The zeros in the larger `format` the growth check refuses; the smaller holds
+ * {@link growthFactor} times fewer.
+ */
+const formatZeros = 64_000;
+
+/**
+ * The `format` growth check refuses the larger format once and times each size three times. The
+ * quadratic pattern took about 3.5 s on 64,000 zeros, so a failing check runs past vitest's default
+ * of 5 s, and it should report its ratio, not a timeout.
+ */
+const formatGrowthTimeoutMs = 60_000;
 
 /**
  * Each outcome the information model types, with the base type it must have and the line that says
@@ -2733,6 +2781,45 @@ describe("checkStructure", () => {
         at("qti-assessment-item/qti-item-body/p/qti-printed-variable/@format"),
       ]);
     });
+
+    it("[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i and d (review 079e8c44 P2-13)", () => {
+      const strings = stringsUpTo(formatAlphabet, 5);
+      const disagreeing = strings.filter(
+        (format) =>
+          quadraticPrintfFormat.test(format) !==
+          (found(printed(format), generatedTables).length === 0),
+      );
+
+      assert.strictEqual(strings.length, 271_453);
+      assert.deepStrictEqual(disagreeing, []);
+    });
+
+    it.effect(
+      "[I-5] refuses a format of %, 64,000 zeros and d as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
+      () =>
+        Effect.gen(function* checksFormatInLinearTime() {
+          const fewer = printed(`%${"0".repeat(formatZeros / growthFactor)}d`);
+          const more = printed(`%${"0".repeat(formatZeros)}d`);
+          assert.deepStrictEqual(found(more, generatedTables), [
+            ["attribute-type", at("qti-printed-variable/@format")],
+          ]);
+
+          const growth = yield* growthRatio(
+            () => {
+              checkStructure(fewer, generatedTables);
+            },
+            () => {
+              checkStructure(more, generatedTables);
+            },
+          );
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the zeros took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      formatGrowthTimeoutMs,
+    );
   });
 
   describe("the XSD instance attributes", () => {
