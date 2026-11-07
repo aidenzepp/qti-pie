@@ -92,6 +92,39 @@ const testFeedbackPackage = (outcome: string, baseType: string) => ({
 });
 
 /**
+ * The breaches of "Item duration" among a judgment's.
+ *
+ * @param breaches - The breaches.
+ * @returns Those of that law.
+ */
+const itemDurationBreaches = (breaches: readonly Breach[]) =>
+  breaches.filter(({ law }) => law === "Item duration");
+
+/**
+ * Write a package whose test reads `variable` into a float outcome from its outcome processing,
+ * over an item that is, or is not, time dependent.
+ *
+ * @param variable - The test-level variable reference the test reads.
+ * @param timeDependent - The item's `time-dependent`.
+ * @returns The package.
+ */
+const durationReadPackage = (variable: string, timeDependent: boolean) => ({
+  "imsmanifest.xml": manifestOf(
+    `${itemResource}<resource identifier="RT" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>`,
+  ),
+  "item.xml": edit(item, 'time-dependent="false"', `time-dependent="${String(timeDependent)}"`),
+  "test.xml": edit(
+    edit(
+      test,
+      "</qti-test-part>",
+      `</qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="TIMED"><qti-variable identifier="${variable}"/></qti-set-outcome-value></qti-outcome-processing>`,
+    ),
+    '<qti-test-part identifier="P"',
+    `<qti-outcome-declaration identifier="TIMED" cardinality="single" base-type="float"/><qti-test-part identifier="P"`,
+  ),
+});
+
+/**
  * The packages that break each law the oracle reads from documents, one case per law.
  */
 const lawCases: readonly LawCase[] = [
@@ -525,6 +558,30 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
       assert.isFalse(identifier.held, identifier.breaches);
       assert.isFalse(builtIn.held, builtIn.breaches);
     }),
+  );
+
+  it.effect(
+    "Item duration: a test reads the duration of an item that is not time dependent, and a part's or a section's is its own",
+    () =>
+      Effect.gen(function* testItemDuration() {
+        const untimed = itemDurationBreaches(
+          breachesOf(yield* judged(durationReadPackage("I.duration", false))),
+        );
+        const timed = itemDurationBreaches(
+          breachesOf(yield* judged(durationReadPackage("I.duration", true))),
+        );
+        const part = itemDurationBreaches(
+          breachesOf(yield* judged(durationReadPackage("P.duration", false))),
+        );
+        const section = itemDurationBreaches(
+          breachesOf(yield* judged(durationReadPackage("S.duration", false))),
+        );
+
+        assert.strictEqual(untimed.length, 1, shown(untimed));
+        assert.strictEqual(timed.length, 0, shown(timed));
+        assert.strictEqual(part.length, 0, shown(part));
+        assert.strictEqual(section.length, 0, shown(section));
+      }),
   );
 
   it.effect("Feedback outcome type: a test's feedback names an identifier outcome", () =>
