@@ -90,6 +90,8 @@ const unjudged = {
   "Node.parentParentKind": rootCopy,
   "Node.was": "a copy along a predecessor axis, `pred(at)`, which the host does not restore",
   "Node: a between term": unreadTerm("between"),
+  "OpenAttributeName: a literal term":
+    "its predicate holds a literal of no datum's type, a Bits set over AttributeName",
   "OpenElementName: a literal term": "its predicate holds a literal of no datum's type",
   "OutcomeRange: a when term": unreadTerm("when"),
   "Quotation: a base term": unreadTerm("base"),
