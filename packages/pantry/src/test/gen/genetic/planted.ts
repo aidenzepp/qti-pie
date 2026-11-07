@@ -8,19 +8,23 @@
  * - A slider's `step="-1"`, under the positive integer `step` is;
  * - An outcome's `normal-maximum="0"`, under the positive double the normal maximum is.
  *
- * They are judged every run (`src/test/genetic.oracle.test.ts`): the import's host path must agree
- * with the oracle on each, so each disagrees until the import refuses a value outside its domain's
- * facets, and agrees once it does.
+ * They are judged every run (`src/test/genetic.oracle.test.ts`): each disagrees while it waits on
+ * its owner's fix, the import refusing a value outside its domain's facets, and must agree once the
+ * fix lands, whose commit drops the wait.
  */
+import { Option } from "effect";
 import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
+import type { Owned } from "#pantry/test/gen/genetic/known.ts";
 
 /**
- * One planted case: its name, and its package.
+ * One planted case: its name, its package, and the fix it waits on while the two sides disagree on
+ * it.
  */
 export interface Planted {
   readonly entries: PackageEntries;
   readonly name: string;
+  readonly waits: Option.Option<Owned>;
 }
 
 /**
@@ -45,6 +49,14 @@ const editedBase = (path: string, passage: string, replacement: string): Package
 };
 
 /**
+ * The fix the three cases wait on.
+ */
+const facets = Option.some({
+  fix: "G1-2: the import refuses an attribute value outside its value domain's facets",
+  owner: "REP-B",
+});
+
+/**
  * The three planted cases.
  */
 export const plantedCases: readonly Planted[] = [
@@ -55,6 +67,7 @@ export const plantedCases: readonly Planted[] = [
       '<qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual"><qti-time-limits min-time="-1"/>',
     ),
     name: 'a test part\'s qti-time-limits min-time="-1"',
+    waits: facets,
   },
   {
     entries: editedBase(
@@ -63,9 +76,11 @@ export const plantedCases: readonly Planted[] = [
       'upper-bound="10" step="-1"',
     ),
     name: 'a slider\'s step="-1"',
+    waits: facets,
   },
   {
     entries: editedBase("items/item.xml", 'normal-maximum="10"', 'normal-maximum="0"'),
     name: 'an outcome\'s normal-maximum="0"',
+    waits: facets,
   },
 ];
