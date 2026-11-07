@@ -65,6 +65,22 @@ const packageOfPattern = (pattern: string) =>
   );
 
 /**
+ * A package whose one test holds one item ref that names an LTI link, with the given children
+ * under the item ref and the given outcome processing over the test's one outcome.
+ *
+ * @param children - The item ref's children, as written.
+ * @param processing - The test's outcome processing, as written.
+ * @returns The package's files, by path.
+ */
+const packageOfLtiRef = (children: string, processing: string) => ({
+  "imsmanifest.xml": manifestOf(
+    `<resource identifier="T" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="L" type="imslti_xmlv1p1" href="lti.xml"><file href="lti.xml"/></resource>`,
+  ),
+  "lti.xml": "<link/>",
+  "test.xml": `<qti-assessment-test xmlns="${asi}" identifier="T" title="Test"><qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="Section" visible="true"><qti-assessment-item-ref identifier="LTI01" href="lti.xml">${children}</qti-assessment-item-ref></qti-assessment-section></qti-test-part>${processing}</qti-assessment-test>`,
+});
+
+/**
  * Count the breaches of one law in a judged package.
  *
  * @param files - The package's files, by path.
@@ -295,6 +311,33 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             ),
             1,
             "inside a record",
+          );
+        }),
+    );
+
+    judging.effect(
+      "an LTI item ref takes a variable mapping and a prefixed reference unchecked, and a template default under it still breaks (reading 110)",
+      () =>
+        Effect.gen(function* ltiItemRef() {
+          const read = `<qti-outcome-processing><qti-set-outcome-value identifier="OUT"><qti-variable identifier="LTI01.OTHER"/></qti-set-outcome-value></qti-outcome-processing>`;
+          const mapped = packageOfLtiRef(
+            `<qti-variable-mapping source-identifier="NOSUCH" target-identifier="SCORE"/>`,
+            read,
+          );
+          const judgment = yield* judged(mapped);
+
+          assert.deepStrictEqual(breachesOf(judgment), [], shown(breachesOf(judgment)));
+          assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+          assert.strictEqual(
+            yield* breachesOfLaw(
+              packageOfLtiRef(
+                `<qti-template-default template-identifier="TPL"><qti-base-value base-type="integer">1</qti-base-value></qti-template-default>`,
+                "",
+              ),
+              "Template default target",
+            ),
+            1,
+            "an LTI link names no item, so no template of it",
           );
         }),
     );
