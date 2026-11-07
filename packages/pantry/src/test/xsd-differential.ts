@@ -731,7 +731,7 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_ExpressionGroup (§6.9, ExpressionGroup: each operator's attribute states its sub-expressions' base types and cardinalities, as §6.9.33, qti-member, 'The first sub-expression must have single cardinality and the second must be a multiple or ordered container', and §6.9.21, qti-match, 'which must both have the same base-type and cardinality')",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_ExpressionGroup (§6.9, ExpressionGroup, normative: Table 6.9.33, qti-member, 'The first sub-expression must have single cardinality and the second must be a multiple or ordered container'; Table 6.9.21, qti-match, 'which must both have the same base-type and cardinality')",
       why: "each operator takes the operand types §6.9 states; the XSD admits any expression as any operand",
     },
     rule: "P23",
@@ -742,7 +742,7 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_SetValue (§5.130, SetValue, normative, every setter's class: 'floating point values can not be assigned to integer variables and vice-versa'; §5.130.2: 'The expression which must have an effective base-type and cardinality that matches the base-type and cardinality of the outcome variable being set')",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_SetValue (§5.130, SetValue, normative: 'floating point values can not be assigned to integer variables and vice-versa'; §5.130.2: 'The expression which must have an effective base-type and cardinality that matches the base-type and cardinality of the outcome variable being set')",
       why: "a setter's expression has its variable's base type and cardinality; the XSD types no expression",
     },
     rule: "P20",
@@ -753,7 +753,7 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration, normative: 'SCORE needs to be a float.', 'MAXSCORE needs to be a float.', 'PASSED needs to be a boolean.')",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration, normative: 'SCORE needs to be a float.' 'MAXSCORE needs to be a float.' 'PASSED needs to be a boolean.')",
       why: "SCORE and MAXSCORE are declared float and PASSED boolean; the XSD admits any base type on any outcome declaration",
     },
     rule: "reserved-type",
@@ -764,7 +764,7 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Value (§7.46, Value: 'The base-type is defined by the 'base-type' attribute of the declaration') and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, each base type's value set)",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Value (§7.46, Value, normative: 'The base-type is defined by the 'base-type' attribute of the declaration') and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, normative, of identifier: 'The set of identifier values is the same as the set of values defined by the identifier class.')",
       why: "a qti-value's text is a lexical form of its declaration's base type; the XSD types qti-value's text as any string",
     },
     rule: "typed-copy",
