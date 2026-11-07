@@ -1150,6 +1150,40 @@ export const generatedRecorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
+        "R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog')",
+      why: "a catalog holds one card for each support; the XSD states no key over the cards' support",
+    },
+    rule: "card-support",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_CardEntry (§5.27.2, CardEntry's default: 'Only one of the CardEntry instances can have a default designation')",
+      why: "a card holds at most one entry designated by default; the XSD types default xs:boolean and states no count over a card's entries",
+    },
+    rule: "card-default",
+  },
+  {
+    class: "identity",
+    detail: /^Catalog reference /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "specification",
+      source:
+        "R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names)",
+      why: "a data-catalog-idref names the id of a qti-catalog of its document; the XSD types it xs:IDREF, which any ID of the document satisfies",
+    },
+    rule: "idref-target",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
         "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_ResponseCondition_qti-response-if (§5.114.1, and §5.114.2 and §5.117 of the response branches, §5.99.1, §5.99.2 and §5.101 of the outcome branches, and §5.149.1, §5.149.2 and §5.154 of the template branches: each 'consists of an expression which must have an effective base-type of boolean and single cardinality'), and https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateConstraint (§5.150: 'A templateConstraint contains an expression which must have an effective base-type of boolean and single cardinality')",
       why: "a condition's expression is boolean and single; the XSD types no expression, so a dropped or swapped child leaves a condition of another type it accepts",
     },
