@@ -213,8 +213,8 @@ const noReader = { reader: "none", readerVersion: "none" } as const;
 /**
  * The step-1 items, with the Appendix A interaction each one shows: BG007 (Choice), BG010 (Text
  * Entry), BG011 (Extended Text), a shuffled Choice with a phrasing Prompt, the walk corpus's
- * `pattern-mask` Text Entry, the `xhtml` item Item_QTI3_WritingPostcard_02 and the walk corpus's
- * container essay (`ordered`).
+ * `pattern-mask` Text Entry, the walk corpus's `xhtml` Extended Text item and its container essay
+ * (`ordered`).
  */
 const stepOneItems = {
   bg007: { interactions: ["Q-2"], item: "QTI3_BPIG_Examples/items/BG007.xml" },
@@ -222,11 +222,8 @@ const stepOneItems = {
   bg011: { interactions: ["Q-5"], item: "QTI3_BeginnersGuide_Examples/items/BG011.xml" },
   ordered: { interactions: ["Q-5"], item: "ordered.xml" },
   pattern: { interactions: ["Q-20"], item: "pattern.xml" },
-  postcard: {
-    interactions: ["Q-5"],
-    item: "qtiv3-examples/items/shared-vocabulary/Items/Item_QTI3_WritingPostcard_02/extended_text_qti3.xml",
-  },
   shuffled: { interactions: ["Q-2"], item: "qtiv3-examples/packaging/items/choice_fixed.xml" },
+  xhtml: { interactions: ["Q-5"], item: "xhtml.xml" },
 } as const;
 
 /**
@@ -238,7 +235,7 @@ const stepOne = [
   stepOneItems.bg011,
   stepOneItems.shuffled,
   stepOneItems.pattern,
-  stepOneItems.postcard,
+  stepOneItems.xhtml,
   stepOneItems.ordered,
 ] as const;
 
