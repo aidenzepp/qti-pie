@@ -20,6 +20,8 @@ import {
   materializeSpec,
   negativeNames,
   pciNames,
+  pciNegativeNames,
+  pciVerdicts,
   restoredNames,
   specOf,
   transformHash,
@@ -634,6 +636,194 @@ const pciPresent: readonly (readonly [(typeof pciNames)[number], string])[] = [
   ["template-foreign", '<template><x:widget xmlns:x="urn:example:widget" size="3"/></template>'],
   ["custom-3-0-1", '<qti-custom-interaction response-identifier="RESPONSE"/>'],
 ];
+
+/**
+ * The item of each PCI negative, the `schemaversion` its manifest declares and a text its edit put
+ * there, in the order of {@link pciNegativeNames}.
+ */
+const pciNegativeRows: readonly (readonly [
+  (typeof pciNegativeNames)[number],
+  string,
+  "3.0.0" | "3.0.1",
+  string,
+])[] = [
+  [
+    "pci-no-module",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-portable-custom-interaction response-identifier="RESPONSE" custom-interaction-type-identifier="urn-fdc-hmhco.com-pci-tapToReveal">',
+  ],
+  [
+    "custom-3-0-0",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-custom-interaction response-identifier="RESPONSE"/>',
+  ],
+  [
+    "pci-context-builtin-3-0-0",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-context-variable identifier="QTI_CONTEXT"/>',
+  ],
+  [
+    "pci-context-undeclared",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-context-variable identifier="CTX"/>',
+  ],
+  [
+    "pci-context-undeclared-3-0-1",
+    "measuring_ph.xml",
+    "3.0.1",
+    '<qti-context-variable identifier="LEVEL"/>',
+  ],
+  [
+    "pci-template-undeclared",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-template-variable template-identifier="T"/>',
+  ],
+  [
+    "pci-no-type",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-portable-custom-interaction response-identifier="RESPONSE" module="tap">',
+  ],
+  [
+    "pci-two-modules",
+    "measuring_ph.xml",
+    "3.0.0",
+    "</qti-interaction-modules><qti-interaction-modules>",
+  ],
+  ["pci-modules-empty", "measuring_ph.xml", "3.0.0", "<qti-interaction-modules/>"],
+  [
+    "pci-no-markup",
+    "measuring_ph.xml",
+    "3.0.0",
+    'custom-interaction-type-identifier="urn-fdc-hmhco.com-pci-tapToReveal"></qti-portable-custom-interaction>',
+  ],
+  [
+    "pci-two-markups",
+    "measuring_ph.xml",
+    "3.0.0",
+    "</qti-interaction-markup><qti-interaction-markup>",
+  ],
+  [
+    "pci-markup-order",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-template-variable template-identifier="T"/><qti-interaction-markup>',
+  ],
+  [
+    "pci-modules-after-markup",
+    "measuring_ph.xml",
+    "3.0.0",
+    "</qti-interaction-markup><qti-interaction-modules>",
+  ],
+  ["pci-prompt-late", "measuring_ph.xml", "3.0.0", "</qti-interaction-markup><qti-prompt>"],
+  [
+    "pci-markup-text",
+    "measuring_ph.xml",
+    "3.0.0",
+    "<qti-interaction-markup>Tap</qti-interaction-markup>",
+  ],
+  [
+    "pci-stylesheet-3-0-0",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-stylesheet href="pci.css" type="text/css"/>',
+  ],
+  ["pci-catalog-info-3-0-0", "measuring_ph.xml", "3.0.0", '<qti-catalog id="tap-help">'],
+  [
+    "template-outside",
+    "measuring_ph.xml",
+    "3.0.0",
+    "</qti-interaction-markup><template/></qti-portable-custom-interaction>",
+  ],
+  ["pci-nested", "measuring_ph.xml", "3.0.0", '<qti-response-declaration identifier="INNER"'],
+  ["pci-type-malformed", "measuring_ph.xml", "3.0.0", 'custom-interaction-type-identifier="a%zz"'],
+  ["pci-path-malformed", "measuring_ph.xml", "3.0.0", 'primary-path="modules/ta%zzp.js"'],
+  ["pci-module-malformed", "measuring_ph.xml", "3.0.0", 'module="1shading"'],
+  ["pci-module-id-malformed", "measuring_ph.xml", "3.0.0", '<qti-interaction-module id="1shading"'],
+  ["custom-attribute", "measuring_ph.xml", "3.0.1", 'xmlns:x="urn:example:widget" x:mode="draw"'],
+  [
+    "pci-items-fallback",
+    "fractions_deps_2.xml",
+    "3.0.0",
+    'fallback-configuration="modules/hmh_co_com_fallback.json"',
+  ],
+  ["pci-items-unlisted", "fractions_deps.xml", "3.0.0", '<qti-interaction-module id="raphael"'],
+  ["pci-items-missing", "fractions_deps.xml", "3.0.0", '<qti-interaction-module id="raphael"'],
+  [
+    "pci-configuration-missing",
+    "fractions_deps_2.xml",
+    "3.0.0",
+    'primary-configuration="modules/hmh_co_comXX.js"',
+  ],
+];
+
+/**
+ * The files the package of a hand-written PCI negative holds beside the manifest.
+ */
+const pciNegativeStandard = [
+  "ammonia.svg",
+  "baking_soda.svg",
+  "measuring_ph.xml",
+  "modules/module_resolution.js",
+  "modules/tap.js",
+  "vinegar.svg",
+] as const;
+
+/**
+ * The files the cuts of `fractions_deps_2.xml` hold beside the manifest, which are
+ * `pci-configurations`' files.
+ */
+const pciConfigurationsHeld = [
+  "fractions_deps_2.xml",
+  "modules/hmh_co_com.js",
+  "modules/hmh_co_com_fallback.json",
+  "modules/lib/eve.js",
+  "modules/lib/jquery-2.2.2.min.js",
+  "modules/shading_deps.js",
+] as const;
+
+/**
+ * The files the cuts of `fractions_deps.xml` hold beside the manifest, which are `pci-modules`'
+ * files.
+ */
+const pciModulesHeld = [
+  "fractions_deps.xml",
+  "modules/lib/eve.js",
+  "modules/lib/handlebars.min-latest.js",
+  "modules/shading_deps.js",
+] as const;
+
+/**
+ * The files each PCI negative's package holds beside the manifest, when they are not the standard
+ * ones, and the files its manifest lists, when they are not the files it holds: the corpus cuts
+ * break the pairing in one file each (`pci-items-unlisted` holds the handlebars file its manifest
+ * does not list, `pci-items-missing` lists `raphael.js` with no file behind it).
+ */
+const pciNegativeFiles: Readonly<
+  Partial<
+    Record<
+      (typeof pciNegativeNames)[number],
+      { readonly held: readonly string[]; readonly listed?: readonly string[] }
+    >
+  >
+> = {
+  "pci-configuration-missing": { held: pciConfigurationsHeld },
+  "pci-items-fallback": { held: pciConfigurationsHeld },
+  "pci-items-missing": {
+    held: pciModulesHeld,
+    listed: [...pciModulesHeld, "modules/lib/raphael.js"].toSorted(),
+  },
+  "pci-items-unlisted": {
+    held: pciModulesHeld,
+    listed: pciModulesHeld.filter((file) => file !== "modules/lib/handlebars.min-latest.js"),
+  },
+  "pci-stylesheet-3-0-0": { held: [...pciNegativeStandard, "pci.css"].toSorted() },
+};
 
 /**
  * For each XML-path negative, a file of its package and the text its edit put there.
@@ -2291,5 +2481,122 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
+  );
+
+  it.effect(
+    "the PCI negative names are the spec's 28, with a verdict row each, apart from every other list and from phase 5's 63",
+    () =>
+      Effect.sync(() => {
+        assert.strictEqual(pciNegativeNames.length, 28);
+        assert.strictEqual(new Set(pciNegativeNames).size, 28);
+        assert.strictEqual(negativeNames.length, 63);
+        assert.deepStrictEqual(
+          pciVerdicts.map(([name]) => name),
+          [...pciNegativeNames],
+        );
+        assert.deepStrictEqual(
+          pciNegativeRows.map(([name]) => name),
+          [...pciNegativeNames],
+        );
+        assert.includeMembers([...fixtureNames], [...pciNegativeNames]);
+
+        for (const [name, rules] of pciVerdicts) {
+          assert.isAbove(rules.length, 0, name);
+          assert.strictEqual(new Set(rules).size, rules.length, name);
+        }
+
+        for (const name of pciNegativeNames) {
+          assert.notInclude(
+            [
+              ...negativeNames,
+              ...restoredNames,
+              ...assemblyNames,
+              ...catalogNames,
+              ...companionNames,
+              ...catalogNegativeNames,
+              ...pciNames,
+            ],
+            name,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "each PCI negative materializes under 2 MB at its version, holds the files its row lists, carries its edit and no custom data attribute",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciNegatives() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, item, version, needle] of pciNegativeRows) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+            let size = 0;
+
+            for (const file of files) {
+              size += Number((yield* fs.stat(`${dir}/${file}`)).size);
+            }
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml"),
+              [...(pciNegativeFiles[name]?.held ?? pciNegativeStandard)],
+              name,
+            );
+            assert.deepStrictEqual(
+              listedFilesOf(manifest),
+              [
+                ...(pciNegativeFiles[name]?.listed ??
+                  pciNegativeFiles[name]?.held ??
+                  pciNegativeStandard),
+              ],
+              name,
+            );
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+
+            const text = yield* fs.readFileString(`${dir}/${item}`);
+            const document = yield* readXml(yield* fs.readFile(`${dir}/${item}`));
+
+            assert.strictEqual(document.root.namespace, qtiNamespace, name);
+            assert.notMatch(text, /\sdata-(?!catalog-idref)/u, name);
+            assert.include(text, needle, `${name}: ${needle}`);
+          }
+        }),
+      ),
+    240_000,
+  );
+
+  it.effect(
+    "the PCI negatives that start from a positive differ from it in the one edit their row names",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciNegativeAgainstPositive() {
+          const fs = yield* FileSystem.FileSystem;
+          const textOf = Effect.fn("textOf")(function* textOf(name: FixtureName, item: string) {
+            return yield* fs.readFileString(`${yield* materialize(name)}/${item}`);
+          });
+          const positive = yield* textOf("pci-configurations", "fractions_deps_2.xml");
+          const fallback = yield* textOf("pci-items-fallback", "fractions_deps_2.xml");
+          const missing = yield* textOf("pci-configuration-missing", "fractions_deps_2.xml");
+          const modules = yield* textOf("pci-modules", "fractions_deps.xml");
+
+          assert.strictEqual(
+            fallback,
+            positive.replace('secondary-configuration="', 'fallback-configuration="'),
+          );
+          assert.strictEqual(
+            missing,
+            positive.replace(
+              'primary-configuration="modules/hmh_co_com.js"',
+              'primary-configuration="modules/hmh_co_comXX.js"',
+            ),
+          );
+          assert.strictEqual(yield* textOf("pci-items-unlisted", "fractions_deps.xml"), modules);
+          assert.strictEqual(yield* textOf("pci-items-missing", "fractions_deps.xml"), modules);
+        }),
+      ),
+    240_000,
   );
 });
