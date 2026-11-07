@@ -2390,3 +2390,16 @@ against it. A reading that is not an information-model-over-XSD case says which 
      alike. (Decided 2026-11-07 by the coordinator, ruling P-7, from RV seat REP-B (`5502d569`): the zip reader refused
      both forms, and the directory reader read a `\` as a character of a file name and a drive prefix as the start of a
      relative path, so one package was read two ways by its form.)
+139. **A package zip's central directory ends where its end record begins: other bytes between them are refused under
+     `zip-format`.** APPNOTE 6.3.10 lays a zip out as its local headers and data, then the central directory, then the
+     ZIP64 end of central directory record and locator, then the end of central directory record (section 4.3.6), and
+     the end record's "size of the central directory" is "The size (in bytes) of the entire central directory" beside
+     its "Offset of the start of the central directory" (sections 4.4.23 and 4.4.24). So the directory's offset and size
+     name the end record's own offset, and only the ZIP64 records, which pantry does not read and refuses as such, may
+     stand there. An archive with any other bytes there is no zip, and its central directory does not parse where its
+     offsets say; Python's `zipfile` and Info-ZIP's `unzip` both refuse or repair it. Content Packaging 1.2 names no zip
+     format of its own: "Physical encapsulation shall be as a compressed binary file conforming to RFC1951" (section
+     6.3, condition a), so the container's form is APPNOTE's. Refusing a malformed container is no refusal of valid QTI:
+     reading 1 protects valid content, and these bytes make the file no valid package interchange file. This binds
+     pantry and plate alike. (Decided 2026-11-07 by the coordinator, on GEN-B/zip's finding, from RV seat REP-B
+     (`8558cbaa`, its comments renumbered in `bcafe951`).)
