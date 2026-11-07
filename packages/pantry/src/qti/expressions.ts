@@ -20,7 +20,8 @@
  *   to a declaration of its document (`declarationRef`), a built-in variable (the installed
  *   `BuiltInVariable`, A63), or nothing, which only a document that is no item may hold; a claim of
  *   no declaration is proved by {@link VariableLookup}, and a table it reads by
- *   {@link DeclarationTable} (M2).
+ *   {@link DeclarationTable} (M2). The type a setter or a lookup sets its variable to is a row of
+ *   its own, {@link HeldType}.
  * - **{@link ExpressionAttribute}** carries the attributes an expression's type follows from
  *   (`base-type`, `name`, `weight-identifier`), an unwritten one included, {@link Literal} a base
  *   value's text, and {@link ProcessingTemplate} a response processing's published template.
@@ -313,13 +314,13 @@ export const Processing = relation(
  *   spells, the whitespace around a bare name or the braces around a braced one; `parent`,
  *   `language`, `elementBase` and `elementCardinality`, its element's (`exprRef` for an expression,
  *   the language for a rule); `rootKind`, its document's root's; `resolution`; `baseType` and
- *   `cardinality`, the variable's type; `table`, the table its element needs the declaration to
- *   hold; and `heldBase` and `heldCardinality`, the type of a setter's or a lookup's one
- *   expression.
+ *   `cardinality`, the variable's type; and `table`, the table its element needs the declaration to
+ *   hold.
  *
  * The declaration a declared reference names is a row of its own, {@link VariableRefDeclaration}
  * (lane NIL's NS1: a reference that names no declaration has no declaration row, never the nil
- * uuid). A type field its element leaves unread holds `unknown`.
+ * uuid), and so is the type of a setter's or a lookup's one expression, {@link HeldType}. A type
+ * field its element leaves unread holds `unknown`.
  */
 export const VariableRef = relation(
   "VariableRef",
@@ -332,8 +333,6 @@ export const VariableRef = relation(
     document: uuid,
     elementBase: closedId(ValueBase),
     elementCardinality: closedId(ValueCardinality),
-    heldBase: closedId(ValueBase),
-    heldCardinality: closedId(ValueCardinality),
     identifier: keyText,
     kind: closedId(NodeKind),
     language: closedId(Language),
@@ -374,6 +373,39 @@ export const VariableRefDeclaration = relation(
     table: closedId(ReferencedTable),
   },
   ["node", "attribute"],
+);
+
+/**
+ * The type a setter or a lookup sets its variable to, keyed by its node: the `exprRef` tuple of its
+ * first expression (`expression`, `node` its parent, `expressionKind`, `language`, `heldBase` and
+ * `heldCardinality`), the one its content model allows (a second breaks N5's `Follow`), beside the
+ * fields of its {@link VariableRef} that `Set_type` and `Lookup_type` compare with it (`kind`,
+ * `baseType`, `cardinality` and `table`), each copied from the reference.
+ *
+ * A row of its own (AGENTS.md's Schema intent: a value that may be missing is a row of its own
+ * relation), written where the setter both names a variable and holds an expression. One whose
+ * `identifier` names no variable, unwritten or no NCName (spec reading 152), has no reference, and
+ * one that holds no expression holds no type, so neither has a row, and AL3, its value domain or
+ * its content model refuses it alone. Every field is proved by a copy, but no law forces the row in
+ * where both are: a containment's source is one relation's rows, never the join of two. The import
+ * writes it there (`heldTypesOf`), and the genetic differential holds it to the oracle's `Set type`
+ * and `Lookup type`.
+ */
+export const HeldType = relation(
+  "HeldType",
+  {
+    baseType: closedId(ValueBase),
+    cardinality: closedId(ValueCardinality),
+    expression: uuid,
+    expressionKind: closedId(NodeKind),
+    heldBase: closedId(ValueBase),
+    heldCardinality: closedId(ValueCardinality),
+    kind: closedId(NodeKind),
+    language: closedId(Language),
+    node: uuid,
+    table: closedId(ReferencedTable),
+  },
+  ["node"],
 );
 
 /**
@@ -894,6 +926,7 @@ export const Reading = relation(
 export const referenceRelations = {
   AssembledReference,
   DeclarationTable,
+  HeldType,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -1004,8 +1037,8 @@ const templateAttributes = select(Attribute, (a) =>
 );
 
 /**
- * The setters' and the lookup's references to their variable, which copy their one expression's
- * type.
+ * The setters' and the lookup's references to their variable, whose fields a {@link HeldType}
+ * copies.
  */
 const heldReferences = select(VariableRef, (v) =>
   v.and(v.eq(v.attribute, "identifier"), v.in(v.kind, heldKinds)),
@@ -2547,15 +2580,23 @@ export const expressionLawsByName = {
       on(Processing, "node", "language"),
     ),
     contained(on(VariableRef, "document", "rootKind"), on(Document, "node", "rootKind")),
+    // HeldType: a setter's or a lookup's reference, and its one expression, each copied.
     key(on(heldReferences, "node")),
     contained(
+      on(HeldType, "node", "kind", "baseType", "cardinality", "table"),
+      on(heldReferences, "node", "kind", "baseType", "cardinality", "table"),
+    ),
+    contained(
       on(
-        select(Expression, (e) => e.in(e.parentKind, heldKinds)),
-        "parent",
-        "baseType",
-        "cardinality",
+        HeldType,
+        "expression",
+        "node",
+        "expressionKind",
+        "language",
+        "heldBase",
+        "heldCardinality",
       ),
-      on(heldReferences, "node", "heldBase", "heldCardinality"),
+      exprRef,
     ),
     contained(
       on(
@@ -2825,14 +2866,17 @@ export const expressionLawsByName = {
       v.or(
         v.ne(v.attribute, "identifier"),
         v.ne(v.kind, lookupKindHandle),
-        v.and(
-          v.in(v.heldCardinality, ["single", "unknown"]),
-          v.in(v.heldBase, ["duration", "float", "integer", ...silentBases]),
-          v.or(
-            v.ne(v.resolution, "declared"),
-            v.in(v.table, ["qti-match-table", "qti-interpolation-table"]),
-          ),
-          v.or(v.ne(v.table, "qti-match-table"), v.in(v.heldBase, ["integer", ...silentBases])),
+        v.ne(v.resolution, "declared"),
+        v.in(v.table, ["qti-match-table", "qti-interpolation-table"]),
+      ),
+    ),
+    check("Lookup_type", HeldType, (h) =>
+      h.or(
+        h.ne(h.kind, lookupKindHandle),
+        h.and(
+          h.in(h.heldCardinality, ["single", "unknown"]),
+          h.in(h.heldBase, ["duration", "float", "integer", ...silentBases]),
+          h.or(h.ne(h.table, "qti-match-table"), h.in(h.heldBase, ["integer", ...silentBases])),
         ),
       ),
     ),
@@ -2908,20 +2952,19 @@ export const expressionLawsByName = {
     ),
   ],
   "Set type": [
-    check("Set_type", VariableRef, (v) =>
-      v.or(
-        v.ne(v.attribute, "identifier"),
-        v.not(v.in(v.kind, setKindHandles)),
-        v.and(
-          v.or(
-            v.eq(v.heldBase, v.baseType),
-            v.in(v.heldBase, silentBases),
-            v.in(v.baseType, silentBases),
+    check("Set_type", HeldType, (h) =>
+      h.or(
+        h.not(h.in(h.kind, setKindHandles)),
+        h.and(
+          h.or(
+            h.eq(h.heldBase, h.baseType),
+            h.in(h.heldBase, silentBases),
+            h.in(h.baseType, silentBases),
           ),
-          v.or(
-            v.eq(v.heldCardinality, v.cardinality),
-            v.eq(v.heldCardinality, "unknown"),
-            v.eq(v.cardinality, "unknown"),
+          h.or(
+            h.eq(h.heldCardinality, h.cardinality),
+            h.eq(h.heldCardinality, "unknown"),
+            h.eq(h.cardinality, "unknown"),
           ),
         ),
       ),

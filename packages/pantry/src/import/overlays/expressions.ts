@@ -69,6 +69,7 @@ import type {
   DeclarationTable,
   Expression,
   ExpressionAttribute,
+  HeldType,
   Literal,
   LiteralTyped,
   MappingLookup,
@@ -131,6 +132,7 @@ export interface ExpressionRows {
   readonly DeclarationTable: ReadonlyMap<string, Addition<typeof DeclarationTable>>;
   readonly Expression: ReadonlyMap<string, Addition<typeof Expression>>;
   readonly ExpressionAttribute: ReadonlyMap<string, Addition<typeof ExpressionAttribute>>;
+  readonly HeldType: ReadonlyMap<string, Addition<typeof HeldType>>;
   readonly Literal: ReadonlyMap<string, Addition<typeof Literal>>;
   readonly LiteralTyped: ReadonlyMap<string, Addition<typeof LiteralTyped>>;
   readonly Operand: ReadonlyMap<string, Addition<typeof Operand>>;
@@ -179,15 +181,13 @@ const baseOf = (baseType: Option.Option<(typeof BaseType.handles)[number]>): Val
   Option.match(baseType, { onNone: () => unknownType.baseType, onSome: valueBaseOf });
 
 /**
- * A reference's element type and its held expression's type as {@link unknownType} gives them,
- * which `withTypes` fills once every expression is typed, and which stay where its element holds
- * none: the null objects `VariableRef` holds in the fields its case leaves unread.
+ * A reference's element type as {@link unknownType} gives it, which `withTypes` fills once every
+ * expression is typed, and which stays where its element is no expression: the null object
+ * `VariableRef` holds in the fields its case leaves unread.
  */
 const unfilledTypes = {
   elementBase: unknownType.baseType,
   elementCardinality: unknownType.cardinality,
-  heldBase: unknownType.baseType,
-  heldCardinality: unknownType.cardinality,
 } as const;
 
 /**
@@ -243,7 +243,7 @@ const rules: ReadonlySet<string> = new Set(ruleKindHandles);
 const rootLanguage: ReadonlyMap<string, Language> = new Map(rootLanguages);
 
 /**
- * The setters and the lookup, whose reference copies their one expression's type.
+ * The setters and the lookup, whose one expression's type is a {@link HeldType} row of its own.
  */
 const holders: ReadonlySet<string> = new Set(heldKinds);
 
@@ -961,7 +961,7 @@ const resolve = (doc: Document, name: string) => {
 };
 
 /**
- * Build one reference's row, its element's type and a holder's expression type to fill.
+ * Build one reference's row, its element's type to fill.
  *
  * @param doc - The document.
  * @param node - The element.
@@ -1212,33 +1212,71 @@ const expressionRowsOf = (
 };
 
 /**
- * Fill a reference's element type, an expression's own, and a setter's or a lookup's one
- * expression's type, once every expression is typed.
+ * Fill a reference's element type, an expression's own, once every expression is typed.
  *
- * @param doc - The document.
  * @param typed - Each expression's type.
  * @param reference - The reference's row.
- * @returns The row with both filled, `unknown` where its element holds none.
+ * @returns The row with it filled, `unknown` where its element is no expression.
  */
 const withTypes = (
-  doc: Document,
   typed: ReadonlyMap<NodeId, Typed>,
   reference: Addition<typeof VariableRef>,
 ): Addition<typeof VariableRef> => {
   const element = typeIn(Option.fromNullishOr(typed.get(reference.node)));
-  const holding = holders.has(reference.kind) && reference.attribute === "identifier";
-  const operand = holding ? Arr.head(elementsOf(doc, reference.node)) : Option.none();
-  const holds = typeIn(
-    operand.pipe(Option.flatMap(({ id }) => Option.fromNullishOr(typed.get(id)))),
-  );
 
   return {
     ...reference,
     elementBase: element.baseType,
     elementCardinality: element.cardinality,
-    heldBase: holds.baseType,
-    heldCardinality: holds.cardinality,
   };
+};
+
+/**
+ * Write the type each setter and lookup that names a variable sets it to, as a row of its own: its
+ * first expression's `exprRef` tuple, beside its reference's fields. One that holds no expression
+ * has none, and one that names no variable has no reference to hold one by, so its expression is
+ * refused by AL3 or its value domain alone (spec reading 152).
+ *
+ * @param references - The document's references, their types filled.
+ * @param typedRows - The document's expression rows, in document order.
+ * @returns The rows, by the holder's node.
+ */
+const heldTypesOf = (
+  references: ReadonlyMap<string, Addition<typeof VariableRef>>,
+  typedRows: ReadonlyMap<string, Addition<typeof Expression>>,
+): ReadonlyMap<string, Addition<typeof HeldType>> => {
+  const held = new Map<string, Addition<typeof Expression>>();
+  for (const expression of typedRows.values()) {
+    if (holders.has(expression.parentKind) && !held.has(expression.parent)) {
+      held.set(expression.parent, expression);
+    }
+  }
+
+  return new Map(
+    [...references.values()].flatMap((reference) => {
+      const expression = held.get(reference.node);
+
+      return reference.attribute !== "identifier" || expression === undefined
+        ? []
+        : [
+            [
+              reference.node,
+              {
+                baseType: reference.baseType,
+                cardinality: reference.cardinality,
+                expression: expression.node,
+                expressionKind: expression.kind,
+                heldBase: expression.baseType,
+                heldCardinality: expression.cardinality,
+                kind: reference.kind,
+                language: expression.language,
+                node: reference.node,
+                table: reference.table,
+              },
+            ] as const,
+          ];
+    }),
+  );
 };
 
 /**
@@ -1509,8 +1547,8 @@ const testReferencesOf = (
  * Build the rows of every expression and processing overlay of one document.
  *
  * An expression's type is derived after its operands', and a reference's element type and a
- * holder's expression type are filled once their expressions are typed, so each rule the laws
- * state reads values already derived.
+ * holder's type are filled once their expressions are typed, so each rule the laws state reads
+ * values already derived.
  *
  * @param tree - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -1528,7 +1566,7 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
 
   const typed = typesOf(doc, references);
   for (const [at, reference] of references) {
-    references.set(at, withTypes(doc, typed, reference));
+    references.set(at, withTypes(typed, reference));
   }
 
   const built = {
@@ -1558,6 +1596,7 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
   return {
     ...built,
     DeclarationTable: declarationTablesOf(doc, declarations),
+    HeldType: heldTypesOf(references, built.Expression),
     ReferenceDocument:
       doc.rootKind === itemKind
         ? new Map<string, Addition<typeof ReferenceDocument>>()

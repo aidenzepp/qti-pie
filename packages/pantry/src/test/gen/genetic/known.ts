@@ -92,25 +92,6 @@ export const known = {
     fix: "an ID-typed attribute whose value is no NCName, a response or context declaration's empty identifier or one with whitespace inside, still gets a DocumentId row, which E1_derived refuses beside its value domain: an ID that names nothing wants no DocumentId row (spec reading 152's reading, applied to the identity overlay)",
     owner: "unassigned, found by FIX-NCNAME",
   },
-  "import-only-law: E1 derived, contained Expression(parent, baseType, cardinality) in VariableRef(node, heldBase, heldCardinality)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
-        ],
-        [
-          "item.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-set-outcome-value identifier=""><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
-        ],
-      ],
-      fix: "a setter or a lookup whose identifier names no variable (unwritten, or no NCName: spec reading 152) has no VariableRef row, but its one expression's type is copied into that row; the held type wants a row of its own, keyed by the setter, so an expression under a setter that names nothing is refused by AL3 or its value domain alone",
-      owner: "unassigned, found by FIX-NCNAME",
-    },
   "import-only-law: Mapping overlay, contained Attribute(node, lexical) in MapKey(node, key)": {
     files: [
       [
@@ -866,6 +847,25 @@ export const fixed = {
     fix: "PG's Expression base type commit: an attribute-typed expression whose base-type spells no base is unknown, and ResultBase judges no such one (resultTyped), so the containment this class broke no longer reads it and its statement is another",
     owner: "PG",
   },
+  "import-only-law: E1 derived, contained Expression(parent, baseType, cardinality) in VariableRef(node, heldBase, heldCardinality)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+        ],
+        [
+          "item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-set-outcome-value identifier=""><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
+        ],
+      ],
+      fix: "FIX-HELDTYPE: a setter's or a lookup's held type is a row of its own, HeldType, keyed by the setter and written only where it names a variable and holds an expression, so one whose identifier names no variable (unwritten, or no NCName: spec reading 152) is refused by AL3 or its value domain alone, and the statement this class broke is gone",
+      owner: "FIX-HELDTYPE",
+    },
   "import-only-law: E1 derived, contained GeneralObject(record, document) in LomObject(record, document)":
     {
       files: [
