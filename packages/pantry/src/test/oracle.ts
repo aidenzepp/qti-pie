@@ -4225,6 +4225,13 @@ const overlayLaws: readonly ((
         : [];
     }
 
+    // A test's own feedback naming an outcome the test declares is typed with the test's other
+    // content references, over every document the test reads (`contentBreachesOf`,
+    // `#pantry/test/oracle-laws/tests.ts`); a built-in it names is typed above.
+    if (!overlay.isItem) {
+      return [];
+    }
+
     // An outcome that writes no cardinality, or one outside its domain, or a base type outside its
     // domain, is refused by AL3 ("required-attribute") or that domain alone, as it has no
     // `Declaration` row for a reference to read (the orchestrator's ruling of 2026-11-06; lane
