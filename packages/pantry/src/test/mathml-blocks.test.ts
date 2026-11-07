@@ -23,12 +23,13 @@ const grammar = Effect.fromResult(composed());
 const everyBlock: readonly MathmlBlock[] = [...mathmlBlocks, annotationXmlBlock];
 
 /**
- * The MathML kinds whose attribute declarations no block writes. The blocks were generated against
- * `main`'s tree, which has one `m:semantics` kind where this base's grammar splits it by position:
- * `m:semantics.ci` (in an `m:bvar`, which a block writes) and `m:semantics.contexp` (a content
- * expression, which no block writes). A block for it is a change to the data, not this port's.
+ * The MathML kinds whose attribute declarations no block writes: none, `m:semantics.contexp`
+ * included (`attr-semantics-contexp`, a `m:semantics` standing as a content expression, spec
+ * reading 2). The blocks were generated against `main`'s tree, which has one `m:semantics` kind
+ * where this base's grammar splits it by position, so its split kinds are written by blocks of this
+ * port's.
  */
-const unwritten: ReadonlySet<string> = new Set(["m:semantics.contexp"]);
+const unwritten: ReadonlySet<string> = new Set();
 
 /**
  * The base document a block goes into, by its site: the item, the test or the stimulus.

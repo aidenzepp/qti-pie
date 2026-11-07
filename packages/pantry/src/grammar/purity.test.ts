@@ -176,6 +176,7 @@ describe("the test helpers", () => {
       "qti/quotation.test.ts: #pantry/test/oracle.ts",
       "qti/tests.test.ts: #pantry/test/oracle.ts",
       "test/attribute-order.oracle.test.ts: #pantry/test/oracle.ts",
+      "test/fixtures.mathml.oracle.test.ts: #pantry/test/oracle.ts",
       "test/gen/xdm.ts: #pantry/test/oracle.ts",
       "test/locate.ts: #pantry/test/oracle.ts",
       "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
