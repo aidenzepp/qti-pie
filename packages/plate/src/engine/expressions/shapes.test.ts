@@ -1,6 +1,21 @@
 import { assert, describe, it } from "@effect/vitest";
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 
+/**
+ * Give 2 to a whole power as a float, by doubling: exact for every power up to 1023.
+ *
+ * @param power The power.
+ * @returns 2 to that power.
+ */
+const twoTo = (power: number): number => {
+  let value = 1;
+  for (let doubling = 0; doubling < power; doubling += 1) {
+    value *= 2;
+  }
+
+  return value;
+};
+
 describe("areaHolds", () => {
   it("rect holds a point inside, and not one outside", () => {
     assert.isTrue(areaHolds.rect([10, 20, 30, 40], 20, 30));
@@ -67,6 +82,47 @@ describe("areaHolds", () => {
     assert.isTrue(areaHolds.poly([0, 0, 10, 0, 0, 10], 5, 5));
     assert.isTrue(areaHolds.poly([0, 0, 10, 0, 0, 10], 5, 0));
     assert.isTrue(areaHolds.poly([0, 0, 10, 0, 0, 10], 10, 0));
+  });
+
+  it("[I-9a] ellipse does not hold a point far outside a huge ellipse, and holds its boundary and centre (reading 52)", () => {
+    assert.isFalse(areaHolds.ellipse([0, 0, 1e78, 1e78], 1e80, 0));
+    assert.isFalse(areaHolds.ellipse([0, 0, 1e60, 1e100], 0, 2e100));
+    assert.isTrue(areaHolds.ellipse([0, 0, 1e78, 1e78], 1e78, 0));
+    assert.isTrue(areaHolds.ellipse([0, 0, 1e60, 1e100], 0, 1e100));
+    assert.isTrue(areaHolds.ellipse([0, 0, 1e78, 1e78], 0, 0));
+  });
+
+  it("[I-9a] circle does not hold a point far outside a huge circle, and holds its boundary and centre (reading 52)", () => {
+    assert.isFalse(areaHolds.circle([0, 0, 1e155], 1e160, 0));
+    assert.isTrue(areaHolds.circle([0, 0, 1e155], 1e155, 0));
+    assert.isTrue(areaHolds.circle([0, 0, 1e155], 0, 1e155));
+    assert.isTrue(areaHolds.circle([0, 0, 1e155], 0, 0));
+  });
+
+  it("[I-9a] poly does not hold a point far outside a huge triangle, and holds a point inside or on an edge (reading 52)", () => {
+    const triangle = [0, 0, 1e160, 1e160, 1e160, 0];
+
+    assert.isFalse(areaHolds.poly(triangle, 2e160, 5e159));
+    assert.isFalse(areaHolds.poly(triangle, 1e200, 5e159));
+    assert.isTrue(areaHolds.poly(triangle, 9e159, 1e159));
+    assert.isTrue(areaHolds.poly(triangle, 5e159, 5e159));
+  });
+
+  it("[I-9a] circle and ellipse at 2^600 hold a 5-12-13 point on the boundary, and not the next float outside it (reading 52)", () => {
+    const scale = twoTo(600);
+    // The float just above 5 · 2^600 = 1.25 · 2^602, whose last place is 2^550.
+    const above = 5 * scale + twoTo(550);
+
+    assert.isTrue(areaHolds.circle([0, 0, 13 * scale], 12 * scale, 5 * scale));
+    assert.isFalse(areaHolds.circle([0, 0, 13 * scale], 12 * scale, above));
+    assert.isTrue(areaHolds.ellipse([0, 0, 13 * scale, 13 * scale], 12 * scale, 5 * scale));
+    assert.isFalse(areaHolds.ellipse([0, 0, 13 * scale, 13 * scale], 12 * scale, above));
+  });
+
+  it("circle, ellipse and poly hold no point when a number is not finite, which no reader gives", () => {
+    assert.isFalse(areaHolds.circle([0, 0, Number.POSITIVE_INFINITY], 1, 1));
+    assert.isFalse(areaHolds.ellipse([0, 0, 10, 10], Number.NaN, 0));
+    assert.isFalse(areaHolds.poly([0, 0, 10, 0, 0, 10], 1, Number.NEGATIVE_INFINITY));
   });
 
   it("default holds every point", () => {
