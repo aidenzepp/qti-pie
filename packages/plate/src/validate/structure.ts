@@ -574,6 +574,7 @@ const typedOutcomes = [
  * Whether "SCORE MUST be a float" also refuses a `record` declaration, which has no base type, is
  * a reading that awaits the operator (G-R2, pending); until it settles, a `record` one is admitted,
  * as the qti package admits it.
+ *
  * The identifier is compared exactly after collapse, as {@link reservedIdentifiers} compares it, so
  * `Score` is another name; one that holds an unexpanded entity reference is unknown and holds.
  *

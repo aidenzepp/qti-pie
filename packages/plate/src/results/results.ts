@@ -878,10 +878,10 @@ const deliveredItem = (
  * Report one item of a test session.
  *
  * The values reported are the responses saved and not yet processed, else the record's; a response
- * only content the page does not see under the record binds ({@link hiddenOnlyResponses}) reports
- * the record's value and never the saved one, as `score` keeps it, so its answered status is judged
- * on that value. Its outcomes are the first processed attempt's when its effective limit is 0,
- * since a delivery engine that does not limit attempts reports only the first outcomes of a
+ * bound only by content the page does not see under the record ({@link hiddenOnlyResponses})
+ * reports the record's value and never the saved one, as `score` keeps it, so its answered status
+ * is judged on that value. Its outcomes are the first processed attempt's when its effective limit
+ * is 0, since a delivery engine that does not limit attempts reports only the first outcomes of a
  * non-adaptive item, and the record's otherwise: the last processed, or the starting values before
  * any. A presented shuffled Choice or Inline Choice carries the order it was presented in, under
  * the session's seed and the item's instance `<session instance>.<sequenceIndex>`, listing only the
