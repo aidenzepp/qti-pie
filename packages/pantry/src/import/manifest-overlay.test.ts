@@ -15,7 +15,7 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Formatter } from "effect";
 import { NodeKind } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -171,7 +171,7 @@ describe("the manifest overlays, from the package's manifest alone", () => {
         );
         assert.isTrue(
           "refused" in nested && nested.refused.includes("unmodeled-vocabulary"),
-          `a sub-manifest is refused before any row: ${JSON.stringify(nested)}`,
+          `a sub-manifest is refused before any row: ${Formatter.format(nested)}`,
         );
       }).pipe(Effect.provide(NodeServices.layer)),
   );

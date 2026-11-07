@@ -8,7 +8,7 @@ import path from "node:path";
 import { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Layer, Schema } from "effect";
+import { Effect, Exit, FileSystem, Formatter, Layer, Schema } from "effect";
 import { describe } from "vitest";
 import { ExportData } from "#pantry/cli/export.ts";
 import { ImportData } from "#pantry/cli/import.ts";
@@ -102,7 +102,7 @@ describe.skipIf(!hasLease)(
 
               assert.isFalse(
                 report.some(({ outcome }) => outcome.kind === "differs"),
-                JSON.stringify(report),
+                Formatter.format(report),
               );
             }),
         );
@@ -140,7 +140,7 @@ describe.skipIf(!hasLease)(
 
               assert.isFalse(
                 report.some(({ outcome }) => outcome.kind === "differs"),
-                JSON.stringify(report),
+                Formatter.format(report),
               );
             }),
         );

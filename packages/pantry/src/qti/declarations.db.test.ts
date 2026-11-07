@@ -28,7 +28,7 @@
 import { ChangeSet, Db, lexicalForm, pg } from "@bjornpagen/grizzle";
 import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Formatter, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import {
@@ -324,7 +324,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
                   outcome.laws.some(keyOver("Declaration", ["document", "identifier"])),
-                JSON.stringify(second),
+                Formatter.format(second),
               );
             }
           }),
