@@ -1698,6 +1698,24 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 - **Classification:** confirmed, a grizzle defect, fixed in `e9227af`.
 - **qti-pie:** no workaround. The import needs the repin, which the `UnorderableStratum` entry below blocks.
 
+### `InteractionAttribute`'s immediate key into `SectionTemplateName` refuses a fragment's template reference at import (the owner-axis ordering defect, fixed upstream in `e9227af`; lane OL)
+
+- **Seen:** `package.packaging`'s `rtest01-template-reference` (N2's log `src_import_package.packaging.test.ts.log:527`).
+  It adds `<qti-template-inline template-identifier="NONE">` to `rtest01`'s shared fragment, which the oracle rightly
+  refuses under `template-ref`. The database reports a `LocateDisagreement` instead, under `contained
+  InteractionAttribute(node, name, kind, document, value) in SectionTemplateName(…)`.
+- **The rows are right:** `readProgram` writes one `InteractionAttribute` `{template-identifier, qti-template-inline,
+  document rtest01-fragment.xml, value NONE}` and the matching `SectionTemplateName` `{identifier "NONE"}`, so the
+  containment holds. The schema's source (`fragmentReferenceOf(references.template)`) and the host's
+  (`sectionNamesOf(…)`) select the same attributes.
+- **Cause:** `SectionTemplateName` is a counted member of `sectionTemplateNameFamily`, owned by `ReferringDocument`.
+  The key into it, `__interaction_attribute_fk_node_name_kind_document_5huu3vxx2z`
+  (`20261107041337_init/02-structure.sql:6354`), has no DEFERRABLE, and neither has
+  `__section_template_ref_fk_node_attribute_kind_…` (`:7068`). A family's members are inserted after their stratum's
+  statements, so the immediate key is checked before its row exists: the `AriaRange` class, above.
+- **Classification:** a grizzle defect, fixed in `e9227af` by grizzle's report. It is not re-run yet, since that needs
+  the repin, which the `UnorderableStratum` entry below blocks. No schema change and no workaround.
+
 ### A ChangeSet chain of more than about 94 inserts is TS2589 at `e9227af` (grizzle defect, type layer)
 
 - **Checked at:** grizzle `e9227af`, under grizzle's own checker (effect-tsgo `tsrs`) and under `tsc` 7.0.2. It is a
