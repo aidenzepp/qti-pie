@@ -2376,3 +2376,13 @@ against it. A reading that is not an information-model-over-XSD case says which 
      Main stored no order: its `AttributeLexical` was keyed by `(node, attribute)` (`2b276d76`). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Operator ruling of 2026-11-06 that attribute and
      namespace-declaration order is kept as written, from RV seat AO.)
+138. **An entry path that holds a backslash or begins with a drive prefix is refused under `href-path`, in a zip and in
+     a directory alike.** The ZIP format's file name field says "The path stored MUST NOT contain a drive or device
+     letter, or a leading slash. All slashes MUST be forward slashes '/'", rather than backslashes (PKWARE APPNOTE
+     6.3.10, section 4.4.17.1). A manifest's `href` is an RFC 3986 URI reference: its grammar has no `\` (section 2),
+     and a reference that begins `C:` parses as one whose scheme is `C` (section 3.1), so neither names an entry of the
+     package. A zip and a directory are read alike: one rule refuses both forms in either, with the reason it gives, and
+     the import names it `href-path`, as it names every entry path outside the package. This binds pantry and plate
+     alike. (Decided 2026-11-07 by the coordinator, ruling P-7, from RV seat REP-B (`5502d569`): the zip reader refused
+     both forms, and the directory reader read a `\` as a character of a file name and a drive prefix as the start of a
+     relative path, so one package was read two ways by its form.)
