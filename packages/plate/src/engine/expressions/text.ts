@@ -26,7 +26,7 @@ import { referenceValue } from "#plate/engine/refs.ts";
 import type { Expression, StringOrRef } from "#plate/model/expression.ts";
 import { compile, matches } from "#plate/model/regex.ts";
 import type { Matcher } from "#plate/model/regex.ts";
-import { nullOf } from "#plate/model/values.ts";
+import { isNull, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
 /**
@@ -129,8 +129,7 @@ const evaluateSubstring: Evaluator<"substring"> = (expression, scope, evaluate) 
 
 /**
  * Give the automaton a `pattern` stands for: its literal text compiled, or the value of the
- * variable it names compiled, through the resolver in `#plate/engine/refs.ts` with the kind's
- * checked string facet.
+ * variable it names compiled, through {@link referenceValue} with the kind's checked string facet.
  *
  * Each evaluation compiles its pattern again, as a `pattern-mask` check does, so nothing an
  * author's pattern builds outlives the evaluation.
@@ -203,7 +202,7 @@ const evaluateInside: Evaluator<"inside"> = (expression, scope, evaluate) => {
   const holds = areaHolds[expression.shape];
 
   return Result.map(evaluate(operand, scope), (value) =>
-    value.values.length === 0
+    isNull(value)
       ? unknown()
       : booleanOf(
           value.values.some(

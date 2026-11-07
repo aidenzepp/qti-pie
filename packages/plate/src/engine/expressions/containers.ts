@@ -129,22 +129,21 @@ const containerOf = (cardinality: "multiple" | "ordered", values: readonly Value
  * @param single The single.
  * @returns The value, of the single's base type.
  */
-const singleValueOf = (single: Single): Value => ({
+const singleOf = (single: Single): Value => ({
   baseType: single.baseType,
   cardinality: "single",
   values: [single],
 });
 
 /**
- * Report whether two singles are the same value, as `qti-match` compares two single values: of one
- * base type and equal, a `pair` in either order.
+ * Report whether two singles are equal, as `qti-match` compares two single values: of one base
+ * type, a `pair` in either order.
  *
  * @param left One single.
  * @param right The other single.
- * @returns Whether they are the same value.
+ * @returns Whether they are equal.
  */
-const same = (left: Single, right: Single): boolean =>
-  match(singleValueOf(left), singleValueOf(right));
+const equal = (left: Single, right: Single): boolean => match(singleOf(left), singleOf(right));
 
 /**
  * Give the value of a `qti-multiple`: a multiple container of its operands' values, a multiple
@@ -311,7 +310,7 @@ const pairOf = (
  * @returns Whether the container holds it; false when the value is not a single one.
  */
 const holds = (container: Value, value: Value): boolean =>
-  container.values.some((held) => match(value, singleValueOf(held)));
+  container.values.some((held) => match(value, singleOf(held)));
 
 /**
  * Give the value of a `qti-member`: a single boolean, whether the container its second operand
@@ -345,9 +344,7 @@ const evaluateDelete: Evaluator<"delete"> = (expression, scope, evaluate) =>
   Result.map(pairOf(expression.operands, scope, evaluate), ([value, container]): Value => ({
     baseType: container.baseType,
     cardinality: container.cardinality,
-    values: isNull(value)
-      ? []
-      : container.values.filter((held) => !match(value, singleValueOf(held))),
+    values: isNull(value) ? [] : container.values.filter((held) => !match(value, singleOf(held))),
   }));
 
 /**
@@ -363,7 +360,7 @@ const holdsAll = (container: readonly Single[], part: readonly Single[]): boolea
   const unmatched = [...container];
 
   return part.every((single) => {
-    const index = unmatched.findIndex((held) => same(single, held));
+    const index = unmatched.findIndex((held) => equal(single, held));
     if (index === -1) {
       return false;
     }
@@ -390,7 +387,7 @@ const holdsRun = (sequence: readonly Single[], part: readonly Single[]): boolean
       part.every((single, offset) => {
         const held = sequence[start + offset];
 
-        return held !== undefined && same(single, held);
+        return held !== undefined && equal(single, held);
       }),
   );
 
