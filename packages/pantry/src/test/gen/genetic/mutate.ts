@@ -23,7 +23,9 @@
  * percent-encoded; one path listed under two types; a content packaging element outside the
  * manifest; an include in foreign or wildcard content. And absence (hot spot 8): a present value
  * equal to a sentinel the import or the schema spells (empty, `0`, `none`, `single`, the nil uuid,
- * the document's own identifier).
+ * the document's own identifier). And a wild attribute: one or two names no kind admits, or that
+ * name an open class no name of which they are, on one element, the order of whose refusals no
+ * law may read (reading 137).
  *
  * Which operators a run draws, and how often, is its swarm (`@grizzle/testing/swarm`): drawn per
  * run, one operator always on, so no run is left with nothing to breed by.
@@ -38,9 +40,11 @@ import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
+import { noType } from "#pantry/grammar/xsi.ts";
 import type { Corpus } from "#pantry/test/gen/genetic/corpus.ts";
 import { versionOfGenome } from "#pantry/test/gen/genetic/corpus.ts";
 import { below, oneOf } from "#pantry/test/gen/genetic/engine.ts";
+import { keyCopies } from "#pantry/test/key-copies.ts";
 import type { Edited } from "#pantry/test/gen/genetic/engine.ts";
 import {
   attributeValue,
@@ -98,6 +102,7 @@ export const faults = [
   "cp-outside-manifest",
   "include-in-wildcard",
   "sentinel-value",
+  "wild-attribute",
 ] as const;
 
 /**
@@ -156,6 +161,26 @@ const identifierNames: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The attribute names the laws read, a dictionary of the values the code branches on: an absent
+ * required attribute is drawn among these two times in three, by name first, so an absence the
+ * laws read (a declaration's cardinality, the history's absent-as-empty bug) is not drowned by the
+ * many identifiers every package writes.
+ */
+const lawRead: ReadonlySet<string> = new Set([
+  "base-type",
+  "cardinality",
+  "coords",
+  "href",
+  "identifier",
+  "max-choices",
+  "outcome-identifier",
+  "response-identifier",
+  "shape",
+  "template-identifier",
+  "type",
+]);
+
+/**
  * The resource types a wrong root type writes beside those the corpus holds: an older QTI's, and
  * none the specification names.
  */
@@ -168,10 +193,40 @@ const wildTypes = ["imsqti_item_xmlv2p2", "imsqti_xmlv3p0", "x"] as const;
 const sentinels = ["", "0", "none", "single", "00000000-0000-0000-0000-000000000000"] as const;
 
 /**
+ * The attribute names a wild attribute writes: names no kind admits, and names that open a class
+ * (`data-`, `aria-`) without naming a member of it, or are in a namespace no vocabulary declares
+ * them in.
+ */
+const wildNames = ["foo", "bogus-name", "data-", "aria-", "aria-bogus", "xml:bogus", "x"] as const;
+
+/**
  * The `xml:base` values a reference's element is given: the identity, a subdirectory, its parent,
  * a dot segment pair, and a percent-encoded subdirectory.
  */
 const bases = ["./", "sub/", "../", "./sub/../", "%73ub/"] as const;
+
+/**
+ * How far past the key-text bound a key text is drawn, in bytes: one under, at, and over it twice
+ * as often, so the bound is crossed in most draws and met exactly in the rest.
+ */
+const boundOffsets = [-1, 0, 1, 1, 2] as const;
+
+/**
+ * Whether the schema copies an attribute's text into a key text: some `Attribute` copy of
+ * `#pantry/test/key-copies.ts` holds it, read over the fields that copy knows, the element's
+ * governing type taken as none.
+ *
+ * @param kind - The element's kind.
+ * @param name - The attribute's name as written.
+ * @param lexical - Its value.
+ * @param version - The document's version.
+ * @returns Whether a copy holds it.
+ */
+const copiedAttribute = (kind: string, name: string, lexical: string, version: string): boolean =>
+  keyCopies.some(
+    (copy) =>
+      copy.source === "Attribute" && copy.holds({ governs: noType, kind, lexical, name, version }),
+  );
 
 /**
  * The characters an over-long key is filled with: one, two, three and four UTF-8 bytes each, every
@@ -456,18 +511,18 @@ const operations: Readonly<
 > = {
   "absent-required-attribute": (genome, _mate, breeding) => (source) => {
     const version = versionIn(genome);
-    const site = source.draw(
-      oneOf(
-        attributeSites(genome, ({ at, qname }) =>
-          admittedOf(
-            breeding.grammar.attributes,
-            breeding.grammar.kinds.attributeName,
-            version,
-            breeding.corpus.kindOf(at.element),
-          ).some(({ name, use }) => use === "required" && name === qname),
-        ),
-      ),
+    const required = attributeSites(genome, ({ at, qname }) =>
+      admittedOf(
+        breeding.grammar.attributes,
+        breeding.grammar.kinds.attributeName,
+        version,
+        breeding.corpus.kindOf(at.element),
+      ).some(({ name, use }) => use === "required" && name === qname),
     );
+    const read = required.filter(({ qname }) => lawRead.has(qname));
+    const pool = read.length > 0 && source.pick(0, 2) > 0 ? read : required;
+    const name = source.draw(oneOf([...new Set(pool.map(({ qname }) => qname))]));
+    const site = source.draw(oneOf(pool.filter(({ qname }) => qname === name)));
 
     return site === undefined
       ? Option.none()
@@ -867,7 +922,7 @@ const operations: Readonly<
     );
   },
   "over-long-key": (genome, _mate, breeding) => (source) => {
-    const bytes = keyTextBytes + source.pick(0, 2) - 1;
+    const bytes = keyTextBytes + (source.draw(oneOf(boundOffsets)) ?? 1);
     const widths = fillers.map(
       (filler) => [filler, new TextEncoder().encode(filler).length] as const,
     );
@@ -883,11 +938,17 @@ const operations: Readonly<
     }
 
     const value = characters.join("");
+    const version = versionIn(genome);
 
     if (source.pick(0, 2) > 0) {
+      const copied = source.pick(0, 2) > 0;
       const site = source.draw(
         oneOf(
-          attributeSites(genome, ({ qname }) => identifierNames.has(qname) || qname === "href"),
+          attributeSites(genome, ({ at, qname, value: held }) =>
+            copied
+              ? copiedAttribute(breeding.corpus.kindOf(at.element), qname, held, version)
+              : identifierNames.has(qname) || qname === "href",
+          ),
         ),
       );
 
@@ -895,7 +956,7 @@ const operations: Readonly<
         ? Option.none()
         : edited(
             atSite(genome, site, value),
-            `over-long-key: ${site.qname} of ${breeding.corpus.kindOf(site.at.element)} in ${site.document.path}, ${String(bytes)} bytes`,
+            `over-long-key: ${site.qname} of ${breeding.corpus.kindOf(site.at.element)} in ${site.document.path}, ${String(bytes)} bytes${copied ? ", a key copy's" : ""}`,
           );
     }
 
@@ -974,6 +1035,30 @@ const operations: Readonly<
         editAt(manifest.root, resource.address, (element) => [element, twin]),
       ),
       `two-types: ${attributeValue(resource.element, "href") ?? ""} listed as ${held ?? "no type"} and ${type}`,
+    );
+  },
+  "wild-attribute": (genome, _mate, breeding) => (source) => {
+    const document = source.draw(oneOf(documentsOf(genome)));
+    const at = document === undefined ? undefined : source.draw(oneOf(document.elements));
+    const first = source.draw(oneOf(wildNames));
+    const second = source.pick(0, 1) === 1 ? source.draw(oneOf(wildNames)) : undefined;
+    if (document === undefined || at === undefined || first === undefined) {
+      return Option.none();
+    }
+
+    const names = [...new Set([first, ...(second === undefined ? [] : [second])])];
+    let { element } = at;
+    for (const name of names) {
+      element = withAttribute(element, name, "1");
+    }
+
+    return edited(
+      withDocumentRoot(
+        genome,
+        document.path,
+        editAt(document.root, at.address, () => [element]),
+      ),
+      `wild-attribute: ${names.join(" and ")} on ${breeding.corpus.kindOf(at.element)} in ${document.path}`,
     );
   },
   "wrong-root-type": (genome, _mate, breeding) => (source) => {

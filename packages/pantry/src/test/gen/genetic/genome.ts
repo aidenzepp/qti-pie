@@ -444,8 +444,10 @@ export const resolvedPath = (from: string, href: string): string | undefined => 
 /**
  * List the genomes one cut smaller than a genome, the largest cuts first, for a reduction: each
  * entry but the manifest left out; then, document by document, each element left out, the
- * shallowest first; then each attribute that is no namespace declaration left out; then each
- * element's text left out.
+ * shallowest first; then a document's prolog and epilog, and each element's comments and
+ * processing instructions; then each attribute left out, a namespace declaration included, which a
+ * reduction keeps only where the package still reads as it did; then each element's text left
+ * out.
  *
  * @param genome - The genome.
  * @returns The smaller genomes.
@@ -482,16 +484,44 @@ export const cutsOf = (genome: Genome): readonly Genome[] => {
             ],
       ),
     ),
+    ...documents.flatMap(({ doc, path }): readonly Genome[] =>
+      doc.prolog.length > 0 || doc.epilog.length > 0
+        ? [
+            genome.map((entry): Entry =>
+              entry.path === path
+                ? { body: { doc: { ...doc, epilog: [], prolog: [] }, kind: "xml" }, path }
+                : entry,
+            ),
+          ]
+        : [],
+    ),
     ...placed.flatMap(({ doc, elements, path }) =>
       elements.flatMap(({ address, element }) =>
-        element.attributes
-          .filter((attribute) => !isDeclaration(attribute))
-          .map(({ qname }) =>
-            rooted(
-              path,
-              editAt(doc.root, address, (held) => [withoutAttribute(held, qname)]),
-            ),
+        element.children.some((child) => child.kind === "comment" || child.kind === "pi")
+          ? [
+              rooted(
+                path,
+                editAt(doc.root, address, (held) => [
+                  {
+                    ...held,
+                    children: held.children.filter(
+                      (child) => child.kind !== "comment" && child.kind !== "pi",
+                    ),
+                  },
+                ]),
+              ),
+            ]
+          : [],
+      ),
+    ),
+    ...placed.flatMap(({ doc, elements, path }) =>
+      elements.flatMap(({ address, element }) =>
+        element.attributes.map(({ qname }) =>
+          rooted(
+            path,
+            editAt(doc.root, address, (held) => [withoutAttribute(held, qname)]),
           ),
+        ),
       ),
     ),
     ...placed.flatMap(({ doc, elements, path }) =>

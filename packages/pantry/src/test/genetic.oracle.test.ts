@@ -52,7 +52,7 @@ const laws = lawsOf(grammar);
  */
 const budgets = {
   bounded: {
-    budget: { candidates: 60, edits: 3, generation: 1, initial: 6 },
+    budget: { candidates: 80, edits: 3, generation: 1, initial: 6 },
     runs: 2,
     tries: 120,
   },
@@ -97,7 +97,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       (ctx) =>
         // Oracle: a second implementation, the law oracle, against readProgram's refusal and the
         // laws its rows hold on the host. Bound: per run, the budget above, each candidate one to
-        // its most edits from a parent of the corpus or of the run's population.
+        // its most edits from a parent of the corpus or of the run's population, every other one
+        // judged beside a noised copy.
         searched(
           ctx,
           Effect.gen(function* searchRuns() {

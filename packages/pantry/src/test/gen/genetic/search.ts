@@ -26,15 +26,31 @@ import {
   signatureOf,
 } from "#pantry/test/gen/genetic/judge.ts";
 import type { Bench, Disagreement, Feature, Judged } from "#pantry/test/gen/genetic/judge.ts";
-import { noised, noises } from "#pantry/test/gen/genetic/noise.ts";
+import { noised } from "#pantry/test/gen/genetic/noise.ts";
 import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
 import { mutationOf, operators } from "#pantry/test/gen/genetic/mutate.ts";
 import type { Operator } from "#pantry/test/gen/genetic/mutate.ts";
 
 /**
- * How often a candidate is judged beside a noised copy: one in this many, each noise in turn.
+ * The noise each candidate's copy takes, in turn, none for a candidate judged alone: every other
+ * candidate is judged beside a noised copy, attribute order every other time, since a rule named by
+ * which attribute came first is the history's most repaired refusal-naming bug (d31495a8,
+ * 4e6dc428).
  */
-const noiseEvery = 2;
+const noiseSchedule: readonly (Noise | undefined)[] = [
+  "attribute-order",
+  undefined,
+  "prefix-rename",
+  undefined,
+  "attribute-order",
+  undefined,
+  "resource-order",
+  undefined,
+  "attribute-order",
+  undefined,
+  "path-rename",
+  undefined,
+];
 
 /**
  * One run as its case draws it: the swarm its edits are weighed by, and the seed its every choice
@@ -125,7 +141,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
     });
   const judgeAll = (genomes: readonly Genome[]) =>
     Effect.forEach([...genomes], (genome) => {
-      const noise = noises[judged % (noises.length * noiseEvery)];
+      const noise = noiseSchedule[judged % noiseSchedule.length];
 
       return noise === undefined ? judgeAt(genome) : withTwin(genome, noise, judged);
     });
