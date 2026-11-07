@@ -173,18 +173,15 @@ CREATE TABLE "qti"."attribute_entity" (
 
 CREATE TABLE "qti"."binding" (
   "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
-  "root_kind" "qti"."node_kind" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__binding_pk_sxmg35fgob" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint)) IS TRUE),
-  CONSTRAINT "__binding_key_node_kind_v2dfyie2n7" UNIQUE NULLS DISTINCT ("node", "kind"),
-  CONSTRAINT "__binding_key_node_root_kind_identifier_7yqssz554g" UNIQUE NULLS DISTINCT ("node", "root_kind", "identifier")
+  CONSTRAINT "__binding_key_node_kind_v2dfyie2n7" UNIQUE NULLS DISTINCT ("node", "kind")
 );
 
 CREATE TABLE "qti"."binding_declaration" (
@@ -3557,8 +3554,6 @@ ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__node_nh35tvp7et" "pg_cat
 
 ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__node_h2pd4crnor" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "name" IN (52::smallint, 53::smallint) THEN "node" END) STORED;
 
-ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__root_kind_tbe6jfl65z" smallint GENERATED ALWAYS AS (CASE WHEN "kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint) AND "name" IN (76::smallint) THEN "root_kind" END) STORED;
-
 ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_ct2tqxnafs" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN NOT "root_kind" IN (299::smallint, 300::smallint, 302::smallint) AND "kind" IN (155::smallint, 13::smallint, 154::smallint, 153::smallint, 156::smallint, 11::smallint, 162::smallint, 114::smallint, 143::smallint, 116::smallint, 200::smallint, 15::smallint, 201::smallint, 185::smallint) AND "name" IN (87::smallint) THEN "value" END) STORED;
 
 ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_orhsjpvixb" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN NOT "root_kind" IN (299::smallint, 300::smallint, 302::smallint) AND "kind" IN (186::smallint) AND "name" IN (86::smallint) THEN "value" END) STORED;
@@ -3582,8 +3577,6 @@ ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_mdalpmjeoc" "pg_ca
 ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_dkwqpcuznd" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint) AND "name" IN (76::smallint, 78::smallint) THEN "value" END) STORED;
 
 ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_dn24zfiou4" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint) AND "name" IN (76::smallint, 78::smallint) AND "root_kind" = 299::smallint THEN "value" END) STORED;
-
-ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_qdidqhei3v" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint) AND "name" IN (76::smallint) THEN "value" END) STORED;
 
 ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_3u6ov5n4s6" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" IN (186::smallint) AND "name" IN (86::smallint) AND "root_kind" IN (299::smallint, 302::smallint) THEN "value" END) STORED;
 
@@ -4981,6 +4974,8 @@ ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_key_instance_i
 
 ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_key_document_u2jbpo4mif" UNIQUE NULLS DISTINCT ("__document_lef635gfp3");
 
+ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_key_node_s2a23mqgqv" UNIQUE NULLS DISTINCT ("__node_qbnexppy63");
+
 ALTER TABLE "qti"."item_ref_target" ADD CONSTRAINT "__item_ref_target_key_node_rozaxrlbl6" UNIQUE NULLS DISTINCT ("__node_thuesrvpoz");
 
 ALTER TABLE "qti"."lom_language" ADD CONSTRAINT "__lom_language_key_general_tag_index_carriers_3ddjs7apwl" UNIQUE NULLS DISTINCT ("general", "tag", "__index_carriers_hprm4xufhg");
@@ -6145,6 +6140,8 @@ ALTER TABLE "qti"."attribute_entity" ADD CONSTRAINT "__attribute_entity_fk_node_
 
 ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_gp5kkqrgir" FOREIGN KEY ("node") REFERENCES "qti"."interaction" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_3chvwpsie6" FOREIGN KEY ("node") REFERENCES "qti"."interaction_attribute" ("__node_qbnexppy63") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_document_kind_start_nearest_f3nwllxe5i" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."binding_declaration" ADD CONSTRAINT "__binding_declaration_fk_declaration_document_72vmrzu6ky" FOREIGN KEY ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
@@ -6551,7 +6548,7 @@ ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribut
 
 ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_fk_node_name_kind_document_3blqxq3n3g" FOREIGN KEY ("__node_padbue3zvo", "__name_64kjos2b75", "__kind_2l4uhszbdi", "__document_o5amvkxi7u", "__value_dn24zfiou4") REFERENCES "qti"."bound_variable" ("node", "attribute", "kind", "document", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_fk_node_root_kind_value_vqpo2z2miz" FOREIGN KEY ("__node_qbnexppy63", "__root_kind_tbe6jfl65z", "__value_qdidqhei3v") REFERENCES "qti"."binding" ("node", "root_kind", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_fk_node_lxuiybfjdb" FOREIGN KEY ("__node_qbnexppy63") REFERENCES "qti"."binding" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_fk_node_name_kind_document_reqewm34vr" FOREIGN KEY ("__node_dfhz6dgkds", "__name_2g7bkdjtwl", "__kind_teqpxqcv7n", "__document_kefywyspw6", "__value_3u6ov5n4s6") REFERENCES "qti"."context_ref" ("node", "attribute", "kind", "document", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

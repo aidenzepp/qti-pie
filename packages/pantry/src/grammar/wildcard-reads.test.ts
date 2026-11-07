@@ -31,6 +31,13 @@ import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 37 s at a load average of 68 to 108,
+ * its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * Whether the XSD cache holds every pin.
  */
 const cached = await Effect.runPromise(
@@ -117,7 +124,7 @@ describe.skipIf(!cached)("a wildcard's global elements", () => {
             "no wildcard admits a global its schema sets or its versions do not declare",
           );
         }),
-      { timeout: 120_000 },
+      { timeout: testTimeoutMs },
     );
   });
 });

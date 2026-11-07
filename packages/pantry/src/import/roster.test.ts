@@ -16,6 +16,13 @@ import { Author } from "#pantry/qti/roles.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 1 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The relations each member of a ChangeSet's Description inserts, as its `desc` holds them.
  */
 const InsertedRelations = Schema.Struct({
@@ -66,7 +73,7 @@ layer(NodeServices.layer)("the derived roster", (it) => {
 
         assert.deepStrictEqual(sortedNames(written), [...overlayNames]);
       }).pipe(Effect.scoped),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect("names exactly the relations the document layer writes", () =>
@@ -95,6 +102,6 @@ layer(NodeServices.layer)("the derived roster", (it) => {
         assert.deepStrictEqual(sortedNames(inserted), [...writtenNames]);
         assert.strictEqual(new Set(inserted).size, inserted.length);
       }).pipe(Effect.scoped),
-    120_000,
+    testTimeoutMs,
   );
 });

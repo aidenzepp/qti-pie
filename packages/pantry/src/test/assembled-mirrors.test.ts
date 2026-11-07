@@ -29,6 +29,13 @@ import { judgedLaws } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 14.2 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * A term of a selection or a check the host's evaluator does not read.
  *
  * @param term - The term's kind.
@@ -241,7 +248,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
           }),
         ),
-      600_000,
+      testTimeoutMs,
     );
   },
 );

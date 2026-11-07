@@ -35,6 +35,13 @@ import {
 import type { Particle } from "#pantry/test/gen/grammar.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 50.9 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * Whether every pinned XSD is in the cache; without them the XSD read is skipped.
  */
 const cached = await Effect.runPromise(
@@ -160,7 +167,7 @@ describe.skipIf(!cached)("OperatorArity against the ASI XSDs", () => {
           assert.deepStrictEqual(differing, []);
         }
       }).pipe(Effect.provide(XsdOracleLayer)),
-    120_000,
+    testTimeoutMs,
   );
 });
 

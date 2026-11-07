@@ -16,7 +16,7 @@ import { drawn, explore } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { orphansOf } from "#pantry/test/family-owners.ts";
@@ -36,6 +36,13 @@ import type { Mutation } from "#pantry/test/oracle-complete/mutation.ts";
 import { overlayMutations } from "#pantry/test/oracle-complete/overlays.ts";
 import { packageMutations } from "#pantry/test/oracle-complete/packages.ts";
 import { testMutations } from "#pantry/test/oracle-complete/tests.ts";
+
+/**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 2.4 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 600_000;
 
 /**
  * Every law's mutation over a package's text, by law, as `oracle.complete.test.ts` gathers them:
@@ -61,9 +68,18 @@ const packageMutationsByLaw: readonly (readonly [string, Mutation])[] = Object.e
  */
 const ownersHold = (entries: PackageEntries, label: string) =>
   Effect.gen(function* familyOwnersHold() {
-    const { inputs } = yield* readProgram(yield* scopedPackage(entries));
+    // A package the reader or the codec refuses writes no row at all, so no member of its rows can
+    // name an absent owner: a mutation whose law moved to the reader (crust daed3e96's URI
+    // reference, for Namespace name) holds here by having no rows.
+    const program = yield* readProgram(yield* scopedPackage(entries)).pipe(
+      Effect.map(Option.some),
+      Effect.catchTag("ImportRefused", () => Effect.succeed(Option.none())),
+    );
+    if (Option.isNone(program)) {
+      return;
+    }
 
-    const orphans = orphansOf(inputs);
+    const orphans = orphansOf(program.value.inputs);
     assert.deepStrictEqual(
       orphans,
       [],
@@ -97,7 +113,7 @@ describe("every family member names an owner the import writes", () => {
             ownersHold(everyRelationPackage(members), JSON.stringify(members)),
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 
   for (const [law, mutation] of packageMutationsByLaw) {
@@ -131,7 +147,7 @@ describe("every family member names an owner the import writes", () => {
               },
             ),
           ),
-        300_000,
+        testTimeoutMs,
       );
     }
   }

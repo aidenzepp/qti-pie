@@ -22,11 +22,17 @@
  *   measurement. A budget measured on an idle machine is one a busy machine exceeds: the hooks of
  *   `vocab/derive/declarations.test.ts` and `vocab/derive/models.test.ts`, measured at a load near
  *   12 and given four times that, took 231 s and 427 s at a load of 76 to 87, past budgets of 160 s
- *   and 240 s.
+ *   and 240 s;
+ * - Each timeout a test, a `describe`, a `layer` or a hook of the free project states is such a
+ *   constant, or a conditional of them, and never a number or a string written in place, so every
+ *   stated timeout carries its measurement.
  *
  * The database project's files, named `*.db.test.ts` or `*.packaging.test.ts` or gated on the lease
  * (`vite.config.ts` reads them so), run one at a time on a lease, which a free run does not hold,
- * so the last rule leaves their constants to a measurement taken there.
+ * so the last two rules leave their timeouts to a measurement taken there. A test that runs only
+ * under `GR8DES_GENETIC=1`, or sits in a `describe` that does, is a long budget, as a conditional
+ * constant's other branch is: it states a named constant, and its measurement is the long run's.
+ * {@link exempt} names the files no lane may edit, which the last rule leaves as they are.
  *
  * The floor is measured, not chosen: every suite was run once on 2026-11-07, pantry's free project
  * and crust's, each under `nice -n 15` with 3 workers at a load average of 63 to 73 (lane TD-B).
@@ -42,6 +48,16 @@ import { assert, describe, it } from "@effect/vitest";
  * The least timeout a test project or a search may state, in milliseconds.
  */
 const hangGuardMs = 60_000;
+
+/**
+ * The test files the literal rule leaves as they are, each with why: a file no lane may edit.
+ */
+const exempt: ReadonlyMap<string, string> = new Map([
+  [
+    "pantry/src/test/census.migration.test.ts",
+    "LANES.md: no lane touches census.migration.test.ts, so its timeout is named when its owner edits it",
+  ],
+]);
 
 /**
  * The least load average a timeout's measurement may be taken at, of every figure `uptime` gave
@@ -160,7 +176,9 @@ const argumentsAt = (text: string, open: number): readonly [readonly string[], n
 
 /**
  * Mark where a module's string literals and comments stand, so a call written inside one, as a
- * planted case's text, is no call.
+ * planted case's text, is no call. A regular expression literal is read as code, so one that holds
+ * a quotation mark or a backtick opens a string the reader never closes, and the planted cases
+ * after it read as calls: a pattern in this file writes them `\u0022`, `\u0027` and `\u0060`.
  *
  * @param text - The module's text.
  * @returns Each literal's or comment's start and end offsets.
@@ -372,6 +390,7 @@ const millisOf = (source: Source, written: string): number | "unread" => {
  */
 interface Call {
   readonly callee: string;
+  readonly chain: string;
   readonly end: number;
   readonly parts: readonly string[];
   readonly start: number;
@@ -403,7 +422,9 @@ const callsIn = (text: string): readonly Call[] => {
 
     const [parts, end] = argumentsAt(text, call.index + call[0].length - 1);
 
-    return [{ callee: call.groups?.["callee"] ?? "", end, parts, start: call.index }];
+    return [
+      { callee: call.groups?.["callee"] ?? "", chain: call[0], end, parts, start: call.index },
+    ];
   });
 };
 
@@ -438,14 +459,16 @@ const optionTimeout = (part: string): string | undefined => {
  */
 const timeoutOf = ({ callee, parts }: Call): string | undefined => {
   if (hooks.has(callee)) {
-    return parts[1]?.trim();
+    const timeout = parts[1]?.trim();
+
+    return timeout === "" ? undefined : timeout;
   }
 
   if (callee === "layer") {
     return optionTimeout(parts[1] ?? "");
   }
 
-  if (!/^["'`]/u.test((parts[0] ?? "").trim())) {
+  if (!/^[\u0022\u0027\u0060]/u.test((parts[0] ?? "").trim())) {
     return undefined;
   }
 
@@ -482,7 +505,11 @@ export const searchTimeouts = (source: Source): readonly Stated[] => {
   const stated: Stated[] = [];
   for (const call of callsIn(source.text)) {
     const title = (call.parts[0] ?? "").trim();
-    if (hooks.has(call.callee) || call.callee === "layer" || !/^["'`]/u.test(title)) {
+    if (
+      hooks.has(call.callee) ||
+      call.callee === "layer" ||
+      !/^[\u0022\u0027\u0060]/u.test(title)
+    ) {
       continue;
     }
 
@@ -507,6 +534,22 @@ export const searchTimeouts = (source: Source): readonly Stated[] => {
 };
 
 /**
+ * Whether a call runs only under `GR8DES_GENETIC=1`: its own chain, or a `describe`'s around it,
+ * skips it unless `settings.geneticRequested`.
+ *
+ * @param calls - The file's calls.
+ * @param call - The call.
+ * @returns Whether only the long run runs it.
+ */
+const geneticOnly = (calls: readonly Call[], call: Call): boolean =>
+  [
+    call,
+    ...calls.filter(
+      ({ callee, end, start }) => callee === "describe" && start < call.start && end > call.end,
+    ),
+  ].some(({ chain }) => /\bgeneticRequested\b/u.test(chain));
+
+/**
  * Find every constant a test file states as a timeout: each name in a test's, a `describe`'s, a
  * `layer`'s or a hook's timeout that names a constant the file reaches whose initializer holds a
  * number.
@@ -514,14 +557,45 @@ export const searchTimeouts = (source: Source): readonly Stated[] => {
  * @param source - The test file.
  * @returns Each such constant, once for each call that states it.
  */
-const namedTimeouts = (source: Source): readonly Constant[] =>
-  callsIn(source.text).flatMap((call) =>
-    [...(timeoutOf(call) ?? "").matchAll(/(?<![\w$.])[A-Za-z_$][\w$]*/gu)].flatMap(([name]) => {
-      const constant = source.constants.get(name);
+const namedTimeouts = (source: Source): readonly Constant[] => {
+  const calls = callsIn(source.text);
 
-      return constant === undefined || constant.ms === "unread" ? [] : [constant];
-    }),
-  );
+  return calls
+    .filter((call) => !geneticOnly(calls, call))
+    .flatMap((call) =>
+      [...(timeoutOf(call) ?? "").matchAll(/(?<![\w$.])[A-Za-z_$][\w$]*/gu)].flatMap(([name]) => {
+        const constant = source.constants.get(name);
+
+        return constant === undefined || constant.ms === "unread" ? [] : [constant];
+      }),
+    );
+};
+
+/**
+ * A timeout written in place: a call's stated timeout that holds a number or a string, not only
+ * the names of constants.
+ */
+interface Written {
+  readonly at: string;
+  readonly timeout: string;
+}
+
+/**
+ * Find every timeout a test file writes in place: each call whose stated timeout holds a numeric
+ * or string literal.
+ *
+ * @param source - The test file.
+ * @returns Each such timeout, where it stands and as written.
+ */
+const writtenTimeouts = (source: Source): readonly Written[] =>
+  callsIn(source.text).flatMap((call) => {
+    const timeout = timeoutOf(call);
+    const line = source.text.slice(0, call.start).split("\n").length;
+
+    return timeout !== undefined && /[\u0022\u0027\u0060]|(?<![\w$.])\d/u.test(timeout)
+      ? [{ at: `${source.file}:${String(line)}`, timeout: timeout.replaceAll(/\s+/gu, " ") }]
+      : [];
+  });
 
 /**
  * Why a constant is no measured timeout: `idle` where none of its measurements was taken at a load
@@ -564,7 +638,7 @@ describe("the timeouts a test runs under", () => {
   it("states each project's testTimeout and hookTimeout, at least the hang guard, in both packages", () => {
     for (const name of Object.values(packages)) {
       const config = readFileSync(path.join(packagesRoot, name, "vite.config.ts"), "utf-8");
-      const projects = Math.max(1, [...config.matchAll(/\bname\s*:\s*"/gu)].length);
+      const projects = Math.max(1, [...config.matchAll(/\bname\s*:\s*\u0022/gu)].length);
       const timeouts = projectTimeouts(config);
 
       for (const key of ["testTimeout", "hookTimeout"]) {
@@ -610,6 +684,16 @@ describe("the timeouts a test runs under", () => {
       [],
       `timeout constants with no measurement at a load average of ${String(busyLoad)} or more (idle), or under twice their slowest (short)`,
     );
+  });
+
+  it("states every timeout of the free project as a named constant, never a literal", () => {
+    const literal = Object.values(packages)
+      .flatMap(testsOf)
+      .filter((source) => !inDatabaseProject(source) && !exempt.has(source.file))
+      .flatMap(writtenTimeouts)
+      .map(({ at, timeout }) => `${at} (${timeout})`);
+
+    assert.deepStrictEqual(literal, [], "timeouts written in place, not as a measured constant");
   });
 
   it("finds a planted search under a deadline, a project on the 5 s default and an unread timeout", () => {
@@ -684,6 +768,48 @@ describe("the timeouts a test runs under", () => {
         ["planted.test.ts: busy", undefined],
         ["planted.test.ts: bare", "idle"],
       ],
+    );
+  });
+
+  it("finds a planted timeout written in place, and leaves a long run's and a named one", () => {
+    // Oracle: the last two rules, on the named cases. Live: a test, a describe, a layer and a hook
+    // that each state a constant or a conditional of two, a hook that states none, and a long run's
+    // constant with no measurement, which the measured rule leaves to the long run. Wild: a number
+    // stated by a test, a describe, a layer and a hook, a duration written as a string, and a
+    // number beside a constant in a conditional.
+    const source = sourceOf(
+      "planted.test.ts",
+      [
+        "const named = 60_000;",
+        "const longTimeoutMs = 3_600_000;",
+        'it.effect("a", () => Effect.void, named);',
+        'describe("b", { timeout: long ? named : named }, () => {});',
+        'layer(Suite, { timeout: named })("c", (it) => {});',
+        "beforeAll(() => preload, named);",
+        "beforeAll(() =>\n  preload,\n);",
+        'it.effect.skipIf(!settings.geneticRequested)("d", () => Effect.void, longTimeoutMs);',
+        'it.effect("e", () => Effect.void, 120_000);',
+        'describe("f", { timeout: 300_000 }, () => {});',
+        'layer(Suite, { timeout: "120 seconds" })("g", (it) => {});',
+        "beforeAll(() => preload, 60_000);",
+        'it.effect("h", () => Effect.void, { timeout: long ? 900_000 : named });',
+      ].join("\n"),
+    );
+
+    assert.deepStrictEqual(
+      writtenTimeouts(source).map(({ at, timeout }) => `${at} ${timeout}`),
+      [
+        "planted.test.ts:11 120_000",
+        "planted.test.ts:12 300_000",
+        'planted.test.ts:13 "120 seconds"',
+        "planted.test.ts:14 60_000",
+        "planted.test.ts:15 long ? 900_000 : named",
+      ],
+    );
+    assert.deepStrictEqual(
+      namedTimeouts(source).map(({ at }) => at),
+      Array.from({ length: 6 }, () => "planted.test.ts: named"),
+      "the long run's constant is left to the long run",
     );
   });
 });

@@ -46,6 +46,13 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 172 s at a load average of 75, under
+ * V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 1_200_000;
+
+/**
  * A situation a search must reach: where a rule's target lies, and the shapes of the instance tree
  * reading 87 is judged over.
  */
@@ -270,7 +277,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts",
           judge,
         ),
       ),
-    { timeout: 1_200_000 },
+    { timeout: testTimeoutMs },
   );
 
   it.effect(
@@ -301,6 +308,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts",
           ({ assembly }, c) => judge(assembly, c),
         ),
       ),
-    { timeout: 1_200_000 },
+    { timeout: testTimeoutMs },
   );
 });

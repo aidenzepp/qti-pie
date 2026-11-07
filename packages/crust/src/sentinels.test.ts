@@ -20,6 +20,13 @@ import { Duration, Effect, Formatter } from "effect";
 import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 0.6 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The first code point of the Basic Multilingual Plane's private use area, as the Unicode Character
  * Database's `Blocks.txt` bounds it (`E000..F8FF; Private Use Area`). The oracle reads the area
  * from Unicode, not from `sentinels.ts`, so a moved bound of the module's range fails the box at
@@ -233,7 +240,7 @@ describe("the sentinel scan, against the walk it replaced", () => {
           }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -263,6 +270,6 @@ describe("the sentinel scan, against the walk it replaced", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });

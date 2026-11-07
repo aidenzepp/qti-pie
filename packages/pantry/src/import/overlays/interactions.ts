@@ -512,8 +512,8 @@ const bindingsOf = (context: Context) => {
   const bound = new Map<string, Addition<typeof BoundVariable>>();
   const declarations = new Map<string, Addition<typeof BindingDeclaration>>();
   for (const node of context.rows.nodes.filter(({ kind }) => interactions.has(kind))) {
-    for (const identifier of Option.toArray(valueOf(context, node.id, "response-identifier"))) {
-      bindings.set(node.id, { ...tupleOf(context, node), identifier, rootKind: context.rootKind });
+    if (Option.isSome(valueOf(context, node.id, "response-identifier"))) {
+      bindings.set(node.id, tupleOf(context, node));
     }
 
     for (const attribute of bindingAttributes) {

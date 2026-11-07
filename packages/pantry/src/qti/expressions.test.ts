@@ -82,6 +82,13 @@ import { Qti } from "#pantry/qti/schema.ts";
 import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 1.1 s at a load average of 75, under
+ * V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The rule each of this module's check names keeps, the oracle laws `#pantry/test/oracle.ts` names
  * with spaces for underscores (Q5.17 maps them).
  */
@@ -119,67 +126,71 @@ const patternOf = (baseType: string): RegExp =>
   new RegExp(BaseTypePattern.rows.find((row) => row.baseType === baseType)?.pattern ?? "^$", "u");
 
 describe("qti/expressions.ts, declared", () => {
-  it("builds a schema of every relation its laws read, with its laws and theirs, each statement once", () => {
-    const built = schema(
-      "ExpressionLayer",
-      {
-        ...Qti.relations,
-        AreaMapping,
-        BaseTypePattern,
-        Declaration,
+  it(
+    "builds a schema of every relation its laws read, with its laws and theirs, each statement once",
+    () => {
+      const built = schema(
+        "ExpressionLayer",
+        {
+          ...Qti.relations,
+          AreaMapping,
+          BaseTypePattern,
+          Declaration,
+          Expression,
+          ExpressionAttribute,
+          InterpolationTable,
+          ItemTiming,
+          Language,
+          LeadCardinality,
+          Literal,
+          LiteralTyped,
+          Mapping,
+          MatchTable,
+          Operand,
+          OperandBase,
+          Processing,
+          ProcessingTemplate,
+          ReferenceBase,
+          ReferenceResolution,
+          ReferencedTable,
+          ResultBase,
+          ResultCardinality,
+          RpTemplate,
+          TailCardinality,
+          ValueBase,
+          ValueBaseBit,
+          ValueBaseForm,
+          ValueBaseOf,
+          ValueCardinality,
+          ValueCardinalityBit,
+          ValueCardinalityOf,
+          VariableRef,
+        },
+        [...nodeLaws, ...chardataLaws, ...attributeLaws, ...expressionLaws],
+      );
+
+      for (const relation of [
         Expression,
+        Operand,
+        Processing,
+        VariableRef,
         ExpressionAttribute,
-        InterpolationTable,
         ItemTiming,
-        Language,
-        LeadCardinality,
         Literal,
         LiteralTyped,
-        Mapping,
-        MatchTable,
-        Operand,
-        OperandBase,
-        Processing,
         ProcessingTemplate,
-        ReferenceBase,
-        ReferenceResolution,
-        ReferencedTable,
-        ResultBase,
-        ResultCardinality,
-        RpTemplate,
-        TailCardinality,
-        ValueBase,
-        ValueBaseBit,
-        ValueBaseForm,
-        ValueBaseOf,
-        ValueCardinality,
-        ValueCardinalityBit,
-        ValueCardinalityOf,
-        VariableRef,
-      },
-      [...nodeLaws, ...chardataLaws, ...attributeLaws, ...expressionLaws],
-    );
+        ...Object.values(referenceRelations),
+      ]) {
+        assert.strictEqual(
+          Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
+          relation,
+        );
+      }
 
-    for (const relation of [
-      Expression,
-      Operand,
-      Processing,
-      VariableRef,
-      ExpressionAttribute,
-      ItemTiming,
-      Literal,
-      LiteralTyped,
-      ProcessingTemplate,
-      ...Object.values(referenceRelations),
-    ]) {
-      assert.strictEqual(
-        Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
-        relation,
-      );
-    }
-
-    assert.strictEqual(new Set(expressionLaws).size, expressionLaws.length);
-  }, 120_000);
+      assert.strictEqual(new Set(expressionLaws).size, expressionLaws.length);
+    },
+    testTimeoutMs,
+  );
 
   it("names each check by a law whose rule it keeps", () => {
     // Oracle: the rule table of plan §2.2 (P2, P8, P20 to P27, P29) and the C17 proofs' `derived`.

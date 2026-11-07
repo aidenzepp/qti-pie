@@ -57,6 +57,13 @@ import type { Domain, Facet } from "#pantry/vocab/inventory/types.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 35.3 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * Every distinct definition the leaf resolves, once each with a declaration it types: the leaf
  * states each definition once and its declarations share it.
  */
@@ -611,7 +618,7 @@ describe("The whitespace fold", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it("refuses to fold exactly the collapsed languages in which two spaces that do not merge may stand together, and refuses as empty those whose every word begins or ends with a space", () => {
@@ -826,7 +833,7 @@ describe.skipIf(!hasXmllint)("The translation of XSD regular expressions", () =>
         assert.isAbove(probes.length, leafPatterns.length * 10);
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(NodeServices.layer)),
-    120_000,
+    testTimeoutMs,
   );
 
   it("refuses the patterns XSD's grammar does not define, and the blocks this reader has no range for", () => {
@@ -994,7 +1001,7 @@ describe("Integer intervals", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it("read the bounds of the wide built-ins exactly at their edges: int, long, unsignedLong", () => {
@@ -1502,7 +1509,7 @@ describe("Length facets", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });
 
@@ -1681,7 +1688,7 @@ describe("xs:boolean", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it("is read in grammar/domains.ts alone: no other module spells a truth of its own", () => {

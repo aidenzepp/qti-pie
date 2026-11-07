@@ -35,6 +35,13 @@ import type { Content, Probe, ProbeDocument, XsdSet } from "#pantry/test/gen/gra
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 132.8 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * The toy base type.
  */
 const base: ExpandedName = { local: "Base", namespace: "urn:toy" };
@@ -375,7 +382,7 @@ describe.skipIf(!cached)("XsiType against xmllint", () => {
         assert.isAbove(probed, 0);
         assert.deepStrictEqual(failures.slice(0, 30), []);
       }).pipe(Effect.provide(XsdOracleLayer)),
-    600_000,
+    testTimeoutMs,
   );
 });
 
@@ -489,7 +496,7 @@ describe("Governor", () => {
         assert.isAbove(attributes.governor.rows.length, 0);
         assert.deepStrictEqual(disagreements, []);
       }),
-    60_000,
+    testTimeoutMs,
   );
 });
 
@@ -567,6 +574,6 @@ describe("the TypeName spelling", () => {
           );
         }
       }),
-    60_000,
+    testTimeoutMs,
   );
 });

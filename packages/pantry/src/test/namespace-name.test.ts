@@ -19,6 +19,13 @@ import type { Element } from "@qti-pie/crust/tree.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 9.5 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The characters a value is drawn from, each as the document spells it and as normalization
  * leaves it: RFC 3986's letters, digits, delimiters and `%`, a space and a tab written as
  * themselves and as character references, a quote, and a letter beyond US-ASCII.
@@ -161,6 +168,6 @@ describe("crust's reader holds a namespace declaration's value to RFC 3986's URI
           }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });

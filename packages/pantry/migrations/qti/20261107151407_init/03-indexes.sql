@@ -178,8 +178,6 @@ CREATE INDEX "__interaction_attribute_ix_node_ozxio_6_e_2_u_5_4nyxw274vf" ON "qt
 
 CREATE INDEX "__interaction_attribute_ix_node_padbue_3_zvo_name_64_yem4rbpm3k" ON "qti"."interaction_attribute" USING btree ("__node_padbue3zvo", "__name_64kjos2b75", "__kind_2l4uhszbdi", "__document_o5amvkxi7u", "__value_dn24zfiou4");
 
-CREATE INDEX "__interaction_attribute_ix_node_qbnexppy_63_root_6emhnybrh6" ON "qti"."interaction_attribute" USING btree ("__node_qbnexppy63", "__root_kind_tbe6jfl65z", "__value_qdidqhei3v");
-
 CREATE INDEX "__interaction_attribute_ix_node_t_777_luyk_3_g_name_2veecz6vt4" ON "qti"."interaction_attribute" USING btree ("__node_t777luyk3g", "__name_limigk44w6", "__kind_bcfvh5xx6m", "__document_egzcabyxvz", "__value_kb5rjfmgxs");
 
 CREATE INDEX "__interaction_attribute_ix_node_tbq_7_mvy_7_hj_name_whfccevr6v" ON "qti"."interaction_attribute" USING btree ("__node_tbq7mvy7hj", "__name_7sg2on63h6", "__kind_oqssngwejq", "__document_gfjmj2jpph", "__value_ogpaod77i3");

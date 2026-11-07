@@ -68,6 +68,13 @@ import {
 import type { Breach, LawName } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 12.5 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * The composed grammar every case judges by, composed once for the file.
  */
 const grammar = Result.getOrThrow(composed());
@@ -361,7 +368,7 @@ describe("every law the oracle declares", () => {
               property(law, mutation),
             ),
           ),
-        300_000,
+        testTimeoutMs,
       );
     }
   }

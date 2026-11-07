@@ -34,6 +34,13 @@ import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { asiNamespace, xsiNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 43.7 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * Whether the XSD cache holds every pin.
  */
 const cached = await Effect.runPromise(
@@ -165,7 +172,7 @@ describe.skipIf(!cached)("xsi:type names by version", () => {
             "the codec reads a type of the other version alone as unknown, and its own as known",
           );
         }),
-      { timeout: 300_000 },
+      { timeout: testTimeoutMs },
     );
   });
 });

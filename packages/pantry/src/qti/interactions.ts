@@ -86,6 +86,7 @@ import {
   fin,
   key,
   lexicalForm,
+  mirrors,
   natural,
   on,
   pg,
@@ -542,20 +543,19 @@ export const Interaction = relation(
 );
 
 /**
- * An interaction's `response-identifier`, keyed by the interaction's node: its {@link nodeRef}
- * tuple, its document's root kind and the response identifier collapsed. It is the optional part of
- * the {@link Interaction}: an interaction that writes no `response-identifier` has none.
+ * That an interaction writes a `response-identifier`, keyed by the interaction's node: its
+ * {@link nodeRef} tuple. It is the optional part of the {@link Interaction}: an interaction that
+ * writes no `response-identifier` has none, and one that writes one has it, both ways. The name it
+ * binds is its {@link BoundVariable}'s, the one row every law over a binding's name reads.
  */
 export const Binding = relation(
   "Binding",
   {
     document: uuid,
-    identifier: keyText,
     kind: closedId(NodeKind),
     nearest: uuid,
     node: uuid,
     parent: uuid,
-    rootKind: closedId(NodeKind),
     start: natural,
     version: closedId(SchemaVersion),
   },
@@ -1676,6 +1676,13 @@ const lastWhere = (h: HotspotRow) =>
   );
 
 /**
+ * The read `response-identifier` of each interaction, one per interaction, keyed by its node: the
+ * attribute's own key fixes its name, and the key over the selection states it so that
+ * {@link Binding} mirrors it.
+ */
+const responseIdentifiers = readOf(["response-identifier"], interactionKinds);
+
+/**
  * The interactions not inside a feedback element: the one selection of `Node` O3 reads, a target,
  * so it adds a generated column and a UNIQUE to `Node` and no foreign key. A feedback element
  * enters `fb` (`Enters`, read as a set, since grizzle's set algebra takes no set literal), and an
@@ -1801,7 +1808,7 @@ const sectionPlacements = select(Instance, (i) =>
  * - **interactions:** each interaction's {@link Interaction} (its node's, of an interaction kind),
  *   the owner of its choices.
  * - **bindings:** each interaction's {@link Binding}, where it writes a `response-identifier` (its
- *   node's, its identifier that attribute's, the part of its {@link Interaction}); each item
+ *   node's, the part of its {@link Interaction}, exactly where the attribute is read); each item
  *   binding's {@link BoundVariable}, which has its {@link BindingDeclaration} ("Binding declared",
  *   reading 75), a response declaration's, whose fields are the binding's and back; each
  *   declaration of a type `BindingFit` or `RecordBindingFit` admits, the custom and portable custom
@@ -2124,10 +2131,8 @@ export const interactionLawsByName = {
     contained(on(elementForms, "node"), on(moduleElements, "parent")),
     pciModuleFamily,
     contained(on(Binding, "node"), on(Interaction, "node")),
-    contained(
-      on(readOf(["response-identifier"], interactionKinds), "node", "rootKind", "value"),
-      on(Binding, "node", "rootKind", "identifier"),
-    ),
+    key(on(responseIdentifiers, "node")),
+    mirrors(on(responseIdentifiers, "node"), on(Binding, "node")),
     check("E1_derived", Binding, (b) => b.in(b.kind, interactionKinds)),
     contained(
       on(

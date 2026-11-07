@@ -59,6 +59,13 @@ import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, LawName } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 45.5 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * The oracle's tables over the installed grammar, which the importer reads.
  */
 const laws = lawsOf(grammar);
@@ -268,7 +275,7 @@ describe("the bindings the fit laws judge", () => {
               }).pipe(Effect.scoped),
           ),
         ),
-      600_000,
+      testTimeoutMs,
     );
   });
 });

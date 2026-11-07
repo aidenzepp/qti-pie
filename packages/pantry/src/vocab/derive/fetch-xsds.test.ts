@@ -56,6 +56,13 @@ import { scratchDirectory } from "#pantry/test/scratch.ts";
 import type { XsdSource } from "#pantry/vocab/derive/sources.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 5.8 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The package directory, `packages/pantry`.
  */
 const packageRoot = path.resolve(import.meta.dirname, "../../..");
@@ -916,6 +923,6 @@ describe("fetchPinned", () => {
           },
         ),
       ).pipe(Effect.provide(fetchLayer)),
-    120_000,
+    testTimeoutMs,
   );
 });

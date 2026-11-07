@@ -42,6 +42,13 @@ import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 16.4 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The composed grammar.
  */
 const grammar = Result.getOrThrow(composed());
@@ -396,6 +403,6 @@ describe("expression typing by the information model's tables", () => {
         assert.isAbove(cases.length, 0, "the box holds cases");
         assert.deepStrictEqual(wrong, [], "the oracle and the tables agree on every case");
       }),
-    { timeout: 120_000 },
+    { timeout: testTimeoutMs },
   );
 });

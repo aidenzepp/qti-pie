@@ -45,6 +45,13 @@ import { judge, lawNames, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracl
 import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 5 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * How long building a schema over every relation of `Qti` may take: its statements are planned
  * whole, which takes some seconds beside the composed grammar.
  * Measured 2026-11-07: 2.8 s at a load average of 63 to 73.
@@ -857,7 +864,7 @@ const operatorCase: Gen<OperatorCase> = (source) =>
     ],
   );
 
-describe("test/oracle.ts, the operator laws past the box", { timeout: 600_000 }, () => {
+describe("test/oracle.ts, the operator laws past the box", { timeout: testTimeoutMs }, () => {
   it.effect(
     "refuses each operator a swarm draws under its law exactly where the specification does",
     (ctx) =>

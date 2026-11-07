@@ -77,6 +77,13 @@ import {
 } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 7 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * The relations `metadata.ts` declares, by name.
  */
 const metadataRelations = {
@@ -381,7 +388,7 @@ const dateCases: Gen<DateCase> = (source) => ({
  */
 type DateSituation = "valid" | "leap day" | "not a day" | "not the form";
 
-describe("qti/metadata.ts, the calendar", { timeout: 120_000 }, () => {
+describe("qti/metadata.ts, the calendar", { timeout: testTimeoutMs }, () => {
   it.effect(
     "admits exactly DateDType's values: a typed day is lexicalForm(date) between whitespace",
     (ctx) =>
@@ -523,7 +530,7 @@ const usageTextSituation = (unjudged: boolean, admitted: boolean): UsageTextSitu
   return admitted ? "admitted" : "refused";
 };
 
-describe("qti/metadata.ts, the usage typed value", { timeout: 120_000 }, () => {
+describe("qti/metadata.ts, the usage typed value", { timeout: testTimeoutMs }, () => {
   it.effect(
     "judges a usage value's text as the law oracle reads a typed value written as element content",
     (ctx) =>
@@ -567,36 +574,40 @@ describe("qti/metadata.ts, the usage typed value", { timeout: 120_000 }, () => {
   );
 });
 
-describe("qti/metadata.ts, the usage typed value by the law oracle", { timeout: 120_000 }, () => {
-  it.effect("breaks Usage typed value on no usage-data fixture the importer accepts", () =>
-    // Oracle: the specification as a checker, reading 105: a `ud:value` that writes `baseType`
-    // and no `fieldIdentifier` is untyped text, so `usage3-integer-float` (`0.87` under integer,
-    // outside a record) is accepted, as the oracle judges it.
-    // Bound: `usage3-integer-float`, `usage3` (no value writes a baseType), `usage3-typed` (24 typed values outside a
-    // record) and `usage3-float-padded` (a padded float outside a record).
-    Effect.gen(function* usageOracle() {
-      for (const [name, breaks] of [
-        ["usage3", 0],
-        ["usage3-integer-float", 0],
-        ["usage3-typed", 0],
-        ["usage3-float-padded", 0],
-      ] as const satisfies readonly (readonly [FixtureName, number])[]) {
-        const judgment = yield* judge(
-          yield* readPackage(yield* materialize(name)),
-          grammar,
-          lawsOf(grammar),
-        );
-        assert.strictEqual(judgment._tag, "Judged", name);
+describe(
+  "qti/metadata.ts, the usage typed value by the law oracle",
+  { timeout: testTimeoutMs },
+  () => {
+    it.effect("breaks Usage typed value on no usage-data fixture the importer accepts", () =>
+      // Oracle: the specification as a checker, reading 105: a `ud:value` that writes `baseType`
+      // and no `fieldIdentifier` is untyped text, so `usage3-integer-float` (`0.87` under integer,
+      // outside a record) is accepted, as the oracle judges it.
+      // Bound: `usage3-integer-float`, `usage3` (no value writes a baseType), `usage3-typed` (24 typed values outside a
+      // record) and `usage3-float-padded` (a padded float outside a record).
+      Effect.gen(function* usageOracle() {
+        for (const [name, breaks] of [
+          ["usage3", 0],
+          ["usage3-integer-float", 0],
+          ["usage3-typed", 0],
+          ["usage3-float-padded", 0],
+        ] as const satisfies readonly (readonly [FixtureName, number])[]) {
+          const judgment = yield* judge(
+            yield* readPackage(yield* materialize(name)),
+            grammar,
+            lawsOf(grammar),
+          );
+          assert.strictEqual(judgment._tag, "Judged", name);
 
-        const found =
-          judgment._tag === "Judged"
-            ? judgment.breaches.filter(({ law }) => law === "Usage typed value")
-            : [];
-        assert.lengthOf(found, breaks, name);
-      }
-    }).pipe(Effect.provide(NodeServices.layer)),
-  );
-});
+          const found =
+            judgment._tag === "Judged"
+              ? judgment.breaches.filter(({ law }) => law === "Usage typed value")
+              : [];
+          assert.lengthOf(found, breaks, name);
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+  },
+);
 
 /**
  * The sources of the learning resource type box: none, the empty source, one of whitespace alone,
@@ -725,7 +736,7 @@ const resourceTypeSituation = (type: TypeSketch, refused: boolean): ResourceType
     : "accepted, an allowed value";
 };
 
-describe("qti/metadata.ts, the learning resource type", { timeout: 300_000 }, () => {
+describe("qti/metadata.ts, the learning resource type", { timeout: testTimeoutMs }, () => {
   it.effect(
     "refuses exactly the types of the LOM vocabulary whose value is exam or self assessment, as the specification, the database's laws over the rows and the law oracle each read them",
     (ctx) =>

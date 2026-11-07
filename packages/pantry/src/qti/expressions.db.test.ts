@@ -69,7 +69,7 @@ import {
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { itemRefPackageEntries } from "#pantry/test/gen/item-ref-declarations.ts";
-import type { ItemRefPackage } from "#pantry/test/gen/item-ref-declarations.ts";
+import type { ItemRefPackage, ItemTarget } from "#pantry/test/gen/item-ref-declarations.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -1134,6 +1134,19 @@ const itemRefCases: readonly (readonly [string, ItemRefPackage, string | undefin
   ],
 ];
 
+/**
+ * The rules each item ref target's bare package is refused under, as the law oracle predicts them,
+ * none for the LTI link (lane NIL's NS3): another type is the item ref's law alone; an unlisted
+ * path, a stray file and a missing item file break their packaging law beside it.
+ */
+const itemRefTargetCases: readonly (readonly [ItemTarget, readonly string[]])[] = [
+  ["lti", []],
+  ["other", ["item-ref-target"]],
+  ["unlisted", ["file-exists", "item-ref-target"]],
+  ["stray", ["file-listed", "item-ref-target"]],
+  ["missing", ["entry-kind", "file-exists", "item-ref-target"]],
+];
+
 describe.skipIf(!hasLease)(
   "qti/expressions.db.test.ts, an item ref's declarations on the lease",
   () => {
@@ -1171,6 +1184,48 @@ describe.skipIf(!hasLease)(
                     : [outcome.kind],
                   [rule],
                   `${name}: every law the refusal names keeps ${rule}: ${JSON.stringify(outcome)}`,
+                );
+              }
+            }
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
+      );
+
+      it.effect(
+        "refuses an item ref that names no item of the package under Item ref target and the package laws its cause breaks, and accepts an LTI link",
+        () =>
+          // Oracle: PostgreSQL, every law of the schema over the import's one ChangeSet, against
+          // the rules the law oracle predicts for the same packages
+          // (`item-ref-declarations.oracle.test.ts`): an item ref's target and item are rows only
+          // where the package holds them (lane NIL's NS3), so the item ref, and the assembly's name
+          // that reads them, are refused under "Item ref target" beside the packaging law a missing
+          // or unlisted file breaks, and under no law of a sentinel's. Bound: one bare item ref for
+          // each target, the LTI link the control.
+          Effect.gen(function* itemRefTargets() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            for (const [target, rules] of itemRefTargetCases) {
+              const input: ItemRefPackage = { defaults: [], mappings: [], target };
+              const dir = yield* scopedPackage(itemRefPackageEntries(input));
+              const program = yield* readProgram(dir);
+              const outcome = yield* db.apply(changeSetOf(Author, program.inputs), {});
+              const refused =
+                outcome.kind === "invariant-rejected"
+                  ? outcome.refused.laws.map((law): string | undefined =>
+                      Option.getOrUndefined(ruleOfLaws([law])),
+                    )
+                  : [outcome.kind];
+
+              if (rules.length === 0) {
+                assert.strictEqual(
+                  outcome.kind,
+                  "accepted",
+                  `${target}: ${JSON.stringify(outcome)}`,
+                );
+              } else {
+                assert.strictEqual(outcome.kind, "invariant-rejected", target);
+                assert.isTrue(
+                  refused.every((rule) => rule !== undefined && rules.includes(rule)),
+                  `${target}: every law the refusal names keeps one of ${rules.join(", ")}: ${JSON.stringify(outcome)}`,
                 );
               }
             }

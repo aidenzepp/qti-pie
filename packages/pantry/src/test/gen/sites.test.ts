@@ -44,6 +44,13 @@ import type { HrefCase, SiteBox, SiteName } from "#pantry/test/gen/sites.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 284.1 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 2_400_000;
+
+/**
  * The rules a site's laws, the required href of a section ref, or an absent file refuse a package
  * under: the include's target, the section ref's document entry, the href's reachability, AL3 and
  * the file's existence.
@@ -340,7 +347,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
           judged,
         ),
       ),
-    { timeout: 2_400_000 },
+    { timeout: testTimeoutMs },
   );
 
   it.effect(
@@ -391,6 +398,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
             }).pipe(Effect.scoped),
         ),
       ),
-    { timeout: 2_400_000 },
+    { timeout: testTimeoutMs },
   );
 });

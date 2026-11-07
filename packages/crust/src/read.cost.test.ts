@@ -14,6 +14,13 @@ import { Effect } from "effect";
 import { readXml } from "#crust/read.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 24 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 180_000;
+
+/**
  * The chain depths the gate reads, each with how many times it is read.
  */
 const SIZES = [
@@ -83,6 +90,6 @@ describe("the reader's cost", () => {
           assert.isAtMost(cost, FLAT * (smallest ?? 0), shown);
         }
       }),
-    180_000,
+    testTimeoutMs,
   );
 });

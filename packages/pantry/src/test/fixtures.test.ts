@@ -30,6 +30,13 @@ import type { Edit, FixtureName, FixtureSpec } from "#pantry/test/fixtures.ts";
 import { settings as hostSettings } from "#pantry/test/settings.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 53.8 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 180_000;
+
+/**
  * The directory every test root is made under: the package's gitignored `work/`.
  */
 const workDirectory = path.resolve(import.meta.dirname, "../../work");
@@ -1663,7 +1670,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -1711,7 +1718,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.notInclude(noPart, "<qti-test-part");
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -1738,7 +1745,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.include(ambiguous, 'identifier="SCORE" cardinality="single" base-type="float"');
         }),
       ),
-    60_000,
+    testTimeoutMs,
   );
 
   it.effect("extmeta's record keeps the two xml:lang attributes the published file carries", () =>

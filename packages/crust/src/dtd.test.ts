@@ -92,7 +92,6 @@ describe("the XML declaration", () => {
       assert.instanceOf(error, WellFormednessError);
       assert.strictEqual(error.line, 2);
       assert.strictEqual(error.column, 11);
-      assert.isFalse(error.afterSubstitution);
     }),
   );
 
@@ -208,7 +207,6 @@ describe("general entities", () => {
       assert.instanceOf(error, WellFormednessError);
       assert.strictEqual(error.line, 1);
       assert.strictEqual(error.column, 43);
-      assert.isFalse(error.afterSubstitution);
     }),
   );
 
@@ -618,7 +616,7 @@ const substituted = (text: string) =>
 describe("substituting entities", () => {
   it.effect("puts the replacement text of a content reference into the body as markup", () =>
     Effect.gen(function* substitutesContent() {
-      const { body } = yield* substituted('<!DOCTYPE a [<!ENTITY m "<b>x</b>">]><a>1&m;2</a>');
+      const body = yield* substituted('<!DOCTYPE a [<!ENTITY m "<b>x</b>">]><a>1&m;2</a>');
 
       assert.strictEqual(body, '<!DOCTYPE a [<!ENTITY m "<b>x</b>">]><a>1<b>x</b>2</a>');
     }),
@@ -626,7 +624,7 @@ describe("substituting entities", () => {
 
   it.effect("rescans the replacement text for further references", () =>
     Effect.gen(function* rescans() {
-      const { body } = yield* substituted(
+      const body = yield* substituted(
         '<!DOCTYPE a [<!ENTITY x "1"><!ENTITY y "&x;&x;"><!ENTITY z "[&y;]">]><a>&z;</a>',
       );
 
@@ -636,7 +634,7 @@ describe("substituting entities", () => {
 
   it.effect("substitutes a line feed of the replacement text into an attribute literal", () =>
     Effect.gen(function* substitutesLineFeed() {
-      const { body } = yield* substituted('<!DOCTYPE a [<!ENTITY n "p&#10;q">]><a t="&n;"/>');
+      const body = yield* substituted('<!DOCTYPE a [<!ENTITY n "p&#10;q">]><a t="&n;"/>');
 
       assert.isTrue(body.endsWith('<a t="p\nq"/>'));
     }),
@@ -644,7 +642,7 @@ describe("substituting entities", () => {
 
   it.effect("writes a quote of the replacement text in an attribute literal as a reference", () =>
     Effect.gen(function* substitutesQuote() {
-      const { body } = yield* substituted(
+      const body = yield* substituted(
         "<!DOCTYPE a [<!ENTITY q 'say \"hi\" it&#39;s'>]><a t=\"&q;\" u='&q;'/>",
       );
 
@@ -656,7 +654,7 @@ describe("substituting entities", () => {
 
   it.effect("leaves a character reference the document wrote as written in an attribute", () =>
     Effect.gen(function* keepsCharacterReference() {
-      const { body } = yield* substituted('<!DOCTYPE a [<!ENTITY n "x">]><a t="&#10;&n;"/>');
+      const body = yield* substituted('<!DOCTYPE a [<!ENTITY n "x">]><a t="&#10;&n;"/>');
 
       assert.isTrue(body.endsWith('<a t="&#10;x"/>'));
     }),
@@ -664,7 +662,7 @@ describe("substituting entities", () => {
 
   it.effect("leaves a '<' of replacement text in an attribute for the parser to refuse", () =>
     Effect.gen(function* keepsAngle() {
-      const { body } = yield* substituted('<!DOCTYPE a [<!ENTITY l "<">]><a t="&l;"/>');
+      const body = yield* substituted('<!DOCTYPE a [<!ENTITY l "<">]><a t="&l;"/>');
 
       assert.isTrue(body.endsWith('<a t="<"/>'));
     }),
@@ -672,7 +670,7 @@ describe("substituting entities", () => {
 
   it.effect("expands a reference nested in the replacement text of an attribute reference", () =>
     Effect.gen(function* nestsInAttribute() {
-      const { body } = yield* substituted(
+      const body = yield* substituted(
         '<!DOCTYPE a [<!ENTITY x "\'"><!ENTITY y "[&x;]">]><a t="&y;"/>',
       );
 
@@ -683,7 +681,7 @@ describe("substituting entities", () => {
   it.effect("leaves references inside a comment, a PI and a CDATA section untouched", () =>
     Effect.gen(function* skipsHidden() {
       const text = '<!DOCTYPE a [<!ENTITY m "X">]><a><!-- &m; --><?t &m;?><![CDATA[&m;]]>&m;</a>';
-      const { body } = yield* substituted(text);
+      const body = yield* substituted(text);
 
       assert.isTrue(body.endsWith("<a><!-- &m; --><?t &m;?><![CDATA[&m;]]>X</a>"));
     }),
@@ -693,34 +691,9 @@ describe("substituting entities", () => {
     Effect.gen(function* keepsProlog() {
       const text = '<?xml version="1.0"?>\n<!DOCTYPE a [<!ENTITY m "X">]>\n<a>&m;</a>';
       const prolog = yield* lexProlog(text);
-      const { body } = yield* substitute(text, prolog);
+      const body = yield* substitute(text, prolog);
 
       assert.strictEqual(body.slice(0, prolog.bodyStart), text.slice(0, prolog.bodyStart));
-    }),
-  );
-
-  it.effect("reports a substitution only after the first one", () =>
-    Effect.gen(function* reportsAfter() {
-      const text = '<!DOCTYPE a [<!ENTITY m "XYZ">]><a><b/>&m;<c/></a>';
-      const { afterSubstitution, body } = yield* substituted(text);
-      const reference = body.lastIndexOf("XYZ");
-
-      assert.isFalse(afterSubstitution(0));
-      assert.isFalse(afterSubstitution(reference));
-      assert.isTrue(afterSubstitution(reference + 1));
-      assert.isTrue(afterSubstitution(body.length));
-    }),
-  );
-
-  it.effect("reports after an empty replacement from the offset the reference stood at", () =>
-    Effect.gen(function* reportsEmpty() {
-      const { afterSubstitution, body } = yield* substituted(
-        '<!DOCTYPE a [<!ENTITY e "">]><a>&e;<b/></a>',
-      );
-      const next = body.indexOf("<b/>");
-
-      assert.isFalse(afterSubstitution(next - 1));
-      assert.isTrue(afterSubstitution(next));
     }),
   );
 });
@@ -812,7 +785,7 @@ describe("the expansion budget", () => {
         subset += `<!ENTITY e${n} "&e${n - 1};">`;
       }
       const text = `<!DOCTYPE a [${subset}]><a>&e19;</a>`;
-      const { body } = yield* lexProlog(text).pipe(Effect.flatMap((p) => substitute(text, p)));
+      const body = yield* lexProlog(text).pipe(Effect.flatMap((p) => substitute(text, p)));
 
       assert.isTrue(body.endsWith("<a>x</a>"));
     }),

@@ -23,6 +23,13 @@ import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 38.7 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * The composed grammar of production, failing the test that reads it when a generator refuses.
  */
 const grammar = Effect.fromResult(composed());
@@ -104,7 +111,7 @@ describe("the composition", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -439,7 +446,7 @@ describe("spec reading 90, through the codec", () => {
           ),
         );
       }),
-    300_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -586,6 +593,6 @@ describe("spec reading 109, wild IDs", () => {
           ),
         );
       }),
-    120_000,
+    testTimeoutMs,
   );
 });

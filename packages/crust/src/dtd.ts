@@ -458,7 +458,6 @@ const failure = (
   const where = Option.getOrElse(cursor.anchor, () => offset);
 
   return new WellFormednessError({
-    afterSubstitution: false,
     ...positionOf(cursor.source, where),
     message,
   });
@@ -1647,18 +1646,6 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
 });
 
 /**
- * The document text with its general entities substituted, and the question `p1-09` asks of it.
- *
- * `body` is the whole text: the prolog and the DOCTYPE verbatim, then the body with each declared
- * entity reference replaced. `afterSubstitution` says whether a substitution precedes an offset
- * into `body`, so a reader knows when a line and column no longer match the source.
- */
-export interface Substituted {
-  readonly afterSubstitution: (offset: number) => boolean;
-  readonly body: string;
-}
-
-/**
  * How a quote of replacement text is written inside an attribute value literal.
  */
 const ATTRIBUTE_QUOTES: ReadonlyMap<string, string> = new Map([
@@ -1730,21 +1717,12 @@ const declaredReferenceAt = (
  *   references open too much.
  * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#entproc XML 1.0, section 4.4}
  */
-export const substitute = (
-  text: string,
-  prolog: Prolog,
-): Effect.Effect<Substituted, ReaderRefusal> =>
+export const substitute = (text: string, prolog: Prolog): Effect.Effect<string, ReaderRefusal> =>
   Effect.suspend(() => {
     const { bodyStart, entities } = prolog;
     const budget = expansionBudget(text.length, prolog.expanded);
     const opened = { refusal: Option.none<ReaderRefusal>() };
-    let first = Option.none<number>();
     let body = text.slice(0, bodyStart);
-    const noteSubstitution = (length: number) => {
-      if (Option.isNone(first)) {
-        first = Option.some(length === 0 ? body.length : body.length + 1);
-      }
-    };
 
     const open = (length: number, depth: number, name: string): boolean => {
       opened.refusal = overBudget(budget, length, depth, name);
@@ -1800,7 +1778,6 @@ export const substitute = (
                 : Option.none();
             if (Option.isSome(reference)) {
               const { name, replacement } = reference.value;
-              noteSubstitution(replacement.length);
               if (open(replacement.length, depth + 1, name)) {
                 body += expandAttribute(replacement, depth + 1);
               }
@@ -1837,7 +1814,6 @@ export const substitute = (
           const reference = declaredReferenceAt(source, offset, entities);
           if (Option.isSome(reference)) {
             const { name, replacement } = reference.value;
-            noteSubstitution(replacement.length);
             if (open(replacement.length, depth + 1, name)) {
               scanContent(replacement, depth + 1);
             }
@@ -1862,9 +1838,5 @@ export const substitute = (
       return Effect.fail(opened.refusal.value);
     }
 
-    return Effect.succeed({
-      afterSubstitution: (offset: number) =>
-        Option.exists(first, (threshold) => offset >= threshold),
-      body,
-    });
+    return Effect.succeed(body);
   });

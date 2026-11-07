@@ -15,6 +15,13 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 0.9 s at a load average of 75, under
+ * V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * How long one case may take: it shreds three small documents, so a minute only bounds a hang.
  */
 const caseHang = Duration.minutes(1);
@@ -201,6 +208,6 @@ describe("contextsOf", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });

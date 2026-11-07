@@ -29,6 +29,13 @@ import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { globalKinds, vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 18.5 s at a load average of 75,
+ * under V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 240_000;
+
+/**
  * The composed grammar every case is judged by.
  */
 const grammar = Result.getOrThrow(composed());
@@ -258,7 +265,7 @@ describe("model/shred.ts and test/oracle.ts, a document's root", () => {
             }).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-    240_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -321,6 +328,6 @@ describe("model/shred.ts and test/oracle.ts, a document's root", () => {
             }).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-    240_000,
+    testTimeoutMs,
   );
 });

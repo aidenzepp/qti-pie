@@ -19,6 +19,13 @@ import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 4.6 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 60_000;
+
+/**
  * The composed grammar every seed is judged by.
  */
 const grammar = Result.getOrThrow(composed());
@@ -326,7 +333,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               Formatter.format(accepted),
             );
           }),
-        60_000,
+        testTimeoutMs,
       );
     }
   },

@@ -12,6 +12,13 @@ import { ascii, bytesOf, declared } from "#crust/test/bytes.ts";
 import { withoutBuffer } from "#crust/test/without-buffer.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 12.2 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * Builds a UTF-16 document of the Basic Multilingual Plane `text` with its byte order mark, in the
  * byte order named.
  */
@@ -348,7 +355,7 @@ describe("decode refuses every lone surrogate under decode", () => {
           }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });
 

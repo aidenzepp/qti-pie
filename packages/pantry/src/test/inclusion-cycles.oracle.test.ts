@@ -36,6 +36,13 @@ import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 42 s at a load average of 68 to 108,
+ * its slowest test.
+ */
+const testTimeoutMs = 240_000;
+
+/**
  * The composed grammar every case is judged by.
  */
 const grammar = Result.getOrThrow(composed());
@@ -198,7 +205,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             ),
           );
         }),
-      240_000,
+      testTimeoutMs,
     );
   },
 );

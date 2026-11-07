@@ -55,6 +55,13 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 140.2 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 1_200_000;
+
+/**
  * Every generated package's write program, with the package's literal, in the order the searches
  * drew them, with the list of inserts it passes to grizzle: what the last tests compile the
  * distinct lists of.
@@ -278,7 +285,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
           ),
         );
       }),
-    { timeout: 1_200_000 },
+    { timeout: testTimeoutMs },
   );
 
   it.effect(
@@ -310,21 +317,25 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
           `${text}${drawnCase === "" ? "" : `\nthe generated case: ${drawnCase}`}`,
         );
       }),
-    { timeout: 1_200_000 },
+    { timeout: testTimeoutMs },
   );
 
-  it("draws write programs of exactly the lists of inserts it measured, one", () => {
-    // Oracle: the specification as a checker, `changeSetOf`'s one list of inserts: what qti passes
-    // to grizzle does not depend on the package. A change that makes it depend grows the set past
-    // `distinctMeasured`, and this fails so that someone revisits the compile above.
-    // Bound: the 368 packages the first test drew.
-    const found = distinct();
+  it(
+    "draws write programs of exactly the lists of inserts it measured, one",
+    () => {
+      // Oracle: the specification as a checker, `changeSetOf`'s one list of inserts: what qti passes
+      // to grizzle does not depend on the package. A change that makes it depend grows the set past
+      // `distinctMeasured`, and this fails so that someone revisits the compile above.
+      // Bound: the 368 packages the first test drew.
+      const found = distinct();
 
-    assert.isAbove(programs.length, 0, "no package was drawn");
-    assert.strictEqual(
-      found.length,
-      distinctMeasured,
-      `the drawn write programs have ${String(found.length)} distinct lists of inserts, first drawn by ${found.map(([, { literal }]) => literal).join("; ")}`,
-    );
-  }, 600_000);
+      assert.isAbove(programs.length, 0, "no package was drawn");
+      assert.strictEqual(
+        found.length,
+        distinctMeasured,
+        `the drawn write programs have ${String(found.length)} distinct lists of inserts, first drawn by ${found.map(([, { literal }]) => literal).join("; ")}`,
+      );
+    },
+    testTimeoutMs,
+  );
 });

@@ -64,6 +64,19 @@ import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 51 s at a load average of 68 to 108,
+ * its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
+ * The timeout, in milliseconds, of the search that runs only under `GR8DES_GENETIC=1`: the long
+ * budget's hang guard, measured by the long run, not the free one.
+ */
+const longTimeoutMs = 3_600_000;
+
+/**
  * The oracle's law tables over the installed grammar, which the importer reads.
  */
 const laws = lawsOf(grammar);
@@ -195,7 +208,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
           }).pipe(Effect.scoped),
         ),
-      600_000,
+      testTimeoutMs,
     );
 
     it.effect(
@@ -254,7 +267,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
           }).pipe(Effect.scoped),
         ),
-      600_000,
+      testTimeoutMs,
     );
 
     it.effect.skipIf(!settings.geneticRequested)(
@@ -338,7 +351,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
           }).pipe(Effect.scoped),
         ),
-      3_600_000,
+      longTimeoutMs,
     );
   },
 );

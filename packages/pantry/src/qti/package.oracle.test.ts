@@ -35,6 +35,13 @@ import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { judge, lawNames, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 0.6 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The file system and processes the fixtures' materializer and `readPackage` need.
  */
 const TestLayer = NodeChildProcessSpawner.layer.pipe(
@@ -343,7 +350,7 @@ describe("qti/package.ts", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(

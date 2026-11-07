@@ -14,6 +14,13 @@ import type * as Closed from "#pantry/grammar/closed.ts";
 import type * as Sequencing from "#pantry/vocab/sequencing.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 0 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * What the composition did: the rows each `closed` call stated, by relation name in call order, and
  * the automata `automatonOf` built.
  */
@@ -88,7 +95,7 @@ describe("the content grammar's work", () => {
           Object.fromEntries(contentRelations.map((name) => [name, [install[name].rows.length]])),
         );
       }),
-    600_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -112,6 +119,6 @@ describe("the content grammar's work", () => {
           install.ContentModel.handles.length,
         );
       }),
-    600_000,
+    testTimeoutMs,
   );
 });

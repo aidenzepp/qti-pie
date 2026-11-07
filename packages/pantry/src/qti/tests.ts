@@ -862,8 +862,9 @@ export const linkResourceTypes: readonly (typeof ResourceType.handles)[number][]
  * type of the resource of the package whose href's path that is (`NamedHref`), which "Item ref
  * target" judges: the URI an item ref holds is "the URI used to refer to the item's file (e.g.,
  * elsewhere in the same content package)" (information model §5.6.5, `href`), so it names an item
- * of the package, or an LTI link (R36). An item it names is an {@link ItemRefDocument} row of its
- * own.
+ * of the package, or an LTI link (R36). It is a row only where a resource of the package names the
+ * path, so an item ref naming none has no target, which the mirror over the item refs refuses. An
+ * item it names is an {@link ItemRefDocument} row of its own.
  *
  * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
  * its package, and testWithLti's two item refs name LTI links; both packages are refused at the
@@ -876,9 +877,10 @@ export const ItemRefTarget = relation(
 );
 
 /**
- * The item document an item ref names, keyed by the item ref's node: one row for each
- * {@link ItemRefTarget} of the item type, and none for an LTI link's. Every law that reads what an
- * item ref's item declares reads it here.
+ * The item document an item ref names, keyed by the item ref's node: a row only where the package
+ * holds a document at the path of an {@link ItemRefTarget} of the item type, and none for an LTI
+ * link's, so an item resource whose file the package lacks has none, which "Item ref target"
+ * refuses. Every law that reads what an item ref's item declares reads it here.
  */
 export const ItemRefDocument = relation(
   "ItemRefDocument",

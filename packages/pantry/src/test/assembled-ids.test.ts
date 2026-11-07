@@ -35,6 +35,13 @@ import { judgedLaws } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 240.3 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * Which of the three carriers share their ID: none, two of them, or all three.
  */
 const alikes = [
@@ -268,6 +275,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("the IDs of an assemble
             ),
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 });

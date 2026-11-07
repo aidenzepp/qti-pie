@@ -27,6 +27,13 @@ import { materialize } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 122.4 s at a load average of 75,
+ * under V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * The composed grammar every case is judged by.
  */
 const grammar = Result.getOrThrow(composed());
@@ -242,7 +249,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             ),
           );
         }),
-      300_000,
+      testTimeoutMs,
     );
 
     it.effect(

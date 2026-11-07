@@ -36,6 +36,13 @@ import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { Domain } from "#pantry/vocab/inventory/types.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 16.1 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 900_000;
+
+/**
  * What the wrapped functions saw: each definition `compile` compiled, with its reading, in call
  * order, and each input `generate` was given.
  */
@@ -311,7 +318,7 @@ describe("the attribute grammar's domain work", () => {
 
         assert.isAbove(compiles.size, 0);
       }),
-    900_000,
+    testTimeoutMs,
   );
 });
 
@@ -638,7 +645,7 @@ describe("the attribute grammar's domain work on toy declarations", () => {
           (draws, c) => toyCase(toyDeclarations(draws), c),
         ),
       ),
-    900_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -676,7 +683,7 @@ describe("the attribute grammar's domain work on toy declarations", () => {
           (draws, c) => toyCase(toyDeclarations(draws), c),
         ),
       ),
-    900_000,
+    testTimeoutMs,
   );
 });
 
@@ -711,6 +718,6 @@ describe("the attribute grammar's domain work through a shared reader", () => {
           ({ first, second }, c) => sharedCase(toyDeclarations(first), toyDeclarations(second), c),
         ),
       ),
-    900_000,
+    testTimeoutMs,
   );
 });

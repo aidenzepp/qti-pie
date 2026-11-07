@@ -37,6 +37,13 @@ import { keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 13.5 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 1_800_000;
+
+/**
  * The oracle's tables over the installed grammar, built once.
  */
 const laws = lawsOf(grammar);
@@ -830,7 +837,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
           assert.strictEqual(exhausted.cases, boxCases.length);
         }),
-      { timeout: 1_800_000 },
+      { timeout: testTimeoutMs },
     );
 
     test.effect(
@@ -870,7 +877,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             ),
           ),
         ),
-      { timeout: 1_800_000 },
+      { timeout: testTimeoutMs },
     );
   },
 );
