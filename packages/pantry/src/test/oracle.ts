@@ -120,7 +120,6 @@ import type {
   XdmDocument,
   XdmElement,
 } from "#pantry/model/xdm.ts";
-import { dataSsmlFaultIn } from "#pantry/vocab/data-ssml.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
@@ -136,6 +135,7 @@ import {
   lomNamedTypes,
   objectRoots,
 } from "#pantry/test/oracle-laws.ts";
+import { dataSsmlBreachIn } from "#pantry/test/oracle-laws/data-ssml.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
@@ -6396,11 +6396,11 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
 
         const xml = yield* readDocument(path, file.bytes);
         const tree = yield* shredDocument(path, xml, version, shredGrammar);
-        const fault = dataSsmlFaultIn(tree);
-        if (fault !== undefined) {
+        const breach = dataSsmlBreachIn(tree);
+        if (Option.isSome(breach)) {
           return yield* Effect.fail<CodecRefusal>({
             _tag: "CodecRefusal",
-            detail: `${path} at ${fault.path}: ${fault.detail}`,
+            detail: `${path} at ${breach.value}: Data-SSML 1.0 does not admit the value`,
             document: path,
             rule: "attribute-lexical",
           });
