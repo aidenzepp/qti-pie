@@ -2762,7 +2762,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      changes no direction), so `<div dir="rtl"><m:math>…<m:mrow dir="ltr"><m:maligngroup/>…` keeps its group in its cell
      and is accepted. By the same rule `<div dir="rtl"><m:math>…<m:mrow dir="rtl"><m:maligngroup/>…` is refused: the
      formula starts at `ltr`, so the `mrow`'s `rtl` changes direction and the group cannot pass it; a formula meant to
-     run right to left writes `dir="rtl"` on its `m:math`. A `dir` that spells neither `ltr` nor `rtl` changes no direction (MathML 3 lists only those two;
-     the value domain refuses another on a MathML element). This binds pantry and plate alike. This is not a case of
-     documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on audit e8db90e1's F6, under the operator's
-     standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
+     run right to left writes `dir="rtl"` on its `m:math`. A `dir` that spells neither `ltr` nor `rtl` changes no
+     direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
+     and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
+     audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
