@@ -246,14 +246,14 @@ const spelledIn = <Handle extends string>(
   );
 
 /**
- * The `ValueBase` handle a `BaseType` handle reads as: itself, which `ValueBase` spells, and
- * `unknown` for `none`, a record's, which has no base type.
+ * The `ValueBase` handle a `BaseType` handle reads as: itself, which `ValueBase` spells. A variable
+ * that has no base type, a record, reads as `unknown`, which no `BaseType` handle is.
  *
  * @param baseType - The declaration code.
  * @returns The expression-typing code.
  */
 export const valueBaseOf = (baseType: string): (typeof valueBases)[number] =>
-  baseType === "none" ? "unknown" : spelledIn(valueBases, baseType, "ValueBase");
+  spelledIn(valueBases, baseType, "ValueBase");
 
 /**
  * The `ValueCardinality` handle a `Cardinality` handle reads as: itself, which `ValueCardinality`
@@ -320,7 +320,7 @@ export const spelledBasesPattern = `^(?:${valueBases
  *
  * @see {@link https://www.w3.org/TR/xml-names/#NT-NCName | Namespaces in XML 1.0, NCName}
  */
-export const ncStart =
+const ncStart =
   "A-Z_a-z\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{2FF}\\u{370}-\\u{37D}\\u{37F}-\\u{1FFF}\\u{200C}-\\u{200D}\\u{2070}-\\u{218F}\\u{2C00}-\\u{2FEF}\\u{3001}-\\u{D7FF}\\u{F900}-\\u{FDCF}\\u{FDF0}-\\u{FFFD}\\u{10000}-\\u{EFFFF}";
 
 /**
@@ -328,7 +328,7 @@ export const ncStart =
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-NameChar | XML 1.0, NameChar}
  */
-export const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncStart}`;
+const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncStart}`;
 
 /**
  * The base types whose values a value domain's pattern judges, and that domain: QTI's base types
@@ -374,13 +374,11 @@ export const pairValuePattern = `^[\\t\\n\\r ]*[${ncStart}][${ncChar}]*[\\t\\n\\
 
 /**
  * The base types every text is a value of: `string`, whose whitespace is part of the value
- * (spec reading 7), and `file`, whose octets and content type no text of a value spells; and the
- * null object `none`, a record field's that writes no base type.
+ * (spec reading 7), and `file`, whose octets and content type no text of a value spells.
  */
 export const unjudgedBaseTypes = [
   "string",
   "file",
-  "none",
 ] as const satisfies readonly (typeof BaseType.handles)[number][];
 
 /**

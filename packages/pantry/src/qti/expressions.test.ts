@@ -21,6 +21,7 @@ import {
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import {
   BaseType,
+  builtInBaseTypes,
   BuiltInVariable,
   grammar,
   OperatorArity,
@@ -232,10 +233,14 @@ describe("qti/expressions.ts, declared", () => {
     const cardinalityOf = new Map(
       ValueCardinalityOf.rows.map(({ cardinality, value }) => [cardinality, value]),
     );
-    const installed = BuiltInVariable.rows.map(
-      ({ baseType, cardinality, root, variable }) =>
-        `${root} ${variable} ${valueOf.get(baseType) ?? "?"} ${cardinalityOf.get(cardinality) ?? "?"}`,
-    );
+    // A built-in with no base type, the record QTI_CONTEXT, reads `unknown` (`builtInBaseTypes`
+    // holds no row for it).
+    const installed = BuiltInVariable.rows.map(({ cardinality, root, variable }) => {
+      const typed = builtInBaseTypes.find((row) => row.root === root && row.variable === variable);
+      const base = typed === undefined ? "unknown" : (valueOf.get(typed.baseType) ?? "?");
+
+      return `${root} ${variable} ${base} ${cardinalityOf.get(cardinality) ?? "?"}`;
+    });
     const stated = builtInTypes.flatMap(({ baseType, cardinality, test, variable }) =>
       [...(test ? testRoots : itemRoots)].map(
         (root) => `${root} ${variable} ${baseType} ${cardinality}`,
@@ -320,7 +325,7 @@ describe("qti/expressions.ts, declared", () => {
       BaseTypePattern.rows.map(({ baseType }) => baseType).toSorted(),
       [...BaseType.handles].toSorted(),
     );
-    assert.deepStrictEqual([...unjudgedBaseTypes].toSorted(), ["file", "none", "string"]);
+    assert.deepStrictEqual([...unjudgedBaseTypes].toSorted(), ["file", "string"]);
   });
 
   it("reads reading 34's boolean and reading 45's integer", () => {

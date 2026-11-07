@@ -7,7 +7,6 @@
  * builder, which reads the tree's flat rows (`flatten`). Each typed key's value is PostgreSQL's,
  * generated from the split, so `#pantry/qti/mapping.db.test.ts` judges it.
  */
-import { lexicalForm, pg } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -42,19 +41,14 @@ import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 const xsInteger = /^[+-]?[0-9]+$/u;
 
 /**
- * The deleted schema's `xs:double` lexical space (`src/schema/patterns.ts` `xsDouble`).
+ * The deleted schema's `xs:double` lexical space (`src/schema/patterns.ts` `xsDouble`): the float
+ * keys that hold a typed value, every one of them (spec reading 154).
  */
 const xsDouble = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
- * Grizzle's lexical form of `double precision`: with {@link xsDouble}, the float keys that hold a
- * typed value, since every run of zeros a short key holds is within the key-text bound.
- */
-const grizzleDouble = new RegExp(lexicalForm(pg["double precision"]), "u");
-
-/**
  * Read a key as the value its mapping's base type gives it, as the walk compares keys: an integer
- * by `BigInt`, a float in grizzle's form by `Number`, and every other key as written.
+ * by `BigInt`, a float by `Number`, and every other key as written.
  *
  * @param baseType - The mapping's base type.
  * @param key - The key.
@@ -65,9 +59,7 @@ const typedOf = (baseType: string, key: string): string => {
     return String(BigInt(key));
   }
 
-  return baseType === "float" && xsDouble.test(key) && grizzleDouble.test(key)
-    ? String(Number(key))
-    : key;
+  return baseType === "float" && xsDouble.test(key) ? String(Number(key)) : key;
 };
 
 /**
@@ -246,8 +238,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
     (ctx) =>
       // Oracle: a second implementation, a direct walk of the XDM tree that numbers its entries in
       // document order, against the builder's read of the flat rows; each integer key's selection
-      // by the deleted `xsInteger`, and each float key's by the deleted `xsDouble` and grizzle's
-      // double form.
+      // by the deleted `xsInteger`, and each float key's by the deleted `xsDouble`.
       // Bound: every mapping of 3 base types with at most 4 entries over 3 keys and 2 values,
       // 4,665.
       searched(
@@ -282,8 +273,18 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
                 [...walked].map(([node, { key, mapping }]) => [node, node, mapping, key]),
               );
               for (const row of rows.MapKey.values()) {
-                assert.strictEqual(row.baseType, input.baseType);
+                assert.strictEqual(row.baseTypes, 1n);
               }
+
+              assert.deepStrictEqual(
+                [...rows.MapKeyType].map(([node, row]) => [
+                  node,
+                  row.mapping,
+                  row.key,
+                  row.baseType,
+                ]),
+                [...walked].map(([node, { key, mapping }]) => [node, mapping, key, input.baseType]),
+              );
 
               assert.deepStrictEqual(
                 [...rows.MapKeyInteger].map(([node, row]) => [node, row.key]),
@@ -297,13 +298,18 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
                 [...rows.MapKeyFloat].map(([node, row]) => [node, row.key]),
                 input.baseType === "float"
                   ? [...walked].flatMap(([node, { key }]) =>
-                      xsDouble.test(key) && grizzleDouble.test(key) ? [[node, key]] : [],
+                      xsDouble.test(key) ? [[node, key]] : [],
                     )
                   : [],
               );
               assert.deepStrictEqual([...rows.Mapping.keys()], [ids.idOf(3)]);
-              assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.baseType, input.baseType);
+              assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.baseTypes, 1n);
               assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.declaration, ids.idOf(2));
+              assert.deepStrictEqual(rows.MappingBaseType.get(ids.idOf(3)), {
+                baseType: input.baseType,
+                declaration: ids.idOf(2),
+                node: ids.idOf(3),
+              });
             }),
         ),
       ),
@@ -375,8 +381,8 @@ const identityOf = (entries: readonly { caseSensitive?: string; key: string }[])
   ].map((row) => JSON.stringify([row.mapping, row.folded, row.key]));
 
 describe("import/overlays/mapping.ts, which map keys are one key", () => {
-  it("writes the key as written beside how it is matched as a key's identity, so York and york are two keys and york written twice is one (reading 154)", () => {
-    // Oracle: reading 154 (decision 425): two string entries are one key only when they are
+  it("writes the key as written beside how it is matched as a key's identity, so York and york are two keys and york written twice is one (reading 157)", () => {
+    // Oracle: reading 157 (decision 425): two string entries are one key only when they are
     // written identically and matched the same way; the schema's uniqueness is
     // `key(MapKey(mapping, folded, key))`, so the identity read here is that tuple.
     // Bound: the one string mapping, its entries named.
@@ -761,8 +767,13 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
                 expected,
               );
               for (const row of rows.LookupValue.values()) {
-                assert.strictEqual(row.baseType, "integer");
+                assert.strictEqual(row.baseTypes, 1n);
               }
+
+              assert.sameDeepMembers(
+                [...rows.LookupValueType].map(([node, row]) => [node, row.value, row.baseType]),
+                expected.map(([node, , value]) => [node, value, "integer"]),
+              );
 
               assert.deepStrictEqual(
                 [...rows.LookupTable].map(([node, { kind }]) => [node, kind]),

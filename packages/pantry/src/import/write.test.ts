@@ -1105,17 +1105,17 @@ describe("domainOrdered", () => {
 
   it("names each pattern input as a field of its relation's rows", () => {
     // Oracle: the specification as a checker, the checks that read a per-row pattern by a field
-    // (Q5.08's `Typed_value` by base type, Q5.10's `Literal_lexical` by type code and
+    // (Q5.08's `Typed_value` on `DeclaredValue` by base type, Q5.10's `Literal_lexical` by type code and
     // `ExpressionAttribute`'s `E1_derived` by attribute and base type), the fields held by the
     // compiler against each relation's `Addition` (`changeSetOf` sorts by them).
     const inputs: { readonly [Relation in keyof typeof patternInputs]: readonly string[] } =
       patternInputs;
 
     assert.sameMembers(Object.keys(inputs), [
+      "DeclaredValue",
       "ExpressionAttribute",
       "LiteralTyped",
       "UsageValue",
-      "Value",
     ]);
   });
 });

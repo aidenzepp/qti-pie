@@ -37,6 +37,7 @@ import { Declaration } from "#pantry/qti/declarations.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   AriaRange,
+  BindingBaseType,
   BindingDeclaration,
   boundKinds,
   BoundVariable,
@@ -173,7 +174,7 @@ const declarationRow = (at: number, fields: Partial<Fact<typeof BindingDeclarati
 
   return {
     attribute: "response-identifier",
-    baseType: "identifier",
+    baseTypes: 1n,
     cardinality: "single",
     declaration: stray,
     declarationKind: "qti-response-declaration",
@@ -324,7 +325,7 @@ const feedbackOf = (fields: Partial<Fact<typeof FeedbackRef>> = {}) =>
 const feedbackDeclarationOf = (fields: Partial<Fact<typeof FeedbackRefDeclaration>> = {}) =>
   ({
     ...feedbackOf(),
-    baseType: "identifier",
+    baseTypes: 1n,
     cardinality: "single",
     declaration: stray,
     declarationKind: "qti-outcome-declaration",
@@ -418,11 +419,6 @@ const strayDocument = {
   exportCharset: "UTF-8",
   node: stray,
   nodeChildren: 1n,
-  nodeDocument: stray,
-  nodeGoverns: "none",
-  nodeKind: "document",
-  nodeParentKind: "document",
-  nodeStart: 0n,
   package: stray,
   path: manifestPath,
   resourceType: "none",
@@ -499,38 +495,73 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a binding of a type its interaction does not fit, by BindingFit, RecordBindingFit and a string binding's base type",
         () =>
-          // Oracle: PostgreSQL, the containments of a typed and a record binding into the closed
-          // `BindingFit` and `RecordBindingFit` (CHECKs on BindingDeclaration's table), and the
-          // `BindingFit` check on a string binding (§5.48.2, §5.162.3).
+          // Oracle: PostgreSQL, the containments of a typed binding's base type row and a record's
+          // binding into the closed `BindingFit` and `RecordBindingFit` (CHECKs on their tables),
+          // and the `BindingFit` checks on a string binding (§5.48.2, §5.162.3): its base type
+          // where its variable has one, and its cardinality, a record's having none.
           // Bound: a choice interaction bound to a single string, and to a record; a text entry's
-          // string binding to an integer.
+          // string binding to an integer, and to a record.
           Effect.gen(function* bindingFit() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            const cases = [
+            const typedCases = [
               {
-                picks: containedIn("BindingDeclaration", "BindingFit"),
-                row: declarationRow(0, { baseType: "string" }),
+                label: "a choice bound to a single string",
+                picks: containedIn("BindingBaseType", "BindingFit"),
+                row: {
+                  attribute: "response-identifier",
+                  baseType: "string",
+                  cardinality: "single",
+                  declaration: stray,
+                  kind: "qti-choice-interaction",
+                  node: strayNode(0),
+                },
               },
               {
+                label: "a string binding to an integer",
+                picks: checkNamed("BindingBaseType", "BindingFit"),
+                row: {
+                  attribute: "string-identifier",
+                  baseType: "integer",
+                  cardinality: "single",
+                  declaration: stray,
+                  kind: "qti-text-entry-interaction",
+                  node: strayNode(0),
+                },
+              },
+            ] as const;
+            for (const { label, picks, row } of typedCases) {
+              const outcome = yield* db.apply(
+                ChangeSet.empty(Author).insert(BindingBaseType, [row]),
+                {},
+              );
+
+              assert.isTrue(rejectedBy(outcome, picks), label);
+            }
+
+            const recordCases = [
+              {
+                label: "a choice bound to a record",
                 picks: containedIn("BindingDeclaration", "RecordBindingFit"),
-                row: declarationRow(0, { baseType: "none", cardinality: "record" }),
+                row: declarationRow(0, { baseTypes: 0n, cardinality: "record" }),
               },
               {
+                label: "a string binding to a record",
                 picks: checkNamed("BindingDeclaration", "BindingFit"),
                 row: declarationRow(0, {
                   attribute: "string-identifier",
-                  baseType: "integer",
+                  baseTypes: 0n,
+                  cardinality: "record",
                   kind: "qti-text-entry-interaction",
                 }),
               },
             ];
-            for (const { picks, row } of cases) {
+            for (const { label, picks, row } of recordCases) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author).insert(BindingDeclaration, [row]),
                 {},
               );
 
-              assert.isTrue(rejectedBy(outcome, picks), `${row.attribute} ${row.baseType}`);
+              assert.isTrue(rejectedBy(outcome, picks), label);
             }
           }),
       );
@@ -834,7 +865,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   statedInserts([
                     {
                       fact: declarationRow(0, {
-                        baseType: "string",
                         cardinality: "multiple",
                         kind: "qti-extended-text-interaction",
                         mosts,
@@ -941,7 +971,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // Oracle: PostgreSQL, the `Feedback_outcome_type` check over the declaration rows (reading
           // 77) and the `Feedback_reference` check that a built-in's name is one `ContentReference`
           // lets the reference name.
-          // Bound: a float outcome, of an item's feedback and of a section's feedback placed under
+          // Bound: an ordered outcome, of an item's feedback and of a section's feedback placed under
           // a test (port audit A45); a feedback naming the response built-in numAttempts. The placed
           // feedback stands on the section document's `ReferringDocument` and its
           // `SectionFeedbackName`, since its placement's counts are its document's and its
@@ -951,7 +981,9 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const typed = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(FeedbackRef, [feedbackOf()])
-                .insert(FeedbackRefDeclaration, [feedbackDeclarationOf({ baseType: "float" })]),
+                .insert(FeedbackRefDeclaration, [
+                  feedbackDeclarationOf({ cardinality: "ordered" }),
+                ]),
               {},
             );
             assert.isTrue(
@@ -982,7 +1014,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 ])
                 .insert(SectionFeedbackRef, [{ ...feedbackOf(), ...placement }])
                 .insert(SectionFeedbackRefDeclaration, [
-                  { ...feedbackDeclarationOf({ baseType: "float" }), ...placement },
+                  { ...feedbackDeclarationOf({ cardinality: "ordered" }), ...placement },
                 ]),
               {},
             );
@@ -1161,7 +1193,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           Effect.gen(function* choiceNotVariable() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const declared = {
-              baseType: "identifier",
               cardinality: "single",
               cardinalityLexical: "single",
               declarationKind: "qti-outcome-declaration",

@@ -45,7 +45,7 @@ const laws = lawsOf(grammar);
 /**
  * Every law the host judges, read once.
  */
-const hostLaws = judgedLaws(Qti.statements);
+const hostLaws = judgedLaws(Qti);
 
 /**
  * The QTI 3 ASI namespace, of every item element.

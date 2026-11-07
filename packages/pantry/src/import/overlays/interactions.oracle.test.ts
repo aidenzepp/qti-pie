@@ -36,7 +36,7 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
-import type { Declaration } from "#pantry/qti/declarations.ts";
+import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
 import { choiceKinds, hottextInteraction, hottextKind } from "#pantry/qti/interactions.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
@@ -867,10 +867,10 @@ const assemblyOf = (tree: readonly Placement[]) => {
 };
 
 /**
- * The declaration of the section box's test: an outcome `SCORED`, a single identifier.
+ * The declaration of the section box's test: an outcome `SCORED`, a single identifier, its base
+ * type its {@link scoredBaseType}.
  */
 const scored: Addition<typeof Declaration> = {
-  baseType: "identifier",
   cardinality: "single",
   cardinalityLexical: "single",
   declarationKind: "qti-outcome-declaration",
@@ -885,6 +885,16 @@ const scored: Addition<typeof Declaration> = {
   parent: idOf(1000),
   start: 2n,
   version: "3.0.1",
+};
+
+/**
+ * The base type of the section box's test's declaration, `SCORED`'s.
+ */
+const scoredBaseType: Addition<typeof DeclarationBaseType> = {
+  baseType: "identifier",
+  baseTypeLexical: "identifier",
+  node: scored.node,
+  valueBase: "identifier",
 };
 
 describe("import/overlays/interactions.ts, section references", () => {
@@ -935,6 +945,7 @@ describe("import/overlays/interactions.ts, section references", () => {
                 })),
               );
               const rows = sectionRowsOf({
+                baseTypes: [scoredBaseType],
                 contexts: [],
                 declarations: [scored],
                 feedbacks: named.filter(({ attribute }) => attribute === "outcome-identifier"),
@@ -1494,9 +1505,7 @@ describe("import/overlays/interactions.ts, content reference declarations", () =
                         key,
                         {
                           ...reference,
-                          baseType: referencedDeclarations.find(
-                            ({ kind }) => kind === declaration.kind,
-                          )?.baseType,
+                          baseTypes: 1n,
                           cardinality: "single",
                           declaration: declaration.id,
                           declarationKind: declaration.kind,

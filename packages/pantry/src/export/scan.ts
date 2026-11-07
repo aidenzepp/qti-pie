@@ -231,8 +231,8 @@ export const documentsOf = query(Author).rule((r) => {
 });
 
 /**
- * The record of a package: every entry's path and its bytes as base64 text, in listing order, the
- * `Entry` family's `at`.
+ * The record of a package: every entry's path and its bytes, in listing order, the `Entry`
+ * family's `at`.
  */
 export const entriesOf = query(Author)
   .rule((r) => {

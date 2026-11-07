@@ -53,7 +53,7 @@ const laws = lawsOf(grammar);
 /**
  * Every law the host judges, read once.
  */
-const hostLaws = judgedLaws(Qti.statements);
+const hostLaws = judgedLaws(Qti);
 
 /**
  * The QTI 3 ASI namespace, of every item element.
@@ -338,8 +338,10 @@ const assertRows = (drawn: Case, inputs: PackageInputs, label: string): void => 
         `${label}: DeclarationBaseType`,
       );
       assert.deepStrictEqual(
-        [...inputs.Declaration.values()].map(({ baseType }) => baseType),
-        { spelled: ["float"], unspelled: [], unwritten: ["none"] }[drawn.baseType],
+        [...inputs.Declaration.values()].map(({ cardinality }) => cardinality),
+        { spelled: [drawn.cardinality], unspelled: [], unwritten: [drawn.cardinality] }[
+          drawn.baseType
+        ],
         `${label}: Declaration`,
       );
       break;

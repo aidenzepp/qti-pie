@@ -3990,6 +3990,29 @@ export type Reading = "exact" | "xsd";
 export const patternFlags = "u";
 
 /**
+ * An NCName as a pattern both dialects read, grouped and unanchored so that its readers compose it:
+ * {@link ncName}'s language, `xs:NCName`'s lexical space as the value domains compile it, which
+ * `IdentifierDType` restricts. It is the one test of whether a value names something: a variable
+ * reference's or a binding's name, a declaration's or a record field's identifier. Any other value
+ * names nothing, and its value domain refuses it alone (spec reading 152).
+ */
+export const ncNamePattern = `(?:${emit(ncName)})`;
+
+/**
+ * {@link ncNamePattern} over a whole value, as a JavaScript host reads it.
+ */
+const ncNameForm = new RegExp(`^${ncNamePattern}$`, patternFlags);
+
+/**
+ * Decide whether a value is an NCName, by {@link ncNamePattern}: the host's reading of the one
+ * test the schema states.
+ *
+ * @param value - The value, collapsed.
+ * @returns Whether it names something.
+ */
+export const isNcName = (value: string): boolean => ncNameForm.test(value);
+
+/**
  * Compile a resolved definition into its value domain.
  *
  * Each call compiles: the attribute grammar compiles each distinct definition once

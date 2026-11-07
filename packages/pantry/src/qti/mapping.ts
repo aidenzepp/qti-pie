@@ -9,24 +9,30 @@
  * - {@link Mapping} (`qti-mapping`) and {@link AreaMapping} (`qti-area-mapping`), under a response
  *   declaration, and {@link LookupTable} (`qti-match-table` and `qti-interpolation-table`, its
  *   `kind` telling them apart), under an outcome declaration, each copy their declaration's
- *   `declarationRef` tuple, so the base type and cardinality they are read in are the declaration's
- *   codes (C17's proof is the declaration's own);
- * - {@link MapKey} (`qti-map-entry`) copies its mapping's base type and its `map-key` from
+ *   `declarationRef` tuple, so the cardinality they are read in is the declaration's code (C17's
+ *   proof is the declaration's own), and whether it has a base type, `baseTypes`;
+ * - {@link MappingBaseType} holds a mapping's declaration's base type, where it has one (a record has
+ *   none: lane NIL's audit, B12);
+ * - {@link MapKey} (`qti-map-entry`) copies its mapping's `baseTypes` and its `map-key` from
  *   `Attribute` (C18), one row per entry, so two entries with one key are two facts the key law
- *   refuses rather than one fact that set semantics collapses (rows-first §0);
+ *   refuses rather than one fact that set semantics collapses (rows-first §0), and
+ *   {@link MapKeyType} holds it beside its mapping's base type, where it has one;
  * - {@link MapKeyInteger}, {@link MapKeyFloat}, {@link MapKeyPoint}, {@link MapKeyPair} and
  *   {@link MapKeyDirectedPair} hold a map key's typed value where it differs from its lexical form,
  *   each a row of its own relation keyed by the entry's node and mirrored with the map keys of its
  *   base type (the addendum's `MapKeyInteger` pattern), its `value` a field PostgreSQL generates
  *   from the key's text;
  * - {@link LookupValue} copies each table entry's `target-value` and each table's `default-value`
- *   beside its table's base type.
+ *   with its table's declaration, and {@link LookupValueType} holds it beside the declaration's
+ *   base type, where it has one.
  *
  * The laws, by the rule each states:
  *
- * - **`mapping-base-type`** (reading 78): a mapping's base type is in `MappableBaseType`, so `file`,
- *   `duration` and a record's `none` are refused; an area mapping's is `point` (information model
- *   §5.5, "a mapping from a source set of point values").
+ * - **`mapping-base-type`** (reading 78): a mapping is no record's ("cannot be applied to variables
+ *   of record cardinality", information model §2.11.1.5), and its base type is in
+ *   `MappableBaseType`, so `file` and `duration` are refused; an area mapping is no record's, and
+ *   its base type is `point` (information model §5.5, "a mapping from a source set of point
+ *   values"). A record has no base type, so its mapping is judged by its cardinality alone.
  * - **Map keys are distinct** (information model §5.88.4 and §7.21: "a set of mapEntries, each of
  *   which maps a single value from the source set onto a single float", so a mapping is a function
  *   of its source value): by their lexical forms, `key(mapping, key)`, and, for the base types
@@ -70,10 +76,11 @@ import {
 } from "#pantry/grammar/install.ts";
 import { booleanTrue } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
-import { declarationRef } from "#pantry/qti/declarations.ts";
+import { DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { keyText, keyTextBytes } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 
 /**
  * `xs:integer`'s lexical space, an optional sign and digits: the map keys of an integer mapping
@@ -82,44 +89,6 @@ import { Node, nodeRef } from "#pantry/qti/node.ts";
  * with JavaScript's engine as the oracle.
  */
 export const integerKeyPattern = "^[+-]?[0-9]+$";
-
-/**
- * The most padding zeros a float key's run of them holds where the key has a typed value: one
- * counted repetition, PostgreSQL's `DUPMAX`.
- *
- * Each run is bounded because a key's text sits in a UNIQUE, and grizzle proves the key's cast
- * total only for a pattern whose automaton it can build: at most 2,048 states
- * (`core/limits.ts` `regexDfaMaxStates`; `scalar/regex/inclusion.ts`), and a counted run costs a
- * state a zero. Three runs as long as the key-text bound exceed it, and three of one repetition
- * each stay within it.
- */
-export const floatKeyZeros = 255;
-
-/**
- * Grizzle's lexical form of `double precision` (`lexicalForm(pg["double precision"])`), each run
- * of padding zeros written as at most {@link floatKeyZeros}: the map keys of a float mapping whose
- * value {@link MapKeyFloat} holds. `mapping.oracle.test.ts` holds this literal to
- * {@link floatKeyPatternOf} of {@link floatKeyZeros}.
- */
-export const floatKeyPattern =
-  "^(?:[+-]?(?:0{0,255}(?:0|[1-9][0-9]{0,14})(?:\\.(?:[0-9]{15}0{0,255}|[0-9]{0,14}))?|\\.(?:[0-9]{15}0{0,255}|[0-9]{1,14}))(?:[eE][+-]?0{0,255}(?:0|[1-9][0-9]?|1[0-9]{2}|2[0-8][0-9]|29[0-2]|293))?|-?INF|NaN)$";
-
-/**
- * Write grizzle's `double precision` form with each `0*` bounded to a run of `zeros`, as
- * consecutive repetitions of at most 255, PostgreSQL's `DUPMAX`.
- *
- * @param form - The form, `lexicalForm(pg["double precision"])`.
- * @param zeros - The most padding zeros a run holds.
- * @returns The bounded pattern.
- */
-export const floatKeyPatternOf = (form: string, zeros: number): string => {
-  const parts: string[] = [];
-  for (let left = zeros; left > 0; left -= 255) {
-    parts.push(`0{0,${Math.min(left, 255)}}`);
-  }
-
-  return form.replaceAll("0*", parts.join(""));
-};
 
 /**
  * A point's lexical form as an attribute writes it: two integers and the one whitespace character
@@ -148,13 +117,13 @@ export const exactValuePattern =
 
 /**
  * A mapping's overlay, keyed by its `qti-mapping` node: its {@link nodeRef} tuple, its
- * `declaration` the node's parent, and the declaration's `declarationRef` tuple, whose `baseType`
- * its entries' keys are read in.
+ * `declaration` the node's parent, and the declaration's `declarationRef` tuple. The base type its
+ * entries' keys are read in is its {@link MappingBaseType}'s, where `baseTypes` is 1.
  */
 export const Mapping = relation(
   "Mapping",
   {
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -170,8 +139,19 @@ export const Mapping = relation(
 );
 
 /**
+ * A mapping's declaration's base type, keyed by its `qti-mapping` node, where the declaration has
+ * one: `declaration`, its {@link Mapping}'s, and `baseType`, the declaration's
+ * {@link DeclarationBaseType}'s. A record has none, and its mapping no row.
+ */
+export const MappingBaseType = relation(
+  "MappingBaseType",
+  { baseType: closedId(BaseType), declaration: uuid, node: uuid },
+  ["node"],
+);
+
+/**
  * A map entry's overlay, keyed by its `qti-map-entry` node: its {@link nodeRef} tuple, its
- * `mapping` the node's parent, its mapping's base type, and its `map-key` as written.
+ * `mapping` the node's parent, its mapping's `baseTypes`, and its `map-key` as written.
  *
  * It also holds how the key is matched (reading 98, §7.21.3): `caseText`, the entry's
  * `case-sensitive` as written, empty where it is unwritten; `folded`, whether a response is matched
@@ -182,7 +162,7 @@ export const Mapping = relation(
 export const MapKey = relation(
   "MapKey",
   {
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     caseText: keyText,
     document: uuid,
     folded: pg.boolean,
@@ -195,6 +175,17 @@ export const MapKey = relation(
     start: natural,
     version: closedId(SchemaVersion),
   },
+  ["node"],
+);
+
+/**
+ * A map key beside the base type it is read in, keyed by its `qti-map-entry` node, where its
+ * mapping's declaration has one: `mapping` and `key`, its {@link MapKey}'s, and `baseType`, its
+ * mapping's {@link MappingBaseType}'s. The typed keys and `Typed_attribute_value` read it.
+ */
+export const MapKeyType = relation(
+  "MapKeyType",
+  { baseType: closedId(BaseType), key: keyText, mapping: uuid, node: uuid },
   ["node"],
 );
 
@@ -268,31 +259,35 @@ export const MapKeyInteger = relation.generated(
 );
 
 /**
- * The text type of a float map key that has a typed value: {@link floatKeyPattern}, whose
- * language lies inside grizzle's `double precision` form, so its cast is total.
+ * The text type of a float map key: `xs:double`'s lexical space as an attribute writes it
+ * (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's, reading 71's edition, so `+INF`
+ * is outside it), every key of which has the value {@link MapKeyFloat} holds (reading 154), and
+ * whose language lies inside grizzle's `doubleText`, so `Compute.parseDouble` reads it total; of at
+ * most {@link keyTextBytes} UTF-8 bytes, as the {@link MapKeyType} copy it mirrors is, since the
+ * key sits in the mirror's UNIQUE. Exported for `src/import/refusal.ts`, which names its pattern
+ * law.
  */
-const FloatKey = str.regex(floatKeyPattern);
+export const FloatKey = str.bytes(keyTextBytes, str.regex(doublePattern));
 
 /**
- * A float map key's typed value, keyed by its entry's node: `value`, the `double precision` its
- * key names, which PostgreSQL generates by casting the key. The cast rounds the decimal once to
- * the nearest double, as XML Schema's lexical mapping does (reading 56), so `1`, `1.0` and `10e-1`
- * are one value.
+ * A float map key's typed value, keyed by its entry's node: `value`, the double its key names,
+ * which PostgreSQL generates by grizzle's `Compute.parseDouble`, XML Schema 1.1's doubleLexicalMap
+ * (Part 2 §3.3.5.2, reading 144): the decimal rounded once to the nearest double, ties to even, of
+ * any digits and any exponent, an infinity of its sign at or past the overflow threshold and a zero
+ * of its sign at or below half the least subnormal.
  *
- * Only a key of grizzle's form has one: at most 15 significant digits on each side of the point
- * (`DBL_DIG`) and an exponent of at most 293, so the value is finite and nonzero unless it is
- * zero (`scalar/lexical.ts` `doubleForm`), with each run of padding zeros at most
- * {@link floatKeyZeros}. A key outside it, such as reading 56's `1e400`, `1e294` or
- * `1.2345678901234567`, has no row here and is distinct from the others by its lexical form alone:
- * grizzle's cast reads its double form only, and qti-pie's upstream ask #8 to grizzle, a total
- * xs:double parse, is what lifts the limit.
+ * Every key of a float mapping in the lexical space has one (reading 154), so `key(mapping, value)`
+ * compares every float key by its value: `1`, `1.0` and `10e-1` are one value, `1e400`, `2e400`
+ * and `INF` another, and `0`, `-0` and `1e-400` a third. PostgreSQL's `float8` equality, which the
+ * key's UNIQUE compares by, holds -0 equal to 0 and NaN equal to NaN, as an identity constraint
+ * compares two keys "equal or identical" (XML Schema 1.1 Part 1 §3.11.4).
  */
 export const MapKeyFloat = relation.generated(
   "MapKeyFloat",
   { key: FloatKey, mapping: uuid, node: uuid },
   ["node"],
   (r) => ({
-    value: generated(pg["double precision"], Compute.cast(r.key, pg["double precision"])),
+    value: generated(pg["double precision"], Compute.parseDouble(r.key)),
   }),
 );
 
@@ -396,16 +391,17 @@ export const MapKeyDirectedPair = relation.generated(
  * A lookup table's typed attribute value, keyed by the node that carries it: a
  * `qti-match-table-entry`'s or `qti-interpolation-table-entry`'s `target-value`, or a
  * `qti-match-table`'s or `qti-interpolation-table`'s `default-value`, as written, with its
- * {@link nodeRef} tuple and its table's base type, the outcome declaration's (reading 8).
+ * {@link nodeRef} tuple and its table's `declaration` and `baseTypes`, the outcome declaration's.
  *
- * The value is copied (C18) because `Typed_attribute_value` reads it beside its table's base
- * type, which only the table's row holds; it is `keyText`, so a value past the key-text bound is
- * refused under that limit.
+ * The value is copied (C18) because `Typed_attribute_value` reads it beside its declaration's base
+ * type (reading 8), its {@link LookupValueType}'s; it is `keyText`, so a value past the key-text
+ * bound is refused under that limit.
  */
 export const LookupValue = relation(
   "LookupValue",
   {
-    baseType: closedId(BaseType),
+    baseTypes: natural,
+    declaration: uuid,
     document: uuid,
     kind: closedId(NodeKind),
     nearest: uuid,
@@ -419,13 +415,24 @@ export const LookupValue = relation(
 );
 
 /**
+ * A lookup table's typed attribute value beside the base type it is read in, keyed by the node that
+ * carries it, where its outcome declaration has one: `declaration` and `value`, its
+ * {@link LookupValue}'s, and `baseType`, the declaration's {@link DeclarationBaseType}'s.
+ */
+export const LookupValueType = relation(
+  "LookupValueType",
+  { baseType: closedId(BaseType), declaration: uuid, node: uuid, value: keyText },
+  ["node"],
+);
+
+/**
  * An area mapping's overlay, keyed by its `qti-area-mapping` node: its {@link nodeRef} tuple and
  * its declaration's `declarationRef` tuple.
  */
 export const AreaMapping = relation(
   "AreaMapping",
   {
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -443,14 +450,15 @@ export const AreaMapping = relation(
 /**
  * A lookup table's overlay, keyed by its node: a `qti-match-table` or a `qti-interpolation-table`,
  * which its {@link nodeRef} tuple's `kind` tells apart, and its outcome declaration's
- * `declarationRef` tuple, whose base type its targets and default value are values of (reading 8).
+ * `declarationRef` tuple, whose base type, where it has one, its targets and default value are
+ * values of (reading 8).
  * The two tables differ in how their entries' sources match, which no law here reads: only each
  * entry's `target-value` and the table's `default-value` are modeled, so they are one shape.
  */
 export const LookupTable = relation(
   "LookupTable",
   {
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -516,25 +524,37 @@ const caseAttributes = select(Attribute, (a) =>
 );
 
 /**
+ * The map keys whose mapping's declaration has a base type: each has its {@link MapKeyType}, and
+ * only these do.
+ */
+const typedMapKeys = select(MapKey, (k) => k.eq(k.baseTypes, 1n));
+
+/**
+ * The lookup values whose table's declaration has a base type: each has its
+ * {@link LookupValueType}, and only these do.
+ */
+const typedLookupValues = select(LookupValue, (v) => v.eq(v.baseTypes, 1n));
+
+/**
  * The map keys of integer mappings: each has its {@link MapKeyInteger} row, and no other key does.
  */
-const integerKeys = select(MapKey, (k) =>
+const integerKeys = select(MapKeyType, (k) =>
   k.and(k.eq(k.baseType, "integer"), Compute.matches(k.key, integerKeyPattern)),
 );
 
 /**
- * The map keys of float mappings in grizzle's form: each has its {@link MapKeyFloat} row, and no
- * other key does.
+ * The map keys of float mappings in `xs:double`'s lexical space: each has its {@link MapKeyFloat}
+ * row, and no other key does.
  */
-const floatKeys = select(MapKey, (k) =>
-  k.and(k.eq(k.baseType, "float"), Compute.matches(k.key, floatKeyPattern)),
+const floatKeys = select(MapKeyType, (k) =>
+  k.and(k.eq(k.baseType, "float"), Compute.matches(k.key, doublePattern)),
 );
 
 /**
  * The map keys of point mappings written as two integers: each has its {@link MapKeyPoint} row,
  * and no other key does.
  */
-const pointKeys = select(MapKey, (k) =>
+const pointKeys = select(MapKeyType, (k) =>
   k.and(k.eq(k.baseType, "point"), Compute.matches(k.key, pointKeyPattern)),
 );
 
@@ -542,7 +562,7 @@ const pointKeys = select(MapKey, (k) =>
  * The map keys of pair mappings written as two items: each has its {@link MapKeyPair} row, and no
  * other key does.
  */
-const pairKeys = select(MapKey, (k) =>
+const pairKeys = select(MapKeyType, (k) =>
   k.and(k.eq(k.baseType, "pair"), Compute.matches(k.key, pairKeyPattern)),
 );
 
@@ -550,7 +570,7 @@ const pairKeys = select(MapKey, (k) =>
  * The map keys of directed pair mappings written as two items: each has its
  * {@link MapKeyDirectedPair} row, and no other key does.
  */
-const directedPairKeys = select(MapKey, (k) =>
+const directedPairKeys = select(MapKeyType, (k) =>
   k.and(k.eq(k.baseType, "directedPair"), Compute.matches(k.key, pairKeyPattern)),
 );
 
@@ -579,18 +599,32 @@ const lookupAttributes = select(Attribute, (a) =>
  *   and names a node of its kind; a mapping and a map entry exist through the entry's `map-key`
  *   copy (a mapping holds at least one entry, N7), and the area mapping and the two tables through
  *   their kind's selection of `Node`, both ways; the four declared overlays copy their
- *   declaration's `declarationRef` tuple;
- * - **`mapping-base-type`:** the containment into `MappableBaseType`, and `AreaMapping_base_type`;
- * - **map keys:** the entry's mapping's base type, its `map-key` copy, the lexical key, each typed
- *   relation mirrored with its keys, `E1_derived` its split, and its typed key over the value
+ *   declaration's `declarationRef` tuple; a mapping's {@link MappingBaseType}, a map key's
+ *   {@link MapKeyType} and a lookup value's {@link LookupValueType} exist exactly where `baseTypes`
+ *   is 1, each copying the base type from the declaration's typed row;
+ * - **`mapping-base-type`:** a mapping and an area mapping are no record's (`MappableBaseType`,
+ *   `AreaMapping_base_type`), a mapping's base type is in `MappableBaseType`, and an area mapping's
+ *   is `point`, each judged where the declaration has one;
+ * - **map keys:** the entry's mapping's `baseTypes`, its `map-key` copy, the lexical key, each typed
+ *   relation mirrored with its typed keys, `E1_derived` its split, and its typed key over the value
  *   PostgreSQL generates, and `Typed_attribute_value` its lexical form;
  * - **`Lookup_table_cardinality`:** a match or interpolation table's outcome is single;
- * - **lookup values:** each copies its node's tuple and its attribute, holds its table's base type,
- *   and `Typed_attribute_value` judges it.
+ * - **lookup values:** each copies its node's tuple, its attribute and its table's declaration, and
+ *   `Typed_attribute_value` judges it where the declaration has a base type.
  */
 export const mappingLawsByName = {
   "AreaMapping base type": [
-    check("AreaMapping_base_type", AreaMapping, (a) => a.eq(a.baseType, "point")),
+    check("AreaMapping_base_type", AreaMapping, (a) => a.ne(a.cardinality, "record")),
+    contained(
+      on(
+        select(AreaMapping, (a) => a.eq(a.baseTypes, 1n)),
+        "declaration",
+      ),
+      on(
+        select(DeclarationBaseType, (b) => b.eq(b.baseType, "point")),
+        "node",
+      ),
+    ),
   ],
   "DocumentId key": [
     key(on(mapKeyAttributes, "node")),
@@ -645,7 +679,10 @@ export const mappingLawsByName = {
     key(on(MapKeyPair, "mapping", "value")),
     key(on(MapKeyDirectedPair, "mapping", "value")),
   ],
-  MappableBaseType: [contained(on(Mapping, "baseType"), on(MappableBaseType, "baseType"))],
+  MappableBaseType: [
+    check("MappableBaseType", Mapping, (m) => m.ne(m.cardinality, "record")),
+    contained(on(MappingBaseType, "baseType"), on(MappableBaseType, "baseType")),
+  ],
   "Mapping overlay": [
     contained(
       on(Mapping, "node", "document", "kind", "start", "nearest", "version", "declaration"),
@@ -659,8 +696,8 @@ export const mappingLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
@@ -668,8 +705,30 @@ export const mappingLawsByName = {
       on(MapKey, "node", "document", "kind", "start", "nearest", "version", "mapping"),
       nodeRef,
     ),
+    contained(
+      on(
+        select(Mapping, (m) => m.eq(m.baseTypes, 1n)),
+        "node",
+      ),
+      on(MappingBaseType, "node"),
+    ),
+    contained(
+      on(MappingBaseType, "node", "declaration"),
+      on(
+        select(Mapping, (m) => m.eq(m.baseTypes, 1n)),
+        "node",
+        "declaration",
+      ),
+    ),
+    contained(
+      on(MappingBaseType, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
+    ),
     contained(on(MapKey, "node"), on(nodesOf("qti-map-entry"), "id")),
-    contained(on(MapKey, "mapping", "baseType"), on(Mapping, "node", "baseType")),
+    contained(on(MapKey, "mapping", "baseTypes"), on(Mapping, "node", "baseTypes")),
+    contained(on(typedMapKeys, "node"), on(MapKeyType, "node")),
+    contained(on(MapKeyType, "node", "mapping", "key"), on(typedMapKeys, "node", "mapping", "key")),
+    contained(on(MapKeyType, "mapping", "baseType"), on(MappingBaseType, "node", "baseType")),
     contained(on(mapKeyAttributes, "node", "lexical"), on(MapKey, "node", "key")),
     contained(on(caseAttributes, "node", "lexical"), on(MapKey, "node", "caseText")),
     contained(
@@ -699,8 +758,8 @@ export const mappingLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
@@ -722,8 +781,8 @@ export const mappingLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
@@ -737,27 +796,38 @@ export const mappingLawsByName = {
       on(
         select(LookupValue, (v) => v.in(v.kind, lookupEntryKinds)),
         "parent",
-        "baseType",
+        "baseTypes",
+        "declaration",
       ),
-      on(LookupTable, "node", "baseType"),
+      on(LookupTable, "node", "baseTypes", "declaration"),
     ),
     contained(
       on(
         select(LookupValue, (v) => v.in(v.kind, lookupTableKinds)),
         "node",
-        "baseType",
+        "baseTypes",
+        "declaration",
       ),
-      on(LookupTable, "node", "baseType"),
+      on(LookupTable, "node", "baseTypes", "declaration"),
+    ),
+    contained(on(typedLookupValues, "node"), on(LookupValueType, "node")),
+    contained(
+      on(LookupValueType, "node", "declaration", "value"),
+      on(typedLookupValues, "node", "declaration", "value"),
+    ),
+    contained(
+      on(LookupValueType, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
     ),
   ],
   "Typed attribute value": [
-    check("Typed_attribute_value", MapKey, (k) =>
+    check("Typed_attribute_value", MapKeyType, (k) =>
       k.and(
         Compute.matches(k.key, BaseTypePattern.at("pattern", k.baseType)),
         k.or(k.eq(k.baseType, "string"), Compute.matches(k.key, exactValuePattern)),
       ),
     ),
-    check("Typed_attribute_value", LookupValue, (v) =>
+    check("Typed_attribute_value", LookupValueType, (v) =>
       v.and(
         Compute.matches(v.value, BaseTypePattern.at("pattern", v.baseType)),
         v.or(v.eq(v.baseType, "string"), Compute.matches(v.value, exactValuePattern)),

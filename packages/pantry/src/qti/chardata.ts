@@ -31,6 +31,7 @@ import {
   closed,
   closedId,
   Compute,
+  constant,
   contained,
   drawn,
   fin,
@@ -367,10 +368,11 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   instances copy, drawn: `bindings`, `choices` and `hottexts` (Q5.09's `BindingName`, `Choice`
  *   and `Hottext` rows), `ids` (Q5.07's `DocumentId` rows), `idrefTargets` (Q5.07's `IdrefTarget`
  *   rows), `langs` (Q5.07's `XmlLang` rows) and `variables` (Q5.10's `VariableRef` rows).
- * - **its document node's copies:** `nodeChildren`, `nodeDocument`, `nodeGoverns`, `nodeKind`,
- *   `nodeParentKind`, `nodeStart` and `version`, the document node's own, so the row states the
- *   node's context through {@link nodeContext}, the owner axis's own UNIQUE, and no other index on
- *   `Node` holds it.
+ * - **its document node's copies:** `nodeChildren` and `version`, the document node's own, so the row
+ *   states the node's context through {@link nodeContext}, the owner axis's own UNIQUE, and no
+ *   other index on `Node` holds it. What every document node holds alike is no field: the
+ *   containment's source reads `node` again as the node's `document` and states its governing type
+ *   `none`, its kind and its parent's `document`, and its start 0 as constants.
  */
 export const Document = relation(
   "Document",
@@ -389,11 +391,6 @@ export const Document = relation(
     langs: drawn(natural),
     node: uuid,
     nodeChildren: natural,
-    nodeDocument: uuid,
-    nodeGoverns: closedId(TypeName),
-    nodeKind: closedId(NodeKind),
-    nodeParentKind: closedId(NodeKind),
-    nodeStart: natural,
     package: uuid,
     path: EntryPath,
     resourceType: closedId(ResourceType),
@@ -561,14 +558,14 @@ export const chardataLawsByName = {
         "node",
         "nodeChildren",
         "context",
-        "nodeDocument",
+        "node",
         "resourceType",
-        "nodeGoverns",
-        "nodeKind",
+        constant("none"),
+        constant("document"),
         "contextNearest",
         "contextNearestKind",
-        "nodeParentKind",
-        "nodeStart",
+        constant("document"),
+        constant(0n),
         "version",
       ),
       nodeContext,

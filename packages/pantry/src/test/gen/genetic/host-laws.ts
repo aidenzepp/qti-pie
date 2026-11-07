@@ -29,7 +29,7 @@
  */
 import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
-import type { Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
+import type { Law, LawSourceSide } from "@bjornpagen/grizzle";
 import { lawNameOf, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
@@ -284,6 +284,10 @@ const StoredSide = Schema.Struct({
     Schema.Union([
       Schema.String,
       Schema.Struct({ field: Schema.String, kind: Schema.Literal("pred") }),
+      Schema.Struct({
+        kind: Schema.Literal("constant"),
+        value: Schema.Union([Schema.String, Schema.BigInt, Schema.Number, Schema.Boolean]),
+      }),
     ]),
   ),
 });
@@ -322,14 +326,22 @@ const StoredCheck = Schema.Struct({
 interface Side {
   readonly predicate: Option.Option<Term>;
   readonly relation: string;
-  readonly terms: readonly (string | undefined)[];
+  /**
+   * Each term: a field's name, a containment source's constant as its value's text, and none for a
+   * `pred` term, which this module does not evaluate.
+   */
+  readonly terms: readonly (
+    | { readonly field: string; readonly kind: "field" }
+    | { readonly kind: "constant"; readonly text: string }
+    | undefined
+  )[];
 }
 
 /**
  * A side read two ways: as the host evaluates it, and as an outcome names its law.
  */
 interface ReadSide {
-  readonly law: LawSide;
+  readonly law: LawSourceSide;
   readonly side: Side;
 }
 
@@ -357,7 +369,15 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
       predicate:
         "desc" in side.source ? Option.some(termOf(side.source.desc.predicate)) : Option.none(),
       relation,
-      terms: side.terms.map((term) => (Predicate.isString(term) ? term : undefined)),
+      terms: side.terms.map((term) => {
+        if (Predicate.isString(term)) {
+          return { field: term, kind: "field" as const };
+        }
+
+        return term.kind === "constant"
+          ? { kind: "constant" as const, text: String(term.value) }
+          : undefined;
+      }),
     },
   };
 };
@@ -389,18 +409,20 @@ type Evaluated =
  * @param read - The side as this module read it.
  * @returns Whether they are one side.
  */
-const sameSide = (law: LawSourceSide, read: LawSide): boolean =>
+const sameSide = (law: LawSourceSide, read: LawSourceSide): boolean =>
   law.relation === read.relation &&
   law.terms.length === read.terms.length &&
   law.terms.every((term, at) => {
     const held = read.terms[at];
+    if (held === undefined) {
+      return false;
+    }
 
-    return (
-      held !== undefined &&
-      term.kind !== "constant" &&
-      term.kind === held.kind &&
-      term.field === held.field
-    );
+    if (term.kind === "constant" || held.kind === "constant") {
+      return term.kind === "constant" && held.kind === "constant" && term.value === held.value;
+    }
+
+    return term.kind === held.kind && term.field === held.field;
   });
 
 /**
@@ -1302,7 +1324,8 @@ const tuplesOf = (view: View, side: Side): Option.Option<readonly string[]> => {
   const closed = relations.get(side.relation);
   const rows: readonly Row[] | undefined =
     closed?.kind === "closedRelation" ? closed.rows?.map(ownFields) : view.get(side.relation);
-  if (rows === undefined || side.terms.includes(undefined)) {
+  const terms = side.terms.flatMap((term) => (term === undefined ? [] : [term]));
+  if (rows === undefined || terms.length !== side.terms.length) {
     return Option.none();
   }
 
@@ -1317,8 +1340,8 @@ const tuplesOf = (view: View, side: Side): Option.Option<readonly string[]> => {
     }
 
     if (selected === true) {
-      const values = side.terms.map((field) =>
-        field === undefined ? undefined : textOf(row[field]),
+      const values = terms.map((term) =>
+        term.kind === "constant" ? term.text : textOf(row[term.field]),
       );
       if (values.includes(undefined)) {
         return Option.none();
@@ -1501,6 +1524,20 @@ export const viewOf = (inputs: PackageInputs): View => {
       }
     }
   }
+
+  // A declaration's count of base types is drawn, so the program writes no field of it: it is the
+  // number of its `DeclarationBaseType` rows, as the database draws it, so a containment over
+  // `declarationRef` reads the tuple PostgreSQL holds (lane NIL's audit, B12).
+  const baseTyped = new Set<Value | undefined>(
+    (view.get("DeclarationBaseType") ?? []).map(({ node }) => node),
+  );
+  view.set(
+    "Declaration",
+    (view.get("Declaration") ?? []).map((row) => ({
+      ...row,
+      baseTypes: baseTyped.has(row["node"]) ? 1n : 0n,
+    })),
+  );
 
   return view;
 };

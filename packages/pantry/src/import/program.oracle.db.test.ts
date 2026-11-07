@@ -17,7 +17,7 @@
  * Each case also logs how long `db.compile` takes over its ChangeSet (the W5 amendment's C19), the
  * compile time per package the network seat reports.
  */
-import { CommitUnknown, Db, query, uuid, v } from "@bjornpagen/grizzle";
+import { CommitUnknown, Db, query, uuid, v, writableNamesOf } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, DbConnection, Law, Plan } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -525,11 +525,9 @@ describe.skipIf(!hasLease)(
               WHERE (n.nspname = $1 OR n.nspname LIKE $2) AND NOT t.tgisinternal`,
             [qtiSchema, `${qtiSchema}\\_\\_%`],
           );
-          const stored = Object.values(Qti.relations).filter(({ kind }) => kind === "relation");
-
           assert.strictEqual(
             tables.length,
-            stored.length + 1,
+            writableNamesOf(Qti).length + 1,
             "a table per stored relation, and the ledger",
           );
           assert.include(

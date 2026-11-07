@@ -13,6 +13,7 @@
  * `roster.test.ts` holds each list to the inputs a real import gives, so a name derived here and
  * the keys of `PackageInputs` and `OverlayRows` are one set.
  */
+import { writableNamesOf } from "@bjornpagen/grizzle";
 import { Option, Schema } from "effect";
 import type { OverlayRows } from "#pantry/import/overlays/index.ts";
 import type { DocumentLayerRows, PackageInputs } from "#pantry/import/write.ts";
@@ -84,16 +85,15 @@ const sorted = <N extends string>(names: readonly N[]): readonly N[] =>
   names.toSorted((x, y) => (x < y ? -1 : Number(x > y)));
 
 /**
- * Every relation an import writes directly, in code point order: each stored relation of `Qti` that
- * no ordered family nests.
+ * Every relation an import writes directly, in code point order: each stored relation of `Qti`,
+ * grizzle's `writableNamesOf(Qti)`, that no ordered family nests.
  */
-// SAFETY: the names are the stored relations of `Qti` less the ordered families' members, which are
-// the keys of `PackageInputs`; `roster.test.ts` holds the two to one set over a real import.
+// SAFETY: the stored relations of `Qti` less the ordered families' members are the keys of
+// `PackageInputs`, which the builders' row types state by hand; `roster.test.ts` holds the two to
+// one set over a real import.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
 export const writtenNames = sorted(
-  Object.entries(Qti.relations).flatMap(([name, member]) =>
-    member.kind === "relation" && !nestedMembers.has(name) ? [name] : [],
-  ),
+  writableNamesOf(Qti).filter((name) => !nestedMembers.has(name)),
 ) as readonly (keyof PackageInputs)[];
 
 /**

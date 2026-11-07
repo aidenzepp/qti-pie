@@ -124,10 +124,10 @@ import {
   SchemaVersion,
   versions,
 } from "#pantry/grammar/install.ts";
-import { booleanTrue } from "#pantry/grammar/domains.ts";
+import { booleanTrue, ncNamePattern } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { Declaration, declarationRef } from "#pantry/qti/declarations.ts";
+import { Declaration, DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, itemInstances, itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
@@ -158,11 +158,12 @@ const Space = str.regex("^[\\t\\n\\r ]*$");
 export const atomicValuePattern = "^[^\\t\\n\\r ]*$";
 
 /**
- * A printed variable's `base` or `index` that is an integer, not a variable's name: its first
- * character is a digit or a sign, which no `VariableStringDType` name starts with. The laws read it
- * as a POSIX pattern and the overlay's builder as a JavaScript one; the two agree on it.
+ * A collapsed value that names a variable: an NCName (`ncNamePattern`), the lexical space of each
+ * reference attribute's `IdentifierDType` and of the `VariableStringDType` member of a printed
+ * variable's `base` and `index`. Any other value names nothing, an integer of `base` or `index`
+ * among them, and its value domain refuses it alone (spec reading 152).
  */
-export const integerStartPattern = "^[+\\-0-9]";
+const namePattern = `^${ncNamePattern}$`;
 
 /**
  * The root kinds of the documents whose content references resolve in their own declarations: an
@@ -376,8 +377,8 @@ const templateVariableKind = "qti-template-variable" satisfies Kind;
 /**
  * Each content reference relation's attributes and kinds, as `ContentReference` lists them. A
  * printed variable's `base` and `index` hold an integer or a variable's name (the XSD's union of
- * `xs:integer` and `VariableStringDType`); each other attribute is an `IdentifierDType` and always
- * names one.
+ * `xs:integer` and `VariableStringDType`); each other attribute is an `IdentifierDType`. Each names
+ * a variable exactly where its value is an NCName ({@link namePattern}).
  */
 export const references = {
   context: { attributes: ["identifier"], kinds: [contextVariableKind] },
@@ -497,7 +498,9 @@ export const Binding = relation(
 
 /**
  * One binding of an item's interaction to a response variable, keyed by the interaction's node and
- * the attribute that binds it: `response-identifier`, or `string-identifier`'s second variable.
+ * the attribute that binds it: `response-identifier`, or `string-identifier`'s second variable,
+ * where its value names a variable, an NCName ({@link namePattern}). Any other value binds nothing,
+ * and its value domain refuses it alone (spec reading 152).
  *
  * Its fields, every one written by the host:
  *
@@ -530,8 +533,8 @@ export const BoundVariable = relation(
  *
  * - `node`, `attribute`, `kind`, `document` and `identifier`, its binding's, copied from
  *   {@link BoundVariable};
- * - `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration's, copied through
- *   `declarationRef`;
+ * - `declaration`, `declarationKind`, `cardinality` and `baseTypes`, the declaration's, copied
+ *   through `declarationRef`: its base type, where it has one, is its {@link BindingBaseType}'s;
  * - `mosts`, its interaction's count of most values, its {@link CountBound}'s `mosts` where
  *   `ChoiceBound` pairs the kind's counts, and 0 on any other kind, which has none: "Binding
  *   cardinality" judges a binding only where its interaction's most has a value.
@@ -540,7 +543,7 @@ export const BindingDeclaration = relation(
   "BindingDeclaration",
   {
     attribute: closedId(AttributeName),
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -555,10 +558,11 @@ export const BindingDeclaration = relation(
 
 /**
  * One attribute by which an interaction of any document binds a response variable, keyed by the
- * interaction's node and the attribute (spec reading 117): `kind`, the interaction's; `document`;
- * and `identifier`, the attribute's value collapsed. A fragment's interactions bind no variable of
- * their own document, which declares none, but one of each item that places the fragment
- * ({@link PlacedBinding}); its rows count as `Document.bindings`.
+ * interaction's node and the attribute (spec reading 117), where its value names a variable:
+ * `kind`, the interaction's; `document`; and `identifier`, the attribute's value collapsed. A
+ * fragment's interactions bind no variable of their own document, which declares none, but one of
+ * each item that places the fragment ({@link PlacedBinding}); its rows count as
+ * `Document.bindings`.
  */
 export const BindingName = relation(
   "BindingName",
@@ -606,15 +610,16 @@ export const PlacedBinding = relation(
  *
  * Its fields, every one written by the host: `instance`, `node`, `attribute`, `assembly`,
  * `document`, `kind` and `identifier`, its binding's, copied from `PlacedBinding`; and
- * `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration's, copied through
- * `declarationRef`; and `mosts`, as {@link BindingDeclaration}'s.
+ * `declaration`, `declarationKind`, `cardinality` and `baseTypes`, the declaration's, copied
+ * through `declarationRef`; and `mosts`, as {@link BindingDeclaration}'s. Its base type, where it
+ * has one, is its {@link PlacedBindingBaseType}'s.
  */
 export const PlacedBindingDeclaration = relation(
   "PlacedBindingDeclaration",
   {
     assembly: uuid,
     attribute: closedId(AttributeName),
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -623,6 +628,43 @@ export const PlacedBindingDeclaration = relation(
     instance: uuid,
     kind: closedId(NodeKind),
     mosts: natural,
+    node: uuid,
+  },
+  ["instance", "node", "attribute"],
+);
+
+/**
+ * A bound variable's base type, keyed as its {@link BindingDeclaration} is, where its declaration
+ * has one: `baseType`, the declaration's {@link DeclarationBaseType}'s, beside the binding's
+ * `declaration`, `cardinality` and interaction `kind`, the fields `BindingFit` judges together. A
+ * record has no base type, and its binding no row (lane NIL's audit, B12).
+ */
+export const BindingBaseType = relation(
+  "BindingBaseType",
+  {
+    attribute: closedId(AttributeName),
+    baseType: closedId(BaseType),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
+  ["node", "attribute"],
+);
+
+/**
+ * A placed binding's variable's base type, keyed as its {@link PlacedBindingDeclaration} is, where
+ * its declaration has one, as {@link BindingBaseType} is an item's own binding's.
+ */
+export const PlacedBindingBaseType = relation(
+  "PlacedBindingBaseType",
+  {
+    attribute: closedId(AttributeName),
+    baseType: closedId(BaseType),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    instance: uuid,
+    kind: closedId(NodeKind),
     node: uuid,
   },
   ["instance", "node", "attribute"],
@@ -1077,11 +1119,13 @@ export const ItemMode = relation("ItemMode", { adaptive: pg.boolean, document: u
 /**
  * The fields of a content reference: the referring element's node, kind and document, the root kind
  * of the assembly it resolves in, which for an item's or a test's own reference is its document's
- * own root kind, the attribute it refers by, and the name it refers to, collapsed. What the name
- * resolves to is a row of its own, where it names a declaration (`referenceDeclarationFields`),
- * and none where it names a built-in variable of that root, as the installed `BuiltInVariable`
- * holds each under its root (spec reading 29: an item's are not a test's), or nothing, which its
- * law refuses (lane NIL's NS2: a missing value is a row of its own relation, never the nil uuid).
+ * own root kind, the attribute it refers by, and the name it refers to, collapsed. A value that is
+ * no NCName ({@link namePattern}) names nothing and has no row: its value domain refuses it alone
+ * (spec reading 152). What the name resolves to is a row of its own, where it names a
+ * declaration (`referenceDeclarationFields`), and none where it names a built-in variable of that
+ * root, as the installed `BuiltInVariable` holds each under its root (spec reading 29: an item's
+ * are not a test's), or nothing, which its law refuses (lane NIL's NS2: a missing value is a row of
+ * its own relation, never the nil uuid).
  */
 const referenceFields = {
   assemblyKind: closedId(NodeKind),
@@ -1100,7 +1144,7 @@ const referenceFields = {
 const referenceDeclarationFields = {
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
-  baseType: closedId(BaseType),
+  baseTypes: natural,
   cardinality: closedId(Cardinality),
   declaration: uuid,
   declarationKind: closedId(DeclarationKind),
@@ -1327,7 +1371,7 @@ const sectionReferenceDeclarationFields = {
   assembly: uuid,
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
-  baseType: closedId(BaseType),
+  baseTypes: natural,
   cardinality: closedId(Cardinality),
   declaration: uuid,
   declarationKind: closedId(DeclarationKind),
@@ -1461,6 +1505,7 @@ export const interactionRelations = {
   AriaRange,
   AriaValue,
   Binding,
+  BindingBaseType,
   BindingDeclaration,
   BindingName,
   BoundVariable,
@@ -1482,6 +1527,7 @@ export const interactionRelations = {
   MostCount,
   PciModuleForm,
   PlacedBinding,
+  PlacedBindingBaseType,
   PlacedBindingDeclaration,
   PlacedChoice,
   PlacedHottext,
@@ -1593,20 +1639,34 @@ const readOf = (names: readonly Name[], kinds: readonly Kind[]) =>
   select(InteractionAttribute, (v) => v.and(v.in(v.name, names), v.in(v.kind, kinds)));
 
 /**
- * Select the read attributes of some names on some kinds in item documents.
+ * State that a read attribute is an interaction's binding that names a variable
+ * ({@link namePattern}).
  *
- * @param names - The attributes' names.
- * @param kinds - Their elements' kinds.
- * @returns The selection of `InteractionAttribute`.
+ * @param v - The row.
+ * @returns The predicate.
  */
-const itemReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
-  select(InteractionAttribute, (v) =>
-    v.and(v.in(v.name, names), v.in(v.kind, kinds), v.eq(v.rootKind, itemKind)),
+const namedBinding = (v: AttributeRow) =>
+  v.and(
+    v.in(v.name, bindingAttributes),
+    v.in(v.kind, interactionKinds),
+    Compute.matches(v.value, namePattern),
   );
 
 /**
- * Select the read attributes of some names on some kinds in the documents whose references resolve
- * in their own declarations, items and tests.
+ * The bindings that name a variable, in every document: {@link BindingName}'s source.
+ */
+const namedBindings = select(InteractionAttribute, namedBinding);
+
+/**
+ * The bindings that name a variable in item documents: {@link BoundVariable}'s source.
+ */
+const itemBindings = select(InteractionAttribute, (v) =>
+  v.and(namedBinding(v), v.eq(v.rootKind, itemKind)),
+);
+
+/**
+ * Select the read attributes of some names on some kinds that name a variable ({@link namePattern})
+ * in the documents whose references resolve in their own declarations, items and tests.
  *
  * @param names - The attributes' names.
  * @param kinds - Their elements' kinds.
@@ -1614,7 +1674,12 @@ const itemReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
  */
 const referenceReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
   select(InteractionAttribute, (v) =>
-    v.and(v.in(v.name, names), v.in(v.kind, kinds), v.in(v.rootKind, referringRoots)),
+    v.and(
+      v.in(v.name, names),
+      v.in(v.kind, kinds),
+      v.in(v.rootKind, referringRoots),
+      Compute.matches(v.value, namePattern),
+    ),
   );
 
 /**
@@ -1864,6 +1929,22 @@ const adaptiveTrue = select(InteractionAttribute, (v) =>
 );
 
 /**
+ * State that a read attribute is a printed variable's reference: its `identifier`, or its `base`
+ * or `index`, where its value names a variable.
+ *
+ * @param v - The row.
+ * @returns The predicate.
+ */
+const printedReference = (v: AttributeRow) =>
+  v.and(
+    Compute.matches(v.value, namePattern),
+    v.or(
+      v.and(v.in(v.name, references.printed.attributes), v.in(v.kind, references.printed.kinds)),
+      v.and(v.in(v.name, references.variable.attributes), v.in(v.kind, references.variable.kinds)),
+    ),
+  );
+
+/**
  * The read attributes each content reference relation holds: those that name a variable, in items
  * and tests, each resolving in its own document's declarations.
  */
@@ -1871,54 +1952,36 @@ const referenceSources = {
   context: referenceReadOf(references.context.attributes, references.context.kinds),
   feedback: referenceReadOf(references.feedback.attributes, references.feedback.kinds),
   printed: select(InteractionAttribute, (v) =>
-    v.and(
-      v.in(v.rootKind, referringRoots),
-      v.or(
-        v.and(v.in(v.name, references.printed.attributes), v.in(v.kind, references.printed.kinds)),
-        v.and(
-          v.in(v.name, references.variable.attributes),
-          v.in(v.kind, references.variable.kinds),
-          v.not(Compute.matches(v.value, integerStartPattern)),
-        ),
-      ),
-    ),
+    v.and(v.in(v.rootKind, referringRoots), printedReference(v)),
   ),
   template: referenceReadOf(references.template.attributes, references.template.kinds),
 };
 
 /**
  * The read attributes a section document's or a fragment's feedback references are: its feedback
- * elements' outcomes.
+ * elements' outcomes, where they name a variable.
  */
 const sectionFeedbackSource = select(InteractionAttribute, (v) =>
   v.and(
     v.not(v.in(v.rootKind, referringRoots)),
     v.in(v.name, references.feedback.attributes),
     v.in(v.kind, references.feedback.kinds),
+    Compute.matches(v.value, namePattern),
   ),
 );
 
 /**
  * The read attributes a section document's or a fragment's printed variable references are:
- * printed variables' names, and their bases and indices where they name a variable.
+ * printed variables' names, bases and indices, where they name a variable.
  */
 const sectionPrintedSource = select(InteractionAttribute, (v) =>
-  v.and(
-    v.not(v.in(v.rootKind, referringRoots)),
-    v.or(
-      v.and(v.in(v.name, references.printed.attributes), v.in(v.kind, references.printed.kinds)),
-      v.and(
-        v.in(v.name, references.variable.attributes),
-        v.in(v.kind, references.variable.kinds),
-        v.not(Compute.matches(v.value, integerStartPattern)),
-      ),
-    ),
-  ),
+  v.and(v.not(v.in(v.rootKind, referringRoots)), printedReference(v)),
 );
 
 /**
  * Select the read attributes a fragment's references of one class are (spec reading 117): the
- * class's attributes on its kinds, in a document that is no item, test or section.
+ * class's attributes on its kinds that name a variable, in a document that is no item, test or
+ * section.
  *
  * @param reference - The class's attributes and kinds.
  * @returns The selection.
@@ -1932,6 +1995,7 @@ const fragmentReferenceOf = (reference: {
       v.not(v.in(v.rootKind, unfragmentedRoots)),
       v.in(v.name, reference.attributes),
       v.in(v.kind, reference.kinds),
+      Compute.matches(v.value, namePattern),
     ),
   );
 
@@ -2116,8 +2180,8 @@ const contentReferenceLaws = ({
       "document",
       "identifier",
       "declarationKind",
-      "baseType",
       "cardinality",
+      "baseTypes",
     ),
     declarationRef,
   ),
@@ -2163,14 +2227,43 @@ const contentReferenceLaws = ({
       "assembly",
       "identifier",
       "declarationKind",
-      "baseType",
       "cardinality",
+      "baseTypes",
     ),
     declarationRef,
   ),
   check(rule, placedDeclared, namesNoBuiltIn),
   check(rule, placed, namesAllowedBuiltIn),
 ];
+
+/**
+ * The bindings whose variable has a base type: each has its {@link BindingBaseType}, and only these
+ * do.
+ */
+const typedBindings = select(BindingDeclaration, (r) => r.eq(r.baseTypes, 1n));
+
+/**
+ * The placed bindings whose variable has a base type: each has its {@link PlacedBindingBaseType},
+ * and only these do.
+ */
+const typedPlacedBindings = select(PlacedBindingDeclaration, (r) => r.eq(r.baseTypes, 1n));
+
+/**
+ * The cardinalities a feedback element's outcome may have (§5.49.1, §5.52.1: "an outcome variable
+ * of base-type identifier and single or multiple cardinality"): a record's is none of them, so
+ * its whole value is judged by its cardinality alone.
+ */
+const feedbackCardinalities = ["single", "multiple"] as const;
+
+/**
+ * The declarations whose base type is `identifier`, a feedback outcome's, where the declaration has
+ * a base type: the target of `Feedback_outcome_type`'s containment over a feedback reference's
+ * declaration.
+ */
+const identifierTyped = on(
+  select(DeclarationBaseType, (b) => b.eq(b.baseType, "identifier")),
+  "node",
+);
 
 /**
  * Every statement over the O3 overlays, each `check` named by its oracle law:
@@ -2324,13 +2417,22 @@ export const interactionLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
     check("Binding_declared", BindingDeclaration, (r) =>
       r.eq(r.declarationKind, "qti-response-declaration"),
+    ),
+    contained(on(typedBindings, "node", "attribute"), on(BindingBaseType, "node", "attribute")),
+    contained(
+      on(BindingBaseType, "node", "attribute", "declaration", "cardinality", "kind"),
+      on(typedBindings, "node", "attribute", "declaration", "cardinality", "kind"),
+    ),
+    contained(
+      on(BindingBaseType, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
     ),
     contained(
       on(
@@ -2361,13 +2463,41 @@ export const interactionLawsByName = {
         "assembly",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
     check("Binding_declared", PlacedBindingDeclaration, (r) =>
       r.eq(r.declarationKind, "qti-response-declaration"),
+    ),
+    contained(
+      on(typedPlacedBindings, "instance", "node", "attribute"),
+      on(PlacedBindingBaseType, "instance", "node", "attribute"),
+    ),
+    contained(
+      on(
+        PlacedBindingBaseType,
+        "instance",
+        "node",
+        "attribute",
+        "declaration",
+        "cardinality",
+        "kind",
+      ),
+      on(
+        typedPlacedBindings,
+        "instance",
+        "node",
+        "attribute",
+        "declaration",
+        "cardinality",
+        "kind",
+      ),
+    ),
+    contained(
+      on(PlacedBindingBaseType, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
     ),
   ],
   "Binding unique": [
@@ -2377,7 +2507,7 @@ export const interactionLawsByName = {
   BindingFit: [
     contained(
       on(
-        select(BindingDeclaration, (r) =>
+        select(BindingBaseType, (r) =>
           r.and(
             r.eq(r.attribute, "response-identifier"),
             r.ne(r.cardinality, "record"),
@@ -2390,12 +2520,18 @@ export const interactionLawsByName = {
       ),
       on(BindingFit, "baseType", "cardinality", "kind"),
     ),
+    // A string identifier's variable is "of base-type string" (§5.48.2, §5.162.3), which a record,
+    // having no base type, is not: its whole value is judged by its cardinality alone, and a
+    // typed variable's base type by its `BindingBaseType`.
     check("BindingFit", BindingDeclaration, (r) =>
+      r.or(r.ne(r.attribute, "string-identifier"), r.ne(r.cardinality, "record")),
+    ),
+    check("BindingFit", BindingBaseType, (r) =>
       r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
     ),
     contained(
       on(
-        select(PlacedBindingDeclaration, (r) =>
+        select(PlacedBindingBaseType, (r) =>
           r.and(
             r.eq(r.attribute, "response-identifier"),
             r.ne(r.cardinality, "record"),
@@ -2409,6 +2545,9 @@ export const interactionLawsByName = {
       on(BindingFit, "baseType", "cardinality", "kind"),
     ),
     check("BindingFit", PlacedBindingDeclaration, (r) =>
+      r.or(r.ne(r.attribute, "string-identifier"), r.ne(r.cardinality, "record")),
+    ),
+    check("BindingFit", PlacedBindingBaseType, (r) =>
       r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
     ),
   ],
@@ -2461,21 +2600,14 @@ export const interactionLawsByName = {
     mirrors(on(responseIdentifiers, "node"), on(Binding, "node")),
     check("E1_derived", Binding, (b) => b.in(b.kind, interactionKinds)),
     contained(
-      on(
-        itemReadOf(bindingAttributes, interactionKinds),
-        "node",
-        "name",
-        "kind",
-        "document",
-        "value",
-      ),
+      on(itemBindings, "node", "name", "kind", "document", "value"),
       on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(on(BoundVariable, "node", "kind"), on(Binding, "node", "kind")),
     contained(on(BindingDeclaration, "node", "attribute"), on(BoundVariable, "node", "attribute")),
     contained(on(BoundVariable, "document", "adaptive"), on(ItemMode, "document", "adaptive")),
     contained(
-      on(readOf(bindingAttributes, interactionKinds), "node", "name", "kind", "document", "value"),
+      on(namedBindings, "node", "name", "kind", "document", "value"),
       on(BindingName, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(on(BindingName, "node", "kind"), on(Binding, "node", "kind")),
@@ -2865,10 +2997,24 @@ export const interactionLawsByName = {
   ],
   "Feedback outcome type": [
     check("Feedback_outcome_type", FeedbackRefDeclaration, (r) =>
-      r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+      r.in(r.cardinality, feedbackCardinalities),
+    ),
+    contained(
+      on(
+        select(FeedbackRefDeclaration, (r) => r.eq(r.baseTypes, 1n)),
+        "declaration",
+      ),
+      identifierTyped,
     ),
     check("Feedback_outcome_type", SectionFeedbackRefDeclaration, (r) =>
-      r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+      r.in(r.cardinality, feedbackCardinalities),
+    ),
+    contained(
+      on(
+        select(SectionFeedbackRefDeclaration, (r) => r.eq(r.baseTypes, 1n)),
+        "declaration",
+      ),
+      identifierTyped,
     ),
   ],
   "Graphic gap match default hotspot": [

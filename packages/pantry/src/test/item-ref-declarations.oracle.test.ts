@@ -44,7 +44,7 @@ import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { itemRefKind, itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
-import type { Declaration } from "#pantry/qti/declarations.ts";
+import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
 import type {
   Expression,
   MappingSourceDeclaration,
@@ -232,8 +232,8 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "itemDocument",
         "template",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ],
       kind: "contained",
       to: [
@@ -242,8 +242,8 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "document",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ],
     },
     "Template default target",
@@ -314,8 +314,8 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "itemDocument",
         "source",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ],
       kind: "contained",
       to: [
@@ -324,8 +324,8 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "document",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ],
     },
     "Variable mapping source",
@@ -345,8 +345,8 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "variable",
         "declaration",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ],
       kind: "contained",
       to: [
@@ -355,8 +355,8 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "target",
         "declaration",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ],
     },
     "Variable mapping source",
@@ -409,6 +409,7 @@ const valueCardinalityOf = (cardinality: string): string =>
  * The import's rows a host law reads, gathered once per package.
  */
 interface HostRows {
+  readonly baseTypes: ReadonlyMap<string, Addition<typeof DeclarationBaseType>>;
   readonly declarations: readonly Addition<typeof Declaration>[];
   readonly documentOf: ReadonlyMap<string, string>;
   readonly expressions: readonly Addition<typeof Expression>[];
@@ -448,18 +449,22 @@ const declares = (
       d.document === row.itemDocument &&
       d.identifier === identifier &&
       d.declarationKind === row.declarationKind &&
-      d.baseType === row.declBaseType &&
+      (rows.baseTypes.has(d.node) ? 1n : 0n) === row.declBaseTypes &&
       d.cardinality === row.declCardinality,
   );
 
 /**
- * Whether a template default's expression fits its template's type (`Template_default_type`).
+ * Whether a template default's expression fits its template's type (`Template_default_type`): its
+ * base type the declaration's `DeclarationBaseType`'s, `unknown` where it has none, a record's.
  *
+ * @param rows - The rows.
  * @param target - The template default's target.
  * @returns Whether it fits.
  */
-const fitsHeld = (target: Addition<typeof TemplateDefaultTarget>): boolean => {
-  const declaredBase = valueBaseOf(target.declBaseType);
+const fitsHeld = (rows: HostRows, target: Addition<typeof TemplateDefaultTarget>): boolean => {
+  const typed = rows.baseTypes.get(target.declaration);
+  const declaredBase =
+    target.declBaseTypes === 1n && typed !== undefined ? valueBaseOf(typed.baseType) : "unknown";
 
   return (
     (target.heldBase === declaredBase ||
@@ -501,7 +506,7 @@ const targetBreaches = (
       "Template default target",
       name,
     ),
-    ...unless(fitsHeld(target), "Template default type", name),
+    ...unless(fitsHeld(rows, target), "Template default type", name),
     ...unless(
       rows.expressions.some(
         (e) =>
@@ -606,7 +611,7 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] =>
           source.target === reading.variable &&
           source.declaration === reading.declaration &&
           source.declarationKind === reading.declarationKind &&
-          source.declBaseType === reading.declBaseType &&
+          source.declBaseTypes === reading.declBaseTypes &&
           source.declCardinality === reading.declCardinality,
       );
       const mapping = rows.mappings.find(
@@ -727,6 +732,7 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
  */
 const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const rows: HostRows = {
+    baseTypes: inputs.DeclarationBaseType,
     declarations: [...inputs.Declaration.values()],
     documentOf: new Map(
       [...inputs.ItemRefDocument.values()].map(({ document, node }) => [node, document]),

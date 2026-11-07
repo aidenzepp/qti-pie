@@ -55,7 +55,7 @@ const laws = lawsOf(grammar);
 /**
  * Every law the host judges, read once.
  */
-const hostLaws = judgedLaws(Qti.statements);
+const hostLaws = judgedLaws(Qti);
 
 /**
  * Every case of the box: each cycle by each count of set items that include the fragment, with

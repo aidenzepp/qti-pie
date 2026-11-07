@@ -35,14 +35,16 @@ import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { BindingFit, grammar, RecordBindingFit } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { anyTypeKinds } from "#pantry/qti/interactions.ts";
 import type {
+  BindingBaseType,
   BindingDeclaration,
   BoundVariable,
   PlacedBinding,
+  PlacedBindingBaseType,
   PlacedBindingDeclaration,
 } from "#pantry/qti/interactions.ts";
 import {
@@ -87,6 +89,11 @@ type DeclarationRow =
   | Addition<typeof PlacedBindingDeclaration>;
 
 /**
+ * A bound variable's base type row the importer writes, an item's own or one in place.
+ */
+type BaseTypeRow = Addition<typeof BindingBaseType> | Addition<typeof PlacedBindingBaseType>;
+
+/**
  * The laws that judge a binding's type.
  */
 const fitLaws: ReadonlySet<LawName> = new Set([
@@ -100,14 +107,20 @@ const fitLaws: ReadonlySet<LawName> = new Set([
  * The fit law the schema's statements refuse a typed binding under, by the closed relations they
  * contain it in: none for an interaction of any type; `RecordBindingFit` for a record its kind does
  * not take; `BindingFit` for a typed response whose (base type, cardinality, kind) `BindingFit`
- * holds no row of, and for a string identifier's of a base type other than string.
+ * holds no row of, and for a string identifier's record, which has no base type, or variable of a
+ * base type other than string. A variable of no base type that is no record is judged by no fit
+ * law over its base type: Declaration base type refuses it alone (lane NIL's audit, B12).
  *
  * @param row - The declaration row.
+ * @param baseType - Its `BindingBaseType` or `PlacedBindingBaseType` row's base type, none where
+ *   it has none.
  * @returns The law, or none.
  */
-const misfitOf = (row: DeclarationRow): LawName | undefined => {
+const misfitOf = (row: DeclarationRow, baseType: Option.Option<string>): LawName | undefined => {
   if (row.attribute === "string-identifier") {
-    return row.baseType === "string" ? undefined : "BindingFit";
+    return row.cardinality === "record" || Option.exists(baseType, (held) => held !== "string")
+      ? "BindingFit"
+      : undefined;
   }
 
   if (anyTypeKinds.includes(row.kind)) {
@@ -120,12 +133,16 @@ const misfitOf = (row: DeclarationRow): LawName | undefined => {
       : "RecordBindingFit";
   }
 
-  return BindingFit.rows.some(
-    ({ baseType, cardinality, kind }) =>
-      baseType === row.baseType && cardinality === row.cardinality && kind === row.kind,
+  return Option.exists(
+    baseType,
+    (held) =>
+      !BindingFit.rows.some(
+        (fit) =>
+          fit.baseType === held && fit.cardinality === row.cardinality && fit.kind === row.kind,
+      ),
   )
-    ? undefined
-    : "BindingFit";
+    ? "BindingFit"
+    : undefined;
 };
 
 /**
@@ -201,7 +218,19 @@ const holds = (site: BindingSite, state: BindingState) =>
       `${label}: Binding declared, of the breaches:\n${shown}`,
     );
 
-    const misfits = new Set(declarations.flatMap((row) => misfitOf(row) ?? []));
+    const bindingKey = (row: DeclarationRow | BaseTypeRow): string =>
+      JSON.stringify(["instance" in row ? row.instance : "", row.node, row.attribute]);
+    const baseTypes = new Map(
+      [
+        ...program.inputs.BindingBaseType.values(),
+        ...program.inputs.PlacedBindingBaseType.values(),
+      ].map((row) => [bindingKey(row), row.baseType] as const),
+    );
+    const misfits = new Set(
+      declarations.flatMap(
+        (row) => misfitOf(row, Option.fromUndefinedOr(baseTypes.get(bindingKey(row)))) ?? [],
+      ),
+    );
     if (expected.typed) {
       for (const law of ["BindingFit", "RecordBindingFit"] as const) {
         assert.strictEqual(

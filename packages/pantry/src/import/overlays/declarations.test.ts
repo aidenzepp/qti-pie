@@ -72,6 +72,7 @@ type Expected = { readonly [Relation in keyof DeclarationRows]: Map<string, obje
 const relationNames = [
   "Declaration",
   "DeclarationBaseType",
+  "DeclaredValue",
   "MasteryCeiling",
   "MasteryFloor",
   "MasteryValue",
@@ -143,21 +144,25 @@ interface Parent {
 }
 
 /**
- * The fields of a declaration its value sets copy.
+ * The fields of a declaration its value sets copy, and its base type, none where it writes none.
  */
 interface WalkedDeclaration {
-  readonly baseType: string;
+  readonly baseType: Option.Option<string>;
   readonly cardinality: string;
   readonly declarationKind: string;
   readonly identifier: string;
+  readonly node: NodeId;
 }
 
 /**
- * The fields of a value set its values read.
+ * The fields of a value set its values read: its declaration's base type, none where it writes
+ * none, its count of them, its cardinality and its declaration's node.
  */
 interface WalkedSet {
-  readonly baseType: string;
+  readonly baseType: Option.Option<string>;
+  readonly baseTypes: bigint;
   readonly cardinality: string;
+  readonly declaration: NodeId;
 }
 
 /**
@@ -227,20 +232,23 @@ const walkDeclaration = (
   const cardinalityLexical = valueOf("cardinality");
   const { lead, name, trail } = walkedPieces(identifierLexical ?? "");
   const cardinality = spelledCardinalities.get(cardinalityLexical ?? "");
-  const baseType = baseTypeLexical === undefined ? "none" : spelledBaseTypes.get(baseTypeLexical);
+  // A base type unwritten is none, and one written that spells no code leaves no row.
+  const baseType = Option.map(Option.fromUndefinedOr(baseTypeLexical), (lexical) =>
+    Option.fromUndefinedOr(spelledBaseTypes.get(lexical)),
+  );
+  const spelled = Option.getOrUndefined(Option.flatten(baseType));
   if (
     identifierLexical === undefined ||
     name === "" ||
     cardinalityLexical === undefined ||
     cardinality === undefined ||
-    baseType === undefined
+    Option.exists(baseType, Option.isNone)
   ) {
     return Option.none();
   }
 
   const row = {
     ...tuple,
-    baseType,
     cardinality,
     cardinalityLexical,
     declarationKind: tuple.kind,
@@ -250,11 +258,12 @@ const walkDeclaration = (
     identifierTrail: trail,
   };
   expected.Declaration.set(tuple.node, row);
-  if (baseTypeLexical !== undefined) {
+  if (baseTypeLexical !== undefined && spelled !== undefined) {
     expected.DeclarationBaseType.set(tuple.node, {
-      baseType,
+      baseType: spelled,
       baseTypeLexical,
       node: tuple.node,
+      valueBase: spelled,
     });
   }
 
@@ -292,7 +301,7 @@ const walkDeclaration = (
     }
   }
 
-  return Option.some(row);
+  return Option.some({ ...row, baseType: Option.fromUndefinedOr(spelled) });
 };
 
 /**
@@ -303,19 +312,28 @@ const walkDeclaration = (
  * @param owner - Its declaration.
  * @returns What its values read.
  */
-const walkSet = (expected: Expected, { child, rank, tuple }: Met, owner: WalkedDeclaration) => {
-  const row = {
+const walkSet = (
+  expected: Expected,
+  { child, rank, tuple }: Met,
+  owner: WalkedDeclaration,
+): WalkedSet => {
+  const baseTypes = Option.isSome(owner.baseType) ? 1n : 0n;
+  expected.ValueSet.set(tuple.node, {
     ...tuple,
-    baseType: owner.baseType,
+    baseTypes,
     cardinality: owner.cardinality,
     declarationKind: owner.declarationKind,
     elementChildren: BigInt(child.children.filter(({ _tag }) => _tag === "element").length),
     elements: rank,
     identifier: owner.identifier,
-  };
-  expected.ValueSet.set(tuple.node, row);
+  });
 
-  return row;
+  return {
+    baseType: owner.baseType,
+    baseTypes,
+    cardinality: owner.cardinality,
+    declaration: owner.node,
+  };
 };
 
 /**
@@ -337,7 +355,9 @@ const textOf = (child: Met["child"]): string =>
     .join("");
 
 /**
- * Collect a value's expected row, its own base type's where it writes one that spells a code, its
+ * Collect a value's expected row, its text in its declaration's base type where its set is no
+ * record's and the declaration has one (information model §7.46: "except in the case of variables
+ * with record cardinality"), its own base type's where it writes one that spells a code, its
  * field's where it writes both a field identifier and a base type, whatever its set, and its
  * field's name where that identifier names something once collapsed.
  *
@@ -351,10 +371,21 @@ const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: Wa
   const text = textOf(child);
   expected.Value.set(tuple.node, {
     ...tuple,
-    baseType: owner.baseType,
+    baseTypes: owner.baseTypes,
     cardinality: owner.cardinality,
+    declaration: owner.declaration,
     text,
   });
+  if (owner.cardinality !== "record") {
+    for (const baseType of Option.toArray(owner.baseType)) {
+      expected.DeclaredValue.set(tuple.node, {
+        baseType,
+        declaration: owner.declaration,
+        node: tuple.node,
+        text,
+      });
+    }
+  }
 
   const ownBaseType = fieldBaseType === undefined ? undefined : spelledBaseTypes.get(fieldBaseType);
   if (fieldBaseType !== undefined && ownBaseType !== undefined) {
@@ -400,6 +431,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
   const expected: Expected = {
     Declaration: new Map(),
     DeclarationBaseType: new Map(),
+    DeclaredValue: new Map(),
     MasteryCeiling: new Map(),
     MasteryFloor: new Map(),
     MasteryValue: new Map(),

@@ -7,7 +7,7 @@
  * The database tests (`mapping.db.test.ts`) judge the same laws through PostgreSQL, and the
  * builder's rows are `#pantry/import/overlays/mapping.test.ts`'s.
  */
-import { lexicalForm, pg } from "@bjornpagen/grizzle";
+import { doubleText } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -25,9 +25,7 @@ import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
 import {
   AreaMapping,
   exactValuePattern,
-  floatKeyPattern,
-  floatKeyPatternOf,
-  floatKeyZeros,
+  FloatKey,
   integerKeyPattern,
   LookupValue,
   MapKey,
@@ -42,6 +40,7 @@ import {
   pairKeyPattern,
   pointKeyPattern,
 } from "#pantry/qti/mapping.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
@@ -54,15 +53,16 @@ const oldInteger = /^[+-]?[0-9]+$/u;
 
 /**
  * The deleted schema's `xs:double` lexical space (`src/schema/patterns.ts` `xsDouble`), the float
- * base type's lexical form the typed float key must lie inside.
+ * base type's lexical form the typed float key must equal (reading 154: every float key has a
+ * typed value).
  */
 const oldDouble = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
- * Grizzle's own lexical form of `double precision`, unbounded: what a typed float key is cast
- * from, so a key outside it has no typed value.
+ * Grizzle's `doubleText`, the language `Compute.parseDouble` reads total, which every typed float
+ * key must lie inside.
  */
-const grizzleDouble = new RegExp(lexicalForm(pg["double precision"]), "u");
+const parsed = new RegExp(doubleText, "u");
 
 /**
  * `integerKeyPattern` as JavaScript's engine reads it.
@@ -70,9 +70,9 @@ const grizzleDouble = new RegExp(lexicalForm(pg["double precision"]), "u");
 const integerKey = new RegExp(integerKeyPattern, "u");
 
 /**
- * `floatKeyPattern` as JavaScript's engine reads it.
+ * `FloatKey`'s pattern, the float keys that hold a typed value, as JavaScript's engine reads it.
  */
-const floatKey = new RegExp(floatKeyPattern, "u");
+const floatKey = new RegExp(FloatKey.pattern.source, "u");
 
 /**
  * The relations this module declares.
@@ -124,16 +124,15 @@ describe("qti/mapping.ts, declared", { timeout: searchTimeout }, () => {
       "AreaMapping base type",
       "E1 derived",
       "Lookup table cardinality",
+      "MappableBaseType",
       "Typed attribute value",
     ]);
   });
 
-  it("writes the float key pattern as grizzle's double form with each zero run bounded by one counted repetition", () => {
-    // Oracle: grizzle's own `lexicalForm`, each `0*` bounded by `floatKeyZeros`.
-    assert.strictEqual(
-      floatKeyPattern,
-      floatKeyPatternOf(lexicalForm(pg["double precision"]), floatKeyZeros),
-    );
+  it("types a float key by xs:double's one lexical pattern, the one a tolerance is read by", () => {
+    // Oracle: `#pantry/qti/operators.ts` `doublePattern`, the schema's one statement of
+    // `xs:double`'s lexical space, whose language the box below holds to the deleted `xsDouble`.
+    assert.strictEqual(FloatKey.pattern.source, doublePattern);
   });
 });
 
@@ -207,11 +206,12 @@ describe("qti/mapping.ts, the typed keys' languages", { timeout: searchTimeout }
   );
 
   it.effect(
-    "selects exactly the xs:double lexical forms of grizzle's double form as the float keys that hold a typed value",
+    "selects exactly the xs:double lexical forms as the float keys that hold a typed value, each inside grizzle's doubleText",
     (ctx) =>
-      // Oracle: the specification as a checker, the deleted schema's `xsDouble` and grizzle's own
-      // `lexicalForm(pg["double precision"])`, read by JavaScript's engine: within the box every
-      // run of zeros is below the key-text bound, so the bounded pattern is their intersection.
+      // Oracle: the specification as a checker, the deleted schema's `xsDouble`, read by
+      // JavaScript's engine beside `FloatKey`'s pattern; reading 154 gives every float key a value,
+      // so the languages are equal, and grizzle's `doubleText`, the language its parse reads
+      // total, holds them.
       // Bound: every text of at most 4 characters over 11 characters, 16,105.
       searched(
         ctx,
@@ -225,7 +225,7 @@ describe("qti/mapping.ts, the typed keys' languages", { timeout: searchTimeout }
             literal: (text) => JSON.stringify(text),
             oracle: {
               kind: "specification",
-              name: "xs:double's lexical space (xsDouble) inside grizzle's double form",
+              name: "xs:double's lexical space (xsDouble), inside grizzle's doubleText",
             },
             suite: "qti/mapping-float-key",
           },
@@ -234,41 +234,37 @@ describe("qti/mapping.ts, the typed keys' languages", { timeout: searchTimeout }
               const selected = floatKey.test(text);
               c.note(selected ? "selected" : "not selected");
 
-              assert.strictEqual(
-                selected,
-                oldDouble.test(text) && grizzleDouble.test(text),
-                JSON.stringify(text),
-              );
+              assert.strictEqual(selected, oldDouble.test(text), JSON.stringify(text));
+              assert.isTrue(!selected || parsed.test(text), JSON.stringify(text));
             }),
         ),
       ),
   );
 
-  it("leaves out the float keys past grizzle's double form or past a zero run's bound, each a valid xs:double", () => {
-    // Oracle: the specification as a checker, `xsDouble` and grizzle's `doubleForm` bounds
-    // (`scalar/lexical.ts`: DBL_DIG significant digits each side of the point, an exponent of at
-    // most 293), with the zero runs `floatKeyZeros` bounds.
-    // Bound: each named variant at its edge, and its neighbour inside.
+  it("selects the float keys past grizzle's former double form, each a valid xs:double, and no XML Schema 1.1 +INF", () => {
+    // Oracle: the specification as a checker, `xsDouble` (reading 154 gives every one a value),
+    // at the edges of the bounded form the deleted pattern held: DBL_DIG significant digits each
+    // side of the point, an exponent of at most 293, and zero runs of at most 255.
+    // Bound: each named variant at the old edge, and its neighbour past it.
     const cases = [
       { inside: true, key: "123456789012345" },
-      { inside: false, key: "1234567890123456" },
-      { inside: true, key: "0.123456789012345" },
-      { inside: false, key: "0.1234567890123456" },
+      { inside: true, key: "1234567890123456" },
+      { inside: true, key: "0.1234567890123456" },
+      { inside: true, key: "1.2345678901234567" },
       { inside: true, key: "1e293" },
-      { inside: false, key: "1e294" },
-      { inside: false, key: "1e400" },
-      { inside: true, key: `${zeros(floatKeyZeros)}1` },
-      { inside: false, key: `${zeros(floatKeyZeros + 1)}1` },
-      { inside: true, key: `1.${zeros(15 + floatKeyZeros)}` },
-      { inside: false, key: `1.${zeros(16 + floatKeyZeros)}` },
-      { inside: true, key: `1e${zeros(floatKeyZeros)}1` },
-      { inside: false, key: `1e${zeros(floatKeyZeros + 1)}1` },
+      { inside: true, key: "1e294" },
+      { inside: true, key: "1e400" },
+      { inside: true, key: "-1e-400" },
+      { inside: true, key: `${zeros(256)}1` },
+      { inside: true, key: `1.${zeros(271)}` },
+      { inside: true, key: `1e${zeros(256)}1` },
       { inside: true, key: "-INF" },
       { inside: true, key: "NaN" },
+      { inside: false, key: "+INF" },
     ] as const;
 
     for (const { inside, key } of cases) {
-      assert.isTrue(oldDouble.test(key), `${key.slice(0, 24)} is an xs:double`);
+      assert.strictEqual(oldDouble.test(key), inside, `${key.slice(0, 24)} is an xs:double`);
       assert.strictEqual(floatKey.test(key), inside, key.slice(0, 24));
     }
   });
@@ -432,27 +428,41 @@ const mappingBreachesOf = (text: string) =>
 
 describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }, () => {
   it.effect(
-    "refuses a repeated key by its base type's value, keeps a float outside grizzle's form apart from a typed value its text spells, and refuses a typed value no lexical form of its base type spells",
+    "refuses a repeated key by its base type's value, a float past grizzle's former form included, and refuses a typed value no lexical form of its base type spells",
     () =>
       // Oracle: the specification as a checker: §5.88.4 and §7.21 (a mapping is a function of its
       // source value), §8.13 (a pair undirected, a directed pair and a point ordered tuples),
-      // readings 7, 8, 34 and 45, and reading 56's stated limit, under which `1e+307` names the
-      // double `100000000000000e293` does and is still compared by its text alone.
+      // readings 7, 8, 34 and 45, and readings 144 and 154: a float key is the double XML Schema
+      // 1.1's doubleLexicalMap gives it, `1e400` and `2e400` both INF, and two keys repeat where
+      // they are equal or identical, -0 equal to 0.
       // Bound: each named variant, once.
       Effect.gen(function* oracleVariants() {
         const cases = [
           { breaks: ["Map key"], keys: ["1", "01"], name: "integer repeat", type: "integer" },
           { breaks: ["Map key"], keys: ["1", "1.0"], name: "float repeat", type: "float" },
           {
-            breaks: [],
+            breaks: ["Map key"],
             keys: ["100000000000000e293", "1e+307"],
-            name: "float outside the form spelling a typed value",
+            name: "float past the former form spelling one double",
+            type: "float",
+          },
+          { breaks: ["Map key"], keys: ["1e400", "2e400"], name: "overflow", type: "float" },
+          { breaks: ["Map key"], keys: ["INF", "1e400"], name: "INF", type: "float" },
+          { breaks: ["Map key"], keys: ["0", "-0"], name: "negative zero", type: "float" },
+          { breaks: ["Map key"], keys: ["-0", "1e-400"], name: "underflow", type: "float" },
+          { breaks: ["Map key"], keys: ["NaN", "NaN"], name: "NaN", type: "float" },
+          { breaks: [], keys: ["1", "1.0000000000000002"], name: "one ulp", type: "float" },
+          { breaks: [], keys: ["1e308", "1e309"], name: "finite and INF", type: "float" },
+          {
+            breaks: ["Typed attribute value"],
+            keys: ["+INF"],
+            name: "XML Schema 1.1's +INF",
             type: "float",
           },
           {
             breaks: [],
             keys: ["York", "york"],
-            name: "string keys differing only by case, both matched by the default (reading 154)",
+            name: "string keys differing only by case, both matched by the default (reading 157)",
             type: "string",
           },
           {

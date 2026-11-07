@@ -226,15 +226,12 @@ export const AttributeName = closed(
 export const TypeName = closed("TypeName", nonEmpty("TypeName", grammar.xsi.typeName.handles));
 
 /**
- * The `BaseType` roster: QTI's base types, each spelled as its lexical form, then `none`, the base
- * type of a record, which the specification gives none ("Variables with record cardinality have no
- * base-type", QTI 3.0 information model, tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3). No
- * `BaseTypeLexical` row names `none`: nothing writes it from a lexical form.
+ * The `BaseType` roster: QTI's base types, each spelled as its lexical form. A record has none
+ * ("Variables with record cardinality have no base-type", QTI 3.0 information model, tables 4.5.3,
+ * 5.34.3, 5.115.3 and 5.151.3), so no handle stands for its absence: a declaration's base type is a
+ * row of its own (`DeclarationBaseType`), which a record does not have (lane NIL's audit, B12).
  */
-export const BaseType = closed(
-  "BaseType",
-  nonEmpty("BaseType", [...grammar.baseTypes.handles, none]),
-);
+export const BaseType = closed("BaseType", nonEmpty("BaseType", grammar.baseTypes.handles));
 
 /**
  * A generated value as a `BaseType` handle ({@link handleLookup}).
@@ -1623,32 +1620,47 @@ export const Declares = closed.relation(
 );
 
 /**
- * `BuiltInVariable`: (root, variable) → (declaration, baseType, cardinality), each built-in
- * variable the processing of a document's root holds, with the declaration kind, base type and
- * cardinality it stands as there (spec reading 29, the UP audit's A63): an item's and a response
- * processing template's `numAttempts`, `duration` (a float) and `completionStatus`, a test's and a
- * section's `duration` (a duration), and `QTI_CONTEXT`, a record of base type `none`, under all
- * four. A reference to it reads as one to a declaration of that kind and type, and a name with no
- * row under its document's root is no built-in there.
+ * `BuiltInVariable`: (root, variable) → (declaration, cardinality), each built-in variable the
+ * processing of a document's root holds, with the declaration kind and cardinality it stands as
+ * there (spec reading 29, the UP audit's A63): an item's and a response processing template's
+ * `numAttempts`, `duration` and `completionStatus`, a test's and a section's `duration`, and
+ * `QTI_CONTEXT`, a record, under all four. A reference to it reads as one to a declaration of that
+ * kind, and a name with no row under its document's root is no built-in there. The base type each
+ * but the record stands as is {@link builtInBaseTypes}'.
  */
 export const BuiltInVariable = closed.relation(
   "BuiltInVariable",
   {
-    baseType: closedId(BaseType),
     cardinality: closedId(Cardinality),
     declaration: closedId(DeclarationKind),
     root: closedId(NodeKind),
     variable: closedId(BuiltIn),
   },
   ["root", "variable"],
-  grammar.references.builtIn.rows.map(({ baseType, cardinality, declaration, root, variable }) => ({
-    baseType: asBaseType(baseType),
+  grammar.references.builtIn.rows.map(({ cardinality, declaration, root, variable }) => ({
     cardinality: asCardinality(cardinality),
     declaration,
     root: memberOf(grammar.kinds.nodeKind, root),
     variable,
   })),
 );
+
+/**
+ * The base type each built-in variable stands as under a root, for the variables that have one
+ * (`BuiltInBaseType` of the grammar): an item's `numAttempts` an integer, its `duration` a float
+ * and its `completionStatus` an identifier, and a test's and a section's `duration` a duration.
+ * `QTI_CONTEXT` is a record, which has no base type, and no row (information model §2.2.2.1 and
+ * tables 4.5.3 and 5.34.3). Only the host reads it, in typing a reference to a built-in.
+ */
+export const builtInBaseTypes: readonly {
+  readonly baseType: (typeof BaseType.handles)[number];
+  readonly root: (typeof NodeKind.handles)[number];
+  readonly variable: (typeof BuiltIn.handles)[number];
+}[] = grammar.references.builtInBaseType.rows.map(({ baseType, root, variable }) => ({
+  baseType: asBaseType(baseType),
+  root: memberOf(grammar.kinds.nodeKind, root),
+  variable,
+}));
 
 /**
  * `VariableReference`: (kind, attribute) → spelling, every attribute by which an element of a kind
@@ -1750,13 +1762,13 @@ export const SectionPart = closed.relation(
 
 /**
  * `BaseTypeLexical`: code → lexical, each base type's lexical form, which proves an overlay's
- * written code: `eq(BaseTypeLexical.at("lexical", baseType), lexical)`; `none` has none.
+ * written code: `eq(BaseTypeLexical.at("lexical", baseType), lexical)`.
  */
 export const BaseTypeLexical = closed.relation(
   "BaseTypeLexical",
   { code: closedId(BaseType), lexical: anyText },
   ["code"],
-  BaseType.handles.filter((code) => code !== none).map((code) => ({ code, lexical: code })),
+  BaseType.handles.map((code) => ({ code, lexical: code })),
 );
 
 /**

@@ -119,6 +119,7 @@ import {
   Declaration,
   DeclarationBaseType,
   declarationLaws,
+  DeclaredValue,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -136,13 +137,16 @@ import { interactionLaws, interactionRelations } from "#pantry/qti/interactions.
 import {
   AreaMapping,
   LookupValue,
+  LookupValueType,
   MapKey,
   MapKeyDirectedPair,
   MapKeyFloat,
   MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
+  MapKeyType,
   Mapping,
+  MappingBaseType,
   mappingLaws,
   LookupTable,
 } from "#pantry/qti/mapping.ts";
@@ -374,12 +378,14 @@ const packageRelations = {
 
 /**
  * `declarations.ts`'s relations: each variable's declaration and its base type, its value sets and
- * values, a value's own base type, a record's fields and their names, and an outcome's mastery
- * value and normal range, each end and each pair of them.
+ * values, a value's text in its declaration's base type, a value's own base type, a record's
+ * fields and their names, and an outcome's mastery value and normal range, each end and each pair
+ * of them.
  */
 const declarationRelations = {
   Declaration,
   DeclarationBaseType,
+  DeclaredValue,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -393,21 +399,25 @@ const declarationRelations = {
 };
 
 /**
- * `mapping.ts`'s relations: each response mapping and its map keys, with the typed values of its
- * integer, float, point, pair and directed pair keys, each area mapping, each outcome's lookup
- * table and its tables' typed values.
+ * `mapping.ts`'s relations: each response mapping, its declaration's base type and its map keys,
+ * each beside that base type, with the typed values of its integer, float, point, pair and
+ * directed pair keys, each area mapping, each outcome's lookup table and its tables' typed values,
+ * each beside its declaration's base type.
  */
 const mappingRelations = {
   AreaMapping,
   LookupTable,
   LookupValue,
+  LookupValueType,
   MapKey,
   MapKeyDirectedPair,
   MapKeyFloat,
   MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
+  MapKeyType,
   Mapping,
+  MappingBaseType,
 };
 
 /**

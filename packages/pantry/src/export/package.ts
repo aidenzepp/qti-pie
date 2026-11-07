@@ -122,7 +122,7 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
   const recorded = new Set(record.map(({ path }) => path));
   const entries: readonly ZipEntry[] = [
     ...record.map(({ content, path }) => ({
-      bytes: rendered.get(path) ?? Uint8Array.fromBase64(content),
+      bytes: rendered.get(path) ?? content,
       path,
     })),
     ...[...rendered].flatMap(([path, bytes]) => (recorded.has(path) ? [] : [{ bytes, path }])),
@@ -153,7 +153,7 @@ export const compareExported = Effect.fn("export.compareExported")(function* com
   const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
 
   return yield* compareRecord(
-    record.map(({ content, path }) => ({ bytes: Uint8Array.fromBase64(content), path })),
+    record.map(({ content, path }) => ({ bytes: content, path })),
     exported,
   );
 });

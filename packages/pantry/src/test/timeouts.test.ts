@@ -66,6 +66,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 32-case exhaust ran 61.2 s at a load average of 31 to 46 in FIX-ASM's run of 2026-11-07, beside two other suites, and 135.9 s in lane ASM's run under the swarm, whose load was not recorded; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/test/record-declarations.oracle.test.ts",
+    "measurement owed: its 96-case exhaust ran 3.7 s in FIX-B12's run of 2026-11-07, which recorded no load average; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/test/unwritten-declaration-attributes.oracle.test.ts",
     "measurement owed: its 78-case exhaust ran 12.7 s at a load average of 45 to 53 in FIX-UNWRITTEN's run of 2026-11-07, beside five other suites; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
@@ -88,6 +92,22 @@ const exempt: ReadonlyMap<string, string> = new Map([
   [
     "pantry/src/test/normal-minimum-default.oracle.test.ts",
     "measurement owed: its 32-case exhaust ran 2.9 s at a load average of 34 to 45 in FIX-NORMALMIN's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/reference-names.oracle.test.ts",
+    "measurement owed: its 343-package box ran 137.6 s at a load average of 26 to 44, and 198.4 s at a load average of 34 to 46, in FIX-NCNAME's runs of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/law-names.test.ts",
+    "measurement owed: its one test compiles Qti's law model twice (6caa20ef), measured only at a load average below 60; its 300_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/expressions.ns1.oracle.test.ts",
+    "measurement owed: FB-EXPR's NS1 guard (66716a8b) ran at a load average below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
+    "pantry/src/import/overlays/operators.holds.oracle.test.ts",
+    "measurement owed: FB-EXPR's Rounding guard (33a71bb7) ran at a load average below 60; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
     "pantry/src/test/census.migration.test.ts",

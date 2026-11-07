@@ -1160,10 +1160,7 @@ export const metadataLawsByName = {
     contained(on(UsageValue, "node"), on(usageRecordValues, "id")),
     contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
     check("E1_derived", UsageValue, (u) =>
-      u.and(
-        u.ne(u.baseType, "none"),
-        u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
-      ),
+      u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
     ),
   ],
   "LOM learning resource type": [

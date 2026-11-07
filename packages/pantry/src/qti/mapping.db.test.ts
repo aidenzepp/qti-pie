@@ -11,12 +11,11 @@
  * UNIQUE finds a key's repeat is outside the contract.
  *
  * The cases over a whole imported item need the importer's ChangeSet (Q5.15), and are stated in
- * Q5.11's report for the network seat's probe: accepted, a string mapping keyed `York` and `york`,
- * a directed pair mapping keyed `A B` and `B A`, and a float mapping keyed `100000000000000e293`
- * and `1e+307` (reading 56's limit); refused, a record's mapping, an integer mapping keyed `1` and
- * `01`, a float mapping keyed `1` and `1.0`, a pair mapping keyed `A B` and `B A`, a point mapping
- * keyed `1 2` and `01 +2`, an integer mapping keyed `abc`, and an integer outcome's match table
- * entry targeting `x`.
+ * Q5.11's report for the network seat's probe: accepted, a string mapping keyed `York` and `york`
+ * and a directed pair mapping keyed `A B` and `B A`; refused, a record's mapping, an integer
+ * mapping keyed `1` and `01`, a float mapping keyed `1` and `1.0`, or `1e400` and `2e400` (reading
+ * 154), a pair mapping keyed `A B` and `B A`, a point mapping keyed `1 2` and `01 +2`, an integer
+ * mapping keyed `abc`, and an integer outcome's match table entry targeting `x`.
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
@@ -27,14 +26,16 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
   AreaMapping,
-  LookupValue,
+  LookupValueType,
   MapKey,
   MapKeyDirectedPair,
   MapKeyFloat,
   MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
+  MapKeyType,
   Mapping,
+  MappingBaseType,
   LookupTable,
 } from "#pantry/qti/mapping.ts";
 import { Author } from "#pantry/qti/roles.ts";
@@ -114,7 +115,7 @@ const containedIn =
  * @returns The row.
  */
 const declaredRow = <const F extends Partial<Fact<typeof AreaMapping>>>(fields: F) => ({
-  baseType: "point" as const,
+  baseTypes: 1n,
   cardinality: "single" as const,
   declaration: stray,
   declarationKind: "qti-response-declaration" as const,
@@ -129,19 +130,14 @@ const declaredRow = <const F extends Partial<Fact<typeof AreaMapping>>>(fields: 
 });
 
 /**
- * A stray map key of one mapping, entry `at`.
+ * A stray map key of one mapping, entry `at`, of a mapping whose declaration has a base type.
  *
  * @param at - The entry's number.
  * @param key - Its key.
- * @param baseType - Its mapping's base type, `string` unless the case says.
  * @returns The row.
  */
-const mapKeyRow = (
-  at: number,
-  key: string,
-  baseType: Fact<typeof MapKey>["baseType"] = "string",
-): Fact<typeof MapKey> => ({
-  baseType,
+const mapKeyRow = (at: number, key: string, baseType = "string"): Fact<typeof MapKey> => ({
+  baseTypes: 1n,
   caseText: "",
   document: stray,
   folded: baseType === "string",
@@ -181,27 +177,36 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
     "the mapping overlays' laws, judged by PostgreSQL",
     (it) => {
       it.effect(
-        "refuses a mapping of a base type MappableBaseType does not hold, by its containment into MappableBaseType",
+        "refuses a mapping of a base type MappableBaseType does not hold, by its containment into MappableBaseType, and a record's mapping by its cardinality",
         () =>
-          // Oracle: PostgreSQL, the containment of Mapping.baseType into MappableBaseType, a CHECK
-          // on Mapping's table (reading 78).
-          // Bound: every BaseType handle MappableBaseType leaves out: file, duration, and a
-          // record's none.
+          // Oracle: PostgreSQL, the containment of MappingBaseType.baseType into MappableBaseType,
+          // a CHECK on MappingBaseType's table, and the MappableBaseType CHECK on Mapping's
+          // (reading 78: a mapping is of no record, §2.11.1.5).
+          // Bound: every BaseType handle MappableBaseType leaves out, file and duration, and a
+          // record's mapping, which has no base type.
           Effect.gen(function* unmappable() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const baseType of ["file", "duration", "none"] as const) {
+            for (const baseType of ["file", "duration"] as const) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(Mapping, [
-                  declaredRow({ baseType, kind: "qti-mapping" }),
+                ChangeSet.empty(Author).insert(MappingBaseType, [
+                  { baseType, declaration: stray, node: strayNode(0) },
                 ]),
                 {},
               );
 
               assert.isTrue(
-                rejectedBy(outcome, containedIn("Mapping", "MappableBaseType")),
+                rejectedBy(outcome, containedIn("MappingBaseType", "MappableBaseType")),
                 baseType,
               );
             }
+
+            const record = yield* db.apply(
+              ChangeSet.empty(Author).insert(Mapping, [
+                declaredRow({ baseTypes: 0n, cardinality: "record", kind: "qti-mapping" }),
+              ]),
+              {},
+            );
+            assert.isTrue(rejectedBy(record, checkNamed("Mapping", "MappableBaseType")), "record");
           }),
       );
 
@@ -323,9 +328,12 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         "refuses two float keys of one mapping that name one double, by the key on (mapping, value)",
         () =>
           // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyFloat, "mapping", "value")) over the
-          // value it generates, the cast that rounds each decimal once to its nearest double
-          // (reading 56).
-          // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, and 0.1 and .10.
+          // value it generates, grizzle's `Compute.parseDouble`, XML Schema 1.1's doubleLexicalMap
+          // (readings 144 and 154), and `float8` equality, -0 equal to 0 and NaN to NaN.
+          // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, 0.1 and .10, and past grizzle's former
+          // bounded form: two overflows, an overflow and INF, an underflow and 0, a 17-digit key
+          // and the 18-digit one that rounds with it, a tie to even, a 15-digit mantissa at 293
+          // and the 1e+307 it spells, and two NaNs.
           Effect.gen(function* floatRepeat() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const [first, second] of [
@@ -333,6 +341,13 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               ["1", "10e-1"],
               ["0", "-0"],
               ["0.1", ".10"],
+              ["1e400", "2e400"],
+              ["INF", "1e400"],
+              ["0", "1e-400"],
+              ["1.2345678901234567", "1.23456789012345671"],
+              ["9007199254740993", "9007199254740992"],
+              ["100000000000000e293", "1e+307"],
+              ["NaN", "NaN"],
             ] as const) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author).insert(MapKeyFloat, [
@@ -357,13 +372,17 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           // cast it generates, against the doubles each decimal rounds to, which differ: the
           // control of the repeat above. A stray row's deferred containments may still refuse the
           // write at commit, so the key alone is read.
-          // Bound: 1 and 2, 0.1 and 0.100000000000001 (apart in the fifteenth digit, the last the
-          // form holds), and INF and -INF.
+          // Bound: 1 and 2, 0.1 and 0.100000000000001 (apart in the fifteenth digit), 1 and the
+          // double one ulp above it, the greatest finite double and INF, the least subnormal and
+          // 0, and INF and -INF.
           Effect.gen(function* floatDistinct() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const [first, second] of [
               ["1", "2"],
               ["0.1", "0.100000000000001"],
+              ["1", "1.0000000000000002"],
+              ["1.7976931348623157e308", "1e309"],
+              ["4.9e-324", "0"],
               ["INF", "-INF"],
             ] as const) {
               const outcome = yield* db.apply(
@@ -383,24 +402,27 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses an area mapping of a declaration whose base type is not point, by AreaMapping_base_type",
+        "refuses an area mapping of a record, which has no base type, by AreaMapping_base_type",
         () =>
           // Oracle: PostgreSQL, the AreaMapping_base_type CHECK, judged as the row is inserted
-          // (information model §5.5).
-          // Bound: a base type of each other shape of value: a pair, an identifier and a float.
+          // (information model §5.5: "a mapping from a source set of point values"; a record has
+          // no base type, so it is judged by its cardinality alone). A typed declaration's base
+          // type is judged by the containment into `DeclarationBaseType`'s point rows, which the
+          // host tier holds (`test/record-declarations.oracle.test.ts`).
+          // Bound: a record's area mapping.
           Effect.gen(function* areaBaseType() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const baseType of ["pair", "identifier", "float"] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(AreaMapping, [declaredRow({ baseType })]),
-                {},
-              );
+            const record = yield* db.apply(
+              ChangeSet.empty(Author).insert(AreaMapping, [
+                declaredRow({ baseTypes: 0n, cardinality: "record" }),
+              ]),
+              {},
+            );
 
-              assert.isTrue(
-                rejectedBy(outcome, checkNamed("AreaMapping", "AreaMapping_base_type")),
-                baseType,
-              );
-            }
+            assert.isTrue(
+              rejectedBy(record, checkNamed("AreaMapping", "AreaMapping_base_type")),
+              "record",
+            );
           }),
       );
 
@@ -413,11 +435,11 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           Effect.gen(function* lookupCardinality() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const cardinality of ["multiple", "ordered", "record"] as const) {
-              const baseType = cardinality === "record" ? "none" : "integer";
+              const baseTypes = cardinality === "record" ? 0n : 1n;
               const match = yield* db.apply(
                 ChangeSet.empty(Author).insert(LookupTable, [
                   declaredRow({
-                    baseType,
+                    baseTypes,
                     cardinality,
                     declarationKind: "qti-outcome-declaration",
                     kind: "qti-match-table",
@@ -428,7 +450,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               const interpolation = yield* db.apply(
                 ChangeSet.empty(Author).insert(LookupTable, [
                   declaredRow({
-                    baseType,
+                    baseTypes,
                     cardinality,
                     declarationKind: "qti-outcome-declaration",
                     kind: "qti-interpolation-table",
@@ -452,7 +474,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a map key or a lookup value that is no lexical form of its base type, written exactly, by Typed_attribute_value",
         () =>
-          // Oracle: PostgreSQL, the Typed_attribute_value CHECK on MapKey and on LookupValue,
+          // Oracle: PostgreSQL, the Typed_attribute_value CHECK on MapKeyType and LookupValueType,
           // judged as the row is inserted: BaseTypePattern's row of the base type, and no
           // whitespace around a value of any base type but string (readings 7, 8 and 34).
           // Bound: a text of no integer, a padded integer, a boolean written 1, a point of one
@@ -468,12 +490,14 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               ["float", "1,5"],
             ] as const) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKey, [mapKeyRow(0, key, baseType)]),
+                ChangeSet.empty(Author).insert(MapKeyType, [
+                  { baseType, key, mapping: stray, node: strayNode(0) },
+                ]),
                 {},
               );
 
               assert.isTrue(
-                rejectedBy(outcome, checkNamed("MapKey", "Typed_attribute_value")),
+                rejectedBy(outcome, checkNamed("MapKeyType", "Typed_attribute_value")),
                 `${baseType} ${key}`,
               );
             }
@@ -484,24 +508,14 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               ["identifier", "1a"],
             ] as const) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(LookupValue, [
-                  {
-                    baseType,
-                    document: stray,
-                    kind: "qti-match-table-entry",
-                    nearest: stray,
-                    node: strayNode(0),
-                    parent: stray,
-                    start: 5n,
-                    value,
-                    version: "3.0.1",
-                  },
+                ChangeSet.empty(Author).insert(LookupValueType, [
+                  { baseType, declaration: stray, node: strayNode(0), value },
                 ]),
                 {},
               );
 
               assert.isTrue(
-                rejectedBy(outcome, checkNamed("LookupValue", "Typed_attribute_value")),
+                rejectedBy(outcome, checkNamed("LookupValueType", "Typed_attribute_value")),
                 `${baseType} ${value}`,
               );
             }

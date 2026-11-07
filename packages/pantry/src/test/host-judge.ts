@@ -17,13 +17,17 @@
  *   owner's end, and its members' running values in slot order, a member its step's selection does
  *   not hold stepping by the identity;
  * - **each copy along a family's axis**: an accumulated field of a member that a containment pairs,
- *   beside the member's group and the owner's primary key, with a field of the owner.
+ *   beside the member's group and the owner's primary key, with a field of the owner;
+ * - **each field PostgreSQL generates** (`relation.generated`): its term, as grizzle keeps it in the
+ *   relation's description, evaluated over the row's written fields as a predicate is
+ *   (`#pantry/test/key-copies.ts` `generatedFields`).
  *
  * What it does not restore stays absent: a tree root's copies along the axis, whose start values
- * grizzle keeps in its own field builders; a copy along a last or a predecessor axis; a field
- * PostgreSQL generates. A float is read as grizzle's `float8` stores it, -0 as 0. A law that reads
- * an absent value on a row it reads is not judged, and {@link judge} names it with every absent
- * value, so a skip is always named by its cause.
+ * grizzle keeps in its own field builders; a copy along a last or a predecessor axis; a generated
+ * field whose term holds one the evaluator does not read, a cast or a conditional. A float is read
+ * as grizzle's `float8` stores it, -0 as 0. A law that reads an absent value on a row it reads is
+ * not judged, and {@link judge} names it with every absent value, so a skip is always named by its
+ * cause.
  */
 import type { Law } from "@bjornpagen/grizzle";
 import { Option, Order, Predicate, Schema } from "effect";
@@ -33,11 +37,12 @@ import {
   closedRows,
   datumText,
   floatDatum,
+  generatedFields,
   judgedLaws,
   judgedSideOf,
   SideSchema,
 } from "#pantry/test/key-copies.ts";
-import type { Datum, JudgedLaw, JudgedSide } from "#pantry/test/key-copies.ts";
+import type { Datum, JudgedLaw, JudgedSide, JudgedSourceSide } from "#pantry/test/key-copies.ts";
 
 /**
  * A row as the host holds it: each of its fields' values that is a datum.
@@ -97,9 +102,9 @@ interface Modelled {
 
 /**
  * Read every member of a schema the host models: each stored relation's primary key and its
- * fields' writings, by name. A member the host can read neither as a stored relation nor as a kind
- * it reads elsewhere ({@link readElsewhere}) fails loudly, by name, since a relation that vanished
- * from the host's model would leave every law over it unjudged without a word.
+ * fields' writings, by name. A member the host can read neither as a stored relation nor as
+ * a kind it reads elsewhere ({@link readElsewhere}) fails loudly, by name, since a relation that
+ * vanished from the host's model would leave every law over it unjudged without a word.
  *
  * @param members - The schema's members, `Qti.relations`' values.
  * @returns The stored relations by name.
@@ -393,6 +398,20 @@ interface AxisCopy {
 }
 
 /**
+ * A law side's term that reads a field as it is: no `pred` term and no constant.
+ */
+type FieldTerm = Extract<JudgedSourceSide["law"]["terms"][number], { readonly kind: "field" }>;
+
+/**
+ * Test whether a law side's term reads a field as it is.
+ *
+ * @param term - The term.
+ * @returns Whether it is a field term.
+ */
+const isFieldTerm = (term: JudgedSourceSide["law"]["terms"][number]): term is FieldTerm =>
+  term.kind === "field";
+
+/**
  * Read a containment as copies along a family's axis, where it is one.
  *
  * @param law - The containment.
@@ -402,14 +421,15 @@ const axisCopiesOf = (
   law: Extract<JudgedLaw, { readonly kind: "contained" }>,
 ): readonly AxisCopy[] =>
   families.flatMap((family) => {
-    const from = law.from.law.terms;
-    const to = law.to.law.terms;
+    const from = law.from.law.terms.filter(isFieldTerm);
+    const to = law.to.law.terms.filter(isFieldTerm);
     const ownerKey = keyOf(family.owner);
     if (
       family.member !== law.from.relation ||
       family.owner !== law.to.relation ||
       law.to.reads.length > 0 ||
-      [...from, ...to].some(({ kind }) => kind !== "field")
+      from.length !== law.from.law.terms.length ||
+      to.length !== law.to.law.terms.length
     ) {
       return [];
     }
@@ -603,7 +623,7 @@ const foldAll = (rows: ReadonlyMap<string, FilledRow[]>): number => {
 /**
  * Every copy along a family's axis the schema states.
  */
-const copies = axisCopies(judgedLaws(Qti.statements));
+const copies = axisCopies(judgedLaws(Qti));
 
 /**
  * Rebuild a program's rows as the database holds them, every value grizzle fills that the
@@ -633,6 +653,15 @@ export const hostRowsOf = (inputs: PackageInputs): HostRows => {
     for (const [field, value] of Object.entries(written)) {
       if (isDatum(value) && row[field] === undefined) {
         row[field] = Predicate.isNumber(value) ? floatDatum(value) : value;
+      }
+    }
+
+    for (const generated of Option.toArray(Option.fromUndefinedOr(generatedFields.get(relation)))) {
+      for (const [field, valueOf] of generated) {
+        const value = valueOf(row);
+        if (value !== undefined) {
+          row[field] = value;
+        }
       }
     }
 
@@ -769,13 +798,26 @@ interface LawRead {
 }
 
 /**
+ * Whether a constant's literal is a scalar a row holds as it is: a text, a number, a bigint or a
+ * boolean.
+ *
+ * @param value - The literal.
+ * @returns Whether it is one.
+ */
+const isScalar = (value: unknown): value is bigint | boolean | number | string =>
+  Predicate.isString(value) ||
+  Predicate.isBigInt(value) ||
+  Predicate.isNumber(value) ||
+  Predicate.isBoolean(value);
+
+/**
  * Project one side over a relation's rows ({@link Projection}).
  *
  * @param side - The side.
  * @param held - The rows.
  * @returns The tuples and the absent values.
  */
-const projectionOf = (side: JudgedSide, held: readonly HostRow[]): Projection => {
+const projectionOf = (side: JudgedSourceSide, held: readonly HostRow[]): Projection => {
   const absent = new Set(side.unread.map((kind) => `${side.relation}: a ${kind} term`));
   const tuples = new Map<string, HostRow>();
   for (const row of held) {
@@ -793,6 +835,18 @@ const projectionOf = (side: JudgedSide, held: readonly HostRow[]): Projection =>
     const values: Datum[] = [];
     let outside = false;
     for (const term of side.law.terms) {
+      if (term.kind === "constant") {
+        // A containment source's constant is its value on every row (grizzle's `constant(v)`).
+        const { value: constant } = term;
+        if (isScalar(constant)) {
+          values.push(constant);
+        } else {
+          absent.add(`${side.relation}: a constant term`);
+        }
+
+        continue;
+      }
+
       const value = row[term.field];
       if (value === undefined) {
         absent.add(`${side.relation}.${term.field}`);

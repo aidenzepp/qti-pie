@@ -39,6 +39,7 @@ import {
   breachAt,
   collapsed,
   elementsOf,
+  typedOptionalOf,
   typedOr,
   typedValueOf,
   valueOf,
@@ -167,13 +168,16 @@ const tableKinds: ReadonlyMap<string, readonly string[]> = new Map([
 ]);
 
 /**
- * Read a declaration code as an expression type's: `none`, a record's base type, reads `unknown`
- * (the schema's `ValueBaseOf`).
+ * Read a variable's base type as an expression type's: the declaration code itself, which the
+ * expression types spell alike, and `unknown` where the variable has none, a record's, or one
+ * whose declaration writes none (information model tables 4.5.3 and 5.34.3: "Variables with
+ * record cardinality have no base-type").
  *
- * @param baseType - The declaration's base type, `none` where it writes none.
+ * @param baseType - The variable's base type, none where it has none.
  * @returns The value base.
  */
-const valueBaseOf = (baseType: string): string => (baseType === "none" ? "unknown" : baseType);
+const valueBaseOf = (baseType: Option.Option<string>): string =>
+  Option.getOrElse(baseType, () => "unknown");
 
 /**
  * One variable reference a processing element makes, resolved: the attribute, the name, the
@@ -377,6 +381,11 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
       .filter(({ root }) => root === rootKind)
       .map((row) => [row.variable, row] as const),
   );
+  const builtInBases = new Map(
+    grammar.references.builtInBaseType.rows
+      .filter(({ root }) => root === rootKind)
+      .map(({ baseType, variable }) => [variable, baseType] as const),
+  );
   const processing = new Set([...typings.keys(), ...rules]);
   const references = rows.members.flatMap((node): readonly Reference[] =>
     processing.has(node.kind)
@@ -402,12 +411,7 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
                   // one does: its declaration's value domain refuses it alone (the ruling of
                   // 2026-11-06; lane NIL's audit, B11).
                   type: {
-                    base: valueBaseOf(
-                      Option.getOrElse(
-                        typedValueOf(rows, declaration.id, "base-type"),
-                        () => "none",
-                      ),
-                    ),
+                    base: valueBaseOf(typedValueOf(rows, declaration.id, "base-type")),
                     cardinality: Option.getOrElse(
                       typedValueOf(rows, declaration.id, "cardinality"),
                       () => "unknown",
@@ -433,7 +437,10 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
                     identifier,
                     node,
                     resolution: "builtIn",
-                    type: { base: valueBaseOf(builtIn.baseType), cardinality: builtIn.cardinality },
+                    type: {
+                      base: valueBaseOf(Option.fromUndefinedOr(builtInBases.get(identifier))),
+                      cardinality: builtIn.cardinality,
+                    },
                   };
             }),
           )
@@ -867,7 +874,7 @@ export const expressionPackageBreaches = (
           // compare against (the orchestrator's ruling of 2026-11-06; lane NIL's audit, B11).
           Option.flatMap((declaration) =>
             Option.zipWith(
-              typedOr(item.rows, declaration.id, "base-type", "none"),
+              typedOptionalOf(item.rows, declaration.id, "base-type"),
               typedValueOf(item.rows, declaration.id, "cardinality"),
               (base, cardinality) => ({ base: valueBaseOf(base), cardinality }),
             ),

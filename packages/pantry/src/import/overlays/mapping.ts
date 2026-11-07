@@ -6,31 +6,37 @@
  * The rows restate what the tree says and nothing else: each overlay's node tuple, its parent, its
  * declaration's `declarationRef` tuple as `#pantry/qti/declarations.ts` derives it, each map
  * entry's `map-key` as written, each key's split where its base type has a typed value, whose
- * value PostgreSQL generates from the split, and each lookup table's typed attribute values beside
- * its base type. The database proves every one of them (`mappingLaws`), so a row this builder gets
- * wrong is refused, never accepted.
+ * value PostgreSQL generates from the split, and each lookup table's typed attribute values; and,
+ * where the declaration has a base type, a mapping's, a map key's and a lookup value's row beside
+ * it (a record has none: lane NIL's audit, B12). The database proves every one of them
+ * (`mappingLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
+import { baseTypesOf, declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
+import type { DeclaredFields } from "#pantry/import/overlays/declarations.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
-import { floatKeyPattern, pairKeyPattern } from "#pantry/qti/mapping.ts";
+import { pairKeyPattern } from "#pantry/qti/mapping.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 import type {
   AreaMapping,
   LookupValue,
+  LookupValueType,
   MapKey,
   MapKeyDirectedPair,
   MapKeyFloat,
   MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
+  MapKeyType,
   Mapping,
+  MappingBaseType,
   LookupTable,
 } from "#pantry/qti/mapping.ts";
 
@@ -58,13 +64,16 @@ export interface MappingIds {
 export interface MappingRows {
   readonly AreaMapping: ReadonlyMap<string, Addition<typeof AreaMapping>>;
   readonly LookupValue: ReadonlyMap<string, Addition<typeof LookupValue>>;
+  readonly LookupValueType: ReadonlyMap<string, Addition<typeof LookupValueType>>;
   readonly MapKey: ReadonlyMap<string, Addition<typeof MapKey>>;
   readonly MapKeyDirectedPair: ReadonlyMap<string, Addition<typeof MapKeyDirectedPair>>;
   readonly MapKeyFloat: ReadonlyMap<string, Addition<typeof MapKeyFloat>>;
   readonly MapKeyInteger: ReadonlyMap<string, Addition<typeof MapKeyInteger>>;
   readonly MapKeyPair: ReadonlyMap<string, Addition<typeof MapKeyPair>>;
   readonly MapKeyPoint: ReadonlyMap<string, Addition<typeof MapKeyPoint>>;
+  readonly MapKeyType: ReadonlyMap<string, Addition<typeof MapKeyType>>;
   readonly Mapping: ReadonlyMap<string, Addition<typeof Mapping>>;
+  readonly MappingBaseType: ReadonlyMap<string, Addition<typeof MappingBaseType>>;
   readonly LookupTable: ReadonlyMap<string, Addition<typeof LookupTable>>;
 }
 
@@ -74,18 +83,38 @@ export interface MappingRows {
  */
 type DeclarationCopy = Pick<
   Addition<typeof Mapping>,
-  "baseType" | "cardinality" | "declarationKind" | "identifier"
+  "baseTypes" | "cardinality" | "declarationKind" | "identifier"
 >;
 
 /**
  * A `BaseType` handle.
  */
-type BaseTypeHandle = Addition<typeof Mapping>["baseType"];
+type BaseTypeHandle = Addition<typeof MappingBaseType>["baseType"];
 
 /**
- * The map keys of a float mapping that hold a typed value, as `floatKeys` selects them.
+ * Read the fields a declared overlay copies from its declaration: its base type only as its count
+ * ({@link baseTypesOf}), since a record has none.
+ *
+ * @param declared - The declaration's fields.
+ * @returns The copy.
  */
-const floatKey = new RegExp(floatKeyPattern, "u");
+const copyOf = ({
+  baseType,
+  cardinality,
+  declarationKind,
+  identifier,
+}: DeclaredFields): DeclarationCopy => ({
+  baseTypes: baseTypesOf(baseType),
+  cardinality,
+  declarationKind,
+  identifier,
+});
+
+/**
+ * The map keys of a float mapping, every one of which holds a typed value (reading 154), as
+ * `floatKeys` selects them.
+ */
+const doubleKey = new RegExp(doublePattern, "u");
 
 /**
  * The map keys of a pair or directed pair mapping that hold a typed value, as `pairKeys` and
@@ -284,8 +313,9 @@ interface TypedEntry {
 
 /**
  * Each base type's typed key, where it has one: the parse of its key, which is the one test that
- * the key holds a typed value, and the relation its row joins. A float key's test is its pattern,
- * since its row holds no split; a pair's is its pattern beside the parse ({@link pairKey}).
+ * the key holds a typed value, and the relation its row joins. A float key's test is its pattern
+ * ({@link doubleKey}), since its row holds no split; a pair's is its pattern beside the parse
+ * ({@link pairKey}).
  */
 const typedKeyAdders: Partial<
   Readonly<Record<BaseTypeHandle, (typed: TypedKeys, entry: TypedEntry) => void>>
@@ -297,7 +327,7 @@ const typedKeyAdders: Partial<
     }
   },
   float: (typed, entry) => {
-    if (floatKey.test(entry.key)) {
+    if (doubleKey.test(entry.key)) {
       typed.MapKeyFloat.set(entry.node, entry);
     }
   },
@@ -323,8 +353,8 @@ const typedKeyAdders: Partial<
 
 /**
  * Add a map key's typed row, where its base type gives it one and its key is of the form the
- * row's mirror selects: an integer's, a float of grizzle's double form, a point's two integers, or
- * a pair's or a directed pair's two items. Every other key has no typed row.
+ * row's mirror selects: an integer's, a float's in `xs:double`'s lexical space, a point's two
+ * integers, or a pair's or a directed pair's two items. Every other key has no typed row.
  *
  * @param typed - The typed rows so far.
  * @param baseType - The key's mapping's base type.
@@ -370,8 +400,10 @@ const matchingOf = (baseType: BaseTypeHandle, caseText: string | undefined, key:
  * key-text bound keeps its `MapKey` row and its typed row, whose `keyText` fields alone refuse it
  * (their parts' types bound no length), so it is refused under "Key text bound" only; and a key its
  * base type's typed form does not hold has no typed row, as the typed relations' mirrors select. A
- * table entry, and a table with a `default-value`, has its `LookupValue` row, its base type its
- * table's declaration's.
+ * table entry, and a table with a `default-value`, has its `LookupValue` row, with its table's
+ * declaration. Each of a mapping, a map key and a lookup value has its row beside its declaration's
+ * base type, where the declaration has one, and only there; a record's has none, so its keys and
+ * values are read in no base type and have no typed row.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -404,14 +436,17 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   const declarations = new Map(
     rows.nodes.flatMap((node) =>
       Option.toArray(declaredFieldsOf(node.kind, (name) => valueOf(node.id, name))).map(
-        (declared): readonly [NodeId, DeclarationCopy] => [node.id, declared],
+        (declared): readonly [NodeId, DeclaredFields] => [node.id, declared],
       ),
     ),
   );
 
   const areaMappings = new Map<string, Addition<typeof AreaMapping>>();
   const lookupValues = new Map<string, Addition<typeof LookupValue>>();
+  const lookupValueTypes = new Map<string, Addition<typeof LookupValueType>>();
   const mapKeys = new Map<string, Addition<typeof MapKey>>();
+  const mapKeyTypes = new Map<string, Addition<typeof MapKeyType>>();
+  const mappingBaseTypes = new Map<string, Addition<typeof MappingBaseType>>();
   const typed: TypedKeys = {
     MapKeyDirectedPair: new Map(),
     MapKeyFloat: new Map(),
@@ -424,9 +459,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
 
   for (const node of rows.nodes) {
     for (const declaration of Option.toArray(Option.fromNullishOr(declarations.get(node.parent)))) {
-      const declared = { ...tupleOf(node), ...declaration, declaration: node.parent };
+      const declared = { ...tupleOf(node), ...copyOf(declaration), declaration: node.parent };
       if (node.kind === "qti-mapping") {
         mappings.set(node.id, declared);
+        for (const baseType of Option.toArray(declaration.baseType)) {
+          mappingBaseTypes.set(node.id, { baseType, declaration: node.parent, node: node.id });
+        }
       } else if (node.kind === "qti-area-mapping") {
         areaMappings.set(node.id, declared);
       } else if (node.kind === "qti-match-table" || node.kind === "qti-interpolation-table") {
@@ -439,13 +477,22 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
       lookupAttribute === undefined ? undefined : valueOf(node.id, lookupAttribute);
     const table = lookupAttribute === "default-value" ? node : byId.get(node.parent);
     const tableDeclaration = table === undefined ? undefined : declarations.get(table.parent);
-    if (lookupValue !== undefined && tableDeclaration !== undefined) {
+    if (lookupValue !== undefined && table !== undefined && tableDeclaration !== undefined) {
       lookupValues.set(node.id, {
         ...tupleOf(node),
-        baseType: tableDeclaration.baseType,
+        baseTypes: baseTypesOf(tableDeclaration.baseType),
+        declaration: table.parent,
         parent: node.parent,
         value: lookupValue,
       });
+      for (const baseType of Option.toArray(tableDeclaration.baseType)) {
+        lookupValueTypes.set(node.id, {
+          baseType,
+          declaration: table.parent,
+          node: node.id,
+          value: lookupValue,
+        });
+      }
     }
 
     const key = node.kind === "qti-map-entry" ? valueOf(node.id, "map-key") : undefined;
@@ -455,24 +502,28 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
       continue;
     }
 
-    const { baseType } = mappingDeclaration;
     mapKeys.set(node.id, {
       ...tupleOf(node),
-      ...matchingOf(baseType, valueOf(node.id, "case-sensitive"), key),
-      baseType,
+      ...matchingOf(mappingDeclaration.baseType, valueOf(node.id, "case-sensitive"), key),
+      baseTypes: baseTypesOf(mappingDeclaration.baseType),
       key,
       mapping: node.parent,
     });
-
-    addTypedKey(typed, baseType, { key, mapping: node.parent, node: node.id });
+    for (const baseType of Option.toArray(mappingDeclaration.baseType)) {
+      mapKeyTypes.set(node.id, { baseType, key, mapping: node.parent, node: node.id });
+      addTypedKey(typed, baseType, { key, mapping: node.parent, node: node.id });
+    }
   }
 
   return {
     AreaMapping: areaMappings,
     LookupTable: lookupTables,
     LookupValue: lookupValues,
+    LookupValueType: lookupValueTypes,
     MapKey: mapKeys,
     ...typed,
+    MapKeyType: mapKeyTypes,
     Mapping: mappings,
+    MappingBaseType: mappingBaseTypes,
   };
 };

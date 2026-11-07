@@ -24,6 +24,7 @@ import {
   breachAt,
   elementsOf,
   field,
+  typedOptionalOf,
   typedOr,
   typedValueOf,
   valueOf,
@@ -194,7 +195,7 @@ const masteryRangeOf = (rows: View, node: Row): readonly Breach[] => {
  * @param rows - The document.
  * @param set - The value set.
  * @param cardinality - Its declaration's cardinality.
- * @param baseType - Its declaration's base type, `none` where it writes none.
+ * @param baseType - Its declaration's base type, none where it writes none.
  * @param grammar - The composed grammar.
  * @returns The breaches.
  */
@@ -202,7 +203,7 @@ const valueSetLawsOf = (
   rows: View,
   set: Row,
   cardinality: string,
-  baseType: string,
+  baseType: Option.Option<string>,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
   const values = elementsOf(rows, set.id);
@@ -245,16 +246,20 @@ const valueSetLawsOf = (
         return [];
       }
 
-      // A field's own base type outside its domain types nothing, as an unwritten one does: that
-      // domain refuses it alone (the ruling of 2026-11-06; lane NIL's audit, B11).
-      const typed =
-        baseType === "none"
-          ? Option.getOrElse(typedValueOf(rows, value.id, "base-type"), () => "none")
-          : baseType;
+      // §7.46: "The base-type is defined by the 'base-type' attribute of the declaration except in
+      // the case of variables with record cardinality": a record's value is a field, read in its
+      // own base type, and any other value in its declaration's. A type that is unwritten, or
+      // outside its domain, types nothing: the declaration's own law or that domain refuses it
+      // alone (the ruling of 2026-11-06; lane NIL's audit, B11 and B12).
+      const typed = cardinality === "record" ? typedValueOf(rows, value.id, "base-type") : baseType;
 
-      return typedValueHolds(grammar, typed, value.stringValue)
-        ? []
-        : [breachAt(rows, value, "Typed value", { baseType: typed, text: value.stringValue })];
+      return Option.match(typed, {
+        onNone: () => [],
+        onSome: (held) =>
+          typedValueHolds(grammar, held, value.stringValue)
+            ? []
+            : [breachAt(rows, value, "Typed value", { baseType: held, text: value.stringValue })],
+      });
     }),
   ];
 };
@@ -284,24 +289,32 @@ const declarationLawsOf = (
   const typed = Option.all([
     typedValueOf(rows, node.id, "identifier"),
     typedValueOf(rows, node.id, "cardinality"),
-    typedOr(rows, node.id, "base-type", "none"),
+    typedOptionalOf(rows, node.id, "base-type"),
   ]);
   if (Option.isNone(typed)) {
     return [];
   }
 
+  // A record has no base type, and every other variable has one (tables 4.5.3, 5.34.3, 5.115.3
+  // and 5.151.3): its absence is no type. A typed name (SCORE, MAXSCORE, PASSED) is no record, its
+  // whole value judged by its cardinality alone, and has its type where it has a base type; one
+  // with none is Declaration base type's alone (lane NIL's audit, B12).
   const [identifier, cardinality, baseType] = typed.value;
-  const keys = { baseType, cardinality, identifier };
+  const keys = {
+    ...Option.match(baseType, { onNone: () => ({}), onSome: (held) => ({ baseType: held }) }),
+    cardinality,
+    identifier,
+  };
   const reserved = reservedBaseTypes.get(identifier);
   const reservedBroken =
     (node.kind === "qti-outcome-declaration" &&
       reserved !== undefined &&
-      baseType !== reserved.baseType &&
+      (cardinality === "record" || Option.exists(baseType, (held) => held !== reserved.baseType)) &&
       (reserved.testsHeld ||
         !Option.exists(rows.root, ({ kind }) => kind === "qti-assessment-test"))) ||
     (identifier === "QTI_CONTEXT" &&
       (node.kind !== "qti-context-declaration" || cardinality !== "record"));
-  const baseBroken = (cardinality === "record") !== (baseType === "none");
+  const baseBroken = (cardinality === "record") === Option.isSome(baseType);
   const sets = elementsOf(rows, node.id).filter(({ kind }) => valueSetKinds.has(kind));
 
   return [

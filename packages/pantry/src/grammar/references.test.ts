@@ -461,28 +461,41 @@ describe("the reference relations of production", () => {
       // QTI_CONTEXT, of no base type. An item's and a response processing template's processing
       // holds an item's, a test's and a section's a test's.
       Effect.gen(function* builtInsAreTheSpecs() {
-        const { builtIn } = yield* production;
+        const { builtIn, builtInBaseType } = yield* production;
         const item = ["qti-assessment-item", "qti-response-processing"];
         const test = ["qti-assessment-test", "qti-assessment-section"];
 
         assert.deepStrictEqual(
           new Set(
-            builtIn.rows.map(({ baseType, cardinality, declaration, root, variable }) =>
-              keyed(root, variable, declaration, baseType, cardinality),
+            builtIn.rows.map(({ cardinality, declaration, root, variable }) =>
+              keyed(root, variable, declaration, cardinality),
             ),
           ),
           new Set([
             ...item.flatMap((root) => [
-              keyed(root, "numAttempts", "qti-response-declaration", "integer", "single"),
-              keyed(root, "duration", "qti-response-declaration", "float", "single"),
-              keyed(root, "completionStatus", "qti-outcome-declaration", "identifier", "single"),
+              keyed(root, "numAttempts", "qti-response-declaration", "single"),
+              keyed(root, "duration", "qti-response-declaration", "single"),
+              keyed(root, "completionStatus", "qti-outcome-declaration", "single"),
             ]),
-            ...test.map((root) =>
-              keyed(root, "duration", "qti-response-declaration", "duration", "single"),
-            ),
+            ...test.map((root) => keyed(root, "duration", "qti-response-declaration", "single")),
             ...[...item, ...test].map((root) =>
-              keyed(root, "QTI_CONTEXT", "qti-context-declaration", "none", "record"),
+              keyed(root, "QTI_CONTEXT", "qti-context-declaration", "record"),
             ),
+          ]),
+        );
+        assert.deepStrictEqual(
+          new Set(
+            builtInBaseType.rows.map(({ baseType, root, variable }) =>
+              keyed(root, variable, baseType),
+            ),
+          ),
+          new Set([
+            ...item.flatMap((root) => [
+              keyed(root, "numAttempts", "integer"),
+              keyed(root, "duration", "float"),
+              keyed(root, "completionStatus", "identifier"),
+            ]),
+            ...test.map((root) => keyed(root, "duration", "duration")),
           ]),
         );
       }),
@@ -607,9 +620,16 @@ describe("references", () => {
               for (const { baseType, cardinality, declaration, root, variable } of builtIns) {
                 assert.deepStrictEqual(
                   Option.map(relations.builtIn.lookup({ root, variable }), (row) =>
-                    keyed(row.declaration, row.baseType, row.cardinality),
+                    keyed(row.declaration, row.cardinality),
                   ),
-                  Option.some(keyed(declaration, baseType, cardinality)),
+                  Option.some(keyed(declaration, cardinality)),
+                );
+                assert.deepStrictEqual(
+                  Option.map(
+                    relations.builtInBaseType.lookup({ root, variable }),
+                    (row) => row.baseType,
+                  ),
+                  baseType,
                 );
               }
 

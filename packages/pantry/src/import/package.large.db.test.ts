@@ -4,23 +4,24 @@
  * bulk of binary entries whose record alone is longer than PostgreSQL's longest message, imported
  * in one transaction and exported back equal.
  *
- * A package's record is one `Entry` family under its `Package` row, every entry's bytes as its
- * canonical base64 (`#pantry/import/record.ts`), written in one ChangeSet step. One statement's
- * Bind message carries at most 1,073,741,822 bytes (PostgreSQL's `PQ_LARGE_MESSAGE_LIMIT`,
- * grizzle's `messageMaxBytes`), and one array literal at most 536,870,888 UTF-16 code units (V8's
- * longest string, `maxStringLength`). A family past either is written by grizzle as one count
- * update and consecutive inserts in ascending slot order, in the same transaction, and never
- * refused as `InputTooLarge` (fin.md §4.5a, grizzle's W2.P1). So the importer never splits a
- * package: the whole package is one transaction, however large.
+ * A package's record is one `Entry` family under its `Package` row, every entry's bytes as read in
+ * a grizzle `bytes` field (`#pantry/import/record.ts`), written in binary in one ChangeSet step, at
+ * most grizzle's `bytesMaxLength` bytes a value. One statement's Bind message carries at most
+ * 1,073,741,822 bytes (PostgreSQL's `PQ_LARGE_MESSAGE_LIMIT`, grizzle's `messageMaxBytes`). A
+ * family past it is written by grizzle as one count update and consecutive inserts in ascending
+ * slot order, in the same transaction, and never refused as `InputTooLarge` (fin.md §4.5a,
+ * grizzle's W2.P1). So the importer never splits a package: the whole package is one transaction,
+ * however large.
  *
- * Written to run at N1 on the lease, never by a hand. It holds about 1.1 GB of base64 text on the
- * JavaScript heap at once, the record as the import builds it and again as the export reads it,
- * within Node's default heap of about 4 GB; on disk the bulk's entries are hard links to one file,
- * and the export writes them out whole under the package's `work/`, removed when the test ends.
+ * Written to run at N1 on the lease, never by a hand. It holds about 1 GiB of entry bytes on the
+ * JavaScript heap as the import reads them and again as the export reads them back, each value read
+ * through its hex text one row at a time, within Node's default heap of about 4 GB; on disk the
+ * bulk's entries are hard links to one file, and the export writes them out whole under the
+ * package's `work/`, removed when the test ends.
  *
  * @see {@link https://www.postgresql.org/docs/19/protocol-message-formats.html | PostgreSQL 19, §54.7 Message Formats}
  */
-import { Db, messageMaxBytes } from "@bjornpagen/grizzle";
+import { bytesMaxLength, Db, messageMaxBytes } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Duration, Effect, FileSystem, Layer, Option, Path } from "effect";
@@ -37,23 +38,16 @@ import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-rela
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
- * The bytes of each bulk entry: 64 MiB, whose base64 is 89,478,488 characters, so the literal
- * bound admits five of them in one statement and the Bind bound twelve.
+ * The bytes of each bulk entry: 64 MiB, one `bytes` value within grizzle's `bytesMaxLength`, so the
+ * Bind bound admits fifteen of them in one statement.
  */
 const bulkEntryBytes = 64 * 1024 * 1024;
 
 /**
- * The length of the canonical base64 of a byte string, padded (RFC 4648, §4).
- *
- * @param bytes - The byte string's length.
- * @returns Its base64's length, in characters, which are its UTF-8 bytes.
+ * The bulk's entries: the fewest whose record content alone, in raw bytes, is past
+ * {@link messageMaxBytes}.
  */
-const base64Length = (bytes: number): number => 4 * Math.ceil(bytes / 3);
-
-/**
- * The bulk's entries: the fewest whose record content alone is past {@link messageMaxBytes}.
- */
-const bulkEntries = Math.floor(messageMaxBytes.value / base64Length(bulkEntryBytes)) + 1;
+const bulkEntries = Math.floor(messageMaxBytes.value / bulkEntryBytes) + 1;
 
 /**
  * The timeout of the test: it sends past a gibibyte to the server and reads it back.
@@ -116,7 +110,7 @@ describe.skipIf(!hasLease)(
           // inserted its whole record, though no one statement can carry it; and the export gives
           // back every entry of the source, byte for byte or canonically.
           // Bound: the every-relation package of 3 choices, 2 hottexts and 2 hotspots, with
-          // 12 bulk entries of 64 MiB, the fewest past the Bind bound.
+          // 16 bulk entries of 64 MiB, the fewest past the Bind bound.
           Effect.gen(function* pastOneBind() {
             const fs = yield* FileSystem.FileSystem;
             const path = yield* Path.Path;
@@ -124,11 +118,13 @@ describe.skipIf(!hasLease)(
               { choices: 3, hotspots: 2, hottexts: 2 },
               { bytes: new Uint8Array(bulkEntryBytes), entries: bulkEntries },
             );
-            const recordBytes = [...entries.values()].reduce(
-              (sum, bytes) => sum + base64Length(bytes.length),
-              0,
-            );
+            const recordBytes = [...entries.values()].reduce((sum, bytes) => sum + bytes.length, 0);
 
+            assert.isAtMost(
+              bulkEntryBytes,
+              bytesMaxLength.value,
+              "a bulk entry is one bytes value",
+            );
             assert.isAbove(recordBytes, messageMaxBytes.value, "the record fits one Bind message");
 
             const source = yield* scopedPackage(entries);

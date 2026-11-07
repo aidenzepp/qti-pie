@@ -668,18 +668,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
     Schema decides how its own literal maps to a value. (The renderer's phase-3 default, delivery spec section 5.1,
     applied in plate; 2026-11-04.)
 
-    One limit remains in pantry, stated here as a known limit. Two map keys of a float mapping are compared as the
-    doubles they name only where grizzle's lexical form of `double precision` holds the key (`src/qti/mapping.ts`
-    `floatKeyPattern`): at most 15 significant digits on each side of the point, an exponent of at most 293, and each
-    run of padding zeros at most 255. A key outside it, such as `1e400` or `1.7976931348623157e308`, is distinct from
-    every other key by its lexical form alone. So a mapping keyed `1e400` and `2e400`, which name one double, is
-    accepted where comparing the values would refuse it. The corpus holds no float mapping. (Recorded 2026-11-06, from
-    W5 Q5.11.) The cause is that grizzle's `double precision` lexical form, the only form its cast to `double
-    precision` is defined over, holds no key past those bounds, so a key outside it has no typed value to compare. What
-    would lift it is a `double precision` lexical form that holds every decimal spelling of a finite double, or a typed
-    key over a normalized spelling of the double that this package could write instead; the key's own text would then be
-    compared as a double whatever its spelling. The limit is recorded as row 69 of `docs/grizzle-findings.md`.
-    (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
+    The limit this reading recorded in pantry on 2026-11-06 (from W5 Q5.11), under which a float map key outside
+    grizzle's bounded lexical form of `double precision` was distinct from every other key by its text alone, is
+    lifted by reading 154, which compares every float key by the double reading 144 maps it to.
 
 57. **In lax wildcard content, every prose rule judges the QTI elements the structural walk checks there, as it judges
     them anywhere else.** Under a `lax` element wildcard, such as the content of `qti-custom-interaction`, XML Schema
@@ -1559,7 +1550,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     (section 5.88.4, https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping, and section 7.21), so a mapping is a
     function of its source value, and two entries of one key would map one value twice. The keys are compared as the
     values section 8.13 gives each base type: an integer by its value (reading 45, at any length); a float as the
-    double it names (reading 56, within that reading's stated limit); a point as its integer tuple; a pair as an
+    double it names (reading 154, under reading 144); a point as its integer tuple; a pair as an
     unordered pair of identifiers ("The association is undirected so (A,B) and (B,A) are equivalent"); a directed pair
     as an ordered one; a boolean as written (reading 34); an identifier and a URI as written; and a string as its
     entry's `case-sensitive` says it is matched, "Used to control whether or not a qti-map-entry string is matched case
@@ -2955,8 +2946,77 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      the same attribute is reading 134's. This binds pantry and plate alike. This is not a case of documents in
      conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
      FIX-LOMLANG.)
+152. **A value names something only where it is an NCName: a variable reference's, an interaction's binding, a
+     declaration's `identifier` and a record field's `field-identifier`. Any other value names nothing: no row holds
+     it as a name, and its value domain alone refuses it.** The ASI XSD types each such attribute `IdentifierDType`,
+     which restricts `xs:NCName` (`imsqti_asiv3p0_v1p0.xsd`), or, in a literal-or-reference union, holds the
+     variable by its `VariableStringDType` member, an `xs:NCName` too (a printed variable's `base` and `index`, a
+     random integer's `min` and `max`, a rounding's `figures`), or by `EncVariableStringDType`, an NCName between
+     braces. A form outside a type's lexical space denotes no value of it (XML Schema Part 2, §2.3), so `""`, a form
+     of whitespace alone, `1a`, `a b`, or a name only XML 1.0's fifth edition admits, such as one that starts with
+     ARABIC-INDIC DIGIT ZERO, which the `Letter` tables `\i` and `\c` read (XML Schema Part 2, Appendix F) hold as a
+     digit, names no variable, declaration or field. It shares no name with another, no
+     reference resolves to it, and the law a reference, a binding or a name is held to does not judge it; the
+     attribute's value domain refuses it under its own rule. The grammar states the NCName once
+     (`ncNamePattern`, `src/grammar/domains.ts`), and the schema's sources and the importer's readers each read it.
+     This sets aside the importer's reading of any string as a name: a content reference or a binding by its
+     collapsed value, so `template-identifier=""` was a template reference no declaration held, a declaration's or a
+     field's identifier by any form not whitespace alone, and a processing reference by the fifth edition's names. Its
+     rows broke the reference's law, "Binding declared", "Variable declared" or "E1 derived" beside the value domain
+     the law oracle alone raised (`referenced`, `typedValueOf`, `src/test/oracle.ts`). A declaration whose identifier
+     names nothing has no `Declaration` row, so "Declaration overlay"'s copies of its cardinality and base type, which
+     ask a row of every declaration, still break beside its value domain, as they did for an empty identifier
+     before; that wants the declaration's name as a row of its own, as `RecordFieldName` is a field's. This
+     binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NCNAME.)
+153. **A record has no base type, so no value stands for one: a law about a record's whole value judges its cardinality,
+     and a law over a base type reads the declaration's own, where it writes one.** The information model says
+     "Variables with record cardinality have no base-type" (tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3,
+     https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_base-type), and of a value
+     "The base-type is defined by the 'base-type' attribute of the declaration except in the case of variables with
+     record cardinality" (section 7.46). So a record's value is a field, read in its own base type, never in its
+     declaration's, even where a record writes one, which Declaration base type refuses. A mapping is of no record
+     (reading 78: its map response "cannot be applied to variables of record cardinality", section 2.11.1.5); an area
+     mapping maps "a source set of point values" (section 5.5); a feedback element's outcome is "of either single or
+     multiple cardinality" (section 5.49.1); a string identifier's variable is "of base-type string" (section 5.48.2);
+     and SCORE, MAXSCORE and PASSED are typed (section 2.2.2.3): each refuses a record by its cardinality, as the
+     specification states it, and judges any other variable's base type where it has one. A variable that is no
+     record and writes no base type is refused by Declaration base type alone, never by a law over a type it does not
+     have (the orchestrator's ruling of 2026-11-06: one cause is refused under one rule), and an expression reads its
+     type as `unknown`. A declaration's base type is a row of its own (`DeclarationBaseType`), every row that names a
+     declaration copies only its count of them, and each row that reads one copies it from that row, so only where it
+     is. This sets aside the importer's reading of a record's base type as `none`, a code no lexical form spells,
+     which every row that named a declaration copied (lane NIL's audit, B12), under which a record's mapping was
+     refused as a base type `MappableBaseType` does not hold and a record's values were read in `none`, every text;
+     and the law oracle's reading of an unwritten base type as empty or `none`, under which it refused a single
+     variable that writes none under each law over a type, read a single variable's values in their own base type,
+     and a record's in its declaration's. This binds pantry and plate alike. This is not a case of documents in
+     conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
+     FIX-B12.)
+154. **A float mapping's map keys are compared by the doubles reading 144 maps them to, and every key in the float
+     domain has one: `1e400`, `2e400` and `INF` repeat, as do `0`, `-0` and `1e-400`, and two `NaN`s.** Reading 98
+     makes a mapping's keys distinct as values of its base type, a float's as the double it names, and reading 144
+     settles that double: XML Schema 1.1's doubleLexicalMap (Part 2 §3.3.5.2), the decimal of any digits and any
+     exponent rounded once to the nearest double, ties to even, an infinity of its sign at or past the overflow
+     threshold and a zero of its sign at or below half the least subnormal. A key is in the float domain when it is in
+     `xs:double`'s lexical space as XML Schema 1.0 writes it (reading 71's edition, so `+INF` is no key of a float
+     mapping and is refused under `attribute-lexical`), and every such key has its value, at the database
+     (`MapKeyFloat`, which PostgreSQL generates by grizzle's `Compute.parseDouble`, `src/qti/mapping.ts`) and in the
+     law oracle. Two keys repeat where their values are "pairwise equal or identical", as XML Schema 1.1 compares the
+     values of an identity constraint's keys (Part 1 §3.11.4, Identity-constraint Satisfied): "0 = −0 (although they
+     are not identical) and NaN ≠ NaN (although NaN is of course identical to itself)", so "0 and −0 are thus
+     equivalent for purposes of enumerations, identity constraints, and minimum and maximum values" (Part 2
+     §3.3.5.1). So `0` and `-0` repeat, as reading 144 reads them, and two `NaN` keys repeat, as their one spelling
+     already does by its text; a mapping may hold one `NaN` key. Refusing both is also the stricter reading, since a
+     mapping is a function of its source value. This sets aside reading 56 where it read `1e400` as the largest
+     finite double, and the limit it recorded for pantry, under which a key outside grizzle's former bounded form of
+     `double precision` (15 significant digits on each side of the point, an exponent of at most 293, zero runs of at
+     most 255) had no typed value and was distinct by its text alone, so a mapping keyed `1e400` and `2e400` was
+     accepted. The corpus holds no float mapping, so no verdict moves. This binds pantry and plate alike; plate's own
+     reading of a double is the renderer team's follow-up. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-FLOATKEY.)
 
-152. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+155. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
      should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
@@ -2972,7 +3032,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
 
-153. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+156. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
@@ -2989,7 +3049,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
-154. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+157. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
      nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or

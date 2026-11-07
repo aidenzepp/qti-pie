@@ -761,7 +761,8 @@ export const AssembledName = relation(
  *   `instanceStart`, the instance's.
  *
  * Its target is a row of its own, {@link BranchTarget}, which a rule whose target names nothing
- * lacks: the existence law `BranchResolution ⊆ BranchTarget` is "Branch target".
+ * lacks: the existence law `BranchResolution(instance, rule, target) ⊆ BranchTarget(instance,
+ * rule, target)` is "Branch target", and holds the target's `target` to the rule's.
  *
  * The instance's `end` is not copied, because the law needs only the start: a pre-order interval
  * `[start, end)` holds an instance exactly when it holds the instance's `start`, so
@@ -791,9 +792,10 @@ export const BranchResolution = relation(
  * 87): the written element its identifier names in an instance that holds the rule's, the first
  * in pre-order where several do. A rule whose target names no such element has no row.
  *
- * - **the resolution's copy** (back into {@link BranchResolution}): `assembly`, `instanceStart`,
- *   `target` and the owner's `ownerKind`, `ownerStart`, `ownerEnd` and `ownerPart`, the fields the
- *   laws read;
+ * - **the resolution's copy** (back into {@link BranchResolution}): `assembly`, `instanceStart` and
+ *   the owner's `ownerKind`, `ownerStart`, `ownerEnd` and `ownerPart`, the fields the laws read;
+ *   and `target`, which the resolution's existence law holds to its own, so the text rides a key
+ *   beside two uuids alone and keeps the one bound `keyText` states (`#pantry/qti/limits.ts`);
  * - **the target's:** `targetInstance` and `targetNode`, with that name's `targetKind`, `targetPart`,
  *   `targetReplaced`, `targetMixes`, `targetStart` and `targetEnd`, and its instance's
  *   `targetInstanceStart` and `targetInstanceEnd`; and `via`, the child of the target's instance on
@@ -1698,7 +1700,10 @@ export const testLawsByName = {
       on(BranchResolution, "instance", "owner", "ownerEnd", "ownerPart", "ownerStart"),
       on(InstanceName, "instance", "node", "end", "part", "start"),
     ),
-    contained(on(BranchResolution, "instance", "rule"), on(BranchTarget, "instance", "rule")),
+    contained(
+      on(BranchResolution, "instance", "rule", "target"),
+      on(BranchTarget, "instance", "rule", "target"),
+    ),
     contained(
       on(
         BranchTarget,
@@ -1710,7 +1715,6 @@ export const testLawsByName = {
         "ownerKind",
         "ownerPart",
         "ownerStart",
-        "target",
       ),
       on(
         BranchResolution,
@@ -1722,7 +1726,6 @@ export const testLawsByName = {
         "ownerKind",
         "ownerPart",
         "ownerStart",
-        "target",
       ),
     ),
     contained(

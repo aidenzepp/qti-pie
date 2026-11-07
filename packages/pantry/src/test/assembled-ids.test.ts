@@ -205,7 +205,7 @@ const packageOf = (drawn: IdCase): PackageEntries => {
 /**
  * Every law the host judges, read once.
  */
-const laws = judgedLaws(Qti.statements);
+const laws = judgedLaws(Qti);
 
 /**
  * A situation the box must reach: each verdict, and a section document placed twice whose IDs

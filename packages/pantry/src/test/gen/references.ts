@@ -341,7 +341,7 @@ const facetGen =
     const rooted = toyKinds.flatMap((root) => toyVariables.map((variable) => ({ root, variable })));
     const builtIns = Arr.isReadonlyArrayNonEmpty(declarations)
       ? source.draw(shuffled(rooted, { max: 3, min: floor })).map(({ root, variable }) => ({
-          baseType: source.draw(element(["float", "none"])),
+          baseType: source.draw(element([Option.some("float"), Option.none()])),
           cardinality: source.draw(element(["single", "record"])),
           declaration: source.draw(element(declarations)),
           root,
@@ -478,7 +478,7 @@ const withFault =
               builtIns: [
                 ...facet.builtIns,
                 {
-                  baseType: "float",
+                  baseType: Option.some("float"),
                   cardinality: "single",
                   declaration: outside,
                   root: "k0",

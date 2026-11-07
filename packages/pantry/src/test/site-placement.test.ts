@@ -206,7 +206,7 @@ const instanceCheck = Option.getOrThrow(checkOf(Qti.statements, "Instance", "E1_
 /**
  * Every law the host judges, read once.
  */
-const laws = judgedLaws(Qti.statements);
+const laws = judgedLaws(Qti);
 
 /**
  * Every instance below an assembly's root as the database holds it, its drawn and accumulated
