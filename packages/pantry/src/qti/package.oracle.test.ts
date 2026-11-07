@@ -37,7 +37,7 @@ import { judge } from "#pantry/test/host-judge.ts";
 import type { HostRows } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/key-copies.ts";
 import type { JudgedLaw } from "#pantry/test/key-copies.ts";
-import { lawNames, lawsOf } from "#pantry/test/oracle.ts";
+import { judge as judgeByOracle, lawNames, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -682,7 +682,7 @@ const judgedFixture = (
 
       return { ...file, bytes: new TextEncoder().encode(text) };
     });
-    const judgment = yield* judge(edited, grammar, laws);
+    const judgment = yield* judgeByOracle(edited, grammar, laws);
     assert.strictEqual(judgment._tag === "Judged" ? "Judged" : JSON.stringify(judgment), "Judged");
 
     const breaches = judgment._tag === "Judged" ? judgment.breaches : [];
