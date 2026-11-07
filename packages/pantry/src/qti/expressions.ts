@@ -56,6 +56,7 @@ import {
   check,
   closedId,
   Compute,
+  constant,
   contained,
   counted,
   drawn,
@@ -537,13 +538,13 @@ export const DeclarationTable = relation(
 );
 
 /**
- * Whether a document declares a name, keyed by the document and the name (M2): each declaration of
- * every document is forced in, `declared`, with its node, its codes and its count of base types;
- * every other row is a probe of a name the document does not declare, its declaration the document
- * itself and its codes the null objects (`qti-outcome-declaration`, `single`, and no base type).
- * The key leaves no room for an absent
- * row where a declaration is, so a probe reads the truth: a reference's claim that it names no
- * declaration, a reading's variable, a mapping target.
+ * Whether a document declares a name, keyed by the document and the name (M2): each name a
+ * document declares is forced in, `declared`, its row naming a declaration of that name with its
+ * codes and its count of base types, the one `Declaration key` allows; every other row is a probe
+ * of a name the document does not declare, its declaration the document itself and its codes the
+ * null objects (`qti-outcome-declaration`, `single`, and no base type). The key leaves no room for
+ * an absent row where a declaration is, so a probe reads the truth: a reference's claim that it
+ * names no declaration, a reading's variable, a mapping target.
  */
 export const VariableLookup = relation(
   "VariableLookup",
@@ -1736,26 +1737,14 @@ export const referenceLawsByName = {
     key(on(sectionIdentifierAttributes, "node")),
   ],
   "E1 derived": [
-    // VariableLookup: every declaration forced in, each found one justified, the absent null objects.
+    // VariableLookup: every declared name forced in, each found one justified, the absent null
+    // objects. The force-in reads a declaration's name, never its node: the lookup is keyed by the
+    // document and the name, so a force-in of each declaration's node would state Declaration key
+    // again, and a second declaration of a name would break both. Declaration key alone says a
+    // name's declaration is one, and the justification makes a found row that one, with its codes.
     contained(
-      on(
-        Declaration,
-        "document",
-        "identifier",
-        "node",
-        "declarationKind",
-        "cardinality",
-        "baseTypes",
-      ),
-      on(
-        VariableLookup,
-        "document",
-        "name",
-        "declaration",
-        "declarationKind",
-        "cardinality",
-        "baseTypes",
-      ),
+      on(Declaration, "document", "identifier", constant(true)),
+      on(VariableLookup, "document", "name", "declared"),
     ),
     contained(
       on(
