@@ -41,6 +41,7 @@ import {
   SchemaVersion,
   TypeName,
 } from "#pantry/grammar/install.ts";
+import { bitsText, bitsWidth } from "#pantry/test/bits.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -181,12 +182,18 @@ interface SqlRow {
  * attribute layer reads unless the case sets it.
  *
  * @param column - The column.
- * @returns Zero, the empty text, the nil uuid, or the empty set of its width.
+ * @returns Zero, the empty text, the nil uuid, or the empty set.
  */
 const identityOf = (column: Column): string | number | boolean => {
   switch (column.base) {
     case "bit": {
-      return "0".repeat(Math.max(column.width, 0));
+      assert.strictEqual(
+        column.width,
+        bitsWidth(AttributeSlot),
+        `${column.name}: the attribute layer's one set is over AttributeSlot`,
+      );
+
+      return bitsText(AttributeSlot, []);
     }
     case "bool": {
       return false;
@@ -326,13 +333,17 @@ const codeOf = (handles: readonly string[], handle: string): number => {
 };
 
 /**
- * A set of `AttributeSlot` handles as its bit string: bit i is code i.
+ * A set of `AttributeSlot` handles as its column reads it, in grizzle's one spelling of a bit
+ * string (`#pantry/test/bits.ts`).
  *
  * @param slots - The slots, by code.
- * @returns The bit string.
+ * @returns The set's text.
  */
 const slotBits = (...slots: readonly number[]): string =>
-  AttributeSlot.handles.map((_, code) => (slots.includes(code) ? "1" : "0")).join("");
+  bitsText(
+    AttributeSlot,
+    AttributeSlot.handles.filter((_, code) => slots.includes(code)),
+  );
 
 /**
  * The element of every Attribute case: a hotspot choice in 3.0.1 under its declared type, which

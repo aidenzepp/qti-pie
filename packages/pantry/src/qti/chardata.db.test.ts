@@ -42,6 +42,7 @@ import { Document, OpenElementName, XmlStandalone } from "#pantry/qti/chardata.t
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
+import { bitsText } from "#pantry/test/bits.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
@@ -365,7 +366,7 @@ const arms: readonly { readonly row: SqlRow; readonly table: string }[] = [
       bindings: 0,
       charset: "UTF-8",
       choices: 0,
-      context: "0".repeat(Flag.handles.length),
+      context: bitsText(Flag, []),
       context_nearest: strayNode,
       context_nearest_kind: codeOf(NodeKind.handles, "document"),
       encoding: "",

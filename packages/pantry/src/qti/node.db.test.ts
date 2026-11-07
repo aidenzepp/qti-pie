@@ -57,6 +57,7 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
+import { bitsText } from "#pantry/test/bits.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
@@ -486,17 +487,18 @@ const code = (roster: { readonly handles: readonly string[] }, handle: string): 
 };
 
 /**
- * Spell a set of handles as its bit string, one bit per code, code 0 first.
+ * Spell a set of handles as its SQL literal: its text in grizzle's one spelling of a bit string
+ * (`#pantry/test/bits.ts`), quoted, which the set's column reads through bit's input function.
  *
  * @param roster - The roster.
  * @param roster.handles - Its handles, in code order.
  * @param members - The set's handles.
- * @returns The bit string's literal.
+ * @returns The literal.
  */
 const bitsOf = (
   roster: { readonly handles: readonly string[] },
   members: ReadonlySet<string>,
-): string => `B'${roster.handles.map((handle) => (members.has(handle) ? "1" : "0")).join("")}'`;
+): string => text(bitsText(roster, members));
 
 /**
  * The kinds that are no element, as a set.
@@ -1412,7 +1414,8 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
           Effect.gen(function* rowLaws() {
             const client = yield* loginSession;
             const catalogue = yield* catalogueOf(client);
-            const lawful = sqlRowsOf(yield* foldedOf(lawfulItem));
+            const lawfulRows = yield* foldedOf(lawfulItem);
+            const lawful = sqlRowsOf(lawfulRows);
             const math = sqlRowsOf(yield* foldedOf(mathItem));
             const ciKind = code(NodeKind, "m:ci");
             const secondCi = targetOf(
@@ -1445,12 +1448,14 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
                   ),
               ) ?? Flag.handles[0];
             const leaked = new Set([flag]);
-            const withFlag = (bits: string): string => {
-              const set = bits.slice(2, -1).split("");
-              set[Flag.handles.indexOf(flag)] = "1";
-
-              return `B'${set.join("")}'`;
-            };
+            const leakedRows = sqlRowsOf({
+              ...lawfulRows,
+              nodes: lawfulRows.nodes.map((node) => ({
+                ...node,
+                derived: { ...node.derived, ancestry: new Set([...node.derived.ancestry, flag]) },
+                parentAncestry: new Set([...node.parentAncestry, flag]),
+              })),
+            });
             const cases: readonly {
               readonly codes: readonly string[];
               readonly name: string;
@@ -1511,10 +1516,10 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
                 codes: ["23514"],
                 name: "a leaked root ancestry, carried consistently down the tree (C10)",
                 roles: ["N1 sentinel"],
-                rows: lawful.map((row) => ({
+                rows: lawful.map((row, at) => ({
                   ...row,
-                  ancestry: withFlag(row["ancestry"] ?? ""),
-                  parentAncestry: withFlag(row["parentAncestry"] ?? ""),
+                  ancestry: leakedRows[at]?.["ancestry"] ?? "",
+                  parentAncestry: leakedRows[at]?.["parentAncestry"] ?? "",
                 })),
               },
               {
