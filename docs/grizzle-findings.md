@@ -1483,7 +1483,7 @@ target's UNIQUE are both representable, and only the source's index is refused.
   - the workload guard's two free tests (`src/qti/logins.test.ts` and `src/test/gen/assembly.compile.test.ts`,
     `bbe5f4ca` and `d11c39f1`) are red, with `schema Qti is not the one snapshot.json records`.
 
-### A counted family's `Monoid.or` end is re-read through the wrong text form (defect, fix pending in grizzle)
+### A counted family's `Monoid.or` end is re-read through the wrong text form (defect, fixed in `1bf3dbb`)
 
 - **Triage:** lane N2, at grizzle `27c4cd2`. The five files below are byte-identical at `4b155e8` and `30af956`.
 - **Checked at:** grizzle `30af956`, its newest `main` when N2 ran the pull-first check at 19:05 on 2026-11-06, from
@@ -1539,8 +1539,22 @@ target's UNIQUE are both representable, and only the source's index is refused.
 
   The guard is a round trip over every carrier through PostgreSQL and the fold-end search over monoids, carriers,
   family kinds and write forms, with planted bugs, `edit.ts:203` among them, restored and shown caught. It is being
-  fixed before beta.1, so nothing is filed. qti-pie takes no workaround. The fixing commit is recorded here when it
-  lands.
+  fixed before beta.1, so nothing is filed. qti-pie takes no workaround.
+
+- **Fixed in grizzle `1bf3dbb`** (`1bf3dbb0a625949c086c28785f60b275d758b2b1`), pushed to grizzle `main` with its full
+  gate green; `git ls-remote` shows it as `origin/main`.
+  - **The fix:** the recount carries host values end to end, with one encode at `planRelation` and `planOwners`, and
+    nothing reads back a text grizzle wrote.
+  - **A second defect of the same class,** found by the new round trip: the codec test's wire sizing used the roster's
+    size, not its hex width.
+  - **The guard:** an independent fold model over every monoid and plane; bits widths 1 to 9; counted, ordered and
+    tree families; every write form; 0 to 4 members exhausted; on the unit tier and on PostgreSQL, with every cell
+    required and this case kept.
+  - **Planted bugs, each caught:** an identity end, a first-member end, a dropped high hex digit, and the old
+    `edit.ts:203` read.
+  - **Still to come:** lane FOLD's part 2, distinct branded types for parameter text and output text.
+  - **qti-pie:** S-ORACLE's repin E and N2's confirmation follow, and their hashes are recorded here when they land.
+    Nothing is filed.
 
 ### A CHECK's refusal drops PostgreSQL's DETAIL row (a reporting limit, accepted by grizzle)
 
