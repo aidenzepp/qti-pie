@@ -621,10 +621,10 @@ export type TemplateRule =
  * The type of an expression as the kind rules give it: a base type and a cardinality.
  *
  * `any` is the base type of a value that takes any type, `qti-null`'s NULL; `unknown` is one no
- * rule can say, such as a template variable's or a `qti-custom-operator`'s. A record has no base
- * type of its own, so it is `{ baseType: "unknown", cardinality: "record" }`. A base type of `any`
- * or `unknown`, and a cardinality of `unknown`, satisfy every operand rule, as the qti package's
- * checker reads them (`packages/pantry/src/processing/check.ts`).
+ * rule can say, such as a `qti-custom-operator`'s. A record has no base type of its own, so it is
+ * `{ baseType: "unknown", cardinality: "record" }`. A base type of `any` or `unknown`, and a
+ * cardinality of `unknown`, satisfy every operand rule, as the qti package's checker reads them
+ * (`packages/pantry/src/processing/check.ts`).
  */
 export interface ExpressionType {
   readonly baseType: BaseType | "any" | "unknown";
