@@ -1,6 +1,7 @@
 /**
  * Starting a test session, and reading what it shows: {@link startTest} builds the session a host
- * stores, {@link present} starts an item's first attempt when the candidate first meets it,
+ * stores, {@link partStarted} computes a nonlinear part's template defaults as the part starts,
+ * {@link present} starts an item's first attempt when the candidate first meets it,
  * {@link recordStep} saves what one request carries, and {@link current}, {@link itemView} and
  * {@link permits} say what to render.
  *
@@ -18,6 +19,7 @@ import { appendSegments, decodeSegment } from "#plate/document/href.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { testScopeOf } from "#plate/engine/outcome.ts";
+import type { TestScope } from "#plate/engine/scope.ts";
 import { defaultLabel, drawStream } from "#plate/engine/random.ts";
 import { checkTemplateDefaults, evaluateTemplateDefaults } from "#plate/engine/template.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
@@ -584,17 +586,57 @@ export const withItem = (
   session.items.map((existing, position) => (position === index ? item : existing));
 
 /**
+ * Evaluate an item ref's template defaults for a session item and check them against the item they
+ * set.
+ *
+ * The defaults are evaluated in document order from the stream keyed by the session's processing
+ * seed under the default label of the item's sequence index, never the default key. Each
+ * expression reads the test's outcomes as the session holds them and the test's items through the
+ * scope given, which holds no time.
+ *
+ * @param test The test.
+ * @param session The session.
+ * @param scope The session's test scope, with no duration: the test's own `duration` reads NULL.
+ * @param ref The item ref.
+ * @param item The session item that delivers it.
+ * @param accepted The item it delivers, whose template variables the defaults set.
+ * @returns The defaults, by template identifier, each a value of its variable's declared type, a
+ *   NULL its variable's own; or the {@link EngineFailure} of their evaluation, or of
+ *   `checkTemplateDefaults`: a key that names no template variable of the item, or a value of
+ *   another type.
+ */
+const evaluatedDefaults = (
+  test: Test,
+  session: TestSession,
+  scope: TestScope,
+  ref: ItemRef,
+  item: SessionItem,
+  accepted: Accepted,
+): Result.Result<Readonly<Record<string, Value>>, EngineFailure> =>
+  Result.flatMap(
+    evaluateTemplateDefaults(
+      ref.templateDefaults,
+      test,
+      session.outcomes,
+      scope,
+      drawStream(session.seed, defaultLabel(session.instance, item.sequenceIndex)),
+    ),
+    (defaults) => checkTemplateDefaults(accepted.item, defaults),
+  );
+
+/**
  * Give the template defaults the test's item ref gives a session item at its first presentation,
  * checked against the item they set.
  *
  * In a linear part the defaults are evaluated as the candidate meets the item (`info.txt:46025`),
- * in document order from the stream keyed by the session's processing seed under the default label
- * of the item's sequence index, never the default key. Each expression reads the test's outcomes
- * as the session holds them and the test's items through the session's test scope, which holds no
- * time: the test's own `duration` reads NULL, and so does a variable of an item whose record holds
- * no value of it, such as one not yet presented. A default the test model marked is not in the
- * item ref's defaults, so its variable keeps its declared default. A nonlinear part's defaults are
- * not evaluated here, and an item no item ref of the test names has none.
+ * as {@link evaluatedDefaults} does, over the session's test scope with no time: the test's own
+ * `duration` reads NULL, and so does a variable of an item whose record holds no value of it, such
+ * as one not yet presented. In a nonlinear part they were evaluated when the part started
+ * ({@link partStarted}) and the item holds them, so a later change to what they read does not
+ * change them; they are checked again here, since a stored session is the host's to hand back. An
+ * item of a nonlinear part that holds none has none. A default the test model marked is not in the
+ * item ref's defaults, so its variable keeps its declared default. An item no item ref of the test
+ * names has none.
  *
  * @param test The test.
  * @param items The accepted items, keyed by item ref identifier.
@@ -618,19 +660,87 @@ const templateDefaultsOf = (
       onNone: () => Result.succeed({}),
       onSome: ({ part, ref }) =>
         part.navigation === "linear"
-          ? Result.flatMap(
-              evaluateTemplateDefaults(
-                ref.templateDefaults,
-                test,
-                session.outcomes,
-                testScopeOf(test, items, session, Option.none()),
-                drawStream(session.seed, defaultLabel(session.instance, item.sequenceIndex)),
-              ),
-              (defaults) => checkTemplateDefaults(accepted.item, defaults),
+          ? evaluatedDefaults(
+              test,
+              session,
+              testScopeOf(test, items, session, Option.none()),
+              ref,
+              item,
+              accepted,
             )
-          : Result.succeed({}),
+          : checkTemplateDefaults(
+              accepted.item,
+              Option.getOrElse(item.templateDefaults, () => ({})),
+            ),
     },
   );
+
+/**
+ * Start a test part's template defaults: when the part is nonlinear, give each of its items the
+ * template defaults its item ref gives, evaluated and checked now, before any of its items is
+ * presented, since "in nonlinear mode the expression is evaluated at the start of the testPart"
+ * (`info.txt:46025`).
+ *
+ * Each item ref's defaults are evaluated as {@link evaluatedDefaults} does, each from its own
+ * stream under the default label of its item's sequence index, over the test's outcomes as the
+ * session holds them, which after a simultaneous part's submission are those its outcome run left,
+ * and the session's test scope with no time, in which the test's own `duration` reads NULL and so
+ * does a variable of an item whose record holds no value of it, such as one of this part not yet
+ * presented. Each item stores its checked defaults in `templateDefaults`, which its first
+ * presentation passes to `firstAttempt`. An item whose item ref has no template default keeps
+ * none, and a linear part's items are left as they are: a linear part evaluates an item's defaults
+ * when the candidate meets the item.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, none of the part's items presented.
+ * @param part The part that starts.
+ * @returns The session with each of the part's items holding its defaults;
+ *   {@link TestNotDeliverable} when the items have no entry for an item ref of the part that holds
+ *   a default, or one from another document than its record's; or the first {@link EngineFailure},
+ *   in sequence order: a default reads a value the session's records lack (an
+ *   `UnknownIdentifierError`, holder `record`), names no template variable of its item (holder
+ *   `item`), or is a value of another type than its variable's (an `OutcomeMismatchError`).
+ */
+export const partStarted = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  part: TestPart,
+): Result.Result<TestSession, EngineFailure | TestNotDeliverable> => {
+  if (part.navigation !== "nonlinear") {
+    return Result.succeed(session);
+  }
+
+  const refs = new Map<string, ItemRef>();
+  for (const ref of itemRefsIn(part.children)) {
+    if (!refs.has(ref.identifier)) {
+      refs.set(ref.identifier, ref);
+    }
+  }
+
+  const scope = testScopeOf(test, items, session, Option.none());
+
+  return Result.map(
+    Result.all(
+      session.items.map((item): Result.Result<SessionItem, EngineFailure | TestNotDeliverable> => {
+        const ref = refs.get(item.ref);
+        if (ref === undefined || ref.templateDefaults.length === 0) {
+          return Result.succeed(item);
+        }
+
+        return Result.map(
+          Result.flatMap(
+            deliverable(items, session.test, item.ref, item.record.document),
+            (accepted) => evaluatedDefaults(test, session, scope, ref, item, accepted),
+          ),
+          (defaults) => ({ ...item, templateDefaults: Option.some(defaults) }),
+        );
+      }),
+    ),
+    (started): TestSession => ({ ...session, items: started }),
+  );
+};
 
 /**
  * Mark a session item presented and start its first attempt: its record becomes the one
@@ -709,21 +819,24 @@ const presentedIn = (
  * seed under the default label of the item's sequence index, each over the test's outcomes as the
  * session holds them and the test's items through the session's test scope, in which the test's own
  * `duration` reads NULL and so does a variable of an item whose record holds no value of it, such
- * as one not yet presented. Each is checked against the item it sets. A default the test model
- * marked is not applied, so its variable keeps its declared default. Then the item's record becomes
- * the one `firstAttempt` starts: its template variables begin at their declared defaults, the
- * test's defaults in their place, and the item's template processing runs once, drawing from the
- * stream keyed by the session's processing seed under the template label of the item's instance and
- * the item, and a constraint's restart returns to the test's defaults. Each response then holds its
- * default (`info.txt:8462`), the one template processing set, else its `qti-default-value`, else
- * NULL, and each outcome its default, the one template processing set, else its starting value.
- * Where the item model marks the item's template processing (it names a variable the engine does
- * not hold, such as `QTI_CONTEXT` or a context variable, or holds an element the engine does not
- * run), it does not run, and the record begins with each response and outcome at its declared
- * default, each template variable at the test's default or else none, and no correct response or
- * default, as `firstAttempt` starts it; `check`'s verdict, `accepted-with-unsupported`, names each
- * mark. An item never presented keeps a fresh record, with no template value. Presenting an item
- * already presented changes nothing. The moves and a part's end call this for the item they show.
+ * as one not yet presented. In a nonlinear part they were evaluated when the part started
+ * ({@link partStarted}), and the values the item stores are used instead, so a later run that
+ * changes what a default read does not change them. Each is checked against the item it sets, a
+ * stored value included. A default the test model marked is not applied, so its variable keeps its
+ * declared default. Then the item's record becomes the one `firstAttempt` starts: its template
+ * variables begin at their declared defaults, the test's defaults in their place, and the item's
+ * template processing runs once, drawing from the stream keyed by the session's processing seed
+ * under the template label of the item's instance and the item, and a constraint's restart returns
+ * to the test's defaults. Each response then holds its default (`info.txt:8462`), the one template
+ * processing set, else its `qti-default-value`, else NULL, and each outcome its default, the one
+ * template processing set, else its starting value. Where the item model marks the item's template
+ * processing (it names a variable the engine does not hold, such as `QTI_CONTEXT` or a context
+ * variable, or holds an element the engine does not run), it does not run, and the record begins
+ * with each response and outcome at its declared default, each template variable at the test's
+ * default or else none, and no correct response or default, as `firstAttempt` starts it; `check`'s
+ * verdict, `accepted-with-unsupported`, names each mark. An item never presented keeps a fresh
+ * record, with no template value. Presenting an item already presented changes nothing. The moves
+ * and a part's end call this for the item they show.
  *
  * A test and its items each pass `check` apart, so a template default that does not fit its item is
  * caller input: it is returned, never thrown. A package that holds the test and its items refuses
@@ -823,9 +936,13 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * instance alone. A shuffle's order is on the page, so pass a processing seed apart from the
  * configuration's `seed`, never one string as both. The session starts each of the test's
  * outcomes at its declared default, else its starting value, with no run of the test's outcome
- * processing counted, so the first item's template defaults, which it applies at that item's
- * presentation, read each test outcome at that value. No session item stores template defaults. A
- * test with no item at all starts closed.
+ * processing counted, so the first part's template defaults read each test outcome at that value.
+ * When the first part is linear, the first item's are evaluated at its presentation and no session
+ * item stores them. When it is nonlinear, the defaults of every item of the part are evaluated as
+ * the part starts, before its first item is presented, each from its own stream under the default
+ * label of its sequence index, and each item whose item ref has a default stores them in
+ * `templateDefaults`, which its first presentation applies ({@link partStarted}). A test with no
+ * item at all starts closed.
  *
  * @example
  *   startTest(test, items, configuration, { instance: crypto.randomUUID(), now: new Date() });
@@ -845,9 +962,10 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * @returns The session; {@link TestNotDeliverable} when the items have no entry for an item ref
  *   (`item-missing`) or hold one from another document than the ref names (`item-mismatch`);
  *   {@link InvalidSessionInstance} for an instance that breaks a requirement; {@link InvalidTime}
- *   for an invalid `now`; an `EngineFailure` of the first item's template defaults, in a linear
- *   part, as {@link present} gives it: a default reads a value the session lacks (an
- *   `UnknownIdentifierError`, holder `record`), names no template variable of the item (holder
+ *   for an invalid `now`; an `EngineFailure` of the first part's template defaults: in a linear
+ *   part the first item's, as {@link present} gives it, and in a nonlinear part any item's, as
+ *   {@link partStarted} gives it. A default reads a value the session lacks (an
+ *   `UnknownIdentifierError`, holder `record`), names no template variable of its item (holder
  *   `item`), or is a value of another type than its variable's (an `OutcomeMismatchError`). A test
  *   and its items each pass `check` apart, so a default that does not fit is caller input; a
  *   package that holds them refuses it at `open`.
@@ -911,10 +1029,15 @@ export const startTest = (
       updated: datestamp,
     };
 
-    return yield* Option.match(Arr.head(delivered), {
+    const begun = yield* Option.match(first, {
       onNone: () => Result.succeed(session),
-      onSome: ({ accepted, item }) =>
-        presentedIn(test.test, items, session, 0, item, accepted, datestamp),
+      onSome: (part) => partStarted(test.test, items, session, part),
+    });
+
+    return yield* Option.match(Arr.head(Arr.zip(begun.items, delivered)), {
+      onNone: () => Result.succeed(begun),
+      onSome: ([item, { accepted }]) =>
+        presentedIn(test.test, items, begun, 0, item, accepted, datestamp),
     });
   });
 

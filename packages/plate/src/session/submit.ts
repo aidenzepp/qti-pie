@@ -44,6 +44,7 @@ import {
   ItemNotInSession,
   TestNotDeliverable,
   itemView,
+  partStarted,
   present,
   recordStep,
   withItem,
@@ -162,9 +163,10 @@ type ScoreFailure =
  * Why {@link endPart}, or the end of a part, may fail: a refusal, a stored session that does not
  * fit the test or the items passed, or an invalid `now`. An end that closes the test runs its
  * outcome processing, which fails with an `EngineFailure` over a stored session whose item record
- * lacks a value the processing reads. An end that moves on to a linear part presents its first
- * item after the item ref's template defaults, which fail with an `EngineFailure` when one does
- * not fit the item or reads a value the session's records lack.
+ * lacks a value the processing reads. An end that moves on to a part gives template defaults: a
+ * nonlinear part's, every item's, as it starts, and a linear part's, its first item's, as that
+ * item is presented. Each fails with an `EngineFailure` when a default does not fit its item or
+ * reads a value the session's records lack.
  */
 export type PartEndFailure =
   | EngineFailure
@@ -475,8 +477,10 @@ const outcomesProcessed = (
  * close the test when no such part follows.
  *
  * The parts between, which hold no item, end as the candidate reaches them, as at the start. When
- * the test closes, its outcome processing runs once more, at the same `now` as any run before it in
- * the transition.
+ * the next part is nonlinear, its items' template defaults are evaluated as it starts, before its
+ * first item is presented (`partStarted`), over the test's outcomes as the session holds them:
+ * after a simultaneous part's submission, those its outcome run left. When the test closes, its
+ * outcome processing runs once more, at the same `now` as any run before it in the transition.
  *
  * @param test The test.
  * @param items The accepted items, keyed by item ref identifier.
@@ -484,8 +488,8 @@ const outcomesProcessed = (
  * @param ending The index of the part that ends, among the test's parts.
  * @param now The time of the transition.
  * @returns The session after the part's end; {@link UnknownItemRef} when the session holds no item
- *   for the next part's first item ref; a failure of `present`; or the `EngineFailure` of the
- *   closing outcome run.
+ *   for the next part's first item ref; a failure of `partStarted` or of `present`; or the
+ *   `EngineFailure` of the closing outcome run.
  */
 const partEnded = (
   test: Test,
@@ -496,7 +500,7 @@ const partEnded = (
 ): Result.Result<TestSession, PartEndFailure> => {
   const next = Arr.findFirst(test.parts, (part, index) =>
     index > ending
-      ? Option.map(Arr.head(refIdentifiersIn(part.children)), (ref) => ({ index, ref }))
+      ? Option.map(Arr.head(refIdentifiersIn(part.children)), (ref) => ({ index, part, ref }))
       : Option.none(),
   );
   const reached = Option.match(next, {
@@ -516,17 +520,18 @@ const partEnded = (
 
   return Option.match(next, {
     onNone: () => outcomesProcessed(test, items, { ...session, parts, status: "closed" }, now),
-    onSome: ({ ref }) =>
-      Result.flatMap(
-        Result.fromOption(
-          Arr.findFirst(session.items, (item, position) =>
-            item.ref === ref ? Option.some([position, item] as const) : Option.none(),
+    onSome: ({ part, ref }) =>
+      Result.gen(function* startNextPart() {
+        const [position, item] = yield* Result.fromOption(
+          Arr.findFirst(session.items, (each, index) =>
+            each.ref === ref ? Option.some([index, each] as const) : Option.none(),
           ),
           () => new UnknownItemRef({ ref, test: test.identifier }),
-        ),
-        ([position, item]) =>
-          present(test, items, { ...session, parts, position }, item.sequenceIndex, now),
-      ),
+        );
+        const begun = yield* partStarted(test, items, { ...session, parts, position }, part);
+
+        return yield* present(test, items, begun, item.sequenceIndex, now);
+      }),
   });
 };
 
