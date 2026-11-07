@@ -157,13 +157,7 @@ import {
   UsageValue,
 } from "#pantry/qti/metadata.ts";
 import { Chars, EndCharacter, prefixPattern } from "#pantry/qti/node.ts";
-import {
-  EntryContent,
-  HrefParams,
-  PackageName,
-  Reference,
-  ReferencePath,
-} from "#pantry/qti/package.ts";
+import { EntryContent, HrefParams, Reference, ReferencePath } from "#pantry/qti/package.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
 import {
   branchLaws,
@@ -1429,8 +1423,7 @@ const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
  *     reads with saxes's `xmlns` on, which refuses a name that is no QName (Namespaces in XML 1.0,
  *     §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
  *     with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
- *     refuses an absolute name; a package's name is the last `/`-segment of its path
- *     (`packageNameOf`), at the file systems' 255;
+ *     refuses an absolute name;
  *   - An unbounded XML production (`Char*`, a comment, an instruction, a doctype, an encoding name, a
  *     version number, an NCName) is "XML production", which crust refuses before any row exists;
  *   - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
@@ -1459,7 +1452,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     [NamespacePrefix, "Key text bound"],
     [ForeignNamespace, "Key text bound"],
     [EntryPath, "Key text bound"],
-    [PackageName, "Key text bound"],
     [Chars, "XML production"],
     [Lexical, "XML production"],
     [NamespaceUri, "Namespace name"],

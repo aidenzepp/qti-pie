@@ -96,20 +96,14 @@ export const EntryContent = str.regex(
 );
 
 /**
- * A package's name: the last segment of the directory or zip file it was read from, which the
- * importer writes (`#pantry/import/record.ts` `packageNameOf`). No law reads it, and no key holds
- * it; a file name is at most 255 code points on every file system the reader runs on.
- *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
- */
-export const PackageName = str.regex("^[^/]{1,255}$");
-
-/**
- * A package: its id, its name, and its count of entries, which the family draws.
+ * A package: its id, its name, and its count of entries, which the family draws. Its name is the
+ * last segment of the directory or zip file it was read from, as the importer writes it
+ * (`#pantry/import/record.ts` `packageNameOf`), any text: no law and no export reads it, and no key
+ * holds it, so it carries no shape and no bound.
  */
 export const Package = relation(
   "Package",
-  { entries: drawn(natural), id: uuid, name: PackageName },
+  { entries: drawn(natural), id: uuid, name: str.regex("^.*$", "su") },
   ["id"],
 );
 
