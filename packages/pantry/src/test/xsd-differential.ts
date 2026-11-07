@@ -1625,6 +1625,12 @@ const kindOfNode = (node: string): string =>
  * document's foreign elements are compared as one: an `xmllint` message on one of them is matched
  * by any refusal of its class at a node of a foreign kind, and such a refusal by any such message.
  *
+ * `xmllint` names an element by its expanded name alone, so a name both a kind's element and a
+ * foreign element of the document have, a QTI root nested in lax content beside the kind's own
+ * element (reading 6), could be either: a message on it is matched by a refusal of either, and a
+ * refusal of either by such a message. Where both have it, the element grain cannot tell them
+ * apart, and compares their messages and refusals as one.
+ *
  * @param xsd - `xmllint`'s verdict.
  * @param law - The law oracle's judgment.
  * @param comparison - The two compared class by class.
@@ -1658,32 +1664,26 @@ export const elementGrainDifferences = (
       : Option.getOrUndefined(
           Option.map(grammar.kinds.elementName.lookup({ kind: kindOfNode(node) }), messageName),
         );
-  const nameOfMessage = (name: string): string | undefined => {
-    if (foreignNames.has(name)) {
-      return foreignGroup;
-    }
-
-    return kinds.has(name) ? name : undefined;
-  };
+  // The groups a message's element may be in: its kind's, and the foreign elements', both where a
+  // kind's element and a foreign one share its name.
+  const groupsOfMessage = (name: string): readonly string[] => [
+    ...(kinds.has(name) ? [name] : []),
+    ...(foreignNames.has(name) ? [foreignGroup] : []),
+  ];
 
   return comparison.xsdClasses.flatMap((cls): readonly Difference[] => {
     if (!elementGrainClasses.has(cls) || !comparison.lawClasses.includes(cls)) {
       return [];
     }
 
-    const said = Map.groupBy(
-      xsd.messages.flatMap((message) =>
-        Option.contains(classOfMessage(message), cls)
-          ? Option.toArray(
-              message.element.pipe(
-                Option.flatMap((name) => Option.fromUndefinedOr(nameOfMessage(name))),
-                Option.map((name) => ({ message, name })),
-              ),
-            )
-          : [],
-      ),
-      ({ name }) => name,
-    );
+    const messages = xsd.messages.flatMap((message) => {
+      const groups = Option.contains(classOfMessage(message), cls)
+        ? Option.match(message.element, { onNone: () => [], onSome: groupsOfMessage })
+        : [];
+      const [name] = groups;
+
+      return name === undefined ? [] : [{ groups, message, name }];
+    });
     const refused = Map.groupBy(
       law.refusals.flatMap((refusal) => {
         const name = refusal.class === cls ? nameOfNode(refusal.node) : undefined;
@@ -1692,25 +1692,28 @@ export const elementGrainDifferences = (
       }),
       ({ name }) => name,
     );
+    const said = Map.groupBy(
+      messages.filter(({ groups }) => !groups.some((group) => refused.has(group))),
+      ({ name }) => name,
+    );
+    const heard = new Set(messages.flatMap(({ groups }) => groups));
 
     return [
-      ...[...said]
-        .filter(([name]) => !refused.has(name))
-        .map(([, held]): Difference => ({
-          class: cls,
-          // Each message names its own element, never the group's, so a classifier that reads
-          // where a message stands (reading 6's nested roots, reading 81's sets) still can.
-          detail: held
-            .map(
-              ({ message, name }) =>
-                `line ${String(message.line)} ${Option.getOrElse(message.element, () => name)}: ${message.text}`,
-            )
-            .join(" | "),
-          direction: "xsd-only",
-          rule: "",
-        })),
+      ...[...said].map(([, held]): Difference => ({
+        class: cls,
+        // Each message names its own element, never the group's, so a classifier that reads
+        // where a message stands (reading 6's nested roots, reading 81's sets) still can.
+        detail: held
+          .map(
+            ({ message, name }) =>
+              `line ${String(message.line)} ${Option.getOrElse(message.element, () => name)}: ${message.text}`,
+          )
+          .join(" | "),
+        direction: "xsd-only",
+        rule: "",
+      })),
       ...[...refused]
-        .filter(([name]) => !said.has(name))
+        .filter(([name]) => !heard.has(name))
         .flatMap(([, held]) =>
           held.map(({ refusal }): Difference => ({
             class: cls,
