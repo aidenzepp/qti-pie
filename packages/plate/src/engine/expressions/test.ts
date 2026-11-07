@@ -1,38 +1,518 @@
 /**
- * The test family of the engine: the test-level expressions `qti-number-correct`,
+ * The test family of the engine: the outcome-only expressions `qti-number-correct`,
  * `qti-number-incorrect`, `qti-number-presented`, `qti-number-responded`, `qti-number-selected`,
- * `qti-outcome-minimum`, `qti-outcome-maximum` and `qti-test-variables`. The family has landed no
- * kind yet, so each entry is the stub marker (ruling R2); a test's outcome processing reads them,
- * and M3.b-3 replaces each marker with the kind's evaluator.
+ * `qti-outcome-minimum`, `qti-outcome-maximum` and `qti-test-variables`, which a test's outcome
+ * processing evaluates over its items.
  *
- * It reads the evaluator's types from `#plate/engine/evaluate.ts` as types only, so the
- * dispatcher's table may import it without a cycle.
+ * Each reads the test scope a test's run carries (`Variables.test`; `#plate/engine/scope.ts`): the
+ * items its filters keep (`keptItems`: a `section-identifier`'s, nested sections' included, and
+ * one shared category to include and one to exclude; G-R3, pending), and each item's variable by
+ * name through the item ref's variable mappings (`itemName`, `itemVariable`). A run with no test
+ * scope holds no item to read, so each kind gives the record's gap there, as a variable the record
+ * holds no value of does: an item's own processing never holds one, since reading 23 refuses it
+ * there. A count is a single integer. A minimum, a maximum and a collection build at most one value
+ * per item, and one of more than `containerSizeBound` values (1,000,000; the operator's ruling
+ * `afb7e648`) is NULL instead.
+ *
+ * It value-imports only `effect`'s `Option` and `Result`, the engine leaves
+ * `#plate/engine/failures.ts`, `#plate/engine/numbers.ts`, `#plate/engine/refs.ts` and
+ * `#plate/engine/scope.ts`, and `#plate/model/values.ts`, and reads the evaluator's types from
+ * `#plate/engine/evaluate.ts` as types only, so the dispatcher's table may import it without a
+ * cycle.
  *
  * @module
  */
-import type { FamilyTable } from "#plate/engine/evaluate.ts";
+import { Option, Result } from "effect";
+import type { Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.ts";
+import { UnknownIdentifierError } from "#plate/engine/failures.ts";
+import { containerSizeBound, floatOf, integerValue } from "#plate/engine/numbers.ts";
+import { own } from "#plate/engine/refs.ts";
+import { itemName, itemVariable, keptItems, weightOf } from "#plate/engine/scope.ts";
+import type { DeclaredType, ItemFilters, ScopeItem, TestScope } from "#plate/engine/scope.ts";
+import type { ResponseDeclaration } from "#plate/model/item.ts";
+import { isModelled, isNull, match, nullOf } from "#plate/model/values.ts";
+import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import type { BaseType } from "#plate/vocabulary.ts";
 
 /**
- * The test family's evaluators by kind: the stub marker for each, which the dispatcher in
- * `#plate/engine/evaluate.ts` never reaches on a checked item, because the reader marks an unlanded
- * kind and its processing never runs.
+ * The five kinds that count the items they read.
  */
-export const testEvaluators: FamilyTable<
+type CountKind =
   | "number-correct"
   | "number-incorrect"
   | "number-presented"
   | "number-responded"
-  | "number-selected"
-  | "outcome-maximum"
-  | "outcome-minimum"
-  | "test-variables"
-> = {
-  "number-correct": "unlanded",
-  "number-incorrect": "unlanded",
-  "number-presented": "unlanded",
-  "number-responded": "unlanded",
-  "number-selected": "unlanded",
-  "outcome-maximum": "unlanded",
-  "outcome-minimum": "unlanded",
-  "test-variables": "unlanded",
+  | "number-selected";
+
+/**
+ * The family's kinds.
+ */
+type TestKind = CountKind | "outcome-maximum" | "outcome-minimum" | "test-variables";
+
+/**
+ * Give the test scope a run carries.
+ *
+ * @param variables The variables of the run.
+ * @param kind The kind that reads it.
+ * @returns The scope, or an {@link UnknownIdentifierError} with holder `record`, naming the kind's
+ *   element, when the run carries none.
+ */
+const heldScope = (
+  variables: Variables,
+  kind: TestKind,
+): Result.Result<TestScope, UnknownIdentifierError> =>
+  Result.fromOption(
+    Option.fromUndefinedOr(variables.test),
+    () =>
+      new UnknownIdentifierError({ holder: "record", identifier: `qti-${kind}`, role: "variable" }),
+  );
+
+/**
+ * Count the items a count's filters keep that a test passes.
+ *
+ * @param kind The count.
+ * @param filters Its filters.
+ * @param variables The variables of the run, which carry the test scope.
+ * @param counts Whether an item is counted, or the failure reading it gives.
+ * @returns The count, a single integer, or the first failure.
+ */
+const countOf = (
+  kind: CountKind,
+  filters: ItemFilters,
+  variables: Variables,
+  counts: (item: ScopeItem) => Result.Result<boolean, UnknownIdentifierError>,
+): Result.Result<Value, UnknownIdentifierError> =>
+  Result.gen(function* countItems() {
+    const scope = yield* heldScope(variables, kind);
+    let count = 0n;
+    for (const item of keptItems(scope, filters)) {
+      if (yield* counts(item)) {
+        count += 1n;
+      }
+    }
+
+    return integerValue(count);
+  });
+
+/**
+ * Give the value an item's record holds of one of its declared responses.
+ *
+ * @param item The item.
+ * @param identifier The response's identifier.
+ * @returns The value, or an {@link UnknownIdentifierError} with holder `record` when the record
+ *   holds none, as a stored record lacking a response is in an item's own processing.
+ */
+const responseValue = (
+  item: ScopeItem,
+  identifier: string,
+): Result.Result<Value, UnknownIdentifierError> =>
+  Result.fromOption(
+    own(item.record.responses, identifier),
+    () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
+  );
+
+/**
+ * Report whether two values are the same: both NULL, or a match as `qti-match` compares them.
+ *
+ * @param left One value.
+ * @param right The other.
+ * @returns Whether they are the same.
+ */
+const sameValue = (left: Value, right: Value): boolean =>
+  (isNull(left) && isNull(right)) || match(left, right);
+
+/**
+ * Give a response's default: the one the item's template processing set, else the declared one,
+ * else NULL of its declared type.
+ *
+ * @param item The item.
+ * @param declaration The response's declaration.
+ * @returns The default.
+ */
+const defaultOf = (item: ScopeItem, declaration: ResponseDeclaration): Value =>
+  Option.getOrElse(
+    Option.orElse(
+      own(item.record.defaults, declaration.identifier),
+      () => declaration.defaultValue,
+    ),
+    () => nullOf(declaration.baseType, declaration.cardinality),
+  );
+
+/**
+ * Report whether an item was responded to: some declared response holds a value that differs from
+ * its default, the one its template processing set first, else its declared one, else NULL.
+ *
+ * @param item The item.
+ * @returns Whether a response differs, or the record's gap.
+ */
+const respondedTo = (item: ScopeItem): Result.Result<boolean, UnknownIdentifierError> =>
+  Result.map(
+    Result.all(
+      Array.from(item.declarations.responses.values(), (declaration) =>
+        Result.map(
+          responseValue(item, declaration.identifier),
+          (held) => !sameValue(held, defaultOf(item, declaration)),
+        ),
+      ),
+    ),
+    (differs) => differs.includes(true),
+  );
+
+/**
+ * Judge an item's responses against their correct responses, as `qti-number-correct` and
+ * `qti-number-incorrect` read them: only an item whose every declared response has a correct
+ * response, the one its template processing set first, else the declared one, is judged, and an
+ * item that declares no response is not (G-R3, pending).
+ *
+ * @param item The item.
+ * @returns Whether every response matches its correct response as `qti-match` compares them, none
+ *   when the item is not judged, or the record's gap.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutNumberCorrect
+ */
+const judged = (item: ScopeItem): Result.Result<Option.Option<boolean>, UnknownIdentifierError> => {
+  const responses = [...item.declarations.responses.values()];
+  const keys = Option.all(
+    responses.map((declaration) =>
+      Option.map(
+        Option.orElse(own(item.record.correct, declaration.identifier), () => declaration.correct),
+        (key) => [declaration.identifier, key] as const,
+      ),
+    ),
+  );
+  if (responses.length === 0 || Option.isNone(keys)) {
+    return Result.succeed(Option.none());
+  }
+
+  return Result.map(
+    Result.all(
+      keys.value.map(([identifier, key]) =>
+        Result.map(responseValue(item, identifier), (held) => match(held, key)),
+      ),
+    ),
+    (matches) => Option.some(!matches.includes(false)),
+  );
+};
+
+/**
+ * Give the value of a `qti-number-selected`: the number of items its filters keep. Selection is
+ * marked, so every item of the session is selected.
+ *
+ * @param expression The `qti-number-selected`.
+ * @param scope The holder and the variables of the run, which carry the test scope.
+ * @returns The count, a single integer, or the record's gap with no test scope.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutNumberSelected
+ */
+const evaluateNumberSelected: Evaluator<"number-selected"> = (expression, scope) =>
+  countOf(expression.kind, expression, scope.variables, () => Result.succeed(true));
+
+/**
+ * Give the value of a `qti-number-presented`: the number of items its filters keep that the
+ * candidate has been shown.
+ *
+ * @param expression The `qti-number-presented`.
+ * @param scope The holder and the variables of the run, which carry the test scope.
+ * @returns The count, a single integer, or the record's gap with no test scope.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutNumberPresented
+ */
+const evaluateNumberPresented: Evaluator<"number-presented"> = (expression, scope) =>
+  countOf(expression.kind, expression, scope.variables, (item) => Result.succeed(item.presented));
+
+/**
+ * Give the value of a `qti-number-responded`: the number of items its filters keep that were
+ * presented and hold a response that differs from its default (`respondedTo`).
+ *
+ * @param expression The `qti-number-responded`.
+ * @param scope The holder and the variables of the run, which carry the test scope.
+ * @returns The count, a single integer, or the record's gap: with no test scope, or when a
+ *   presented item's record holds no value of a declared response.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutNumberResponded
+ */
+const evaluateNumberResponded: Evaluator<"number-responded"> = (expression, scope) =>
+  countOf(expression.kind, expression, scope.variables, (item) =>
+    item.presented ? respondedTo(item) : Result.succeed(false),
+  );
+
+/**
+ * Give the value of a `qti-number-correct`: the number of items its filters keep whose every
+ * response has a correct response and matches it ({@link judged}).
+ *
+ * @param expression The `qti-number-correct`.
+ * @param scope The holder and the variables of the run, which carry the test scope.
+ * @returns The count, a single integer, or the record's gap: with no test scope, or when a judged
+ *   item's record holds no value of a declared response.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutNumberCorrect
+ */
+const evaluateNumberCorrect: Evaluator<"number-correct"> = (expression, scope) =>
+  countOf(expression.kind, expression, scope.variables, (item) =>
+    Result.map(judged(item), (matched) => Option.exists(matched, (each) => each)),
+  );
+
+/**
+ * Give the value of a `qti-number-incorrect`: the number of items its filters keep that were
+ * attempted, at least one attempt processed, whose every response has a correct response, and at
+ * least one of which does not match it ({@link judged}).
+ *
+ * @param expression The `qti-number-incorrect`.
+ * @param scope The holder and the variables of the run, which carry the test scope.
+ * @returns The count, a single integer, or the record's gap: with no test scope, or when a judged
+ *   item's record holds no value of a declared response.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutNumberIncorrect
+ */
+const evaluateNumberIncorrect: Evaluator<"number-incorrect"> = (expression, scope) =>
+  countOf(expression.kind, expression, scope.variables, (item) =>
+    item.numAttempts > 0
+      ? Result.map(judged(item), (matched) => Option.exists(matched, (each) => !each))
+      : Result.succeed(false),
+  );
+
+/**
+ * Give a number weighted by an item ref's weight, when a `weight-identifier` is given: the number
+ * times the weight, 1.0 when the item ref defines none (G-R3, pending).
+ *
+ * @param item The item.
+ * @param weightIdentifier The `weight-identifier`, none when absent.
+ * @param value The number.
+ * @returns The number, weighted.
+ */
+const weighted = (
+  item: ScopeItem,
+  weightIdentifier: Option.Option<string>,
+  value: number,
+): number =>
+  Option.match(weightIdentifier, {
+    onNone: () => value,
+    onSome: (identifier) => value * weightOf(item, identifier),
+  });
+
+/**
+ * Give the multiple float of numbers, NULL past the container bound.
+ *
+ * @param numbers The numbers, in order.
+ * @returns The value; NULL when there is none or more than `containerSizeBound`.
+ */
+const floatsOf = (numbers: readonly number[]): Value =>
+  numbers.length > containerSizeBound
+    ? nullOf("float", "multiple")
+    : {
+        baseType: "float",
+        cardinality: "multiple",
+        values: numbers.map((value): Single => ({ baseType: "float", value })),
+      };
+
+/**
+ * Give the `normal-minimum` or `normal-maximum` an item declares of the variable a name names,
+ * through its item ref's mappings ({@link itemName}). Only a variable of single cardinality is
+ * considered. A name that names no outcome of the item, a response, a template variable or an
+ * item-session built-in among them, names nothing that declares either (G-R3, pending).
+ *
+ * @param item The item.
+ * @param name The `outcome-identifier`.
+ * @param bound Which of the two.
+ * @returns None when the variable is not of single cardinality, else the declared bound, none when
+ *   none is declared.
+ */
+const declaredBound = (
+  item: ScopeItem,
+  name: string,
+  bound: "normalMaximum" | "normalMinimum",
+): Option.Option<Option.Option<number>> =>
+  Option.match(itemName(item, name), {
+    onNone: () => Option.some(Option.none()),
+    onSome: (named) => {
+      if (named.type.cardinality !== "single") {
+        return Option.none();
+      }
+
+      return Option.some(
+        named.kind === "outcome"
+          ? Option.flatMap(
+              Option.fromUndefinedOr(item.declarations.outcomes.get(named.identifier)),
+              (declaration) => declaration[bound],
+            )
+          : Option.none(),
+      );
+    },
+  });
+
+/**
+ * Give the value of a `qti-outcome-minimum`: a multiple float of each item's `normal-minimum` of
+ * the named single outcome, weighted when a `weight-identifier` is given, an item with no declared
+ * minimum ignored.
+ *
+ * @param expression The `qti-outcome-minimum`.
+ * @param scope The holder and the variables of the run, which carry the test scope.
+ * @returns The minimums, NULL when there is none or past the container bound, or the record's gap
+ *   with no test scope.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutOutcomeMin
+ */
+const evaluateOutcomeMinimum: Evaluator<"outcome-minimum"> = (expression, scope) =>
+  Result.map(heldScope(scope.variables, expression.kind), (test) =>
+    floatsOf(
+      keptItems(test, expression).flatMap((item) =>
+        Option.toArray(
+          Option.flatMap(
+            declaredBound(item, expression.outcomeIdentifier, "normalMinimum"),
+            (minimum) => minimum,
+          ),
+        ).map((minimum) => weighted(item, expression.weightIdentifier, minimum)),
+      ),
+    ),
+  );
+
+/**
+ * Give the value of a `qti-outcome-maximum`: a multiple float of each item's `normal-maximum` of
+ * the named single outcome, weighted when a `weight-identifier` is given; NULL when any item it
+ * considers has no declared maximum.
+ *
+ * @param expression The `qti-outcome-maximum`.
+ * @param scope The holder and the variables of the run, which carry the test scope.
+ * @returns The maximums, NULL when an item has none, when there is none or past the container
+ *   bound, or the record's gap with no test scope.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutOutcomeMax
+ */
+const evaluateOutcomeMaximum: Evaluator<"outcome-maximum"> = (expression, scope) =>
+  Result.map(heldScope(scope.variables, expression.kind), (test) => {
+    const maximums: number[] = [];
+    for (const item of keptItems(test, expression)) {
+      const declared = declaredBound(item, expression.outcomeIdentifier, "normalMaximum");
+      if (Option.isSome(declared)) {
+        if (Option.isNone(declared.value)) {
+          return nullOf("float", "multiple");
+        }
+
+        maximums.push(weighted(item, expression.weightIdentifier, declared.value.value));
+      }
+    }
+
+    return floatsOf(maximums);
+  });
+
+/**
+ * Report whether `qti-test-variables` collects a variable of a declared base type: one of the
+ * written `base-type`, or, with none written, one declared integer or float (Admission A7: "If
+ * omitted, variables declared with base-type integer or float are matched").
+ *
+ * @param written The `base-type`, none when absent.
+ * @param declared The variable's declared base type.
+ * @returns Whether it is collected.
+ */
+const collects = (written: Option.Option<BaseType>, declared: DeclaredType["baseType"]): boolean =>
+  Option.match(written, {
+    onNone: () => declared === "integer" || declared === "float",
+    onSome: (baseType) => baseType === declared,
+  });
+
+/**
+ * One value `qti-test-variables` collected, with the item it came from, whose weight it takes.
+ */
+interface Collected {
+  readonly item: ScopeItem;
+  readonly single: Single;
+}
+
+/**
+ * Give the base type of what `qti-test-variables` collected: a written base type that is not
+ * numerical; else float when a weight is given, a float was collected, or float is written; else
+ * integer, every value an integer and unweighted (`info.txt` 2.11.2.8).
+ *
+ * @param written The `base-type`, none when absent or not one the value model holds.
+ * @param isWeighted Whether a `weight-identifier` is given.
+ * @param collected The values collected.
+ * @returns The base type.
+ */
+const collectedBaseType = (
+  written: Option.Option<ModelledBaseType>,
+  isWeighted: boolean,
+  collected: readonly Collected[],
+): ModelledBaseType => {
+  if (Option.isSome(written) && written.value !== "integer" && written.value !== "float") {
+    return written.value;
+  }
+
+  return isWeighted ||
+    Option.exists(written, (baseType) => baseType === "float") ||
+    collected.some(({ single }) => single.baseType !== "integer")
+    ? "float"
+    : "integer";
+};
+
+/**
+ * Give one collected value as the collection holds it: a number as a float, weighted, when the
+ * collection is float, integers promoted; any other value as it is.
+ *
+ * @param baseType The collection's base type.
+ * @param weightIdentifier The `weight-identifier`, none when absent.
+ * @param collected The value and its item.
+ * @returns The value.
+ */
+const collectedSingle = (
+  baseType: ModelledBaseType,
+  weightIdentifier: Option.Option<string>,
+  { item, single }: Collected,
+): Single =>
+  baseType === "float" && (single.baseType === "integer" || single.baseType === "float")
+    ? { baseType: "float", value: weighted(item, weightIdentifier, floatOf(single)) }
+    : single;
+
+/**
+ * Give the value of a `qti-test-variables`: a multiple of each item's value of the named single
+ * variable, read through its item ref's mappings as a prefixed reference reads it (`numAttempts`
+ * the processed attempt count, `completionStatus` the record's), NULLs ignored. It collects a
+ * variable of the written `base-type`, or, with none written, one declared integer or float
+ * (Admission A7). It is a multiple integer when every value is an integer and unweighted, else a
+ * multiple float, integers promoted, each number weighted when a `weight-identifier` is given; of
+ * a written base type that is not numerical, a multiple of it, unweighted.
+ *
+ * @param expression The `qti-test-variables`.
+ * @param scope The holder and the variables of the run, which carry the test scope.
+ * @returns The values, NULL when there is none or past the container bound; or the record's gap,
+ *   with no test scope or when an item's record holds no value of the response or outcome named.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutTestVariables
+ */
+const evaluateTestVariables: Evaluator<"test-variables"> = (expression, scope) =>
+  Result.gen(function* collectVariables() {
+    const test = yield* heldScope(scope.variables, expression.kind);
+    const written = expression.baseType.pipe(Option.filter(isModelled));
+    const isWeighted = Option.isSome(expression.weightIdentifier);
+    const collected: Collected[] = [];
+    for (const item of keptItems(test, expression)) {
+      const named = itemName(item, expression.variableIdentifier);
+      if (
+        Option.isSome(named) &&
+        named.value.type.cardinality === "single" &&
+        collects(expression.baseType, named.value.type.baseType)
+      ) {
+        const reading = yield* itemVariable(item, expression.variableIdentifier);
+        const [single] = reading.kind === "held" ? reading.value.values : [];
+        if (single !== undefined) {
+          collected.push({ item, single });
+        }
+
+        if (collected.length > containerSizeBound) {
+          return nullOf(collectedBaseType(written, isWeighted, collected), "multiple");
+        }
+      }
+    }
+
+    const baseType = collectedBaseType(written, isWeighted, collected);
+
+    return {
+      baseType,
+      cardinality: "multiple",
+      values: collected.map((each) => collectedSingle(baseType, expression.weightIdentifier, each)),
+    } satisfies Value;
+  });
+
+/**
+ * The test family's evaluators by kind.
+ */
+export const testEvaluators: FamilyTable<TestKind> = {
+  "number-correct": evaluateNumberCorrect,
+  "number-incorrect": evaluateNumberIncorrect,
+  "number-presented": evaluateNumberPresented,
+  "number-responded": evaluateNumberResponded,
+  "number-selected": evaluateNumberSelected,
+  "outcome-maximum": evaluateOutcomeMaximum,
+  "outcome-minimum": evaluateOutcomeMinimum,
+  "test-variables": evaluateTestVariables,
 };
