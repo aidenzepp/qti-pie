@@ -20,7 +20,7 @@
  *
  * @see {@link https://www.postgresql.org/docs/19/protocol-message-formats.html | PostgreSQL 19, §54.7 Message Formats}
  */
-import { Db } from "@bjornpagen/grizzle";
+import { Db, messageMaxBytes } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Duration, Effect, FileSystem, Layer, Option, Path } from "effect";
@@ -35,15 +35,6 @@ import { Package } from "#pantry/qti/package.ts";
 import { authorRole, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
-
-/**
- * The longest Bind message a PostgreSQL 19 backend reads, as its length word counts it: grizzle's
- * `messageMaxBytes`, from `PQ_LARGE_MESSAGE_LIMIT` (grizzle's README, "Limits": "One statement's
- * parameters are at most 1,073,741,822 bytes"). grizzle's public API does not export it.
- *
- * @see {@link https://github.com/postgres/postgres/blob/REL_19_RC1/src/include/libpq/libpq.h#L34 | libpq.h, PQ_LARGE_MESSAGE_LIMIT, one less than MaxAllocSize}
- */
-const messageMaxBytes = 1_073_741_822;
 
 /**
  * The bytes of each bulk entry: 64 MiB, whose base64 is 89,478,488 characters, so the literal
@@ -62,7 +53,7 @@ const base64Length = (bytes: number): number => 4 * Math.ceil(bytes / 3);
 /**
  * The bulk's entries: the fewest whose record content alone is past {@link messageMaxBytes}.
  */
-const bulkEntries = Math.floor(messageMaxBytes / base64Length(bulkEntryBytes)) + 1;
+const bulkEntries = Math.floor(messageMaxBytes.value / base64Length(bulkEntryBytes)) + 1;
 
 /**
  * The timeout of the test: it sends past a gibibyte to the server and reads it back.
@@ -138,7 +129,7 @@ describe.skipIf(!hasLease)(
               0,
             );
 
-            assert.isAbove(recordBytes, messageMaxBytes, "the record fits one Bind message");
+            assert.isAbove(recordBytes, messageMaxBytes.value, "the record fits one Bind message");
 
             const source = yield* scopedPackage(entries);
             const [importElapsed, id] = yield* Effect.timed(importPackage(source));
