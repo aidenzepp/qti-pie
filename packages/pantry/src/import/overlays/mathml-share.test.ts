@@ -30,6 +30,7 @@ import { idOf } from "#pantry/test/gen/xdm.ts";
 /**
  * The timeout, in milliseconds, that this file's slower test states: a hang guard, never a budget.
  * Measured 2026-11-07: 3.7 s at a load average of 17.65 to 123.38, its slowest test, in a free run.
+ * Measured 2026-11-07: 1.8 s at a load average of 74.59 to 117.21, its slowest test, run alone.
  */
 const testTimeoutMs = 60_000;
 
