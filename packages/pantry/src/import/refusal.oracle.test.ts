@@ -69,6 +69,13 @@ import { PackageReadError } from "#pantry/package/read.ts";
 import { ZipRefusal } from "#pantry/package/zip.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 29.2 s at a load average of 70 to
+ * 74, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The composed grammar of production, whose rows `install.ts` installs: the constants an
  * explanation reads.
  */
@@ -1632,7 +1639,7 @@ describe("the explanation of a content-order refusal", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });
 
@@ -1859,7 +1866,7 @@ describe("the census of the composed Qti schema", () => {
           ),
         );
       }),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -1889,7 +1896,7 @@ describe("the census of the composed Qti schema", () => {
           "rows of the table that name a law no statement of Qti states",
         );
       }),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -1907,7 +1914,7 @@ describe("the census of the composed Qti schema", () => {
 
         assert.deepStrictEqual(unowned, [], "text fields whose pattern no row of the table owns");
       }),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -1932,7 +1939,7 @@ describe("the census of the composed Qti schema", () => {
           "generated laws the table states for no generated field of Qti",
         );
       }),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -1992,7 +1999,7 @@ describe("the census of the composed Qti schema", () => {
           assert.deepStrictEqual(ruleOfLaws([law]), Option.some(rule), lawIdentity(law));
         }
       }),
-    120_000,
+    testTimeoutMs,
   );
 
   it("names a generated field no row owns, so a field Qti gains without one fails the census", () => {
