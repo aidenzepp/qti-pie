@@ -128,7 +128,7 @@ export const lawPackageBreaches = (
 };
 
 /**
- * The laws the schema states (`#pantry/import/refusal.ts` `lawTable`) that the oracle states as
+ * The laws of the catalog (`#pantry/vocab/laws.ts` `lawTable`) that the oracle states as
  * several laws of its own, each part a law of the oracle with the stated law's rule.
  *
  * - `N2 tree`: grizzle's tree statement over `Node` (`tree(on(Node, "parent", "at"), fin(Node,

@@ -10,7 +10,7 @@
  *   that law (`#pantry/test/oracle-complete/*.ts`) edits a generated package the oracle accepts,
  *   the every-relation package drawn by its member counts unless the mutation brings its own base,
  *   at a site and with a value it draws. The oracle must raise the law, and must raise no law whose
- *   rule stands ahead of the law's in the refusal's precedence (`#pantry/import/refusal.ts`
+ *   rule stands ahead of the law's in the refusal's precedence (`#pantry/vocab/laws.ts`
  *   `precedence`), the order the database names a refusal by, so the database would name the
  *   mutated package by the law's rule. A law over rows no package text can break is broken in the
  *   folded rows of one document instead, and judged by `documentBreaches`.
@@ -30,7 +30,8 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { lawNames as statedLawNames, lawTable, precedence } from "#pantry/import/refusal.ts";
+import { lawNames as statedLawNames } from "#pantry/import/refusal.ts";
+import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import type { FoldedRows } from "#pantry/model/folds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { int } from "@grizzle/testing/gen";

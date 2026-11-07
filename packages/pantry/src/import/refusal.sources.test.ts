@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Config, Effect, FileSystem, Option } from "effect";
-import { lawTable } from "#pantry/import/refusal.ts";
+import { lawTable } from "#pantry/vocab/laws.ts";
 import * as differential from "#pantry/test/xsd-differential.ts";
 import type { Recorded } from "#pantry/test/xsd-differential.ts";
 import {

@@ -132,13 +132,6 @@ const recorded: readonly Recorded[] = [
     why: "crust refuses a forward reference in a default everywhere: inside the WFC's scope as not well-formed, outside it as an invalid document whose default has no value the specification fixes (the coordinator's ruling 5: refuse where the infoset is undetermined); libxml2 2.9.13 reads such a default as the empty string, its own choice",
   },
   {
-    signature:
-      /^O1 crust refused-well-formedness \(invalid attempt to undefine prefix in XML N\.N\), libxml2 accepts$/u,
-    source:
-      'Namespaces in XML 1.0 (Third Edition) section 2.2: the normalized value "MUST be either a URI reference ... or an empty string", and a prefixed declaration\'s MUST NOT be empty',
-    why: "a prefixed declaration whose normalized value is whitespace alone, written through an entity or a character reference, is no URI reference and not empty, so the document is not namespace-well-formed; crust refuses it (saxes reads it as an undeclaration, the wrong reason but the right verdict); libxml2 2.9.13 accepts it",
-  },
-  {
     signature: /^O1 crust refused-element-depth, libxml2 accepts$/u,
     source:
       "crust's reader bound, read.ts defaultElementDepth (256), which XML 1.0 leaves to the processor (section 5.1 sets no limit); libxml2 2.9.13's xmlParserMaxDepth of 256 is checked after the 257th element is pushed, so it reads 257 levels and refuses 258",
@@ -165,20 +158,6 @@ interface Open {
  */
 const open: readonly Open[] = [
   {
-    finding: "GEN-B/codec N1: an attribute-list default is added with no namespace processing",
-    kept: [
-      { charset: "UTF-8", text: '<!DOCTYPE r [<!ATTLIST r xml:space NMTOKENS "">]><r/>' },
-      { charset: "UTF-8", text: '<!DOCTYPE r [<!ATTLIST r p:a IDREF "">]><r/>' },
-      { charset: "UTF-8", text: '<!DOCTYPE r [<!ATTLIST r xmlns CDATA "urn:d">]><r/>' },
-      {
-        charset: "UTF-8",
-        text: '<!DOCTYPE r [<!ATTLIST r xml:space CDATA "x"><!ATTLIST r b CDATA "y">]><r/>',
-      },
-    ],
-    signature: /^O\d defaulted name in no namespace: .+$/u,
-    why: "crust appends a defaulted attribute as a name in no namespace (read.ts defaultAttribute), so a default named xml:space, p:a or xmlns is no xml: attribute, no prefixed attribute and no namespace declaration, and canonical XML sorts it among the attributes in no namespace; the Information Set's [attributes] and [namespace attributes] hold the attributes 'specified or defaulted from the DTD' (XML Information Set, section 2.2), and Namespaces in XML 1.0 (Third Edition) section 6.2 and NSC Prefix Declared (section 4) bind them as written ones; libxml2 does",
-  },
-  {
     finding: "GEN-B/codec N2: a namespace name that is no URI reference is accepted",
     kept: [{ charset: "UTF-8", text: '<r xmlns:p="&quot;"/>' }],
     signature: /^O1 crust accepts, libxml2 refuses: (?:.+ \+ )?xmlns(?::\S+)?: '.*$/u,
@@ -201,6 +180,20 @@ interface Fixed {
  * The defects closed since the search found them.
  */
 const fixed: readonly Fixed[] = [
+  {
+    commit:
+      "the commit that resolves namespaces in crust after the attribute-list defaults are added",
+    finding: "GEN-B/codec N1: an attribute-list default was added with no namespace processing",
+    kept: [
+      { charset: "UTF-8", text: '<!DOCTYPE r [<!ATTLIST r xml:space NMTOKENS "">]><r/>' },
+      { charset: "UTF-8", text: '<!DOCTYPE r [<!ATTLIST r p:a IDREF "">]><r/>' },
+      { charset: "UTF-8", text: '<!DOCTYPE r [<!ATTLIST r xmlns CDATA "urn:d">]><r/>' },
+      {
+        charset: "UTF-8",
+        text: '<!DOCTYPE r [<!ATTLIST r xml:space CDATA "x"><!ATTLIST r b CDATA "y">]><r/>',
+      },
+    ],
+  },
   {
     commit:
       "the commit that reads a document's encoding as a row of Appendix F.1, refuses a label the row rules out, and writes UTF-16LE and UTF-16BE with no byte order mark",

@@ -17,6 +17,7 @@ import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
 import type { RefusalWitness } from "#pantry/import/refusal.ts";
 import { readerOrigin, WitnessKind } from "#pantry/package/refusal-origin.ts";
+import { lawTable } from "#pantry/vocab/laws.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 import { captureCli, matchesCommitted, preloadEngine } from "#pantry/test/cli.ts";
 import { fileScratchDirectory } from "#pantry/test/scratch.ts";
@@ -264,7 +265,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
     // Oracle: the refusal as `refusalOfLaws` builds it; the printed lines carry its message, each of
     // its sources once, and the help `describeFailure` gives a refusal that carries laws.
     Effect.gen(function* text() {
-      const { lawTable } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
       const { exit, stderr, stdout } = yield* captureCli([], { command: refusing });
       const { source } = lawTable["AL1 admission"];
 
@@ -295,9 +295,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
     // identity alone. The witness kind the refusal was built under, and the committed schema of
     // the error object.
     Effect.gen(function* json() {
-      const { checkNameOf, lawTable } = yield* Effect.promise(
-        () => import("#pantry/import/refusal.ts"),
-      );
+      const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
       const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
       const error = errorLine(stderr);
 
@@ -329,7 +327,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
       // object. Bound: every law of the table (`lawNames`), each the one law of a refusal under an
       // unreported witness, exhausted; residual none.
       Effect.gen(function* everyLaw() {
-        const { checkNameOf, lawNames, lawTable, refusalOfLaws } = yield* Effect.promise(
+        const { checkNameOf, lawNames, refusalOfLaws } = yield* Effect.promise(
           () => import("#pantry/import/refusal.ts"),
         );
         const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
@@ -400,7 +398,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
       // origin's, by its own words. Bound: the reader's origin and the database's under each kind of
       // `WitnessKind`, exhausted, each in text and JSON; residual none.
       Effect.gen(function* everyOrigin() {
-        const { checkNameOf, ImportRefused, lawTable, refusalOfLaws } = yield* Effect.promise(
+        const { checkNameOf, ImportRefused, refusalOfLaws } = yield* Effect.promise(
           () => import("#pantry/import/refusal.ts"),
         );
         const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));

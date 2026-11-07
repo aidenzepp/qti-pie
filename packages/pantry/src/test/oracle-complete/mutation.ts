@@ -13,7 +13,7 @@
  *   over rows the folds write that no package text can break (a tree's interval, a fold's copy).
  *
  * The property holds a mutated package to the law: the oracle raises it, and raises no law whose
- * rule stands ahead of the law's in the refusal's precedence (`#pantry/import/refusal.ts`
+ * rule stands ahead of the law's in the refusal's precedence (`#pantry/vocab/laws.ts`
  * `precedence`), so the database, which names a refusal by that order, names it by the law's rule.
  */
 import { element, int } from "@grizzle/testing/gen";

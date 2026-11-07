@@ -1299,15 +1299,12 @@ const decodeDifferential = Effect.fnUntraced(function* decodeDifferential(
 });
 
 /**
- * The classes of input a tree crust read can fall in whose every disagreement has one cause:
- *
- * - `defaulted name in no namespace`: crust appended an attribute-list default whose name has a
- *   prefix, or is `xmlns`, as a name in no namespace, the cause GEN-B/codec's N1 names;
- * - `namespace name holds a reference`: a namespace declaration's value keeps an unexpanded
- *   reference, whose namespace name no reader knows (XML 1.0 section 4.4.3: the processor reports
- *   the reference it did not read).
+ * The class of input a tree crust read can fall in whose every disagreement has one cause,
+ * `namespace name holds a reference`: a namespace declaration's value keeps an unexpanded
+ * reference, whose namespace name no reader knows (XML 1.0 section 4.4.3: the processor reports
+ * the reference it did not read).
  */
-type TreeClass = "defaulted name in no namespace" | "namespace name holds a reference";
+type TreeClass = "namespace name holds a reference";
 
 /**
  * A class of input whose every disagreement has one cause: a {@link TreeClass}, or a document
@@ -1327,13 +1324,6 @@ export type InputClass =
  */
 const treeClassOf = (tree: XmlDocument): TreeClass | undefined => {
   const attributes = elementsIn(tree.root).flatMap((element) => element.attributes);
-  if (
-    attributes.some(
-      ({ local, namespace }) => namespace === "" && (local.includes(":") || local === "xmlns"),
-    )
-  ) {
-    return "defaulted name in no namespace";
-  }
 
   return attributes.some((attribute) => isDeclaration(attribute) && attribute.references.length > 0)
     ? "namespace name holds a reference"
@@ -1371,7 +1361,7 @@ const inputClassOf = (
  * @returns Whether it does.
  */
 const isClassed = (held: CodecDisagreement): boolean =>
-  /^O\d (?:defaulted name in no namespace|namespace name holds a reference|encoding declared against the bytes|UTF-16 input ends inside a surrogate pair|default names an entity declared after it): /u.test(
+  /^O\d (?:namespace name holds a reference|encoding declared against the bytes|UTF-16 input ends inside a surrogate pair|default names an entity declared after it): /u.test(
     held.signature,
   );
 
@@ -1593,26 +1583,6 @@ const referenceDifferential = Effect.fnUntraced(function* referenceDifferential(
 });
 
 /**
- * Whether a genome's internal subset declares a default for an attribute named with a prefix or
- * as `xmlns`, which crust adds in no namespace (GEN-B/codec's N1).
- *
- * @param genome - The genome.
- * @returns Whether it does.
- */
-const namespacedDefault = (genome: CodecGenome): boolean =>
-  genome.doctype
-    .pipe(
-      Option.flatMap(({ subset }) => subset),
-      Option.getOrElse((): readonly Declaration[] => []),
-    )
-    .some(
-      (declaration) =>
-        declaration._tag === "attlist" &&
-        declaration.default._tag === "value" &&
-        (declaration.attribute.includes(":") || declaration.attribute === "xmlns"),
-    );
-
-/**
  * Whether a genome's internal subset holds an attribute-list default that references a general
  * entity the subset declares only after it, directly or through the replacement text of an entity
  * declared before it. A general entity reference in an entity value is bypassed at its declaration
@@ -1692,21 +1662,13 @@ const judgeOne = Effect.fnUntraced(function* judgeOne(
     disagreements: [
       ...judged.disagreements,
       ...references.disagreements.map((held) => classed(held, inputClassOf(bytes, read))),
-    ]
-      .map((held) =>
-        // A default named with a prefix or as xmlns, which crust adds in no namespace, is that
-        // class even where crust refused the document over it and left no tree to see it in.
-        namespacedDefault(genome) && Result.isFailure(read) && !isClassed(held)
-          ? classed(held, "defaulted name in no namespace")
-          : held,
-      )
-      .map((held) =>
-        // A default naming an entity the subset declares after it is crust's refusal by XML 1.0
-        // section 4.1's last sentence, whatever else the document holds.
-        defaultBeforeEntity(genome) && Result.isFailure(read) && !isClassed(held)
-          ? classed(held, "default names an entity declared after it")
-          : held,
-      ),
+    ].map((held) =>
+      // A default naming an entity the subset declares after it is crust's refusal by XML 1.0
+      // section 4.1's last sentence, whatever else the document holds.
+      defaultBeforeEntity(genome) && Result.isFailure(read) && !isClassed(held)
+        ? classed(held, "default names an entity declared after it")
+        : held,
+    ),
     features: new Set([...genomeFeatures(genome), ...judged.features, ...references.features]),
   } satisfies Judgment<string, CodecDisagreement>;
 });
