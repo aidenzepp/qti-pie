@@ -109,6 +109,7 @@ import type {
   XdmChild,
   XdmClosedElement,
   XdmDocument,
+  XdmElement,
 } from "#pantry/model/xdm.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
@@ -3790,10 +3791,9 @@ export const documentBreaches = (
  */
 interface Listed {
   /**
-   * Its rows indexed for the laws, or the one breach of a document the folds refuse, since it has
-   * no rows for any other law to read.
+   * Its rows indexed for the laws, less what the folds refused, and the breach of each refusal.
    */
-  readonly folded: Result.Result<View, Breach>;
+  readonly folded: Folded;
   /**
    * The collapsed `identifier` its root element carries, none when it carries none.
    */
@@ -3993,7 +3993,7 @@ const inclusionCycles = (
 ): readonly (readonly string[])[] => {
   const edges = new Map<string, readonly string[]>();
   for (const { folded, path } of documents) {
-    for (const view of Result.isSuccess(folded) ? [folded.success] : []) {
+    for (const view of Option.toArray(folded.view)) {
       edges.set(path, [
         ...(edges.get(path) ?? []),
         ...view.members
@@ -4070,11 +4070,11 @@ const referenceBreaches = (
   const rootKinds = new Map(documents.map((listed) => [listed.path, listed.rootKind] as const));
 
   return documents.flatMap(({ folded, path }) => {
-    if (Result.isFailure(folded)) {
+    if (Option.isNone(folded.view)) {
       return [];
     }
 
-    const view = folded.success;
+    const view = folded.view.value;
     const breach = (law: LawName, keys: Keys): Breach => ({
       document: path,
       keys: { node: "", ...keys },
@@ -4272,11 +4272,11 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
   const byPath = new Map(documents.map((listed) => [listed.path, listed] as const).toReversed());
 
   return documents.flatMap((document) => {
-    if (Result.isFailure(document.folded)) {
+    if (Option.isNone(document.folded.view)) {
       return [];
     }
 
-    const view = document.folded.success;
+    const view = document.folded.view.value;
 
     return view.members
       .filter((member) => merges(grammar, member))
@@ -4411,23 +4411,25 @@ const inclusionBreaches = (
 ): readonly Breach[] => {
   const sites = sitesOf(documents, grammar);
   const includes = documents.flatMap(({ folded, path }) =>
-    Result.isSuccess(folded)
-      ? folded.success.members
+    Option.match(folded.view, {
+      onNone: () => [],
+      onSome: (view) =>
+        view.members
           .filter(({ kind }) => kind === "xi:include")
           .flatMap((node) =>
-            Option.toArray(valueOf(folded.success, node.id, "href")).flatMap((href) =>
+            Option.toArray(valueOf(view, node.id, "href")).flatMap((href) =>
               href.includes("#")
                 ? [
                     {
                       document: path,
-                      keys: { href, node: pathOf(folded.success, node.id) },
+                      keys: { href, node: pathOf(view, node.id) },
                       law: "Include fragment identifier" as const,
                     },
                   ]
                 : [],
             ),
-          )
-      : [],
+          ),
+    }),
   );
   let contexts: ReadonlyMap<string, string> = new Map();
   for (let round = 0; round <= documents.length; round += 1) {
@@ -4684,11 +4686,13 @@ const documentLangBreaches = (
       : listed;
     const forms = new Set(
       merged.flatMap(({ folded }) =>
-        Result.isSuccess(folded)
-          ? [...folded.success.valuesOf.values()].flatMap((named) =>
+        Option.match(folded.view, {
+          onNone: () => [],
+          onSome: (view) =>
+            [...view.valuesOf.values()].flatMap((named) =>
               Option.toArray(Option.fromNullishOr(named.get("xml:lang"))),
-            )
-          : [],
+            ),
+        }),
       ),
     );
 
@@ -5049,14 +5053,132 @@ const refusalBreach = (
 };
 
 /**
+ * A document folded for the laws: its rows indexed, less each node or attribute a fold refused,
+ * and the breach of each refusal.
+ */
+interface Folded {
+  /**
+   * The breach of each node or attribute the folds refused, in the order they met them.
+   */
+  readonly refusals: readonly Breach[];
+  /**
+   * Its rows indexed for the laws, none where the folds refused its root element.
+   */
+  readonly view: Option.Option<View>;
+}
+
+/**
+ * Read the slots that lead from a document's root element down to one of its nodes: each node's
+ * place among its parent's children, as `flatten` numbers them.
+ *
+ * @param tree - The document.
+ * @param idOf - Draws the id of each node, as `fold` reads it.
+ * @param node - The node's id, as a fold's refusal names it.
+ * @returns Its slots below the root, empty for the root itself; none for a node the document does
+ *   not hold.
+ */
+const slotsTo = (
+  tree: XdmDocument<Composed>,
+  idOf: (index: number) => NodeId,
+  node: string,
+): Option.Option<readonly number[]> => {
+  const rows = flatten(tree, idOf);
+  const byId = new Map<string, NodeRow<Composed>>(rows.nodes.map((row) => [row.id, row] as const));
+  const slots: number[] = [];
+  let row = byId.get(node);
+  while (row !== undefined && row.parent !== rows.document.node) {
+    slots.unshift(Number(row.at));
+    row = byId.get(row.parent);
+  }
+
+  return row === undefined ? Option.none() : Option.some(slots);
+};
+
+/**
+ * Rebuild an element with one of its descendants changed: the element the slots lead to, given to
+ * `change`.
+ *
+ * @param element - The element.
+ * @param slots - The slots from it down to the element to change, empty for itself.
+ * @param change - The change.
+ * @returns The element rebuilt.
+ */
+const changedAt = <E extends XdmElement<Composed>>(
+  element: E,
+  slots: readonly number[],
+  change: (target: XdmElement<Composed>) => XdmElement<Composed>,
+): E => {
+  const [slot, ...rest] = slots;
+  if (slot === undefined) {
+    // SAFETY: each change spreads the element it is given and replaces only its children or its
+    // attributes, so the element it returns keeps every field of E.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+    return change(element) as E;
+  }
+
+  return {
+    ...element,
+    children: element.children.map((child, at) =>
+      at === slot && "children" in child ? changedAt(child, rest, change) : child,
+    ),
+  };
+};
+
+/**
+ * Set aside what a fold refused: the child and its subtree, or the attribute.
+ *
+ * @param tree - The document.
+ * @param idOf - Draws the id of each node, as `fold` reads it.
+ * @param refusal - The fold's refusal.
+ * @returns The document without it; none where the refused node is the root element, which no
+ *   document stands without.
+ */
+const withoutRefused = (
+  tree: XdmDocument<Composed>,
+  idOf: (index: number) => NodeId,
+  refusal: FoldRefusal,
+): Option.Option<XdmDocument<Composed>> =>
+  Option.flatMap(slotsTo(tree, idOf, refusal.node), (slots) => {
+    if (refusal._tag === "ChildUnadmitted") {
+      const parent = slots.slice(0, -1);
+      const slot = slots.at(-1);
+
+      return slot === undefined
+        ? Option.none()
+        : Option.some({
+            ...tree,
+            root: changedAt(tree.root, parent, (element) => ({
+              ...element,
+              children: element.children.filter((_, at) => at !== slot),
+            })),
+          });
+    }
+
+    return Option.some({
+      ...tree,
+      root: changedAt(tree.root, slots, (element) => ({
+        ...element,
+        attributes: element.attributes.filter((_, at) => BigInt(at) !== refusal.at),
+      })),
+    });
+  });
+
+/**
  * Fold one shredded document and index its rows for the laws.
+ *
+ * A fold that meets a missing cell, a child its parent does not admit or an attribute its kind does
+ * not admit, refuses that node. Its breach is kept, the child and its subtree or the attribute are
+ * set aside, and the rest is folded again, until the document folds: so every other row of the
+ * document is judged, and through the manifest every document it lists, and precedence picks among
+ * every breach, as the importer writes every row and the database judges them all. The refused
+ * subtree is the one part left unjudged, since no state places it; a refused root leaves no rows.
  *
  * @param path - The document's path in its package.
  * @param tree - The document.
  * @param idOf - Draws the id of each node, as `fold` reads it.
  * @param grammar - The closed relations the folds read.
  * @param typed - How an attribute's type reads its value.
- * @returns The view, or the breach of a fold that meets a missing cell and so has no rows.
+ * @returns The document's rows and its refusals' breaches.
  */
 const foldedOf = (
   path: string,
@@ -5064,11 +5186,21 @@ const foldedOf = (
   idOf: (index: number) => NodeId,
   grammar: FoldGrammar<Composed>,
   typed: TypedReading,
-): Result.Result<View, Breach> =>
-  Result.mapBoth(fold(tree, idOf, grammar), {
-    onFailure: (refusal) => refusalBreach(path, tree, idOf, refusal),
-    onSuccess: (rows) => viewOf(path, rows, typed),
-  });
+): Folded => {
+  const refusals: Breach[] = [];
+  let current: Option.Option<XdmDocument<Composed>> = Option.some(tree);
+  while (Option.isSome(current)) {
+    const folded = fold(current.value, idOf, grammar);
+    if (Result.isSuccess(folded)) {
+      return { refusals, view: Option.some(viewOf(path, folded.success, typed)) };
+    }
+
+    refusals.push(refusalBreach(path, current.value, idOf, folded.failure));
+    current = withoutRefused(current.value, idOf, folded.failure);
+  }
+
+  return { refusals, view: Option.none() };
+};
 
 /**
  * Read the collapsed `identifier` of a document's root element.
@@ -5108,7 +5240,7 @@ const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
  * another is judged inside each document that splices it, and not alone; every other document is
  * judged with its includes spliced, as XInclude's result infoset reads it, so its included
  * fragments' content stands where it is included, binding its item's responses and counting among
- * its IDs. A document whose fold meets a missing cell has that refusal as its one breach.
+ * its IDs. A fold's refusals are breaches beside the rest of the document's ({@link foldedOf}).
  *
  * Breaches inside spliced content are reported against the including document, at their path in
  * its merged tree.
@@ -5138,8 +5270,9 @@ const inPlaceBreaches = (
   );
 
   return documents.flatMap((listed, index) => {
-    if (Result.isFailure(listed.folded)) {
-      return [listed.folded.failure];
+    const { refusals, view } = listed.folded;
+    if (Option.isNone(view)) {
+      return refusals;
     }
 
     if (placed.has(listed.path)) {
@@ -5147,7 +5280,7 @@ const inPlaceBreaches = (
     }
 
     if (!splicing.has(listed.path)) {
-      return documentBreaches(listed.path, listed.folded.success.rows, laws);
+      return [...refusals, ...documentBreaches(listed.path, view.value.rows, laws)];
     }
 
     const tree: XdmDocument<Composed> = {
@@ -5155,10 +5288,15 @@ const inPlaceBreaches = (
       root: splicedElement(grammar, byPath, listed.tree.root, listed.path, [listed.path]),
     };
 
-    return Result.match(foldedOf(listed.path, tree, idsFor(index + 1), foldGrammar, typed), {
-      onFailure: (breach) => [breach],
-      onSuccess: (read) => documentBreaches(read.path, read.rows, laws),
-    });
+    const spliced = foldedOf(listed.path, tree, idsFor(index + 1), foldGrammar, typed);
+
+    return [
+      ...spliced.refusals,
+      ...Option.match(spliced.view, {
+        onNone: () => [],
+        onSome: (read) => documentBreaches(read.path, read.rows, laws),
+      }),
+    ];
   });
 };
 
@@ -5216,9 +5354,9 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
       shredGrammar,
     );
     const manifest = foldedOf(manifestFile.path, manifestTree, idsFor(0), foldGrammar, typed);
-    const listing = Result.match(manifest, {
-      onFailure: () => [],
-      onSuccess: (view) => documentsOf(resourcesOf(view, grammar), grammar),
+    const listing = Option.match(manifest.view, {
+      onNone: () => [],
+      onSome: (view) => documentsOf(resourcesOf(view, grammar), grammar),
     });
     const byPath = new Map(files.map((file) => [file.path, file]));
     const documents: Listed[] = [];
@@ -5250,30 +5388,28 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
 
   const { documents, manifest, missing } = outcome.success;
 
-  return Result.match(manifest, {
-    onFailure: (breach): Judged => ({
+  return Option.match(manifest.view, {
+    onNone: (): Judged => ({
       _tag: "Judged",
-      breaches: [breach],
+      breaches: manifest.refusals,
       documents: [manifestFile.path],
     }),
-    onSuccess: (view): Judged => ({
+    onSome: (view): Judged => ({
       _tag: "Judged",
       breaches: [
         ...packageBreaches({ documents, files, manifest: view, missing }, laws),
+        ...manifest.refusals,
         ...documentBreaches(view.path, view.rows, laws),
         ...inPlaceBreaches(documents, grammar, foldGrammar, laws),
         ...lawPackageBreaches(
           {
             documents: documents.flatMap((listed) =>
-              Result.isSuccess(listed.folded)
-                ? [
-                    {
-                      path: listed.path,
-                      resourceType: listed.resource.type,
-                      rows: listed.folded.success.rows,
-                    },
-                  ]
-                : [],
+              Option.match(listed.folded.view, {
+                onNone: () => [],
+                onSome: ({ rows }) => [
+                  { path: listed.path, resourceType: listed.resource.type, rows },
+                ],
+              }),
             ),
             entries: files.map(({ path }) => path),
             manifest: { path: view.path, rows: view.rows },
