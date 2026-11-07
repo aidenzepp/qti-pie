@@ -598,15 +598,14 @@ const presented = (
   accepted: Accepted,
   datestamp: string,
   seed: string,
-): SessionItem => ({
-  ...item,
-  datestamp,
-  presented: true,
-  record: Result.getOrThrowWith(
-    firstAttempt(accepted.item, { instance: item.record.instance, seed }),
-    (failure) => new FirstAttemptDefect({ failure, item: accepted.item.identifier }),
-  ),
-});
+): SessionItem => {
+  const started = firstAttempt(accepted.item, { instance: item.record.instance, seed });
+  if (Result.isFailure(started)) {
+    throw new FirstAttemptDefect({ failure: started.failure, item: accepted.item.identifier });
+  }
+
+  return { ...item, datestamp, presented: true, record: started.success };
+};
 
 /**
  * Mark an item of a session presented, starting its first attempt when it was not.
