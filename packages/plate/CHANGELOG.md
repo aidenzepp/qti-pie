@@ -152,10 +152,14 @@ and both of its entry points are unstable until M3.
     gives no value.
   - A printed tie rounds half away from zero on the shortest decimal, so 0.25 at `%.1f` prints
     `0.3`. Negative zero prints as `-0`. `index` counts from 1 _(pending)_, and `power-form`
-    applies only with no `format` _(pending)_.
+    applies only with no `format` _(pending)_. `power-form` writes an ASCII `x`, as the information
+    model writes it, so 1.5e21 prints `1.5 x 10 to the power 21`. An earlier commit of template
+    processing wrote `×`.
   - Under `%i`, `%o`, `%x` or `%X`, a float prints its shortest decimal's integer part, truncated
-    toward zero _(pending)_, and an infinity or NaN prints `inf`, `-inf` or `nan`, in upper case
-    under `%X` _(pending)_. Under `%o`, `%x` or `%X`, a negative writes `-` and its digits
+    toward zero _(pending)_, so `%i` of `1e23` prints `100000000000000000000000`. An earlier commit
+    of template processing cut the double's binary value and printed `99999999999999991611392`.
+    An infinity or NaN prints `inf`, `-inf` or `nan` under those conversions, in upper case under
+    `%X` _(pending)_. Under `%o`, `%x` or `%X`, a negative writes `-` and its digits
     _(pending)_. A `base` outside 2 to 36 writes base 10 _(pending)_, and a width or precision past
     1,000,000 prints nothing, as NULL does _(pending)_.
   - A `param-variable` that holds a container passes its values joined by `;`, and NULL passes an
