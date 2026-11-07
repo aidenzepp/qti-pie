@@ -18,8 +18,13 @@
  *   is judged by reading 48 against the items they resolve to, their variable mappings and its
  *   parts and sections: one no reading resolves, or one that reads the `duration` of an item that
  *   is not time dependent, is `undeclared-variable`, and one two readings resolve is
- *   `ambiguous-reference`; and each item ref's variable mappings name an outcome its item declares
- *   as their source (`undeclared-variable`) and each its own target (`duplicate-identifier`);
+ *   `ambiguous-reference`; each item ref's variable mappings name an outcome its item declares as
+ *   their source (`undeclared-variable`) and each its own target (`duplicate-identifier`), and its
+ *   template defaults a template variable its item declares (`undeclared-variable`); a reference
+ *   attribute reads through an item ref only a template or outcome variable, and a mapping
+ *   expression only a response with the mapping it needs; and the test's expressions are typed
+ *   through its item refs, so the item's processing rules judge what it reads there and what each
+ *   template default sets (`expression-type`);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
@@ -50,9 +55,15 @@ import {
   expressionKinds,
   floatOrRefOf,
   integerOrRefOf,
+  singleOf,
   stringOrRefOf,
 } from "#plate/model/expression.ts";
-import type { ExpressionKind, LiteralOrRef, ReferenceEntry } from "#plate/model/expression.ts";
+import type {
+  ExpressionKind,
+  ExpressionType,
+  LiteralOrRef,
+  ReferenceEntry,
+} from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import { isNcName, trimXmlSpace } from "#plate/model/values.ts";
@@ -61,6 +72,13 @@ import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/p
 import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
+import {
+  declarationType,
+  declarationsOf,
+  mappingRequirement,
+  processingRefusals,
+} from "#plate/validate/rules.ts";
+import type { PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
@@ -260,9 +278,38 @@ const rootOfType: ReadonlyMap<string, string> = new Map<string, string>(resource
 const lomBoundTypes: ReadonlySet<string> = new Set(["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0"]);
 
 /**
- * The variables every item has besides those it declares (QTI's built-in item variables).
+ * The variables every item has besides those it declares that a test reads through an item ref,
+ * with the types the qti package gives them (`itemSessionBuiltIns` in
+ * `packages/pantry/src/processing/env.ts`): QTI's built-in item variables but `QTI_CONTEXT`, an
+ * item's `duration` a single float, seconds (reading 29).
  */
-const itemBuiltIns: ReadonlySet<string> = new Set(["completionStatus", "duration", "numAttempts"]);
+const itemBuiltIns: ReadonlyMap<string, ExpressionType> = new Map([
+  ["completionStatus", singleOf("identifier")],
+  ["duration", singleOf("float")],
+  ["numAttempts", singleOf("integer")],
+]);
+
+/**
+ * The type of a part's or a section's `duration`, a single duration, where an item's is a float
+ * (`partDuration` in `packages/pantry/src/processing/env.ts`).
+ */
+const scopeDuration: ExpressionType = singleOf("duration");
+
+/**
+ * The type of a name no reading resolves, or two readings resolve: unknown, which satisfies every
+ * rule, so such a name earns its reading's refusal alone ({@link judgeReference}).
+ */
+const unknownType: ExpressionType = { baseType: "unknown", cardinality: "unknown" };
+
+/**
+ * The declarations of the variables a reference attribute may name through an item ref, by local
+ * name in QTI's namespace: a template variable and an outcome variable (P24, pantry's
+ * `checkAttributeReference`).
+ */
+const namableDeclarations: ReadonlySet<string> = new Set([
+  "qti-outcome-declaration",
+  "qti-template-declaration",
+]);
 
 /**
  * The declarations of an item's variables, by local name in QTI's namespace.
@@ -276,13 +323,36 @@ const itemDeclarations: ReadonlySet<string> = new Set([
 
 /**
  * The expressions whose `identifier` a test may prefix with an item ref, a part or a section, by
- * local name in QTI's namespace: a variable's value, its correct response and its default.
+ * local name in QTI's namespace: a variable's value, its correct response and its default, and a
+ * response mapped through its mapping or its area mapping (pantry's `checkMapping` reads both
+ * through `reference`).
  */
 const referenceElements: ReadonlySet<string> = new Set([
   "qti-correct",
   "qti-default",
+  "qti-map-response",
+  "qti-map-response-point",
   "qti-variable",
 ]);
+
+/**
+ * The declaration of a response variable, by local name in QTI's namespace.
+ */
+const responseDeclarations: ReadonlySet<string> = new Set(["qti-response-declaration"]);
+
+/**
+ * The expressions that map a response, by local name in QTI's namespace.
+ */
+const mappingExpressions: ReadonlySet<string> = new Set([
+  "qti-map-response",
+  "qti-map-response-point",
+]);
+
+/**
+ * The child of an item ref that gives one of its item's template variables a value before its
+ * template processing, by local name in QTI's namespace.
+ */
+const templateDefaultElements: ReadonlySet<string> = new Set(["qti-template-default"]);
 
 /**
  * The item ref, the one element of a test that references an item document, by local name in
@@ -679,14 +749,11 @@ const checkLom = (
  */
 interface ItemVariables {
   /**
-   * The identifiers of the variables the item declares.
+   * The variables the item declares, each identifier with its declaration: a response, an outcome,
+   * a template or a context declaration. Of two that share an identifier the last is kept, as the
+   * rules keep it (`declarationsOf`); the item's own verdict refuses the pair.
    */
-  readonly declared: ReadonlySet<string>;
-  /**
-   * The identifiers of the outcome variables the item declares, the ones a variable mapping of an
-   * item ref to it may name as its source.
-   */
-  readonly outcomes: ReadonlySet<string>;
+  readonly declarations: ReadonlyMap<string, SourceElement>;
   /**
    * Whether the item's `time-dependent` reads false as `xs:boolean`, so that no expression may
    * read its `duration`. One that is absent or outside `xs:boolean` is the item's own verdict's
@@ -696,17 +763,19 @@ interface ItemVariables {
 }
 
 /**
- * Give the identifiers some declarations declare.
+ * Report whether an item declares a variable by a declaration of one kind.
  *
- * @param declarations The declarations.
- * @returns Their identifiers, each once.
+ * @param variables The item's variables.
+ * @param identifier The variable's identifier.
+ * @param local The declaration's local name, such as `qti-outcome-declaration`.
+ * @returns Whether the item's declaration of that identifier is one of that kind.
  */
-const identifiersOf = (declarations: readonly SourceElement[]): ReadonlySet<string> =>
-  new Set(declarations.flatMap((declaration) => Option.toArray(identifierOf(declaration))));
+const declaresAs = (variables: ItemVariables, identifier: string, local: string): boolean =>
+  variables.declarations.get(identifier)?.local === local;
 
 /**
  * Read what a reading of a dotted reference may name through an item ref from its item's document:
- * the variables it declares, its outcome variables among them, and whether it is time dependent.
+ * the variables it declares, and whether it is time dependent.
  *
  * @param document The item's document.
  * @returns Its variables, none when the document is unread or its root is not an item.
@@ -716,19 +785,15 @@ const variablesOf = (document: Document | undefined): Option.Option<ItemVariable
     return Option.none();
   }
 
-  const { root } = document.source.success;
+  const source = document.source.success;
+  const { root } = source;
   if (root.namespace !== qtiNamespace || root.local !== "qti-assessment-item") {
     return Option.none();
   }
 
-  const declarations = root.children.flatMap((child) =>
-    child.kind === "element" && isQti(child, itemDeclarations) ? [child] : [],
-  );
-
   return Option.some({
-    declared: identifiersOf(declarations),
-    outcomes: identifiersOf(
-      declarations.filter((declaration) => declaration.local === "qti-outcome-declaration"),
+    declarations: new Map(
+      [...itemDeclarations].flatMap((kind) => [...declarationsOf(source, kind)]),
     ),
     untimed: Option.exists(
       Option.flatMap(attributeOf(root, "time-dependent"), xsBooleanOf),
@@ -743,7 +808,10 @@ const variablesOf = (document: Document | undefined): Option.Option<ItemVariable
  * as pantry's reach holds them (`testProcessingRows` in `packages/pantry/src/import/reference.ts`).
  */
 interface ItemRefVariables extends ItemVariables {
-  readonly mapped: ReadonlySet<string>;
+  /**
+   * Each mapping target, with the declaration of the source it reads.
+   */
+  readonly mapped: ReadonlyMap<string, SourceElement>;
 }
 
 /**
@@ -756,8 +824,31 @@ interface ReferenceScope {
 }
 
 /**
+ * The variable one resolving reading of a dotted reference reads, as pantry's `resolveReading`
+ * gives it (`packages/pantry/src/processing/env.ts`).
+ */
+interface ReadVariable {
+  /**
+   * The declaration the reading names directly, a variable its item declares; none for a mapping
+   * target and a built-in.
+   */
+  readonly declaration: Option.Option<SourceElement>;
+  /**
+   * Whether a reference attribute may name it (P24): a template or outcome variable the item
+   * declares, or a mapping target, which pantry reads as an outcome; never a response, a context
+   * variable or a built-in.
+   */
+  readonly namable: boolean;
+  /**
+   * Its type: a mapping target's is its source's, a declared variable's its declaration's, a
+   * built-in's its built-in type; unknown where the declaration's type is not judged.
+   */
+  readonly type: ExpressionType;
+}
+
+/**
  * One reading of a dotted reference that resolves (reading 48): the item ref, part or section its
- * prefix names, and the rest, as written.
+ * prefix names, the rest, as written, and the variable it reads.
  */
 interface Reading {
   readonly prefix: string;
@@ -767,7 +858,18 @@ interface Reading {
    * not be used in any item or test-level expression" (`info-compact.txt:8472`).
    */
   readonly untimed: boolean;
+  readonly variable: ReadVariable;
 }
+
+/**
+ * Give the type a declaration declares, unknown when it is not judged (the item's own verdict's
+ * refusal).
+ *
+ * @param declaration The declaration.
+ * @returns Its type.
+ */
+const declaredType = (declaration: SourceElement): ExpressionType =>
+  Option.getOrElse(declarationType(declaration), () => unknownType);
 
 /**
  * Resolve one reading of a dotted reference (reading 48), in pantry's order (`resolveReading` in
@@ -775,7 +877,7 @@ interface Reading {
  *
  * After an item ref, the rest names, directly or in the occurrence form `N.VAR` (reading 4), a
  * target of the item ref's variable mappings, else a variable its item declares, else one of the
- * built-ins every item has. After a part or a section, the rest is its `duration`.
+ * built-ins every item has. After a part or a section, the rest is its `duration`, a built-in.
  *
  * @param scope What the test's references resolve against.
  * @param prefix The part before the dot the reading splits at.
@@ -786,18 +888,46 @@ const readingOf = (scope: ReferenceScope, prefix: string, rest: string): Option.
   const item = scope.items.get(prefix);
   if (item === undefined) {
     return scope.durations.has(prefix) && rest === "duration"
-      ? Option.some({ prefix, rest, untimed: false })
+      ? Option.some({
+          prefix,
+          rest,
+          untimed: false,
+          variable: { declaration: Option.none(), namable: false, type: scopeDuration },
+        })
       : Option.none();
   }
 
   const variable = occurrenceForm.exec(rest)?.groups?.["variable"] ?? rest;
-  if (item.mapped.has(variable) || item.declared.has(variable)) {
-    return Option.some({ prefix, rest, untimed: false });
+  const source = item.mapped.get(variable);
+  if (source !== undefined) {
+    return Option.some({
+      prefix,
+      rest,
+      untimed: false,
+      variable: { declaration: Option.none(), namable: true, type: declaredType(source) },
+    });
   }
 
-  return itemBuiltIns.has(variable)
-    ? Option.some({ prefix, rest, untimed: item.untimed && variable === "duration" })
-    : Option.none();
+  const declaration = item.declarations.get(variable);
+  if (declaration !== undefined) {
+    return Option.some({
+      prefix,
+      rest,
+      untimed: false,
+      variable: {
+        declaration: Option.some(declaration),
+        namable: isQti(declaration, namableDeclarations),
+        type: declaredType(declaration),
+      },
+    });
+  }
+
+  return Option.map(Option.fromUndefinedOr(itemBuiltIns.get(variable)), (type) => ({
+    prefix,
+    rest,
+    untimed: item.untimed && variable === "duration",
+    variable: { declaration: Option.none(), namable: false, type },
+  }));
 };
 
 /**
@@ -846,15 +976,21 @@ const mappingsOf = (
  */
 interface NamedReference {
   readonly attribute: SourceAttribute;
+  /**
+   * The base type a reference attribute's facet entry names, which the variable must have (P24);
+   * none for an `identifier`, which names a variable of any type.
+   */
+  readonly baseType: Option.Option<ReferenceEntry["baseType"]>;
   readonly identifier: string;
 }
 
 /**
  * Give each variable an element of a test names, in the element's attribute order: the
- * `identifier` of a `qti-variable`, `qti-correct` or `qti-default`, and each value of a reference
- * attribute its expression kind's reference facet checks, as pantry's `referenceAttributes` lists
- * them (`figures`, `max`, `min`, `n`, `number-repeats`, `pattern` and `step`;
- * `packages/pantry/src/processing/check.ts`).
+ * `identifier` of a `qti-variable`, `qti-correct`, `qti-default`, `qti-map-response` or
+ * `qti-map-response-point`, and each value of a reference attribute its expression kind's reference
+ * facet checks, as pantry's `referenceAttributes` lists them (`figures`, `max`, `min`, `n`,
+ * `number-repeats`, `pattern` and `step`; `packages/pantry/src/processing/check.ts`), with the base
+ * type its entry names.
  *
  * A literal names no variable, and a `pattern` names one only as a braced name of a variable the
  * test holds (ruling R1). A name that is no NCName is the structure check's refusal, so it is
@@ -884,7 +1020,7 @@ const referencesOf = (
     if (attribute.local === "identifier" && referenceElements.has(element.local)) {
       const identifier = trimXmlSpace(attribute.value);
 
-      return isNcName(identifier) ? [{ attribute, identifier }] : [];
+      return isNcName(identifier) ? [{ attribute, baseType: Option.none(), identifier }] : [];
     }
 
     const entry = entries.find((one) => one.checked && one.attribute === attribute.local);
@@ -903,7 +1039,7 @@ const referencesOf = (
       );
 
       return classified._tag === "ref" && isNcName(classified.identifier)
-        ? [{ attribute, identifier: classified.identifier }]
+        ? [{ attribute, baseType: Option.some(entry.baseType), identifier: classified.identifier }]
         : [];
     });
   });
@@ -922,11 +1058,25 @@ const referencesOf = (
  * `undeclared-variable` names the `element`, the `identifier` as written and, for an attribute
  * other than `identifier`, the `attribute`.
  *
+ * A reference whose one reading resolves is judged by what it reads, at the element, as the rules
+ * judge a name the test declares (`#plate/validate/rules.ts`):
+ *
+ * - In a reference attribute, a variable that is not a template or outcome variable (a response, a
+ *   context variable or a built-in) is `expression-type` with `check: "reference"`, its detail the
+ *   rules' P24 detail, as pantry's `checkAttributeReference` judges a resolved prefixed name. One
+ *   of another type is the rules' own P24, which they judge through the typed reach.
+ * - In a `qti-map-response` or `qti-map-response-point`, a response its item declares without the
+ *   mapping or the area mapping the expression needs is `template-requirements`, as an item's
+ *   inline expression is, the `identifier` as written: the information model's "transforms it using
+ *   the associated mapping, which must have been declared" (`info.txt:9306`). Pantry checks no P27
+ *   for a prefixed name, so this is an agreement difference (G-R3, pending).
+ *
  * @param document The test's location.
  * @param visit The element's visit.
  * @param reference The attribute and the name it holds.
  * @param scope What the test's references resolve against.
- * @returns The refusal, none when exactly one reading resolves it and that one may be read.
+ * @returns The refusals, none when exactly one reading resolves it and what that one reads may be
+ *   read there.
  */
 const judgeReference = (
   document: string,
@@ -961,9 +1111,38 @@ const judgeReference = (
     ];
   }
 
-  return first.untimed
-    ? [refuse(document, "undeclared-variable", path, { ...named, check: "untimed-duration" })]
-    : [];
+  const { variable } = first;
+
+  return [
+    ...(first.untimed
+      ? [refuse(document, "undeclared-variable", path, { ...named, check: "untimed-duration" })]
+      : []),
+    ...(variable.namable
+      ? []
+      : reference.baseType.pipe(
+          Option.map((expectedBaseType) =>
+            refuse(document, "expression-type", visit.path, {
+              attribute: attribute.local,
+              check: "reference",
+              element,
+              expectedBaseType,
+              identifier,
+            }),
+          ),
+          Option.toArray,
+        )),
+    ...variable.declaration.pipe(
+      Option.filter(
+        (declaration) =>
+          attribute.local === "identifier" &&
+          isQti(visit.element, mappingExpressions) &&
+          isQti(declaration, responseDeclarations),
+      ),
+      Option.flatMap((declaration) => mappingRequirement(element, identifier, declaration)),
+      Option.map((detail) => refuse(document, "template-requirements", visit.path, detail)),
+      Option.toArray,
+    ),
+  ];
 };
 
 /**
@@ -1004,7 +1183,12 @@ const judgeMappings = (
         attributeOf(element, local).pipe(Option.map(trimXmlSpace), Option.filter(isNcName));
       const at = (local: string): string => attributePath(path, { local, namespace: "" });
       for (const source of Option.toArray(named("source-identifier"))) {
-        if (Option.exists(variablesFor(itemRef), (variables) => !variables.outcomes.has(source))) {
+        if (
+          Option.exists(
+            variablesFor(itemRef),
+            (variables) => !declaresAs(variables, source, "qti-outcome-declaration"),
+          )
+        ) {
           refusals.push(
             refuse(document, "undeclared-variable", at("source-identifier"), {
               attribute: "source-identifier",
@@ -1036,9 +1220,130 @@ const judgeMappings = (
 };
 
 /**
+ * What judging the template defaults of a test's item refs gives: their refusals, and the type of
+ * the template variable each other one sets.
+ */
+interface TemplateDefaults {
+  readonly refusals: readonly Refusal[];
+  /**
+   * Each template default whose target its item declares as a template variable of a judged type,
+   * with that type.
+   */
+  readonly targets: ReadonlyMap<SourceElement, ExpressionType>;
+}
+
+/**
+ * Judge the template defaults of a test's item refs, as pantry's import judges a `TemplateDefault`
+ * (`packages/pantry/src/schema/test/rules.ts`), each in document order, and type the template
+ * variable each sets, as pantry's `templateOf` does (`packages/pantry/src/processing/check.ts`).
+ *
+ * A default's `template-identifier` that names no template variable the item ref's item declares, a
+ * name it does not declare or one it declares as another kind of variable, is
+ * `undeclared-variable` at that attribute, its detail the `element`, the `attribute`, the
+ * `identifier` and `expected: "template"`, pantry's `template-default-target`. It is judged only
+ * through an item ref whose item the package holds and the reader read. A value that is no NCName,
+ * or a default without the attribute, is the structure check's refusal, so it is passed over.
+ *
+ * @param document The test's location.
+ * @param visits The visits of the test's elements, in document order.
+ * @param variablesFor The variables of the item an item ref resolves to, none when it resolves to
+ *   no item the reader read.
+ * @returns The refusals, in document order, and each typed target.
+ */
+const judgeTemplateDefaults = (
+  document: string,
+  visits: readonly Visit[],
+  variablesFor: (itemRef: SourceElement) => Option.Option<ItemVariables>,
+): TemplateDefaults => {
+  const refusals: Refusal[] = [];
+  const targets = new Map<SourceElement, ExpressionType>();
+  for (const { element, parent, path } of visits) {
+    const itemRef = parent.pipe(
+      Option.filter((one) => isQti(one, itemRefElements)),
+      Option.getOrUndefined,
+    );
+    const variables = itemRef === undefined ? Option.none() : variablesFor(itemRef);
+    const target = attributeOf(element, "template-identifier").pipe(
+      Option.map(trimXmlSpace),
+      Option.filter(isNcName),
+    );
+    if (
+      isQti(element, templateDefaultElements) &&
+      Option.isSome(variables) &&
+      Option.isSome(target)
+    ) {
+      const declaration = variables.value.declarations.get(target.value);
+      if (declaration?.local === "qti-template-declaration") {
+        for (const type of Option.toArray(declarationType(declaration))) {
+          targets.set(element, type);
+        }
+      } else {
+        refusals.push(
+          refuse(
+            document,
+            "undeclared-variable",
+            attributePath(path, { local: "template-identifier", namespace: "" }),
+            {
+              attribute: "template-identifier",
+              element: element.local,
+              expected: "template",
+              identifier: target.value,
+            },
+          ),
+        );
+      }
+    }
+  }
+
+  return { refusals, targets };
+};
+
+/**
+ * Give a refusal's facts as one string, its rule, location and detail, the detail's facts in key
+ * order, so two refusals with the same facts give the same string.
+ *
+ * @param refusal The refusal.
+ * @returns Its facts.
+ */
+const factsOf = (refusal: Refusal): string =>
+  JSON.stringify([
+    refusal.rule,
+    refusal.location,
+    Object.entries(refusal.detail).toSorted(([one], [other]) => (one < other ? -1 : 1)),
+  ]);
+
+/**
+ * Give the refusals of one list that another does not already hold, each held one passing over one
+ * refusal with its facts ({@link factsOf}).
+ *
+ * @param refusals The refusals.
+ * @param held The refusals already given.
+ * @returns The refusals not held, in order.
+ */
+const notHeld = (refusals: readonly Refusal[], held: readonly Refusal[]): readonly Refusal[] => {
+  const counts = new Map<string, number>();
+  for (const refusal of held) {
+    counts.set(factsOf(refusal), (counts.get(factsOf(refusal)) ?? 0) + 1);
+  }
+
+  const kept: Refusal[] = [];
+  for (const refusal of refusals) {
+    const left = counts.get(factsOf(refusal)) ?? 0;
+    if (left > 0) {
+      counts.set(factsOf(refusal), left - 1);
+    } else {
+      kept.push(refusal);
+    }
+  }
+
+  return kept;
+};
+
+/**
  * What judging one test gives: each item ref's item path, keyed by the item ref's identifier, in
- * document order, and the test's refusals, the item refs', their variable mappings', then the
- * references', each in document order.
+ * document order, and the test's refusals: the item refs', their variable mappings', their template
+ * defaults', the references', then those of the test's processing that only its typed reach gives,
+ * each in document order.
  */
 interface TestJudgement {
   readonly refs: ReadonlyMap<string, string>;
@@ -1047,8 +1352,9 @@ interface TestJudgement {
 
 /**
  * Judge one test document of the package: each item ref resolved against the test's path to an item
- * resource the manifest lists, its variable mappings by {@link judgeMappings}, then each dotted
- * reference by reading 48.
+ * resource the manifest lists, its variable mappings by {@link judgeMappings} and its template
+ * defaults by {@link judgeTemplateDefaults}, each dotted reference by reading 48, then the test's
+ * processing through its typed reach.
  *
  * An item ref that resolves to no listed item resource is `item-ref-unresolved` at the item ref,
  * its detail the `identifier`, the `href` and, when the `href` names a path inside the package,
@@ -1057,6 +1363,14 @@ interface TestJudgement {
  * the test's own check's; every other is judged by {@link judgeReference}. An item ref resolves a
  * reading only through an item whose document the package holds and the reader read, so a
  * reference through any other names nothing, as pantry's reach holds no such item ref.
+ *
+ * The test's expressions are then judged by the item's processing rules (`processingRefusals` in
+ * `#plate/validate/rules.ts`: P20 to P24), with each prefixed read typed by the variable its one
+ * resolving reading reads, as pantry's `typePrefixed` types it, and a name no reading or two
+ * readings resolve typed unknown, so it keeps its reading's refusal alone; and with each template
+ * default judged against the template variable it sets. Only what that typed run adds is reported
+ * (Admission A5): the same rules over the test alone, every prefixed read unknown, are the test
+ * document's own verdict's, and a refusal the references already gave is not given again.
  *
  * @param source The test's source.
  * @param testPath The test's path.
@@ -1110,20 +1424,32 @@ const judgeTest = (
     for (const variables of Option.toArray(variablesOf(documents.get(itemPath)))) {
       items.set(identifier, {
         ...variables,
-        mapped: new Set(
+        mapped: new Map(
           (mappings.get(identifier) ?? []).flatMap(([from, to]) =>
-            variables.declared.has(from) ? [to] : [],
+            Option.toArray(
+              Option.map(
+                Option.fromUndefinedOr(variables.declarations.get(from)),
+                (declaration) => [to, declaration] as const,
+              ),
+            ),
           ),
         ),
       });
     }
   }
 
-  const mapped = judgeMappings(source.location, visits, (itemRef) =>
+  /**
+   * Give the variables of the item an item ref resolves to.
+   *
+   * @param itemRef The item ref.
+   * @returns Its item's variables, none when it resolves to no item the reader read.
+   */
+  const variablesFor = (itemRef: SourceElement): Option.Option<ItemVariables> =>
     Option.flatMap(Option.fromUndefinedOr(resolvedRefs.get(itemRef)), (itemPath) =>
       variablesOf(documents.get(itemPath)),
-    ),
-  );
+    );
+  const mapped = judgeMappings(source.location, visits, variablesFor);
+  const defaults = judgeTemplateDefaults(source.location, visits, variablesFor);
   const scope: ReferenceScope = { durations, items };
   const whole: ReadonlySet<string> = new Set([
     ...testBuiltIns,
@@ -1142,7 +1468,28 @@ const judgeTest = (
     ),
   );
 
-  return { refs, refusals: [...unresolved, ...mapped, ...references] };
+  /**
+   * Type a prefixed read by the variable its one resolving reading reads.
+   *
+   * @param name The prefixed read.
+   * @returns Its type, unknown when no reading or two readings resolve it.
+   */
+  const typed: PrefixedTyper = (name) => {
+    const [only, ...others] = readingsOf(scope, name);
+
+    return only === undefined || others.length > 0 ? unknownType : only.variable.type;
+  };
+  const processing = notHeld(
+    processingRefusals(source, tables, typed, (templateDefault) =>
+      Option.fromUndefinedOr(defaults.targets.get(templateDefault)),
+    ),
+    [...processingRefusals(source, tables, () => unknownType), ...references],
+  );
+
+  return {
+    refs,
+    refusals: [...unresolved, ...mapped, ...defaults.refusals, ...references, ...processing],
+  };
 };
 
 /**

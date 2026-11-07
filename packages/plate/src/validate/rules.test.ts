@@ -9,7 +9,7 @@ import type {
 } from "#plate/document/source.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { singleOf } from "#plate/model/expression.ts";
-import type { ReferenceEntry } from "#plate/model/expression.ts";
+import type { ExpressionType, ReferenceEntry } from "#plate/model/expression.ts";
 import { checkRules, processingRefusals, referenceRefusals } from "#plate/validate/rules.ts";
 import type { PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -3193,10 +3193,16 @@ const unknownTyping: PrefixedTyper = () => ({ baseType: "unknown", cardinality: 
  *
  * @param source The test.
  * @param typePrefixed The typer of its prefixed reads.
+ * @param templateDefaultType The typer of its template defaults' targets, none for every default
+ *   unless given.
  * @returns The refusals, reduced to their rule, path and detail.
  */
-const processed = (source: SourceDocument, typePrefixed: PrefixedTyper) =>
-  processingRefusals(source, tables, typePrefixed).map((refusal) => ({
+const processed = (
+  source: SourceDocument,
+  typePrefixed: PrefixedTyper,
+  templateDefaultType?: (templateDefault: SourceElement) => Option.Option<ExpressionType>,
+) =>
+  processingRefusals(source, tables, typePrefixed, templateDefaultType).map((refusal) => ({
     detail: refusal.detail,
     path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
     rule: refusal.rule,
@@ -3217,7 +3223,92 @@ const roundedByItem = (): SourceDocument =>
     ),
   );
 
+/**
+ * A template default of `ITEM1`'s template variable `T` to the string `x`.
+ */
+const stringDefault = el(
+  "qti-template-default",
+  [attr("template-identifier", "T")],
+  [baseValue("string", "x")],
+);
+
+/**
+ * A hand-built test with a float `SCORE`, one part, one section and the item ref `ITEM1`, which
+ * holds {@link stringDefault}.
+ */
+const defaultingTest = doc(
+  testLocation,
+  el(
+    "qti-assessment-test",
+    [attr("identifier", "T"), attr("title", "Test")],
+    [
+      outcome("SCORE"),
+      el(
+        "qti-test-part",
+        [
+          attr("identifier", "P"),
+          attr("navigation-mode", "linear"),
+          attr("submission-mode", "individual"),
+        ],
+        [
+          el(
+            "qti-assessment-section",
+            [attr("identifier", "S"), attr("title", "S"), attr("visible", "true")],
+            [
+              el(
+                "qti-assessment-item-ref",
+                [attr("href", "items/ITEM1.xml"), attr("identifier", "ITEM1")],
+                [stringDefault],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
+ * Construct a typer of template defaults' targets that gives {@link stringDefault}'s a single type.
+ *
+ * @param baseType The base type it gives that target.
+ * @returns The typer.
+ */
+const defaultTyping =
+  (baseType: "integer" | "string") =>
+  (templateDefault: SourceElement): Option.Option<ExpressionType> =>
+    templateDefault === stringDefault ? Option.some(singleOf(baseType)) : Option.none();
+
 describe("processingRefusals", () => {
+  it("[T-9] judges a template default against the template variable it sets where the caller types it, and judges none it is not given (pantry P20, templateOf)", () => {
+    assert.deepStrictEqual(
+      [
+        processed(defaultingTest, unknownTyping, defaultTyping("integer")),
+        processed(defaultingTest, unknownTyping, defaultTyping("string")),
+        processed(defaultingTest, unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              element: "qti-template-default",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              identifier: "T",
+              outcomeBaseType: "integer",
+              outcomeCardinality: "single",
+              targetKind: "template",
+            },
+            path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref/qti-template-default",
+            rule: "expression-type",
+          },
+        ],
+        [],
+        [],
+      ],
+    );
+  });
+
   it("[T-9] types a prefixed read with the typer it is given, so a string ITEM1.SCORE cannot set a float SCORE (pantry P20)", () => {
     assert.deepStrictEqual(
       [
