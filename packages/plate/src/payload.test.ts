@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
-import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
@@ -3406,5 +3406,123 @@ describe("redactItem on param-variable parameters", () => {
         ]);
         assert.deepStrictEqual(started.notices, []);
       }),
+  );
+});
+
+/**
+ * Construct an item whose template processing sets the ordered template variable `S` to a number
+ * of copies of one value through a `qti-repeat`, and whose one paragraph prints `S` after the
+ * label `Value: `.
+ *
+ * @param baseType `S`'s base type.
+ * @param lexical The value repeated, as written.
+ * @param count How many times `qti-repeat` repeats it.
+ * @param printedAttributes The printed variable's attributes besides its `identifier`.
+ * @returns The document.
+ */
+const repeatedDocument = (
+  baseType: string,
+  lexical: string,
+  count: number,
+  printedAttributes: readonly SourceAttribute[],
+): SourceDocument =>
+  doc(
+    "item.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "repeated"), attr("time-dependent", "false"), attr("title", "Repeated")],
+      [
+        el("qti-template-declaration", [
+          attr("base-type", baseType),
+          attr("cardinality", "ordered"),
+          attr("identifier", "S"),
+        ]),
+        el(
+          "qti-template-processing",
+          [],
+          [
+            el(
+              "qti-set-template-value",
+              [attr("identifier", "S")],
+              [
+                el(
+                  "qti-repeat",
+                  [attr("number-repeats", String(count))],
+                  baseValues(baseType, [lexical]),
+                ),
+              ],
+            ),
+          ],
+        ),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                sourceText("Value: "),
+                el("qti-printed-variable", [attr("identifier", "S"), ...printedAttributes]),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * Construct an ordered container that holds one string a number of times.
+ *
+ * @param value The string.
+ * @param count How many times the container holds it.
+ * @returns The value.
+ */
+const repeatedStrings = (value: string, count: number): Value => ({
+  baseType: "string",
+  cardinality: "ordered",
+  values: Array.from({ length: count }, () => ({ baseType: "string", value })),
+});
+
+/**
+ * The accepted items whose printed variable's whole text passes 1,000,000 characters, each with
+ * the value its template processing sets: 600 integers printed under `%999999i`, and 1,000,000
+ * strings of 600 characters printed in the default form.
+ */
+const oversizedPrinting: readonly (readonly [SourceDocument, Value])[] = [
+  [
+    repeatedDocument("integer", "1", 600, [attr("format", "%999999i")]),
+    orderedIntegers(Array.from({ length: 600 }, () => 1n)),
+  ],
+  [
+    repeatedDocument("string", "y".repeat(600), 1_000_000, []),
+    repeatedStrings("y".repeat(600), 1_000_000),
+  ],
+];
+
+describe("redactItem on a printed variable whose whole text passes 1,000,000 characters", () => {
+  it.effect(
+    "[I-5] returns with the printed variable's place empty, for 600 integers under %999999i and for 1,000,000 strings of 600 characters (G-R2, pending)",
+    () =>
+      Effect.gen(function* emptiesOversizedText() {
+        for (const [document, value] of oversizedPrinting) {
+          const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+          const emptied = redactItem(accepted.item, holding({ S: value }));
+
+          assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
+          assert.deepStrictEqual(emptied.notices, []);
+        }
+      }),
+  );
+
+  it.effect("[I-5] prints the same item's text when it stays within the bound", () =>
+    Effect.gen(function* printsWithinBound() {
+      const document = repeatedDocument("integer", "1", 3, [attr("format", "%2i")]);
+      const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+      const shown = redactItem(accepted.item, holding({ S: orderedIntegers([1n, 1n, 1n]) }));
+
+      assert.deepStrictEqual(paragraphOf(shown), texts("Value: ", " 1; 1; 1"));
+    }),
   );
 });

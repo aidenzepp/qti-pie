@@ -1216,6 +1216,61 @@ describe("score over a response an interaction the renderer shows as a notice bi
   );
 });
 
+/**
+ * Write an item document whose template processing sets the ordered template variable `S` to a
+ * number of copies of one value through a `qti-repeat`, and whose one paragraph prints `S`.
+ *
+ * @param baseType `S`'s base type.
+ * @param lexical The value repeated, as written.
+ * @param count How many times `qti-repeat` repeats it.
+ * @param printing The printed variable's attributes besides its `identifier`, as written.
+ * @returns The document's text.
+ */
+const repeatedItem = (baseType: string, lexical: string, count: number, printing: string): string =>
+  `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="repeated" title="Repeated" time-dependent="false"><qti-template-declaration identifier="S" cardinality="ordered" base-type="${baseType}"/><qti-template-processing><qti-set-template-value identifier="S"><qti-repeat number-repeats="${String(count)}"><qti-base-value base-type="${baseType}">${lexical}</qti-base-value></qti-repeat></qti-set-template-value></qti-template-processing><qti-item-body><p>Value: <qti-printed-variable identifier="S"${printing}/></p></qti-item-body></qti-assessment-item>`;
+
+/**
+ * The items whose printed variable's whole text passes 1,000,000 characters, each with a label and
+ * the number of members its template processing sets: 600 integers printed under `%999999i`, and
+ * 1,000,000 strings of 600 characters printed in the default form.
+ */
+const oversizedPrinting: readonly (readonly [string, string, number])[] = [
+  ["600 integers under %999999i", repeatedItem("integer", "1", 600, ' format="%999999i"'), 600],
+  [
+    "1,000,000 strings of 600 characters",
+    repeatedItem("string", "y".repeat(600), 1_000_000, ""),
+    1_000_000,
+  ],
+];
+
+/**
+ * The time one oversized case may take: `begin` sets and `score` decodes and encodes a template
+ * value of 1,000,000 members, which takes seconds here; the bound leaves room for a slow machine
+ * without letting a hung run stall the suite.
+ */
+const oversizedTimeoutMs = 120_000;
+
+describe("score on an item whose printed variable's whole text passes 1,000,000 characters", () => {
+  for (const [label, document, members] of oversizedPrinting) {
+    it.effect(
+      `[I-5] returns a Result over begin's record, which holds every member, for ${label} (G-R2, pending)`,
+      () =>
+        Effect.gen(function* scoresBesideOversizedText() {
+          const verdict = yield* open("items/repeated.xml", new TextEncoder().encode(document));
+          const opened = Option.getOrElse(acceptedItem(verdict), () =>
+            assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+          );
+          const started = yield* Effect.fromResult(begin(opened, { instance: "q1", seed: "7" }));
+          const scored = score(opened, {}, started);
+
+          assert.isTrue(Result.isSuccess(scored));
+          assert.strictEqual(started.templates["S"]?.values.length, members);
+        }),
+      oversizedTimeoutMs,
+    );
+  }
+});
+
 describe("fitting", () => {
   it("[I-9a] accepts a record that holds the built-in completionStatus and one that lacks it, and refuses one of another type", () => {
     const record = fresh(item, "");

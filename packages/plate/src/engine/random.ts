@@ -155,7 +155,9 @@ const tagLength = 32;
  *
  * Each call starts a fresh stream, so the same seed and label give the same draws in every call.
  * The stream keeps the key's HMAC states, and computes a block when its first word is drawn. The
- * counter wraps only after 2^35 draws, past every bound of the engine.
+ * counter wraps after 2^32 blocks, 2^35 draws, and the stream then repeats from its first draw, so
+ * its draws stay a function of the seed and label alone; nothing bounds the draws of one run, but
+ * reaching the wrap takes hours.
  *
  * @param seed The record's seed, the HMAC key: the caller's, used as given.
  * @param label What the stream draws for, such as {@link templateLabel}'s or

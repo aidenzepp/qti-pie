@@ -161,7 +161,8 @@ and both of its entry points are unstable until M3.
     An infinity or NaN prints `inf`, `-inf` or `nan` under those conversions, in upper case under
     `%X` _(pending)_. Under `%o`, `%x` or `%X`, a negative writes `-` and its digits
     _(pending)_. A `base` outside 2 to 36 writes base 10 _(pending)_, and a width or precision past
-    1,000,000 prints nothing, as NULL does _(pending)_.
+    1,000,000 prints nothing, as NULL does _(pending)_. So does a value whose whole printed text,
+    delimiters included, would pass 1,000,000 characters _(pending)_.
   - A `param-variable` that holds a container passes its values joined by `;`, and NULL passes an
     empty value. The standard sets no written form for either, so these follow how a printed
     variable prints a container and NULL by default.

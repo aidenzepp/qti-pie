@@ -45,6 +45,19 @@ const integers = (cardinality: "multiple" | "ordered", values: readonly bigint[]
 });
 
 /**
+ * An ordered container that holds one string a number of times.
+ *
+ * @param text The string.
+ * @param count How many times the container holds it.
+ * @returns The value.
+ */
+const repeatedText = (text: string, count: number): Value => ({
+  baseType: "string",
+  cardinality: "ordered",
+  values: Array.from({ length: count }, () => ({ baseType: "string", value: text })),
+});
+
+/**
  * The integer rows of the worked table, `B#format-attribute-of-printed-variable` (Appendix E), as
  * R§4.5 transcribes them: the format, the integer and the text it prints. A `_` in the table is a
  * space here.
@@ -318,5 +331,36 @@ describe("formatPrinted: the conversions beyond the worked table", () => {
     assert.strictEqual(formatPrinted(integer(1n), { format: "%1000001i" }), "");
     assert.strictEqual(formatPrinted(float(1), { format: "%.1000001f" }), "");
     assert.lengthOf(formatPrinted(integer(1n), { format: "%1000000i" }), 1_000_000);
+  });
+});
+
+describe("formatPrinted: the whole text is bounded at 1,000,000 characters (G-R2, pending)", () => {
+  it("[I-5] prints nothing, without throwing, for 600 integers under %999999i and for 1,000,000 strings of 600 characters, whose joined text passes the longest string an engine holds", () => {
+    const ones = integers(
+      "ordered",
+      Array.from({ length: 600 }, () => 1n),
+    );
+
+    assert.strictEqual(formatPrinted(ones, { format: "%999999i" }).length, 0);
+    assert.strictEqual(formatPrinted(repeatedText("y".repeat(600), 1_000_000)).length, 0);
+  });
+
+  it("[I-5] counts each delimiter in the whole text and prints nothing past 1,000,000 characters, a single value included", () => {
+    const thousand = repeatedText("y".repeat(999), 1000);
+    const long = single({ baseType: "string", value: "y".repeat(1_000_001) });
+
+    assert.strictEqual(formatPrinted(thousand, { delimiter: ";;" }).length, 0);
+    assert.strictEqual(formatPrinted(long).length, 0);
+  });
+
+  it("[I-5] prints a whole text of up to 1,000,000 characters", () => {
+    const longest = single({ baseType: "string", value: "y".repeat(1_000_000) });
+
+    assert.strictEqual(formatPrinted(repeatedText("y".repeat(999), 1000)).length, 999_999);
+    assert.strictEqual(formatPrinted(longest).length, 1_000_000);
+    assert.strictEqual(
+      formatPrinted(integers("ordered", [1n]), { format: "%999999i" }).length,
+      999_999,
+    );
   });
 });
