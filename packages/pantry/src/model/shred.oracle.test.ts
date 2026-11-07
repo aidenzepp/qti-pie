@@ -25,6 +25,7 @@ import { fold } from "#pantry/model/folds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { NotQti3, shred, UnmodeledVocabulary, versionOf } from "#pantry/model/shred.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
+import { collapsed } from "#pantry/test/oracle-view.ts";
 import { toXmlDocument, unshred } from "#pantry/model/unshred.ts";
 import { flatten, none } from "#pantry/model/xdm.ts";
 import type { XdmAttribute, XdmChild, XdmClosedElement, XdmDocument } from "#pantry/model/xdm.ts";
@@ -908,9 +909,23 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 const xs = "http://www.w3.org/2001/XMLSchema";
 
 /**
+ * The `xsi:type` values XML Schema's `collapse` leaves no QName: the declared type's name under a
+ * bound prefix, padded before or after with a no-break space (U+00A0) or an ideographic space
+ * (U+3000). `collapse` turns only #x9, #xA and #xD into #x20 and strips only #x20 (XSD 1.1 Part 2,
+ * §4.3.6), so each keeps its pad, and no type governs where it stands.
+ */
+const unstrippedPads = [
+  "\u00A0a:AssessmentItemDType",
+  "a:AssessmentItemDType\u00A0",
+  "\u3000a:AssessmentItemDType",
+  "a:AssessmentItemDType\u3000",
+] as const;
+
+/**
  * The `xsi:type` values the box draws on a strictly assessed root: none; the declared type's name
  * unprefixed (the default namespace), under a bound prefix, padded with whitespace and under an
- * unbound prefix; a built-in under a bound prefix; a name no schema defines; and no QName at all.
+ * unbound prefix; a built-in under a bound prefix; a name no schema defines; no QName at all; and
+ * the declared type's name padded with what is no XML whitespace ({@link unstrippedPads}).
  */
 const typeValues = [
   Option.none(),
@@ -921,61 +936,104 @@ const typeValues = [
   Option.some("xs:string"),
   Option.some("NoSuchDType"),
   Option.some("a:b:c"),
-] as const;
+  ...unstrippedPads.map((pad) => Option.some(pad)),
+];
+
+/**
+ * The bindings the box's root declares: the default namespace and `a` the ASI namespace, `xs`
+ * XML Schema's.
+ */
+const typeScope: ReadonlyMap<string, string> = new Map([
+  ["", asi],
+  ["a", asi],
+  ["xs", xs],
+]);
+
+/**
+ * The type XML Schema gives the box's root, or why it gives none. Oracle: XML Schema 1.0 Part 1
+ * §3.3.4 clause 4 and §3.15.3 as a checker: a QName after `collapse` (the law oracle's
+ * {@link collapsed}, XSD 1.1 Part 2 §4.3.6, which strips XML's four whitespace characters and no
+ * other), its prefix in scope (an unprefixed one the default namespace's), naming a type of the
+ * pinned schemas; no xsi:type, the declared type.
+ *
+ * @param value - The root's `xsi:type`, if it has one.
+ * @returns The governing type's handle, or `type-unresolved` or `type-unknown`.
+ */
+const governingOf = (value: Option.Option<string>): Result.Result<string, string> =>
+  Option.match(value, {
+    onNone: () => Result.succeed(grammar.xsi.declaredType("3.0.1", "qti-assessment-item")),
+    onSome: (held) => {
+      const parts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u.exec(collapsed(held))?.groups;
+      const namespace = typeScope.get(parts?.["prefix"] ?? "");
+      if (parts === undefined || namespace === undefined) {
+        return Result.fail("type-unresolved");
+      }
+
+      const handle = typeHandle({ local: parts["local"] ?? "", namespace });
+
+      return grammar.xsi.definedIn("3.0.1", handle)
+        ? Result.succeed(handle)
+        : Result.fail("type-unknown");
+    },
+  });
+
+/**
+ * Shred the box's root with an `xsi:type` and read the type that governs it, or why none does.
+ *
+ * @param value - The root's `xsi:type`, if it has one.
+ * @returns The governing type's handle, or the refusal's reason.
+ */
+const shreddedGoverningOf = (value: Option.Option<string>) => {
+  const attribute = Option.match(value, {
+    onNone: () => "",
+    onSome: (held) => ` xsi:type="${held.replaceAll("\t", "&#9;").replaceAll("\n", "&#10;")}"`,
+  });
+  const bytes = new TextEncoder().encode(
+    `<qti-assessment-item xmlns="${asi}" xmlns:a="${asi}" xmlns:xs="${xs}" xmlns:xsi="${xsiNamespace}"${attribute}/>`,
+  );
+
+  return Effect.map(
+    Effect.result(reread(bytes, "3.0.1")),
+    (result): Result.Result<string, string> =>
+      Result.isSuccess(result)
+        ? Result.succeed(result.success.root.governs)
+        : Result.fail(
+            result.failure instanceof UnmodeledVocabulary
+              ? result.failure.reason
+              : result.failure._tag,
+          ),
+  );
+};
 
 describe("shred's governing type", () => {
   it.effect(
     "resolves an xsi:type on an element of a kind against the bindings in scope, and refuses one that names no type, every value of the box",
     () =>
       Effect.gen(function* governing() {
-        // Oracle: XML Schema 1.0 Part 1 §3.3.4 clause 4 and §3.15.3 as a checker: a QName after
-        // `collapse`, its prefix in scope (an unprefixed one the default namespace's), naming a
-        // type of the pinned schemas; no xsi:type, the declared type.
-        const scope = new Map([
-          ["", asi],
-          ["a", asi],
-          ["xs", xs],
-        ]);
         for (const value of typeValues) {
-          const attribute = Option.match(value, {
-            onNone: () => "",
-            onSome: (held) =>
-              ` xsi:type="${held.replaceAll("\t", "&#9;").replaceAll("\n", "&#10;")}"`,
-          });
-          const bytes = new TextEncoder().encode(
-            `<qti-assessment-item xmlns="${asi}" xmlns:a="${asi}" xmlns:xs="${xs}" xmlns:xsi="${xsiNamespace}"${attribute}/>`,
+          assert.deepStrictEqual(
+            yield* shreddedGoverningOf(value),
+            governingOf(value),
+            Option.getOrElse(value, () => "(none)"),
           );
-          const result = yield* Effect.result(reread(bytes, "3.0.1"));
-          const expected = Option.match(value, {
-            onNone: () => Result.succeed(grammar.xsi.declaredType("3.0.1", "qti-assessment-item")),
-            onSome: (held) => {
-              const parts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u.exec(
-                held.trim(),
-              )?.groups;
-              const namespace = scope.get(parts?.["prefix"] ?? "");
-              if (parts === undefined || namespace === undefined) {
-                return Result.fail("type-unresolved");
-              }
+        }
+      }),
+  );
 
-              const handle = typeHandle({ local: parts["local"] ?? "", namespace });
-
-              return grammar.xsi.definedIn("3.0.1", handle)
-                ? Result.succeed(handle)
-                : Result.fail("type-unknown");
-            },
-          });
-          const actual = Result.isSuccess(result)
-            ? Result.succeed(result.success.root.governs)
-            : Result.fail(
-                result.failure instanceof UnmodeledVocabulary
-                  ? result.failure.reason
-                  : result.failure._tag,
-              );
+  it.effect(
+    "refuses an xsi:type padded with a no-break or an ideographic space as type-unresolved, codec and oracle alike, since collapse strips neither",
+    () =>
+      Effect.gen(function* unstripped() {
+        for (const pad of unstrippedPads) {
+          const sides = [
+            yield* shreddedGoverningOf(Option.some(pad)),
+            governingOf(Option.some(pad)),
+          ];
 
           assert.deepStrictEqual(
-            actual,
-            expected,
-            Option.getOrElse(value, () => "(none)"),
+            sides,
+            [Result.fail("type-unresolved"), Result.fail("type-unresolved")],
+            JSON.stringify(pad),
           );
         }
       }),

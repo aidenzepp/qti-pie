@@ -32,7 +32,7 @@
 import { Effect, Option, Order, Result, Schema } from "effect";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
-import { qNamePartsOf, unboundPrefixesOf } from "#pantry/grammar/domains.ts";
+import { collapse, qNamePartsOf, unboundPrefixesOf } from "#pantry/grammar/domains.ts";
 import type { Qualified } from "#pantry/grammar/domains.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import type { ForeignKind } from "#pantry/grammar/kinds.ts";
@@ -541,9 +541,9 @@ const scopeOf = (outer: Scope, declarations: readonly XdmNamespace[]): Scope =>
     : new Map([...outer, ...declarations.map(({ prefix, uri }) => [prefix, uri] as const)]);
 
 /**
- * Read an `xsi:type` value as the expanded name it is: a QName resolved against the bindings in
- * scope, an unprefixed name taking the default namespace (XML Schema 1.0 Part 1, §3.15.3; spec
- * reading 83).
+ * Read an `xsi:type` value as the expanded name it is: once its whitespace is collapsed
+ * ({@link collapse}), a QName resolved against the bindings in scope, an unprefixed name taking the
+ * default namespace (XML Schema 1.0 Part 1, §3.15.3; spec reading 83).
  *
  * @param typed - The `xsi:type` attribute.
  * @param element - The element that carries it.
@@ -556,7 +556,7 @@ const qNameOf = (
   element: Element,
   scope: Scope,
 ): Result.Result<ExpandedName, UnmodeledVocabulary> => {
-  const parts = qNamePartsOf(typed.value.replaceAll(/[\t\n\r ]+/gu, " ").trim());
+  const parts = qNamePartsOf(collapse(typed.value));
   const namespace = parts.pipe(
     Option.flatMap(({ prefix }) => Option.fromNullishOr(scope.get(prefix))),
   );

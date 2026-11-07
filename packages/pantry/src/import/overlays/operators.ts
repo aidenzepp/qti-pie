@@ -10,8 +10,8 @@
  * and `Tolerance` alone, so it has no rows of its own.
  */
 import type { Addition } from "@bjornpagen/grizzle";
+import { collapse } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { collapse } from "#pantry/import/overlays/metadata.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
