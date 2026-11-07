@@ -11,7 +11,7 @@
  */
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Db } from "@bjornpagen/grizzle";
-import type { ApplyError, DbLayer, Law, OpenError, Refused, Uuid } from "@bjornpagen/grizzle";
+import type { ApplyError, DbLayer, Law, OpenError, Uuid } from "@bjornpagen/grizzle";
 import { Clock, Duration, Effect, Option, Random, Ref, Result, Schedule, Schema } from "effect";
 import type { Array as Arr, FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
@@ -215,47 +215,6 @@ const refusedBy = Effect.fnUntraced(function* refusedBy(
 });
 
 /**
- * The laws an `invariant-rejected` outcome refused the import under, by how grizzle decided them.
- *
- * - `every`: for a CHECK, every law of its table's CHECKs a row the ChangeSet states breaks, each
- *   once, in the schema's canonical order; for any other refusal, the laws its one PostgreSQL
- *   object discharges (grizzle-engine `src/types/changeset/changeset.ts:895` at `234e398`). The
- *   refusal's rule is the most specific among them (`ruleOfLaws`), whichever CHECK PostgreSQL tried
- *   first. A law another table's row breaks, or another object discharges, is not among them:
- *   PostgreSQL refuses the write at the first statement or constraint that fails, so a breach in a
- *   table written or checked later never reaches the rule, however specific its law.
- * - `first`: only the first CHECK PostgreSQL tried, for a row the ChangeSet does not state. The
- *   import states every row it writes (`changeSetOf` inserts facts, never a query), so grizzle
- *   reports `first` here only when its judgment of the stated rows and PostgreSQL disagree. The
- *   laws are then a part of what the row breaks, and no rule chosen from them is the package's.
- *
- * @param refused - The outcome's refusal.
- * @param packageId - The package's id, for the defect.
- * @returns Every law the stated rows break. Dies on `first`: a defect of grizzle or of its pin,
- *   never a verdict on the package.
- */
-export const refusedLaws = (
-  refused: Refused,
-  packageId: Uuid,
-): Effect.Effect<Arr.NonEmptyReadonlyArray<Law>> => {
-  switch (refused.kind) {
-    case "every": {
-      return Effect.succeed(refused.laws);
-    }
-    case "first": {
-      return Effect.die(
-        new Error(
-          `The database refused package ${packageId} under the first CHECK PostgreSQL tried (${refused.laws.map(lawIdentity).join("; ")}), and grizzle found no row of the import's ChangeSet that breaks it. The import states every row it writes, so grizzle's judgment of those rows and PostgreSQL disagree. This is a defect of grizzle or of its pin, never a verdict on the package: report it to grizzle with the package and the laws.`,
-        ),
-      );
-    }
-    default: {
-      return refused satisfies never;
-    }
-  }
-};
-
-/**
  * Import the package at `dir`.
  *
  * Reads the package once, shreds the documents its manifest names, mints every id afresh and
@@ -301,7 +260,17 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   yield* Effect.annotateCurrentSpan({ applyMillis: Duration.toMillis(elapsed), packageId });
 
   if (outcome.kind === "invariant-rejected") {
-    const laws = yield* refusedLaws(outcome.refused, packageId);
+    // The laws the refusal names, by how grizzle decided them (grizzle-engine
+    // `src/types/changeset/changeset.ts:895` and `src/write/program/witness.ts`'s hostJudgement at
+    // `234e398`):
+    // - `every`: every law of the refused row's table that the stated row breaks, each once, in
+    //   the schema's order; for any other refusal, the laws its one PostgreSQL object discharges.
+    // - `first`: the laws of the first CHECK PostgreSQL tried, where grizzle's host cannot witness
+    //   the row, for example a law over a family's filled counts (Choice not variable's).
+    // The rule is the most specific among them either way (`ruleOfLaws`). A breach in a table
+    // written or checked later, or one the host cannot witness, never reaches the rule, however
+    // specific its law; GEN-A's differential records any such divergence from the oracle.
+    const { laws } = outcome.refused;
 
     return yield* Effect.fail(
       yield* refusedBy(
