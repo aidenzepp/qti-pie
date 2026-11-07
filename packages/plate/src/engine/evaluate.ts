@@ -397,7 +397,9 @@ const lookUp = (table: LookupTable, value: Value): Option.Option<Single> => {
  *
  * An outcome with no lookup table maps every value to NULL; the validator refuses a lookup of one
  * (`template-requirements`), so no checked item reaches it. An outcome the item does not declare
- * maps to NULL too, and {@link setOutcome} then fails it.
+ * maps to NULL too, and {@link setOutcome} then fails it, unless it is the built-in
+ * `completionStatus`, whose NULL it stores; the validator refuses a lookup of the built-in
+ * (`undeclared-variable`'s `built-in-target` check).
  *
  * @param item The item, whose outcome declaration holds the table.
  * @param identifier The outcome's identifier.

@@ -12,11 +12,11 @@
  */
 import { Array as Arr, Option, Result } from "effect";
 import type { Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.ts";
+import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
 import { floatValue, toFloat } from "#plate/engine/numbers.ts";
 import { builtInType, own, variableValue } from "#plate/engine/refs.ts";
-import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import type {
   AreaMapping,
   Item,
@@ -183,7 +183,7 @@ const clamped = (
 /**
  * Give the value of a `qti-map-response`: a single float.
  *
- * A value is the sum of the mapped values of the response's distinct values, as {@link distinct}
+ * The value is the sum of the mapped values of the response's distinct values, as {@link distinct}
  * finds them in time linear in their number, keyed by {@link distinctKey}: so a `single` value maps
  * to its one value's, `{B,B,C}` counts `B` once, and a NULL response maps to 0. The mapping's
  * `lower-bound` and `upper-bound` then clamp the sum, a single value's and a NULL's included
@@ -313,7 +313,7 @@ const mapResponsePoint = (
 
 /**
  * Give the value of a `qti-variable`: the response's or the outcome's current value, else the
- * built-in variable's (`builtInValue` in `#plate/engine/refs.ts`).
+ * built-in variable's, as {@link variableValue} reads it.
  *
  * @param expression The `qti-variable`.
  * @param scope The item and the variables of the attempt.
@@ -379,9 +379,9 @@ const evaluateMapResponsePoint: Evaluator<"map-response-point"> = (expression, s
  * outcome included: the 0 an attempt starts such an outcome at is not a declared default. A
  * declared variable wins over a built-in of the same name, as `qti-variable` reads it. A built-in
  * the engine holds, `numAttempts` or `completionStatus`, has no declaration and so no declared
- * default: it gives NULL of the built-in's own type (`builtInType` in `#plate/engine/refs.ts`), a
- * single integer or a single identifier, whatever the attempt holds of it. Template processing,
- * whose `qti-set-default-value` could change a default, never runs first: the item model runs no
+ * default: it gives NULL of the built-in's own type ({@link builtInType}), a single integer or a
+ * single identifier, whatever the attempt holds of it. Template processing, whose
+ * `qti-set-default-value` could change a default, never runs first: the item model runs no
  * response processing of an item that has it.
  *
  * @param expression The `qti-default`.
