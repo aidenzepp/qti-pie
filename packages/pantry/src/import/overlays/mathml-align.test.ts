@@ -160,6 +160,25 @@ const copied = (doc: XdmDocument<Composed>, at: number, parent: number) => ({
 const keysOf = (rows: ReadonlyMap<string, unknown>): readonly string[] => [...rows.keys()];
 
 /**
+ * A cell's leaves, in the order its row nests them.
+ *
+ * @param rows - The document's rows.
+ * @param cell - The cell's number.
+ * @returns Its leaves.
+ */
+const leavesOf = (rows: ReturnType<typeof rowsOf>, cell: number) =>
+  rows.MathCell.get(idOf(cell))?.leaves ?? assert.fail(`no cell row for node ${cell}`);
+
+/**
+ * The nodes of every cell's leaves, cell by cell, each cell's in nesting order.
+ *
+ * @param rows - The document's rows.
+ * @returns The leaves' node ids.
+ */
+const leafKeysOf = (rows: ReturnType<typeof rowsOf>): readonly string[] =>
+  [...rows.MathCell.values()].flatMap((cell) => cell.leaves.map((leaf) => leaf.node));
+
+/**
  * What a scope row says of where its element stands.
  *
  * @param rows - A case's rows.
@@ -414,21 +433,20 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     const doc = cellOf([elementOf("m:mi"), elementOf("m:maligngroup"), elementOf("m:mi")]);
     const rows = rowsOf(doc, ids);
 
-    assert.deepStrictEqual(keysOf(rows.CellLeaf), [idOf(3), idOf(4), idOf(5)]);
-    assert.deepStrictEqual(rows.CellLeaf.get(idOf(3)), {
+    assert.deepStrictEqual(leafKeysOf(rows), [idOf(3), idOf(4), idOf(5)]);
+    assert.deepStrictEqual(leavesOf(rows, 2)[0], {
       ...copied(doc, 3, 2),
-      cell: idOf(2),
       groups: 1n,
       kind: "m:mi",
     });
-    assert.deepStrictEqual(rows.CellLeaf.get(idOf(4)), {
+    assert.deepStrictEqual(leavesOf(rows, 2)[1], {
       ...copied(doc, 4, 2),
-      cell: idOf(2),
       groups: 1n,
       kind: "m:maligngroup",
     });
     assert.deepStrictEqual(keysOf(rows.MathCell), [idOf(2)]);
-    assert.deepStrictEqual(rows.MathCell.get(idOf(2)), { node: idOf(2) });
+    assert.strictEqual(rows.MathCell.get(idOf(2))?.node, idOf(2));
+    assert.strictEqual(leavesOf(rows, 2).length, 3);
   });
 
   it("gives leaves in document order across depth, skipping comments and an element with children", () => {
@@ -440,8 +458,8 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     ]);
     const rows = rowsOf(doc, ids);
 
-    assert.deepStrictEqual(keysOf(rows.CellLeaf), [idOf(5), idOf(7), idOf(8)]);
-    assert.strictEqual(rows.CellLeaf.get(idOf(5))?.groups, 0n);
+    assert.deepStrictEqual(leafKeysOf(rows), [idOf(5), idOf(7), idOf(8)]);
+    assert.strictEqual(leavesOf(rows, 2)[0]?.groups, 0n);
   });
 
   it("gives an maction its selection, 1 where unwritten, and its counts", () => {
@@ -515,7 +533,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     assert.deepStrictEqual(keysOf(rows.MathAlignScope), []);
     assert.deepStrictEqual(keysOf(rows.MathAlignGroup), []);
     assert.deepStrictEqual(keysOf(rows.MathCell), []);
-    assert.deepStrictEqual(keysOf(rows.CellLeaf), []);
+    assert.deepStrictEqual(leafKeysOf(rows), []);
     assert.deepStrictEqual(keysOf(rows.MathAction), []);
   });
 
@@ -535,9 +553,15 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     assert.strictEqual(rows.MathAlignScope.get(idOf(7))?.cell, idOf(7));
     assert.strictEqual(rows.MathAlignScope.get(idOf(8))?.cell, idOf(7));
     assert.strictEqual(rows.MathAlignScope.get(idOf(5))?.cell, idOf(2));
-    assert.deepStrictEqual(keysOf(rows.CellLeaf), [idOf(3), idOf(8)]);
-    assert.strictEqual(rows.CellLeaf.get(idOf(3))?.cell, idOf(2));
-    assert.strictEqual(rows.CellLeaf.get(idOf(8))?.cell, idOf(7));
+    assert.deepStrictEqual(leafKeysOf(rows), [idOf(3), idOf(8)]);
+    assert.deepStrictEqual(
+      leavesOf(rows, 2).map((leaf) => leaf.node),
+      [idOf(3)],
+    );
+    assert.deepStrictEqual(
+      leavesOf(rows, 7).map((leaf) => leaf.node),
+      [idOf(8)],
+    );
   });
 
   it("states a cell's own dir and takes its inherited one from the nearest ancestor that writes one", () => {
@@ -597,8 +621,13 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     assert.strictEqual(rows.MathAlignScope.get(idOf(4))?.state, "open");
     assert.strictEqual(rows.MathAlignScope.get(idOf(6))?.state, "closed");
     assert.deepStrictEqual(keysOf(rows.MathAlignGroup), [idOf(4)]);
-    assert.strictEqual(rows.CellLeaf.get(idOf(4))?.groups, 1n);
-    assert.strictEqual(rows.CellLeaf.get(idOf(6))?.groups, 1n);
+    assert.deepStrictEqual(
+      leavesOf(rows, 2).map((leaf) => [leaf.node, leaf.groups]),
+      [
+        [idOf(4), 1n],
+        [idOf(6), 1n],
+      ],
+    );
   });
 
   it("builds the rows of an element with many children in linear time", () => {
@@ -610,7 +639,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     const rows = rowsOf(doc, ids);
     const seconds = (performance.now() - began) / 1000;
 
-    assert.strictEqual(rows.CellLeaf.size, count);
+    assert.strictEqual(leafKeysOf(rows).length, count);
     assert.strictEqual(rows.MathAlignScope.size, count + 1);
     assert.isBelow(seconds, 5);
   });

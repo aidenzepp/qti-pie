@@ -23,10 +23,11 @@
  *   as written (not `dirLexical`'s filtered form: `auto` has a row, while its scope's `dirLexical`
  *   is empty).
  * - **`CellLeaf`**, one row for every complete element of a cell, an element with no element child,
- *   in document order within its cell, which the database numbers by the order the rows are
- *   inserted in. An `m:mtd` is no leaf: an empty cell nested in another is its own cell with no
- *   leaf, not a leaf of the outer one, though the oracle counts it as one (`contentOfCell` in
- *   `#pantry/test/oracle.ts`; the phase-6 audit list's third item, left as the oracle has it).
+ *   in document order within its cell, nested in its cell's `MathCell` row as `leaves`, which the
+ *   database numbers by the order they are nested in. An `m:mtd` is no leaf: an empty cell nested
+ *   in another is its own cell with no leaf, not a leaf of the outer one, though the oracle counts
+ *   it as one (`contentOfCell` in `#pantry/test/oracle.ts`; the phase-6 audit list's third item,
+ *   left as the oracle has it).
  *
  * A direction is the `dir` an element writes where its collapsed form is `ltr` or `rtl`, and else
  * the one its parent holds, `ltr` above every element (MathML 3 §3.1.5.1). A `dir` of any other
@@ -56,14 +57,26 @@ import type {
 import { integerForm } from "#pantry/qti/operators.ts";
 
 /**
+ * One complete element of a cell as its cell's family nests it: without the `cell` the nesting
+ * supplies, nor the `at` the family draws.
+ */
+export type CellLeafInsert = Omit<Addition<typeof CellLeaf>, "cell">;
+
+/**
+ * A cell's row, with its leaves nested at its count field, in document order.
+ */
+export type MathCellRow = Omit<Addition<typeof MathCell>, "leaves"> & {
+  readonly leaves: readonly CellLeafInsert[];
+};
+
+/**
  * A document's align rows, one keyed set per relation, each keyed by its node's id.
  */
 export interface MathmlAlignRows {
-  readonly CellLeaf: ReadonlyMap<string, Addition<typeof CellLeaf>>;
   readonly MathAction: ReadonlyMap<string, Addition<typeof MathAction>>;
   readonly MathAlignGroup: ReadonlyMap<string, Addition<typeof MathAlignGroup>>;
   readonly MathAlignScope: ReadonlyMap<string, Addition<typeof MathAlignScope>>;
-  readonly MathCell: ReadonlyMap<string, Addition<typeof MathCell>>;
+  readonly MathCell: ReadonlyMap<string, MathCellRow>;
   readonly MathDir: ReadonlyMap<string, Addition<typeof MathDir>>;
 }
 
@@ -430,6 +443,36 @@ const dirRowsOf = (
 };
 
 /**
+ * Group the complete elements of the cells by their cell, each cell's in document order.
+ *
+ * @param reading - The document's reading.
+ * @param leafNodes - The complete elements, in document order.
+ * @param scopes - Each element's scope row, by node id.
+ * @param groupsOf - Each cell's count of open groups.
+ * @returns Each cell's leaves, by the cell's node id.
+ */
+const leavesByCell = (
+  reading: Reading,
+  leafNodes: readonly NodeRow<Composed>[],
+  scopes: ReadonlyMap<string, Addition<typeof MathAlignScope>>,
+  groupsOf: ReadonlyMap<NodeId, bigint>,
+): ReadonlyMap<string, readonly CellLeafInsert[]> => {
+  const nested = new Map<string, CellLeafInsert[]>();
+  for (const node of leafNodes) {
+    const cell = scopes.get(node.id)?.cell ?? node.id;
+    const own = nested.get(cell) ?? [];
+    own.push({
+      ...placed(reading, node),
+      groups: groupsOf.get(cell) ?? 0n,
+      kind: node.kind,
+    });
+    nested.set(cell, own);
+  }
+
+  return nested;
+};
+
+/**
  * The align rows of one document.
  *
  * @param tree - The document's XDM tree.
@@ -449,7 +492,7 @@ export const rowsOf = (
     ...foldsOf(flat.nodes, ids.context?.nearest),
   };
   const actions = new Map<string, Addition<typeof MathAction>>();
-  const cells = new Map<string, Addition<typeof MathCell>>();
+  const cells = new Map<string, MathCellRow>();
   const scopes = new Map<string, Addition<typeof MathAlignScope>>();
   const groups = new Map<string, Addition<typeof MathAlignGroup>>();
   const groupsOf = new Map<NodeId, bigint>();
@@ -478,7 +521,7 @@ export const rowsOf = (
     reading.standing.set(node.id, scope);
     scopes.set(node.id, row);
     if (node.kind === "m:mtd") {
-      cells.set(node.id, { node: node.id });
+      cells.set(node.id, { leaves: [], node: node.id });
     } else {
       if (node.kind === "m:maligngroup" && row.state === "open") {
         groups.set(node.id, { cell: row.cell, node: node.id });
@@ -491,19 +534,12 @@ export const rowsOf = (
     }
   }
 
-  const leaves = new Map<string, Addition<typeof CellLeaf>>();
-  for (const node of leafNodes) {
-    const cell = scopes.get(node.id)?.cell ?? node.id;
-    leaves.set(node.id, {
-      ...placed(reading, node),
-      cell,
-      groups: groupsOf.get(cell) ?? 0n,
-      kind: node.kind,
-    });
+  const nested = leavesByCell(reading, leafNodes, scopes, groupsOf);
+  for (const [node, cell] of cells) {
+    cells.set(node, { ...cell, leaves: nested.get(node) ?? [] });
   }
 
   return {
-    CellLeaf: leaves,
     MathAction: actions,
     MathAlignGroup: groups,
     MathAlignScope: scopes,

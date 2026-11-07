@@ -49,7 +49,6 @@ import {
   select,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { Statement } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { IdBinding, ShareFragment } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
@@ -130,7 +129,7 @@ export const shareRelations = { MathRank, ShareTarget };
  *   {@link MathRank} rows of the share and of the target, and `MathML_share_cycle`: the share's
  *   rank is above its target's.
  */
-export const shareLaws: readonly Statement[] = [
+export const shareLaws = [
   contained(
     on(MathRank, "node", "document", "kind", "start", "nearest", "version", "parent"),
     nodeRef,

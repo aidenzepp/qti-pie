@@ -113,7 +113,6 @@ import {
   MatchTable,
 } from "#pantry/qti/mapping.ts";
 import {
-  CellLeaf,
   MathAction,
   MathAlignGroup,
   MathAlignScope,
@@ -1208,7 +1207,6 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(BranchResolution, [...inputs.BranchResolution.values()])
     .insert(BranchRule, [...inputs.BranchRule.values()])
     .insert(CellHeaders, [...inputs.CellHeaders.values()])
-    .insert(CellLeaf, [...inputs.CellLeaf.values()])
     .insert(Choice, [...inputs.Choice.values()])
     .insert(ChoiceVariableName, [...inputs.ChoiceVariableName.values()])
     .insert(CnAttribute, [...inputs.CnAttribute.values()])
