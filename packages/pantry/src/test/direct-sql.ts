@@ -169,6 +169,20 @@ const checksOf = (client: Client, table: string) =>
  * digest no case can know. The end is read off the one fold CHECK whose definition reads the
  * accumulator: its comment ends `into Owner(…, field)`.
  *
+ * This reads grizzle's physical naming, which it exports no other way, as the vendored engine at
+ * 72f7d03 writes it (`packages/engine/src`):
+ *
+ * - The accumulator's comment, `the accumulator <side> plane <n> of the fold <law> over the family
+ *   <Owner>.<count>`, is `core/identity.ts:807`. `<law>` is the fold law's hashed identifier,
+ *   minted by `law` at `core/identity.ts:949`.
+ * - The fold CHECK's comment, `check of <Relation> for law <display>`, is `core/identity.ts:867`. The
+ *   display, `<monoid> fold over <family> of <step> into <end>`, is
+ *   `analysis/theory/theory.ts:308`.
+ * - The CHECK's definition reads the accumulator's column by name.
+ *
+ * A repin that changes any of these fails a case here ("the one fold CHECK that reads it"), and
+ * the guard's catalogue search states the shapes.
+ *
  * @param columns - The table's written columns, each with its comment.
  * @param checks - The table's CHECKs, each with its definition and comment.
  * @returns Each column, in order, with its key; a declared field's is its comment or its name.
@@ -403,8 +417,7 @@ export const sqlRowOf = (
   relation: AnyRelation,
   fact: Readonly<Record<string, string | number | bigint | boolean>>,
 ): SqlRow => {
-  const fields =
-    fieldsOf.get(relation) ?? Schema.decodeUnknownSync(FieldsSchema)(relation).fields;
+  const fields = fieldsOf.get(relation) ?? Schema.decodeUnknownSync(FieldsSchema)(relation).fields;
   fieldsOf.set(relation, fields);
 
   return Object.fromEntries(
