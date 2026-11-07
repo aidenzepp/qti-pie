@@ -29,12 +29,16 @@
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { Addition, ApplyOutcome, Fact, Law } from "@bjornpagen/grizzle";
+import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { expressionTypings } from "#pantry/grammar/expression.ts";
+import { readProgram } from "#pantry/import/program.ts";
+import { ruleOfLaws } from "#pantry/import/refusal.ts";
+import { changeSetOf } from "#pantry/import/write.ts";
 import { OperatorArity } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
@@ -43,12 +47,12 @@ import {
   ExpressionAttribute,
   ItemTiming,
   Literal,
-  MappingSource,
+  MappingSourceDeclaration,
   Operand,
   ProcessingTemplate,
   Reading,
   ReferenceDocument,
-  TemplateDefault,
+  TemplateDefaultTarget,
   TestReference,
   VariableRef,
 } from "#pantry/qti/expressions.ts";
@@ -63,6 +67,9 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { itemRefPackageEntries } from "#pantry/test/gen/item-ref-declarations.ts";
+import type { ItemRefPackage } from "#pantry/test/gen/item-ref-declarations.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -958,11 +965,13 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, `Template_default_target` and `Template_default_type` (A37, A38,
           // spec reading 108) and `Variable_mapping_source` and `Variable_mapping_target` (A34,
-          // reading 97). Bound: one breach of each, breaking that law alone, since PostgreSQL
-          // names the first CHECK a row breaks by name, beside its repair, which keeps all four.
+          // reading 97), each a CHECK on the declaration's own row (`TemplateDefaultTarget`,
+          // `MappingSourceDeclaration`). Bound: one breach of each, breaking that law alone,
+          // since PostgreSQL names the first CHECK a row breaks by name, beside its repair, which
+          // keeps all four.
           Effect.gen(function* itemRefLaws() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            const templateDefault: Addition<typeof TemplateDefault> = {
+            const templateDefault: Addition<typeof TemplateDefaultTarget> = {
               declBaseType: "integer",
               declCardinality: "single",
               declaration: nodeOf(80),
@@ -971,13 +980,10 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               heldCardinality: "single",
               itemDocument: nodeOf(70),
               itemRef: nodeOf(60),
-              lead: "",
-              lexical: "T",
               node: nodeOf(1),
               template: "T",
-              trail: "",
             };
-            const mapping: Addition<typeof MappingSource> = {
+            const mapping: Addition<typeof MappingSourceDeclaration> = {
               declBaseType: "float",
               declCardinality: "single",
               declaration: nodeOf(81),
@@ -990,9 +996,9 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               targetDeclared: true,
             };
             const templateCases: readonly {
-              readonly broken: Addition<typeof TemplateDefault>;
+              readonly broken: Addition<typeof TemplateDefaultTarget>;
               readonly law: string;
-              readonly repaired: Addition<typeof TemplateDefault>;
+              readonly repaired: Addition<typeof TemplateDefaultTarget>;
             }[] = [
               {
                 broken: templateDefault,
@@ -1011,22 +1017,22 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             ];
             for (const { broken, law, repaired } of templateCases) {
               const refused = yield* db.apply(
-                ChangeSet.empty(Author).insert(TemplateDefault, [broken]),
+                ChangeSet.empty(Author).insert(TemplateDefaultTarget, [broken]),
                 {},
               );
               const kept = yield* db.apply(
-                ChangeSet.empty(Author).insert(TemplateDefault, [repaired]),
+                ChangeSet.empty(Author).insert(TemplateDefaultTarget, [repaired]),
                 {},
               );
 
-              assert.isTrue(names(refused, "TemplateDefault", law), law);
-              assert.isFalse(names(kept, "TemplateDefault", law), law);
+              assert.isTrue(names(refused, "TemplateDefaultTarget", law), law);
+              assert.isFalse(names(kept, "TemplateDefaultTarget", law), law);
             }
 
             const mappingCases: readonly {
-              readonly broken: Addition<typeof MappingSource>;
+              readonly broken: Addition<typeof MappingSourceDeclaration>;
               readonly law: string;
-              readonly repaired: Addition<typeof MappingSource>;
+              readonly repaired: Addition<typeof MappingSourceDeclaration>;
             }[] = [
               {
                 broken: {
@@ -1045,19 +1051,136 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             ];
             for (const { broken, law, repaired } of mappingCases) {
               const refused = yield* db.apply(
-                ChangeSet.empty(Author).insert(MappingSource, [broken]),
+                ChangeSet.empty(Author).insert(MappingSourceDeclaration, [broken]),
                 {},
               );
               const kept = yield* db.apply(
-                ChangeSet.empty(Author).insert(MappingSource, [repaired]),
+                ChangeSet.empty(Author).insert(MappingSourceDeclaration, [repaired]),
                 {},
               );
 
-              assert.isTrue(names(refused, "MappingSource", law), law);
-              assert.isFalse(names(kept, "MappingSource", law), law);
+              assert.isTrue(names(refused, "MappingSourceDeclaration", law), law);
+              assert.isFalse(names(kept, "MappingSourceDeclaration", law), law);
             }
           }),
       );
     },
   );
 });
+
+/**
+ * The whole-package cases of an item ref's declarations (lane NIL, the audit's A17 to A22), each a
+ * package of the item-ref-declarations generator with one cause, and the rule its import must be
+ * refused under alone, or none for the lawful control. A template default or a mapping whose item
+ * declares nothing under its name, or whose item ref names no item, has no declaration row, so the
+ * existence law refuses it; one whose item declares the name under the wrong kind has its row,
+ * and the row's own CHECK refuses it.
+ */
+const itemRefCases: readonly (readonly [string, ItemRefPackage, string | undefined])[] = [
+  [
+    "a lawful template default and a lawful read mapping",
+    {
+      defaults: [{ held: "integer", template: "T" }],
+      mappings: [{ read: true, source: "SCORE", target: "M1" }],
+      target: "item",
+    },
+    undefined,
+  ],
+  [
+    "a template default naming no variable of its item",
+    { defaults: [{ held: "integer", template: "U" }], mappings: [], target: "item" },
+    "template-default-target",
+  ],
+  [
+    "a template default naming an outcome of its item",
+    { defaults: [{ held: "float", template: "SCORE" }], mappings: [], target: "item" },
+    "template-default-target",
+  ],
+  [
+    "a template default under an item ref naming an LTI link",
+    { defaults: [{ held: "integer", template: "T" }], mappings: [], target: "lti" },
+    "template-default-target",
+  ],
+  [
+    "a template default whose expression does not fit its template",
+    { defaults: [{ held: "float", template: "T" }], mappings: [], target: "item" },
+    "P20",
+  ],
+  [
+    "a mapping whose source its item declares nothing under",
+    { defaults: [], mappings: [{ read: false, source: "U", target: "M1" }], target: "item" },
+    "variable-mapping-source",
+  ],
+  [
+    "a mapping whose undeclared source the test reads through the item ref",
+    { defaults: [], mappings: [{ read: true, source: "U", target: "M1" }], target: "item" },
+    "variable-mapping-source",
+  ],
+  [
+    "a mapping whose source is a template of its item",
+    { defaults: [], mappings: [{ read: false, source: "T", target: "M1" }], target: "item" },
+    "variable-mapping-source",
+  ],
+  [
+    "a mapping whose source is a response of its item",
+    { defaults: [], mappings: [{ read: false, source: "R", target: "M1" }], target: "item" },
+    "variable-mapping-source",
+  ],
+  [
+    "a mapping under an item ref naming an LTI link",
+    { defaults: [], mappings: [{ read: false, source: "SCORE", target: "M1" }], target: "lti" },
+    "variable-mapping-source",
+  ],
+  [
+    "a mapping whose target is another variable of its item",
+    { defaults: [], mappings: [{ read: false, source: "SCORE", target: "X" }], target: "item" },
+    "variable-mapping-target",
+  ],
+];
+
+describe.skipIf(!hasLease)(
+  "qti/expressions.db.test.ts, an item ref's declarations on the lease",
+  () => {
+    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+      excludeTestServices: true,
+      timeout: authorLayerHookTimeoutMs,
+    })("each package imported in one apply, judged by PostgreSQL", (it) => {
+      it.effect(
+        "refuses each package with one cause under that cause's rule alone, and accepts the control",
+        () =>
+          // Oracle: PostgreSQL, every law of the schema over the import's one ChangeSet, against
+          // the rule each case's one cause keeps, which `item-ref-declarations.oracle.test.ts` holds
+          // the law oracle to over the same packages. Bound: the lawful control and one package for
+          // each way a template default or a mapping fails to name its item's variable: undeclared,
+          // the wrong kind, under an LTI link, its type, and its target.
+          Effect.gen(function* itemRefPackages() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            for (const [name, input, rule] of itemRefCases) {
+              const dir = yield* scopedPackage(itemRefPackageEntries(input));
+              const program = yield* readProgram(dir);
+              const outcome = yield* db.apply(changeSetOf(Author, program.inputs), {});
+
+              if (rule === undefined) {
+                assert.strictEqual(outcome.kind, "accepted", `${name}: ${JSON.stringify(outcome)}`);
+              } else {
+                assert.deepStrictEqual(
+                  outcome.kind === "invariant-rejected"
+                    ? [
+                        ...new Set(
+                          outcome.refused.laws.map((law): string | undefined =>
+                            Option.getOrUndefined(ruleOfLaws([law])),
+                          ),
+                        ),
+                      ]
+                    : [outcome.kind],
+                  [rule],
+                  `${name}: every law the refusal names keeps ${rule}: ${JSON.stringify(outcome)}`,
+                );
+              }
+            }
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
+      );
+    });
+  },
+);

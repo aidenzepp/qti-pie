@@ -73,122 +73,6 @@ export const known = {
     fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "dangling-uuid: MappingLookup.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    
-    
-    <resource type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  
-  
-  
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        
-      </qti-assessment-item-ref>
-      
-    </qti-assessment-section>
-    
-  </qti-test-part>
-  
-</qti-assessment-test>`,
-      ],
-    ],
-    fix: "A17-A22: a template default, mapping source or lookup that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
-  "dangling-uuid: MappingSource.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    
-    
-    <resource type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  
-  
-  
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        
-      </qti-assessment-item-ref>
-      
-    </qti-assessment-section>
-    
-  </qti-test-part>
-  
-</qti-assessment-test>`,
-      ],
-    ],
-    fix: "A17-A22: a template default, mapping source or lookup that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
   "dangling-uuid: NameLookup.itemDocument": {
     files: [
       [
@@ -1370,6 +1254,122 @@ export const fixed = {
       ],
     ],
     fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
+    owner: "NIL",
+  },
+  "dangling-uuid: MappingLookup.declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+  <metadata>
+    
+    <schemaversion>3.0.0</schemaversion>
+    
+  </metadata>
+  
+  <resources>
+    
+    
+    
+    
+    
+    
+    
+    <resource type="imsqti_test_xmlv3p0" href="test.xml">
+      
+      
+      
+      
+      
+    </resource>
+    
+  </resources>
+</manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
+  
+  
+  
+  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
+    <qti-assessment-section identifier="first" title="First" visible="true">
+      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
+        
+        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
+        
+      </qti-assessment-item-ref>
+      
+    </qti-assessment-section>
+    
+  </qti-test-part>
+  
+</qti-assessment-test>`,
+      ],
+    ],
+    fix: "A17-A22: a template default, mapping source or lookup that names no declaration is a row of its own relation, never the nil uuid",
+    owner: "NIL",
+  },
+  "dangling-uuid: MappingSource.declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+  <metadata>
+    
+    <schemaversion>3.0.0</schemaversion>
+    
+  </metadata>
+  
+  <resources>
+    
+    
+    
+    
+    
+    
+    
+    <resource type="imsqti_test_xmlv3p0" href="test.xml">
+      
+      
+      
+      
+      
+    </resource>
+    
+  </resources>
+</manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
+  
+  
+  
+  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
+    <qti-assessment-section identifier="first" title="First" visible="true">
+      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
+        
+        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
+        
+      </qti-assessment-item-ref>
+      
+    </qti-assessment-section>
+    
+  </qti-test-part>
+  
+</qti-assessment-test>`,
+      ],
+    ],
+    fix: "A17-A22: a template default, mapping source or lookup that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
   "dangling-uuid: PlacedId.copy": {

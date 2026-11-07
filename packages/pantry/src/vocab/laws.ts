@@ -793,12 +793,12 @@ export const lawTable = {
   "Template default target": {
     rule: "template-default-target",
     source:
-      "the UP audit's A37: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateDefault.Attr_template-identifier (§5.152.1: 'The identifier of the template variable affected'; §5.152: 'The default value of a template variable in an item can be overridden based on the test context'): a template default names a template declaration of the item its item ref names, compared collapsed (expressions.ts TemplateDefault, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no template of it (reading 110)",
+      "the UP audit's A37: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateDefault.Attr_template-identifier (§5.152.1: 'The identifier of the template variable affected'; §5.152: 'The default value of a template variable in an item can be overridden based on the test context'): a template default names a template declaration of the item its item ref names, compared collapsed (expressions.ts TemplateDefaultTarget, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no template of it (reading 110)",
   },
   "Template default type": {
     rule: "P20",
     source:
-      "the UP audit's A38, the old checker's P20 for a setter: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_TemplateDefault_expressionGroup (§5.152.2: 'An expression which must result in a value with base-type and cardinality matching the declaration of the associated variable's qti-template-declaration'): a template default's expression fits its template variable's type, a type no declaration says aside (reading 4) (expressions.ts Template_default_type)",
+      "the UP audit's A38, the old checker's P20 for a setter: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_TemplateDefault_expressionGroup (§5.152.2: 'An expression which must result in a value with base-type and cardinality matching the declaration of the associated variable's qti-template-declaration'): a template default's expression fits its template variable's type, a type no declaration says aside (reading 4) (expressions.ts TemplateDefaultTarget Template_default_type)",
   },
   "Template reads": {
     rule: "P26",
@@ -863,12 +863,12 @@ export const lawTable = {
   "Variable mapping source": {
     rule: "variable-mapping-source",
     source:
-      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSource, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it (reading 110)",
+      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSourceDeclaration, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it (reading 110)",
   },
   "Variable mapping target": {
     rule: "variable-mapping-target",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 74: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 97), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSource, its declared half)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 74: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 97), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSourceDeclaration, its declared half)",
   },
   "Variable reference copy": {
     rule: "varref-copy",

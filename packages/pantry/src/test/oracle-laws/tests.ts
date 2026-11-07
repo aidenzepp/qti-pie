@@ -9,11 +9,12 @@
  *   required parts (§4.2.2); `Stimulus ref key`, no two stimulus refs of one item share an
  *   identifier (§7.6.2); `Variable mapping target`, the key `(item ref, target)` and no session
  *   variable as a target (reading 97).
- * - **The items an item ref names** (`itemRefLaws`, `MappingSource`, `TemplateDefault`): `Item ref
- *   target`, its href names an item or an LTI link of the package (B2, B3); `Variable mapping
- *   source`, a mapping's source is an outcome its item declares (A34); the declared half of
- *   `Variable mapping target`, no target is another variable its item declares (reading 97);
- *   `Template default target`, a template default names a template its item declares (A37).
+ * - **The items an item ref names** (`itemRefLaws`, `MappingSourceDeclaration`,
+ *   `TemplateDefaultTarget`): `Item ref target`, its href names an item or an LTI link of the
+ *   package (B2, B3); `Variable mapping source`, a mapping's source is an outcome its item declares
+ *   (A34); the declared half of `Variable mapping target`, no target is another variable its item
+ *   declares (reading 97); `Template default target`, a template default names a template its item
+ *   declares (A37).
  * - **The assembly** (`testNameLaws`, `branchLaws`, the readings of `expressions.ts`): `Test name
  *   key`, no two written elements of one test's assembly share an identifier (reading 86); `Branch
  *   target` and `Branch forward` over each instance's resolution of each branch rule (reading 87);
