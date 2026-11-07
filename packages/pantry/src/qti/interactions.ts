@@ -4,13 +4,15 @@
  * orchestrator's answers of 2026-11-06).
  *
  * Every attribute an O3 law reads is copied once, from one selection of `Attribute`, into
- * {@link InteractionAttribute}, keyed by its element's node and its name, with its lexical form
- * split into the whitespace around its value and the value itself. Every identifier, count, number
- * and flag these laws read is an atomic XSD type whose whiteSpace is `collapse` (spec reading 7:
- * "An attribute the XSD itself types ... is read as the XSD reads it, outer whitespace collapsed"),
- * so the value is the collapsed form, the one `Declaration.identifier` holds. One selection of
- * `Attribute` costs one UNIQUE on it (the addendum's "Text in keys"), so the overlays below read
- * `InteractionAttribute` and never `Attribute`.
+ * {@link InteractionAttribute}, keyed by its element's node and its name, with its lexical form and
+ * its value, the form collapsed (`Compute.collapse`, XML Schema Part 2 §4.3.6). Every identifier,
+ * count, number and flag these laws read is an atomic XSD type whose whiteSpace is `collapse` (spec
+ * reading 7: "An attribute the XSD itself types ... is read as the XSD reads it, outer whitespace
+ * collapsed"), so the value is the form its type's lexical space is read on, the one
+ * `Declaration.identifier` holds. The copy claims no type of it: a value with whitespace inside
+ * (`max-choices="1 2"`) is in no such type's lexical space, and its value domain alone refuses it.
+ * One selection of `Attribute` costs one UNIQUE on it (the addendum's "Text in keys"), so the
+ * overlays below read `InteractionAttribute` and never `Attribute`.
  *
  * - {@link Interaction}: every interaction element, in every document, owning its choices'
  *   {@link ChoiceInteraction} rows as a counted family (C15). A stimulus body holds interactions
@@ -98,7 +100,6 @@ import {
   pg,
   relation,
   select,
-  str,
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
@@ -139,20 +140,6 @@ type Kind = (typeof NodeKind.handles)[number];
  * An `AttributeName` handle.
  */
 type Name = (typeof AttributeName.handles)[number];
-
-/**
- * XML whitespace `S`, possibly none: what a lexical form holds around its value.
- *
- * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
- */
-const Space = str.regex("^[\\t\\n\\r ]*$");
-
-/**
- * A run holding no XML whitespace, possibly empty: the collapsed value of an atomic type, which
- * `E1_derived` holds every {@link InteractionAttribute} value to, so its pieces are exactly its
- * lexical form's outer whitespace.
- */
-export const atomicValuePattern = "^[^\\t\\n\\r ]*$";
 
 /**
  * A collapsed value that names a variable: an NCName (`ncNamePattern`), the lexical space of each
@@ -421,8 +408,9 @@ export const readAttributes: ReadonlyMap<Name, readonly Kind[]> = (() => {
 
 /**
  * An attribute an O3 law reads, keyed by its element's node and its name: the element's kind,
- * document and document's root kind, the lexical form as written (C18's copy), and that form as
- * three pieces, `lead`, `value` and `trail`, the value its collapsed form.
+ * document and document's root kind, the lexical form as written (C18's copy), and `value`, that
+ * form collapsed, as `E1_derived` states it ({@link collapsed}), whatever the form: a value with
+ * whitespace inside is held as its type's whiteSpace reads it, and is no value of its type.
  *
  * Copied text is `keyText` (`#pantry/qti/limits.ts`): the lexical form and the value each sit in a
  * containment's index, and a longer value is refused under the schema's one limit law.
@@ -432,12 +420,10 @@ export const InteractionAttribute = relation(
   {
     document: uuid,
     kind: closedId(NodeKind),
-    lead: Space,
     lexical: keyText,
     name: closedId(AttributeName),
     node: uuid,
     rootKind: closedId(NodeKind),
-    trail: Space,
     value: keyText,
   },
   ["node", "name"],
@@ -1604,19 +1590,16 @@ const referenceReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
   );
 
 /**
- * State that an attribute's pieces are its lexical form's outer whitespace and its collapsed
- * value: they concatenate to the lexical form, the value holds no whitespace, and an empty value
- * puts all the whitespace in `lead`, so the split is the one split.
+ * State that an attribute's value is its lexical form collapsed (XML Schema Part 2, §4.3.6, as
+ * `SsmlAttribute`'s is): each run of whitespace one space, and none at either end. It claims no
+ * type of the value: every form has its collapsed value, so the copy every read attribute asks
+ * holds beside it, and a value with whitespace inside, in no atomic type's lexical space, is
+ * refused by its value domain alone.
  *
  * @param v - The row.
  * @returns The predicate.
  */
-const collapsed = (v: AttributeRow) =>
-  v.and(
-    v.eq(v.lexical, Compute.concat(Compute.concat(v.lead, v.value), v.trail)),
-    Compute.matches(v.value, atomicValuePattern),
-    v.or(v.ne(v.value, ""), v.eq(v.trail, "")),
-  );
+const collapsed = (v: AttributeRow) => v.eq(v.value, Compute.collapse(v.lexical));
 
 /**
  * The XSD default of an attribute on a kind in a version, as the inventory leaf declares it.

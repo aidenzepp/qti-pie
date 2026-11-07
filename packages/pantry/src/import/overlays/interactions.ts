@@ -18,7 +18,7 @@ import {
   ContentReference,
   interactionKinds,
 } from "#pantry/grammar/install.ts";
-import { booleanOf, isNcName } from "#pantry/grammar/domains.ts";
+import { booleanOf, collapse, isNcName } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
@@ -187,16 +187,6 @@ type CountName = (typeof ChoiceBound.rows)[number]["min"];
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
- * XML whitespace at the start of a text.
- */
-const leading = /^[\t\n\r ]*/u;
-
-/**
- * XML whitespace at the end of a text.
- */
-const trailing = /[\t\n\r ]*$/u;
-
-/**
  * An `xs:integer` form, split into its sign and its digits (XML Schema 1.1 Part 2 §3.3.13).
  */
 const integerParts = /^(?<sign>[+-]?)(?<digits>[0-9]+)$/u;
@@ -225,67 +215,6 @@ const countValueOf = (form: string): Option.Option<bigint> => {
     Option.map((digits) => (groups?.["sign"] === "-" ? -BigInt(digits) : BigInt(digits))),
     Option.filter((value) => value >= 0n && value <= countMost),
   );
-};
-
-/**
- * XML whitespace `S`, possibly none, as the `lead` and `trail` of a read attribute are typed.
- */
-type Space = Addition<typeof InteractionAttribute>["lead"];
-
-/**
- * Decide whether a text is XML whitespace, possibly none.
- *
- * @param text - The text, none where a pattern matched nothing.
- * @returns Whether it is a {@link Space}.
- */
-const isSpace = (text: string | undefined): text is Space =>
-  text !== undefined && /^[\t\n\r ]*$/u.test(text);
-
-/**
- * Take the whitespace a pattern anchors at one end of a text: {@link leading} or {@link trailing},
- * each of which matches every text, its run possibly empty.
- *
- * @param pattern - The pattern.
- * @param text - The text.
- * @returns The run.
- * @throws {Error} When the pattern matches no whitespace run, which both patterns rule out: a
- *   defect of this splitter, never of the document.
- */
-const spaceAt = (pattern: RegExp, text: string): Space => {
-  const run = pattern.exec(text)?.[0];
-  if (!isSpace(run)) {
-    throw new Error(
-      `The whitespace pattern ${String(pattern)} took no run of XML whitespace from ${JSON.stringify(text)}, but it matches every text. Correct the pattern pieces splits by.`,
-    );
-  }
-
-  return run;
-};
-
-/**
- * A lexical form's pieces: its outer whitespace and its collapsed value.
- */
-export interface Pieces {
-  readonly lead: Space;
-  readonly trail: Space;
-  readonly value: string;
-}
-
-/**
- * Split a lexical form into its outer whitespace and its collapsed value, as `E1_derived` proves
- * it: an all-whitespace form puts its whitespace in `lead`.
- *
- * @param lexical - The lexical form as written.
- * @returns Its pieces.
- * @throws {Error} When a whitespace pattern takes no run ({@link spaceAt}): a defect of this
- *   splitter, never of the document.
- */
-export const pieces = (lexical: string): Pieces => {
-  const lead = spaceAt(leading, lexical);
-  const rest = lexical.slice(lead.length);
-  const trail = spaceAt(trailing, rest);
-
-  return { lead, trail, value: rest.slice(0, rest.length - trail.length) };
 };
 
 /**
@@ -359,7 +288,10 @@ const lexicalOf = (
 ): Option.Option<string> => Option.fromNullishOr(context.attributes.get(node)?.get(name));
 
 /**
- * Read an element's attribute collapsed.
+ * Read an element's attribute collapsed (XML Schema Part 2, §4.3.6), as
+ * `InteractionAttribute.value` holds it: whitespace inside a value is kept, one space a run, so a
+ * value with some is no value of the attribute's atomic type, and its value domain refuses it
+ * alone.
  *
  * @param context - The document.
  * @param node - The element.
@@ -370,8 +302,7 @@ const valueOf = (
   context: Pick<Context, "attributes">,
   node: NodeId,
   name: string,
-): Option.Option<string> =>
-  Option.map(lexicalOf(context, node, name), (lexical) => pieces(lexical).value);
+): Option.Option<string> => Option.map(lexicalOf(context, node, name), collapse);
 
 /**
  * Read the name an element's attribute gives: its value collapsed, where that is an NCName
@@ -434,7 +365,7 @@ const declaredOf = (
       ? Option.toArray(lexicalOf(context, node.id, "identifier")).map((identifier) => ({
           fields: declaredFieldsAt(context, node),
           node: node.id,
-          written: pieces(identifier).value,
+          written: collapse(identifier),
         }))
       : [],
   );
@@ -601,7 +532,7 @@ const readOnKinds: ReadonlySet<string> = new Set(
 );
 
 /**
- * Build the read attributes: each attribute O3 reads, its lexical form and its pieces.
+ * Build the read attributes: each attribute O3 reads, its lexical form and its value collapsed.
  *
  * @param context - The document.
  * @returns The rows, keyed by (node, name).
@@ -617,13 +548,13 @@ const interactionAttributesOf = (context: Context) =>
             [
               keyOf([node, name]),
               {
-                ...pieces(lexical),
                 document: context.document,
                 kind,
                 lexical,
                 name,
                 node,
                 rootKind: context.rootKind,
+                value: collapse(lexical),
               } satisfies Addition<typeof InteractionAttribute>,
             ] as const,
           ]

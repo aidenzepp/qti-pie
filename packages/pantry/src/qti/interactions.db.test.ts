@@ -1242,12 +1242,10 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 {
                   document: stray,
                   kind: "qti-choice-interaction",
-                  lead: "",
                   lexical: " R",
                   name: "response-identifier",
                   node: strayNode(0),
                   rootKind: "qti-assessment-item",
-                  trail: "",
                   value: " R",
                 },
               ]),
