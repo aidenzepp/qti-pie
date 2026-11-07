@@ -530,10 +530,11 @@ const processedRecord = (item: SessionItem, processed: number): ItemRecord => ({
  * with no outcome processing run, under the processing seed {@link processingSeed}.
  *
  * @param test The test it is a session of.
- * @param items Its items.
+ * @param items Its items: one per item ref of the test, in document order, as `decodeSession`
+ *   requires.
  * @param parts Its parts, each ended by default.
  * @param shuffleSeed Its shuffle seed, {@link seed} by default.
- * @returns The stored session, closed.
+ * @returns The stored session: closed when every part has ended, interacting otherwise.
  */
 const storedSession = (
   test: AcceptedTest,
@@ -562,7 +563,7 @@ const storedSession = (
       seed: processingSeed,
       shuffleSeed,
       started,
-      status: "closed",
+      status: parts.every((entry) => entry.status === "ended") ? "closed" : "interacting",
       test: test.test.identifier,
       updated,
     }),
@@ -1649,13 +1650,20 @@ describe("results", () => {
       ];
 
       for (const entry of cases) {
-        const base = sessionItem(accepted, entry.ref, 1, entry.changes);
-        const item = { ...base, record: processedRecord(base, entry.processed) };
+        const sessionItems = [...items.keys()].map((refId, index) => {
+          if (refId !== entry.ref) {
+            return sessionItem(accepted, refId, index + 1);
+          }
+
+          const base = sessionItem(accepted, refId, index + 1, entry.changes);
+
+          return { ...base, record: processedRecord(base, entry.processed) };
+        });
         const { report } = yield* reported({
           context,
           items,
           kind: "test",
-          session: storedSession(test, [item], entry.parts),
+          session: storedSession(test, sessionItems, entry.parts),
           test,
         });
         const written = itemOf(report, entry.ref);

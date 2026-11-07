@@ -18,9 +18,22 @@ import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
 
 /**
- * The test the sessions below belong to, as `decodeSession` checks them against it.
+ * The test the sessions below belong to, as `decodeSession` checks them against it: one part,
+ * `part-1`, whose section holds the one item ref `item-1`, and no outcome declaration.
  */
-const owner: SessionTest = { test: { document: "tests/m2.xml", identifier: "m2" } };
+const owner: SessionTest = {
+  test: {
+    document: "tests/m2.xml",
+    identifier: "m2",
+    outcomes: new Map(),
+    parts: [
+      {
+        children: [{ children: [{ identifier: "item-1", kind: "item-ref" }], kind: "section" }],
+        identifier: "part-1",
+      },
+    ],
+  },
+};
 
 /**
  * A one-item session of {@link owner} under an id: the item presented, processed once and holding
