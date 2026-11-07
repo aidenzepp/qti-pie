@@ -152,6 +152,7 @@ import {
   ItemRefTarget,
   itemRefKind,
   itemResourceType,
+  linkResourceTypes,
   Named,
   partKind,
   sectionKind,
@@ -167,6 +168,12 @@ import {
  * `src/import/refusal.ts`, which names its pattern law.
  */
 export const Affix = str.regex("^(?:[\\t\\n\\r ]*|\\{|\\})$");
+
+/**
+ * The document the host writes for what no item holds: an LTI link's item, and a missing
+ * document, which no `Document` row holds.
+ */
+const nilDocument = "00000000-0000-0000-0000-000000000000";
 
 /**
  * XML whitespace `S`, possibly none, as a pattern.
@@ -1285,6 +1292,16 @@ const itemScoped = (r: ReadingRow) =>
 const itemHeld = (r: ReadingRow) => r.and(itemScoped(r), r.eq(r.resourceType, itemResourceType));
 
 /**
+ * State that a reading's scope is a found item ref that names an LTI link, which has no
+ * declarations and no template variables to resolve a name against (spec reading 110): a name
+ * read through it is accepted unchecked, a recorded limit.
+ *
+ * @param r - The row.
+ * @returns The predicate.
+ */
+const linkHeld = (r: ReadingRow) => r.and(itemScoped(r), r.in(r.resourceType, linkResourceTypes));
+
+/**
  * State that a reading reads its variable in a document's declarations: the test's own, unsplit,
  * or an item ref's item.
  *
@@ -1355,11 +1372,11 @@ const builtInKindOfScope = (r: ReadingRow) =>
   );
 
 /**
- * State that a reading resolves (spec reading 48): its variable is named, declared, mapped or
- * built in, and, numbered, its item ref can repeat under a selection with replacement and its
- * number is at least 1 (reading 88). A name reading, a `section-identifier`'s, is no variable's,
- * and a setter's prefixed reading resolves nothing: a setter sets its own document's variable
- * (reading 112).
+ * State that a reading resolves (spec reading 48): its variable is named, declared, mapped or built
+ * in, or read through an LTI item ref unchecked ({@link linkHeld}), and, numbered, its item ref can
+ * repeat under a selection with replacement and its number is at least 1 (reading 88). A name
+ * reading, a `section-identifier`'s, is no variable's, and a setter's prefixed reading resolves
+ * nothing: a setter sets its own document's variable (reading 112).
  *
  * @param r - The row.
  * @returns The predicate.
@@ -1367,7 +1384,7 @@ const builtInKindOfScope = (r: ReadingRow) =>
 const resolves = (r: ReadingRow) =>
   r.and(
     r.ne(r.form, "name"),
-    r.ne(r.source, "none"),
+    r.or(r.ne(r.source, "none"), linkHeld(r)),
     r.or(r.eq(r.form, "unsplit"), r.not(r.in(r.kind, setterKinds))),
     r.or(
       r.ne(r.form, "numbered"),
@@ -1384,6 +1401,14 @@ const resolves = (r: ReadingRow) =>
  */
 const readsItemDuration = (r: ReadingRow) =>
   r.and(itemHeld(r), r.eq(r.source, "builtIn"), r.eq(r.variable, "duration"));
+
+/**
+ * The variable mappings under an item ref that holds an item: a mapping under an LTI item ref has
+ * no item, the host writes it the nil document, and is accepted unchecked (spec reading 110), so
+ * neither its item nor its source's declaration is judged. A mapping under an item ref that names
+ * a missing document stays refused by `ItemRefDocument`'s own laws.
+ */
+const heldMappings = select(MappingSource, (m) => m.ne(m.itemDocument, nilDocument));
 
 /**
  * The readings that resolve: a key over them by their reference is "at most one", and the
@@ -1709,10 +1734,10 @@ const referenceLaws = [
   ),
   contained(on(MappingSource, "node", "target"), on(VariableMapping, "node", "target")),
   key(on(MappingSource, "itemRef", "target")),
-  contained(on(MappingSource, "itemRef", "itemDocument"), on(ItemRefDocument, "node", "document")),
+  contained(on(heldMappings, "itemRef", "itemDocument"), on(ItemRefDocument, "node", "document")),
   contained(
     on(
-      MappingSource,
+      heldMappings,
       "declaration",
       "itemDocument",
       "source",
