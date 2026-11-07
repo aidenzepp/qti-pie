@@ -2115,3 +2115,59 @@ describe("a MathML element where the parent admits none (p6n-6)", () => {
       }),
   );
 });
+
+describe("an SSML role item whose prefix nothing binds (p7n-6.1)", () => {
+  it.effect(
+    "refuses an ssml:w or ssml:token role item whose prefix no declaration in scope binds as role-unresolved, and reads a bound prefix, xml:, an unprefixed item and a role on any other element: both versions",
+    () =>
+      // Oracle: the specification as a checker: SSML's `role` on `token` and `w` is a list of
+      // `xsd:QName` (`ssml/synthesis-nonamespace.xsd` line 308), a QName's prefix must resolve in
+      // the namespace declarations in scope, and `xml` is bound by definition (XML Schema 1.0 Part
+      // 2, §3.2.18; Namespaces in XML 1.0, §3; spec reading 83). An unprefixed item takes the
+      // default namespace and is never unbound.
+      // Bound: two kinds and five role values, in the 2 versions.
+      Effect.gen(function* roleItems() {
+        const ssml = "http://www.w3.org/2001/10/synthesis";
+        const read = (version: Composed["version"], tag: string, role: string, declaration = "") =>
+          reread(
+            new TextEncoder().encode(
+              `<qti-assessment-item xmlns="${asi}" xmlns:ssml="${ssml}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p><ssml:speak version="1.1" xml:lang="en"${declaration}><ssml:${tag} role="${role}">x</ssml:${tag}></ssml:speak></p></qti-item-body></qti-assessment-item>`,
+            ),
+            version,
+          );
+
+        for (const version of schemaVersions) {
+          for (const tag of ["w", "token"]) {
+            assert.deepStrictEqual(
+              yield* Effect.flip(read(version, tag, "x:noun")),
+              new UnmodeledVocabulary({
+                kind: "attribute",
+                name: "role",
+                parent: Option.some(`ssml:${tag}`),
+                reason: "role-unresolved",
+              }),
+              `unbound x: on ${tag} in ${version}`,
+            );
+            assert.deepStrictEqual(
+              yield* Effect.flip(read(version, tag, "noun y:verb")),
+              new UnmodeledVocabulary({
+                kind: "attribute",
+                name: "role",
+                parent: Option.some(`ssml:${tag}`),
+                reason: "role-unresolved",
+              }),
+              `unbound y: after a bare item on ${tag} in ${version}`,
+            );
+            for (const [role, declaration] of [
+              ["x:noun", ' xmlns:x="urn:x"'],
+              ["noun xml:lang", ""],
+              ["noun", ""],
+              ["  noun \n verb  ", ""],
+            ] as const) {
+              yield* read(version, tag, role, declaration);
+            }
+          }
+        }
+      }),
+  );
+});

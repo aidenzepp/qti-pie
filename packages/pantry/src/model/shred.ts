@@ -204,6 +204,9 @@ export interface ShredGrammar<V extends XdmVocabulary> {
  *   of a kind or a foreign one alike, since XML Schema assesses the attribute against its own
  *   declaration where no element declaration is found (XML Schema 1.0 Part 1, §3.3.4 clause 4.1,
  *   §3.2.4 clause 1.2, §3.15.3; spec reading 83);
+ * - `role-unresolved`: a `role` item on an `ssml:token` or `ssml:w` whose prefix no declaration in
+ *   scope binds, `role` being a list of `xsd:QName` there, and a QName's prefix having to resolve
+ *   (`ssml/synthesis-nonamespace.xsd` line 308; spec reading 83);
  * - `type-unknown`: an `xsi:type` on an element of a kind whose QName names no type of the pinned
  *   schemas (clause 4.2); on a foreign element such a name leaves it to lax assessment, or under
  *   `strict` is `strict-undeclared` (spec reading 60);
@@ -226,6 +229,7 @@ export const unmodeledReasons = [
   ...openClassRefusals,
   "namespace-entity",
   "type-unresolved",
+  "role-unresolved",
   "type-unknown",
   "strict-undeclared",
   "mathml-foreign",
@@ -265,6 +269,8 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
       "mathml-foreign":
         "is in the MathML namespace, and its parent admits no MathML element of that name, while MathML content stands only inside an m:math element (MathML 3, 2.2), so it is no foreign element either",
       "namespace-entity": "declares a namespace through an entity reference, which is never read",
+      "role-unresolved":
+        "lists a QName whose prefix no declaration in scope binds, so it names no expanded name",
       "strict-undeclared":
         "is held by a strict wildcard, and neither a global declaration of its document's schemas names it nor an xsi:type names one of their types or a built-in, so XML Schema cannot assess it (XML Schema 1.0 Part 1, 3.10.4 and 3.3.4)",
       "type-unknown":
@@ -544,6 +550,42 @@ const qNameOf = (
   return parts === undefined || typed.references.length > 0 || namespace === undefined
     ? Result.fail(unmodeledAttribute(typed, element, "type-unresolved"))
     : Result.succeed({ local: parts["local"] ?? "", namespace });
+};
+
+/**
+ * Refuse the first item of an SSML `role` whose prefix nothing binds.
+ *
+ * `role` on `ssml:token` and `ssml:w` is a list of `xsd:QName` (`ssml/synthesis-nonamespace.xsd`
+ * line 308), so each whitespace-separated item resolves its prefix in the bindings in scope; the
+ * `xml` prefix is bound by definition, and an unprefixed item takes the default namespace (spec
+ * reading 83).
+ *
+ * @param reading - How the element is read.
+ * @param scope - The bindings in scope at the element.
+ * @returns Nothing, or the refusal of the first item whose prefix nothing binds.
+ */
+const roleResolved = <V extends XdmVocabulary>(
+  reading: Reading<V>,
+  scope: Scope,
+): Result.Result<void, UnmodeledVocabulary> => {
+  const role = reading.element.attributes.find(
+    ({ local, namespace }) => namespace === "" && local === "role",
+  );
+
+  return role === undefined ||
+    reading._tag !== "kind" ||
+    (reading.kind !== "ssml:token" && reading.kind !== "ssml:w") ||
+    !role.value
+      .replaceAll(/[\t\n\r ]+/gu, " ")
+      .trim()
+      .split(" ")
+      .some((item) => {
+        const prefix = qNameParts.exec(item)?.groups?.["prefix"];
+
+        return prefix !== undefined && prefix !== "xml" && !scope.has(prefix);
+      })
+    ? Result.void
+    : Result.fail(unmodeledAttribute(role, reading.element, "role-unresolved"));
 };
 
 /**
@@ -942,6 +984,7 @@ const contentOf = <V extends XdmVocabulary>(
     const scope = scopeOf(outer, namespaces);
     const governs = yield* governsOf(reading, scope, version, grammar);
     const attributes = yield* attributesOf(reading, governs, version, grammar);
+    yield* roleResolved(reading, scope);
 
     return { attributes, governs, namespaces, prefix: reading.element.prefix, scope };
   });

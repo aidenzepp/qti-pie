@@ -1205,6 +1205,9 @@ const judgeDocument = Effect.fn("test.judgeDocument")(function* judgeDocument(in
           case "namespace-entity": {
             return "other";
           }
+          // A role item (xs:QName) whose prefix no declaration binds is a value its attribute's
+          // declaration refuses (cvc-datatype-valid, QName's prefix resolution), on the attribute.
+          case "role-unresolved":
           case "type-unknown":
           case "type-unresolved": {
             return "attribute-value";
