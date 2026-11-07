@@ -39,6 +39,7 @@ import type {
   ResponsesRefused,
 } from "#plate/score.ts";
 import { UnknownItemRef } from "#plate/session/control.ts";
+import { elapsedSeconds } from "#plate/session/elapsed.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import {
   ItemNotInSession,
@@ -425,17 +426,6 @@ const processedInPart = (
   );
 
 /**
- * Give the seconds from a session's start to a transition, truncated to a tenth of a second, as the
- * test result writes the test's `duration`; 0 when the transition comes before the start.
- *
- * @param started When the session started, in ISO 8601.
- * @param now The time of the transition.
- * @returns The seconds.
- */
-const secondsSince = (started: string, now: Date): number =>
-  Math.max(Math.trunc((now.getTime() - Date.parse(started)) / 100) / 10, 0);
-
-/**
  * Run the test's outcome processing over a session once, and store what it leaves.
  *
  * Run `n` is `outcomeRuns + 1`. It starts every test outcome from its declared default, else its
@@ -464,7 +454,8 @@ const outcomesProcessed = (
   }
 
   const run = session.outcomeRuns + 1;
-  const scope = testScopeOf(test, items, session, Option.some(secondsSince(session.started, now)));
+  const elapsed = elapsedSeconds(Date.parse(session.started), now.getTime());
+  const scope = testScopeOf(test, items, session, Option.some(elapsed));
 
   return Result.map(
     runOutcomes(test, scope, drawStream(session.seed, outcomeLabel(session.instance, run))),

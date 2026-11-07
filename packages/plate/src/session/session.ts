@@ -77,9 +77,11 @@ export interface SessionItem {
    */
   readonly sequenceIndex: number;
   /**
-   * The values its item ref's template defaults took when its nonlinear part started, by template
-   * variable identifier, which its first attempt's template processing starts from; none when its
-   * part did not compute them, as a linear part computes them when the item is first presented.
+   * The values its item ref's template defaults took, by template variable identifier, which its
+   * first attempt's template processing starts from. Present only on an item of a nonlinear part
+   * whose item ref has a template default, computed when that part starts; none on any other item:
+   * one whose item ref has no template default, or one of a linear part, which computes its item's
+   * defaults when the item is first presented and stores none here.
    */
   readonly templateDefaults: Option.Option<Readonly<Record<string, Value>>>;
 }

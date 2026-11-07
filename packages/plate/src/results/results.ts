@@ -41,6 +41,7 @@ import {
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
+import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { choiceOrder, hiddenOnlyResponses, redactStructure } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
@@ -49,6 +50,7 @@ import { belonging, fitting } from "#plate/score.ts";
 import type { RecordMismatch } from "#plate/score.ts";
 import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
+import { elapsedSeconds } from "#plate/session/elapsed.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 import type { AnsweredStatus, SessionStatus } from "#plate/vocabulary.ts";
@@ -176,7 +178,7 @@ const judging: Configuration = {
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,
-  outputBudget: 16_777_216,
+  outputBudget: defaultOutputBudget,
   showFeedback: false,
   showSolution: false,
   validateResponses: true,
@@ -304,7 +306,7 @@ const optional = (local: string, value: Option.Option<string>): readonly Attribu
 const declared = (
   identifier: string,
   cardinality: Value["cardinality"],
-  baseType: ModelledBaseType | "duration",
+  baseType: ModelledBaseType,
 ): readonly Attribute[] => [
   attribute("identifier", identifier),
   attribute("cardinality", cardinality),
@@ -745,17 +747,6 @@ const timed = (session: TestSession): Result.Result<TestSession, InvalidSession>
 };
 
 /**
- * Give the time between two ISO 8601 times in seconds, truncated to a tenth of a second, and 0
- * when the second is not later.
- *
- * @param from The earlier time.
- * @param to The later time.
- * @returns The seconds between them.
- */
-const secondsBetween = (from: string, to: string): number =>
-  Math.max(Math.trunc((Date.parse(to) - Date.parse(from)) / 100) / 10, 0);
-
-/**
  * Give the order a shuffled Choice or a shuffled Inline Choice was presented in, as `render`
  * presents it ({@link choiceOrder}), and none for any other interaction: a Choice or an Inline
  * Choice not shuffled keeps document order, and a Text Entry or an Extended Text has no choices.
@@ -1027,7 +1018,7 @@ const testResults = (
         [
           builtInResponse("duration", {
             baseType: "duration",
-            value: secondsBetween(session.started, session.updated),
+            value: elapsedSeconds(Date.parse(session.started), Date.parse(session.updated)),
           }),
           ...outcomes,
         ],

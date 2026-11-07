@@ -2733,7 +2733,7 @@ type SettingKind = Extract<Rule | TemplateRule, { readonly identifier: string }>
  * and `qti-set-default-value` a response or an outcome (`targetOf` in
  * `#plate/engine/template.ts`). The names it finds are valid content, never refused (reading 1,
  * rule `5b8ee08b`): a response, an outcome or a template variable the model does not hold (base
- * type `duration` or `file`, cardinality `record`, or no base type), a template variable beside
+ * type `file`, cardinality `record`, or no base type), a template variable beside
  * template processing that does not run, the built-in variable `duration`, read or set, which the
  * engine holds no value for, and the built-in `completionStatus` where a declaration names it.
  * Reading 29 makes an item's `duration` a single float, so it is a valid name in an item's rules.
@@ -2942,7 +2942,7 @@ type ValueType = Pick<Value, "baseType" | "cardinality">;
 
 /**
  * Give the value type of a type the kind rules give, none when the value model holds no value of
- * it: a base type of `any`, `unknown`, `duration` or `file`, or a cardinality of `record` or
+ * it: a base type of `any`, `unknown` or `file`, or a cardinality of `record` or
  * `unknown`. Such a type is not judged.
  *
  * @param type The type.
