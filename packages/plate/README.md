@@ -313,9 +313,11 @@ The host stores two records as JSON and hands each back on the next request. pla
 Each function that reads one back checks that it has version 2, that each field has its type, and
 that each value is well formed. `restore` also checks that each response and outcome in an item's
 record fits the item's declarations, as `results` does, and refuses another item's record with
-`RecordMismatch`, as `score` does. `decodeSession` also checks that the
-session names the test you pass it and that test's document. It does not check the session's items
-against the test's item refs, so keep the stored session where only your server can change it.
+`RecordMismatch`, as `score` does. For an item whose template processing runs, `score` and
+`restore` also refuse, with `InvalidRecord`, a record that holds no value for one of its template
+variables. `decodeSession` also checks that the session names the test you pass it and that test's
+document. It does not check the session's items against the test's item refs, so keep the stored
+session where only your server can change it.
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
@@ -333,7 +335,10 @@ storage. `ItemView`, the item that `current` gives, and `restore`'s `Restored` e
 record, so they are server data too.
 
 `restore(document, record)` gives an item's decoded record and its values back from its
-`StoredRecord`. In a test, `itemView` gives them.
+`StoredRecord`. In a test, `itemView` gives them. plate exports no `ItemRecord` type: the record's
+type is `Restored["record"]`, and the narrower type that `redact`, `checkResponses` and `solution`
+each take is `Parameters<typeof redact>[1]`, `Parameters<typeof checkResponses>[3]` and
+`Parameters<typeof solution>[1]`.
 
 ## Results
 
@@ -487,9 +492,10 @@ place. A test session starts each item's record when it first shows the item, an
 The seed is a string, and it is the record's secret: it keys every value that template and
 response processing draw. A seed someone can guess, such as `"7"` or `""`, lets anyone who sees
 the page and the item work those values out. When you pass no seed, `begin` draws 128 random bits,
-as `startTest` does for a session and `score` does for a record it starts itself. The same
-document, instance and seed give the same record every run. To fix the seed for `score`, start the
-record with `begin`.
+as `startTest` does for a session and `score` does for a record it starts itself. `configure`
+reads a `seed` of `""` as no seed, so `startTest` then draws one, while `begin` uses a given `""`
+as the seed, and `score` uses the seed of the record it is handed. The same document, instance and
+seed give the same record every run. To fix the seed for `score`, start the record with `begin`.
 
 With no record, plate fills in no value that template processing sets. For an item whose template
 processing runs:
@@ -529,14 +535,20 @@ and can change.
 - A printed variable with a `format` prints as its one printf conversion writes the value. A tie
   rounds half away from zero on the shortest decimal that reads back, so 0.25 at `%.1f` prints
   `0.3`, where C's `printf` prints `0.2`.
+- Under `%i`, `%o`, `%x` or `%X`, a float prints its shortest decimal's integer digits
+  *(pending)*, a negative under `%o`, `%x` or `%X` writes `-` and its digits *(pending)*, and an
+  infinity or NaN prints `inf`, `-inf` or `nan`, in upper case under `%X` *(pending)*. A `base`
+  outside 2 to 36 writes base 10 *(pending)*. A width or precision past 1,000,000 prints nothing
+  *(pending)*.
 - With no `format`, it prints an integer as its digits, a float as its shortest decimal and
-  negative zero as `-0`. `power-form` writes such a float's exponent as `× 10 to the power n`
+  negative zero as `-0`. `power-form` writes such a float's exponent as `x 10 to the power n`
   *(pending)*.
 - NULL prints nothing, and a container prints its values joined by `delimiter`. `index` picks one
   member of an ordered value, counting from 1, and prints them all when it is out of range
   *(pending)*.
-- A `param-variable` that holds a container passes its values joined by `;`, and NULL passes an
-  empty value *(pending)*.
+- QTI 3.0 sets no written form for a `param`'s list or NULL value, so a `param-variable` follows
+  the printed-value defaults: a container passes its values joined by `;`, and NULL passes an empty
+  value.
 
 `open` refuses the following. pantry refuses the same, except in the three places named below the
 table.
@@ -547,7 +559,7 @@ table.
 | A read in template processing of a response, an outcome or a built-in other than `QTI_CONTEXT`, through `qti-variable`, `qti-correct`, `qti-default`, `qti-map-response`, `qti-map-response-point` or a reference attribute. Template processing reads only template and context variables | `expression-type` | P26 |
 | A `qti-set-template-value` that names no template variable, a `qti-set-correct-response` that names no response, or a `qti-set-default-value` that names neither a response nor an outcome | `undeclared-variable` | P8, or P9 for a built-in |
 | A printed variable's `format` that is not one printf conversion with a code from `E e f G g r R i o X x`, such as `%d`, `%u` or `Score: %.1f` | `attribute-type` | R38 |
-| A printed variable whose `identifier` names no outcome or template variable, or whose `base` or `index`, written as a name, names no single integer outcome or template variable | `undeclared-variable` for a name nothing declares, else `expression-type` | `printed-variable-ref` |
+| A printed variable whose `identifier` names no outcome or template variable, or whose `base` or `index`, written as a name, names no single integer outcome or template variable; in a test, whose `identifier` names no outcome the test declares, or whose `base` or `index` names no single integer outcome the test declares | `undeclared-variable` for a name nothing declares, else `expression-type` | `printed-variable-ref` |
 | A `template-identifier`, on a template block or inline or on a choice, that names no template variable of base type `identifier` and cardinality `single` or `multiple` | `undeclared-variable` for a name nothing declares, else `expression-type` | `template-ref` |
 
 plate and pantry differ in three places until pantry follows. plate accepts a `format` whose
@@ -556,9 +568,10 @@ precision has no digits, such as `%.f`, and a printed variable that names the bu
 does not check.
 
 The verdict marks a template declaration of base type `duration` or `file`, of cardinality
-`record`, or with no base type, as it marks such a response or outcome declaration. Template
-processing that holds a feature the verdict marks does not run, and its template variables hold
-no value.
+`record`, or with no base type, as it marks such a response or outcome declaration. It also marks
+template processing that reads `QTI_CONTEXT` or a context variable, or that reads or sets a variable
+plate does not model. Template processing that holds a feature the verdict marks does not run, and
+its template variables hold no value.
 
 ## Server and browser
 
