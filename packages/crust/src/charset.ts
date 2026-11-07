@@ -1,5 +1,6 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The XML 1.0 section 4.3.3 label spellings (`UTF-8`, `US-ASCII`) and the closed encoder-class names (`utf8`) are this module's data, not identifiers passed to a Node encoding API. */
 import { Option } from "effect";
+import { preorder } from "#crust/tour.ts";
 import type { Child, XmlDocument } from "#crust/tree.ts";
 
 /**
@@ -127,18 +128,18 @@ const holdsAbove = (limit: number, text: string): boolean => {
 };
 
 /**
- * Test whether a node holds, in a place a character reference cannot reach, a code point above
- * `limit`: comment text, a processing instruction's target or data, an element's name or an
- * attribute's name, or an entity reference's name (a child node, or one inside an attribute's
- * value), anywhere in the element's subtree. An entity reference is written back verbatim as
- * `&name;` and a name cannot be written as a character reference.
+ * Test whether a node's own constructs hold, in a place a character reference cannot reach, a code
+ * point above `limit`: comment text, a processing instruction's target or data, an element's name
+ * or an attribute's name, or an entity reference's name (a child node, or one inside an
+ * attribute's value). An entity reference is written back verbatim as `&name;` and a name cannot be
+ * written as a character reference. A node's children are their own nodes.
  *
  * @param limit - The highest code point the label's encoder writes as a single byte.
  * @param node - The node to inspect; text runs are skipped, and an attribute's value is not read
  *   beyond the names of its entity references.
- * @returns `true` when anything inspected in the node's subtree exceeds `limit`.
+ * @returns `true` when anything the node itself holds that is inspected exceeds `limit`.
  */
-const nodeHoldsAbove = (limit: number, node: Child): boolean => {
+const ownHoldsAbove = (limit: number, node: Child): boolean => {
   if (node.kind === "element") {
     return (
       holdsAbove(limit, node.qname) ||
@@ -146,8 +147,7 @@ const nodeHoldsAbove = (limit: number, node: Child): boolean => {
         (attribute) =>
           holdsAbove(limit, attribute.qname) ||
           attribute.references.some((reference) => holdsAbove(limit, reference.name)),
-      ) ||
-      node.children.some((child) => nodeHoldsAbove(limit, child))
+      )
     );
   }
 
@@ -174,7 +174,8 @@ const nodeHoldsAbove = (limit: number, node: Child): boolean => {
  * `latin1` or `ascii` can be written as a numeric character reference in a text run or an attribute
  * value, but nowhere else, so only comment text, processing-instruction targets and data, element
  * and attribute names, and entity-reference names are inspected. An entity reference is written
- * back as `&name;`, so its name is as unwritable as a comment.
+ * back as `&name;`, so its name is as unwritable as a comment. The document is visited by its
+ * {@link preorder}, so a tree of any depth is inspected without recursion.
  *
  * @param label - The label the document was read under, as read.
  * @param doc - The document whose prolog, root subtree and epilog are inspected.
@@ -195,7 +196,7 @@ export const exportCharset = (label: string, doc: XmlDocument): string => {
   }
 
   const holdsAboveLimit = [...doc.prolog, doc.root, ...doc.epilog].some((node) =>
-    nodeHoldsAbove(limit.value, node),
+    preorder(node).some((visited) => ownHoldsAbove(limit.value, visited)),
   );
 
   return holdsAboveLimit ? "UTF-8" : label;

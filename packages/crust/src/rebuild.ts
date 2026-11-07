@@ -1,40 +1,15 @@
+import { tour } from "#crust/tour.ts";
+import type { Leaf } from "#crust/tour.ts";
 import type { Attribute, Child, Element } from "#crust/tree.ts";
-
-/**
- * A node that holds no other node.
- */
-export type Leaf = Exclude<Child, Element>;
-
-/**
- * A child still to rebuild, with the children list of its rebuilt parent.
- */
-interface Pending {
-  readonly into: Child[];
-  readonly node: Child;
-}
-
-/**
- * Put `children` on `pending` last first, each bound for `into`, so they leave it in document
- * order.
- *
- * @param pending - The walk's stack.
- * @param children - The children of one element, in document order.
- * @param into - The children list of that element's rebuilt counterpart.
- */
-const pushChildren = (pending: Pending[], children: readonly Child[], into: Child[]): void => {
-  for (const node of children.toReversed()) {
-    pending.push({ into, node });
-  }
-};
 
 /**
  * Rebuild `root` and everything below it: each element gets the attributes `attributesOf` gives
  * it, and each leaf is replaced, in place and in order, by the nodes `leaf` gives for it.
  *
- * The walk keeps its own stack, so a tree of any depth or width is rebuilt without recursion. A
- * rebuilt element's children list is filled after the element is made, in document order, because
- * a child's whole subtree leaves the stack before its next sibling does; the callbacks see only
- * the original nodes.
+ * The rebuild folds `root`'s {@link tour}, so a tree of any depth or width is rebuilt without
+ * recursion. Each open puts the element's counterpart in the children list being filled and makes
+ * the counterpart's own list the one being filled; each close returns to the list it interrupted,
+ * which the root's own close leaves at the root's. The callbacks see only the original nodes.
  *
  * @param root - The element to rebuild.
  * @param attributesOf - Gives the attributes of an element's rebuilt counterpart.
@@ -48,18 +23,21 @@ export const rebuild = (
 ): Element => {
   const children: Child[] = [];
   const rebuilt: Element = { ...root, attributes: attributesOf(root), children };
-  const pending: Pending[] = [];
-  pushChildren(pending, root.children, children);
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    const { into, node } = next;
-    if (node.kind === "element") {
+  const interrupted: Child[][] = [];
+  let into = children;
+  const steps = tour(root);
+  // The first step is the root's own open, which `rebuilt` already stands for.
+  steps.next();
+  for (const step of steps) {
+    if (step.kind === "open") {
       const below: Child[] = [];
-      into.push({ ...node, attributes: attributesOf(node), children: below });
-      pushChildren(pending, node.children, below);
+      into.push({ ...step.element, attributes: attributesOf(step.element), children: below });
+      interrupted.push(into);
+      into = below;
+    } else if (step.kind === "close") {
+      into = interrupted.pop() ?? children;
     } else {
-      for (const replacement of leaf(node)) {
-        into.push(replacement);
-      }
+      into.push(...leaf(step.node));
     }
   }
 

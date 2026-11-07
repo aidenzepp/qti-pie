@@ -6,7 +6,7 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter } from "effect";
 import { rebuild } from "#crust/rebuild.ts";
-import type { Leaf } from "#crust/rebuild.ts";
+import type { Leaf } from "#crust/tour.ts";
 import {
   caseHang,
   generatedTree,
