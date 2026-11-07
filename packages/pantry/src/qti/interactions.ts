@@ -794,15 +794,21 @@ export const PciModuleForm = relation("PciModuleForm", { element: pg.boolean, no
 export const pciModuleFamily = counted(on(PciModuleForm, "node"), fin(Interaction, "moduleForms"));
 
 /**
+ * The portable custom interaction's kind, the one element whose module a form names.
+ */
+export const pciKind = "qti-portable-custom-interaction" satisfies Kind;
+
+/**
+ * The kind of a portable custom interaction's `qti-interaction-modules` child, the element form of
+ * its module.
+ */
+export const modulesKind = "qti-interaction-modules" satisfies Kind;
+
+/**
  * The custom interaction's kind, the deprecated element a 3.0.0 document holds none of ("Custom
  * interaction version", R10-b).
  */
-export const customKind = "qti-custom-interaction";
-
-/**
- * The portable custom interaction's kind, the one element whose module a form names.
- */
-export const pciKind = "qti-portable-custom-interaction";
+const customKind = "qti-custom-interaction" satisfies Kind;
 
 /**
  * The `module` attribute of a portable custom interaction: the attribute form of its module.
@@ -816,7 +822,7 @@ const moduleAttributes = select(Attribute, (a) =>
  * element form of its module.
  */
 const moduleElements = select(Node, (n) =>
-  n.and(n.eq(n.kind, "qti-interaction-modules"), n.eq(n.parentKind, pciKind)),
+  n.and(n.eq(n.kind, modulesKind), n.eq(n.parentKind, pciKind)),
 );
 
 /**

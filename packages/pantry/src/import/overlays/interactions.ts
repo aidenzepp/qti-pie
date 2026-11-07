@@ -34,6 +34,7 @@ import {
   hotspotKinds,
   hottextKind,
   integerStartPattern,
+  modulesKind,
   nilUuid,
   pciKind,
   readAttributes,
@@ -583,7 +584,7 @@ const pciModuleFormsOf = (context: Context) => {
       forms.set(keyOf([node.id, String(false)]), { element: false, node: node.id });
     }
 
-    if (node.kind === "qti-interaction-modules" && context.facts.kindOf(node.parent) === pciKind) {
+    if (node.kind === modulesKind && context.facts.kindOf(node.parent) === pciKind) {
       forms.set(keyOf([node.parent, String(true)]), { element: true, node: node.parent });
     }
   }
