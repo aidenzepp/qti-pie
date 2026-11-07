@@ -4515,6 +4515,8 @@ ALTER TABLE "qti"."template_ref" ADD COLUMN "__identifier_gausqms2f7" "pg_catalo
 
 ALTER TABLE "qti"."test_document" ADD COLUMN "__tag_assembled_true_gg7wow7ogq" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
 
+ALTER TABLE "qti"."test_document" ADD COLUMN "__node_nv676cv335" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "root_kind" IN (300::smallint, 302::smallint) THEN "node" END) STORED;
+
 ALTER TABLE "qti"."test_document" ADD COLUMN "__package_wmb66a5rru" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "root_kind" = 300::smallint THEN "package" END) STORED;
 
 ALTER TABLE "qti"."test_document" ADD COLUMN "__path_3zs6iyyad2" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "root_kind" = 300::smallint THEN "path" END) STORED;
@@ -5014,6 +5016,8 @@ ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_key_target_index_t
 ALTER TABLE "qti"."ssml_attribute" ADD CONSTRAINT "__ssml_attribute_key_fragment_kind_value_index_rl4wbvkgc3" UNIQUE NULLS DISTINCT ("fragment", "kind", "value", "__index_carriers_pk4gvfq6b7");
 
 ALTER TABLE "qti"."table_header" ADD CONSTRAINT "__table_header_key_table_id_zjvfdq3rsz" UNIQUE NULLS DISTINCT ("__table_3gcg6j4d37", "__id_lmaiziq5mc");
+
+ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_key_node_ar4zzngp5d" UNIQUE NULLS DISTINCT ("__node_nv676cv335");
 
 ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_key_package_path_z7p5cuus5s" UNIQUE NULLS DISTINCT ("__package_wmb66a5rru", "__path_3zs6iyyad2");
 
@@ -6923,7 +6927,7 @@ ALTER TABLE "qti"."reference" ADD CONSTRAINT "__reference_fk_node_name_mfmij6556
 
 ALTER TABLE "qti"."reference" ADD CONSTRAINT "__reference_fk_node_name_document_kind_lbw7m2bjjj" FOREIGN KEY ("__node_rx3smqszrv", "__name_55zdbs4rpu", "__document_5cau2dspow", "__kind_3plysbbxy5") REFERENCES "qti"."reference_path" ("node", "name", "document", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."reference_document" ADD CONSTRAINT "__reference_document_fk_document_dsl4oq6e33" FOREIGN KEY ("document") REFERENCES "qti"."test_document" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."reference_document" ADD CONSTRAINT "__reference_document_fk_document_ti5hcpt6mf" FOREIGN KEY ("document") REFERENCES "qti"."test_document" ("__node_nv676cv335") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."reference_document" ADD CONSTRAINT "__reference_document_fk_document_pred_references_oox4fi727c" FOREIGN KEY ("document", "__pred_references_6abcllx5dz") REFERENCES "qti"."test_reference" ("document", "__index_references_sjnwzeh5ps") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7173,8 +7177,6 @@ ALTER TABLE "qti"."template_ref" ADD CONSTRAINT "__template_ref_fk_declaration_d
 
 ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_uk4oziv3x5" FOREIGN KEY ("node") REFERENCES "qti"."instance" ("__document_ch5fh3p4n7") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_2fjzxhogz7" FOREIGN KEY ("node") REFERENCES "qti"."reference_document" ("document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_package_path_root_kind_6qoyqsjydy" FOREIGN KEY ("node", "package", "path", "root_kind") REFERENCES "qti"."document" ("node", "package", "path", "root_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_tag_assembled_true_y23yuweuvt" FOREIGN KEY ("node", "__tag_assembled_true_gg7wow7ogq") REFERENCES "qti"."document" ("node", "assembled") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
@@ -7184,6 +7186,8 @@ ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_pred_n
 ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_pred_rules_makwvxbijs" FOREIGN KEY ("node", "__pred_rules_vfbblnhiag") REFERENCES "qti"."branch_rule" ("document", "__index_rules_7srobe7smi") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_pred_sites_7abk5yodfe" FOREIGN KEY ("node", "__pred_sites_62entkrpk5") REFERENCES "qti"."site_target" ("document", "__index_sites_ehadpoyrnv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_o3z4xfnvo2" FOREIGN KEY ("__node_nv676cv335") REFERENCES "qti"."reference_document" ("document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."test_flag" ADD CONSTRAINT "__test_flag_fk_node_kind_parent_kind_r2rp7c7vuw" FOREIGN KEY ("node", "kind", "parent_kind") REFERENCES "qti"."node" ("id", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

@@ -4401,6 +4401,8 @@ COMMENT ON COLUMN "qti"."template_ref"."__identifier_gausqms2f7" IS 'identifier 
 
 COMMENT ON COLUMN "qti"."test_document"."__tag_assembled_true_gg7wow7ogq" IS 'tag Document.assembled = true';
 
+COMMENT ON COLUMN "qti"."test_document"."__node_nv676cv335" IS 'node where {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-section","qti-assessment-test"]}';
+
 COMMENT ON COLUMN "qti"."test_document"."__package_wmb66a5rru" IS 'package where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}';
 
 COMMENT ON COLUMN "qti"."test_document"."__path_3zs6iyyad2" IS 'path where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}';
@@ -4900,6 +4902,8 @@ COMMENT ON CONSTRAINT "__site_target_key_target_index_targeted_by_after_gqv3qz3i
 COMMENT ON CONSTRAINT "__ssml_attribute_key_fragment_kind_value_index_rl4wbvkgc3" ON "qti"."ssml_attribute" IS 'key SsmlAttribute(fragment, kind, value, the index of the family FragmentValue.carriers)';
 
 COMMENT ON CONSTRAINT "__table_header_key_table_id_zjvfdq3rsz" ON "qti"."table_header" IS 'key TableHeader(table where {"kind":"compare","left":{"field":"document","kind":"field"},"op":"ne","right":{"field":"table","kind":"field"}}, id where {"kind":"compare","left":{"field":"document","kind":"field"},"op":"ne","right":{"field":"table","kind":"field"}})';
+
+COMMENT ON CONSTRAINT "__test_document_key_node_ar4zzngp5d" ON "qti"."test_document" IS 'key TestDocument(node where {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-section","qti-assessment-test"]})';
 
 COMMENT ON CONSTRAINT "__test_document_key_package_path_z7p5cuus5s" ON "qti"."test_document" IS 'key TestDocument(package where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, path where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}})';
 
@@ -6157,7 +6161,7 @@ COMMENT ON CONSTRAINT "__reference_fk_node_name_mfmij6556r" ON "qti"."reference"
 
 COMMENT ON CONSTRAINT "__reference_fk_node_name_document_kind_lbw7m2bjjj" ON "qti"."reference" IS 'foreign key Reference(node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, name where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, document where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}, kind where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}) to ReferencePath(node, name, document, kind)';
 
-COMMENT ON CONSTRAINT "__reference_document_fk_document_dsl4oq6e33" ON "qti"."reference_document" IS 'foreign key ReferenceDocument(document) to TestDocument(node)';
+COMMENT ON CONSTRAINT "__reference_document_fk_document_ti5hcpt6mf" ON "qti"."reference_document" IS 'foreign key ReferenceDocument(document) to TestDocument(node where {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-section","qti-assessment-test"]})';
 
 COMMENT ON CONSTRAINT "__reference_document_fk_document_pred_references_oox4fi727c" ON "qti"."reference_document" IS 'foreign key ReferenceDocument(document, pred(references)) to TestReference(document, the index of the family ReferenceDocument.references)';
 
@@ -6407,8 +6411,6 @@ COMMENT ON CONSTRAINT "__template_ref_fk_declaration_document_identifier_e5vaiaz
 
 COMMENT ON CONSTRAINT "__test_document_fk_node_uk4oziv3x5" ON "qti"."test_document" IS 'foreign key TestDocument(node) to Instance(document where {"kind":"compare","left":{"field":"start","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:0"}})';
 
-COMMENT ON CONSTRAINT "__test_document_fk_node_2fjzxhogz7" ON "qti"."test_document" IS 'foreign key TestDocument(node) to ReferenceDocument(document)';
-
 COMMENT ON CONSTRAINT "__test_document_fk_node_package_path_root_kind_6qoyqsjydy" ON "qti"."test_document" IS 'foreign key TestDocument(node, package, path, rootKind) to Document(node, package, path, rootKind)';
 
 COMMENT ON CONSTRAINT "__test_document_fk_node_tag_assembled_true_y23yuweuvt" ON "qti"."test_document" IS 'foreign key TestDocument(node, tag Document.assembled = true) to Document(node, assembled)';
@@ -6418,6 +6420,8 @@ COMMENT ON CONSTRAINT "__test_document_fk_node_pred_names_2mrutqfzok" ON "qti"."
 COMMENT ON CONSTRAINT "__test_document_fk_node_pred_rules_makwvxbijs" ON "qti"."test_document" IS 'foreign key TestDocument(node, pred(rules)) to BranchRule(document, the index of the family TestDocument.rules)';
 
 COMMENT ON CONSTRAINT "__test_document_fk_node_pred_sites_7abk5yodfe" ON "qti"."test_document" IS 'foreign key TestDocument(node, pred(sites)) to SiteTarget(document, the index of the family TestDocument.sites)';
+
+COMMENT ON CONSTRAINT "__test_document_fk_node_o3z4xfnvo2" ON "qti"."test_document" IS 'foreign key TestDocument(node where {"arg":{"field":"rootKind","kind":"field"},"kind":"in","values":["qti-assessment-section","qti-assessment-test"]}) to ReferenceDocument(document)';
 
 COMMENT ON CONSTRAINT "__test_flag_fk_node_kind_parent_kind_r2rp7c7vuw" ON "qti"."test_flag" IS 'foreign key TestFlag(node, kind, parentKind) to Node(id, kind, parentKind)';
 

@@ -1186,6 +1186,13 @@ const interpolatedDeclarations = select(DeclarationTable, (d) =>
 const writtenAttributes = select(ExpressionAttribute, (x) => x.eq(x.written, true));
 
 /**
+ * The assembled documents whose root is a test or a section, each a {@link ReferenceDocument}: an
+ * item an include places into, and the fragments its includes place, are assembled documents too
+ * (spec reading 117), and own no test references.
+ */
+const testRootDocuments = select(TestDocument, (d) => d.in(d.rootKind, testRoots));
+
+/**
  * The attribute that types each attribute-typed kind, written or not: a base value's and a test
  * variables' `base-type`, a math operator's `name`. An element holds at most one of them.
  */
@@ -1850,7 +1857,7 @@ const referenceLaws = [
     ),
   ),
   testReferenceFamily,
-  mirrors(on(ReferenceDocument, "document"), on(TestDocument, "node")),
+  mirrors(on(ReferenceDocument, "document"), on(testRootDocuments, "node")),
 
   // PlacedDocument and PlacedReference: every reference once per instance of a test's assembly.
   contained(
