@@ -5,6 +5,7 @@ import {
   drawFloat,
   drawStream,
   fnv1a32,
+  outcomeLabel,
   responseLabel,
   shuffleOrder,
   splitMix32,
@@ -233,6 +234,13 @@ describe("templateLabel and responseLabel", () => {
   it("[I-9a] join the instance, a fixed word and the item or count with U+001F, and no seed", () => {
     assert.strictEqual(templateLabel("i", "item"), "i\u001Ftemplate\u001Fitem");
     assert.strictEqual(responseLabel("i", 2), "i\u001Fresponse\u001F2");
+  });
+});
+
+describe("outcomeLabel", () => {
+  it("[T-9] joins the instance, the word outcome and the decimal run number with U+001F, and no seed", () => {
+    assert.strictEqual(outcomeLabel("i", 2), "i\u001Foutcome\u001F2");
+    assert.strictEqual(outcomeLabel("i", 12), "i\u001Foutcome\u001F12");
   });
 });
 

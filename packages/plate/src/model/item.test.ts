@@ -2895,6 +2895,54 @@ describe("buildItem", () => {
   );
 
   it.effect(
+    "[I-1] [I-2] holds each file and record declaration's identifier, base type and cardinality in unheld, and no modelled one",
+    () =>
+      Effect.gen(function* holdsUnheldDeclarations() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "UPLOAD", "file", "single"),
+              declaration("qti-response-declaration", "RESPONSE", "string", "single"),
+              el("qti-outcome-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "DETAIL"),
+              ]),
+              declaration("qti-outcome-declaration", "TYPED", "integer", "record"),
+              declaration("qti-outcome-declaration", "FILES", "file", "multiple"),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+              templateDeclaration("ROW", "record"),
+              templateDeclaration("T", "single", "integer"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.unheld,
+          new Map([
+            [
+              "UPLOAD",
+              { baseType: Option.some("file"), cardinality: "single", identifier: "UPLOAD" },
+            ],
+            ["DETAIL", { baseType: Option.none(), cardinality: "record", identifier: "DETAIL" }],
+            [
+              "TYPED",
+              { baseType: Option.some("integer"), cardinality: "record", identifier: "TYPED" },
+            ],
+            [
+              "FILES",
+              { baseType: Option.some("file"), cardinality: "multiple", identifier: "FILES" },
+            ],
+            ["ROW", { baseType: Option.none(), cardinality: "record", identifier: "ROW" }],
+          ]),
+        );
+        assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);
+        assert.deepStrictEqual([...built.outcomes.keys()], ["SCORE"]);
+        assert.deepStrictEqual([...built.templates.keys()], ["T"]);
+      }),
+  );
+
+  it.effect(
     "[I-1] reads a response's qti-default-value through the value model, none without",
     () =>
       Effect.gen(function* readsResponseDefault() {
