@@ -146,8 +146,9 @@ describe("the test helpers", () => {
   // - by its verdicts and tables (`judge`, `documentBreaches`, `lawsOf`): the XSD differential
   //   (spec-alignment slice A2), the corpus prewitness, the folds' law model, shred's held roots
   //   under a strict wildcard (C13, which a kept root must leave with no law broken), the database
-  //   witnesses of `Node` and identity, and the importer's overlays, which read what the oracle
-  //   reads;
+  //   witnesses of `Node` and identity, the importer's overlays, which read what the oracle
+  //   reads, and the assembly generator's write programs, which `readProgram` builds only where
+  //   the oracle's codec reads every document, and over exactly those;
   // - by its law catalog (`lawNames`, `nodeLawNames`, `ruleOf`, `lawSources`, `contentLawOf`):
   //   each W5 schema module's test checks that every law the module states is an oracle law with
   //   a rule, so a renamed law breaks the build there as well.
@@ -180,6 +181,7 @@ describe("the test helpers", () => {
       "test/document-roots.oracle.test.ts: #pantry/test/oracle.ts",
       "test/fixtures.mathml.oracle.test.ts: #pantry/test/oracle.ts",
       "test/fixtures.ssml.test.ts: #pantry/test/oracle.ts",
+      "test/gen/assembly.compile.test.ts: #pantry/test/oracle.ts",
       "test/gen/xdm.ts: #pantry/test/oracle.ts",
       "test/locate.ts: #pantry/test/oracle.ts",
       "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
@@ -201,6 +203,7 @@ describe("the test helpers", () => {
       "test/probe.ts: #pantry/test/oracle.ts",
       "test/processing-verdicts.oracle.test.ts: #pantry/test/oracle.ts",
       "test/restored.oracle.test.ts: #pantry/test/oracle.ts",
+      "test/statistic-dates.oracle.test.ts: #pantry/test/oracle.ts",
       "test/xsd.corpus.test.ts: #pantry/test/oracle.ts",
     ]);
   });

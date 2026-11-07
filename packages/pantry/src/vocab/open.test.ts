@@ -265,16 +265,12 @@ describe("vocab/open.ts", () => {
   it.effect(
     "classifies every name by its namespace, its spelling and its element's namespace, as reading 13 and D2 say",
     (ctx) =>
-      // Oracle: the specification as a checker, reading 13's, D2's and XML Schema Part 1 3.2.7's
-      // decision table (`specified`), written apart from `openClassOf`.
-      // Bound: exhaustive over the box, every local name of 1 to 2 plain letters, `data-` and 0 to 2
-      // more, and each declared name, under each of 5 namespaces, on each of 3 host namespaces,
-      // foreign or not: 137 names, 4,110 cases.
       Effect.gen(function* classification() {
         const exhausted = yield* searched(
           ctx,
           exhaust(
             {
+              box: "every local name of 1 to 2 plain letters, data- and 0 to 2 more, and each declared name, under each of 5 namespaces, on each of 3 host namespaces, foreign or not: 137 names, 4,110 cases",
               caseHang,
               coverage: requiredInSpace<(typeof classifications)[number]>(classifications),
               generator: (source) => ({
@@ -285,6 +281,10 @@ describe("vocab/open.ts", () => {
               }),
               limit: classificationBox * namespaces.length * hosts.length * 2,
               literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "reading 13's, D2's and XML Schema Part 1 3.2.7's decision table (specified), written apart from openClassOf",
+              },
               suite: "vocab/open-class-of",
             },
             ({ foreign, host, local, namespace }, c) =>
@@ -984,6 +984,7 @@ describe.skipIf(Option.isSome(absence))(
               ctx,
               exhaust(
                 {
+                  box: `every (version, kind) xmllint probes, each with its attribute candidates, one per class and spelling: ${byKind.length} probes`,
                   caseHang,
                   coverage: requiredInSpace<"admitted" | "refused" | "ruled">([
                     "admitted",
@@ -993,6 +994,10 @@ describe.skipIf(Option.isSome(absence))(
                   generator: int(0, byKind.length - 1),
                   limit: byKind.length,
                   literal: Formatter.format,
+                  oracle: {
+                    kind: "second-implementation",
+                    name: "libxml2's schema validator over the pinned XSDs, but the rulings that set its verdict aside (rulingOf)",
+                  },
                   suite: "vocab/open-attributes-xmllint",
                 },
                 (index, c) =>
@@ -1049,6 +1054,7 @@ describe.skipIf(Option.isSome(absence))(
               ctx,
               exhaust(
                 {
+                  box: `every (version, kind) xmllint probes, each with its element wildcard's candidates: ${byKind.length} probes`,
                   caseHang,
                   coverage: requiredInSpace<"foreign" | "kind" | "refused" | "ruled">([
                     "foreign",
@@ -1059,6 +1065,10 @@ describe.skipIf(Option.isSome(absence))(
                   generator: int(0, byKind.length - 1),
                   limit: byKind.length,
                   literal: Formatter.format,
+                  oracle: {
+                    kind: "second-implementation",
+                    name: "libxml2's schema validator over the pinned XSDs, as processContents reads, but reading 6",
+                  },
                   suite: "vocab/open-elements-xmllint",
                 },
                 (index, c) =>
@@ -1255,11 +1265,16 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
           ctx,
           exhaust(
             {
+              box: `every kind of each version a model states, and each foreign kind, against the target, absent, another and the XML namespace: ${classCells.length} cells`,
               caseHang,
               coverage: requiredInSpace<(typeof classSituations)[number]>(classSituations),
               generator: int(0, classCells.length - 1),
               limit: classCells.length,
               literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "XML Schema 1.0 Part 1 §3.10.4's namespace constraints (constraintAdmits) over the leaf's wildcards, with spec readings 2, 61, 81 and 90",
+              },
               suite: "vocab/open-namespace-classes",
             },
             (index, c) =>

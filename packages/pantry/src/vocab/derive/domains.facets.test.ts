@@ -266,28 +266,33 @@ const numberOf = (facets: readonly Facet[], name: FacetName): Option.Option<bigi
 
 /**
  * Whether a domain admits a value: its compiled pattern, read exactly, matches it. The compiler is
- * the second implementation the restriction is judged by.
+ * the second implementation the restriction is judged by. The domain is compiled once for every
+ * value it judges: a domain over the name classes compiles to a pattern of thousands of characters,
+ * and a case judges every value of a pool under each of its domains.
  *
  * @param domain - The domain.
- * @param value - The value, as written.
- * @returns Whether it is admitted, or the compiler's refusal.
+ * @returns Whether a value, as written, is admitted, or the compiler's refusal.
  */
-const admits = (domain: Domain, value: string): Result.Result<boolean, string> =>
+const admitterOf = (domain: Domain): Result.Result<(value: string) => boolean, string> =>
   Result.map(
     Result.mapError(compile(domain, "exact"), (refused) => refused.message),
-    ({ pattern }) => new RegExp(pattern, "u").test(value),
+    ({ pattern }) => {
+      const regex = new RegExp(pattern, "u");
+
+      return (value: string) => regex.test(value);
+    },
   );
 
 /**
- * Which values of a pool a domain admits, by {@link admits}. A domain the compiler refuses must be
- * refused as empty, which a valid restriction may be, and then admits none.
+ * Which values of a pool a domain admits, by {@link admitterOf}. A domain the compiler refuses must
+ * be refused as empty, which a valid restriction may be, and then admits none.
  *
  * @param domain - The domain.
  * @param pool - The values.
  * @returns Whether each is admitted, in pool order.
  */
 const admittedOf = (domain: Domain, pool: readonly string[]): readonly boolean[] =>
-  Result.match(admits(domain, ""), {
+  Result.match(admitterOf(domain), {
     onFailure: (reason) => {
       assert.match(
         reason,
@@ -297,7 +302,7 @@ const admittedOf = (domain: Domain, pool: readonly string[]): readonly boolean[]
 
       return pool.map(() => false);
     },
-    onSuccess: () => pool.map((value) => Result.getOrElse(admits(domain, value), () => false)),
+    onSuccess: (admits) => pool.map((value) => admits(value)),
   });
 
 /**
@@ -419,9 +424,10 @@ const stringStep =
       () => "preserve",
     );
     const stricter = whiteSpaces.slice((strictness.get(held) ?? 0) + 1);
-    const admitted = poolOf.string.filter((value) =>
-      Result.getOrElse(admits(domain, value), () => false),
-    );
+    const admitted = Result.match(admitterOf(domain), {
+      onFailure: () => [],
+      onSuccess: (admits) => poolOf.string.filter((value) => admits(value)),
+    });
 
     return [
       ...facets,
@@ -565,6 +571,10 @@ describe("vocab/derive/domains.ts, restriction by facets", () => {
             draw: drawn(restrictionCase),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML Schema Part 2 section 4.3's facet rules, each step's read apart from the deriver (stepAdmits)",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -1158,6 +1168,10 @@ describe("vocab/derive/domains.ts, length facets", () => {
             draw: drawn(lengthChain),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML Schema 1.0 Part 2's length-facet rules over the whole chain (brokenBy), and each facet read on its own",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,

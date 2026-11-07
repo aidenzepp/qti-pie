@@ -936,6 +936,10 @@ describe("package/zip.ts readZip, and package/read.ts over a .zip", () => {
               draw: drawn(archiveOf),
               kept: [],
               literal: Formatter.format,
+              oracle: {
+                kind: "second-implementation",
+                name: "the container model (verdictOf), an independent reading of APPNOTE 6.3.10 and IMS CP 1.2",
+              },
               runs: 400,
               shrink: completeShrink,
               steerEvery: 16,
@@ -1083,6 +1087,10 @@ describe("package/zip.ts readZip under a drawn budget", () => {
               draw: drawn(budgetCaseOf),
               kept: [],
               literal: Formatter.format,
+              oracle: {
+                kind: "second-implementation",
+                name: "the budget model (breachesOf) of readZip's documented budgets, and the container model within them",
+              },
               runs: 300,
               shrink: completeShrink,
               steerEvery: 16,
@@ -1201,6 +1209,10 @@ describe("package/zip.ts writeZip", () => {
               draw: drawn(entriesOf),
               kept: [],
               literal: Formatter.format,
+              oracle: {
+                kind: "second-implementation",
+                name: "this file's own central directory walk against writeZip's documented container, and readZip ∘ writeZip = the entries by path",
+              },
               runs: 200,
               shrink: completeShrink,
               steerEvery: 16,

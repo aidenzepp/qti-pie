@@ -176,6 +176,7 @@ describe("the ancestry grammar against the reference model", () => {
         ctx,
         exhaust(
           {
+            box: "every path of at most 3 of the 27 flag-relevant kinds below the document node: 20,440 paths",
             caseHang: Duration.minutes(5),
             coverage: requiredInSpace<"admitted" | "refused" | "self-banned admitted">([
               "admitted",
@@ -185,6 +186,10 @@ describe("the ancestry grammar against the reference model", () => {
             generator: array(element(flagged), { max: 3, min: 0 }),
             limit: 50_000,
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the reference model of the flag sets, written from the QTI readings by the kinds' categories (referenceAdmits)",
+            },
             suite: "grammar/ancestry/paths",
           },
           (path, c) =>

@@ -268,9 +268,6 @@ describe("readXml resolves every namespace as saxes does unseeded", () => {
   it.effect(
     `and reads back the tree, by the generator's namespace model and XML's information set, for swarmed trees of elements, text, CDATA, comments and processing instructions, each within ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}: ${CASES} rotating cases a run beside the witnesses`,
     (ctx) =>
-      // Oracle: a universal one, the round trip read ∘ write, each side compared in the information set's
-      // form (`infosetOf`), which is the identity on an element-only tree; and saxes with nothing
-      // seeded as a second implementation of the names.
       // Bound: the drawn trees, each with its own swarm over `roundTripFeatures` and bounds within
       // CASE_BOUNDS; the witnesses reach every situation of `roundTripSituations`.
       searched(
@@ -286,6 +283,10 @@ describe("readXml resolves every namespace as saxes does unseeded", () => {
             draw: drawn(generatedTree(CASE_BOUNDS, roundTripFeatures)),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "universal",
+              name: "read ∘ write = id in the information set's form (infosetOf), and saxes unseeded resolving the generator's names",
+            },
             runs: CASES,
             shrink: completeShrink,
             steerEvery: 16,

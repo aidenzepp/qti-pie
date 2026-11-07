@@ -419,6 +419,10 @@ describe("census", () => {
           draw: drawn(array(statementOf, { max: 12, min: 0 })),
           kept: [],
           literal: Formatter.format,
+          oracle: {
+            kind: "second-implementation",
+            name: "the statements' own counts (modelOf), and each target read off the statements (targetsOf)",
+          },
           runs: 300,
           shrink: completeShrink,
           steerEvery: 16,

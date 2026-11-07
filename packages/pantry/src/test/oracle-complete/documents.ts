@@ -160,23 +160,6 @@ export const documentMutations = {
     ]),
     over: "package",
   },
-  // Calendar date (the usage data's DateDType): a statistic's lastUpdated that is no day of the
-  // Gregorian calendar: a 13th or 0th month, a 30th of February, a 29th of February in a common
-  // year, a 31st of a 30-day month, or the year 0000.
-  "Calendar date": {
-    mutate: oneOf([
-      drawnIn(
-        "usage.xml",
-        (text) => (source) =>
-          replaceOnce(
-            text,
-            'lastUpdated="2026-11-06"',
-            `lastUpdated="${source.draw(element(["2026-13-01", "2024-02-30", "2025-02-29", "2026-04-31", "0000-01-01", "2026-00-10"]))}"`,
-          ),
-      ),
-    ]),
-    over: "package",
-  },
   // Declaration base type (§4.5.3): a variable of single, multiple or ordered cardinality declared
   // with no base type, or a record declared with one.
   "Declaration base type": {

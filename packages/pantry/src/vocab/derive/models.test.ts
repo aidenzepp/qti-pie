@@ -36,6 +36,7 @@ import type { Edit, MatchScope, Word } from "#pantry/test/gen/vocab.ts";
 import { vpFmt } from "#pantry/test/vp-fmt.ts";
 import {
   loadModels,
+  loadWorld,
   loadWorldDocuments,
   modelsOf,
   renderModels,
@@ -539,6 +540,7 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/models.ts over the pinned 
             ctx,
             exhaust(
               {
+                box: `every (version, kind) of the IR, each probed empty, with text, with white space, and with its covering words and their one-step edits: ${byKind.length} probes`,
                 caseHang,
                 coverage: requiredInSpace<
                   "admitted" | "edit" | "empty" | "refused" | "text" | "whitespace" | "word"
@@ -546,6 +548,10 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/models.ts over the pinned 
                 generator: int(0, byKind.length - 1),
                 limit: byKind.length,
                 literal: Formatter.format,
+                oracle: {
+                  kind: "second-implementation",
+                  name: "libxml2's schema validator over the pinned XSDs",
+                },
                 suite: "vocab/derive-models-xmllint",
               },
               (index, c) =>
@@ -574,12 +580,11 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/models.ts over the pinned 
     );
 
     cached.effect(
-      "derives the same models whatever order the documents are read in",
+      "derives the committed leaf's models whatever order each version's documents are read in",
       (ctx) =>
         Effect.gen(function* permuted() {
-          const read = yield* Documents;
-          const { documents, world } = yield* Effect.fromResult(worldOf(read));
-          const expected = yield* Effect.fromResult(modelsOf(world, documents));
+          const newer = yield* Effect.fromResult(worldOf(yield* Documents));
+          const older = yield* loadWorld("3.0.0");
 
           return yield* searched(
             ctx,
@@ -588,21 +593,45 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/models.ts over the pinned 
                 caseHang,
                 concurrency: 1,
                 coverage: noCoverage,
-                draw: drawn(shuffled(documents, { max: documents.length, min: documents.length })),
+                draw: drawn((source) => ({
+                  newer: source.draw(
+                    shuffled(newer.documents, {
+                      max: newer.documents.length,
+                      min: newer.documents.length,
+                    }),
+                  ),
+                  older: source.draw(
+                    shuffled(older.documents, {
+                      max: older.documents.length,
+                      min: older.documents.length,
+                    }),
+                  ),
+                })),
                 kept: [],
-                literal: (order) =>
-                  Formatter.format(order.map(([, document]) => document.root.qname)),
+                literal: (orders) =>
+                  Formatter.format({
+                    newer: orders.newer.map(([, document]) => document.root.qname),
+                    older: orders.older.map(([, document]) => document.root.qname),
+                  }),
+                oracle: {
+                  kind: "specification",
+                  name: "the committed leaf (contentModels), which the regenerate test ties to the read order",
+                },
                 runs: 4,
                 shrink: completeShrink,
                 steerEvery: 16,
                 suite: "vocab/derive-models-order",
               },
-              (order) =>
+              (orders) =>
                 Effect.sync(() => {
-                  const models = Result.getOrThrow(modelsOf(world, order));
-
                   assert.isTrue(
-                    Equal.equals(rowsOf([["3.0.1", models]]), rowsOf([["3.0.1", expected]])),
+                    Equal.equals(
+                      rowsOf([
+                        ["3.0.0", Result.getOrThrow(modelsOf(older.world, orders.older))],
+                        ["3.0.1", Result.getOrThrow(modelsOf(newer.world, orders.newer))],
+                      ]),
+                      contentModels,
+                    ),
                   );
                 }),
             ),
@@ -637,11 +666,16 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/models.ts over the pinned 
             ctx,
             exhaust(
               {
+                box: `every content model of the IR and each of its particles: ${contentModels.length} models`,
                 caseHang,
                 coverage: requiredInSpace<"cited">(["cited"]),
                 generator: int(0, contentModels.length - 1),
                 limit: contentModels.length,
                 literal: Formatter.format,
+                oracle: {
+                  kind: "specification",
+                  name: "the pinned XSD files' own text, line by line, read apart from the deriver (startsConstruct)",
+                },
                 suite: "vocab/derive-models-sources",
               },
               (index, c) =>

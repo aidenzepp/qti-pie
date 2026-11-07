@@ -157,6 +157,10 @@ describe("unshred", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "universal",
+              name: "the round trip: a run split in two reads back as the unsplit tree",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -244,6 +248,10 @@ describe("unshred", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "universal",
+              name: "the round trip, in the export label crust's exportCharset decides",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -308,6 +316,10 @@ describe("unshred", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "a character reference carries any character of text or an attribute value, and a comment, instruction, doctype or name must fit the label's encoder",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,

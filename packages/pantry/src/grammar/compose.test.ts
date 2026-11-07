@@ -414,6 +414,7 @@ describe("spec reading 90, through the codec", () => {
           ctx,
           exhaust(
             {
+              box: `every (version, kind) a document root reaches whose element that version's Schematron extension rules cover, under every variant, ${cases.length}`,
               caseHang: Duration.seconds(30),
               coverage: requiredInSpace<ExtensionVariant | "read" | "refused">([
                 ...extensionVariants,
@@ -423,6 +424,10 @@ describe("spec reading 90, through the codec", () => {
               generator: int(0, cases.length - 1),
               limit: cases.length,
               literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "spec reading 90 restated over the leaf's attribute declarations, with readings 47 and 10",
+              },
               suite: "grammar/compose/reading-90",
             },
             (index, c) =>

@@ -254,7 +254,6 @@ describe("closed relations against a naive tuple-set model", () => {
   it.effect(
     "refuse exactly the rows the model refuses, by the first reason it finds, and look every point up as it does",
     (ctx) =>
-      // Oracle: a second implementation, a naive tuple-set model of the relation.
       // Bound: up to 3 key fields of up to 3 handles, 2 payload fields, 4 rows and one variant a
       // case.
       searched(
@@ -267,6 +266,10 @@ describe("closed relations against a naive tuple-set model", () => {
               sense: notesOnly,
             }),
             draw: drawn(drawnRelation),
+            oracle: {
+              kind: "second-implementation",
+              name: "a naive tuple-set model of the relation (built)",
+            },
             runs: 600,
             suite: "grammar/closed/model",
           },
@@ -332,8 +335,6 @@ describe("closed relations against a naive tuple-set model", () => {
 
 describe("rosters and value fields", () => {
   it.effect("code each handle by its position, and refuse a handle listed twice", (ctx) =>
-    // Oracle: the specification as a checker: a roster's code is a handle's position, and a
-    // repeated handle has no single one.
     // Bound: up to 5 handles over 4.
     searched(
       ctx,
@@ -345,6 +346,10 @@ describe("rosters and value fields", () => {
             sense: notesOnly,
           }),
           draw: drawn(array(element(["a", "b", "c", "d"] as const), { max: 5, min: 0 })),
+          oracle: {
+            kind: "specification",
+            name: "a roster's code is a handle's position, and a repeated handle has no single one",
+          },
           runs: 300,
           suite: "grammar/closed/roster",
         },
@@ -372,7 +377,6 @@ describe("rosters and value fields", () => {
   );
 
   it.effect("hold a column's distinct values in value order", (ctx) =>
-    // Oracle: a second implementation, a set of the column sorted by value.
     // Bound: up to 6 values of -3 to 3.
     searched(
       ctx,
@@ -384,6 +388,7 @@ describe("rosters and value fields", () => {
             { cases: 300, sense: notesOnly },
           ),
           draw: drawn(array(int(-3, 3), { max: 6, min: 0 })),
+          oracle: { kind: "second-implementation", name: "a set of the column sorted by value" },
           runs: 300,
           suite: "grammar/closed/value-field",
         },

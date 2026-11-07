@@ -255,7 +255,6 @@ export const precedence = [
   "lom-identifier",
   "lom-title",
   "lom-learning-resource-type",
-  "calendar",
   "selection-bounds",
   "selection-required",
   "structure-identifier",
@@ -491,11 +490,6 @@ export const lawTable = {
     rule: "branch-target",
     source:
       "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
-  },
-  "Calendar date": {
-    rule: "calendar",
-    source:
-      "the usage data XSD usagedata/imsqti_usagedatav3p0_v1p0.xsd:127-131 (DateDType, xs:date restricted by the pattern [0-9]{4}-[0-9]{2}-[0-9]{2}), the type of lastUpdated on CategorizedStatisticDType (:161) and OrdinaryStatisticDType (:198), with XML Schema 1.0 Part 2 §3.2.9.1's lexical space (no year 0000, the Gregorian month lengths and the leap rule) under whiteSpace collapse: exactly grizzle's lexical(date), 0001 to 9999 with no timezone, between XML whitespace (Q5.12)",
   },
   "Choice bounds": {
     rule: "choice-bounds",
@@ -1192,7 +1186,7 @@ export const lawTable = {
   "value domain": {
     rule: "attribute-lexical",
     source:
-      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash)",
+      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash); and a usage statistic's lastUpdated, the usage data's DateDType (usagedata/imsqti_usagedatav3p0_v1p0.xsd:127-131, xs:date restricted by the pattern [0-9]{4}-[0-9]{2}-[0-9]{2}), the month lengths and the leap rule included (XML Schema 1.1 Part 2 §3.3.9, Day-of-month Representations), which StatisticDate.day restates as grizzle's lexical(date), whose pattern makes the generated date's cast total (Q5.12)",
   },
   "ws arm": {
     rule: "text-copy",
@@ -2672,12 +2666,16 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
-  ...patternLaws([[lexical(date), "Calendar date"]]),
+  // `day` restates `lastUpdated`, a `DateDType`, whose language the attribute's value domain
+  // states: xs:date's lexical space, the month lengths and the leap rule included, under its
+  // pattern. Its type, lexical(date), is that language, and its pattern law is the value domain's,
+  // with its rule, so one cause names one rule (the orchestrator's ruling of 2026-11-06).
+  ...patternLaws([[lexical(date), "value domain"]]),
   // `date` casts `day`, which lexical(date)'s pattern, the row above, holds to the days 0001-01-01
   // to 9999-12-31 the cast reads total: a day outside it is refused by that law as the statement
   // casts it into its column, before PostgreSQL computes `date`, so no row breaks this one. Its
-  // value is the calendar day `lastUpdated` names, which "Calendar date" states exists.
-  [generatedOf(StatisticDate, "date"), "Calendar date"],
+  // value is the calendar day `lastUpdated` names, which the value domain states exists.
+  [generatedOf(StatisticDate, "date"), "value domain"],
   [
     containedIn(
       sideOf(

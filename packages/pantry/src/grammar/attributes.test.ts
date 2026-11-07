@@ -1402,9 +1402,8 @@ describe("The spec readings", () => {
   it.effect(
     "read 135, searched: generated MIME values and lists, swarm-weighted over nine character classes, judged as the independent reader judges them, each rule of the reader reached alone",
     (ctx) =>
-      // Oracle: `mediaTypeFault` and `isMediaTypeList`, the RFC 2045 reader, not the pattern. The
-      // search must reach each rule the reader tells apart broken alone, the inputs nearest a valid
-      // one, of a value (`mediaTypeNotes`) and of a list (`mediaTypeListNotes`).
+      // The search must reach each rule the reader tells apart broken alone, the inputs nearest a
+      // valid one, of a value (`mediaTypeNotes`) and of a list (`mediaTypeListNotes`).
       searched(
         ctx,
         explore(
@@ -1418,6 +1417,10 @@ describe("The spec readings", () => {
             draw: drawn(mediaTypeCase),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "RFC 2045 §5.1's media type read code point by code point (mediaTypeFault, isMediaTypeList), not the pattern",
+            },
             runs: 800,
             shrink: completeShrink,
             steerEvery: 16,

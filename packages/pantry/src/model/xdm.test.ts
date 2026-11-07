@@ -133,6 +133,10 @@ describe("flatten", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the model the generator writes as it places each node and closes each subtree",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -187,6 +191,10 @@ describe("flatten", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "a pre-order numbering of the generator's model from each node's parent and slot alone",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -258,6 +266,10 @@ describe("flatten", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "plan §1.3's N1 and N2, Node's key, and the attribute ids flatten's contract numbers after the nodes",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,

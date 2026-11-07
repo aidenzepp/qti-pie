@@ -616,6 +616,10 @@ describe("references", () => {
             draw: drawn(toyCase),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the drawn facets read as a naive model of each relation, and each planted fault's refusal (refusalOf)",
+            },
             runs: 400,
             shrink: completeShrink,
             steerEvery: 16,

@@ -452,6 +452,7 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/declarations.ts over the p
             ctx,
             exhaust(
               {
+                box: `every (version, kind) of the leaf, each probed with its required, declared and undeclared attributes: ${byKind.length} probes`,
                 caseHang,
                 coverage: requiredInSpace<
                   | "admitted"
@@ -471,6 +472,10 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/declarations.ts over the p
                 generator: int(0, byKind.length - 1),
                 limit: byKind.length,
                 literal: Formatter.format,
+                oracle: {
+                  kind: "second-implementation",
+                  name: "libxml2's schema validator over the pinned XSDs, but its departure under a lax ##other (isOracleDeparture)",
+                },
                 suite: "vocab/derive-declarations-xmllint",
               },
               (index, c) =>

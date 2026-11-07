@@ -7,6 +7,7 @@
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
+import type { Oracle } from "@grizzle/testing/explore";
 import { noCoverage, required } from "@grizzle/testing/features";
 import type { Coverage } from "@grizzle/testing/features";
 import { array, element, int, string } from "@grizzle/testing/gen";
@@ -155,15 +156,21 @@ const outcomeOf = <A>(outcome: Result.Result<A, { readonly _tag: string }>): str
   Result.isSuccess(outcome) ? "succeeded" : outcome.failure._tag;
 
 /**
- * This file's budget for a search over `generator`.
+ * This file's budget for a search over `generator`, checked against `oracle`.
  */
-const search = <S, F extends string>(suite: string, generator: Gen<S>, coverage: Coverage<F>) => ({
+const search = <S, F extends string>(
+  suite: string,
+  generator: Gen<S>,
+  coverage: Coverage<F>,
+  oracle: Oracle,
+) => ({
   caseHang,
   concurrency: 1,
   coverage,
   draw: drawn(generator),
   kept: [],
   literal: Formatter.format,
+  oracle,
   runs: 300,
   shrink: completeShrink,
   steerEvery: 16,
@@ -176,13 +183,18 @@ describe("test/verdicts.ts", () => {
     (ctx) =>
       searched(
         ctx,
-        explore(search("pantry/verdicts/round-trip", rowsOf(0), noCoverage), (rows) =>
-          Effect.gen(function* roundTrip() {
-            const text = yield* renderVerdicts(rows);
-
-            assert.strictEqual(text, formatted(rows));
-            assert.deepStrictEqual(yield* parseVerdicts(text), rows.toSorted(byFile));
+        explore(
+          search("pantry/verdicts/round-trip", rowsOf(0), noCoverage, {
+            kind: "specification",
+            name: "the format as AGENTS.md states it, written by formatted, and parseVerdicts ∘ renderVerdicts = the rows sorted by file",
           }),
+          (rows) =>
+            Effect.gen(function* roundTrip() {
+              const text = yield* renderVerdicts(rows);
+
+              assert.strictEqual(text, formatted(rows));
+              assert.deepStrictEqual(yield* parseVerdicts(text), rows.toSorted(byFile));
+            }),
         ),
       ),
   );
@@ -195,6 +207,10 @@ describe("test/verdicts.ts", () => {
           "pantry/verdicts/render-refusals",
           rowsWithFault,
           required<RowFault>(ROW_FAULTS, { cases: 300, sense: notesOnly }),
+          {
+            kind: "specification",
+            name: "AGENTS.md's format: rows break it exactly by the fault drawn into one of them",
+          },
         ),
         ({ fault, rows }, c) =>
           Effect.gen(function* refusals() {
@@ -217,6 +233,10 @@ describe("test/verdicts.ts", () => {
           "pantry/verdicts/parse-refusals",
           textWithFault,
           required<TextFault>(TEXT_FAULTS, { cases: 300, sense: notesOnly }),
+          {
+            kind: "specification",
+            name: "AGENTS.md's format: a text breaks it exactly by the fault drawn into it, and a valid one reads back as its rows sorted by file",
+          },
         ),
         ({ fault, rows, text }, c) =>
           Effect.gen(function* refusals() {
@@ -247,6 +267,10 @@ describe("test/verdicts.ts", () => {
             min: 1,
           }),
           noCoverage,
+          {
+            kind: "specification",
+            name: "AGENTS.md's path, packages/pantry/verdicts/<tarball basename>.tsv, resolved by node:path",
+          },
         ),
         (segments) =>
           Effect.sync(() => {

@@ -344,6 +344,10 @@ describe("coveredIn, over generated Schematron", () => {
             draw: drawn(rulesGen),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "a naive model of the reading rules over the drawn rules: a refused context refuses the schema, and each other data-extension rule names its element once, at its first rule's line",
+            },
             runs: 400,
             shrink: completeShrink,
             steerEvery: 16,

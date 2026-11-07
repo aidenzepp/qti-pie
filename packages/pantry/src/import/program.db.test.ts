@@ -390,7 +390,7 @@ const metadataVerdicts: readonly (readonly [FixtureName, readonly string[]])[] =
   ["usage3-typed", []],
   ["usage3-padded", []],
   ["usage3-float-padded", []],
-  ["usage3-feb-30", ["calendar", "attribute-lexical"]],
+  ["usage3-feb-30", ["attribute-lexical"]],
   ["usage3-integer-float", ["typed-copy"]],
 ];
 
@@ -1018,8 +1018,9 @@ describe.skipIf(!hasLease)(
 
       for (const [name, rules] of metadataVerdicts) {
         it.effect(`gives ${name} Q5.12's verdict`, () =>
-          // Oracle: PostgreSQL, Q5.12's laws over a whole package (lom-identifier, lom-title,
-          // calendar) beside every other law, as Q5.12 states each fixture's verdict.
+          // Oracle: PostgreSQL, Q5.12's laws over a whole package (lom-identifier, lom-title, and
+          // lastUpdated's value domain) beside every other law, as Q5.12 states each fixture's
+          // verdict.
           Effect.gen(function* metadataVerdict() {
             const outcome = yield* Effect.result(importPackage(yield* materialize(name)));
 

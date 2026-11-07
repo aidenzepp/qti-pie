@@ -79,6 +79,10 @@ describe("package/record.ts", () => {
             draw: drawn(listingOf),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "Node's Buffer, a second base64 encoder (RFC 4648 §4), and Uint8Array.fromBase64's round trip",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,

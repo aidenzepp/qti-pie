@@ -547,7 +547,6 @@ describe("Admission projected from content models", () => {
   it.effect(
     "admits exactly the elements a particle that may occur names, and never a maxOccurs 0 particle's, through compose",
     (ctx) =>
-      // Oracle: a second implementation, XML Schema Part 1's rule as a naive walk (`mayHold`).
       // Bound: particle trees of depth 2, groups of up to 3 particles.
       searched(
         ctx,
@@ -562,6 +561,10 @@ describe("Admission projected from content models", () => {
             draw: drawn((source) => numbered(source.draw(treeGen(2)))),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "XML Schema Part 1's rule as a naive particle walk (mayHold)",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -625,8 +628,6 @@ describe("Admission through compose", () => {
   it.effect(
     "refuses a triple two vocabularies both state, and keeps one stated once",
     (ctx) =>
-      // Oracle: the specification as a checker: a closed relation's key (E4) holds one row per
-      // (version, parent, child), whichever vocabulary states it.
       // Bound: up to 6 rows over 4 kinds, one restated.
       searched(
         ctx,
@@ -652,6 +653,10 @@ describe("Admission through compose", () => {
             })),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "a closed relation's key (E4) holds one row per (version, parent, child), whichever vocabulary states it",
+            },
             runs: 200,
             shrink: completeShrink,
             steerEvery: 16,

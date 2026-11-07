@@ -625,7 +625,6 @@ const tiers: readonly (readonly Rule[])[] = [
     "map-key-unique",
     "lom-identifier",
     "lom-title",
-    "calendar",
     "selection-bounds",
     "selection-required",
     "structure-identifier",
