@@ -3117,8 +3117,8 @@ const parameterValues = holding({
 });
 
 /**
- * Give the children of the `object` in a body of {@link parameterDocument}: the paragraph's one
- * element.
+ * Give the children of the `object` in a body of {@link parameterDocument} or
+ * {@link containerParameterDocument}: the paragraph's one element.
  *
  * @param body The body, as the model reads it or as a redaction leaves it.
  * @returns The object's children.
@@ -3178,6 +3178,116 @@ const parameterNoticeAt = (node: BodyNode | undefined): Unsupported =>
     ? noticeOf("param", node.path)
     : assert.fail("The object holds fewer params.");
 
+/**
+ * Construct a `param-variable` `qti-template-declaration` with no declared default.
+ *
+ * @param identifier The variable's identifier.
+ * @param baseType Its base type.
+ * @param cardinality Its cardinality.
+ * @returns The element.
+ */
+const unsetParameterDeclaration = (identifier: string, baseType: string, cardinality: string) =>
+  el("qti-template-declaration", [
+    attr("base-type", baseType),
+    attr("cardinality", cardinality),
+    attr("identifier", identifier),
+    attr("param-variable", "true"),
+  ]);
+
+/**
+ * Construct a `qti-base-value` for each lexical value of one base type.
+ *
+ * @param baseType The base type.
+ * @param lexicals The values, as written, in order.
+ * @returns The elements.
+ */
+const baseValues = (baseType: string, lexicals: readonly string[]) =>
+  lexicals.map((lexical) =>
+    el("qti-base-value", [attr("base-type", baseType)], [sourceText(lexical)]),
+  );
+
+/**
+ * An item whose template processing runs, with a paragraph holding an `object` whose parameters
+ * name three `param-variable` template variables that hold no single value: `list` names `LIST`,
+ * an ordered integer container, `set` names `SET`, a multiple identifier container, and `none`
+ * names `NONE`, a single integer the processing sets to NULL.
+ */
+const containerParameterDocument = doc(
+  "item.xml",
+  el(
+    "qti-assessment-item",
+    [
+      attr("identifier", "container-parameters"),
+      attr("time-dependent", "false"),
+      attr("title", "Params"),
+    ],
+    [
+      unsetParameterDeclaration("LIST", "integer", "ordered"),
+      unsetParameterDeclaration("SET", "identifier", "multiple"),
+      unsetParameterDeclaration("NONE", "integer", "single"),
+      el(
+        "qti-template-processing",
+        [],
+        [
+          el(
+            "qti-set-template-value",
+            [attr("identifier", "LIST")],
+            [el("qti-ordered", [], baseValues("integer", ["1", "2", "3"]))],
+          ),
+          el(
+            "qti-set-template-value",
+            [attr("identifier", "SET")],
+            [el("qti-multiple", [], baseValues("identifier", ["A", "B"]))],
+          ),
+          el("qti-set-template-value", [attr("identifier", "NONE")], [el("qti-null", [])]),
+        ],
+      ),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            "p",
+            [],
+            [
+              el(
+                "object",
+                [attr("data", "applet.html"), attr("type", "text/html")],
+                [
+                  ...(
+                    [
+                      ["list", "LIST"],
+                      ["set", "SET"],
+                      ["none", "NONE"],
+                    ] as const
+                  ).map(([name, value]) =>
+                    el("param", [
+                      attr("name", name),
+                      attr("value", value),
+                      attr("valuetype", "DATA"),
+                    ]),
+                  ),
+                  sourceText("Applet"),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
+ * The template values of an attempt of {@link containerParameterDocument}: `LIST` the ordered
+ * integers 1, 2 and 3, `SET` the multiple identifiers A and B, and `NONE` NULL.
+ */
+const containerParameterValues = holding({
+  LIST: orderedIntegers([1n, 2n, 3n]),
+  NONE: nullOf("integer", "single"),
+  SET: multipleOf("A", "B"),
+});
+
 describe("redactItem on param-variable parameters", () => {
   it.effect(
     "[I-5] gives a param whose value names a param-variable template variable that variable's value from the record, which render writes: an integer by %i, a float by %G, a point x then y, a pair and a directed pair as their identifiers, a boolean as true or false (R§4.4)",
@@ -3195,6 +3305,33 @@ describe("redactItem on param-variable parameters", () => {
 
         assert.deepStrictEqual(parametersOf(objectChildren(expanded.body)), expandedParameters);
         assert.deepStrictEqual(written, expandedParameters);
+        assert.deepStrictEqual(expanded.notices, []);
+      }),
+  );
+
+  it.effect(
+    "[I-5] gives a param whose param-variable template variable holds a container its members joined by ; and one holding NULL the empty string, which render writes (G-R2, pending: the printed variable's defaults)",
+    () =>
+      Effect.gen(function* passesContainersAndNull() {
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(containerParameterDocument, tables)),
+        );
+        const expanded = redact(accepted, containerParameterValues);
+        const configuration = yield* configure({});
+        const rendered = yield* Effect.fromResult(render(expanded, configuration, { instance }));
+        const written: readonly (readonly [unknown, unknown])[] = elementsOf(
+          parseHtml(rendered.html),
+        )
+          .filter((element) => element.tag === "param")
+          .map((element) => [element.attrs["name"], element.attrs["value"]]);
+        const passed = [
+          ["list", "1;2;3"],
+          ["set", "A;B"],
+          ["none", ""],
+        ] as const;
+
+        assert.deepStrictEqual(parametersOf(objectChildren(expanded.body)), passed);
+        assert.deepStrictEqual(written, passed);
         assert.deepStrictEqual(expanded.notices, []);
       }),
   );
