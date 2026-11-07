@@ -569,13 +569,13 @@ describe("qti/metadata.ts, the usage typed value by the law oracle", { timeout: 
   it.effect("breaks Usage typed value on no usage-data fixture the importer accepts", () =>
     // Oracle: the specification as a checker, reading 105: a `ud:value` that writes `baseType`
     // and no `fieldIdentifier` is untyped text, so `usage3-integer-float` (`0.87` under integer,
-    // outside a record) is accepted; the oracle's own copy of the law still types it (p15-32.2
-    // moves it to the same test), so that fixture is not judged here until it does.
-    // Bound: `usage3` (no value writes a baseType), `usage3-typed` (24 typed values outside a
+    // outside a record) is accepted, as the oracle judges it.
+    // Bound: `usage3-integer-float`, `usage3` (no value writes a baseType), `usage3-typed` (24 typed values outside a
     // record) and `usage3-float-padded` (a padded float outside a record).
     Effect.gen(function* usageOracle() {
       for (const [name, breaks] of [
         ["usage3", 0],
+        ["usage3-integer-float", 0],
         ["usage3-typed", 0],
         ["usage3-float-padded", 0],
       ] as const satisfies readonly (readonly [FixtureName, number])[]) {

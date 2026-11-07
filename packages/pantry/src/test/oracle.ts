@@ -4026,6 +4026,27 @@ const mapKeyValueOf = (baseType: string, key: string): string => {
 };
 
 /**
+ * Read a map key as the value its entry matches a response by (Map key, reading 98): a string key
+ * whose own entry's `case-sensitive` is not true folds to its ASCII lowercase (grizzle offers no
+ * Unicode fold), and never meets a key of the other kind, so a case-sensitive `York` beside a
+ * default `york` are two keys; every other key is {@link mapKeyValueOf}'s.
+ *
+ * @param baseType - The mapping's base type.
+ * @param key - The key, as written.
+ * @param caseSensitive - The entry's collapsed `case-sensitive`, none when unwritten.
+ * @returns The value's text, `folded` and the lowercase key where the entry matches without regard
+ *   to case, and {@link mapKeyValueOf}'s text otherwise.
+ */
+const matchedKeyOf = (
+  baseType: string,
+  key: string,
+  caseSensitive: Option.Option<string>,
+): string =>
+  baseType === "string" && !Option.exists(caseSensitive, (form) => form === "true" || form === "1")
+    ? `folded ${key.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase())}`
+    : mapKeyValueOf(baseType, key);
+
+/**
  * Compile a built-in XSD type's lexical space as an attribute's typed value is read: exactly, its
  * whitespace class applied to nothing (reading 7), the pattern's anchors dropped so a list can
  * repeat it.
@@ -4376,8 +4397,9 @@ const overlayLaws: readonly ((
   },
   (node, overlay) =>
     // Reading 105: a usage value that names its base type holds a lexical form of it, read as
-    // element content is (reading 7); one that names none is untyped text.
-    node.kind === "ud:value"
+    // element content is (reading 7), where it forms part of a record, that is, writes a
+    // fieldIdentifier (usage data binding §2.6.5.1); one outside a record is untyped text.
+    node.kind === "ud:value" && Option.isSome(valueOf(overlay.view, node.id, "fieldIdentifier"))
       ? Option.toArray(valueOf(overlay.view, node.id, "baseType")).flatMap((baseType) => {
           const text = stringValueOf(overlay.view, node);
 
@@ -4582,7 +4604,11 @@ const overlayLaws: readonly ((
         const lexical: readonly Finding[] = typedAttributeHolds(baseType, key)
           ? []
           : [{ keys: { baseType, value: key }, law: "Typed attribute value" }];
-        const value = mapKeyValueOf(baseType, key);
+        const value = matchedKeyOf(
+          baseType,
+          key,
+          valueOf(overlay.view, id, "case-sensitive").pipe(Option.map(collapsed)),
+        );
         if (!seen.has(value)) {
           seen.add(value);
 
