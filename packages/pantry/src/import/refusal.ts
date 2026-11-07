@@ -1460,6 +1460,22 @@ const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
 ]);
 
 /**
+ * The two containments that judge a `cn`'s part count: its `(type, parts)` in {@link CnParts}, and
+ * each part's `(type, part, form)` in {@link CnForm}. A `cn` of the wrong part count is a `cn` of
+ * the wrong form, "MathML cn form" as the oracle names it, so {@link writtenLaws} names them and the
+ * MathML group leaves them out.
+ */
+const cnCountLaws: readonly Law[] = [
+  containedIn(sideOf("MathCn", "type", "parts"), sideOf("CnParts", "type", "parts")),
+  containedIn(
+    sideOf("CnPartText", "type", "part", "form"),
+    sideOf("CnForm", "type", "part", "form"),
+  ),
+];
+
+const cnCountIdentities: ReadonlySet<string> = new Set(cnCountLaws.map(lawIdentity));
+
+/**
  * The laws written out row by row, each as its outcome names it, with its name in
  * {@link lawTable}: the tree, the families, the folds, the keys and the containments of each
  * `src/qti/` module, in the module order of the plan's §C, after the text types' patterns, each
@@ -3084,6 +3100,9 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ),
     "MathML head qualifier",
   ],
+  // A cn's part count and a part's place are the oracle's "MathML cn form" (a wrong part count is
+  // a cn of the wrong form), so the group leaves them out as it leaves the head qualifier.
+  ...cnCountLaws.map((law) => [law, "MathML cn form"] as const),
   [primaryKeyOf("MathApply", "node"), "E1 derived"],
   [primaryKeyOf("MathArgument", "node"), "E1 derived"],
   [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
@@ -3252,8 +3271,9 @@ const lawsOfStatement = (statement: Statement): readonly Law[] =>
  *   "Quotation punctuation".
  * - **MathML** (`mathml.ts`, reading 2): each statement of its four families is a restatement, "E1
  *   derived", and a row of {@link writtenLaws} names a law of a group otherwise: the apply family's
- *   head qualifier containment ("MathML head qualifier"; its check is "MathML arity"), which the
- *   group leaves out, so that every law a group holds keeps the group's name.
+ *   head qualifier containment ("MathML head qualifier"; its check is "MathML arity") and a cn's
+ *   two part count containments ("MathML cn form"), which the group leaves out, so that every law a
+ *   group holds keeps the group's name.
  */
 export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
   [testOverlayLaws, "Test overlay"],
@@ -3266,7 +3286,14 @@ export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = 
   [mappingLaws, "Mapping overlay"],
   [expressionLaws, "E1 derived"],
   [quotationLaws, "E1 derived"],
-  [mathmlLaws.filter((statement) => statement !== headQualifierLaw), "E1 derived"],
+  [
+    mathmlLaws.filter(
+      (statement) =>
+        statement !== headQualifierLaw &&
+        !lawsOfStatement(statement).some((law) => cnCountIdentities.has(lawIdentity(law))),
+    ),
+    "E1 derived",
+  ],
 ];
 
 /**

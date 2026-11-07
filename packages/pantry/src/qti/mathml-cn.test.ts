@@ -90,10 +90,21 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
     assert.strictEqual(lawTable["MathML cn form"].rule, "attribute-lexical");
   });
 
-  it("reads every containment and the family of the module as 'E1 derived', the form check being named by its own name", () => {
-    // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds.
+  it("reads the count containments as 'MathML cn form' and every other containment and the family as 'E1 derived', the form check being named by its own name", () => {
+    // Oracle: the statements are named by `lawNameOf`'s own table, as `refusal.test.ts` holds. A
+    // part count and a part's place are judged by the oracle's cn form law, as an attribute's form.
     assert.isAbove(ownLaws.length, 0);
-    assert.deepStrictEqual([...new Set(ownLaws.map(([, name]) => name))], ["E1 derived"]);
+    assert.deepStrictEqual([...new Set(ownLaws.map(([, name]) => name))].toSorted(), [
+      "E1 derived",
+      "MathML cn form",
+    ]);
+    assert.deepStrictEqual(
+      ownLaws.filter(([, name]) => name === "MathML cn form").map(([law]) => lawIdentity(law)),
+      [
+        "contained MathCn(type, parts) in CnParts(type, parts)",
+        "contained CnPartText(type, part, form) in CnForm(type, part, form)",
+      ],
+    );
     assert.isTrue(ownLaws.some(([law]) => lawIdentity(law).startsWith("counted family")));
 
     for (const [law, name] of ownLaws) {
