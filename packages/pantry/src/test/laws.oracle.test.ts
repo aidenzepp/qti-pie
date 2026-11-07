@@ -29,6 +29,7 @@ import {
   asi,
   base,
   breachesOf,
+  contextPci,
   edit,
   grammar,
   item,
@@ -520,15 +521,6 @@ const choiceInteraction = `<qti-choice-interaction response-identifier="RESPONSE
  */
 const graphicGapMatch = (area: string): string =>
   `<qti-graphic-gap-match-interaction response-identifier="RESPONSE"><object data="a.png" type="image/png"/><qti-gap-img identifier="G" match-max="1"><object data="g.png" type="image/png"/></qti-gap-img><qti-associable-hotspot identifier="H" match-max="1" ${area}/></qti-graphic-gap-match-interaction>`;
-
-/**
- * A portable custom interaction that reads one context variable.
- *
- * @param identifier - The context variable it names.
- * @returns The interaction.
- */
-const contextPci = (identifier: string): string =>
-  `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-context-variable identifier="${identifier}"/><qti-interaction-markup/></qti-portable-custom-interaction>`;
 
 /**
  * A portable custom interaction that passes one template variable to its module (§7.38.1).

@@ -2828,11 +2828,10 @@ export const expressionLawsByName = {
         v.not(v.in(v.rootKind, [itemKind, testKind])),
         v.ne(v.resolution, "unresolved"),
         // A braced reference is a string attribute's: where it names no variable it is a string
-        // value, not a reference to one nothing declares (reading R15-k; information model §2.7.2
-        // and §9.3.4: "if a string attribute appears to be a reference to a template or outcome
-        // variable but there is no variable with the given name it should be treated simply as
-        // string value"). A numeric attribute's stand-in is bare, and an unresolved one stays
-        // refused.
+        // value, not a reference to one nothing declares (reading R15-k; information model §9.3.4:
+        // "if a string appears to be a reference to a template or outcome variable but there is no
+        // variable with the given name it should be treated simply as string value"). A numeric
+        // attribute's stand-in is bare, and an unresolved one stays refused.
         v.and(
           v.eq(v.rootKind, itemKind),
           v.eq(VariableReference.at("spelling", v.kind, v.attribute), "braced"),

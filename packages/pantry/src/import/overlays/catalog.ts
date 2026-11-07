@@ -10,10 +10,11 @@
  * of them (`catalogLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
+import { Option } from "effect";
 import { booleanTrue } from "#pantry/grammar/domains.ts";
-import { attributeRows, GoverningOf, ValueIdentity } from "#pantry/grammar/install.ts";
+import { attributeRows, ValueIdentity } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldOf, governorOf, ownContext } from "#pantry/import/fold.ts";
 import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -70,17 +71,6 @@ const referencing: ReadonlySet<string> = new Set(
 );
 
 /**
- * The installed `GoverningOf`, keyed `version kind governs`: the governor that reads an element's
- * attributes.
- */
-const governorAt: ReadonlyMap<string, string> = new Map(
-  GoverningOf.rows.map(({ governor, governs, kind, version }) => [
-    `${version} ${kind} ${governs}`,
-    governor,
-  ]),
-);
-
-/**
  * Decide whether an element's `data-catalog-idref` holds an IDREF token, so "Idref target" reads
  * it: the schema checks it as an IDREF under its element's governor, and its value is not empty or
  * blank, which holds no token.
@@ -90,11 +80,11 @@ const governorAt: ReadonlyMap<string, string> = new Map(
  * @returns Whether it is a reference.
  */
 const holdsReference = (element: NodeRow<Composed>, lexical: string): boolean => {
-  const governor = governorAt.get(`${element.version} ${element.kind} ${element.governs}`);
+  const governor = governorOf(element.version, element.kind, element.governs);
 
   return (
-    governor !== undefined &&
-    referencing.has(`${element.version} ${governor}`) &&
+    Option.isSome(governor) &&
+    referencing.has(`${element.version} ${governor.value}`) &&
     collapse(lexical) !== ""
   );
 };

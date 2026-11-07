@@ -39,6 +39,7 @@ import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/orac
 import {
   base,
   breachesOf,
+  contextPci,
   edit,
   item,
   itemResource,
@@ -502,20 +503,6 @@ describe("qti/interactions.ts, Custom interaction version", () => {
     assert.strictEqual(ruleOf("Custom interaction version"), "admission");
   });
 });
-
-/**
- * A portable custom interaction that reads one context variable, with the markup it holds; the
- * variable follows the markup, as the content model orders them.
- *
- * @param identifier - The context variable it names.
- * @param markup - What its `qti-interaction-markup` holds, as written.
- * @returns The interaction's text.
- */
-const contextPci = (identifier: string, markup = ""): string =>
-  pciOf(
-    { attribute: true, element: true },
-    `<qti-interaction-markup>${markup}</qti-interaction-markup><qti-context-variable identifier="${identifier}"/>`,
-  );
 
 /**
  * The laws a package breaches, in the base item with its choice interaction replaced.
