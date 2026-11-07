@@ -1605,9 +1605,9 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   - expected: invariant-rejected 23503 on the containment's key at `O`'s INSERT, with generate drafting that key
     without DEFERRABLE;
   - control: the containment turned to `M` → `O` is accepted.
-- **Workaround in qti-pie:** both laws are stated member → owner (`a6d23fcc`), which is equivalent under the count and
-  E1. The guard `src/test/write-order.test.ts` restates the deferral rule over Qti's statements. It comes out once
-  grizzle fixes the gap.
+- **Workaround in qti-pie (removed in `5eb05874`):** both laws were stated member → owner (`a6d23fcc`), which is
+  equivalent under the count and E1, and the guard `src/test/write-order.test.ts` restated the deferral rule over Qti's
+  statements.
 - **Confirmed by lane N2** at grizzle `27c4cd2` and at its newest `main`, `dec8ab3`
   (`dec8ab32289d91d0190c676e6232ca89a74697a2`), with the same results in
   `~/.cache/gr8des/n2/repro/deferral-owner-cycle/run-27c4cd2.out` and `run-dec8ab3.out`:
@@ -1619,14 +1619,17 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
     2b51d625…)`).
   - **Anchors:** `model.ts:1050-1051`'s comment, "A family axis fixes its own deferral and is no edge of the cycle
     graph…", is the stated reason owner axes are left out.
-- **Status:** handed to grizzle-c5, whose lane F takes it as a defect, with a generated-search guard and this case
-  kept. Nothing is filed. The workaround, `a6d23fcc`, is being removed under the no-workaround ruling (below).
+- **Status:** handed to grizzle-c5, whose lane F takes it as a defect, with a generated-search guard and this case kept.
+  Nothing is filed. The workaround, `a6d23fcc`, was removed in `5eb05874` (below).
 - **Fixed in `e9227af`** (`e9227afd2fa183bba52d74829b38aa52e973cef0`), by grizzle's report: a cycle through an owner
   axis is now deferred or refused, and this case is kept in grizzle's `test/pg/write/deferral/owner-cycle.test.ts`. Lane
   N2 confirmed it downstream (below). qti-pie's repin to `e9227af` is held on the `UnorderableStratum` entry below. By
-  the operator's ruling that qti-pie carries no workaround, `a6d23fcc` is being removed now: DBT's next commit restores
-  the owner-into-member laws and deletes `src/test/write-order.test.ts`, so the LOM-language imports are red at
-  `1bf3dbb` until the repin onto `e9227af`. The removal commit is recorded here when it lands.
+  the operator's ruling that qti-pie carries no workaround, the workaround was removed in `5eb05874`: the laws are owner
+  into member again, `contained(select(LomString, languages = 1)(node, language), LomStringLanguage(node, language))`
+  and its `AssessmentObject` → `ObjectLang` twin; `src/test/write-order.test.ts` is deleted, since grizzle states the
+  rule itself (`e9227af` defers or refuses a cycle through an owner axis); and the `_init` is regenerated,
+  `20261107041337_init`, snapshot `b903bdfd`. Until repin F brings `e9227af`, the LOM-language imports, `sharedMedia`
+  and `metaData`, are refused with 23503 at `1bf3dbb`.
 - **Confirmed downstream by lane N2** at `e9227af`, from tarballs packed from a `git archive` of it (grizzle
   `d1a32154…`, engine `e3978234…`), in `~/.cache/gr8des/n2/repro/deferral-owner-cycle/run-e9227af.out`:
   - **case:** now `accepted`, where at `27c4cd2` and `dec8ab3` it was `invariant-rejected` with 23503 at `O`'s insert.
@@ -1690,9 +1693,30 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
     and refused with 23503.
 - **At `e9227af`:** `AriaRange` → `AriaValue` and the owner axis are deferred, because the owner axis counts in the
   cycle search and `AriaElement` → `AriaRange` → `AriaValue` → `AriaElement` is a cycle. The acyclic form is ordered by
-  the joint schedule. Standalone reproduction: `~/.cache/gr8des/integration/grizzle-repros/ar-order/` (case, cycle,
-  control).
-- **qti-pie's workaround:** none. The import needs the repin, which `e9227af`'s next entry blocks.
+  the joint schedule, so both forms are fixed there. Standalone reproduction:
+  `~/.cache/gr8des/integration/grizzle-repros/ar-order/` (case, cycle, control), and lane N2's SQL run of it,
+  `~/.cache/gr8des/n2/repro/ar-order-n2.out`, where the immediate key refuses `r`'s insert with `Key (node, v)=(…0001,
+  10) is not present in table "m"`.
+- **Classification:** confirmed, a grizzle defect, fixed in `e9227af`.
+- **qti-pie:** no workaround. The import needs the repin, which the `UnorderableStratum` entry below blocks.
+
+### `InteractionAttribute`'s immediate key into `SectionTemplateName` refuses a fragment's template reference at import (the owner-axis ordering defect, fixed upstream in `e9227af`; lane OL)
+
+- **Seen:** `package.packaging`'s `rtest01-template-reference` (N2's log `src_import_package.packaging.test.ts.log:527`).
+  It adds `<qti-template-inline template-identifier="NONE">` to `rtest01`'s shared fragment, which the oracle rightly
+  refuses under `template-ref`. The database reports a `LocateDisagreement` instead, under `contained
+  InteractionAttribute(node, name, kind, document, value) in SectionTemplateName(…)`.
+- **The rows are right:** `readProgram` writes one `InteractionAttribute` `{template-identifier, qti-template-inline,
+  document rtest01-fragment.xml, value NONE}` and the matching `SectionTemplateName` `{identifier "NONE"}`, so the
+  containment holds. The schema's source (`fragmentReferenceOf(references.template)`) and the host's
+  (`sectionNamesOf(…)`) select the same attributes.
+- **Cause:** `SectionTemplateName` is a counted member of `sectionTemplateNameFamily`, owned by `ReferringDocument`.
+  The key into it, `__interaction_attribute_fk_node_name_kind_document_5huu3vxx2z`
+  (`20261107041337_init/02-structure.sql:6354`), has no DEFERRABLE, and neither has
+  `__section_template_ref_fk_node_attribute_kind_…` (`:7068`). A family's members are inserted after their stratum's
+  statements, so the immediate key is checked before its row exists: the `AriaRange` class, above.
+- **Classification:** a grizzle defect, fixed in `e9227af` by grizzle's report. It is not re-run yet, since that needs
+  the repin, which the `UnorderableStratum` entry below blocks. No schema change and no workaround.
 
 ### A ChangeSet chain of more than about 94 inserts is TS2589 at `e9227af` (grizzle defect, type layer)
 
@@ -1715,7 +1739,7 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 - **Status:** relayed to grizzle-c5, with a guard asked for: a 300-insert chain that typechecks in linear time, with
   a planted nested variant shown failing. Not filed.
 
-### `UnorderableStratum` on qti-pie's import ChangeSet at `e9227af` (under triage)
+### `UnorderableStratum` on qti-pie's import ChangeSet at `e9227af`, whose cycle is not real (grizzle defect, confirmed; lane AR)
 
 - **What happens:** `e9227af`'s single schedule, in which plain and family statements share one order, refuses qti-pie's
   152-insert stratum:
@@ -1723,14 +1747,48 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   a cycle of 52 statements through the count of `ReferringDocument`, the insert of `SectionScope` and the update of
   `SectionTemplateRef` (R87's compile at `e9227af`,
   `~/.cache/gr8des/integration/grizzle-repros/chain-depth/clean-f-r87.out`). At `1bf3dbb` the same stratum compiled.
-- **Lane AR's reduction:** a 4-relation reproduction (`~/.cache/gr8des/integration/grizzle-repros/ar-order/`,
-  `unorderable`) fails at `e9227af` and compiles at `1bf3dbb`. The preliminary cause is that the joint schedule
-  treats a family's in-place update, which sets only hidden index columns, as an addition for every reference from
-  its relation (`schedule.ts:253`), and chains every family statement in one total order (`schedule.ts:159`). The
-  import's ChangeSet is in the author login's workload (`src/qti/logins.ts:54`, `importWork`), so at `e9227af`
-  `grizzle generate` refuses at stage generate, as the reproduction's generate does.
-- **Status:** under triage, not yet through the six-step gate. Lane AR is computing whether the immediate keys alone
-  make a cycle, and grizzle-c5 has the text. It blocks repin F.
+- **The cycle is not real** (lane AR, checked at `e9227af`, still `origin/main`):
+  - The NOT DEFERRABLE foreign keys among the cycle's 31 relations number 4 in `e9227af`'s own draft, and they form no
+    cycle among relations: `AssembledLang` → `DocumentGenerals`, `AssembledReference` → `TestReference`, `SectionScope`
+    → `ReferringDocument`, and `SectionTemplateRef` → `SectionScope` (its owner axis, ON UPDATE CASCADE). The `1bf3dbb`
+    draft has 10, among them the owner axes of `Site`, `VariableRef` and `XmlLang` and `DocumentLang`'s key, which
+    `e9227af` defers.
+  - The 52-statement cycle has 2 key edges and 50 chain edges. The key edges run from the count of `ReferringDocument`
+    to the insert of `SectionScope` (its key over the counts), then to the update of `SectionTemplateRef` (the owner
+    axis). The chain edges come from `write/frontend/schedule.ts:158-163`, where each family statement follows the
+    previous one. That makes one total order over every family of the stratum (deletes, then updates in place, then
+    counts, then inserts; `compile.ts:1745-1786`, `familyNodesOf`), so an update of `SectionTemplateRef` precedes the
+    count of `ReferringDocument`, a family it has no key to.
+  - The evidence: `e9227af`'s scheduler run on the import ChangeSet, patched at load time, with a Tarjan search for
+    cyclic components (`~/.cache/gr8des/integration/grizzle-repros/ar-order/pantry-schedule/`, `sched.out` and
+    `immediate-fks.out`). As shipped, it finds 1 component of 90 statements, and the ChangeSet is refused. With the chain
+    kept only between related family statements (the same relation, or an owner and its member) and every key edge
+    kept, it finds 0 components, and the ChangeSet compiles. With update and count edges kept only where their columns
+    meet the key's and the total chain kept, it is still refused, with 64 statements.
+  - The standalone 4-relation reproduction is `ar-order` `unorderable`: it fails at `e9227af` and compiles at
+    `1bf3dbb`.
+- **Classification:** a grizzle defect, introduced by `e9227af`'s joint schedule, the fix for the `AriaRange` class.
+- **Status:** relayed to grizzle-c5's lane F as a hotfix with a guard. Nothing is filed. qti-pie carries no workaround:
+  `ChangeSet.sequence`, which the refusal suggests, would split the import into strata, and is ruled out. It blocks
+  repin F.
+
+### A nested write's dedupe signature concatenates every member's full content text, so a lawful write past V8's string limit dies in the host (grizzle defect, confirmed; lane N2)
+
+- **Checked at:** `1bf3dbb` and grizzle's newest `main`, `e9227af`, with identical results.
+- **Cause:**
+  - `nestedRows`' signature is a `textsKey` of every reached row's identity (`write/family/nesting.ts:326-332`);
+  - `textsKey` concatenates `${length}:${text}` and throws `RangeError` at line 53 once the string passes V8's
+    `MAX_STRING_LENGTH`, 536,870,888 (`write/family/draw.ts:50-56`);
+  - the call path is `normalize.ts:498`, then `bind.ts:182`, then `adapter/apply/run.ts:239`, all before any SQL.
+- **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/texts-key/` (`run-1bf3dbb.out`, `run-e9227af.out`):
+  - **case:** 7 members of 80,000,000 characters each, 560,000,000 together: `failure: RangeError: Invalid string
+    length`, `at textsKey (@bjornpagen/grizzle-engine/dist/write/family/draw.js:53:30)`, from `nestedRows`
+    (`nesting.js:330:21`), `normalizeChangeSet` (`normalize.js:498:20`) and `bindWrite` (`bind.js:182:24`);
+  - **control:** 6 members of 80,000,000 characters, 480,000,000 together: `outcome: accepted`.
+- **Effect in qti-pie:** `src/import/package.large.db.test.ts`, 13 bulk entries of 64 MiB each, dies in the host.
+- **Status:** relayed to grizzle-c5 under the operator's standing order: a root fix (a digest or a structural
+  identity), a guard search past the limit, a cost gate, a planted concatenation, and this case kept. Nothing is filed,
+  and qti-pie carries no workaround.
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
@@ -1830,7 +1888,7 @@ write program compiles, 152 inserts and none refused (lane R87), so `Node`'s nes
   - No workaround is taken. Making either family counted would change the model, which is the operator's call.
   - grizzle's nesting fix closes it, in `f66c05b`.
 
-### 3. A key over a field PostgreSQL generates (grizzle defect, schema-only refusal at write time)
+### 3. A key over a field PostgreSQL generates (a grizzle defect at `64f0427`, a limit since `f66c05b`)
 
 - **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/generated-unique-key/`.
 - **Case:** `relation.generated("R", { id, text }, ["id"], (r) => ({ value: generated(pg.integer, Compute.cast(r.text,
@@ -1844,14 +1902,17 @@ write program compiles, 152 inserts and none refused (lane R87), so `Node`'s nes
   addition at `:1291-1293`.
 - **Docs:** the README says only that a primary key holds no generated field (`README.md:1367`). It says nothing of
   another key over one.
-- **Classification:** a grizzle defect of the same kind as 1, a schema-only refusal first reached at a write.
+- **Classification:** at `64f0427`, a grizzle defect of the same kind as 1, a schema-only refusal first reached at a
+  write. Since `f66c05b`, grizzle refuses a key over a generated field at schema compile by its own design, with a
+  typed refusal, so it is a documented limit, not a defect. If the operator or grizzle later calls the refusal itself
+  a defect, it becomes one again.
 - **qti-pie:** `key(on(MapKeyFloat, "mapping", "value"))` was over the generated cast.
-  - **Workaround:** the host writes `value` (`floatValueOf` in `src/import/overlays/mapping.ts`), and `E1_derived`
-    holds it to the same cast (`src/qti/mapping.ts`, `e255b860`). The key therefore judges the same values.
+  - **The shape grizzle requires** since `f66c05b`'s compile-time refusal of a key over a generated field: a
+    host-written value proved by an E1 check. The host writes `value` (`floatValueOf` in
+    `src/import/overlays/mapping.ts`), and `E1_derived` holds it to the same cast (`src/qti/mapping.ts`, `e255b860`).
+    The key therefore judges the same values.
   - `floatValueOf` is held to IEEE 754 roundTiesToEven of the key's exact value, computed in BigInt arithmetic, over
     2,000 keys (`src/import/overlays/mapping.test.ts`).
-  - The workaround stays: `f66c05b` refuses such a key at compile, so a key over a host-written value that a check
-    proves is the shape that compiles.
 
 ### The guard qti-pie keeps
 

@@ -125,7 +125,7 @@ CREATE TABLE "qti"."assessment_object" (
   CONSTRAINT "__assessment_object_key_document_identifier_skdybq7ygm" UNIQUE NULLS DISTINCT ("document", "identifier"),
   CONSTRAINT "__assessment_object_key_document_lang_tag_k42ax3lghj" UNIQUE NULLS DISTINCT ("document", "lang_tag"),
   CONSTRAINT "__assessment_object_key_document_title_value_wn4bju2lh3" UNIQUE NULLS DISTINCT ("document", "title_value"),
-  CONSTRAINT "__assessment_object_key_node_langs_lang_2ejz2f26ad" UNIQUE NULLS DISTINCT ("node", "langs", "lang")
+  CONSTRAINT "__assessment_object_key_node_langs_75gejw3sm5" UNIQUE NULLS DISTINCT ("node", "langs")
 );
 
 CREATE TABLE "qti"."attribute" (
@@ -1108,8 +1108,8 @@ CREATE TABLE "qti"."lom_string" (
   "node" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__lom_string_pk_j6pxaair7j" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("language" = ''::"pg_catalog"."text" OR "languages" = 1::bigint) IS TRUE),
-  CONSTRAINT "__lom_string_key_node_languages_language_wfurt3o53w" UNIQUE NULLS DISTINCT ("node", "languages", "language"),
-  CONSTRAINT "__lom_string_key_node_language_7q3mu42lfi" UNIQUE NULLS DISTINCT ("node", "language")
+  CONSTRAINT "__lom_string_key_node_language_7q3mu42lfi" UNIQUE NULLS DISTINCT ("node", "language"),
+  CONSTRAINT "__lom_string_key_node_languages_744lmleckw" UNIQUE NULLS DISTINCT ("node", "languages")
 );
 
 CREATE TABLE "qti"."lom_string_language" (
@@ -2655,6 +2655,10 @@ ALTER TABLE "qti"."assembled_reference" ADD COLUMN "__pred_readings_lijgqabw6j" 
 
 ALTER TABLE "qti"."assembled_reference" ADD COLUMN "__pred_segments_lgkpa2wrsx" bigint GENERATED ALWAYS AS (CASE WHEN "segments" > 0::bigint THEN "segments"::numeric - (1::bigint)::numeric END) STORED;
 
+ALTER TABLE "qti"."assessment_object" ADD COLUMN "__lang_vscshxypk3" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "langs" = 1::bigint THEN "lang" END) STORED;
+
+ALTER TABLE "qti"."assessment_object" ADD COLUMN "__node_6wcvqzkni5" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "langs" = 1::bigint THEN "node" END) STORED;
+
 ALTER TABLE "qti"."assessment_object" ADD COLUMN "__pred_langs_yw2uicm4pt" bigint GENERATED ALWAYS AS (CASE WHEN "langs" > 0::bigint THEN "langs"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__tag_mode_written_true_ggm6ceqedn" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
@@ -3568,6 +3572,10 @@ ALTER TABLE "qti"."lom_resource_type_source" ADD COLUMN "__tag_parent_kind_lom_l
 ALTER TABLE "qti"."lom_resource_type_source" ADD COLUMN "__node_jr3yepcmfz" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN NOT "pg_catalog"."btrim"("pg_catalog"."regexp_replace"("text", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) IN (''::"pg_catalog"."text", 'LOMv1.0'::"pg_catalog"."text") THEN "node" END) STORED;
 
 ALTER TABLE "qti"."lom_string" ADD COLUMN "__tag_kind_lom_string_y5pieaaf6y" smallint GENERATED ALWAYS AS (371::smallint) STORED NOT NULL;
+
+ALTER TABLE "qti"."lom_string" ADD COLUMN "__language_cbidl4nwet" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "languages" = 1::bigint THEN "language" END) STORED;
+
+ALTER TABLE "qti"."lom_string" ADD COLUMN "__node_najnjopqcl" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "languages" = 1::bigint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."lom_string" ADD COLUMN "__pred_languages_i7e7rxcgke" bigint GENERATED ALWAYS AS (CASE WHEN "languages" > 0::bigint THEN "languages"::numeric - (1::bigint)::numeric END) STORED;
 
@@ -5861,6 +5869,8 @@ ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_nod
 
 ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_node_pred_langs_ouoqrg6ecx" FOREIGN KEY ("node", "__pred_langs_yw2uicm4pt") REFERENCES "qti"."object_lang" ("node", "__index_langs_c35xn3ubfv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_node_lang_baxofpld5p" FOREIGN KEY ("__node_6wcvqzkni5", "__lang_vscshxypk3") REFERENCES "qti"."object_lang" ("node", "lang") MATCH SIMPLE;
+
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_entities_rssqiasrww" FOREIGN KEY ("node", "id", "__pred_entities_nvm5iwtucq") REFERENCES "qti"."attribute_entity" ("node", "attribute", "at") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_idrefs_idref_text_34746yzucj" FOREIGN KEY ("node", "id", "__pred_idrefs_2kinxrebfw", "idref_text") REFERENCES "qti"."idref" ("node", "attribute", "at", "pieces_after") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
@@ -6481,7 +6491,9 @@ ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_tag_kind_lom
 
 ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_pred_languages_fouwh2wpp7" FOREIGN KEY ("node", "__pred_languages_i7e7rxcgke") REFERENCES "qti"."lom_string_language" ("node", "__index_languages_ft2z7nkccu") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_copy_languages_cip5whzmz2" FOREIGN KEY ("node", "__copy_languages_ck534uuvjr", "language") REFERENCES "qti"."lom_string" ("node", "languages", "language") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_language_cyf36v3gna" FOREIGN KEY ("__node_najnjopqcl", "__language_cbidl4nwet") REFERENCES "qti"."lom_string_language" ("node", "language") MATCH SIMPLE;
+
+ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_copy_languages_rwu7ldnfnv" FOREIGN KEY ("node", "__copy_languages_ck534uuvjr") REFERENCES "qti"."lom_string" ("node", "languages") MATCH SIMPLE ON UPDATE CASCADE;
 
 ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_predecessor_languages_vftzduptkl" FOREIGN KEY ("node", "__predecessor_languages_7ndasyhqmc") REFERENCES "qti"."lom_string_language" ("node", "__index_languages_ft2z7nkccu") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6691,7 +6703,7 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_vmybur325b" FOREIGN KEY ("
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_parent_pred_at_chars_was_elements_was_jditgsexpp" FOREIGN KEY ("__parent_l4ckjnvwat", "__pred_at_xktcobhsti", "chars_was", "elements_was", "start", "was", "__before_children_0_nrqam5jjot", "__before_children_0_3b76aq6obl") REFERENCES "qti"."node" ("__parent_l4ckjnvwat", "at", "chars_after", "elements", "end", "state", "__after_children_0_7j24lewpcd", "__after_children_0_wmlhu3albc") MATCH SIMPLE;
 
-ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_copy_langs_lang_thnqbzepbw" FOREIGN KEY ("node", "__copy_langs_75vki3mroy", "lang") REFERENCES "qti"."assessment_object" ("node", "langs", "lang") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_copy_langs_c7xdvtdhmc" FOREIGN KEY ("node", "__copy_langs_75vki3mroy") REFERENCES "qti"."assessment_object" ("node", "langs") MATCH SIMPLE ON UPDATE CASCADE;
 
 ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_predecessor_langs_tooego3bwr" FOREIGN KEY ("node", "__predecessor_langs_ijqdbr2nj4") REFERENCES "qti"."object_lang" ("node", "__index_langs_c35xn3ubfv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
