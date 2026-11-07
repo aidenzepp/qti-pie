@@ -1,7 +1,8 @@
 /**
  * The O3 overlays' free tests: their statements are composed into `Qti`, each check is named by an
- * oracle law, and the closed data the laws read is the grammar's: the built-in variables, the
- * content references, the last-slot rules, the count pairs and the attributes copied.
+ * oracle law, and the closed data the laws read is the grammar's: the content references, the
+ * last-slot rules, the count pairs and the attributes copied. The built-in variables the laws read
+ * are `BuiltInVariable`'s own rows, under each root (`#pantry/test/built-in-roots.oracle.test.ts`).
  *
  * The database tests (`interactions.db.test.ts`) judge the laws through PostgreSQL; the builder's
  * tests (`#pantry/import/overlays/interactions.oracle.test.ts`) check its rows.
@@ -13,7 +14,6 @@ import { Effect, Option } from "effect";
 import { inject } from "vitest";
 import {
   BindingFit,
-  BuiltInVariable,
   ChoiceBound,
   ContentReference,
   grammar,
@@ -23,7 +23,6 @@ import {
 } from "#pantry/grammar/install.ts";
 import {
   anyTypeKinds,
-  builtIns,
   cardinalityKinds,
   choiceKinds,
   countDefault,
@@ -124,16 +123,6 @@ describe("qti/interactions.ts, declared", () => {
 });
 
 describe("qti/interactions.ts, the closed data its laws read", () => {
-  it("types every built-in variable BuiltInVariable holds, under the declaration kind it stands as", () => {
-    // Oracle: the closed relation itself, `BuiltInVariable`'s rows.
-    assert.deepStrictEqual(
-      builtIns.map(({ declaration, variable }) => `${variable} ${declaration}`).toSorted(),
-      BuiltInVariable.rows
-        .map(({ declaration, variable }) => `${variable} ${declaration}`)
-        .toSorted(),
-    );
-  });
-
   it("holds every ContentReference row in exactly one reference relation, the one whose law the oracle names for it", () => {
     // Oracle: the oracle's `contentLawOf`, the law a reference by (kind, attribute) breaks.
     for (const { attribute, kind } of ContentReference.rows) {

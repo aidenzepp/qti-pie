@@ -300,6 +300,7 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  */
 const feedbackOf = (fields: Partial<Fact<typeof FeedbackRef>> = {}) =>
   ({
+    assemblyKind: "qti-assessment-item",
     attribute: "outcome-identifier",
     document: stray,
     identifier: "FEEDBACK",
@@ -935,7 +936,14 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               ChangeSet.empty(Author)
                 .insert(ReferringDocument, [{ document }])
                 .insert(SectionFeedbackName, [{ attribute, document, identifier, kind, node }])
-                .insert(SectionScope, [{ assembly: stray, document, instance: strayNode(1) }])
+                .insert(SectionScope, [
+                  {
+                    assembly: stray,
+                    assemblyKind: "qti-assessment-item",
+                    document,
+                    instance: strayNode(1),
+                  },
+                ])
                 .insert(SectionFeedbackRef, [{ ...feedbackOf(), ...placement }])
                 .insert(SectionFeedbackRefDeclaration, [
                   { ...feedbackDeclarationOf({ baseType: "float" }), ...placement },

@@ -56,8 +56,10 @@
  *   {@link ContextRef}, each naming a declaration of a kind `ContentReference` allows, its row of
  *   its own ({@link FeedbackRefDeclaration} and the others), through `declarationRef`, or a
  *   built-in variable that stands as one (reading 77), in an item's or a test's own declarations
- *   (the port audit's A43 and A44). A reference that names neither has no declaration row, and its
- *   law refuses it (lane NIL's NS2: never the nil uuid).
+ *   (the port audit's A43 and A44), each built-in one its root holds (spec reading 29: an item's
+ *   `completionStatus` is no test's), so each reference carries the root kind it resolves under. A
+ *   reference that names neither has no declaration row, and its law refuses it (lane NIL's NS2:
+ *   never the nil uuid).
  * - A section document's feedback and printed variables ({@link SectionFeedbackName},
  *   {@link SectionPrintedName}) resolve once per test that places it ({@link SectionFeedbackRef},
  *   {@link SectionPrintedRef}, A45, each with its declaration row where it names a declaration, as
@@ -137,21 +139,6 @@ type Kind = (typeof NodeKind.handles)[number];
  * An `AttributeName` handle.
  */
 type Name = (typeof AttributeName.handles)[number];
-
-/**
- * A `BaseType` handle.
- */
-type BaseTypeHandle = (typeof BaseType.handles)[number];
-
-/**
- * A `Cardinality` handle.
- */
-type CardinalityHandle = (typeof Cardinality.handles)[number];
-
-/**
- * A `DeclarationKind` handle.
- */
-type DeclarationKindHandle = (typeof DeclarationKind.handles)[number];
 
 /**
  * XML whitespace `S`, possibly none: what a lexical form holds around its value.
@@ -398,58 +385,6 @@ export const references = {
 } as const satisfies Readonly<
   Record<string, { readonly attributes: readonly Name[]; readonly kinds: readonly Kind[] }>
 >;
-
-/**
- * A built-in variable's type: the declaration kind it stands as, and its base type and
- * cardinality, which a reference to it reads as a declaration's.
- */
-export interface BuiltInType {
-  readonly baseType: BaseTypeHandle;
-  readonly cardinality: CardinalityHandle;
-  readonly declaration: DeclarationKindHandle;
-  readonly variable: string;
-}
-
-/**
- * The base types and cardinalities of the built-in variables (information model §2.2.2.1:
- * "QTI_CONTEXT, which has record cardinality"; §2.2.2.2: numAttempts "is a single integer", and
- * duration "a single float", where a content reference reads it, in an item, spec reading 29;
- * §2.2.2.3: completionStatus "a single identifier").
- */
-const builtInBase = {
-  QTI_CONTEXT: { baseType: "none", cardinality: "record" },
-  completionStatus: { baseType: "identifier", cardinality: "single" },
-  duration: { baseType: "float", cardinality: "single" },
-  numAttempts: { baseType: "integer", cardinality: "single" },
-} as const satisfies Readonly<Record<string, Pick<BuiltInType, "baseType" | "cardinality">>>;
-
-/**
- * Read a built-in variable's base type and cardinality. Every variable `BuiltInVariable` holds has
- * one in {@link builtInBase} (`interactions.oracle.test.ts` holds the two to name the same
- * variables), so a name it does not hold is a defect of the two tables, thrown when
- * {@link builtIns} is built.
- *
- * @param variable - The variable's name.
- * @returns Its type.
- */
-const builtInBaseOf = (variable: string): Pick<BuiltInType, "baseType" | "cardinality"> =>
-  Option.getOrThrowWith(
-    Rec.get<string, Pick<BuiltInType, "baseType" | "cardinality">>(builtInBase, variable),
-    () => new Error(`BuiltInVariable holds ${variable}, which builtInBase gives no type.`),
-  );
-
-/**
- * Each built-in variable `BuiltInVariable` holds, with its type: its declaration kind from the
- * closed relation, its base type and cardinality from {@link builtInBase}.
- */
-export const builtIns: readonly BuiltInType[] = BuiltInVariable.rows.map(
-  ({ declaration, variable }) => ({ ...builtInBaseOf(variable), declaration, variable }),
-);
-
-/**
- * The built-in variables' names.
- */
-export const builtInNames: readonly string[] = builtIns.map(({ variable }) => variable);
 
 /**
  * The attributes O3 reads, by name, each with the kinds it is read on: every attribute below is
@@ -1064,13 +999,16 @@ export const ItemMode = relation("ItemMode", { adaptive: pg.boolean, document: u
 ]);
 
 /**
- * The fields of a content reference: the referring element's node, kind and document, the attribute
- * it refers by, and the name it refers to, collapsed. What the name resolves to is a row of its
- * own, where it names a declaration (`referenceDeclarationFields`), and none where it names a
- * built-in variable, whose type the installed `BuiltInVariable` holds, or nothing, which its law
- * refuses (lane NIL's NS2: a missing value is a row of its own relation, never the nil uuid).
+ * The fields of a content reference: the referring element's node, kind and document, the root kind
+ * of the assembly it resolves in, which for an item's or a test's own reference is its document's
+ * own root kind, the attribute it refers by, and the name it refers to, collapsed. What the name
+ * resolves to is a row of its own, where it names a declaration (`referenceDeclarationFields`),
+ * and none where it names a built-in variable of that root, as the installed `BuiltInVariable`
+ * holds each under its root (spec reading 29: an item's are not a test's), or nothing, which its
+ * law refuses (lane NIL's NS2: a missing value is a row of its own relation, never the nil uuid).
  */
 const referenceFields = {
+  assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
   document: uuid,
   identifier: keyText,
@@ -1084,6 +1022,7 @@ const referenceFields = {
  * `ContentReference` lets the reference name.
  */
 const referenceDeclarationFields = {
+  assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
   baseType: closedId(BaseType),
   cardinality: closedId(Cardinality),
@@ -1265,13 +1204,15 @@ export const sectionContextNameFamily = counted(
 /**
  * One placement of a section document under a test, or of an included fragment under an item
  * (spec reading 117), keyed by its `Instance`: the document it places, the assembly (its root's
- * document node), and its counts of {@link SectionFeedbackRef}, {@link SectionPrintedRef},
- * {@link SectionTemplateRef} and {@link SectionContextRef} rows, which the families draw.
+ * document node) and its root's kind, whose built-in variables its references read, and its counts
+ * of {@link SectionFeedbackRef}, {@link SectionPrintedRef}, {@link SectionTemplateRef} and
+ * {@link SectionContextRef} rows, which the families draw.
  */
 export const SectionScope = relation(
   "SectionScope",
   {
     assembly: uuid,
+    assemblyKind: closedId(NodeKind),
     contexts: drawn(natural),
     document: uuid,
     feedbacks: drawn(natural),
@@ -1284,13 +1225,14 @@ export const SectionScope = relation(
 
 /**
  * The fields of a section document's or a fragment's reference placed under one assembly that
- * places it: the placement's instance and assembly, and the reference's fields. What its name
- * resolves to among the assembly's declarations is a row of its own, where it names a declaration
- * (`sectionReferenceDeclarationFields`), and none where it names a built-in or nothing, as an own
- * reference's is.
+ * places it: the placement's instance, assembly and the assembly's root kind, and the reference's
+ * fields. What its name resolves to among the assembly's declarations is a row of its own, where it
+ * names a declaration (`sectionReferenceDeclarationFields`), and none where it names a built-in of
+ * the assembly's root or nothing, as an own reference's is.
  */
 const sectionReferenceFields = {
   assembly: uuid,
+  assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
   document: uuid,
   identifier: keyText,
@@ -1305,6 +1247,7 @@ const sectionReferenceFields = {
  */
 const sectionReferenceDeclarationFields = {
   assembly: uuid,
+  assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
   baseType: closedId(BaseType),
   cardinality: closedId(Cardinality),
@@ -1991,39 +1934,51 @@ const allowedDeclarationKinds = on(ContentReference, "kind", "attribute", "decla
 type ReferenceRow = RowScalars<{ readonly heading: typeof referenceFields; readonly name: string }>;
 
 /**
- * Whether a reference names no built-in variable.
+ * The roots that hold built-in variables, each with the names of its built-ins, as the installed
+ * `BuiltInVariable` holds them (spec reading 29): an item's are not a test's.
+ */
+const builtInRoots: readonly (readonly [Kind, readonly string[]])[] = [
+  ...Map.groupBy(BuiltInVariable.rows, ({ root }) => root),
+].map(([root, rows]) => [root, rows.map(({ variable }) => variable)] as const);
+
+/**
+ * Whether a reference names no built-in variable of the root of the assembly it resolves in.
  *
  * @param r - The reference's row.
  * @returns The predicate.
  */
-const namesNoBuiltIn = (r: ReferenceRow) => r.not(r.in(r.identifier, builtInNames));
-
-/**
- * Each built-in variable with the references that may name it, one entry per attribute: the kinds
- * whose references by the attribute `ContentReference` lets name the declaration kind the variable
- * stands as (`BuiltInVariable`), each (variable, declaration kind) once.
- */
-const builtInReferrers = builtIns
-  .filter(
-    (builtIn, at) =>
-      builtIns.findIndex(
-        ({ declaration, variable }) =>
-          variable === builtIn.variable && declaration === builtIn.declaration,
-      ) === at,
-  )
-  .flatMap(({ declaration, variable }) =>
-    [
-      ...Map.groupBy(
-        ContentReference.rows.filter((row) => row.declaration === declaration),
-        ({ attribute }) => attribute,
-      ),
-    ].map(([attribute, rows]) => ({ attribute, kinds: rows.map(({ kind }) => kind), variable })),
+const namesNoBuiltIn = (r: ReferenceRow) =>
+  r.and(
+    ...builtInRoots.map(([root, names]) =>
+      r.or(r.ne(r.assemblyKind, root), r.not(r.in(r.identifier, names))),
+    ),
   );
 
 /**
- * Whether a reference that names a built-in variable is one that may name it: its kind and
- * attribute are a pair `ContentReference` lets name the declaration kind the variable stands as.
- * A reference that names a built-in names no declaration, so this is its whole resolution.
+ * Each built-in variable with the references that may name it under its root, one entry per
+ * attribute: the kinds whose references by the attribute `ContentReference` lets name the
+ * declaration kind the variable stands as there (`BuiltInVariable`, keyed by root and variable).
+ */
+const builtInReferrers = BuiltInVariable.rows.flatMap(({ declaration, root, variable }) =>
+  [
+    ...Map.groupBy(
+      ContentReference.rows.filter((row) => row.declaration === declaration),
+      ({ attribute }) => attribute,
+    ),
+  ].map(([attribute, rows]) => ({
+    attribute,
+    kinds: rows.map(({ kind }) => kind),
+    root,
+    variable,
+  })),
+);
+
+/**
+ * Whether a reference that names a built-in variable of its assembly's root is one that may name
+ * it: its kind and attribute are a pair `ContentReference` lets name the declaration kind the
+ * variable stands as under that root. A reference that names a built-in names no declaration, so
+ * this is its whole resolution; a name that is a built-in of another root only is no built-in here,
+ * and resolves as any other name does.
  *
  * @param r - The reference's row.
  * @returns The predicate.
@@ -2031,8 +1986,13 @@ const builtInReferrers = builtIns
 const namesAllowedBuiltIn = (r: ReferenceRow) =>
   r.or(
     namesNoBuiltIn(r),
-    ...builtInReferrers.map(({ attribute, kinds, variable }) =>
-      r.and(r.eq(r.identifier, variable), r.eq(r.attribute, attribute), r.in(r.kind, kinds)),
+    ...builtInReferrers.map(({ attribute, kinds, root, variable }) =>
+      r.and(
+        r.eq(r.assemblyKind, root),
+        r.eq(r.identifier, variable),
+        r.eq(r.attribute, attribute),
+        r.in(r.kind, kinds),
+      ),
     ),
   );
 
@@ -2040,9 +2000,10 @@ const namesAllowedBuiltIn = (r: ReferenceRow) =>
  * State one content reference's law over its relations (lane NIL's NS2: a reference that names no
  * declaration has no declaration row, never the nil uuid):
  *
- * - An own reference that names no built-in variable has its declaration row, which is its own
- *   reference's, of a kind `ContentReference` allows, a declaration of its document through
- *   `declarationRef`, and names no built-in; one that names a built-in names one it may;
+ * - An own reference that names no built-in variable of its root has its declaration row, which is
+ *   its own reference's, of a kind `ContentReference` allows, a declaration of its document through
+ *   `declarationRef`, and names no built-in of its root; one that names a built-in of its root
+ *   names one it may;
  * - A placed reference is one of its document's names, and under its placement resolves the same way
  *   among its assembly's declarations.
  *
@@ -2065,8 +2026,8 @@ const contentReferenceLaws = ({
     on(ownDeclared, "node", "attribute"),
   ),
   contained(
-    on(ownDeclared, "node", "attribute", "kind", "document", "identifier"),
-    on(own, "node", "attribute", "kind", "document", "identifier"),
+    on(ownDeclared, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
+    on(own, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
   ),
   contained(on(ownDeclared, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
   contained(
@@ -2098,11 +2059,22 @@ const contentReferenceLaws = ({
       "node",
       "attribute",
       "assembly",
+      "assemblyKind",
       "kind",
       "document",
       "identifier",
     ),
-    on(placed, "instance", "node", "attribute", "assembly", "kind", "document", "identifier"),
+    on(
+      placed,
+      "instance",
+      "node",
+      "attribute",
+      "assembly",
+      "assemblyKind",
+      "kind",
+      "document",
+      "identifier",
+    ),
   ),
   contained(on(placedDeclared, "kind", "attribute", "declarationKind"), allowedDeclarationKinds),
   contained(
@@ -2171,16 +2143,17 @@ const contentReferenceLaws = ({
  *   one placement row per instance of an item's or a test's assembly whose document is neither, a
  *   section document's or a fragment's (spec reading 117), counting as many resolutions of each
  *   class as its document has references; each resolution its placement's and its reference's,
- *   resolved in the assembly's declarations or to a built-in, under "Feedback reference" and
- *   "Feedback outcome type", "Printed variable reference", "Template reference" or "Context
- *   variable reference".
- * - **content references:** each relation's rows are its source's; a name that is no built-in's has
- *   its declaration row, the reference's, of a declaration kind `ContentReference` allows for its
- *   kind and attribute, a declaration through `declarationRef`; and a built-in's is one its kind
- *   and attribute may name, under its reference's law ("Feedback reference", "Template reference",
- *   "Printed variable reference", "Context variable reference"); and "Feedback outcome type" over
- *   the declaration rows (reading 77: an outcome of base type identifier, single or multiple; the
- *   one built-in a feedback may name, `completionStatus`, is a single identifier, §2.2.2.3).
+ *   resolved in the assembly's declarations or to a built-in of its root, its kind
+ *   `SectionScope.assemblyKind`, `Instance`'s, under "Feedback reference" and "Feedback outcome
+ *   type", "Printed variable reference", "Template reference" or "Context variable reference".
+ * - **content references:** each relation's rows are its source's, its `assemblyKind` its document's
+ *   root kind; a name that is no built-in's of that root has its declaration row, the reference's,
+ *   of a declaration kind `ContentReference` allows for its kind and attribute, a declaration
+ *   through `declarationRef`; and a built-in's of that root is one its kind and attribute may name
+ *   there, under its reference's law ("Feedback reference", "Template reference", "Printed variable
+ *   reference", "Context variable reference"); and "Feedback outcome type" over the declaration
+ *   rows (reading 77: an outcome of base type identifier, single or multiple; the one built-in a
+ *   feedback may name, `completionStatus`, is a single identifier, §2.2.2.3).
  */
 export const interactionLawsByName = {
   ...pipe(contentReferences, Rec.map(contentReferenceLaws)),
@@ -2725,20 +2698,20 @@ export const interactionLawsByName = {
       ),
     ),
     contained(
-      on(referenceSources.feedback, "node", "name", "kind", "document", "value"),
-      on(FeedbackRef, "node", "attribute", "kind", "document", "identifier"),
+      on(referenceSources.feedback, "node", "name", "kind", "document", "rootKind", "value"),
+      on(FeedbackRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
     ),
     contained(
-      on(referenceSources.template, "node", "name", "kind", "document", "value"),
-      on(TemplateRef, "node", "attribute", "kind", "document", "identifier"),
+      on(referenceSources.template, "node", "name", "kind", "document", "rootKind", "value"),
+      on(TemplateRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
     ),
     contained(
-      on(referenceSources.printed, "node", "name", "kind", "document", "value"),
-      on(PrintedVariableRef, "node", "attribute", "kind", "document", "identifier"),
+      on(referenceSources.printed, "node", "name", "kind", "document", "rootKind", "value"),
+      on(PrintedVariableRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
     ),
     contained(
-      on(referenceSources.context, "node", "name", "kind", "document", "value"),
-      on(ContextRef, "node", "attribute", "kind", "document", "identifier"),
+      on(referenceSources.context, "node", "name", "kind", "document", "rootKind", "value"),
+      on(ContextRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
     ),
     contained(
       on(sectionFeedbackSource, "node", "name", "kind", "document", "value"),
@@ -2761,12 +2734,12 @@ export const interactionLawsByName = {
     sectionTemplateNameFamily,
     sectionContextNameFamily,
     contained(
-      on(sectionPlacements, "id", "document", "assembly"),
-      on(SectionScope, "instance", "document", "assembly"),
+      on(sectionPlacements, "id", "document", "assembly", "assemblyKind"),
+      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
     ),
     contained(
-      on(SectionScope, "instance", "document", "assembly"),
-      on(Instance, "id", "document", "assembly"),
+      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
+      on(Instance, "id", "document", "assembly", "assemblyKind"),
     ),
     contained(
       on(SectionScope, "document", "feedbacks", "prints", "templates", "contexts"),
@@ -2777,20 +2750,20 @@ export const interactionLawsByName = {
     sectionTemplateFamily,
     sectionContextFamily,
     contained(
-      on(SectionFeedbackRef, "instance", "document", "assembly"),
-      on(SectionScope, "instance", "document", "assembly"),
+      on(SectionFeedbackRef, "instance", "document", "assembly", "assemblyKind"),
+      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
     ),
     contained(
-      on(SectionPrintedRef, "instance", "document", "assembly"),
-      on(SectionScope, "instance", "document", "assembly"),
+      on(SectionPrintedRef, "instance", "document", "assembly", "assemblyKind"),
+      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
     ),
     contained(
-      on(SectionTemplateRef, "instance", "document", "assembly"),
-      on(SectionScope, "instance", "document", "assembly"),
+      on(SectionTemplateRef, "instance", "document", "assembly", "assemblyKind"),
+      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
     ),
     contained(
-      on(SectionContextRef, "instance", "document", "assembly"),
-      on(SectionScope, "instance", "document", "assembly"),
+      on(SectionContextRef, "instance", "document", "assembly", "assemblyKind"),
+      on(SectionScope, "instance", "document", "assembly", "assemblyKind"),
     ),
   ],
   "Feedback outcome type": [

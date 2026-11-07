@@ -12,7 +12,12 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
-import { ChoiceBound, ContentReference, interactionKinds } from "#pantry/grammar/install.ts";
+import {
+  BuiltInVariable,
+  ChoiceBound,
+  ContentReference,
+  interactionKinds,
+} from "#pantry/grammar/install.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
@@ -29,7 +34,6 @@ import {
   adaptiveName,
   ariaNames,
   bindingAttributes,
-  builtIns,
   choiceKinds,
   countDefault,
   hotspotKinds,
@@ -505,19 +509,24 @@ const allowedNames: ReadonlySet<string> = new Set(
 );
 
 /**
- * The built-in variables' names, whichever root holds them (`BuiltInVariable`).
+ * Each built-in variable under the root that holds it, as `<root> <variable>`, as the installed
+ * `BuiltInVariable` holds them (spec reading 29): an item's are not a test's.
  */
-const builtInVariables: ReadonlySet<string> = new Set(builtIns.map(({ variable }) => variable));
+const rootBuiltIns: ReadonlySet<string> = new Set(
+  BuiltInVariable.rows.map(({ root, variable }) => `${root} ${variable}`),
+);
 
 /**
- * Find the declaration a content reference names: none for a built-in variable, which stands as a
- * declaration but has none, whose law reads the installed `BuiltInVariable`; else the first
- * declaration of the name of a kind `ContentReference` lets the reference name; else none, a name
- * no declaration the reference may name holds, which its law refuses (lane NIL's NS2: a missing
- * value is a row of its own relation, never the nil uuid).
+ * Find the declaration a content reference names: none for a built-in variable of the root of the
+ * assembly it resolves in, which stands as a declaration but has none, whose law reads the
+ * installed `BuiltInVariable`; else the first declaration of the name of a kind `ContentReference`
+ * lets the reference name; else none, a name no declaration the reference may name holds, which its
+ * law refuses (lane NIL's NS2: a missing value is a row of its own relation, never the nil uuid). A
+ * name only another root holds as a built-in, a test's `completionStatus`, is no built-in there.
  *
  * @param declared - The declarations the name resolves among.
  * @param reference - The reference.
+ * @param reference.assemblyKind - The root kind of the assembly it resolves in.
  * @param reference.attribute - The attribute it refers by.
  * @param reference.identifier - The name, collapsed.
  * @param reference.kind - The kind of the element that carries it.
@@ -525,9 +534,14 @@ const builtInVariables: ReadonlySet<string> = new Set(builtIns.map(({ variable }
  */
 const declarationIn = (
   declared: Context["declared"],
-  reference: { readonly attribute: string; readonly identifier: string; readonly kind: string },
+  reference: {
+    readonly assemblyKind: string;
+    readonly attribute: string;
+    readonly identifier: string;
+    readonly kind: string;
+  },
 ): Option.Option<DeclaredVariable> =>
-  builtInVariables.has(reference.identifier)
+  rootBuiltIns.has(`${reference.assemblyKind} ${reference.identifier}`)
     ? Option.none()
     : Arr.findFirst(
         declared,
@@ -1057,8 +1071,9 @@ const ariaOf = (context: Context) => {
 
 /**
  * Build one content reference relation's rows: each read attribute of the relation's names and
- * kinds that names a variable, in an item or a test, and its declaration row where the name is that
- * of a declaration of the document of a kind `ContentReference` allows there ({@link
+ * kinds that names a variable, in an item or a test, under its document's root kind, the root of
+ * its own assembly, and its declaration row where the name is that of a declaration of the
+ * document of a kind `ContentReference` allows there and no built-in of the root ({@link
  * declarationIn}). A name only a declaration with no `Declaration` row holds, which nothing
  * references, has neither: its declaration's own law refuses it alone (lane NIL's audit, B11).
  *
@@ -1086,6 +1101,7 @@ const referencesOf = (
         .map((row) => ({
           key: keyOf([row.node, row.name]),
           reference: {
+            assemblyKind: context.rootKind,
             attribute: row.name,
             document: context.document,
             identifier: row.value,
@@ -1362,20 +1378,27 @@ export interface SectionRows {
 }
 
 /**
+ * One instance of an assembly's tree, with the assembly it is placed in and that assembly's root
+ * kind.
+ */
+interface Placement {
+  readonly assembly: NodeId;
+  readonly assemblyKind: InstanceRoot["assemblyKind"];
+  readonly instance: InstanceMember | InstanceRoot;
+}
+
+/**
  * Collect every instance of an assembly's tree, its root's own included, with the assembly it is
- * placed in.
+ * placed in and that assembly's root kind.
  *
  * @param root - The assembly's root instance.
  * @returns Each instance and its assembly.
  */
-const instancesOf = (
-  root: InstanceRoot,
-): readonly { readonly assembly: NodeId; readonly instance: InstanceMember | InstanceRoot }[] => {
-  const found: { readonly assembly: NodeId; readonly instance: InstanceMember | InstanceRoot }[] =
-    [];
+const instancesOf = (root: InstanceRoot): readonly Placement[] => {
+  const found: Placement[] = [];
   const stack: (InstanceMember | InstanceRoot)[] = [root];
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
-    found.push({ assembly: root.assembly, instance: next });
+    found.push({ assembly: root.assembly, assemblyKind: root.assemblyKind, instance: next });
     stack.push(...next.children);
   }
 
@@ -1384,30 +1407,41 @@ const instancesOf = (
 
 /**
  * Place each reference of a section document or a fragment under one placement, and resolve it
- * among its assembly's declarations: each has its placed row, and its declaration row where the
- * name is that of an assembly's declaration of a kind it may name ({@link declarationIn}).
+ * among its assembly's declarations: each has its placed row, under its assembly's root kind, and
+ * its declaration row where the name is that of an assembly's declaration of a kind it may name and
+ * no built-in of the assembly's root ({@link declarationIn}).
  *
  * @param names - The document's references of one class.
  * @param declared - The assembly's declarations.
  * @param placement - The placement.
  * @param placement.assembly - The assembly's root document node.
+ * @param placement.assemblyKind - The assembly's root kind.
  * @param placement.instance - The placement's instance.
  * @returns The placed and declaration rows, each keyed by (instance, node, attribute).
  */
 const placedOf = (
   names: readonly Addition<typeof SectionFeedbackName>[],
   declared: Context["declared"],
-  placement: { readonly assembly: NodeId; readonly instance: NodeId },
+  placement: {
+    readonly assembly: NodeId;
+    readonly assemblyKind: Placement["assemblyKind"];
+    readonly instance: NodeId;
+  },
 ): readonly {
   readonly declaration: Option.Option<Addition<typeof SectionFeedbackRefDeclaration>>;
   readonly key: string;
   readonly placed: Addition<typeof SectionFeedbackRef>;
 }[] =>
   names.map((name) => {
-    const placed = { ...name, assembly: placement.assembly, instance: placement.instance };
+    const placed = {
+      ...name,
+      assembly: placement.assembly,
+      assemblyKind: placement.assemblyKind,
+      instance: placement.instance,
+    };
 
     return {
-      declaration: Option.map(declarationIn(declared, name), (variable) => ({
+      declaration: Option.map(declarationIn(declared, placed), (variable) => ({
         ...placed,
         baseType: variable.baseType,
         cardinality: variable.cardinality,
@@ -1435,9 +1469,10 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
 /**
  * Build a package's placements: one per instance of a section document or a fragment under a test
  * and of an included fragment under an item, and under it each of the document's references of each
- * class, with its declaration row where the name is that of an assembly's declaration of a kind it
- * may name: a built-in has none, and its law reads `BuiltInVariable`; a name no allowed declaration
- * holds has none, and its law refuses it (lane NIL's NS2: never the nil uuid).
+ * class, under the assembly's root kind, with its declaration row where the name is that of an
+ * assembly's declaration of a kind it may name: a built-in of the assembly's root has none, and its
+ * law reads `BuiltInVariable`; a name no allowed declaration holds has none, and its law refuses it
+ * (lane NIL's NS2: never the nil uuid).
  *
  * @param input - The package's rows the placements read.
  * @param input.contexts - Every fragment's context variable references ({@link rowsOf}'s
@@ -1476,8 +1511,8 @@ export const sectionRowsOf = (input: {
       ([{ instance }]) => instance.document,
       names,
       ({ document }) => document,
-    ).flatMap(([[{ assembly, instance }, scope], named]) =>
-      placedOf(named, scope, { assembly, instance: instance.id }),
+    ).flatMap(([[{ assembly, assemblyKind, instance }, scope], named]) =>
+      placedOf(named, scope, { assembly, assemblyKind, instance: instance.id }),
     );
 
     return {
@@ -1503,8 +1538,11 @@ export const sectionRowsOf = (input: {
     SectionPrintedRefDeclaration: prints.declarations,
     SectionScope: new Map(
       placements.map(
-        ({ assembly, instance }) =>
-          [instance.id, { assembly, document: instance.document, instance: instance.id }] as const,
+        ({ assembly, assemblyKind, instance }) =>
+          [
+            instance.id,
+            { assembly, assemblyKind, document: instance.document, instance: instance.id },
+          ] as const,
       ),
     ),
     SectionTemplateRef: templates.references,
@@ -1557,9 +1595,7 @@ export const placedBindingRowsOf = (input: {
 }): PlacedBindingRows => {
   const counted = new Set([...input.mosts].map(({ node }) => node));
   const modes = new Map([...input.adaptive].map((row) => [row.document, row.adaptive] as const));
-  const placements = [...input.instances].flatMap((root) =>
-    instancesOf(root).map((placement) => ({ ...placement, assemblyKind: root.assemblyKind })),
-  );
+  const placements = [...input.instances].flatMap((root) => instancesOf(root));
   const placedOfDocument = <Row extends { readonly document: NodeId }>(rows: Iterable<Row>) =>
     joinOn(
       placements,
