@@ -45,6 +45,7 @@ import {
   familyTable,
   flipped,
   judgeProbes,
+  proofInstance,
   proofSchema,
   proofs,
   recorded,
@@ -165,6 +166,7 @@ const probesOf = Effect.fn("lexical.probesOf")(function* probesOf(grammar: Compo
             variant,
             version,
             whiteSpace: whiteSpaceOf(xsd),
+            xsd,
           });
         }
       }
@@ -274,6 +276,7 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, the domains against xmllint", 
               `lexical: ${String(probes.length)} probes over ${String(new Set(probes.map(({ group }) => group)).size)} (version, domain, XSD type) groups, ${String(new Set(probes.map(({ domain }) => domain.handle)).size)} domains; ${String(unprobed.length)} rows unprobed`,
               `  unjudged (a framed element not expected in its frame) ${String(judged.filter(({ outcome }) => outcome === "unjudged").length)}`,
               `  disagreements ${String(disagreements.length)}, unrecorded ${String(unrecorded.length)}, stale records ${String(stale.length)}`,
+              ...stale.map(({ reason }) => `  stale: ${reasonText(reason)}`),
             ].join("\n"),
           );
 
@@ -311,10 +314,7 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, libxml2's recorded departures"
           const values: readonly string[] = "refused" in proof ? proof.refused : proof.accepted;
 
           yield* fs.writeFileString(`${directory}/${name}.xsd`, proofSchema(proof.type));
-          yield* fs.writeFileString(
-            `${directory}/${name}.xml`,
-            ["<r>", ...values.map((value) => `<e>${value}</e>`), "</r>", ""].join("\n"),
-          );
+          yield* fs.writeFileString(`${directory}/${name}.xml`, proofInstance(proof));
 
           const [verdict] = yield* xmllintValidate({
             catalog: oracle.catalog,

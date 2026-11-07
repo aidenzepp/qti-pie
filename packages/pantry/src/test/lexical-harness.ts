@@ -85,6 +85,11 @@ export interface Probe {
    * The XSD type's whitespace class, which the `folded` diagnostic applies.
    */
   readonly whiteSpace: string;
+  /**
+   * The XSD type's resolved domain, when the inventory holds it, whose built-ins a libxml2 record
+   * is scoped by.
+   */
+  readonly xsd: Option.Option<Domain>;
 }
 
 /**
@@ -140,9 +145,23 @@ export type Reason =
  * read one list.
  */
 export interface Recorded {
+  /**
+   * The built-ins the XSD type reads (`builtinsOf`), one of which the pattern must match: what a
+   * libxml2 departure holds of, so a record never classifies a disagreement on a type libxml2
+   * judges rightly.
+   */
+  readonly builtin?: RegExp;
   readonly domain?: RegExp;
   readonly folded?: boolean;
+  /**
+   * A property of the value no pattern over its spelling states, as a double's value of zero.
+   */
+  readonly holds?: (value: string) => boolean;
   readonly kind?: RegExp;
+  /**
+   * The domain's primitive, for a reading that holds of every type derived from one.
+   */
+  readonly primitive?: string;
   readonly reason: Reason;
   readonly subject?: RegExp;
   readonly value?: RegExp;
@@ -155,6 +174,34 @@ export interface Recorded {
  * refuses.
  */
 const outerWhitespace = /^[\t\n\r ]|[\t\n\r ]$/u;
+
+/**
+ * Whether a value is a decimal numeral, with an optional exponent, between optional XML
+ * whitespace: the forms whose double value a record may read.
+ *
+ * @param value - The value.
+ * @returns Whether it is.
+ */
+const isNumeral = (value: string): boolean =>
+  /^[\t\n\r ]*[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?[\t\n\r ]*$/u.test(value);
+
+/**
+ * Whether a value is an integer numeral, collapsed as `xs:integer` collapses it, outside the
+ * signed 64-bit range.
+ *
+ * @param value - The value.
+ * @returns Whether it is.
+ */
+const beyondInt64 = (value: string): boolean => {
+  const digits = /^[\t\n\r ]*(?<sign>[+-]?)(?<digits>[0-9]+)[\t\n\r ]*$/u.exec(value)?.groups;
+  if (digits === undefined) {
+    return false;
+  }
+
+  const integer = BigInt(`${digits["sign"] === "-" ? "-" : ""}${digits["digits"] ?? "0"}`);
+
+  return integer < -9_223_372_036_854_775_808n || integer > 9_223_372_036_854_775_807n;
+};
 
 /**
  * Every disagreement between the domains and the XSD's validator that is no defect, classified.
@@ -184,13 +231,13 @@ export const recorded: readonly Recorded[] = [
   },
   {
     domain: /\(reading [^)]*\b16\b/u,
+    holds: (value) => isNumeral(value) && Number(value) === 0,
     reason: {
       _tag: "reading",
       reading: 16,
       says: "`normal-maximum` is greater than zero.",
-      why: "normal-maximum is greater than zero",
+      why: "normal-maximum is greater than zero, and a value is zero as its xs:double is: every spelling of zero, and a literal below half the least subnormal, which rounds to zero (Part 2, 3.2.5)",
     },
-    value: /^[+-]?0(?:\.0*)?$/u,
     xsd: "valid",
   },
   {
@@ -199,9 +246,9 @@ export const recorded: readonly Recorded[] = [
       _tag: "reading",
       reading: 18,
       says: "If specified, min-choices must be 1 or greater",
-      why: "an order interaction's min-choices is at least 1",
+      why: "an order interaction's min-choices is at least 1, so zero is refused however its collapsed form is padded",
     },
-    value: /^[+-]?0+$/u,
+    value: /^[\t\n\r ]*[+-]?0+[\t\n\r ]*$/u,
     xsd: "valid",
   },
   {
@@ -238,13 +285,13 @@ export const recorded: readonly Recorded[] = [
   },
   {
     domain: /\(reading [^)]*\b46\b/u,
+    holds: (value) => beyondInt64(value),
     reason: {
       _tag: "reading",
       reading: 46,
       says: "A count attribute holds a signed 64-bit integer.",
-      why: "a count is a signed 64-bit integer",
+      why: "a count is a signed 64-bit integer, so an integer beyond -9223372036854775808 to 9223372036854775807 is refused where xs:nonNegativeInteger bounds nothing",
     },
-    value: /^9{20,}$/u,
     xsd: "valid",
   },
   {
@@ -322,10 +369,12 @@ export const recorded: readonly Recorded[] = [
       why: "an xsi:type's QName is valid only when its prefix is bound in scope and it names a type: the codec decides it from the element's in-scope bindings (shred's type-unresolved and type-unknown), which no pattern over the value alone can state, and a probe binds no prefix of its value",
     },
     subject: /^xsi:type$/u,
-    value: /^(?:[\p{L}_][\p{L}\p{N}._-]*:)?[\p{L}_][\p{L}\p{N}._-]*$/u,
+    value: /^[\t\n\r ]*(?:[\p{L}_][\p{L}\p{N}._-]*:)?[\p{L}_][\p{L}\p{N}._-]*[\t\n\r ]*$/u,
     xsd: "invalid",
   },
   {
+    builtin:
+      /^(?:integer|decimal|nonNegativeInteger|positiveInteger|nonPositiveInteger|negativeInteger)$/u,
     reason: {
       _tag: "libxml2",
       proof: "digits",
@@ -335,43 +384,78 @@ export const recorded: readonly Recorded[] = [
     xsd: "invalid",
   },
   {
+    builtin: /^(?:long|int|short|byte|unsignedLong|unsignedInt|unsignedShort|unsignedByte)$/u,
     reason: {
       _tag: "libxml2",
       proof: "whitespace",
-      why: "libxml2 does not collapse the whitespace of xs:int and xs:unsignedLong values (xs:integer, xs:decimal and xs:nonNegativeInteger it does), though whiteSpace is collapse, fixed, for every built-in numeric type (Part 2, 3.3.13 to 3.3.23)",
+      why: "libxml2 does not collapse the whitespace of the bounded integers, xs:long, xs:int, xs:short and xs:byte and their unsigned four (xs:integer, xs:decimal, xs:nonNegativeInteger, xs:double and xs:boolean it does), though whiteSpace is collapse, fixed, for every built-in numeric type (Part 2, 3.3.13 to 3.3.23)",
     },
     value: outerWhitespace,
     xsd: "invalid",
   },
   {
+    builtin: /^(?:double|float)$/u,
     reason: {
       _tag: "libxml2",
       proof: "exponent",
-      why: "libxml2 accepts 1e and 1E as xs:double, whose lexical space needs digits after the exponent mark (Part 2, 3.2.5.1)",
+      why: "libxml2 accepts a mantissa and an exponent mark with no digits after it (1e, 0E, 1.5e+, and padded, once collapsed) as xs:double, whose lexical space needs digits after the exponent mark (Part 2, 3.2.5.1)",
     },
-    value: /^1[eE]$/u,
+    value: /^[\t\n\r ]*[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)[eE][+-]?[\t\n\r ]*$/u,
     xsd: "valid",
   },
   {
+    builtin: /^decimal$/u,
+    reason: {
+      _tag: "libxml2",
+      proof: "signAlone",
+      why: "libxml2 accepts an xs:decimal of a sign and whitespace alone (- followed by a space, a tab or a line feed), and refuses the bare sign; the value collapses to the sign, which Part 2, 3.2.3.1's lexical space refuses",
+    },
+    value: /^[\t\n\r ]*[+-][\t\n\r ]+$/u,
+    xsd: "valid",
+  },
+  {
+    builtin: /^(?:double|float)$/u,
+    reason: {
+      _tag: "libxml2",
+      proof: "specialPadded",
+      why: "libxml2 refuses INF, -INF and NaN followed by whitespace, though it collapses a padded numeral and whiteSpace is collapse, fixed, for xs:double and xs:float (Part 2, 3.2.4 and 3.2.5)",
+    },
+    value: /^[\t\n\r ]*-?(?:INF|NaN)[\t\n\r ]+$/u,
+    xsd: "invalid",
+  },
+  {
+    builtin: /^(?:double|float)$/u,
     reason: {
       _tag: "libxml2",
       proof: "nan",
-      why: "libxml2 accepts NaN under minInclusive 0; NaN is incomparable, so no bound holds of it (Part 2, 3.2.5)",
+      why: "libxml2 accepts NaN, and NaN after whitespace (not before it), under minInclusive 0; NaN is incomparable, so no bound holds of it (Part 2, 3.2.5)",
     },
-    value: /^NaN$/u,
+    value: /^[\t\n\r ]*NaN$/u,
     xsd: "valid",
   },
   {
+    domain: /\(reading [^)]*\b17\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 17,
+      says: "A `view` list has at least one view.",
+      why: "the information model requires at least one view, where the XSD admits an empty list",
+    },
+    value: /^[\t\n\r ]*$/u,
+    xsd: "valid",
+  },
+  {
+    builtin: /^(?:IDREFS|NMTOKENS|ENTITIES|IDREF|NMTOKEN|ENTITY)$/u,
     reason: {
       _tag: "libxml2",
       proof: "emptyLists",
-      why: "libxml2 accepts an empty xs:IDREFS and xs:NMTOKENS, whose minLength is 1 (Part 2, 3.3.10 and 3.3.5)",
+      why: "libxml2 accepts an empty or blank xs:IDREFS and xs:NMTOKENS, a list of no item once collapsed, whose minLength is 1 (Part 2, 3.3.10 and 3.3.5)",
     },
-    value: /^$/u,
+    value: /^[\t\n\r ]*$/u,
     xsd: "valid",
   },
   {
-    domain: /base64/u,
+    builtin: /^base64Binary$/u,
     reason: {
       _tag: "libxml2",
       proof: "base64",
@@ -380,7 +464,36 @@ export const recorded: readonly Recorded[] = [
     xsd: "valid",
   },
   {
-    domain: /anyURI/u,
+    reason: {
+      _tag: "libxml2",
+      proof: "schemaLocation",
+      why: "libxml2 never assesses the value of xsi:schemaLocation, a list of xs:anyURI (Part 1, 3.2.7), and accepts a value that is no list of URI references, as xsd.corpus.test.ts's location record says",
+    },
+    subject: /^xsi:schemaLocation$/u,
+    xsd: "valid",
+  },
+  {
+    domain: /\(reading [^)]*\b132\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 132,
+      says: "A printed variable's `format` is a printf format string of at most one conversion, over the information model's conversion codes.",
+      why: "the information model's printf grammar (§2.3.4), at most one conversion, where the XSD types format xs:normalizedString",
+    },
+    xsd: "valid",
+  },
+  {
+    domain: /\(reading [^)]*\b135\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 135,
+      says: "A MIME type is RFC 2045's type and subtype: two tokens joined by a slash.",
+      why: "RFC 2045's two tokens and a slash, with no whitespace or control character, where the XSD's MimeTypeDType pattern admits a space, U+007F and, under replace, a tab or a line break",
+    },
+    xsd: "valid",
+  },
+  {
+    primitive: "anyURI",
     reason: {
       _tag: "reading",
       reading: 71,
@@ -490,6 +603,7 @@ export const families = {
     "é.xml",
     "http://[::1]/",
     "a#b#c",
+    ":",
   ],
   boolean: ["true", "false", "1", "0", "TRUE", "yes"],
   date: [
@@ -523,6 +637,8 @@ export const families = {
     "0x1",
     "1,5",
     "2147483648",
+    "-",
+    "- ",
   ],
   double: [
     "0",
@@ -562,7 +678,7 @@ export const families = {
   ],
   language: ["en", "en-US", "x-klingon", "i-default", "en_US", "123", "abcdefghi", "a-b-c-d-e-f-g"],
   name: ["a", "a.b", "_a", "a-b", "a1", "1a", "-a", ".a", "a:b", "a b", "é"],
-  string: ["a", "a b", "a  b", "é", "ä€𝄞", "a\tb", "a\nb", "<", '"', "&"],
+  string: ["a", "a b", "a  b", "é", "ä€𝄞", "a\tb", "a\nb", "<", '"', "&", ":"],
 } satisfies Readonly<Record<string, readonly string[]>>;
 
 /**
@@ -633,23 +749,83 @@ export const familiesOf = (domain: ValueDomain, xsd: Option.Option<Domain>): rea
 /**
  * The longest pattern the pattern generator is asked to draw from: a compiled pattern spelling the
  * XML name classes runs to thousands of characters, and drawing from it builds every class it
- * names, so such a domain is probed by its families and enumerations alone.
+ * names, so such a domain is probed by its families and enumerations alone. Every other pattern is
+ * shorter than 1,200 characters (`xs:date`'s 414, `xs:long`'s 714, `contour.datatype`'s 1,112),
+ * and the 22 longer ones spell the name classes or `xsi:schemaLocation`'s list.
  */
-export const drawablePattern = 400;
+export const drawablePattern = 1200;
 
 /**
- * Whether a pattern repeats without a bound outside its classes and escapes (`*`, `+` or `{n,}`),
- * which the pattern generator refuses: every repetition it draws states its bound (`matching`,
- * `@grizzle/testing/pattern`). It refuses only after building every class the pattern names, and
- * XML's `Char` class, astral plane included, is over a million characters, so a refusal took
- * seconds per domain (xs:anySimpleType, xs:normalizedString, URLDType and alphabet.datatype). Such
- * a domain is probed by its families and enumerations alone, as a refused draw left it.
+ * Bound a pattern's unbounded repetitions outside its classes and escapes, which the pattern
+ * generator refuses (every repetition it draws states its bound: `matching`,
+ * `@grizzle/testing/pattern`): `*` as `{0,3}`, `+` as `{1,3}` and `{n,}` as `{n,n+3}`. Every
+ * string the bounded pattern matches the pattern matches, so a domain whose language repeats
+ * without a bound, as a collapsed type's padding or MathML's colour does, is drawn from its own
+ * grammar rather than probed by its families alone.
  *
  * @param pattern - A domain's compiled pattern.
- * @returns Whether it repeats without a bound.
+ * @returns The bounded pattern; the pattern itself where it repeats nothing without a bound.
  */
-export const repeatsUnbounded = (pattern: string): boolean =>
-  /[*+]|\{\d+,\}/u.test(pattern.replaceAll(/\\.|\[(?:\\.|[^\\\]])*\]/gsu, ""));
+export const boundedPattern = (pattern: string): string => {
+  let bounded = "";
+  let inClass = false;
+  for (let at = 0; at < pattern.length; at += 1) {
+    const point = pattern[at] ?? "";
+    if (point === "\\") {
+      bounded += pattern.slice(at, at + 2);
+      at += 1;
+    } else if (inClass) {
+      inClass = point !== "]";
+      bounded += point;
+    } else if (point === "[") {
+      inClass = true;
+      bounded += point;
+    } else if (point === "*") {
+      bounded += "{0,3}";
+    } else if (point === "+") {
+      bounded += "{1,3}";
+    } else {
+      const open = /^\{(?<least>\d+),\}/u.exec(pattern.slice(at))?.groups?.["least"];
+      if (point === "{" && open !== undefined) {
+        bounded += `{${open},${String(Number(open) + 3)}}`;
+        at += open.length + 2;
+      } else {
+        bounded += point;
+      }
+    }
+  }
+
+  return bounded;
+};
+
+/**
+ * How many samples are drawn from each domain's pattern, and how many of different forms
+ * ({@link formOf}) are kept: enough draws that a pattern of a score of alternatives, as MathML's
+ * colour is (a hex form beside sixteen names), meets nearly every arm (16/17 to the 64th is 2%),
+ * and few enough kept that the box stays one batch a version.
+ */
+const samplesDrawn = { drawn: 64, kept: 12 } as const;
+
+/**
+ * A value's form, coarsely: each run of digits as `0`, of lower-case letters as `a`, of upper-case
+ * ones as `A` and of XML spaces as `_`, every other character as itself, so `#3fA` and `#a1F`
+ * share a form and `#3fA` and `green` do not.
+ *
+ * @param value - The value.
+ * @returns Its form.
+ */
+export const formOf = (value: string): string =>
+  value
+    .replaceAll(/\d+/gu, "0")
+    .replaceAll(/\p{Ll}+/gu, "a")
+    .replaceAll(/\p{Lu}+/gu, "A")
+    .replaceAll(/[\t\n\r ]+/gu, "_");
+
+/**
+ * A string of XML characters only: what a probe can carry, since a batch holding any other is no
+ * XML document.
+ */
+const xmlCharacters = /^[\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]*$/u;
 
 /**
  * Read a numeric literal as a number: `INF`, `+INF` and `-INF` as the infinities, anything else as
@@ -764,8 +940,11 @@ export const flipped = (value: string): string =>
 const drawnSamples = new Map<string, readonly string[]>();
 
 /**
- * Draw six samples of a domain's pattern from a stream seeded by its handle, once per domain;
- * none for a pattern the generator refuses or one longer than {@link drawablePattern}.
+ * Draw samples of a domain's pattern from a stream seeded by its handle, once per domain, the first
+ * of each form ({@link samplesDrawn}), with
+ * its unbounded repetitions bounded ({@link boundedPattern}); none for a pattern the generator
+ * refuses or one longer than {@link drawablePattern}, and no sample that holds a character XML
+ * does not admit.
  *
  * @param domain - The domain.
  * @returns The samples.
@@ -777,11 +956,24 @@ export const drawnOf = (domain: ValueDomain): readonly string[] => {
   }
 
   const drawn =
-    domain.pattern.length > drawablePattern || repeatsUnbounded(domain.pattern)
+    domain.pattern.length > drawablePattern
       ? []
       : Result.getOrElse(
           Result.try(() =>
-            sample(matching(regexOf(domain)), floorSeed(`lexical ${domain.handle}`), 6),
+            [
+              ...new Map(
+                sample(
+                  matching(new RegExp(boundedPattern(domain.pattern), patternFlags)),
+                  floorSeed(`lexical ${domain.handle}`),
+                  samplesDrawn.drawn,
+                )
+                  .filter((value) => xmlCharacters.test(value))
+                  .toReversed()
+                  .map((value) => [formOf(value), value] as const),
+              ).values(),
+            ]
+              .toReversed()
+              .slice(0, samplesDrawn.kept),
           ),
           () => [],
         );
@@ -965,8 +1157,14 @@ export const recordOf = (disagreement: Disagreement): Recorded | undefined => {
       (record.folded === undefined || record.folded === folded) &&
       (record.domain === undefined || record.domain.test(probe.domain.handle)) &&
       (record.kind === undefined || record.kind.test(probe.kind)) &&
+      (record.builtin === undefined ||
+        Option.exists(probe.xsd, (type) =>
+          builtinsOf(type).some((name) => record.builtin?.test(name) === true),
+        )) &&
+      (record.primitive === undefined || record.primitive === probe.domain.primitive) &&
       (record.subject === undefined || record.subject.test(subject)) &&
       (record.value === undefined || record.value.test(probe.value)) &&
+      (record.holds === undefined || record.holds(probe.value)) &&
       (record.versions === undefined || record.versions.includes(probe.version)),
   );
 };
@@ -1465,22 +1663,52 @@ export const proofs = {
     type: "xs:integer",
   },
   emptyLists: {
-    accepted: [""],
+    accepted: ["", " ", "&#10; "],
     type: "xs:NMTOKENS",
   },
   exponent: {
-    accepted: ["1e", "1E"],
+    accepted: ["1e", "1E", "0e", "1.5E", "-2e+", ".5e-", "&#9;1e", "1e "],
     type: "xs:double",
   },
   nan: {
-    accepted: ["NaN"],
+    accepted: ["NaN", "&#9;NaN", " NaN"],
     type: "nonNegativeDouble",
+  },
+  schemaLocation: {
+    accepted: [":", "a :", "D264&#13;:"],
+    attribute: "xsi:schemaLocation",
+    type: "xs:string",
+  },
+  signAlone: {
+    accepted: ["-&#10;", "- ", "+ ", " -&#9;"],
+    type: "xs:decimal",
+  },
+  specialPadded: {
+    refused: ["INF ", "-INF ", "&#13;INF&#13;", "NaN "],
+    type: "xs:double",
   },
   whitespace: {
     refused: [" 0 ", "&#9;0"],
     type: "xs:int",
   },
 } as const;
+
+/**
+ * Write a proof's instance: a root `r` of one `e` element per value, each value the element's text,
+ * or the value of the attribute the proof names.
+ *
+ * @param proof - The proof.
+ * @returns The instance's text, value `i` on line `i + 2`.
+ */
+export const proofInstance = (proof: (typeof proofs)[ProofName]): string => {
+  const values: readonly string[] = "refused" in proof ? proof.refused : proof.accepted;
+  const element = (value: string): string =>
+    "attribute" in proof
+      ? `<e xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ${proof.attribute}="${value}"/>`
+      : `<e>${value}</e>`;
+
+  return ["<r>", ...values.map(element), "</r>", ""].join("\n");
+};
 
 /**
  * Write a proof's schema: a root `r` of `e` elements whose text is of the proof's type.
