@@ -43,6 +43,33 @@ const breachesOfLaw = (law: "Card default entry" | "Card support", catalogs: str
   });
 
 /**
+ * The breaches of the base item with a catalog info after its body and one `p` in its body
+ * written with the given `data-catalog-idref`.
+ *
+ * @param token - The attribute's value, as written.
+ * @param catalogs - The catalog info's `qti-catalog` children.
+ * @returns The `node` keys of the breaches of "Catalog reference" and of "Idref target", each
+ *   sorted.
+ */
+const referenceBreaches = (token: string, catalogs: string) =>
+  Effect.gen(function* judgedReference() {
+    const text = edit(
+      edit(item, "</qti-item-body>", `<p data-catalog-idref="${token}">b</p></qti-item-body>`),
+      "</qti-item-body>",
+      `</qti-item-body>${catalogInfo(catalogs)}`,
+    );
+    const breaches = breachesOf(yield* judged({ ...base, "item.xml": text }));
+    const keysOf = (law: "Catalog reference" | "Idref target") =>
+      breaches.filter((breach) => breach.law === law).map(({ keys }) => keys["node"] ?? "");
+
+    return {
+      catalog: keysOf("Catalog reference"),
+      idref: keysOf("Idref target"),
+      shown: shown(breaches),
+    };
+  });
+
+/**
  * A catalog of cards, each a card of the given support.
  *
  * @param id - The catalog's id.
@@ -105,11 +132,13 @@ describe("qti/catalog.ts, declared", () => {
     assert.deepStrictEqual(Object.keys(catalogLawsByName), [
       "Card default entry",
       "Card support",
+      "Catalog reference",
       "DocumentId key",
       "E1 derived",
     ]);
     assert.strictEqual(ruleOf("Card support"), "card-support");
     assert.strictEqual(ruleOf("Card default entry"), "card-default");
+    assert.strictEqual(ruleOf("Catalog reference"), "idref-target");
   });
 });
 
@@ -218,6 +247,71 @@ describe("test/oracle.ts, Card default entry", () => {
       );
 
       assert.deepStrictEqual(keys, [], all);
+    }),
+  );
+});
+
+describe("test/oracle.ts, Catalog reference", () => {
+  // Oracle: the specification as a checker, a `data-catalog-idref` naming a `qti-catalog` (spec
+  // reading R9-a; information model §5.28.1 and §5.15.9), and "Idref target" for the IDREF it is.
+  it.effect("breaks nothing for an idref naming a catalog, written as it is or padded", () =>
+    Effect.gen(function* namesCatalog() {
+      for (const token of ["C", " C "]) {
+        const {
+          catalog,
+          idref,
+          shown: all,
+        } = yield* referenceBreaches(token, catalogOf("C", "spoken"));
+
+        assert.deepStrictEqual([catalog, idref], [[], []], all);
+      }
+    }),
+  );
+
+  it.effect("breaks once for an idref naming an HTML id, and not Idref target", () =>
+    Effect.gen(function* namesHtmlId() {
+      const {
+        catalog,
+        idref,
+        shown: all,
+      } = yield* referenceBreaches("intro", catalogOf("C", "spoken"));
+
+      assert.strictEqual(catalog.length, 1, all);
+      assert.deepStrictEqual(idref, [], all);
+    }),
+  );
+
+  it.effect("breaks once for an idref naming a response declaration, not a catalog", () =>
+    Effect.gen(function* namesDeclaration() {
+      const {
+        catalog,
+        idref,
+        shown: all,
+      } = yield* referenceBreaches("RESPONSE", catalogOf("C", "spoken"));
+
+      assert.strictEqual(catalog.length, 1, all);
+      assert.deepStrictEqual(idref, [], all);
+    }),
+  );
+
+  it.effect("breaks both for an idref naming nothing", () =>
+    Effect.gen(function* namesNothing() {
+      const {
+        catalog,
+        idref,
+        shown: all,
+      } = yield* referenceBreaches("nowhere", catalogOf("C", "spoken"));
+
+      assert.strictEqual(catalog.length, 1, all);
+      assert.strictEqual(idref.length, 1, all);
+    }),
+  );
+
+  it.effect("breaks once for an idref naming a catalog the item does not hold", () =>
+    Effect.gen(function* noCatalog() {
+      const { catalog, shown: all } = yield* referenceBreaches("C", "");
+
+      assert.strictEqual(catalog.length, 1, all);
     }),
   );
 });

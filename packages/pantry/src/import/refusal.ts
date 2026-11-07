@@ -530,6 +530,11 @@ export const lawTable = {
     source:
       "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog'): a catalog holds one card for each support, compared by its collapsed value (catalog.ts CardSupport)",
   },
+  "Catalog reference": {
+    rule: "idref-target",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names): a data-catalog-idref, an xs:IDREF collapsed, is the id of a qti-catalog of its document, and no other ID of it (catalog.ts CatalogRef, CatalogId)",
+  },
   "Choice bounds": {
     rule: "choice-bounds",
     source:
@@ -1653,6 +1658,8 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("LabelUse", "node"), "Label tools"],
   [primaryKeyOf("CardSupport", "node"), "E1 derived"],
   [primaryKeyOf("DefaultEntry", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogRef", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogId", "node"), "E1 derived"],
   [primaryKeyOf("TableScope", "node"), "E1 derived"],
   [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
   [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],

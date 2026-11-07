@@ -4107,6 +4107,18 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
     ),
     ({ parent }) => parent,
   );
+  // Reading R9-a: a `data-catalog-idref` names a `qti-catalog` of its document (§5.28.1, §5.15.9),
+  // the token compared collapsed, as an IDREF is; an ID of any other element does not serve.
+  const catalogIds = new Set(
+    [...ids].flatMap(([id, held]) =>
+      held.some(({ node }) => view.byId.get(node)?.kind === "qti-catalog") ? [id] : [],
+    ),
+  );
+  const catalogRefs = view.members.flatMap((node) =>
+    Option.toArray(collapsedOf(overlay, node, "data-catalog-idref")).flatMap((token) =>
+      catalogIds.has(token) ? [] : [{ node, token }],
+    ),
+  );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
   // so in an item no two of the interactions Binding declared reads name one response.
   const bindings = overlay.isItem
@@ -4187,6 +4199,9 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
           law: "Card default entry",
         }),
       ),
+    ),
+    ...catalogRefs.map(({ node, token }) =>
+      at(node.id, { keys: { token }, law: "Catalog reference" }),
     ),
     ...[...bindings].flatMap(([identifier, held]) =>
       held.slice(1).map(({ node }) =>
@@ -6156,6 +6171,13 @@ const ownLaws = {
     rule: "card-support",
     source:
       "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog'): a catalog holds one card for each support, compared by its collapsed value (catalog.ts CardSupport)",
+  },
+  "Catalog reference": {
+    explain: (keys) =>
+      `the element ${field(keys, "node")} names ${JSON.stringify(field(keys, "token"))} as its catalog, which no catalog of its document is called`,
+    rule: "idref-target",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names): a data-catalog-idref, an xs:IDREF collapsed, is the id of a qti-catalog of its document, and no other ID of it (catalog.ts CatalogRef, CatalogId)",
   },
   "Choice bounds": {
     explain: (keys) =>

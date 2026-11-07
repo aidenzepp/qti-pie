@@ -15,14 +15,22 @@
  *   {@link DefaultEntry} is one row per such entry, keyed by its node, and the key on its `card` is
  *   the law. An entry that writes no `default`, or one whose value is `false` or `0`, has no row;
  *   the XSD's default of `false` designates nothing.
+ * - **Catalog reference** (rule `idref-target`; info §5.28.1, §5.15.9): a `data-catalog-idref` names
+ *   a `qti-catalog` of its document, not any ID of it. The attribute is typed `xs:IDREF`, so "Idref
+ *   target" (`#pantry/qti/identity.ts`) alone refuses a token that names no ID, and accepts one
+ *   that names an HTML `id` or a declaration. {@link CatalogRef} is one row per such attribute,
+ *   keyed by its node, its token the lexical form collapsed (`xs:IDREF`'s whiteSpace `collapse`);
+ *   {@link CatalogId} is one row per `qti-catalog` that writes an `id`, copied from the attribute
+ *   as a `TableHeader` is, its `id` the value its {@link DocumentId} holds. The law is the
+ *   containment of every reference's `(document, token)` in the catalogs' `(document, id)`.
  *
- * Both overlays copy their node through {@link nodeRef}, so `catalog` and `card`, each the node's
- * parent, are the parent the tree holds, and both copy their attribute as `identity.ts` states a
- * copy (C18): from `select(Attribute, φ)` into the overlay, beside a key over the same selection
- * whose UNIQUE serves the copy's reverse probe. Every copied text that takes part in a cross-row
- * equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
- * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores; the overlays'
- * agreement with what the tree holds is "E1 derived" (rule `derived`).
+ * The card overlays copy their node through {@link nodeRef}, so `catalog` and `card`, each the
+ * node's parent, are the parent the tree holds, and both copy their attribute as `identity.ts`
+ * states a copy (C18): from `select(Attribute, φ)` into the overlay, beside a key over the same
+ * selection whose UNIQUE serves the copy's reverse probe. Every copied text that takes part in a
+ * cross-row equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
+ * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores; the overlays' agreement
+ * with what the tree holds is "E1 derived" (rule `derived`).
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card | QTI 3.0 information model, §5.26 Card}
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_CardEntry | QTI 3.0 information model, §5.27 CardEntry}
@@ -41,6 +49,7 @@ import {
 } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
+import { DocumentId } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { nodeRef } from "#pantry/qti/node.ts";
 
@@ -92,9 +101,30 @@ export const DefaultEntry = relation(
 );
 
 /**
+ * One `data-catalog-idref`, keyed by its element's node: its document, the attribute as written
+ * (`lexical`, C18's copy) and that form collapsed (`token`), the id of the catalog it names.
+ */
+export const CatalogRef = relation(
+  "CatalogRef",
+  { document: uuid, lexical: keyText, node: uuid, token: keyText },
+  ["node"],
+);
+
+/**
+ * One `qti-catalog` that carries an `id`, keyed by its node: its document, its `id`, the ID's value
+ * as its {@link DocumentId} holds it (an `xs:ID` collapsed), with `owner` the node itself, an
+ * attribute ID's binding, so its copy shares the superkey `DocumentId` reads.
+ */
+export const CatalogId = relation(
+  "CatalogId",
+  { document: uuid, id: keyText, node: uuid, owner: uuid },
+  ["node"],
+);
+
+/**
  * Every relation this module declares, by name, as `schema.ts` composes them.
  */
-export const catalogRelations = { CardSupport, DefaultEntry };
+export const catalogRelations = { CardSupport, CatalogId, CatalogRef, DefaultEntry };
 
 /**
  * Every card's `support`, the source of {@link CardSupport}.
@@ -119,21 +149,46 @@ const designatingDefaults = select(Attribute, (a) =>
 );
 
 /**
+ * Every `data-catalog-idref`, the source of {@link CatalogRef}.
+ */
+const referenceAttributes = select(Attribute, (a) => a.eq(a.name, "data-catalog-idref"));
+
+/**
+ * Every catalog's `id`, the source of {@link CatalogId}.
+ */
+const catalogIdAttributes = select(Attribute, (a) =>
+  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id")),
+);
+
+/**
  * Every statement over the catalog overlays, each `check` named by its oracle law:
  *
  * - **Card support:** a catalog holds one card for each support, the key on {@link CardSupport}'s
  *   `(catalog, support)`;
  * - **Card default entry:** a card holds at most one designated entry, the key on
  *   {@link DefaultEntry}'s `card`;
- * - **DocumentId key:** one `support` per card and one designating `default` per entry, the keys over
- *   the attribute selections the copies read;
- * - **E1 derived:** each overlay's node tuple, its attribute copied into its row both ways, and its
- *   collapsed value the lexical form collapsed, a designating one `true` or `1`.
+ * - **Catalog reference:** each reference's token is the `id` of a catalog of its document;
+ * - **DocumentId key:** one `support` per card, one designating `default` per entry, one
+ *   `data-catalog-idref` and one catalog `id` per element, the keys over the attribute selections
+ *   the copies read, and {@link CatalogId}'s `(document, id)`, which an ID held twice in a document
+ *   already breaks and which the containment of "Catalog reference" needs of its target;
+ * - **E1 derived:** each card overlay's node tuple, each overlay's attribute copied into its row both
+ *   ways, a collapsed value the lexical form collapsed (a designating one `true` or `1`), and a
+ *   catalog's `id` its {@link DocumentId}'s, owned by the catalog itself.
  */
 export const catalogLawsByName = {
   "Card default entry": [key(on(DefaultEntry, "card"))],
   "Card support": [key(on(CardSupport, "catalog", "support"))],
-  "DocumentId key": [key(on(supportAttributes, "node")), key(on(designatingDefaults, "node"))],
+  "Catalog reference": [
+    contained(on(CatalogRef, "document", "token"), on(CatalogId, "document", "id")),
+  ],
+  "DocumentId key": [
+    key(on(supportAttributes, "node")),
+    key(on(designatingDefaults, "node")),
+    key(on(referenceAttributes, "node")),
+    key(on(catalogIdAttributes, "node")),
+    key(on(CatalogId, "document", "id")),
+  ],
   "E1 derived": [
     contained(
       on(CardSupport, "node", "document", "kind", "start", "nearest", "version", "catalog"),
@@ -154,6 +209,19 @@ export const catalogLawsByName = {
         e.or(e.eq(e.value, designatingValues[0]), e.eq(e.value, designatingValues[1])),
       ),
     ),
+    contained(
+      on(referenceAttributes, "node", "document", "lexical"),
+      on(CatalogRef, "node", "document", "lexical"),
+    ),
+    contained(on(CatalogRef, "node"), on(referenceAttributes, "node")),
+    check("E1_derived", CatalogRef, (r) => r.eq(r.token, Compute.collapse(r.lexical))),
+    contained(on(catalogIdAttributes, "node", "document"), on(CatalogId, "node", "document")),
+    contained(on(CatalogId, "node"), on(catalogIdAttributes, "node")),
+    contained(
+      on(CatalogId, "node", "document", "id", "owner"),
+      on(DocumentId, "node", "document", "id", "owner"),
+    ),
+    check("E1_derived", CatalogId, (c) => c.eq(c.owner, c.node)),
   ],
 } as const;
 

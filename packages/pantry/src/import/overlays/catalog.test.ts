@@ -34,13 +34,14 @@ const shredGrammar = shredGrammarOf(Result.getOrThrow(composed()));
  * Shred an item whose catalog info is the given markup, under 3.0.1.
  *
  * @param catalogs - The `qti-catalog` children of the item's catalog info.
+ * @param body - The item body's markup, empty where none is given.
  * @returns The item's tree.
  */
-const itemOf = (catalogs: string) =>
+const itemOf = (catalogs: string, body = "") =>
   Effect.gen(function* shredsItem() {
     const xml = yield* readXml(
       new TextEncoder().encode(
-        `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false"><qti-item-body/><qti-catalog-info>${catalogs}</qti-catalog-info></qti-assessment-item>`,
+        `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false"><qti-item-body>${body}</qti-item-body><qti-catalog-info>${catalogs}</qti-catalog-info></qti-assessment-item>`,
       ),
     );
 
@@ -171,5 +172,77 @@ describe("import/overlays/catalog.ts, rowsOf", () => {
         });
         assert.strictEqual(placed.CardSupport.get(card?.id ?? "")?.nearest, idOf(9999));
       }),
+  );
+});
+
+describe("import/overlays/catalog.ts, rowsOf, references", () => {
+  it.effect(
+    "gives each data-catalog-idref its token as written and collapsed, and each catalog its id as written and trimmed",
+    () =>
+      Effect.gen(function* referenceRows() {
+        const tree = yield* itemOf(
+          `<qti-catalog id="A"><qti-card support="spoken"/></qti-catalog><qti-catalog id=" B "><qti-card support="spoken"/></qti-catalog>`,
+          `<p data-catalog-idref="A">a</p><p data-catalog-idref=" B ">b</p><p id="p1">c</p>`,
+        );
+        const rows = rowsOf(tree, { idOf });
+        const names = namesOf(tree);
+        const nameOf = (node: NodeId): string => names.get(node) ?? node;
+
+        assert.deepStrictEqual(
+          [...rows.CatalogRef.values()]
+            .map(
+              ({ lexical, node, token }) =>
+                `${nameOf(node)}: ${JSON.stringify(lexical)} = ${token}`,
+            )
+            .toSorted(),
+          ['p#0: "A" = A', 'p#1: " B " = B'],
+        );
+        assert.deepStrictEqual(
+          [...rows.CatalogId.values()]
+            .map(({ id, node, owner }) => `${nameOf(node)} = ${id} (${nameOf(owner)})`)
+            .toSorted(),
+          ["qti-catalog#0 = A (qti-catalog#0)", "qti-catalog#1 = B (qti-catalog#1)"],
+        );
+      }),
+  );
+
+  it.effect(
+    "gives a catalog with no id no CatalogId, and a document with no reference no ref",
+    () =>
+      Effect.gen(function* noReferences() {
+        const rows = rowsOf(
+          yield* itemOf(
+            `<qti-catalog><qti-card support="spoken"/></qti-catalog>`,
+            `<p id="p1">c</p>`,
+          ),
+          { idOf },
+        );
+
+        assert.strictEqual(rows.CatalogRef.size, 0);
+        assert.strictEqual(rows.CatalogId.size, 0);
+      }),
+  );
+
+  it.effect("writes each reference under its document", () =>
+    Effect.gen(function* tuple() {
+      const tree = yield* itemOf(`<qti-catalog id="A"/>`, `<p data-catalog-idref="A">a</p>`);
+      const flat = flatten(tree, idOf);
+      const paragraph = flat.nodes.find(({ kind }) => kind === "p");
+      const catalog = flat.nodes.find(({ kind }) => kind === "qti-catalog");
+      const rows = rowsOf(tree, { idOf });
+
+      assert.deepStrictEqual(rows.CatalogRef.get(paragraph?.id ?? ""), {
+        document: flat.document.node,
+        lexical: "A",
+        node: paragraph?.id,
+        token: "A",
+      });
+      assert.deepStrictEqual(rows.CatalogId.get(catalog?.id ?? ""), {
+        document: flat.document.node,
+        id: "A",
+        node: catalog?.id,
+        owner: catalog?.id,
+      });
+    }),
   );
 });

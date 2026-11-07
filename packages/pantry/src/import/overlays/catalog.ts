@@ -16,7 +16,7 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import { designatingValues } from "#pantry/qti/catalog.ts";
-import type { CardSupport, DefaultEntry } from "#pantry/qti/catalog.ts";
+import type { CardSupport, CatalogId, CatalogRef, DefaultEntry } from "#pantry/qti/catalog.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -36,6 +36,8 @@ export interface CatalogIds {
  */
 export interface CatalogRows {
   readonly CardSupport: ReadonlyMap<string, Addition<typeof CardSupport>>;
+  readonly CatalogId: ReadonlyMap<string, Addition<typeof CatalogId>>;
+  readonly CatalogRef: ReadonlyMap<string, Addition<typeof CatalogRef>>;
   readonly DefaultEntry: ReadonlyMap<string, Addition<typeof DefaultEntry>>;
 }
 
@@ -98,6 +100,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const supports = new Map<string, Addition<typeof CardSupport>>();
   const defaults = new Map<string, Addition<typeof DefaultEntry>>();
+  const references = new Map<string, Addition<typeof CatalogRef>>();
+  const catalogIds = new Map<string, Addition<typeof CatalogId>>();
 
   for (const { lexical, name, node: id } of rows.attributes) {
     const node = byId.get(id);
@@ -106,6 +110,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
     }
 
     const value = collapse(lexical);
+    if (name === "data-catalog-idref") {
+      references.set(id, { document, lexical, node: id, token: value });
+    } else if (node.kind === "qti-catalog" && name === "id") {
+      catalogIds.set(id, { document, id: value, node: id, owner: id });
+    }
+
     const tuple = {
       document,
       kind: node.kind,
@@ -122,5 +132,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
     }
   }
 
-  return { CardSupport: supports, DefaultEntry: defaults };
+  return {
+    CardSupport: supports,
+    CatalogId: catalogIds,
+    CatalogRef: references,
+    DefaultEntry: defaults,
+  };
 };
