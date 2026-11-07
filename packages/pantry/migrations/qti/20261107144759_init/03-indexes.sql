@@ -80,6 +80,8 @@ CREATE INDEX "__document_lang_ix_document_juyvfcb_7_ad_generals_xnnbzpp52u" ON "
 
 CREATE INDEX "__entry_ix_package_sm_22_xuinlg_path_fceociruej_jddz344rfe" ON "qti"."entry" USING btree ("__package_sm22xuinlg", "__path_fceociruej");
 
+CREATE INDEX "__expression_ix_node_oay_5_lzx_65_r_2zpayqdtdx" ON "qti"."expression" USING btree ("__node_oay5lzx65r");
+
 CREATE INDEX "__expression_ix_node_rlahrdawnp_zmawchdkis" ON "qti"."expression" USING btree ("__node_rlahrdawnp");
 
 CREATE INDEX "__expression_ix_node_uquzqs_6_gxs_4qbk5c4rhs" ON "qti"."expression" USING btree ("__node_uquzqs6gxs");

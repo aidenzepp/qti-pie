@@ -62,6 +62,7 @@ import type {
   ExpressionAttribute,
   ItemTiming,
   Literal,
+  LiteralTyped,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -121,6 +122,7 @@ export interface ExpressionRows {
   readonly ExpressionAttribute: ReadonlyMap<string, Addition<typeof ExpressionAttribute>>;
   readonly ItemTiming: ReadonlyMap<string, Addition<typeof ItemTiming>>;
   readonly Literal: ReadonlyMap<string, Addition<typeof Literal>>;
+  readonly LiteralTyped: ReadonlyMap<string, Addition<typeof LiteralTyped>>;
   readonly Operand: ReadonlyMap<string, Addition<typeof Operand>>;
   readonly Processing: ReadonlyMap<string, Addition<typeof Processing>>;
   readonly ProcessingTemplate: ReadonlyMap<string, Addition<typeof ProcessingTemplate>>;
@@ -437,7 +439,8 @@ const numericOf = (operands: readonly Typed[]): ValueBase => {
 
 /**
  * The base type an expression's own attribute gives: a math operator's by its `name`, a base
- * value's and a test variables' by its `base-type`, `unknown` where none is written.
+ * value's and a test variables' by its `base-type`, `unknown` where none is written or the one
+ * written spells no base (`E1_derived` on `ExpressionAttribute`).
  *
  * @param kind - The expression's kind.
  * @param baseTypeLexical - Its `base-type`, if written.
@@ -913,7 +916,7 @@ const charsOf = (doc: Document, node: NodeId): string => {
 /**
  * Add an expression's rows: its `Expression` row, its `Operand` row where its parent is an
  * expression, an `ExpressionAttribute` row for each attribute its type follows from, and a base
- * value's `Literal` row.
+ * value's `Literal` row, with its `LiteralTyped` where its `base-type` spells a base.
  *
  * @param doc - The document.
  * @param node - The expression.
@@ -928,6 +931,7 @@ const expressionRowsOf = (
     readonly Expression: Map<string, Addition<typeof Expression>>;
     readonly ExpressionAttribute: Map<string, Addition<typeof ExpressionAttribute>>;
     readonly Literal: Map<string, Addition<typeof Literal>>;
+    readonly LiteralTyped: Map<string, Addition<typeof LiteralTyped>>;
     readonly Operand: Map<string, Addition<typeof Operand>>;
   },
 ): void => {
@@ -971,11 +975,16 @@ const expressionRowsOf = (
   }
 
   if (node.kind === "qti-base-value") {
-    built.Literal.set(node.id, {
-      ...own,
-      text: (doc.childrenOf.get(node.id) ?? []).map(({ id }) => charsOf(doc, id)).join(""),
-      typeCode: baseTypeOf(valueOf(doc, node.id, "base-type")),
-    });
+    const text = (doc.childrenOf.get(node.id) ?? []).map(({ id }) => charsOf(doc, id)).join("");
+    built.Literal.set(node.id, { ...own, text });
+    if (type.baseType !== "unknown") {
+      built.LiteralTyped.set(node.id, {
+        baseType: type.baseType,
+        node: node.id,
+        text,
+        typeCode: baseTypeOf(valueOf(doc, node.id, "base-type")),
+      });
+    }
   }
 };
 
@@ -1294,6 +1303,7 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
     ExpressionAttribute: new Map<string, Addition<typeof ExpressionAttribute>>(),
     ItemTiming: itemTimingOf(doc),
     Literal: new Map<string, Addition<typeof Literal>>(),
+    LiteralTyped: new Map<string, Addition<typeof LiteralTyped>>(),
     Operand: new Map<string, Addition<typeof Operand>>(),
     Processing: new Map<string, Addition<typeof Processing>>(),
     ProcessingTemplate: new Map<string, Addition<typeof ProcessingTemplate>>(),

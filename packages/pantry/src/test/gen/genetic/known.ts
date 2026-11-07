@@ -469,24 +469,6 @@ export const known = {
       fix: "two declarations of one identifier: the oracle raises the VariableLookup containment that breaks beside Declaration key, so precedence sees it",
       owner: "OL",
     },
-  "import-only-law: E1 derived, contained Expression(kind, baseType) in ResultBase(kind, base)": {
-    files: [
-      [
-        "d0.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-assessment-item-ref><qti-branch-rule><qti-base-value/></qti-branch-rule></qti-assessment-item-ref></qti-assessment-section>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/></resources></manifest>`,
-      ],
-    ],
-    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-    owner: "NIL",
-  },
   "import-only-law: E1 derived, contained GeneralObject(record, document) in LomObject(record, document)":
     {
       files: [
@@ -1405,6 +1387,24 @@ export const fixed = {
       fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, and removes the containment this class broke, so no package can show it",
       owner: "NIL",
     },
+  "import-only-law: E1 derived, contained Expression(kind, baseType) in ResultBase(kind, base)": {
+    files: [
+      [
+        "d0.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-assessment-item-ref><qti-branch-rule><qti-base-value/></qti-branch-rule></qti-assessment-item-ref></qti-assessment-section>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="d0.xml"/></resources></manifest>`,
+      ],
+    ],
+    fix: "PG's Expression base type commit: an attribute-typed expression whose base-type spells no base is unknown, and ResultBase judges no such one (resultTyped), so the containment this class broke no longer reads it and its statement is another",
+    owner: "PG",
+  },
   "import-only-law: Idref target, contained IdrefTarget(document, id) in IdBinding(document, id)": {
     files: [
       [

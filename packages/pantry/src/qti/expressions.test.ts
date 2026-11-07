@@ -68,6 +68,7 @@ import {
   expressionLaws,
   ItemTiming,
   Literal,
+  LiteralTyped,
   Operand,
   Processing,
   ProcessingTemplate,
@@ -131,6 +132,7 @@ describe("qti/expressions.ts, declared", () => {
         Language,
         LeadCardinality,
         Literal,
+        LiteralTyped,
         Mapping,
         MatchTable,
         Operand,
@@ -164,6 +166,7 @@ describe("qti/expressions.ts, declared", () => {
       ExpressionAttribute,
       ItemTiming,
       Literal,
+      LiteralTyped,
       ProcessingTemplate,
       ...Object.values(referenceRelations),
     ]) {

@@ -960,7 +960,7 @@ describe("domainOrdered", () => {
 
     assert.sameMembers(Object.keys(inputs), [
       "ExpressionAttribute",
-      "Literal",
+      "LiteralTyped",
       "UsageValue",
       "Value",
     ]);

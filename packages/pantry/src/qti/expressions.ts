@@ -136,6 +136,7 @@ import {
   ValueBase,
   ValueBaseBit,
   ValueBaseForm,
+  spelledBasesPattern,
   ValueBaseOf,
   ValueCardinality,
   ValueCardinalityBit,
@@ -434,8 +435,8 @@ export const ExpressionAttribute = relation(
 );
 
 /**
- * A base value, keyed by its `qti-base-value` node: its `exprRef` tuple, its base type as the
- * declaration code `BaseTypePattern` is keyed by, and its text, its node's string value.
+ * A base value, keyed by its `qti-base-value` node: its `exprRef` tuple and its text, its node's
+ * string value. The code its `base-type` spells is its optional part, {@link LiteralTyped}.
  */
 export const Literal = relation(
   "Literal",
@@ -446,6 +447,23 @@ export const Literal = relation(
     language: closedId(Language),
     node: uuid,
     parent: uuid,
+    text: keyText,
+  },
+  ["node"],
+);
+
+/**
+ * A base value's type, keyed by its `qti-base-value` node, where its `base-type` spells a base: its
+ * text, the declaration code `BaseTypePattern` is keyed by, and its base type, each its
+ * {@link Literal} row's. A base value whose `base-type` spells none has an `unknown` base type and
+ * no row here, so no law reads its text in a type it does not have, and AL1's value domain refuses
+ * its `base-type` alone.
+ */
+export const LiteralTyped = relation(
+  "LiteralTyped",
+  {
+    baseType: closedId(ValueBase),
+    node: uuid,
     text: keyText,
     typeCode: closedId(BaseType),
   },
@@ -1219,6 +1237,25 @@ const typeAttributes = select(ExpressionAttribute, (x) => x.in(x.attribute, ["ba
  * The kinds whose type an attribute of their own gives.
  */
 const attributeTypedKinds = ["qti-base-value", "qti-math-operator", "qti-test-variables"] as const;
+
+/**
+ * The expressions `ResultBase` judges: every one but an attribute-typed expression of an `unknown`
+ * base type, the type of one whose typing attribute spells no base (`E1_derived` on
+ * {@link ExpressionAttribute}), which AL1's value domain refuses alone. `ResultBase` is the
+ * information model's table of each kind's result bases, and states no `unknown` for a kind whose
+ * attribute must spell one.
+ */
+const resultTyped = select(Expression, (e) =>
+  e.or(e.not(e.in(e.kind, attributeTypedKinds)), e.ne(e.baseType, "unknown")),
+);
+
+/**
+ * The base values whose `base-type` spells a base: each has its {@link LiteralTyped}. A base value
+ * of an `unknown` base has none, since its text has no type to be read in.
+ */
+const typedBaseValues = select(Expression, (e) =>
+  e.and(e.eq(e.kind, "qti-base-value"), e.ne(e.baseType, "unknown")),
+);
 
 /**
  * The references by `identifier` that name a variable, declared or built in: each names one of the
@@ -2322,7 +2359,7 @@ export const expressionLawsByName = {
       ),
       on(Expression, "node", "language"),
     ),
-    contained(on(Expression, "kind", "baseType"), on(ResultBase, "kind", "base")),
+    contained(on(resultTyped, "kind", "baseType"), on(ResultBase, "kind", "base")),
     contained(on(Expression, "kind", "cardinality"), on(ResultCardinality, "kind", "cardinality")),
     check("E1_derived", Expression, (e) =>
       e.and(
@@ -2572,6 +2609,11 @@ export const expressionLawsByName = {
               Compute.matches(x.lexical, ValueBaseForm.at("pattern", x.baseType)),
             ),
             x.and(
+              x.eq(x.attribute, "base-type"),
+              x.eq(x.baseType, "unknown"),
+              x.not(Compute.matches(x.lexical, spelledBasesPattern)),
+            ),
+            x.and(
               x.eq(x.attribute, "name"),
               x.or(
                 x.and(
@@ -2604,11 +2646,18 @@ export const expressionLawsByName = {
       ),
       on(Literal, "node", "text"),
     ),
+    contained(on(typedBaseValues, "node"), on(LiteralTyped, "node")),
+    contained(
+      on(LiteralTyped, "node", "text", "baseType"),
+      on(Literal, "node", "text", "baseType"),
+    ),
     contained(
       on(Literal, "node", "parent", "kind", "language", "baseType", "cardinality"),
       exprRef,
     ),
-    check("E1_derived", Literal, (l) => l.eq(ValueBaseOf.at("value", l.typeCode), l.baseType)),
+    check("E1_derived", LiteralTyped, (l) =>
+      l.and(l.ne(l.baseType, "unknown"), l.eq(ValueBaseOf.at("value", l.typeCode), l.baseType)),
+    ),
     contained(on(templateAttributes, "node", "lexical"), on(ProcessingTemplate, "node", "uri")),
     check("E1_derived", ProcessingTemplate, (t) =>
       t.or(
@@ -2633,7 +2682,7 @@ export const expressionLawsByName = {
     ),
   ],
   "Literal lexical": [
-    check("Literal_lexical", Literal, (l) =>
+    check("Literal_lexical", LiteralTyped, (l) =>
       Compute.matches(l.text, BaseTypePattern.at("pattern", l.typeCode)),
     ),
   ],
