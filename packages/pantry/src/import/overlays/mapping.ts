@@ -413,6 +413,23 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
 };
 
 /**
+ * How a map entry's key is matched: its `case-sensitive` as written (empty where unwritten),
+ * `folded` where its mapping is of strings and the value is not true, and `matched`, the key's
+ * ASCII lowercase where `folded`.
+ *
+ * @param baseType - The entry's mapping's base type.
+ * @param caseText - The entry's `case-sensitive`, where written.
+ * @param key - The entry's `map-key`.
+ * @returns The `MapKey` row's matching fields.
+ */
+const matchingOf = (baseType: BaseTypeHandle, caseText: string | undefined, key: string) => {
+  const written = caseText ?? "";
+  const folded = baseType === "string" && !booleanTrue.some((form) => form === collapse(written));
+
+  return { caseText: written, folded, matched: folded ? lowerAscii(key) : key };
+};
+
+/**
  * Build the mapping overlays' rows of one document.
  *
  * A declared overlay copies its parent's declaration fields as `Declaration`'s builder writes them
@@ -515,17 +532,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     }
 
     const { baseType } = mappingDeclaration;
-    const caseText = valueOf(node.id, "case-sensitive") ?? "";
-    const folded =
-      baseType === "string" && !booleanTrue.some((form) => form === collapse(caseText));
     mapKeys.set(node.id, {
       ...tupleOf(node),
+      ...matchingOf(baseType, valueOf(node.id, "case-sensitive"), key),
       baseType,
-      caseText,
-      folded,
       key,
       mapping: node.parent,
-      matched: folded ? lowerAscii(key) : key,
     });
 
     addTypedKey(typed, baseType, { key, mapping: node.parent, node: node.id });
