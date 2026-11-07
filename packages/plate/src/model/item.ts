@@ -76,6 +76,8 @@ import {
 import type {
   // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
   AreaShape,
+  BaseType,
+  Cardinality,
   Condition,
   FeatureRule,
   InteractionName,
@@ -699,10 +701,22 @@ export type BodyNode =
   | Unsupported;
 
 /**
+ * A response, outcome or template declaration of a type the value model holds no value of: base
+ * type `file`, or cardinality `record`. A record's `base-type` is optional, so it is none when the
+ * declaration writes none.
+ */
+export interface UnheldDeclaration {
+  readonly baseType: Option.Option<BaseType>;
+  readonly cardinality: Cardinality;
+  readonly identifier: string;
+}
+
+/**
  * A valid `qti-assessment-item` as plate models it.
  *
  * `responses`, `outcomes` and `templates` hold the declarations of modelled base types and
- * cardinalities, in document order; every other declaration is a mark. `processing` is none when
+ * cardinalities, in document order; every other declaration is a mark, and `unheld` holds those of
+ * base type `file` or cardinality `record` by identifier. `processing` is none when
  * the item has no response processing, or when plate cannot run it, which `unsupported` then marks.
  * Plate cannot run it beside a `qti-template-processing` that does not run (`templateProcessing`
  * none, an element in it marked), which may set a value response processing reads, such as a
@@ -734,6 +748,13 @@ export interface Item {
    */
   readonly templates: ReadonlyMap<string, TemplateDeclaration>;
   readonly title: string;
+  /**
+   * The response, outcome and template declarations of base type `file` or cardinality `record`,
+   * keyed by identifier, which a test's processing reads through an item ref as NULL of their
+   * declared type. Absent when the item makes no such declaration, so `buildItem` gives it only
+   * when the item makes one, and an item built by hand may leave it out.
+   */
+  readonly unheld?: ReadonlyMap<string, UnheldDeclaration>;
   readonly unsupported: readonly UnsupportedFeature[];
 }
 
@@ -1013,10 +1034,41 @@ interface Declared {
 }
 
 /**
+ * A declaration's identifier, and its base type and cardinality as written, each none when absent.
+ */
+interface WrittenType {
+  readonly baseType: Option.Option<BaseType>;
+  readonly cardinality: Option.Option<Cardinality>;
+  readonly identifier: string;
+}
+
+/**
+ * Read a declaration's identifier, base type and cardinality as written.
+ *
+ * @param build The build.
+ * @param declaration A response, outcome or template declaration.
+ * @returns Them, or a refusal when `identifier` or `cardinality` is missing or a value is outside
+ *   its list.
+ */
+const writtenType = (
+  build: ModelWalk,
+  declaration: SourceElement,
+): Effect.Effect<WrittenType, Refusal> =>
+  Effect.gen(function* readWrittenType() {
+    const identifier = yield* identifierAttribute(build, declaration, "identifier");
+    yield* requiredAttribute(build, declaration, "cardinality");
+
+    const cardinality = yield* enumerated(build, declaration, "cardinality", cardinalities);
+    const baseType = yield* enumerated(build, declaration, "base-type", baseTypes);
+
+    return { baseType, cardinality, identifier };
+  });
+
+/**
  * Read a declaration's identifier, base type and cardinality.
  *
  * @param build The build.
- * @param declaration A response or outcome declaration.
+ * @param declaration A response, outcome or template declaration.
  * @returns Them, none when the base type is absent or not modelled or the cardinality is
  *   `record`, or a refusal when `identifier` or `cardinality` is missing or a value is outside its
  *   list.
@@ -1025,19 +1077,35 @@ const declared = (
   build: ModelWalk,
   declaration: SourceElement,
 ): Effect.Effect<Option.Option<Declared>, Refusal> =>
-  Effect.gen(function* readDeclared() {
-    const identifier = yield* identifierAttribute(build, declaration, "identifier");
-    yield* requiredAttribute(build, declaration, "cardinality");
-
-    const cardinality = yield* enumerated(build, declaration, "cardinality", cardinalities);
-    const baseType = yield* enumerated(build, declaration, "base-type", baseTypes);
-
-    return Option.flatMap(Option.all({ baseType, cardinality }), (read) =>
+  Effect.map(writtenType(build, declaration), ({ baseType, cardinality, identifier }) =>
+    Option.flatMap(Option.all({ baseType, cardinality }), (read) =>
       read.cardinality !== "record" && isModelled(read.baseType)
         ? Option.some({ baseType: read.baseType, cardinality: read.cardinality, identifier })
         : Option.none(),
-    );
-  });
+    ),
+  );
+
+/**
+ * Read a declaration the model holds no value of because of its type: one of base type `file`,
+ * or of cardinality `record`, whose `base-type` is optional.
+ *
+ * @param build The build.
+ * @param declaration A response, outcome or template declaration.
+ * @returns Its identifier, base type and cardinality, none when its type is neither; or a refusal
+ *   when `identifier` or `cardinality` is missing or a value is outside its list.
+ */
+const unheldDeclaration = (
+  build: ModelWalk,
+  declaration: SourceElement,
+): Effect.Effect<Option.Option<UnheldDeclaration>, Refusal> =>
+  Effect.map(writtenType(build, declaration), ({ baseType, cardinality, identifier }) =>
+    cardinality.pipe(
+      Option.filter(
+        (read) => read === "record" || Option.exists(baseType, (type) => type === "file"),
+      ),
+      Option.map((read) => ({ baseType, cardinality: read, identifier })),
+    ),
+  );
 
 /**
  * Read a `qti-mapping` under its response's base type.
@@ -3278,7 +3346,9 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * identifier it does not hold is the mark `variable:<identifier>` at the processing element's path,
  * each such need unmet its mark there (`mapping:<identifier>`, `area-mapping:<identifier>` or
  * `outcome-type:<identifier>`), such a point mapping the mark `area-coords-percent` there, and the
- * processing is then none. Template declarations of modelled types are read into `templates`, and a
+ * processing is then none. A response, outcome or template declaration of base type `file` or
+ * cardinality `record` is held in `unheld`, beside its mark, and `unheld` is absent when there is
+ * none. Template declarations of modelled types are read into `templates`, and a
  * `qti-template-processing` into `templateProcessing` through `templateRules` in
  * `#plate/model/template.ts`, which marks what the engine does not run as response processing's
  * reader does. Its rules are kept only when the engine holds every name they read and set while
@@ -3316,6 +3386,13 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();
     const templateDeclarations = new Map<string, TemplateDeclaration>();
+    const unheld = new Map<string, UnheldDeclaration>();
+    const holdUnheld = (declaration: SourceElement): Effect.Effect<void, Refusal> =>
+      Effect.map(unheldDeclaration(build, declaration), (read) => {
+        for (const each of Option.toArray(read)) {
+          unheld.set(each.identifier, each);
+        }
+      });
     const body: BodyNode[] = [];
     let processing: Option.Option<ReadProcessing> = Option.none();
     let templateRead: Option.Option<ReadTemplateProcessing> = Option.none();
@@ -3345,6 +3422,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         if (Option.isSome(read)) {
           responses.set(read.value.identifier, read.value);
         }
+
+        yield* holdUnheld(part);
       } else if (part.local === "qti-outcome-declaration") {
         markElement(build, part, false);
         markUnreadWithin(build, part);
@@ -3353,6 +3432,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         if (Option.isSome(read)) {
           outcomes.set(read.value.identifier, read.value);
         }
+
+        yield* holdUnheld(part);
       } else if (part.local === "qti-template-declaration") {
         markElement(build, part, false);
         markUnreadWithin(build, part);
@@ -3361,6 +3442,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         if (Option.isSome(read)) {
           templateDeclarations.set(read.value.identifier, read.value);
         }
+
+        yield* holdUnheld(part);
       } else if (part.local === "qti-template-processing") {
         markElement(build, part, false);
 
@@ -3418,7 +3501,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       markAt(build, templateRead.value.at, templateRead.value.path, templateMarks);
     }
 
-    return {
+    const built: Item = {
       body,
       document: source.location,
       identifier,
@@ -3431,4 +3514,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       title,
       unsupported: build.unsupported,
     };
+
+    // `unheld` is absent when the item makes no file or record declaration, as a model built by hand
+    // leaves it out.
+    return unheld.size === 0 ? built : { ...built, unheld };
   });

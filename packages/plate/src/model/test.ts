@@ -179,6 +179,13 @@ export type OutcomeProcessing =
  */
 export interface Test {
   /**
+   * Every identifier the test's outcome and context declarations declare, those the model does not
+   * hold included, so a test-level read never splits a dotted one into an item ref and a variable.
+   * `buildTest` always gives it; a test built by hand may leave it out, and then declares only the
+   * identifiers of `outcomes`.
+   */
+  readonly declared?: ReadonlySet<string>;
+  /**
    * The document's location as the host named it.
    */
   readonly document: string;
@@ -1363,7 +1370,8 @@ const templateDefaultOf = (
  * test's outcome declarations are held and marked as the item model holds and marks an item's. Its
  * outcome processing is `absent` when it has none, `marked` when the engine cannot run it
  * ({@link outcomeProcessingOf}), and `runs` with its rules otherwise; nothing in it or in a
- * template default is refused but an attribute outside its type.
+ * template default is refused but an attribute outside its type. `declared` holds every identifier
+ * the test's outcome and context declarations declare.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The test, or the refusal `value-type` at the first typed value outside its lexical
@@ -1407,6 +1415,7 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
     }
 
     return {
+      declared: names.declared,
       document: source.location,
       identifier,
       outcomeProcessing: read.outcomeProcessing,

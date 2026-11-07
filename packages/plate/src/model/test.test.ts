@@ -738,6 +738,31 @@ const variableRead = (identifier: string) =>
   }) as const;
 
 describe("buildTest's outcome processing, weights and variable mappings", () => {
+  it.effect(
+    "[T-9] declared holds every identifier the test's outcome and context declarations declare, those the model does not hold included",
+    () =>
+      Effect.gen(function* holdsDeclared() {
+        const built = yield* buildTest(
+          test([
+            outcome("SCORE", "float"),
+            el("qti-outcome-declaration", [
+              attr("cardinality", "record"),
+              attr("identifier", "DETAIL"),
+            ]),
+            el("qti-context-declaration", [
+              attr("base-type", "float"),
+              attr("cardinality", "single"),
+              attr("identifier", "I1.SCORE"),
+            ]),
+            part("P1", "linear", "individual", [section("S1", [itemRef("I1", "items/one.xml")])]),
+          ]),
+        );
+
+        assert.deepStrictEqual([...built.outcomes.keys()], ["SCORE"]);
+        assert.deepStrictEqual(built.declared, new Set(["DETAIL", "I1.SCORE", "SCORE"]));
+      }),
+  );
+
   it.effect("[T-9] absent, marked or runs: a test with no outcome processing is absent", () =>
     Effect.gen(function* absent() {
       const built = yield* buildTest(twoParts);
