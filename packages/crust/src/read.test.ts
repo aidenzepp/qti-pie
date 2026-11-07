@@ -169,7 +169,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
   suite.effect("normalizes a non-CDATA attribute and its default, and records an entity name", () =>
     Effect.gen(function* readTypes() {
       const text =
-        '<!DOCTYPE a [<!ATTLIST a i ID " p  q " e (u|v) " u " d NMTOKENS "  m  &amp;n  &z;  " c CDATA " k  ">]><a e=" v  " c=" k  "/>';
+        '<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST a i ID " p  q " e (u|v) " u " d NMTOKENS "  m  &amp;n  &z;  " c CDATA " k  ">]><a e=" v  " c=" k  "/>';
       const { root } = yield* readText(text);
 
       assert.deepStrictEqual(names(root), ["e", "c", "i", "d"]);
