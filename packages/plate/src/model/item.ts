@@ -2580,39 +2580,52 @@ const typeOf = (
  * The evaluator returns `UnmappedResponseError` for a `qti-map-response` of a response with no
  * `qti-mapping` and for a `qti-map-response-point` of one with no `qti-area-mapping`, which only a
  * `point` declaration holds, and `OutcomeMismatchError` for a `qti-set-outcome-value` whose
- * expression's type ({@link typeOf}) is not the outcome's (`#plate/engine/evaluate.ts`). The prose
- * rules refuse inline rules that need these (`expression-type` and `template-requirements` in
- * `#plate/validate/rules.ts`). Of a built-in template they judge less: `template-requirements`
- * judges what a canonical template needs of `RESPONSE` and the base type of `SCORE`, not its
- * cardinality, and leaves the `CC2_*` templates alone (Q6). So {@link runnable} runs no built-in
- * template's tree this walk finds a need in, and those failures stay unreachable from one.
- * The marks name what is missing: `mapping:<identifier>` and `area-mapping:<identifier>` for the
- * response's mapping and area mapping, and `outcome-type:<identifier>` for an outcome a rule sets
- * to a value of another base type or cardinality. An identifier the engine does not hold is
- * {@link unheldIdentifiers}'s mark, and no need is judged of it.
+ * expression's type ({@link typeOf}) is not the outcome's, or a `qti-lookup-outcome-value` of an
+ * outcome that is not single (`#plate/engine/evaluate.ts`). The prose rules refuse inline rules
+ * that map a response with no mapping or set an outcome to another type (`expression-type` and
+ * `template-requirements` in `#plate/validate/rules.ts`), but no prose rule judges a lookup's
+ * outcome cardinality, and pantry's checker accepts a lookup of any outcome with a lookup table.
+ * Of a built-in template they judge less: `template-requirements` judges what a canonical template
+ * needs of `RESPONSE` and the base type of `SCORE`, not its cardinality, and leaves the `CC2_*`
+ * templates alone (Q6). So this walk judges every need of a built-in template's tree and, of inline
+ * rules, only each lookup's outcome cardinality, and {@link runnable} runs no tree it finds a need
+ * in, so those failures stay unreachable from a checked item. The marks name what is missing:
+ * `mapping:<identifier>` and `area-mapping:<identifier>` for the response's mapping and area
+ * mapping, and `outcome-type:<identifier>` for an outcome a rule sets to a value of another base
+ * type or cardinality. An identifier the engine does not hold is {@link unheldIdentifiers}'s mark,
+ * and no need is judged of it; a `record` outcome is one.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
  * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
+ * @param written `template` for a built-in template's tree, whose every need is judged, or
+ *   `inline` for inline rules, of which only a lookup's outcome cardinality is.
  * @returns The marks, empty when every need is met.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_SetValue
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_LookupOutcomeValue
  */
 const unmetNeeds = (
   tree: readonly Rule[],
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
   builtIns: ReadonlySet<string>,
+  written: "inline" | "template",
 ): readonly string[] => {
   const unmet = new Set<string>();
 
   /**
-   * Add the mark of each mapping an expression and its operands read that their response lacks.
+   * Add the mark of each mapping an expression and its operands read that their response lacks,
+   * of a template's tree only: the prose rules refuse an inline one.
    *
    * @param operand The expression.
    */
   const read = (operand: Expression): void => {
+    if (written === "inline") {
+      return;
+    }
+
     if (operand.kind === "map-response" || operand.kind === "map-response-point") {
       const response = responses.get(operand.identifier);
       const point = operand.kind === "map-response-point";
@@ -2631,9 +2644,9 @@ const unmetNeeds = (
 
   /**
    * Add the marks of a rule sequence, nested branches included: each mapping its expressions read
-   * that their response lacks, and each outcome it sets to a value of another type. A lookup gives
-   * a single value of its outcome's base type (reading 8), so it needs an outcome of cardinality
-   * `single`; an exit needs nothing.
+   * that their response lacks, and each outcome it sets to a value of another type, a set's of a
+   * template's tree only. A lookup gives a single value of its outcome's base type (reading 8), so
+   * it needs an outcome of cardinality `single`, inline or not; an exit needs nothing.
    *
    * @param sequence The rules, in order.
    */
@@ -2651,7 +2664,7 @@ const unmetNeeds = (
         read(each.expression);
 
         const outcome = outcomes.get(each.identifier);
-        if (outcome !== undefined) {
+        if (outcome !== undefined && (written === "template" || each.kind === "lookup-outcome")) {
           const given =
             each.kind === "set-outcome"
               ? typeOf(each.expression, responses, outcomes, builtIns)
@@ -2691,14 +2704,16 @@ interface ReadProcessing extends ProcessingTree {
 
 /**
  * Keep a rule tree the engine can run. Each identifier {@link unheldIdentifiers} finds is the mark
- * `variable:<identifier>` at the processing element's path, each need {@link unmetNeeds} finds in a
- * built-in template's tree is its mark there (`mapping:<identifier>`, `area-mapping:<identifier>`
- * or `outcome-type:<identifier>`), and a tree that maps a point through an area mapping with a `%`
+ * `variable:<identifier>` at the processing element's path, each need {@link unmetNeeds} finds is
+ * its mark there (`mapping:<identifier>`, `area-mapping:<identifier>` or
+ * `outcome-type:<identifier>`), and a tree that maps a point through an area mapping with a `%`
  * coordinate ({@link readsPercentArea}) is the mark `area-coords-percent` there. The marks are
  * placed among the others in document order, and the tree is then none. So a built-in template the
  * item does not provide for, a `CC2_*` one (Q6) or a canonical one whose `SCORE` has the base type
  * `template-requirements` asks for and another cardinality, is marked and does not run, and is
- * never refused. Inline rules are not walked for needs: the prose rules refuse those that have one.
+ * never refused. Inline rules are walked only for a lookup of an outcome that is not single, which
+ * is marked `outcome-type:<identifier>` and never refused, as pantry accepts it; the prose rules
+ * refuse the inline rules that have any other need.
  *
  * @param build The build.
  * @param read The processing as read.
@@ -2719,7 +2734,13 @@ const runnable = (
     ...unheldIdentifiers(read.tree, responses, outcomes, builtIns, build.names).map(
       (identifier) => `variable:${identifier}`,
     ),
-    ...(Option.isSome(read.template) ? unmetNeeds(read.tree, responses, outcomes, builtIns) : []),
+    ...unmetNeeds(
+      read.tree,
+      responses,
+      outcomes,
+      builtIns,
+      Option.isSome(read.template) ? "template" : "inline",
+    ),
   ];
   if (readsPercentArea(read.tree, responses)) {
     features.push("area-coords-percent");
@@ -2769,18 +2790,18 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * The body keeps text and HTML elements as written. Choice, Text Entry and Extended Text become
  * their models when their binding is one `renders` lists and they carry no notice feature; any
  * other `qti-*` element in the body becomes a notice, its subtree dropped. Each `renders` mark adds
- * an unsupported feature, and so does each `qti-*` element outside the body that the model does
- * not read. Response processing is a rule tree: a built-in template resolves to the tree its text
+ * an unsupported feature, and so does each `qti-*` element outside the body that the model does not
+ * read. Response processing is a rule tree: a built-in template resolves to the tree its text
  * gives, and inline rules become their tree when every element is in the engine. The tree is kept
  * only when the engine holds every identifier it names, the item provides every declaration a
- * built-in template's tree needs, and it maps no point through an area mapping with a `%`
- * coordinate; each identifier it does not hold is the mark `variable:<identifier>` at the
- * processing element's path, each such need unmet its mark there (`mapping:<identifier>`,
- * `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a point mapping the mark
- * `area-coords-percent` there, and the processing is then none. An item whose root has a
- * `qti-template-processing` child keeps that element's mark and has no processing, whatever the
- * tree: template processing may set a template variable, a default value or a correct response,
- * and the engine runs none of it, so a score computed without it could be wrong.
+ * built-in template's tree needs, every outcome a lookup sets is single, and it maps no point
+ * through an area mapping with a `%` coordinate; each identifier it does not hold is the mark
+ * `variable:<identifier>` at the processing element's path, each such need unmet its mark there
+ * (`mapping:<identifier>`, `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a
+ * point mapping the mark `area-coords-percent` there, and the processing is then none. An item
+ * whose root has a `qti-template-processing` child keeps that element's mark and has no processing,
+ * whatever the tree: template processing may set a template variable, a default value or a correct
+ * response, and the engine runs none of it, so a score computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
