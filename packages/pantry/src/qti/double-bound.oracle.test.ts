@@ -23,7 +23,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawIdentity } from "#pantry/import/refusal.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -175,14 +174,9 @@ const boundLaws = new Set(["value domain", "Double bound", "Double value"]);
 const textLaws = new Set(["TextDomain", "Double bound"]);
 
 /**
- * The same laws as the host judge names the schema's checks.
+ * The same laws as the schema names its checks.
  */
-const boundChecks = new Set([
-  "check value_domain",
-  "check TextDomain",
-  "check Double_bound",
-  "check Double_value",
-]);
+const boundChecks = new Set(["value_domain", "TextDomain", "Double_bound", "Double_value"]);
 
 /**
  * A case's files.
@@ -250,9 +244,10 @@ describe("a bounded double", () => {
 
               const dir = yield* scopedPackage(filesOf(drawnCase));
               const program = yield* readProgram(dir);
-              const broken = hostJudge(hostRowsOf(program.inputs), hostLaws)
-                .broken.map(({ law }) => lawIdentity(law))
-                .filter((law) => boundChecks.has(law));
+              const broken = hostJudge(hostRowsOf(program.inputs), hostLaws).broken.flatMap(
+                ({ law }) =>
+                  law.kind === "check" && boundChecks.has(law.name) ? [Formatter.format(law)] : [],
+              );
 
               assert.strictEqual(yield* oracleAdmits(drawnCase), admitted, "the oracle");
               assert.strictEqual(

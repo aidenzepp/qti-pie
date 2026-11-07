@@ -27,7 +27,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawIdentity, lawNameOf, ruleOfLaws } from "#pantry/import/refusal.ts";
+import { lawNameOf, ruleOfLaws } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -237,9 +237,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("a field-identifier", (
 
                 const { broken } = judgeHost(hostRowsOf(inputs), hostLaws);
                 const brokenNames = broken.map(({ law }) =>
-                  Option.getOrElse(lawNameOf(law), () => lawIdentity(law)),
+                  Option.getOrElse(lawNameOf(law), () => Formatter.format(law)),
                 );
-                const shown = broken.map(({ law }) => lawIdentity(law)).join("; ") || "no law";
+                const shown = broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law";
                 assert.sameMembers(
                   [...new Set(brokenNames)],
                   [...expected],

@@ -24,7 +24,7 @@ import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option } from "effect";
-import { lawIdentity, ruleOfLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaws } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -270,7 +270,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("the IDs of an assemble
 
                 assert.isTrue(
                   rules.has(rule),
-                  `${Formatter.format(drawn)}: the import's rows give ${rule} (${broken.map(({ law }) => lawIdentity(law)).join("; ") || "no law"}), the oracle ${[...rules].join(", ")}`,
+                  `${Formatter.format(drawn)}: the import's rows give ${rule} (${broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law"}), the oracle ${[...rules].join(", ")}`,
                 );
               }),
             ),

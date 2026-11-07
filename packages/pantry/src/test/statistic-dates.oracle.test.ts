@@ -259,7 +259,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           // Oracle: the ruling's one law: lexical(date)'s pattern law, which refuses a day as its
           // statement casts it into `StatisticDate.day`, and `StatisticDate.date`'s generated law are
           // the value domain, and no law of the table, and no place in the precedence, is a calendar's.
-          const dayLaws = statedLaws.filter(
+          const dayLaws = statedLaws().filter(
             ([law]) =>
               (law.kind === "pattern" && law.source === lexical(date).pattern.source) ||
               (law.kind === "generated" && law.relation === "StatisticDate"),

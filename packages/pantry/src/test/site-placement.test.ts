@@ -26,7 +26,7 @@ import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
 import { Duration, Effect, Formatter, Option } from "effect";
-import { lawIdentity, ruleOfLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaws } from "#pantry/import/refusal.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -315,7 +315,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
                 assert.isNotEmpty(sites, `${placement.name}: no site there`);
                 assert.deepStrictEqual(
                   judge(hostRowsOf(program.inputs), laws).broken.map(
-                    ({ law, rows }) => `${lawIdentity(law)}: ${Formatter.format(rows)}`,
+                    ({ law, rows }) => `${Formatter.format(law)}: ${Formatter.format(rows)}`,
                   ),
                   [],
                   `${placement.name}: a law the import's rows break`,
@@ -392,7 +392,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
           assert.deepStrictEqual(
             Option.getOrUndefined(rule),
             "idref-target",
-            `section.xml's IDREF to test.xml's ID: the import's rule, by ${broken.map(({ law }) => lawIdentity(law)).join("; ") || "no law"}`,
+            `section.xml's IDREF to test.xml's ID: the import's rule, by ${broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law"}`,
           );
         }),
       ),

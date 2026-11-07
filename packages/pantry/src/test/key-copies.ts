@@ -172,8 +172,8 @@ interface Copy {
    */
   readonly holds: (row: Row) => boolean;
   /**
-   * The statement as grizzle's outcome names it (`src/import/refusal.ts` `lawIdentity`): the
-   * containment or the fold, and for a check its name, its relation and the two fields it equates.
+   * The statement's law as {@link identityOf} writes it: the containment or the fold, and for a
+   * check its name, its relation and the two fields it equates.
    */
   readonly law: string;
   /**
@@ -1027,7 +1027,8 @@ const lawSideOf = (side: StoredSide): LawSide => ({
 });
 
 /**
- * Write a law side as `src/import/refusal.ts` `lawIdentity` spells it.
+ * Write a law side as {@link identityOf} spells it: its relation and its terms, `pred` of a field as
+ * `pred(field)`, its selection left out.
  *
  * @param side - The side.
  * @returns Its text.
@@ -1036,12 +1037,15 @@ const sideText = (side: LawSide): string =>
   `${side.relation}(${side.terms.map((term) => (term.kind === "field" ? term.field : `pred(${term.field})`)).join(", ")})`;
 
 /**
- * Write a containment's or a fold's identity as `src/import/refusal.ts` `lawIdentity` does.
+ * Write a containment's or a fold's identity as this list keys its copies, and as
+ * `keys.oracle.test.ts` reads the law table's: its kind, its sides and a fold's slots and monoid,
+ * its selections left out, so two statements that differ by their selections alone share it and
+ * {@link Copy}'s `statement` tells them apart.
  *
  * @param law - The law.
  * @returns Its identity.
  */
-const identityOf = (law: Law): string => {
+export const identityOf = (law: Law): string => {
   if (law.kind === "contained") {
     return `contained ${sideText(law.from)} in ${sideText(law.to)}`;
   }

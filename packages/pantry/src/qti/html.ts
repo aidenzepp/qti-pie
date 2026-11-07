@@ -24,9 +24,7 @@
  *
  * Reading 124 and the missing-`kind` half of reading 125 are presence laws, AL3's pattern: a row
  * check on `Node` that a slot is in `attrs`, the fold of its attributes' slots (AL2). Each is its
- * own check, so each refusal names its own law, where a containment from a `Node` selection into
- * an `Attribute` selection would give two of them one identity (`#pantry/import/refusal.ts`
- * `lawIdentity` drops a side's selection). A written `kind` is a value, which `attrs` does not
+ * own check, so each refusal names its own law. A written `kind` is a value, which `attrs` does not
  * hold, so the other half is a containment between two `Attribute` selections. That a value is a
  * valid non-empty URL, and `srclang` a BCP 47 tag, is each attribute's value domain (AL1's lexical
  * half, readings 124, 125 and 129).

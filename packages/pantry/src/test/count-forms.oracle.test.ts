@@ -20,7 +20,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawIdentity, ruleOfLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaws } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -211,7 +211,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a count's value", (it)
                 assert.deepStrictEqual(
                   Option.toArray(rule),
                   [...rules],
-                  `${label}: the import's rows break ${broken.map(({ law }) => lawIdentity(law)).join("; ") || "no law"}`,
+                  `${label}: the import's rows break ${broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law"}`,
                 );
 
                 const value = expected.get(drawn.form);

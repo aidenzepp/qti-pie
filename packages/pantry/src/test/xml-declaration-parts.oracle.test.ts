@@ -22,7 +22,7 @@ import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
-import { lawIdentity } from "#pantry/import/refusal.ts";
+
 import { assemble } from "#pantry/model/assemble.ts";
 import { namesOf } from "#pantry/model/composed.ts";
 import { unshred } from "#pantry/model/unshred.ts";
@@ -349,7 +349,7 @@ const heldAccepted = (
 
     const { broken } = judgeHost(hostRowsOf(program.inputs), hostLaws);
     assert.deepStrictEqual(
-      broken.map(({ law }) => lawIdentity(law)),
+      broken.map(({ law }) => Formatter.format(law)),
       [],
       `${label}: the import's rows`,
     );

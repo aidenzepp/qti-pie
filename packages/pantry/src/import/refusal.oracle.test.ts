@@ -13,6 +13,7 @@ import {
   fold,
   generated,
   key,
+  lawsOf,
   lexical,
   Monoid,
   mirrors,
@@ -22,12 +23,14 @@ import {
   pg,
   pred,
   relation,
+  sameLaw,
+  schema,
   select,
   str,
   tree,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, LawSide, Statement } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
 import { globSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -37,7 +40,18 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Option, pipe, Predicate, Result, Schema } from "effect";
+import {
+  Array as Arr,
+  Duration,
+  Effect,
+  Function as Fn,
+  Formatter,
+  Option,
+  pipe,
+  Predicate,
+  Result,
+  Schema,
+} from "effect";
 import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import {
@@ -45,9 +59,7 @@ import {
   explain,
   ImportRefused,
   ImportRule,
-  lawIdentity,
   lawNameOf,
-  lawRules,
   limitRules,
   owedRules,
   patternLawsOf,
@@ -80,174 +92,6 @@ const testTimeoutMs = 120_000;
  * explanation reads.
  */
 const grammar = Result.getOrThrow(composed());
-
-/**
- * A term of a side as a statement value holds it: a field's name, or `pred` of one.
- */
-const TermValue = Schema.Union([
-  Schema.String,
-  Schema.Struct({ field: Schema.String, kind: Schema.Literal("pred") }),
-]);
-
-/**
- * A relation as a statement value names it.
- */
-const Named = Schema.Struct({ name: Schema.String });
-
-/**
- * A side as a statement value holds it: its source, a relation or a selection of one, and its
- * terms. A selection's predicate is no part of the value a statement exposes.
- */
-const SideValue = Schema.Struct({
-  source: Schema.Union([Named, Schema.Struct({ relation: Named })]),
-  terms: Schema.NonEmptyArray(TermValue),
-});
-
-/**
- * A family's slots as a statement value holds them: its owner relation and the owner's count field.
- */
-const SlotsValue = Schema.Struct({ count: Schema.String, owner: Named });
-
-/**
- * A family statement's value: an `ordered` or `counted` family's member side and slots, or a
- * `tree`'s and the root field each tree's rows share, which grizzle's `tree` always holds.
- */
-const FamilyValue = Schema.Union([
-  Schema.Struct({
-    family: SideValue,
-    kind: Schema.Literals(["counted", "ordered"]),
-    slots: SlotsValue,
-  }),
-  Schema.Struct({
-    family: SideValue,
-    kind: Schema.Literal("tree"),
-    root: Schema.String,
-    slots: SlotsValue,
-  }),
-]);
-
-/**
- * Every statement value a schema of this package holds, as `schema()` keeps it in `statements`.
- */
-const StatementValue = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("check"), name: Schema.String, relation: Named }),
-  Schema.Struct({ kind: Schema.Literal("key"), side: SideValue }),
-  Schema.Struct({
-    kind: Schema.Literals(["contained", "mirrors"]),
-    left: SideValue,
-    right: SideValue,
-  }),
-  FamilyValue,
-  Schema.Struct({
-    end: SideValue,
-    family: FamilyValue,
-    kind: Schema.Literal("fold"),
-    monoid: Schema.Struct({
-      name: Schema.Literals(["count", "sum", "or", "twos", "max", "concat"]),
-    }),
-    step: SideValue,
-  }),
-  Schema.Struct({ kind: Schema.Literal("mutable") }),
-]);
-
-type SideRead = typeof SideValue.Type;
-
-type FamilyRead = typeof FamilyValue.Type;
-
-/**
- * A side read from a statement: the side as a law names it, and whether its source is a selection.
- */
-interface ReadSide {
-  readonly law: LawSide;
-  readonly selected: boolean;
-}
-
-/**
- * Read a side as a law names it, and whether it selects: the selection is no part of a law's
- * identity, but which axis end a side is depends on it.
- *
- * @param side - The side's value.
- * @returns The law side, and whether its source is a selection.
- */
-const sideRead = (side: SideRead): ReadSide => {
-  const selected = "relation" in side.source;
-  const terms = pipe(
-    side.terms,
-    Arr.map((t): LawSide["terms"][number] =>
-      Predicate.isString(t) ? { field: t, kind: "field" } : t,
-    ),
-  );
-
-  return {
-    law: {
-      relation: "relation" in side.source ? side.source.relation.name : side.source.name,
-      selection: { conjuncts: [] },
-      terms,
-    },
-    selected,
-  };
-};
-
-/**
- * Read a family statement's law, as grizzle's outcome names it (README, "Every rule an outcome can
- * name": `family` by its order, member and slots; `tree` by its member, slots and root).
- *
- * @param family - The family's value.
- * @returns The law.
- */
-const familyLawOf = (family: FamilyRead): Law => {
-  const member = sideRead(family.family).law;
-  const slots = { count: family.slots.count, owner: family.slots.owner.name };
-
-  return family.kind === "tree"
-    ? { kind: "tree", member, root: family.root, slots }
-    : { kind: "family", member, order: family.kind, slots };
-};
-
-/**
- * Read the laws a statement states, as an `invariant-rejected` outcome names them: a mirrors is its
- * two containments and a `mutable` states none (README, "Errors and outcomes").
- *
- * @param statement - A statement value of a schema.
- * @returns Its laws, or the refusal of a statement value no law reads.
- */
-const lawsOfStatement = (statement: Statement): Result.Result<readonly Law[], string> =>
-  Result.map(
-    Result.mapError(Schema.decodeUnknownResult(StatementValue)(statement), String),
-    (read): readonly Law[] => {
-      if (read.kind === "check") {
-        return [{ kind: "check", name: read.name, relation: read.relation.name }];
-      }
-
-      if (read.kind === "key") {
-        return [{ kind: "key", side: sideRead(read.side).law }];
-      }
-
-      if (read.kind === "contained" || read.kind === "mirrors") {
-        const left = sideRead(read.left).law;
-        const right = sideRead(read.right).law;
-        const there: Law = { from: left, kind: "contained", to: right };
-
-        return read.kind === "contained"
-          ? [there]
-          : [there, { from: right, kind: "contained", to: left }];
-      }
-
-      if (read.kind === "fold") {
-        return [
-          {
-            end: sideRead(read.end).law,
-            family: { count: read.family.slots.count, owner: read.family.slots.owner.name },
-            kind: "fold",
-            monoid: read.monoid.name,
-            step: sideRead(read.step).law,
-          },
-        ];
-      }
-
-      return "slots" in read ? [familyLawOf(read)] : [];
-    },
-  );
 
 /**
  * The primary key of every stored relation of a schema, as its law.
@@ -294,6 +138,14 @@ const beginsWith = (side: LawSide, prefix: readonly LawSide["terms"][number][]):
   });
 
 /**
+ * Whether a law side reads a selection of its relation rather than every fact.
+ *
+ * @param side - The side.
+ * @returns Whether it selects.
+ */
+const selects = (side: LawSide): boolean => side.selection.conjuncts.length > 0;
+
+/**
  * Read the axes of every family of a schema, each with the laws its foreign key carries: the
  * family's own law, every containment that rides the axis, and on the predecessor and last axes
  * every fold over the family.
@@ -302,48 +154,36 @@ const beginsWith = (side: LawSide, prefix: readonly LawSide["terms"][number][]):
  * 4016b69): the owner axis is member `F(g…)` to owner `O(k…)`; the predecessor axis
  * `F(g…, pred(i))` to `F(g…, i)` and the last axis `O(k…, pred(n))` to `F(g…, i)` for a family
  * whose index is a field. A tree's member ends read its members, a selection, and every other end
- * reads every fact; a statement value shows a selection but not its predicate, so the reader takes
- * any selection of a tree's member for the members.
+ * reads every fact; the reader takes any selection of a tree's member for the members.
  *
- * @param statements - The schema's statement values.
+ * @param laws - The schema's laws, as grizzle's `lawsOf` names them.
  * @param relations - Its relations, for each owner's primary key.
  * @returns The axes.
  */
-const mergedAxes = (
-  statements: readonly Statement[],
-  relations: AnySchema["relations"],
-): readonly Axis[] => {
-  const decoded = statements.flatMap((s) =>
-    Option.toArray(Schema.decodeUnknownOption(StatementValue)(s)),
-  );
+const mergedAxes = (laws: readonly Law[], relations: AnySchema["relations"]): readonly Axis[] => {
   const keys = new Map(
     primaryKeysOf(relations).flatMap((law) =>
       law.kind === "primaryKey" ? [[law.relation, law.fields] as const] : [],
     ),
   );
-  const containments = decoded.flatMap((read) =>
-    read.kind === "contained" ? [{ left: sideRead(read.left), right: sideRead(read.right) }] : [],
-  );
+  const containments = laws.flatMap((law) => (law.kind === "contained" ? [law] : []));
 
-  return decoded.flatMap((read): readonly Axis[] => {
-    if (read.kind !== "counted" && read.kind !== "ordered" && read.kind !== "tree") {
+  return laws.flatMap((own): readonly Axis[] => {
+    if (own.kind !== "family" && own.kind !== "tree") {
       return [];
     }
 
-    const own = familyLawOf(read);
-    const member = sideRead(read.family);
-    const owner = read.slots.owner.name;
-    const isTree = read.kind === "tree";
-    const { terms } = member.law;
-    const group = read.kind === "counted" ? [...terms] : terms.slice(0, -1);
-    const index = read.kind === "counted" ? undefined : terms.at(-1);
+    const { member, slots } = own;
+    const { owner } = slots;
+    const isTree = own.kind === "tree";
+    const byCount = own.kind === "family" && own.order === "counted";
+    const { terms } = member;
+    const group = byCount ? [...terms] : terms.slice(0, -1);
+    const index = byCount ? undefined : terms.at(-1);
     const ownerKey = (keys.get(owner) ?? []).map((field) => ({ field, kind: "field" as const }));
-    const folds = decoded.flatMap((other): readonly Law[] =>
-      other.kind === "fold" &&
-      other.family.slots.owner.name === owner &&
-      other.family.slots.count === read.slots.count
-        ? Result.getOrElse(lawsOfStatement(other), () => [])
-        : [],
+    const folds = laws.filter(
+      (other) =>
+        other.kind === "fold" && other.family.owner === owner && other.family.count === slots.count,
     );
     const riding = (
       from: { readonly relation: string; readonly members: boolean },
@@ -351,23 +191,21 @@ const mergedAxes = (
       fromKey: readonly LawSide["terms"][number][],
       toKey: readonly LawSide["terms"][number][],
     ): readonly Law[] =>
-      containments
-        .filter(
-          ({ left, right }) =>
-            left.law.relation === from.relation &&
-            right.law.relation === to.relation &&
-            left.selected === (from.members && isTree) &&
-            right.selected === (to.members && isTree) &&
-            beginsWith(left.law, fromKey) &&
-            beginsWith(right.law, toKey),
-        )
-        .map(({ left, right }): Law => ({ from: left.law, kind: "contained", to: right.law }));
+      containments.filter(
+        (law) =>
+          law.from.relation === from.relation &&
+          law.to.relation === to.relation &&
+          selects(law.from) === (from.members && isTree) &&
+          selects(law.to) === (to.members && isTree) &&
+          beginsWith(law.from, fromKey) &&
+          beginsWith(law.to, toKey),
+      );
     const ownerAxis: Axis = {
-      label: `${member.law.relation} owner`,
+      label: `${member.relation} owner`,
       laws: [
         own,
         ...riding(
-          { members: true, relation: member.law.relation },
+          { members: true, relation: member.relation },
           { members: false, relation: owner },
           group,
           ownerKey,
@@ -377,19 +215,19 @@ const mergedAxes = (
     if (index === undefined) {
       return [
         ownerAxis,
-        { label: `${member.law.relation} predecessor and last`, laws: [own, ...folds] },
+        { label: `${member.relation} predecessor and last`, laws: [own, ...folds] },
       ];
     }
 
     return [
       ownerAxis,
       {
-        label: `${member.law.relation} predecessor`,
+        label: `${member.relation} predecessor`,
         laws: [
           own,
           ...riding(
-            { members: true, relation: member.law.relation },
-            { members: true, relation: member.law.relation },
+            { members: true, relation: member.relation },
+            { members: true, relation: member.relation },
             [...group, { field: index.field, kind: "pred" }],
             [...group, index],
           ),
@@ -397,13 +235,13 @@ const mergedAxes = (
         ],
       },
       {
-        label: `${member.law.relation} last`,
+        label: `${member.relation} last`,
         laws: [
           own,
           ...riding(
             { members: false, relation: owner },
-            { members: true, relation: member.law.relation },
-            [...ownerKey, { field: read.slots.count, kind: "pred" }],
+            { members: true, relation: member.relation },
+            [...ownerKey, { field: slots.count, kind: "pred" }],
             [...group, index],
           ),
           ...folds,
@@ -414,10 +252,11 @@ const mergedAxes = (
 };
 
 /**
- * A scratch schema's statements, in the shapes `node.ts` and `attributes.ts` state, built with
- * grizzle's own constructors: a tree with its parent copy, predecessor copy, last slot, `Follow`
- * step and two count folds, an ordered family with its owner copy and `or` fold, and a counted
- * family whose owner copy rides its owner axis.
+ * A scratch schema, in the shapes `node.ts` and `attributes.ts` state, built with grizzle's own
+ * constructors: a tree with its parent copy, predecessor copy, last slot, `Follow` step and two
+ * count folds, an ordered family with its owner copy and `or` fold, and a counted family whose
+ * owner copy rides its owner axis; its laws as grizzle's `lawsOf` names them, and the law of each
+ * statement an axis carries, by the statement's name.
  *
  * `grizzle generate` compiled this schema at 4016b69, with no database, and its foreign keys carry
  * exactly: the tree's owner axis (parent, ‹n›, document, parentKind, parentNearest, ‹ps›, version);
@@ -491,61 +330,115 @@ const scratch = (() => {
   const nodeTree = tree(on(Node, "parent", "at"), fin(Node, "children"), { root: "document" });
   const attributeFamily = ordered(on(Attribute, "node", "at"), fin(Node, "attributes"));
   const choiceFamily = counted(on(Choice, "interaction"), fin(Binding, "choices"));
+  const parentCopy = contained(
+    on(members, "parent", "version", "parentKind", "parentNearest"),
+    on(Node, "id", "version", "kind", "nearest"),
+  );
+  const followStep = contained(
+    on(members, "version", "parentKind", "was", "state"),
+    on(Follow, "version", "parent", "from", "to"),
+  );
+  const predecessorCopy = contained(
+    on(members, "parent", pred("at"), "was"),
+    on(members, "parent", "at", "state"),
+  );
+  const lastSlot = contained(
+    on(Node, "id", pred("children"), "lastState"),
+    on(members, "parent", "at", "state"),
+  );
+  const elementCount = fold(
+    nodeTree,
+    Monoid.count,
+    on(members, "parent", "elementsWas", "elements"),
+    on(Node, "id", "elementChildren"),
+  );
+  const countedCount = fold(
+    nodeTree,
+    Monoid.count,
+    on(
+      select(Node, (n) => n.and(n.gt(n.start, 0n), n.eq(n.state, "2"))),
+      "parent",
+    ),
+    on(Node, "id", "countedChildren"),
+  );
+  const attributeOwner = contained(
+    on(Attribute, "node", "kind", "document"),
+    on(Node, "id", "kind", "document"),
+  );
+  const attrsFold = fold(
+    attributeFamily,
+    Monoid.or,
+    on(
+      select(Attribute, (a) => Compute.not(Compute.in(a.name, ["data-*"]))),
+      "node",
+      "slot",
+      "attrsWas",
+      "attrsAfter",
+    ),
+    on(Node, "id", "attrs"),
+  );
+  const choiceOwner = contained(on(Choice, "interaction"), on(Binding, "node"));
+  const relations = { Attribute, Binding, Choice, Follow, Kind, Name, Node, Pos, Slot, Version };
+  const built = schema("Scratch", relations, [
+    nodeTree,
+    parentCopy,
+    followStep,
+    predecessorCopy,
+    lastSlot,
+    elementCount,
+    countedCount,
+    check("N1_sentinel", Node, (n) => n.or(n.gt(n.start, 0n), n.eq(n.state, "0"))),
+    attributeFamily,
+    attributeOwner,
+    attrsFold,
+    choiceFamily,
+    choiceOwner,
+    mirrors(on(Choice, "node"), on(Node, "id")),
+    key(on(Choice, "interaction", "identifier")),
+  ]);
+  const statementLaws = lawsOf(built);
+  const lawOf = (statement: (typeof built.statements)[number]): Law =>
+    pipe(
+      Arr.findFirst(statementLaws, (held) => held.statement === statement),
+      Option.flatMap(({ laws }) => Arr.head(laws)),
+      Option.getOrThrowWith(() => new Error("a scratch statement grizzle states no law of")),
+    );
 
   return {
-    relations: { Attribute, Binding, Choice, Follow, Kind, Name, Node, Pos, Slot, Version },
-    statements: [
-      nodeTree,
-      contained(
-        on(members, "parent", "version", "parentKind", "parentNearest"),
-        on(Node, "id", "version", "kind", "nearest"),
-      ),
-      contained(
-        on(members, "version", "parentKind", "was", "state"),
-        on(Follow, "version", "parent", "from", "to"),
-      ),
-      contained(on(members, "parent", pred("at"), "was"), on(members, "parent", "at", "state")),
-      contained(
-        on(Node, "id", pred("children"), "lastState"),
-        on(members, "parent", "at", "state"),
-      ),
-      fold(
-        nodeTree,
-        Monoid.count,
-        on(members, "parent", "elementsWas", "elements"),
-        on(Node, "id", "elementChildren"),
-      ),
-      fold(
-        nodeTree,
-        Monoid.count,
-        on(
-          select(Node, (n) => n.and(n.gt(n.start, 0n), n.eq(n.state, "2"))),
-          "parent",
-        ),
-        on(Node, "id", "countedChildren"),
-      ),
-      check("N1_sentinel", Node, (n) => n.or(n.gt(n.start, 0n), n.eq(n.state, "0"))),
-      attributeFamily,
-      contained(on(Attribute, "node", "kind", "document"), on(Node, "id", "kind", "document")),
-      fold(
-        attributeFamily,
-        Monoid.or,
-        on(
-          select(Attribute, (a) => Compute.not(Compute.in(a.name, ["data-*"]))),
-          "node",
-          "slot",
-          "attrsWas",
-          "attrsAfter",
-        ),
-        on(Node, "id", "attrs"),
-      ),
-      choiceFamily,
-      contained(on(Choice, "interaction"), on(Binding, "node")),
-      mirrors(on(Choice, "node"), on(Node, "id")),
-      key(on(Choice, "interaction", "identifier")),
-    ],
-  } as const;
+    laws: statementLaws.flatMap(({ laws }) => laws),
+    named: {
+      attributeFamily: lawOf(attributeFamily),
+      attributeOwner: lawOf(attributeOwner),
+      attrsFold: lawOf(attrsFold),
+      choiceFamily: lawOf(choiceFamily),
+      choiceOwner: lawOf(choiceOwner),
+      countedCount: lawOf(countedCount),
+      elementCount: lawOf(elementCount),
+      lastSlot: lawOf(lastSlot),
+      nodeTree: lawOf(nodeTree),
+      parentCopy: lawOf(parentCopy),
+      predecessorCopy: lawOf(predecessorCopy),
+    },
+    relations,
+  };
 })();
+
+/**
+ * Whether a law side reads the relation and the terms of `expected`, whatever its selection: a
+ * containment Qti states over a selection of its relation reads it so.
+ *
+ * @param side - A side of a law Qti states.
+ * @param expected - The side, as {@link sideOf} builds it.
+ * @returns Whether it reads it.
+ */
+const readsAs = (side: LawSide, expected: LawSide): boolean =>
+  side.relation === expected.relation &&
+  side.terms.length === expected.terms.length &&
+  side.terms.every((term, at) => {
+    const held = expected.terms[at];
+
+    return held !== undefined && term.kind === held.kind && term.field === held.field;
+  });
 
 /**
  * Build a law side over every fact, as an outcome names one.
@@ -566,27 +459,85 @@ const sideOf = (name: string, ...terms: readonly [string, ...string[]]): LawSide
 };
 
 /**
- * Read the laws a list of statement values states, failing the test on a value no law reads.
- *
- * @param statements - The values.
- * @returns The laws, in statement order.
- */
-const lawsOf = (statements: readonly Statement[]) =>
-  Effect.all(statements.map((statement) => Effect.fromResult(lawsOfStatement(statement)))).pipe(
-    Effect.map((laws) => laws.flat()),
-  );
-
-/**
- * Collect the laws of {@link statedLaws} named `name` whose identity holds `part`.
+ * Collect the laws of {@link statedLaws} named `name` that `where` holds of.
  *
  * @param name - The law's name.
- * @param part - A part of the identity, empty for every law of the name.
+ * @param where - Which of its laws, every one by default.
  * @returns The laws.
  */
-const statedNamed = (name: keyof typeof lawTable, part = ""): readonly Law[] =>
-  statedLaws.flatMap(([law, owner]) =>
-    owner === name && lawIdentity(law).includes(part) ? [law] : [],
-  );
+const statedNamed = (
+  name: keyof typeof lawTable,
+  where: (law: Law) => boolean = () => true,
+): readonly Law[] =>
+  statedLaws().flatMap(([law, owner]) => (owner === name && where(law) ? [law] : []));
+
+/**
+ * Whether a law is a family's, of either order.
+ *
+ * @param law - The law.
+ * @returns Whether it is.
+ */
+const isFamily = (law: Law): boolean => law.kind === "family";
+
+/**
+ * Whether a law is a fold.
+ *
+ * @param law - The law.
+ * @returns Whether it is.
+ */
+const isFold = (law: Law): boolean => law.kind === "fold";
+
+/**
+ * Whether a law is the family over the slots `owner.count`.
+ *
+ * @param owner - The owner relation.
+ * @param count - Its count.
+ * @returns The test.
+ */
+const familyOver =
+  (owner: string, count: string) =>
+  (law: Law): boolean =>
+    law.kind === "family" && law.slots.owner === owner && law.slots.count === count;
+
+/**
+ * Whether a law is a fold over the family of the slots `owner.count`.
+ *
+ * @param owner - The owner relation.
+ * @param count - Its count.
+ * @returns The test.
+ */
+const foldOver =
+  (owner: string, count: string) =>
+  (law: Law): boolean =>
+    law.kind === "fold" && law.family.owner === owner && law.family.count === count;
+
+/**
+ * Whether a law is a containment into `target`.
+ *
+ * @param target - The target relation.
+ * @returns The test.
+ */
+const containedInto =
+  (target: string) =>
+  (law: Law): boolean =>
+    law.kind === "contained" && law.to.relation === target;
+
+/**
+ * Whether a law is a containment from `source` whose terms begin with `fields`, each a field.
+ *
+ * @param source - The source relation.
+ * @param fields - The fields its terms begin with.
+ * @returns The test.
+ */
+const containedFrom =
+  (source: string, ...fields: readonly string[]) =>
+  (law: Law): boolean =>
+    law.kind === "contained" &&
+    law.from.relation === source &&
+    beginsWith(
+      law.from,
+      fields.map((field) => ({ field, kind: "field" as const })),
+    );
 
 /**
  * The rules of each tier of the spec's order, from QTI's own rules to the representation's (the
@@ -712,16 +663,27 @@ const rulesOf = (laws: readonly Law[]): readonly Rule[] =>
  * @param laws - The laws, in any order, with any repeats.
  */
 const assertResolves = (laws: Arr.NonEmptyReadonlyArray<Law>): void => {
-  const identities = laws.map(lawIdentity).join(" & ");
   const rule = ruleOfLaws(laws);
   const reversed = Arr.reverse(laws);
-  const once = Arr.dedupeWith(laws, (a, b) => lawIdentity(a) === lawIdentity(b));
+  // A repeat is a drawn law again, the same value, so the set keeps each value once.
+  const once = Arr.dedupeWith(laws, (a, b) => a === b);
+  const resolved = Option.getOrUndefined(rule);
+  const rules = rulesOf(laws);
+  if (
+    resolved !== undefined &&
+    Option.getOrUndefined(ruleOfLaws(reversed)) === resolved &&
+    Option.getOrUndefined(ruleOfLaws(once)) === resolved &&
+    rules.includes(resolved) &&
+    tierOf(resolved) === Math.min(...rules.map(tierOf))
+  ) {
+    return;
+  }
 
+  const identities = laws.map((law) => Formatter.format(law)).join(" & ");
   assert.isTrue(Option.isSome(rule), identities);
   assert.deepStrictEqual(ruleOfLaws(reversed), rule, identities);
   assert.deepStrictEqual(ruleOfLaws(once), rule, identities);
   if (Option.isSome(rule)) {
-    const rules = rulesOf(laws);
     assert.include(rules, rule.value, identities);
     assert.strictEqual(tierOf(rule.value), Math.min(...rules.map(tierOf)), identities);
   }
@@ -790,53 +752,53 @@ const plannedAxes = nonEmpty("the planned axes", [
     statedNamed("N5 fold"),
     statedNamed("N7 Counted"),
     statedNamed("N7 barred by"),
-    statedNamed("E1 derived", "fold over Node.children"),
+    statedNamed("E1 derived", foldOver("Node", "children")),
   ),
   plannedAxis(
     "Node last",
     "ordering",
     statedNamed("N2 tree"),
     statedNamed("N7 last slot"),
-    statedNamed("N5 fold", "fold over"),
+    statedNamed("N5 fold", isFold),
     statedNamed("N7 Counted"),
     statedNamed("N7 barred by"),
-    statedNamed("E1 derived", "fold over Node.children"),
+    statedNamed("E1 derived", foldOver("Node", "children")),
   ),
   plannedAxis(
     "Attribute owner",
     "attribute-admission",
-    statedNamed("AL2 count", "family"),
-    statedNamed("AL1 owner", "Attribute(node, kind"),
+    statedNamed("AL2 count", isFamily),
+    statedNamed("AL1 owner", containedFrom("Attribute", "node", "kind")),
   ),
   plannedAxis(
     "Attribute predecessor and last",
     "attribute-admission",
-    statedNamed("AL2 count", "family"),
+    statedNamed("AL2 count", isFamily),
     statedNamed("AL2 fold"),
   ),
   plannedAxis(
     "OpenAttributeName owner",
     "attribute-admission",
-    statedNamed("AL4 open names", "family"),
-    statedNamed("AL1 owner", "OpenAttributeName"),
+    statedNamed("AL4 open names", isFamily),
+    statedNamed("AL1 owner", containedFrom("OpenAttributeName")),
   ),
   plannedAxis(
     "Idref owner",
     "attribute-admission",
-    statedNamed("E1 derived", "family Attribute.idrefs"),
-    statedNamed("AL1 owner", "Idref"),
+    statedNamed("E1 derived", familyOver("Attribute", "idrefs")),
+    statedNamed("AL1 owner", containedFrom("Idref")),
   ),
   plannedAxis(
     "Idref predecessor and last",
     "derived",
-    statedNamed("E1 derived", "family Attribute.idrefs"),
-    statedNamed("E1 derived", "fold over Attribute.idrefs"),
+    statedNamed("E1 derived", familyOver("Attribute", "idrefs")),
+    statedNamed("E1 derived", foldOver("Attribute", "idrefs")),
   ),
-  plannedAxis("Namespace", "reachability", statedNamed("Namespace family", "family")),
+  plannedAxis("Namespace", "reachability", statedNamed("Namespace family", isFamily)),
   plannedAxis(
     "Choice",
     "owner-copy",
-    statedNamed("N8 nearest", "counted family Interaction.choices"),
+    statedNamed("N8 nearest", familyOver("Interaction", "choices")),
   ),
 ]);
 
@@ -845,14 +807,14 @@ const plannedAxes = nonEmpty("the planned axes", [
  * the QTI tier among them, so a set drawn from it meets every pair of tiers.
  */
 const crossTier = nonEmpty("the cross-tier laws", [
-  ...statedNamed("Binding declared", "Declaration(declaration"),
+  ...statedNamed("Binding declared", containedInto("Declaration")),
   ...statedNamed("Choice bounds"),
   { kind: "check", name: checkNameOf("MathML arity"), relation: "Node" } satisfies Law,
-  ...statedNamed("AL1 owner", "Attribute(node, kind"),
+  ...statedNamed("AL1 owner", containedFrom("Attribute", "node", "kind")),
   { kind: "check", name: checkNameOf("N5 Follow"), relation: "Node" } satisfies Law,
   ...statedNamed("N7 last slot"),
   ...statedNamed("N2 tree"),
-  ...statedNamed("E1 derived", "fold over Node.children"),
+  ...statedNamed("E1 derived", foldOver("Node", "children")),
 ]);
 
 describe("the law table", () => {
@@ -896,81 +858,33 @@ describe("the law table", () => {
   );
 });
 
-describe("a law's identity, read from a statement as the outcome names it", () => {
-  it.effect(
-    "reads every statement of a scratch schema as the README's outcome table names its law",
-    () =>
-      Effect.gen(function* identities() {
-        const laws = yield* lawsOf(scratch.statements);
-
-        assert.deepStrictEqual(laws.map(lawIdentity), [
-          "tree Node.children by document",
-          "contained Node(parent, version, parentKind, parentNearest) in Node(id, version, kind, nearest)",
-          "contained Node(version, parentKind, was, state) in Follow(version, parent, from, to)",
-          "contained Node(parent, pred(at), was) in Node(parent, at, state)",
-          "contained Node(id, pred(children), lastState) in Node(parent, at, state)",
-          "count fold over Node.children into Node(id, elementChildren)",
-          "count fold over Node.children into Node(id, countedChildren)",
-          "check N1_sentinel",
-          "ordered family Node.attributes",
-          "contained Attribute(node, kind, document) in Node(id, kind, document)",
-          "or fold over Node.attributes into Node(id, attrs)",
-          "counted family Binding.choices",
-          "contained Choice(interaction) in Binding(node)",
-          "contained Choice(node) in Node(id)",
-          "contained Node(id) in Choice(node)",
-          "key Choice(interaction, identifier)",
-        ]);
-        assert.deepStrictEqual(primaryKeysOf(scratch.relations).map(lawIdentity).toSorted(), [
-          "primary key Attribute(node, at)",
-          "primary key Binding(node)",
-          "primary key Choice(node)",
-          "primary key Node(id)",
-        ]);
-      }),
-  );
-
+describe("the merged axes and the laws no row states", () => {
   it("reads every merged axis of the scratch schema as grizzle generates its foreign key", () => {
-    const axes = mergedAxes(scratch.statements, scratch.relations);
+    const axes = mergedAxes(scratch.laws, scratch.relations);
+    const {
+      attributeFamily,
+      attributeOwner,
+      attrsFold,
+      choiceFamily,
+      choiceOwner,
+      countedCount,
+      elementCount,
+      lastSlot,
+      nodeTree,
+      parentCopy,
+      predecessorCopy,
+    } = scratch.named;
 
-    assert.deepStrictEqual(
-      Object.fromEntries(axes.map(({ label, laws }) => [label, laws.map(lawIdentity)])),
-      {
-        "Attribute last": [
-          "ordered family Node.attributes",
-          "or fold over Node.attributes into Node(id, attrs)",
-        ],
-        "Attribute owner": [
-          "ordered family Node.attributes",
-          "contained Attribute(node, kind, document) in Node(id, kind, document)",
-        ],
-        "Attribute predecessor": [
-          "ordered family Node.attributes",
-          "or fold over Node.attributes into Node(id, attrs)",
-        ],
-        "Choice owner": [
-          "counted family Binding.choices",
-          "contained Choice(interaction) in Binding(node)",
-        ],
-        "Choice predecessor and last": ["counted family Binding.choices"],
-        "Node last": [
-          "tree Node.children by document",
-          "contained Node(id, pred(children), lastState) in Node(parent, at, state)",
-          "count fold over Node.children into Node(id, elementChildren)",
-          "count fold over Node.children into Node(id, countedChildren)",
-        ],
-        "Node owner": [
-          "tree Node.children by document",
-          "contained Node(parent, version, parentKind, parentNearest) in Node(id, version, kind, nearest)",
-        ],
-        "Node predecessor": [
-          "tree Node.children by document",
-          "contained Node(parent, pred(at), was) in Node(parent, at, state)",
-          "count fold over Node.children into Node(id, elementChildren)",
-          "count fold over Node.children into Node(id, countedChildren)",
-        ],
-      },
-    );
+    assert.deepStrictEqual(Object.fromEntries(axes.map(({ label, laws }) => [label, laws])), {
+      "Attribute last": [attributeFamily, attrsFold],
+      "Attribute owner": [attributeFamily, attributeOwner],
+      "Attribute predecessor": [attributeFamily, attrsFold],
+      "Choice owner": [choiceFamily, choiceOwner],
+      "Choice predecessor and last": [choiceFamily],
+      "Node last": [nodeTree, lastSlot, elementCount, countedCount],
+      "Node owner": [nodeTree, parentCopy],
+      "Node predecessor": [nodeTree, predecessorCopy, elementCount, countedCount],
+    });
   });
 
   it("refuses to name a rule for laws no row states, naming each law", () => {
@@ -979,7 +893,7 @@ describe("a law's identity, read from a statement as the outcome names it", () =
 
     assert.isTrue(Result.isFailure(refused));
     if (Result.isFailure(refused)) {
-      assert.deepStrictEqual(refused.failure.laws, [lawIdentity(law)]);
+      assert.deepStrictEqual(refused.failure.laws, [Formatter.format(law)]);
     }
 
     assert.isTrue(Option.isNone(ruleOfLaws([law])));
@@ -1016,10 +930,10 @@ const carriedOf =
  * Write a drawn set of laws as an exhaustion reports it.
  *
  * @param carried - The set.
- * @returns Its axis and its laws' identities.
+ * @returns Its axis and its laws, as grizzle names them.
  */
 const carriedText = ({ axis, laws }: Carried): string =>
-  `${axis}: ${laws.map(lawIdentity).join(" & ")}`;
+  `${axis}: ${laws.map((law) => Formatter.format(law)).join(" & ")}`;
 
 /**
  * Each adjacent pair of {@link precedence}, the rule a refusal names first and the one after it,
@@ -1786,15 +1700,13 @@ const generatedLaws = (relations: AnySchema["relations"]): readonly Law[] => {
 };
 
 /**
- * The generated laws of a schema's relations that no row of the table owns, by identity.
+ * The generated laws of a schema's relations that no row of the table owns.
  *
  * @param relations - The schema's `relations`.
- * @returns The identities, which an outcome naming one would refuse to rule.
+ * @returns The laws, which an outcome naming one would refuse to rule.
  */
-const unownedGenerated = (relations: AnySchema["relations"]): readonly string[] =>
-  generatedLaws(relations)
-    .map(lawIdentity)
-    .filter((identity) => !lawRules.has(identity));
+const unownedGenerated = (relations: AnySchema["relations"]): readonly Law[] =>
+  generatedLaws(relations).filter((law) => Option.isNone(lawNameOf(law)));
 
 /**
  * The composed `Qti` schema, loaded by the census alone: it composes every `src/qti/` module that
@@ -1805,15 +1717,12 @@ const composedQti = Effect.promise(() => import("#pantry/qti/schema.ts")).pipe(
 );
 
 /**
- * Write each pattern law {@link patternLawsOf} builds as its identity and its name.
- *
- * @param rows - The text types and the law each states.
- * @returns The laws, written; or the conflict.
+ * Every law a schema's statements state, as grizzle's `lawsOf` names them, compiled once per
+ * schema.
  */
-const patternNames = (rows: Parameters<typeof patternLawsOf>[0]) =>
-  Result.map(patternLawsOf(rows), (laws) =>
-    laws.map(([law, name]) => `${lawIdentity(law)}: ${name}`),
-  );
+const statementLawsOf = Fn.memoize((built: AnySchema): readonly Law[] =>
+  lawsOf(built).flatMap(({ laws }) => laws),
+);
 
 describe("the pattern laws, one per pattern", () => {
   it("names a pattern two types share by one law, and refuses two rows that name it twice", () => {
@@ -1826,12 +1735,15 @@ describe("the pattern laws, one per pattern", () => {
     const bounded = str.regex("^[a]*$", "su");
 
     assert.deepStrictEqual(
-      patternNames([
+      patternLawsOf([
         [chars, "Key text bound"],
         [sameChars, "Key text bound"],
         [bounded, "XML production"],
       ]),
-      Result.succeed(["pattern /^[a]*$/u: Key text bound", "pattern /^[a]*$/su: XML production"]),
+      Result.succeed([
+        [{ flags: "u", kind: "pattern", source: "^[a]*$" }, "Key text bound"],
+        [{ flags: "su", kind: "pattern", source: "^[a]*$" }, "XML production"],
+      ]),
     );
     for (const [first, second] of [
       ["Key text bound", "XML production"],
@@ -1842,7 +1754,7 @@ describe("the pattern laws, one per pattern", () => {
           [chars, first],
           [sameChars, second],
         ]),
-        Result.fail({ first, identity: "pattern /^[a]*$/u", second }),
+        Result.fail({ first, law: { flags: "u", kind: "pattern", source: "^[a]*$" }, second }),
       );
     }
   });
@@ -1854,12 +1766,14 @@ describe("the census of the composed Qti schema", () => {
     (ctx) =>
       Effect.gen(function* census() {
         const Qti = yield* composedQti;
-        const laws = [...(yield* lawsOf(Qti.statements)), ...primaryKeysOf(Qti.relations)];
-        const unowned = laws.map(lawIdentity).filter((identity) => !lawRules.has(identity));
+        const laws = [...statementLawsOf(Qti), ...primaryKeysOf(Qti.relations)];
+        const unowned = laws
+          .filter((law) => Option.isNone(lawNameOf(law)))
+          .map((law) => Formatter.format(law));
 
         assert.deepStrictEqual(unowned, [], "laws Qti states that no row of the table owns");
 
-        const axes = mergedAxes(Qti.statements, Qti.relations);
+        const axes = mergedAxes(statementLawsOf(Qti), Qti.relations);
         for (const { laws: carried } of axes) {
           assertResolves(carried);
         }
@@ -1875,46 +1789,16 @@ describe("the census of the composed Qti schema", () => {
   );
 
   it.effect(
-    "states no law of a statement's kind that Qti does not state, so a renamed field leaves no row behind",
-    () =>
-      // Oracle: the schema's own statements, read by this file's reader: a row of the table that
-      // names a containment, key, fold or family no statement of Qti states names no law an outcome
-      // can carry, and the law it meant falls to its group's name (the LOM title's two rows, stale
-      // since ad1b20b5 renamed LomTitleString's text and language, and N5's and N7's containments,
-      // which Qti states as checks).
-      Effect.gen(function* staleRows() {
-        const Qti = yield* composedQti;
-        const stated = new Set((yield* lawsOf(Qti.statements)).map(lawIdentity));
-        const statementKinds: ReadonlySet<string> = new Set([
-          "contained",
-          "family",
-          "fold",
-          "key",
-          "tree",
-        ]);
-
-        assert.deepStrictEqual(
-          statedLaws
-            .filter(([law]) => statementKinds.has(law.kind) && !stated.has(lawIdentity(law)))
-            .map(([law, name]) => `${name}: ${lawIdentity(law)}`),
-          [],
-          "rows of the table that name a law no statement of Qti states",
-        );
-      }),
-    testTimeoutMs,
-  );
-
-  it.effect(
     "owns the pattern law of every text field of Qti's stored relations, naming the module that owes an export",
     () =>
       Effect.gen(function* patterns() {
         const Qti = yield* composedQti;
         const moduleOf = yield* modulesOf;
         const unowned = patternFields(Qti.relations)
-          .filter(({ law }) => !lawRules.has(lawIdentity(law)))
+          .filter(({ law }) => Option.isNone(lawNameOf(law)))
           .map(
             ({ field, relation: owner }) =>
-              `${owner}.${field}, in ${moduleOf.get(owner) ?? "an unlisted module"}: export its text type and give its pattern a row of statedLaws`,
+              `${owner}.${field}, in ${moduleOf.get(owner) ?? "an unlisted module"}: export its text type and give its pattern a row of writtenLaws`,
           );
 
         assert.deepStrictEqual(unowned, [], "text fields whose pattern no row of the table owns");
@@ -1927,10 +1811,8 @@ describe("the census of the composed Qti schema", () => {
     () =>
       Effect.gen(function* generations() {
         const Qti = yield* composedQti;
-        const raised = generatedLaws(Qti.relations).map(lawIdentity);
-        const stated = statedLaws.flatMap(([law]) =>
-          law.kind === "generated" ? [lawIdentity(law)] : [],
-        );
+        const raised = generatedLaws(Qti.relations);
+        const stated = statedLaws().flatMap(([law]) => (law.kind === "generated" ? [law] : []));
 
         assert.isNotEmpty(raised, "Qti declares no generated field the census reads");
         assert.deepStrictEqual(
@@ -1939,7 +1821,9 @@ describe("the census of the composed Qti schema", () => {
           "generated fields whose law no row of the table owns",
         );
         assert.deepStrictEqual(
-          stated.filter((identity) => !raised.includes(identity)),
+          stated
+            .filter((law) => !raised.some((held) => sameLaw(held, law)))
+            .map((law) => Formatter.format(law)),
           [],
           "generated laws the table states for no generated field of Qti",
         );
@@ -1959,49 +1843,33 @@ describe("the census of the composed Qti schema", () => {
       // states, under its own rule, so a dangling site of either kind is refused under one rule.
       Effect.gen(function* siteKinds() {
         const Qti = yield* composedQti;
-        const stated = new Set((yield* lawsOf(Qti.statements)).map(lawIdentity));
-        const kinds: readonly (readonly [Law, Rule])[] = [
+        const stated = statementLawsOf(Qti);
+        const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
+          [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
+          [sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind"), "include-target"],
           [
-            {
-              from: sideOf("SitePath", "node"),
-              kind: "contained",
-              to: sideOf("SiteTarget", "node"),
-            },
-            "include-target",
-          ],
-          [
-            {
-              from: sideOf("Site", "node", "kind"),
-              kind: "contained",
-              to: sideOf("SitePath", "node", "kind"),
-            },
-            "include-target",
-          ],
-          [
-            {
-              from: sideOf("SitePath", "package", "path"),
-              kind: "contained",
-              to: sideOf("Entry", "package", "path"),
-            },
+            sideOf("SitePath", "package", "path"),
+            sideOf("Entry", "package", "path"),
             "file-exists",
           ],
           [
-            {
-              from: sideOf("SitePath", "package", "path"),
-              kind: "contained",
-              to: sideOf("TestDocument", "package", "path"),
-            },
+            sideOf("SitePath", "package", "path"),
+            sideOf("TestDocument", "package", "path"),
             "entry-kind",
           ],
-          [
-            { from: sideOf("Site", "node"), kind: "contained", to: sideOf("SitePath", "node") },
-            "entry-kind",
-          ],
+          [sideOf("Site", "node"), sideOf("SitePath", "node"), "entry-kind"],
         ];
 
-        for (const [law, rule] of kinds) {
-          assert.isTrue(stated.has(lawIdentity(law)), lawIdentity(law));
-          assert.deepStrictEqual(ruleOfLaws([law]), Option.some(rule), lawIdentity(law));
+        for (const [from, to, rule] of kinds) {
+          const shown = Formatter.format({ from, to });
+          const laws = stated.filter(
+            (law) => law.kind === "contained" && readsAs(law.from, from) && readsAs(law.to, to),
+          );
+
+          assert.isNotEmpty(laws, `${shown}: no containment Qti states`);
+          for (const law of laws) {
+            assert.deepStrictEqual(ruleOfLaws([law]), Option.some(rule), shown);
+          }
         }
       }),
     testTimeoutMs,
@@ -2015,6 +1883,8 @@ describe("the census of the composed Qti schema", () => {
       (r) => ({ value: generated(pg.bigint, Compute.cast(r.form, pg.bigint)) }),
     );
 
-    assert.deepStrictEqual(unownedGenerated({ Planted }), ["generated Planted.value"]);
+    assert.deepStrictEqual(unownedGenerated({ Planted }), [
+      { field: "value", kind: "generated", relation: "Planted" },
+    ]);
   });
 });

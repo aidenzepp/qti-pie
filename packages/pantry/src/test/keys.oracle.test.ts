@@ -27,13 +27,19 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import { lawIdentity, lawRules, statedLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaws, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { judgedSideOf, keyCopies, keyTextFields, SideSchema } from "#pantry/test/key-copies.ts";
+import {
+  identityOf,
+  judgedSideOf,
+  keyCopies,
+  keyTextFields,
+  SideSchema,
+} from "#pantry/test/key-copies.ts";
 import type { Datum } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
@@ -70,7 +76,7 @@ const isKeyText = (relation: string, field: string): boolean =>
  * fold over a relation's own rows into a `keyText` accumulator of it, as `law → Relation.field` for
  * the field it holds, with whether its source is a document relation.
  */
-const statedCopies = statedLaws.flatMap(([law]) => {
+const statedCopies = statedLaws().flatMap(([law]) => {
   if (law.kind === "contained") {
     return law.from.terms.flatMap((term, at) => {
       const held = law.to.terms[at]?.field ?? "";
@@ -78,7 +84,7 @@ const statedCopies = statedLaws.flatMap(([law]) => {
       return isKeyText(law.to.relation, held) && !isKeyText(law.from.relation, term.field)
         ? [
             {
-              copy: `${lawIdentity(law)} → ${law.to.relation}.${held}`,
+              copy: `${identityOf(law)} → ${law.to.relation}.${held}`,
               document: documentRelations.has(law.from.relation),
               source: `${law.from.relation}.${term.field}`,
             },
@@ -95,7 +101,7 @@ const statedCopies = statedLaws.flatMap(([law]) => {
     law.step.relation === law.end.relation
     ? [
         {
-          copy: `${lawIdentity(law)} → ${law.end.relation}.${held}`,
+          copy: `${identityOf(law)} → ${law.end.relation}.${held}`,
           document: documentRelations.has(law.end.relation),
           source: `${law.step.relation}.${law.step.terms.at(-3)?.field ?? ""}`,
         },
@@ -160,7 +166,7 @@ const placesByIdentity: ReadonlyMap<string, ReadonlySet<number>> = (() => {
           ? [[left, right] as const, [right, left] as const]
           : [[left, right] as const];
       for (const [from, to] of ways) {
-        const identity = lawIdentity({
+        const identity = identityOf({
           from: lawSideOf(from),
           kind: "contained",
           to: lawSideOf(to),
@@ -217,7 +223,7 @@ describe("the oracle's key-text list", () => {
     // Bound: the document relations' fields.
     const held = new Set(keyCopies.map(({ field }) => field));
     const prefixes = new Set(
-      statedLaws.flatMap(([law]) =>
+      statedLaws().flatMap(([law]) =>
         law.kind === "fold" && held.has(`${law.end.relation}.${law.end.terms.at(-1)?.field ?? ""}`)
           ? law.step.terms.slice(-2).map(({ field }) => `${law.step.relation}.${field}`)
           : [],
@@ -836,9 +842,9 @@ const databaseRules = (refused: ReadonlySet<string>): ReadonlySet<string> =>
         return ["key-text-bound"];
       }
 
-      return statedLaws.flatMap(([law]) =>
+      return statedLaws().flatMap(([law]) =>
         law.kind === "contained" && law.to.relation === relation
-          ? Option.toArray(Option.fromUndefinedOr(lawRules.get(lawIdentity(law))))
+          ? Option.toArray(ruleOfLaws([law]))
           : [],
       );
     }),
