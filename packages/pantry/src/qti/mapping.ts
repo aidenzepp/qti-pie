@@ -660,7 +660,7 @@ export const mappingLawsByName = {
     check("Lookup_table_cardinality", LookupTable, (t) => t.eq(t.cardinality, "single")),
   ],
   "Map key": [
-    key(on(MapKey, "mapping", "folded", "matched")),
+    key(on(MapKey, "mapping", "folded", "key")),
     key(on(MapKeyInteger, "mapping", "value")),
     key(on(MapKeyFloat, "mapping", "value")),
     key(on(MapKeyPoint, "mapping", "value")),

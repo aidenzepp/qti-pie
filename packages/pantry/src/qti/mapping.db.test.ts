@@ -206,9 +206,9 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses two map entries of one mapping with one key, identical entries included, by the key on (mapping, folded, matched)",
+        "refuses two map entries of one mapping with one key, identical entries included, by the key on (mapping, folded, key)",
         () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKey, "mapping", "folded", "matched")), or the host's
+          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKey, "mapping", "folded", "key")), or the host's
           // key check before it; the two rows differ only by their node, as two identical
           // qti-map-entry elements do.
           // Bound: two entries, each spelling once identical and once a lone repeat among three.
@@ -220,9 +220,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
             ]) {
               const outcome = yield* db.apply(ChangeSet.empty(Author).insert(MapKey, rows), {});
 
-              assert.isTrue(
-                rejectedBy(outcome, keyOver("MapKey", ["mapping", "folded", "matched"])),
-              );
+              assert.isTrue(rejectedBy(outcome, keyOver("MapKey", ["mapping", "folded", "key"])));
             }
           }),
       );

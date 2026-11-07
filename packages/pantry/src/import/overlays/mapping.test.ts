@@ -318,7 +318,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
 });
 
 describe("import/overlays/mapping.ts, how a map key is matched", () => {
-  it("writes a string key folded unless its entry's case-sensitive is true, so only same-way entries share a matched key", () => {
+  it("writes a string key folded unless its entry's case-sensitive is true, so `matched` is the key a response meets", () => {
     // Oracle: reading 98 (decision 321 (6)): a string key is case-folded where its entry's
     // `case-sensitive` is false, the default, and compared by code points where it is true;
     // `xs:boolean`'s whiteSpace is collapse, so a padded true is true. An entry matched
@@ -359,6 +359,43 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
     assert.deepStrictEqual(
       [...identifiers.MapKey.values()].map((row) => [row.folded, row.matched]),
       [[false, "A B"]],
+    );
+  });
+});
+
+/**
+ * The identity of each entry of a default-matched string mapping's keys: its mapping, whether its
+ * key is folded, and the key as written.
+ *
+ * @param entries - The mapping's entries.
+ * @returns One identity text per entry.
+ */
+const identityOf = (entries: readonly { caseSensitive?: string; key: string }[]) =>
+  [
+    ...rowsOf(
+      treeOf({
+        baseType: "string",
+        entries: entries.map((entry) => ({ ...entry, value: "1" })),
+      }),
+      ids,
+    ).MapKey.values(),
+  ].map((row) => JSON.stringify([row.mapping, row.folded, row.key]));
+
+describe("import/overlays/mapping.ts, which map keys are one key", () => {
+  it("writes the key as written beside how it is matched as a key's identity, so York and york are two keys and york written twice is one (reading 150)", () => {
+    // Oracle: reading 150 (decision 425): two string entries are one key only when they are
+    // written identically and matched the same way; the schema's uniqueness is
+    // `key(MapKey(mapping, folded, key))`, so the identity read here is that tuple.
+    // Bound: the one string mapping, its entries named.
+    assert.strictEqual(new Set(identityOf([{ key: "York" }, { key: "york" }])).size, 2);
+    assert.strictEqual(new Set(identityOf([{ key: "york" }, { key: "york" }])).size, 1);
+    assert.strictEqual(
+      new Set(identityOf([{ key: "york" }, { caseSensitive: "false", key: "york" }])).size,
+      1,
+    );
+    assert.strictEqual(
+      new Set(identityOf([{ caseSensitive: "true", key: "york" }, { key: "york" }])).size,
+      2,
     );
   });
 });

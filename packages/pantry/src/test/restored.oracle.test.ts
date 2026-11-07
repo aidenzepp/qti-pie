@@ -192,7 +192,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
     );
 
     judging.effect(
-      "a string mapping's keys that differ only in ASCII case break Map key, as the default case-sensitive false matches them (reading 98)",
+      "a string mapping's keys that differ only in ASCII case are two keys, though the default case-sensitive false matches them both, and one key written twice breaks Map key (readings 98 and 150)",
       () =>
         Effect.gen(function* foldedKeys() {
           const clash = (first: string, second: string) =>
@@ -200,7 +200,12 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               `<qti-map-entry map-key="${first}" mapped-value="1"/><qti-map-entry map-key="${second}" mapped-value="2"/>`,
             );
 
-          assert.strictEqual(yield* clash("York", "york"), 1, "two default entries fold together");
+          assert.strictEqual(
+            yield* clash("York", "york"),
+            0,
+            "case-only duplicates are two keys (reading 150)",
+          );
+          assert.strictEqual(yield* clash("york", "york"), 1, "one key written twice is a repeat");
           assert.strictEqual(
             yield* mapKeyBreaches(
               `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="york" mapped-value="2"/>`,
