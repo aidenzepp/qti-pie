@@ -108,6 +108,7 @@ const checkRules = {
   Template_default_type: "P20",
   Template_reads: "P26",
   Variable_declared: "P8",
+  Variable_kind: "variable-kind",
   Variable_mapping_source: "variable-mapping-source",
   Variable_mapping_target: "variable-mapping-target",
   Weighted_base: "P29",

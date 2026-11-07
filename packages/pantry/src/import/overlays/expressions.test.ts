@@ -20,7 +20,12 @@ import {
   integerMathOperators,
   rpTemplatePattern,
 } from "#pantry/grammar/expression.ts";
-import { grammar, OperatorArity, VariableReference } from "#pantry/grammar/install.ts";
+import {
+  BuiltInVariable,
+  grammar,
+  OperatorArity,
+  VariableReference,
+} from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
 import {
   assembledExpressionRowsOf,
@@ -403,6 +408,39 @@ const expressionLawsOnHost: readonly (readonly [
 type Reference = ExpressionRows["VariableRef"] extends ReadonlyMap<string, infer R> ? R : never;
 
 /**
+ * The declaration kind each root's built-in variable stands as, by `root variable`.
+ */
+const builtInKinds: ReadonlyMap<string, string> = new Map(
+  BuiltInVariable.rows.map(({ declaration, root, variable }) => [
+    `${root} ${variable}`,
+    declaration,
+  ]),
+);
+
+/**
+ * A reference's declaration row (lane NIL's NS1), none where it names no declaration.
+ *
+ * @param v - The reference.
+ * @param rows - The rows.
+ * @returns The row, if any.
+ */
+const declarationOf = (v: Reference, rows: ExpressionRows) =>
+  rows.VariableRefDeclaration.get(JSON.stringify([v.node, v.attribute]));
+
+/**
+ * The declaration kind a reference names: its declaration row's, or the built-in's it names, or
+ * none for a reference that names nothing.
+ *
+ * @param v - The reference.
+ * @param rows - The rows.
+ * @returns The kind, if any.
+ */
+const declarationKindOf = (v: Reference, rows: ExpressionRows): string | undefined =>
+  v.resolution === "builtIn"
+    ? builtInKinds.get(`${v.rootKind} ${v.identifier}`)
+    : declarationOf(v, rows)?.declarationKind;
+
+/**
  * `E1_derived`'s spelling: the lexical form is the affixes around the name.
  *
  * @param v - The reference.
@@ -416,25 +454,38 @@ const spells = (v: Reference): boolean =>
     : /^[\t\n\r ]*$/u.test(v.before) && /^[\t\n\r ]*$/u.test(v.after));
 
 /**
- * `E1_derived`'s resolution: the type each resolution gives.
+ * `E1_derived`'s resolution: the type each resolution gives, a declared one's by its declaration
+ * row, which a reference has exactly where it is declared.
  *
  * @param v - The reference.
+ * @param rows - The rows.
  * @returns Whether its type is its resolution's.
  */
-const resolves = (v: Reference): boolean => {
+const resolves = (v: Reference, rows: ExpressionRows): boolean => {
   const builtIn = builtIns.get(`${String(testRootSet.has(v.rootKind))} ${v.identifier}`);
+  const declared = declarationOf(v, rows);
   switch (v.resolution) {
     case "declared": {
       return (
-        v.baseType === valueBaseOf.get(v.declBaseType) &&
-        v.cardinality === valueCardinalityOf.get(v.declCardinality)
+        declared !== undefined &&
+        v.baseType === valueBaseOf.get(declared.declBaseType) &&
+        v.cardinality === valueCardinalityOf.get(declared.declCardinality)
       );
     }
     case "builtIn": {
-      return v.baseType === builtIn?.baseType && v.cardinality === builtIn.cardinality;
+      return (
+        declared === undefined &&
+        v.baseType === builtIn?.baseType &&
+        v.cardinality === builtIn.cardinality
+      );
     }
     case "unresolved": {
-      return builtIn === undefined && v.baseType === "unknown" && v.cardinality === "unknown";
+      return (
+        declared === undefined &&
+        builtIn === undefined &&
+        v.baseType === "unknown" &&
+        v.cardinality === "unknown"
+      );
     }
     default: {
       return v.resolution satisfies never;
@@ -497,17 +548,17 @@ const referenceLawsOnHost: readonly (readonly [
   Law,
   (v: Reference, rows: ExpressionRows) => boolean,
 ])[] = [
-  ["E1_derived", (v, rows) => spells(v) && resolves(v) && claims(v) && copies(v, rows)],
+  ["E1_derived", (v, rows) => spells(v) && resolves(v, rows) && claims(v) && copies(v, rows)],
   [
     "Variable_declared",
     (v) => v.rootKind !== "qti-assessment-item" || v.resolution !== "unresolved",
   ],
   [
     "Variable_kind",
-    (v) =>
+    (v, rows) =>
       v.attribute !== "identifier" ||
       v.resolution === "unresolved" ||
-      namedKinds.has(`${v.kind} ${v.declarationKind}`),
+      namedKinds.has(`${v.kind} ${declarationKindOf(v, rows) ?? ""}`),
   ],
   [
     "Set_type",
@@ -532,30 +583,34 @@ const referenceLawsOnHost: readonly (readonly [
   ],
   [
     "Reference_type",
-    (v) =>
+    (v, rows) =>
       v.attribute === "identifier" ||
       v.resolution === "unresolved" ||
       (v.resolution === "declared" &&
-        ["qti-outcome-declaration", "qti-template-declaration"].includes(v.declarationKind) &&
+        ["qti-outcome-declaration", "qti-template-declaration"].includes(
+          declarationKindOf(v, rows) ?? "",
+        ) &&
         (v.baseType === referenceBases.get(`${v.kind} ${v.attribute}`) || silent.has(v.baseType)) &&
         ["single", "unknown"].includes(v.cardinality)),
   ],
   [
     "Template_reads",
-    (v) =>
+    (v, rows) =>
       v.language !== "template" ||
       !expressionSet.has(v.kind) ||
       ((v.resolution !== "declared" ||
-        !["qti-outcome-declaration", "qti-response-declaration"].includes(v.declarationKind)) &&
+        !["qti-outcome-declaration", "qti-response-declaration"].includes(
+          declarationKindOf(v, rows) ?? "",
+        )) &&
         (v.resolution !== "builtIn" || v.identifier === "QTI_CONTEXT")),
   ],
   [
     "Mapped_response",
-    (v) =>
+    (v, rows) =>
       v.attribute !== "identifier" ||
       !["qti-map-response", "qti-map-response-point"].includes(v.kind) ||
       v.resolution !== "declared" ||
-      (v.declarationKind === "qti-response-declaration" &&
+      (declarationKindOf(v, rows) === "qti-response-declaration" &&
         ((v.kind === "qti-map-response" && v.table === "qti-mapping") ||
           (v.kind === "qti-map-response-point" &&
             v.table === "qti-area-mapping" &&
@@ -2017,7 +2072,13 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
           }
 
           for (const reference of rows.VariableRef.values()) {
-            const table = rows.DeclarationTable.get(reference.declaration);
+            const declaration = rows.VariableRefDeclaration.get(
+              JSON.stringify([reference.node, reference.attribute]),
+            );
+            const table =
+              declaration === undefined
+                ? undefined
+                : rows.DeclarationTable.get(declaration.declaration);
             const holds = declared.get(reference.identifier) ?? new Set<string>();
             if (
               reference.resolution === "declared" &&

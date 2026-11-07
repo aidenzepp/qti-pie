@@ -65,6 +65,7 @@ import {
   PlacedDocument,
   PlacedReference,
   PlacedVariableRef,
+  PlacedVariableRefDeclaration,
   Processing,
   ProcessingTemplate,
   Reading,
@@ -77,6 +78,7 @@ import {
   TestReference,
   VariableLookup,
   VariableRef,
+  VariableRefDeclaration,
 } from "#pantry/qti/expressions.ts";
 import {
   chardataLawsByName,
@@ -770,6 +772,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     PlacedDocument,
     PlacedReference,
     PlacedVariableRef,
+    PlacedVariableRefDeclaration,
     Processing,
     ProcessingTemplate,
     Reading,
@@ -781,6 +784,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     TestReference,
     VariableLookup,
     VariableRef,
+    VariableRefDeclaration,
   ].map(
     ({ name, primaryKey }) =>
       [
