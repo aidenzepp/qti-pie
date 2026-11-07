@@ -1116,30 +1116,6 @@ export const fixed = {
     fix: "NS4: the import and the law oracle read a path two resource types name once, as the first type, so the fragment is judged where item2.xml splices it, and the second type's href names no document of its type, Document entry alone (reading 93)",
     owner: "S-ORACLE",
   },
-  "import-only-law: Item duration, contained Reading(lookupDocument) in ItemTiming(document)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="ABSENCE"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="test" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="item" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "items/a.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="a" title="A" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body></qti-assessment-item>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="TEST" title="TEST"><qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="a" href="items/a.xml"/></qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="OUT"><qti-variable identifier="a.duration"/></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
-      ],
-    ],
-    fix: "p15-62: the oracle states Item duration through an item ref (oracle-laws/tests.ts readingsOf's untimedDuration), a resolving reading of the built-in duration of an item that is not time dependent, as the schema's containment into the time-dependent items (his 49e079dd)",
-    owner: "Stage N",
-  },
   "import-only-law: Key text bound, a text past LomString.language, LomStringLanguage.language, LomTitleString.language, LomTitleString.languageTag's bound":
     {
       files: [
@@ -1414,30 +1390,6 @@ export const fixed = {
     ],
     fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
     owner: "VD",
-  },
-  "lone-refusal: AL3 required named item-duration, witness unreported": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="ABSENCE"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="test" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="item" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "items/a.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="a" title="A" adaptive="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body></qti-assessment-item>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="TEST" title="TEST"><qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="a" href="items/a.xml"/></qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="OUT"><qti-variable identifier="a.duration"/></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
-      ],
-    ],
-    fix: "p15-62: the oracle states Item duration through an item ref (oracle-laws/tests.ts readingsOf's untimedDuration), a resolving reading of the built-in duration of an item that is not time dependent, as the schema's containment into the time-dependent items (his 49e079dd)",
-    owner: "Stage N",
   },
   "lone-refusal: N5 Follow named owner-copy, witness unreported": {
     files: [

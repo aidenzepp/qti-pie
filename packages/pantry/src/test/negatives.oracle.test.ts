@@ -67,8 +67,6 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
   "include-text": { main: ["include-parse"], oracle: ["attribute-lexical"] },
   "include-xpointer": { main: ["include-xpointer"], oracle: ["attribute-admission"] },
   "instance-spelling-canonical": { main: ["value-lexical"], oracle: "accepted" },
-  "item-duration-in-item": { main: ["item-duration"], oracle: ["item-duration"] },
-  "item-duration-not-timed": { main: ["item-duration"], oracle: ["item-duration"] },
   "item-in-section": { main: ["admission"], oracle: ["unmodeled-vocabulary"] },
   "item-prefixed": { main: ["prefixed-root"], oracle: "accepted" },
   "item-ref-missing": { main: ["item-ref-target"], oracle: ["file-exists", "item-ref-target"] },

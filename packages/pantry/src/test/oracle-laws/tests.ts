@@ -23,8 +23,7 @@
  *   processing makes resolves, through a name the test places once (readings 48 and 88, M3), with
  *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`); a braced one
  *   (a string attribute's) that resolves nowhere is a string value, with two readings still refused
- *   (reading R15-k); `Item duration`, a resolving reading of an untimed item's built-in `duration`
- *   (information model §2.2.2.2); and the content references, each resolving in the test's
+ *   (reading R15-k); and the content references, each resolving in the test's
  *   declarations or its built-ins (A43 to A45: `Feedback reference`, `Feedback outcome type`,
  *   `Printed variable reference`, `Template reference`, `Context variable reference`), with a
  *   section document's feedback naming a built-in variable judged by the type its name has
@@ -84,7 +83,6 @@ export const testLaws = [
   "Prefixed reference",
   "Variable declared",
   "Variable kind",
-  "Item duration",
   "Context variable reference",
   "Feedback reference",
   "Feedback outcome type",
@@ -645,23 +643,7 @@ interface Read {
   readonly resolves: boolean;
   readonly source: "builtIn" | "declared" | "linked" | "mapped" | "none";
   readonly text: string;
-  /**
-   * Whether it reads the built-in `duration` of an item that is not time dependent, which no item
-   * or test-level expression may (information model §2.2.2.2).
-   */
-  readonly untimedDuration: boolean;
 }
-
-/**
- * Whether an item document is time dependent: its root's `time-dependent` is a true `xs:boolean`.
- *
- * @param item - The item document.
- * @returns Whether it is.
- */
-const timeDependentOf = (item: ListedRows): boolean =>
-  Option.exists(item.rows.root, ({ id }) =>
-    Option.contains(Option.flatMap(valueOf(item.rows, id, "time-dependent"), booleanOf), true),
-  );
 
 /**
  * Name where an unsplit reading's variable comes from: the test's declarations, else its
@@ -719,7 +701,6 @@ const readingsOf = (
     resolves: unsplitSource !== "none",
     source: unsplitSource,
     text: identifier,
-    untimedDuration: false,
   };
   const scoped = (
     form: "numbered" | "split",
@@ -780,17 +761,6 @@ const readingsOf = (
       },
     });
     const { source } = resolved;
-    // An LTI link or an item the package does not hold names no root to read, so it is not judged.
-    const untimedDuration =
-      source === "builtIn" &&
-      variable === "duration" &&
-      Option.exists(
-        looked,
-        ({ item, kind: heldKind, type }) =>
-          heldKind === testKinds.itemRef &&
-          Option.contains(type, itemResourceType) &&
-          Option.exists(item, (document) => !timeDependentOf(document)),
-      );
     const numbered =
       form !== "numbered" ||
       (Option.exists(looked, ({ replaced }) => replaced) && positiveNumber.test(number));
@@ -802,7 +772,6 @@ const readingsOf = (
       resolves: source !== "none" && !setter && numbered,
       source,
       text: number === "" ? `${scope} . ${variable}` : `${scope} . ${number} . ${variable}`,
-      untimedDuration,
     };
   };
   const splits = pieces
@@ -1137,14 +1106,8 @@ const referenceLawsOf = (
                     source !== "linked" && !allowed.includes(declarationKind),
                 ));
 
-            // Item duration over the readings, as the schema's containment of each reading of an
-            // item's built-in `duration` through an item ref into the time-dependent items
-            // (`timedItems`): a resolving reading of an untimed item's built-in `duration`.
-            const untimed = resolving.some(({ untimedDuration }) => untimedDuration);
-
             return [
               ...(prefixed ? [breachAt(rows, node, "Prefixed reference", keys)] : []),
-              ...(untimed ? [breachAt(rows, node, "Item duration", { identifier })] : []),
               ...(undeclared ? [breachAt(rows, node, "Variable declared", { identifier })] : []),
               ...(misnamed
                 ? [
