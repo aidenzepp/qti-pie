@@ -4,7 +4,12 @@ import { Effect, Exit, Option, Predicate, Result, Schema } from "effect";
 import { RedactedSchema } from "#plate/codec/redacted.ts";
 import { configure, encodeRedacted, open, redact } from "#plate/index.ts";
 import type { Accepted, Configuration, RedactedJson } from "#plate/index.ts";
+import { formatPrinted } from "#plate/engine/format.ts";
+import { integerOf } from "#plate/engine/numbers.ts";
+import { own } from "#plate/engine/refs.ts";
+import type { IntegerOrRef } from "#plate/model/expression.ts";
 import type {
+  BodyElement,
   BodyNode,
   BodyText,
   ChoiceInteraction,
@@ -12,13 +17,16 @@ import type {
   ExtendedTextInteraction,
   InlineChoiceInteraction,
   Item,
+  PrintedVariable,
   ResponseDeclaration,
   Rule,
   SimpleChoice,
+  TemplateDeclaration,
   TemplateVisibility,
 } from "#plate/model/item.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { format } from "#plate/model/values.ts";
+import type { Value } from "#plate/model/values.ts";
 import { templateShows } from "#plate/payload.ts";
 import type { RedactedFields } from "#plate/payload.ts";
 import {
@@ -557,89 +565,223 @@ const decided = (
   );
 
 /**
- * One place in a redacted body, as the item and the values decide it: a node the item writes,
- * which the page sees as written, its descendants decided again; or a printed variable, which the
- * page sees as the one text node it prints, as nothing, or as its notice.
+ * What the sweep decides a redacted body from: the values `redact` showed the item by, and the
+ * item's template declarations, which say which `param` stands in for a template variable.
  */
-type Slot =
-  | { readonly kind: "node"; readonly node: BodyNode }
-  | { readonly kind: "printed"; readonly path: string };
+interface Showing {
+  readonly templates: Item["templates"];
+  /**
+   * The values `redact` showed the item by: the record, or none with no record. The template sweep
+   * checks only items whose template processing runs, which have no values without their record
+   * (H3).
+   */
+  readonly values: Option.Option<RedactRecord>;
+}
 
 /**
- * Give the places the page may see for a run of the item's body nodes: a printed variable is a
- * printed place; a template block or inline is its content's places where the values show it,
- * nothing where they hide it, and its notice where they cannot say; any other node is itself.
- *
- * @param nodes The item's body nodes.
- * @param values The values `redact` showed the item by.
- * @returns The places, in document order.
+ * The feature a printed variable's notice names.
  */
-const slotsOf = (
-  nodes: readonly BodyNode[],
+const printedNotice = "qti-printed-variable";
+
+/**
+ * The feature a withheld `param`'s notice names.
+ */
+const parameterNotice = "param";
+
+/**
+ * The feature the notices name once when the values withhold any choice: the attribute that gives
+ * a choice its template visibility. A withheld choice is absent from its interaction, so no body
+ * node carries it.
+ */
+const choiceNotice = "template-identifier";
+
+/**
+ * Give the value the values hold for a variable a printed variable names: its template value, else
+ * its outcome value, read from their own keys only.
+ *
+ * @param record The values.
+ * @param identifier The variable's identifier.
+ * @returns The value, or none when the values hold none by that name.
+ */
+const heldValue = (record: RedactRecord, identifier: string): Option.Option<Value> =>
+  Option.orElse(own(record.templates, identifier), () => own(record.outcomes, identifier));
+
+/**
+ * Resolve a printed variable's `base` or `index`: a literal as written, or the integer the values
+ * hold for the variable it names. A named variable that is NULL or not a single integer is refused
+ * on a checked item (`printed-variable-ref`), so its formatter default applies.
+ *
+ * @param written The attribute's value.
+ * @param record The values.
+ * @returns Some integer, or some none for the formatter's default; none when the values hold no
+ *   value by the name it gives.
+ */
+const resolvedInteger = (
+  written: IntegerOrRef,
+  record: RedactRecord,
+): Option.Option<Option.Option<bigint>> =>
+  written._tag === "literal"
+    ? Option.some(Option.some(written.value))
+    : Option.map(heldValue(record, written.identifier), integerOf);
+
+/**
+ * Give what the page sees in a printed variable's place, decided from the values alone: with none,
+ * its notice (H3); with values, one text node of what `formatPrinted` writes for the value they
+ * hold for its variable under its `format`, `base`, `index`, `power-form` and `delimiter`, nothing
+ * when that text is empty (a NULL value prints nothing), and its notice when they hold no value of
+ * its variable or of a name its `base` or `index` gives.
+ *
+ * @param node The printed variable.
+ * @param values The values `redact` showed the item by.
+ * @returns The nodes the page sees in its place: none, one text node or its notice.
+ */
+const printedSlots = (
+  node: PrintedVariable,
   values: Option.Option<RedactRecord>,
-): readonly Slot[] =>
-  nodes.flatMap((node): readonly Slot[] => {
-    if (node.kind === "printed-variable") {
-      return [{ kind: "printed", path: node.path }];
-    }
+): readonly BodyNode[] => {
+  const resolved = values.pipe(
+    Option.flatMap((record) =>
+      Option.all({
+        base: resolvedInteger(node.base, record),
+        index: Option.match(node.index, {
+          onNone: () => Option.some(Option.none<bigint>()),
+          onSome: (index) => resolvedInteger(index, record),
+        }),
+        value: heldValue(record, node.identifier),
+      }),
+    ),
+  );
 
-    if (node.kind === "template-block" || node.kind === "template-inline") {
-      return Option.match(decided(values, node.templateVisibility, node.identifier), {
-        onNone: (): readonly Slot[] => [
-          {
-            kind: "node",
-            node: { feature: `qti-${node.kind}`, kind: "unsupported", path: node.path },
-          },
-        ],
-        onSome: (shown) => (shown ? slotsOf(node.content, values) : []),
+  return Option.match(resolved, {
+    onNone: (): readonly BodyNode[] => [
+      { feature: printedNotice, kind: "unsupported", path: node.path },
+    ],
+    onSome: ({ base, index, value }): readonly BodyNode[] => {
+      const text = formatPrinted(value, {
+        ...Option.match(base, { onNone: () => ({}), onSome: (radix) => ({ base: radix }) }),
+        delimiter: node.delimiter,
+        ...Option.match(node.format, { onNone: () => ({}), onSome: (code) => ({ format: code }) }),
+        ...Option.match(index, { onNone: () => ({}), onSome: (member) => ({ index: member }) }),
+        mappingIndicator: node.mappingIndicator,
+        powerForm: node.powerForm,
       });
-    }
 
-    return [{ kind: "node", node }];
+      return text === "" ? [] : [{ kind: "text", text }];
+    },
+  });
+};
+
+/**
+ * Give the template variable a body element stands in for as a parameter: the declaration a
+ * `param`'s `value` names, when it is declared `param-variable="true"` (the information model's
+ * Param `value`, `info.txt:69978`).
+ *
+ * @param templates The item's template declarations.
+ * @param node The body element.
+ * @returns The declaration, or none for any other element.
+ */
+const parameterOf = (
+  templates: Item["templates"],
+  node: BodyElement,
+): Option.Option<TemplateDeclaration> =>
+  node.tag === "param"
+    ? Option.fromUndefinedOr(node.attributes.find((attribute) => attribute.name === "value")).pipe(
+        Option.flatMap(({ value }) => Option.fromUndefinedOr(templates.get(value))),
+        Option.filter((declaration) => declaration.paramVariable),
+      )
+    : Option.none();
+
+/**
+ * Give the value a parameter passes for a template value, as the information model's Param
+ * `value` converts it (`info.txt:69978`): an integer by `%i` and a float by `%G`.
+ *
+ * @param value The template value.
+ * @returns The text the parameter passes.
+ */
+const parameterText = (value: Value): string =>
+  formatPrinted(value, { format: value.baseType === "float" ? "%G" : "%i" });
+
+/**
+ * Give what the page sees in a body element's place: the element as written; a `param` standing
+ * in for a template variable with the value the values hold for it in place of its name; or, when
+ * they hold none, the `param`'s notice.
+ *
+ * @param node The body element.
+ * @param showing The values and the item's template declarations.
+ * @returns The one node the page sees in its place.
+ */
+const elementSlot = (node: BodyElement, showing: Showing): BodyNode =>
+  Option.match(parameterOf(showing.templates, node), {
+    onNone: (): BodyNode => node,
+    onSome: (declaration) =>
+      Option.match(
+        showing.values.pipe(
+          Option.flatMap((record) => own(record.templates, declaration.identifier)),
+        ),
+        {
+          onNone: (): BodyNode => ({
+            feature: parameterNotice,
+            kind: "unsupported",
+            path: node.path,
+          }),
+          onSome: (value): BodyNode => ({
+            ...node,
+            attributes: node.attributes.map((attribute) =>
+              attribute.name === "value"
+                ? { ...attribute, value: parameterText(value) }
+                : attribute,
+            ),
+          }),
+        },
+      ),
   });
 
 /**
- * Report whether a run of redacted body nodes fills the places the item gives, in order: each
- * written node by a node that {@link nodeFits} it, and each printed place by one text node, by
- * nothing, or by the printed variable's notice. Every way a printed place may be filled is tried,
- * so a printed value equal to the text after it is matched either way.
+ * Give the nodes the page must see for a run of the item's body nodes, each decided from the
+ * values, never from `redact`'s output: a printed variable as {@link printedSlots} decides it; a
+ * template block or inline as its content's nodes where the values show it, nothing where they
+ * hide it, and its notice where they cannot say; a body element as {@link elementSlot} gives it;
+ * any other node as itself. A written node's descendants are decided again where it is matched.
  *
- * @param slots The places, from {@link slotsOf}.
+ * @param nodes The item's body nodes.
+ * @param showing The values and the item's template declarations.
+ * @returns The nodes, in document order.
+ */
+const slotsOf = (nodes: readonly BodyNode[], showing: Showing): readonly BodyNode[] =>
+  nodes.flatMap((node): readonly BodyNode[] => {
+    if (node.kind === "printed-variable") {
+      return printedSlots(node, showing.values);
+    }
+
+    if (node.kind === "template-block" || node.kind === "template-inline") {
+      return Option.match(decided(showing.values, node.templateVisibility, node.identifier), {
+        onNone: (): readonly BodyNode[] => [
+          { feature: `qti-${node.kind}`, kind: "unsupported", path: node.path },
+        ],
+        onSome: (shown) => (shown ? slotsOf(node.content, showing) : []),
+      });
+    }
+
+    return [node.kind === "element" ? elementSlot(node, showing) : node];
+  });
+
+/**
+ * Report whether a run of redacted body nodes is exactly the nodes the item gives, in order: as
+ * many, each {@link nodeFits} the one in its place.
+ *
+ * @param slots The nodes the page must see, from {@link slotsOf}.
  * @param nodes The redacted nodes.
- * @param values The values `redact` showed the item by.
+ * @param showing The values and the item's template declarations.
  * @returns Whether the nodes fill the places and hold nothing more.
  */
-const fits = (
-  slots: readonly Slot[],
-  nodes: readonly BodyNode[],
-  values: Option.Option<RedactRecord>,
-): boolean => {
-  const [slot, ...later] = slots;
-  const [node, ...after] = nodes;
-  if (slot === undefined) {
-    return node === undefined;
-  }
+const fits = (slots: readonly BodyNode[], nodes: readonly BodyNode[], showing: Showing): boolean =>
+  slots.length === nodes.length &&
+  slots.every((written, index) => {
+    const shown = nodes[index];
 
-  if (slot.kind === "printed") {
-    const printed =
-      node !== undefined &&
-      (node.kind === "text" ||
-        isDeepStrictEqual(node, {
-          feature: "qti-printed-variable",
-          kind: "unsupported",
-          path: slot.path,
-        }));
-
-    return (printed && fits(later, after, values)) || fits(later, nodes, values);
-  }
-
-  return (
-    node !== undefined &&
     // oxlint-disable-next-line eslint/no-use-before-define -- `fits` and `nodeFits` are mutually recursive, as an element's children are body nodes; the call runs only after both are defined.
-    nodeFits(slot.node, node, values) &&
-    fits(later, after, values)
-  );
-};
+    return shown !== undefined && nodeFits(written, shown, showing);
+  });
 
 /**
  * Report whether a redacted Prompt or Label fills the item's: both absent, or both present and
@@ -647,18 +789,18 @@ const fits = (
  *
  * @param written The item's lead.
  * @param shown The redacted lead.
- * @param values The values `redact` showed the item by.
+ * @param showing The values and the item's template declarations.
  * @returns Whether the redacted lead fits.
  */
 const leadFits = (
   written: Option.Option<readonly BodyNode[]>,
   shown: Option.Option<readonly BodyNode[]>,
-  values: Option.Option<RedactRecord>,
+  showing: Showing,
 ): boolean =>
   Option.match(written, {
     onNone: () => Option.isNone(shown),
     onSome: (nodes) =>
-      Option.exists(shown, (redacted) => fits(slotsOf(nodes, values), redacted, values)),
+      Option.exists(shown, (redacted) => fits(slotsOf(nodes, showing), redacted, showing)),
   });
 
 /**
@@ -669,19 +811,19 @@ const leadFits = (
  *
  * @param written The item's choices.
  * @param shown The redacted choices.
- * @param values The values `redact` showed the item by.
+ * @param showing The values and the item's template declarations.
  * @returns Whether the redacted choices fit.
  */
 const choicesFit = (
   written: readonly SimpleChoice[],
   shown: readonly SimpleChoice[],
-  values: Option.Option<RedactRecord>,
+  showing: Showing,
 ): boolean => {
   const visible = written.filter((choice) =>
     Option.match(choice.templateVisibility, {
       onNone: () => true,
       onSome: (visibility) =>
-        Option.getOrElse(decided(values, visibility, choice.identifier), () => false),
+        Option.getOrElse(decided(showing.values, visibility, choice.identifier), () => false),
     }),
   );
 
@@ -696,7 +838,7 @@ const choicesFit = (
           { ...choice, content: page.content, templateVisibility: Option.none() },
           page,
         ) &&
-        fits(slotsOf(choice.content, values), page.content, values)
+        fits(slotsOf(choice.content, showing), page.content, showing)
       );
     })
   );
@@ -708,20 +850,20 @@ const choicesFit = (
  *
  * @param written The item's interaction.
  * @param shown The redacted node.
- * @param values The values `redact` showed the item by.
+ * @param showing The values and the item's template declarations.
  * @returns Whether the redacted node fits.
  */
 const interactionFits = (
   written: ChoiceInteraction | ExtendedTextInteraction | InlineChoiceInteraction,
   shown: BodyNode,
-  values: Option.Option<RedactRecord>,
+  showing: Showing,
 ): boolean => {
   if (written.kind === "choice") {
     return (
       shown.kind === "choice" &&
       isDeepStrictEqual({ ...written, choices: shown.choices, prompt: shown.prompt }, shown) &&
-      leadFits(written.prompt, shown.prompt, values) &&
-      choicesFit(written.choices, shown.choices, values)
+      leadFits(written.prompt, shown.prompt, showing) &&
+      choicesFit(written.choices, shown.choices, showing)
     );
   }
 
@@ -729,46 +871,41 @@ const interactionFits = (
     return (
       shown.kind === "inline-choice" &&
       isDeepStrictEqual({ ...written, choices: shown.choices, label: shown.label }, shown) &&
-      leadFits(written.label, shown.label, values) &&
-      choicesFit(written.choices, shown.choices, values)
+      leadFits(written.label, shown.label, showing) &&
+      choicesFit(written.choices, shown.choices, showing)
     );
   }
 
   return (
     shown.kind === "extended-text" &&
     isDeepStrictEqual({ ...written, prompt: shown.prompt }, shown) &&
-    leadFits(written.prompt, shown.prompt, values)
+    leadFits(written.prompt, shown.prompt, showing)
   );
 };
 
 /**
- * Report whether a redacted node is the item's node as the page may see it: every field as the
- * item writes it, and its children, Prompt, Label or choices fitting the item's again. No
- * redacted node is a printed variable or a template block or inline: {@link slotsOf} gives none
- * as a written node.
+ * Report whether a redacted node is the node the page must see: every field as {@link slotsOf}
+ * gives it, and its children, Prompt, Label or choices fitting the item's again. No node
+ * {@link slotsOf} gives is a printed variable or a template block or inline.
  *
- * @param written The item's node.
+ * @param written The node the page must see.
  * @param shown The redacted node.
- * @param values The values `redact` showed the item by.
+ * @param showing The values and the item's template declarations.
  * @returns Whether the redacted node fits.
  */
-const nodeFits = (
-  written: BodyNode,
-  shown: BodyNode,
-  values: Option.Option<RedactRecord>,
-): boolean => {
+const nodeFits = (written: BodyNode, shown: BodyNode, showing: Showing): boolean => {
   switch (written.kind) {
     case "element": {
       return (
         shown.kind === "element" &&
         isDeepStrictEqual({ ...written, children: shown.children }, shown) &&
-        fits(slotsOf(written.children, values), shown.children, values)
+        fits(slotsOf(written.children, showing), shown.children, showing)
       );
     }
     case "choice":
     case "extended-text":
     case "inline-choice": {
-      return interactionFits(written, shown, values);
+      return interactionFits(written, shown, showing);
     }
     case "printed-variable":
     case "template-block":
@@ -787,37 +924,199 @@ const nodeFits = (
 };
 
 /**
- * The notices a redaction adds in a withheld part's place, beside the item's own: a printed
- * variable's, a template block's, a template inline's, and the one for withheld choices.
+ * Decide whether a path lies at or below one of the paths given: equals one, or starts with one
+ * and a `/`.
+ *
+ * @param path The path.
+ * @param above The paths.
+ * @returns Whether `path` is one of `above` or lies inside one.
  */
-const templateNotices = [
-  "qti-printed-variable",
-  "qti-template-block",
-  "qti-template-inline",
-  "template-identifier",
-] as const;
+const beneath = (path: string, above: ReadonlySet<string>): boolean =>
+  [...above].some((top) => path === top || path.startsWith(`${top}/`));
+
+/**
+ * What one body node gives the notices, decided from the values alone: the notice it gives in its
+ * own place when the page sees it, whether the page does not see what it holds, and the runs of
+ * nodes it holds, each with whether the page sees it where the node is seen.
+ */
+interface NoticeStep {
+  readonly hides: boolean;
+  readonly notice: Option.Option<string>;
+  readonly runs: readonly (readonly [readonly BodyNode[], boolean])[];
+}
+
+/**
+ * The step of a node that gives no notice and holds nothing.
+ */
+const quietStep: NoticeStep = { hides: false, notice: Option.none(), runs: [] };
+
+/**
+ * Give a Choice's or an Inline Choice's step: its Prompt or Label, seen where it is; each choice's
+ * content, seen where the values show the choice; and `template-identifier` when they cannot
+ * decide some choice, which is then absent.
+ *
+ * @param node The Choice or Inline Choice.
+ * @param values The values `redact` showed the item by.
+ * @returns The interaction's step.
+ */
+const choicesStep = (
+  node: ChoiceInteraction | InlineChoiceInteraction,
+  values: Option.Option<RedactRecord>,
+): NoticeStep => {
+  const shown = node.choices.map((choice) =>
+    Option.match(choice.templateVisibility, {
+      onNone: () => Option.some(true),
+      onSome: (visibility) => decided(values, visibility, choice.identifier),
+    }),
+  );
+
+  return {
+    hides: false,
+    notice: shown.some(Option.isNone) ? Option.some(choiceNotice) : Option.none(),
+    runs: [
+      [Option.getOrElse(node.kind === "choice" ? node.prompt : node.label, () => []), true],
+      ...node.choices.map(
+        (choice, index) =>
+          [choice.content, Option.getOrElse(shown[index] ?? Option.none(), () => false)] as const,
+      ),
+    ],
+  };
+};
+
+/**
+ * Give one body node's step: a `param` the values withhold gives `param` and hides its children; a
+ * printed variable {@link printedSlots} shows as its notice gives `qti-printed-variable`; a
+ * template block or inline hides its content unless the values show it, and gives its notice when
+ * they cannot decide it; a Choice or an Inline Choice is {@link choicesStep}'s; any other node
+ * gives nothing and hides nothing.
+ *
+ * @param item The item, whose template declarations say which `param` stands in for a variable.
+ * @param values The values `redact` showed the item by.
+ * @param node The body node.
+ * @returns The node's step.
+ */
+const noticeStep = (
+  item: Item,
+  values: Option.Option<RedactRecord>,
+  node: BodyNode,
+): NoticeStep => {
+  switch (node.kind) {
+    case "element": {
+      const withheld = Option.exists(
+        parameterOf(item.templates, node),
+        (declaration) =>
+          !Option.exists(values, (record) =>
+            Object.hasOwn(record.templates, declaration.identifier),
+          ),
+      );
+
+      return {
+        hides: withheld,
+        notice: withheld ? Option.some(parameterNotice) : Option.none(),
+        runs: [[node.children, !withheld]],
+      };
+    }
+    case "printed-variable": {
+      return printedSlots(node, values).some((slot) => slot.kind === "unsupported")
+        ? { ...quietStep, notice: Option.some(printedNotice) }
+        : quietStep;
+    }
+    case "template-block":
+    case "template-inline": {
+      const shown = decided(values, node.templateVisibility, node.identifier);
+      const visible = Option.getOrElse(shown, () => false);
+
+      return {
+        hides: !visible,
+        notice: Option.isNone(shown) ? Option.some(`qti-${node.kind}`) : Option.none(),
+        runs: [[node.content, visible]],
+      };
+    }
+    case "choice":
+    case "inline-choice": {
+      return choicesStep(node, values);
+    }
+    case "extended-text": {
+      return { ...quietStep, runs: [[Option.getOrElse(node.prompt, () => []), true]] };
+    }
+    case "text":
+    case "text-entry":
+    case "unsupported": {
+      return quietStep;
+    }
+    default: {
+      return node satisfies never;
+    }
+  }
+};
+
+/**
+ * Give the notices a redaction must name, decided from the item and the values alone, never from
+ * `redact`'s output: each notice-shown feature the item lists outside content the values hide or
+ * withhold, and each notice the values give in a part's place on content the page sees. Content
+ * the page does not see is a template block or inline the values hide or cannot decide, a `param`
+ * they withhold, a choice they hide or cannot decide, and everything inside one; a listed feature
+ * at or below the path of any node in it is not named. The values give `qti-printed-variable` for
+ * each printed variable {@link printedSlots} shows as its notice, `qti-template-block` or
+ * `qti-template-inline` for each one they cannot decide, `param` for each `param` they withhold,
+ * and `template-identifier` once when they cannot decide some choice ({@link noticeStep}).
+ *
+ * @param item The item, with the paths its source gives (never the JSON form's, which holds none).
+ * @param values The values `redact` showed the item by.
+ * @returns The notices, as a multiset: the listed ones in the item's order, then the given ones in
+ *   document order.
+ */
+const noticesOf = (item: Item, values: Option.Option<RedactRecord>): readonly string[] => {
+  const unseen = new Set<string>();
+  const given: string[] = [];
+  const walk = (nodes: readonly BodyNode[], seen: boolean): void => {
+    for (const node of nodes) {
+      const step = noticeStep(item, values, node);
+      if (node.kind !== "text" && (step.hides || !seen)) {
+        unseen.add(node.path);
+      }
+
+      const notice = Option.getOrUndefined(step.notice);
+      if (seen && notice !== undefined && !(notice === choiceNotice && given.includes(notice))) {
+        given.push(notice);
+      }
+
+      for (const [run, visible] of step.runs) {
+        walk(run, seen && visible);
+      }
+    }
+  };
+  walk(item.body, true);
+
+  return [
+    ...item.unsupported
+      .filter((entry) => entry.shown === "notice" && !beneath(entry.path, unseen))
+      .map((entry) => entry.feature),
+    ...given,
+  ];
+};
 
 /**
  * Report whether redacted fields are the item's as the page may see them (P7§4.9): the document,
  * identifier, `lang`, title and response bindings as the item holds them; a body that
- * {@link fits} the item's, so a template value shows only as a printed variable's text, and no
- * hidden template content, template visibility, template-set correct response or default, seed
- * or template rule shows at all; and notices that name only features.
+ * {@link fits} the nodes {@link slotsOf} decides, so a template value shows only as the text a
+ * printed variable prints from the values, and no hidden template content, template visibility,
+ * template-set correct response or default, seed or template rule shows at all; and notices that
+ * are, as a multiset, the ones {@link noticesOf} decides.
  *
  * @param item The item.
  * @param fields The redacted fields, as `redact` gave them or as the JSON decodes.
  * @param values The values `redact` showed the item by.
+ * @param notices The notices the fields must name, from {@link noticesOf}.
  * @returns Whether the fields hold nothing the item's body does not show.
  */
 const fieldsFit = (
   item: Item,
   fields: RedactedFields,
   values: Option.Option<RedactRecord>,
+  notices: readonly string[],
 ): boolean => {
-  const notices = new Set<string>([
-    ...item.unsupported.map((entry) => entry.feature),
-    ...templateNotices,
-  ]);
+  const showing: Showing = { templates: item.templates, values };
 
   return (
     isDeepStrictEqual(
@@ -836,8 +1135,8 @@ const fieldsFit = (
       },
       { ...fields },
     ) &&
-    fits(slotsOf(item.body, values), fields.body, values) &&
-    fields.notices.every((notice) => notices.has(notice))
+    fits(slotsOf(item.body, showing), fields.body, showing) &&
+    isDeepStrictEqual(fields.notices.toSorted(), notices.toSorted())
   );
 };
 
@@ -905,28 +1204,37 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
 /**
  * Check a templated item's redaction against the exclusion set (P7§4.9): its redacted fields
  * {@link fieldsFit} the item, and its JSON as decoded, which holds no path, fits the item with
- * every path `""`.
+ * every path `""`. Both name the notices {@link noticesOf} decides from the item with its paths.
  *
  * @param subject The item, its redaction and its JSON.
  * @returns Each problem, naming the item and its record state; empty when both fit. A JSON that
  *   does not decode is {@link keyProblems}' to report.
  */
-const templateProblems = (subject: Subject): readonly string[] => [
-  ...(fieldsFit(subject.item, subject.redacted, subject.record)
-    ? []
-    : [
-        `${subject.location}: the redacted fields hold more than the item's body shows, or not as it writes it`,
-      ]),
-  ...Result.match(decodeStrictly(subject.json), {
-    onFailure: () => [],
-    onSuccess: (fields) =>
-      fieldsFit({ ...subject.item, body: withoutPaths(subject.item.body) }, fields, subject.record)
-        ? []
-        : [
-            `${subject.location}: the JSON holds more than the item's body shows, or not as it writes it`,
-          ],
-  }),
-];
+const templateProblems = (subject: Subject): readonly string[] => {
+  const notices = noticesOf(subject.item, subject.record);
+
+  return [
+    ...(fieldsFit(subject.item, subject.redacted, subject.record, notices)
+      ? []
+      : [
+          `${subject.location}: the redacted fields hold more than the item's body shows, or not as it writes it`,
+        ]),
+    ...Result.match(decodeStrictly(subject.json), {
+      onFailure: () => [],
+      onSuccess: (fields) =>
+        fieldsFit(
+          { ...subject.item, body: withoutPaths(subject.item.body) },
+          fields,
+          subject.record,
+          notices,
+        )
+          ? []
+          : [
+              `${subject.location}: the JSON holds more than the item's body shows, or not as it writes it`,
+            ],
+    }),
+  ];
+};
 
 /**
  * A template block, a template inline or a choice with a template visibility, with the content its
@@ -1259,6 +1567,29 @@ const forgeFields = (subject: Subject, edit: (node: BodyNode) => BodyNode): Subj
   redacted: { ...subject.redacted, body: forgeNodes(subject.redacted.body, edit) },
 });
 
+/**
+ * Forge a template control's paragraph: the one child `chosen` picks, the printed variable's text
+ * or its notice, becomes a text node of `text`.
+ *
+ * @param node One body node; any but the paragraph is left as it is.
+ * @param chosen Picks the child to replace.
+ * @param text The text the forgery prints there.
+ * @returns The node, forged where it is the paragraph.
+ */
+const printedFilled = (
+  node: BodyNode,
+  chosen: (child: BodyNode) => boolean,
+  text: string,
+): BodyNode =>
+  node.kind === "element" && node.tag === "p"
+    ? {
+        ...node,
+        children: node.children.map((child): BodyNode =>
+          chosen(child) ? { kind: "text", text } : child,
+        ),
+      }
+    : node;
+
 describe("the template sweep over the corpus", () => {
   it.effect(
     "[I-5] every templated corpus item, redacted under two seeds and with no record, shows a template value only as a printed variable's text, and no hidden template content, template-set correct response or default, seed, template rule or template visibility, nor any of the core set",
@@ -1319,9 +1650,9 @@ describe("the template sweep over the corpus", () => {
 
           return made.value.success;
         });
-        const [honest] = subjects;
-        if (honest === undefined) {
-          assert.fail("the template control has no record state");
+        const [honest, , unrecorded] = subjects;
+        if (honest === undefined || unrecorded === undefined) {
+          assert.fail("the template control lacks a record state");
         }
 
         const hiddenShown = forgeFields(honest, (node) =>
@@ -1359,6 +1690,23 @@ describe("the template sweep over the corpus", () => {
               }
             : node,
         );
+        const otherValue = forgeFields(honest, (node) =>
+          printedFilled(node, (child) => child.kind === "text" && child.text === "123", "A"),
+        );
+        const valueForNotice = forgeFields(unrecorded, (node) =>
+          printedFilled(
+            node,
+            (child) => child.kind === "unsupported" && child.feature === printedNotice,
+            "123",
+          ),
+        );
+        const noticeDropped: Subject = {
+          ...unrecorded,
+          redacted: {
+            ...unrecorded.redacted,
+            notices: unrecorded.redacted.notices.filter((notice) => notice !== choiceNotice),
+          },
+        };
         const forgedBody = honest.json.body.map((node): BodyNodeJson => {
           if (node.kind !== "choice") {
             return node;
@@ -1386,6 +1734,9 @@ describe("the template sweep over the corpus", () => {
           subjects.map((subject) => subject.state),
           ['seed "1"', 'seed "2"', "no record"],
         );
+        assert.isFalse(isDeepStrictEqual(otherValue.redacted, honest.redacted));
+        assert.isFalse(isDeepStrictEqual(valueForNotice.redacted, unrecorded.redacted));
+        assert.isFalse(isDeepStrictEqual(noticeDropped.redacted, unrecorded.redacted));
         assert.deepStrictEqual(
           subjects.flatMap((subject) => [...keyProblems(subject), ...templateProblems(subject)]),
           [],
@@ -1405,9 +1756,14 @@ describe("the template sweep over the corpus", () => {
             "template value",
           ],
         );
-        for (const forged of [hiddenShown, choiceShown, visibilityKept]) {
+        for (const forged of [hiddenShown, choiceShown, visibilityKept, otherValue]) {
           assert.deepStrictEqual(templateProblems(forged), [
             `${inRecord}: the redacted fields hold more than the item's body shows, or not as it writes it`,
+          ]);
+        }
+        for (const forged of [valueForNotice, noticeDropped]) {
+          assert.deepStrictEqual(templateProblems(forged), [
+            `${templateControlLocation} (no record): the redacted fields hold more than the item's body shows, or not as it writes it`,
           ]);
         }
         assert.isTrue(Result.isFailure(decodeStrictly(forgedJson.json)));
