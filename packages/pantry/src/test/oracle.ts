@@ -4413,18 +4413,20 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    // A template that writes no cardinality, or one outside its domain, or a base type outside its
-    // domain, is refused by AL3 ("required-attribute") or that domain alone, as an outcome is under
-    // "Feedback outcome type": it has no `Declaration` row for a reference to read.
-    const typed = Option.all([baseTypeOf(overlay, template), cardinalityOf(overlay, template)]);
+    // A template that writes no cardinality, or one outside its domain, is refused by AL3
+    // ("required-attribute") or that domain alone, as an outcome is under "Feedback outcome type":
+    // it has no `DeclarationName` for a reference to read (spec reading 158).
+    const typed = cardinalityOf(overlay, template);
     if (Option.isNone(typed)) {
       return [];
     }
 
     // A record is neither, judged by its cardinality alone; a template is judged by its base type
-    // where it has one, and one with none is Declaration base type's alone (lane NIL's audit, B12),
-    // as "Feedback outcome type" reads an outcome.
-    const [baseType, cardinality] = typed.value;
+    // where it has one, and one with none, unwritten or spelling nothing, is Declaration base
+    // type's or its value domain's alone (lane NIL's audit, B12), as "Feedback outcome type" reads
+    // an outcome.
+    const cardinality = typed.value;
+    const baseType = baseTypeOf(overlay, template);
 
     return (cardinality === "single" || cardinality === "multiple") &&
       Option.isNone(typeBreach(baseType, (held) => held === "identifier"))
