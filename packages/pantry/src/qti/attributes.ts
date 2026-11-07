@@ -659,8 +659,7 @@ export const attributeLawsByName = {
             o.or(
               o.ne(o.local, name),
               o.eq(
-                Compute.subset(
-                  AttributeNameSelf.row(name),
+                Compute.disjoint(
                   AttributeSlotOf.row(
                     AttributeModelOf.at(
                       "model",
@@ -668,8 +667,9 @@ export const attributeLawsByName = {
                       GoverningOf.at("governor", o.version, o.kind, o.governs),
                     ),
                   ),
+                  Bits.of(AttributeName, [name]),
                 ),
-                false,
+                true,
               ),
             ),
           ),

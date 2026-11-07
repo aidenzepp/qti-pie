@@ -117,7 +117,6 @@ import {
   NodeKind,
   ResourceType,
   SchemaVersion,
-  SlotSelf,
 } from "#pantry/grammar/install.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
@@ -792,7 +791,7 @@ type NodeRow = RowScalars<typeof Node>;
 const carries = (n: NodeRow, name: "baseType" | "fieldIdentifier") =>
   n.eq(
     Compute.subset(
-      SlotSelf.row(
+      Compute.singleton(
         AttributeSlotOf.at(
           "slot",
           AttributeModelOf.at(
