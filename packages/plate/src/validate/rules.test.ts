@@ -398,6 +398,49 @@ const setCorrect = (identifier: string): SourceElement =>
   el("qti-set-correct-response", [attr("identifier", identifier)], [baseValue("identifier", "A")]);
 
 /**
+ * Construct a template rule that sets a template variable to an expression.
+ *
+ * @param identifier The template variable's identifier.
+ * @param expression The expression.
+ * @returns The `qti-set-template-value`.
+ */
+const setTemplate = (identifier: string, expression: SourceElement): SourceElement =>
+  el("qti-set-template-value", [attr("identifier", identifier)], [expression]);
+
+/**
+ * Construct a `qti-is-null` of an expression, a single boolean of an operand of any type, so a
+ * case can read a variable of any type into a boolean template variable.
+ *
+ * @param operand The expression.
+ * @returns The `qti-is-null`.
+ */
+const nullOf = (operand: SourceElement): SourceElement => el("qti-is-null", [], [operand]);
+
+/**
+ * Construct a `qti-any-n` over one boolean operand, with its `min` and `max` as written.
+ *
+ * @param min Its `min`.
+ * @param max Its `max`.
+ * @returns The expression.
+ */
+const anyNOf = (min: string, max: string): SourceElement =>
+  el("qti-any-n", [attr("min", min), attr("max", max)], [baseValue("boolean", "true")]);
+
+/**
+ * The refusal of a read template processing may not make (P26).
+ *
+ * @param path The reading element's path.
+ * @param facts The detail's facts besides `check`: the element, the identifier, the kind of
+ *   variable it names and, for a read through a reference attribute, the attribute.
+ * @returns The refusal, reduced.
+ */
+const templateRead = (path: string, facts: Readonly<Record<string, string>>) => ({
+  detail: { check: "template-read", ...facts },
+  path,
+  rule: "expression-type" as const,
+});
+
+/**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
  *
  * @param source The document to check.
@@ -1752,13 +1795,12 @@ describe("checkRules", () => {
         );
       });
 
-      it("does not judge a string operand in template processing", () => {
+      it("[I-5] refuses a string operand in template processing too (P23)", () => {
         assert.deepStrictEqual(
           judged(
             item(
-              [declaration("qti-template-declaration", "SAME", "single", "boolean")],
-              [],
               [
+                declaration("qti-template-declaration", "SAME", "single", "boolean"),
                 templateProcessing(
                   el(
                     "qti-set-template-value",
@@ -1767,9 +1809,15 @@ describe("checkRules", () => {
                   ),
                 ),
               ],
+              [],
             ),
           ),
-          [],
+          [
+            {
+              ...operandRefused("2", "string", "single"),
+              path: "qti-assessment-item/qti-template-processing/qti-set-template-value/qti-equal",
+            },
+          ],
         );
       });
     });
@@ -2062,6 +2110,253 @@ describe("checkRules", () => {
               ]),
             ],
           ),
+        ),
+        [],
+      );
+    });
+  });
+
+  describe("template processing", () => {
+    const rulePath = "qti-assessment-item/qti-template-processing/qti-set-template-value";
+
+    /**
+     * The declarations every case below may read or set: a single identifier `RESPONSE` with a
+     * mapping, a single point `POINT` with an area mapping, a float `SCORE` and an integer `COUNT`
+     * outcome, the template variables `B` (single boolean), `N` (single integer), `F` (single
+     * float) and `M` (multiple integer), and the string context variable `CONTEXT`.
+     */
+    const declared = [
+      declaration("qti-context-declaration", "CONTEXT", "single", "string"),
+      response("RESPONSE", "single", "identifier", [mapping("A")]),
+      pointResponse("POINT"),
+      outcome("SCORE"),
+      outcome("COUNT", "integer"),
+      declaration("qti-template-declaration", "B", "single", "boolean"),
+      declaration("qti-template-declaration", "N", "single", "integer"),
+      declaration("qti-template-declaration", "F", "single", "float"),
+      declaration("qti-template-declaration", "M", "multiple", "integer"),
+    ];
+
+    /**
+     * Check an item with {@link declared}'s declarations whose template processing holds the given
+     * rules.
+     *
+     * @param rules The template rules, in document order.
+     * @returns The refusals, reduced.
+     */
+    const templated = (...rules: readonly SourceElement[]) =>
+      judged(item([...declared, templateProcessing(...rules)], []));
+
+    it("[I-5] refuses a qti-map-response of a response in a template rule (P26)", () => {
+      assert.deepStrictEqual(
+        templated(setTemplate("F", variable("RESPONSE", "qti-map-response"))),
+        [
+          templateRead(`${rulePath}/qti-map-response`, {
+            element: "qti-map-response",
+            identifier: "RESPONSE",
+            variableKind: "response",
+          }),
+        ],
+      );
+    });
+
+    it("[I-5] refuses qti-any-n's max naming an outcome in a template rule (P26)", () => {
+      assert.deepStrictEqual(templated(setTemplate("B", anyNOf("1", "COUNT"))), [
+        templateRead(`${rulePath}/qti-any-n`, {
+          attribute: "max",
+          element: "qti-any-n",
+          identifier: "COUNT",
+          variableKind: "outcome",
+        }),
+      ]);
+    });
+
+    it("[I-5] refuses a qti-variable, a qti-correct and a qti-default naming a response, an outcome or numAttempts in a template rule, as P26 alone", () => {
+      const reads = [
+        ["RESPONSE", "response"],
+        ["SCORE", "outcome"],
+        ["numAttempts", "built-in"],
+      ] as const;
+      for (const local of ["qti-variable", "qti-correct", "qti-default"]) {
+        for (const [identifier, variableKind] of reads) {
+          assert.deepStrictEqual(
+            templated(setTemplate("B", nullOf(variable(identifier, local)))),
+            [
+              templateRead(`${rulePath}/qti-is-null/${local}`, {
+                element: local,
+                identifier,
+                variableKind,
+              }),
+            ],
+            `${local} of ${identifier}`,
+          );
+        }
+      }
+    });
+
+    it("[I-5] refuses a qti-map-response-point of a mapped response in a template rule as P26, not P27", () => {
+      assert.deepStrictEqual(templated(setTemplate("F", mapPoint("POINT"))), [
+        templateRead(`${rulePath}/qti-map-response-point`, {
+          element: "qti-map-response-point",
+          identifier: "POINT",
+          variableKind: "response",
+        }),
+      ]);
+    });
+
+    it("[I-5] refuses qti-any-n's min and qti-repeat's number-repeats naming a response in a template rule as P26, not P24", () => {
+      const repeat = el(
+        "qti-repeat",
+        [attr("number-repeats", "RESPONSE")],
+        [baseValue("integer", "1")],
+      );
+
+      assert.deepStrictEqual(
+        templated(setTemplate("B", anyNOf("RESPONSE", "1")), setTemplate("B", nullOf(repeat))),
+        [
+          templateRead(`${rulePath}[1]/qti-any-n`, {
+            attribute: "min",
+            element: "qti-any-n",
+            identifier: "RESPONSE",
+            variableKind: "response",
+          }),
+          templateRead(`${rulePath}[2]/qti-is-null/qti-repeat`, {
+            attribute: "number-repeats",
+            element: "qti-repeat",
+            identifier: "RESPONSE",
+            variableKind: "response",
+          }),
+        ],
+      );
+    });
+
+    it("[I-5] refuses qti-any-n's min naming a float or a multiple template variable where a single integer is needed (P24)", () => {
+      assert.deepStrictEqual(
+        templated(setTemplate("B", anyNOf("F", "1")), setTemplate("B", anyNOf("M", "1"))),
+        ["F", "M"].map((identifier, index) => ({
+          detail: {
+            attribute: "min",
+            check: "reference",
+            element: "qti-any-n",
+            expectedBaseType: "integer",
+            identifier,
+          },
+          path: `${rulePath}[${index + 1}]/qti-any-n`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[I-5] refuses qti-any-n's min and a qti-variable naming nothing in a template rule (P8)", () => {
+      assert.deepStrictEqual(
+        templated(
+          setTemplate("B", anyNOf("NOPE", "1")),
+          setTemplate("B", nullOf(variable("NOPE"))),
+        ),
+        [
+          {
+            detail: {
+              attribute: "min",
+              element: "qti-any-n",
+              expected: "variable",
+              identifier: "NOPE",
+            },
+            path: `${rulePath}[1]/qti-any-n`,
+            rule: "undeclared-variable",
+          },
+          {
+            detail: { element: "qti-variable", expected: "variable", identifier: "NOPE" },
+            path: `${rulePath}[2]/qti-is-null/qti-variable`,
+            rule: "undeclared-variable",
+          },
+        ],
+      );
+    });
+
+    it("[I-5] refuses a qti-set-template-value, a qti-set-correct-response and a qti-set-default-value whose expression is not their variable's type (P20)", () => {
+      const processingPath = "qti-assessment-item/qti-template-processing";
+
+      assert.deepStrictEqual(
+        templated(
+          setTemplate("N", baseValue("float", "1.5")),
+          el(
+            "qti-set-correct-response",
+            [attr("identifier", "RESPONSE")],
+            [baseValue("integer", "1")],
+          ),
+          el("qti-set-default-value", [attr("identifier", "SCORE")], [baseValue("integer", "1")]),
+        ),
+        (
+          [
+            ["qti-set-template-value", "N", "float", "integer"],
+            ["qti-set-correct-response", "RESPONSE", "integer", "identifier"],
+            ["qti-set-default-value", "SCORE", "integer", "float"],
+          ] as const
+        ).map(([element, identifier, expressionBaseType, outcomeBaseType]) => ({
+          detail: {
+            element,
+            expressionBaseType,
+            expressionCardinality: "single",
+            identifier,
+            outcomeBaseType,
+            outcomeCardinality: "single",
+          },
+          path: `${processingPath}/${element}`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[I-5] refuses a template condition's branches and a template constraint over a value that is not a single boolean (P21)", () => {
+      const processingPath = "qti-assessment-item/qti-template-processing";
+      const condition = el(
+        "qti-template-condition",
+        [],
+        [
+          el(
+            "qti-template-if",
+            [],
+            [baseValue("integer", "1"), setTemplate("N", baseValue("integer", "1"))],
+          ),
+          el(
+            "qti-template-else-if",
+            [],
+            [variable("F"), setTemplate("N", baseValue("integer", "2"))],
+          ),
+        ],
+      );
+
+      assert.deepStrictEqual(
+        templated(condition, el("qti-template-constraint", [], [variable("M")])),
+        (
+          [
+            ["qti-template-condition/", "qti-template-if", "integer", "single"],
+            ["qti-template-condition/", "qti-template-else-if", "float", "single"],
+            ["", "qti-template-constraint", "integer", "multiple"],
+          ] as const
+        ).map(([within, element, expressionBaseType, expressionCardinality]) => ({
+          detail: {
+            check: "condition",
+            element,
+            expressionBaseType,
+            expressionCardinality,
+          },
+          path: `${processingPath}/${within}${element}`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[I-5] accepts template rules that read a template variable, QTI_CONTEXT, a declared context variable and a template variable's default", () => {
+      assert.deepStrictEqual(
+        templated(
+          setTemplate("N", variable("N")),
+          setTemplate("B", anyNOf("N", "N")),
+          setTemplate("B", nullOf(variable("QTI_CONTEXT"))),
+          setTemplate("B", nullOf(variable("CONTEXT"))),
+          setTemplate("F", variable("F", "qti-default")),
+          el("qti-template-constraint", [], [variable("B")]),
+          setCorrect("RESPONSE"),
         ),
         [],
       );
