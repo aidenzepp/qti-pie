@@ -2653,3 +2653,20 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
 
      This binds pantry and plate alike. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
      2026-11-05, from RV seat GEN-B/codec (`3fe6a888`, `bb71b197`; its guard `2e4d053b`).)
+
+<!-- Reading 141 is #46's (a document's encoding); this list continues at 142. -->
+
+142. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+     model's section 2.2.2.3, Outcomes Variable (https://www.imsglobal.org/spec/qti/v3p0/info#IV_Outcome), says of SCORE
+     "Items that declare a numeric outcome variable representing the candidate's overall performance on the item should
+     use the outcome name 'SCORE' for the variable. SCORE MUST be a float." (`info.txt:8478`), and of MAXSCORE "Items that
+     declare a maximum score (in multiple response choice interactions, for example) should do so by declaring the
+     'MAXSCORE' variable. MAXSCORE MUST be a float." (`info.txt:8480`). Both sentences are about items. It says of
+     PASSED "Items or tests that want to make the fact that the candidate scored above a predefined threshold available
+     as a variable should use the 'PASSED' variable. PASSED MUST be a boolean." (`info.txt:8482`), which covers a test
+     as well. So an outcome declaration named SCORE or MAXSCORE of an item is refused unless its base type is float, a
+     test's of any base type is accepted (an integer included), and one named PASSED is refused unless it is a boolean,
+     in an item and in a test alike. This refuses nothing the specification states and accepts what it leaves open;
+     reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
+     pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
+     type`.)
