@@ -372,6 +372,33 @@ const expressionAt = (local: string): string =>
   `qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/${local}`;
 
 /**
+ * The path of a child of `readingTestXml`'s one item ref, by its path step.
+ *
+ * @param step The child's path step, such as `qti-variable-mapping[2]`.
+ * @returns Its path.
+ */
+const itemRefChildAt = (step: string): string =>
+  `qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref/${step}`;
+
+/**
+ * A package whose test's outcome processing reads `ITEM1.SCORE` through its one item ref `ITEM1`,
+ * which holds the given variable mappings, to the given item at `items/a.xml`.
+ *
+ * @param mappings The item ref's variable mappings, as written.
+ * @param item The item's text.
+ * @returns The package's files.
+ */
+const mappingPackage = (mappings: string, item: string): ReadonlyMap<string, Uint8Array> =>
+  readingPackage(
+    readingTestXml(
+      '<qti-variable identifier="ITEM1.SCORE"/>',
+      "",
+      itemRefXml("ITEM1", "items/a.xml", mappings),
+    ),
+    { "items/a.xml": item },
+  );
+
+/**
  * A package whose test's outcome processing reads a reference, beside one item ref `a` whose item
  * declares `SCORE`.
  *
@@ -846,6 +873,78 @@ describe("package/open.ts", () => {
               ),
             ),
           );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a mapping whose source names nothing or a response as undeclared-variable, pantry's variable-mapping-source, and accepts one from a declared outcome",
+      () =>
+        Effect.gen(function* mappingSource() {
+          const item = itemXml("a", "SCORE").replace(
+            "<qti-outcome-declaration",
+            '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-outcome-declaration',
+          );
+          const mappedFrom = (source: string) =>
+            openPackage(
+              location,
+              mappingPackage(
+                `<qti-variable-mapping source-identifier="${source}" target-identifier="T"/>`,
+                item,
+              ),
+            );
+
+          for (const source of ["NONE", "RESPONSE"]) {
+            assert.deepStrictEqual(
+              refusalsOf(yield* mappedFrom(source)),
+              [
+                {
+                  detail: {
+                    attribute: "source-identifier",
+                    element: "qti-variable-mapping",
+                    expected: "outcome",
+                    identifier: source,
+                  },
+                  document: fileLocation(location, "test.xml"),
+                  location: {
+                    kind: "path",
+                    path: `${itemRefChildAt("qti-variable-mapping")}/@source-identifier`,
+                  },
+                  rule: "undeclared-variable",
+                },
+              ],
+              source,
+            );
+          }
+          acceptedOf(yield* mappedFrom("SCORE"));
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a second mapping on one item ref to one target as duplicate-identifier, pantry's variable-mapping-target, and accepts two mappings to two targets",
+      () =>
+        Effect.gen(function* mappingTarget() {
+          const item = itemXml("a", "SCORE", "BONUS");
+          const mappedTo = (second: string) =>
+            openPackage(
+              location,
+              mappingPackage(
+                `<qti-variable-mapping source-identifier="SCORE" target-identifier="T"/><qti-variable-mapping source-identifier="BONUS" target-identifier="${second}"/>`,
+                item,
+              ),
+            );
+
+          assert.deepStrictEqual(refusalsOf(yield* mappedTo("T")), [
+            {
+              detail: { identifier: "T" },
+              document: fileLocation(location, "test.xml"),
+              location: {
+                kind: "path",
+                path: `${itemRefChildAt("qti-variable-mapping[2]")}/@target-identifier`,
+              },
+              rule: "duplicate-identifier",
+            },
+          ]);
+          acceptedOf(yield* mappedTo("U"));
         }),
     );
 

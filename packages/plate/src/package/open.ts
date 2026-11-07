@@ -18,7 +18,8 @@
  *   is judged by reading 48 against the items they resolve to, their variable mappings and its
  *   parts and sections: one no reading resolves, or one that reads the `duration` of an item that
  *   is not time dependent, is `undeclared-variable`, and one two readings resolve is
- *   `ambiguous-reference`;
+ *   `ambiguous-reference`; and each item ref's variable mappings name an outcome its item declares
+ *   as their source (`undeclared-variable`) and each its own target (`duplicate-identifier`);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
@@ -682,6 +683,11 @@ interface ItemVariables {
    */
   readonly declared: ReadonlySet<string>;
   /**
+   * The identifiers of the outcome variables the item declares, the ones a variable mapping of an
+   * item ref to it may name as its source.
+   */
+  readonly outcomes: ReadonlySet<string>;
+  /**
    * Whether the item's `time-dependent` reads false as `xs:boolean`, so that no expression may
    * read its `duration`. One that is absent or outside `xs:boolean` is the item's own verdict's
    * refusal and does not make the item untimed here.
@@ -690,8 +696,17 @@ interface ItemVariables {
 }
 
 /**
+ * Give the identifiers some declarations declare.
+ *
+ * @param declarations The declarations.
+ * @returns Their identifiers, each once.
+ */
+const identifiersOf = (declarations: readonly SourceElement[]): ReadonlySet<string> =>
+  new Set(declarations.flatMap((declaration) => Option.toArray(identifierOf(declaration))));
+
+/**
  * Read what a reading of a dotted reference may name through an item ref from its item's document:
- * the variables it declares, and whether it is time dependent.
+ * the variables it declares, its outcome variables among them, and whether it is time dependent.
  *
  * @param document The item's document.
  * @returns Its variables, none when the document is unread or its root is not an item.
@@ -706,14 +721,15 @@ const variablesOf = (document: Document | undefined): Option.Option<ItemVariable
     return Option.none();
   }
 
-  const declared = root.children.flatMap((child) =>
-    child.kind === "element" && isQti(child, itemDeclarations)
-      ? Option.toArray(identifierOf(child))
-      : [],
+  const declarations = root.children.flatMap((child) =>
+    child.kind === "element" && isQti(child, itemDeclarations) ? [child] : [],
   );
 
   return Option.some({
-    declared: new Set(declared),
+    declared: identifiersOf(declarations),
+    outcomes: identifiersOf(
+      declarations.filter((declaration) => declaration.local === "qti-outcome-declaration"),
+    ),
     untimed: Option.exists(
       Option.flatMap(attributeOf(root, "time-dependent"), xsBooleanOf),
       (timeDependent) => !timeDependent,
@@ -951,9 +967,78 @@ const judgeReference = (
 };
 
 /**
+ * Judge the variable mappings of a test's item refs, as pantry's import judges a `VariableMapping`
+ * (`packages/pantry/src/schema/test/rules.ts`), each in document order.
+ *
+ * A mapping's `source-identifier` that names no outcome variable the item ref's item declares, a
+ * name it does not declare or one it declares as another kind of variable, is
+ * `undeclared-variable` at that attribute, its detail the `element`, the `attribute`, the
+ * `identifier` and `expected: "outcome"`, pantry's `variable-mapping-source`. It is judged only
+ * through an item ref whose item the package holds and the reader read, as pantry contains a
+ * mapping's source in the declarations of the item its item ref resolves to. A second mapping of
+ * one item ref with the same `target-identifier` is `duplicate-identifier` at that attribute, its
+ * detail the `identifier`, pantry's `variable-mapping-target`, the key of a mapping by its item ref
+ * and its target. A value that is no NCName is the structure check's refusal, so it is passed
+ * over.
+ *
+ * @param document The test's location.
+ * @param visits The visits of the test's elements, in document order.
+ * @param variablesFor The variables of the item an item ref resolves to, none when it resolves to
+ *   no item the reader read.
+ * @returns The refusals, in document order.
+ */
+const judgeMappings = (
+  document: string,
+  visits: readonly Visit[],
+  variablesFor: (itemRef: SourceElement) => Option.Option<ItemVariables>,
+): readonly Refusal[] => {
+  const targets = new Map<SourceElement, Set<string>>();
+  const refusals: Refusal[] = [];
+  for (const { element, parent, path } of visits) {
+    const itemRef = parent.pipe(
+      Option.filter((one) => isQti(one, itemRefElements)),
+      Option.getOrUndefined,
+    );
+    if (itemRef !== undefined && isQti(element, mappingElements)) {
+      const named = (local: string): Option.Option<string> =>
+        attributeOf(element, local).pipe(Option.map(trimXmlSpace), Option.filter(isNcName));
+      const at = (local: string): string => attributePath(path, { local, namespace: "" });
+      for (const source of Option.toArray(named("source-identifier"))) {
+        if (Option.exists(variablesFor(itemRef), (variables) => !variables.outcomes.has(source))) {
+          refusals.push(
+            refuse(document, "undeclared-variable", at("source-identifier"), {
+              attribute: "source-identifier",
+              element: element.local,
+              expected: "outcome",
+              identifier: source,
+            }),
+          );
+        }
+      }
+
+      for (const target of Option.toArray(named("target-identifier"))) {
+        const seen = targets.get(itemRef) ?? new Set<string>();
+        if (seen.has(target)) {
+          refusals.push(
+            refuse(document, "duplicate-identifier", at("target-identifier"), {
+              identifier: target,
+            }),
+          );
+        }
+
+        seen.add(target);
+        targets.set(itemRef, seen);
+      }
+    }
+  }
+
+  return refusals;
+};
+
+/**
  * What judging one test gives: each item ref's item path, keyed by the item ref's identifier, in
- * document order, and the test's refusals, the item refs' then the references', each in document
- * order.
+ * document order, and the test's refusals, the item refs', their variable mappings', then the
+ * references', each in document order.
  */
 interface TestJudgement {
   readonly refs: ReadonlyMap<string, string>;
@@ -962,7 +1047,8 @@ interface TestJudgement {
 
 /**
  * Judge one test document of the package: each item ref resolved against the test's path to an item
- * resource the manifest lists, then each dotted reference by reading 48.
+ * resource the manifest lists, its variable mappings by {@link judgeMappings}, then each dotted
+ * reference by reading 48.
  *
  * An item ref that resolves to no listed item resource is `item-ref-unresolved` at the item ref,
  * its detail the `identifier`, the `href` and, when the `href` names a path inside the package,
@@ -986,6 +1072,7 @@ const judgeTest = (
 ): TestJudgement => {
   const visits = [...walk(source)];
   const refs = new Map<string, string>();
+  const resolvedRefs = new Map<SourceElement, string>();
   const mappings = new Map<string, readonly (readonly [source: string, target: string])[]>();
   const unresolved: Refusal[] = [];
   const durations = new Set<string>();
@@ -999,6 +1086,7 @@ const judgeTest = (
       const resolved = resolveReference(testPath, written);
       if (Option.isSome(resolved) && itemPaths.has(resolved.value)) {
         refs.set(identifier, resolved.value);
+        resolvedRefs.set(element, resolved.value);
         mappings.set(identifier, mappingsOf(element));
       } else {
         const facts = { href: written, identifier };
@@ -1031,6 +1119,11 @@ const judgeTest = (
     }
   }
 
+  const mapped = judgeMappings(source.location, visits, (itemRef) =>
+    Option.flatMap(Option.fromUndefinedOr(resolvedRefs.get(itemRef)), (itemPath) =>
+      variablesOf(documents.get(itemPath)),
+    ),
+  );
   const scope: ReferenceScope = { durations, items };
   const whole: ReadonlySet<string> = new Set([
     ...testBuiltIns,
@@ -1049,7 +1142,7 @@ const judgeTest = (
     ),
   );
 
-  return { refs, refusals: [...unresolved, ...references] };
+  return { refs, refusals: [...unresolved, ...mapped, ...references] };
 };
 
 /**
