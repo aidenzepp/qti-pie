@@ -136,7 +136,7 @@ const recorded: readonly Recorded[] = [
       /^O1 crust refused-well-formedness \(the (?:prefix \S+|default namespace) is bound to "_", which is no URI reference.*, libxml2 accepts$/u,
     source:
       'RFC 3986 section 4.2: "A path segment that contains a colon character (e.g., "this:that") cannot be used as the first segment of a relative-path reference, as it would be mistaken for a scheme name", and section 3.1, a scheme begins with a letter; Namespaces in XML 1.0 (Third Edition) section 3 asks a declaration\'s normalized value to be a URI reference (reading 142)',
-    why: "libxml2 2.9.13's URI parser admits some values RFC 3986's grammar does not, such as `&f;http://x` (written `&#38;f;http://x`), whose first segment holds a colon and which no scheme can begin with `&`; crust refuses each under reading 142, where libxml2 reads it without the namespace error it reports for other values that are no URI",
+    why: 'O1 runs `xmllint --noout --nonet`, and there libxml2 2.9.13 (libxml version 20913) reports no namespace error for `<r xmlns:p="&#38;f;http://x"/>` and exits 0, though `--c14n` on the same file reports "xmlns:p: \'&f;http://x\' is not a valid URI" and fails, and `--noout --nonet` reports it for `%zz`, `a b`, `&quot;` and every other value probed; the value\'s first segment holds a colon and no scheme begins with `&`, so it is no URI reference and crust refuses it under reading 142',
   },
   {
     signature: /^O1 crust refused-element-depth, libxml2 accepts$/u,
