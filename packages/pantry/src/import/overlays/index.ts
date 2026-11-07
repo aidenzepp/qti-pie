@@ -323,6 +323,7 @@ export const overlayPartsOf = (
       assembled.Instance.values(),
     ),
     placedVariableRowsOf({
+      baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
       declarations: built.flatMap(({ rows }) => [...rows.declarations.Declaration.values()]),
       instances: assembled.Instance.values(),
       references: built.flatMap(({ rows }) => [...rows.expressions.VariableRef.values()]),
@@ -331,6 +332,7 @@ export const overlayPartsOf = (
     objectRowsOfPackage(manifest.document.listed.tree, manifest.document.ids, named),
     placedBindingRowsOf({
       adaptive: built.flatMap(({ rows }) => [...rows.interactions.ItemMode.values()]),
+      baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
       choices: built.flatMap(({ rows }) => [...rows.interactions.Choice.values()]),
       declarations: built.flatMap(({ rows }) => [...rows.declarations.Declaration.values()]),
       hottexts: built.flatMap(({ rows }) => [...rows.interactions.Hottext.values()]),
@@ -344,6 +346,7 @@ export const overlayPartsOf = (
       targets: built.flatMap(({ rows }) => [...rows.identity.IdrefTarget.values()]),
     }),
     sectionRowsOf({
+      baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
       contexts: built.flatMap(({ rows }) => [...rows.interactions.SectionContextName.values()]),
       declarations: built.flatMap(({ rows }) => [...rows.declarations.Declaration.values()]),
       feedbacks: built.flatMap(({ rows }) => [...rows.interactions.SectionFeedbackName.values()]),

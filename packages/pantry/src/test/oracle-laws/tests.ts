@@ -56,6 +56,7 @@ import {
   collapsed,
   contentLawOf,
   elementsOf,
+  typedOptionalOf,
   typedOr,
   typedValueOf,
   valueOf,
@@ -879,16 +880,17 @@ const contentBreachesOf = (
   const outcome = Option.fromNullishOr(
     attribute === "outcome-identifier" && declared ? context.outcomes.get(identifier) : undefined,
   );
-  // The outcome's type as its type reads it, as an item's feedback reads it: an unwritten base type
-  // reads as empty, which is no identifier. An outcome that writes no cardinality is refused by AL3
-  // alone, and one that writes its cardinality or base type outside its value domain (empty,
-  // spelling nothing, or padded, as the type's whiteSpace is `preserve`) by that domain alone, never
-  // judged as a type the outcome does not have (the orchestrator's ruling of 2026-11-06; lane NIL's
-  // audit, B11).
+  // The outcome's type as its type reads it, as an item's feedback reads it: a record has no base
+  // type, and is judged by its cardinality alone, and an outcome is judged by its base type where it
+  // has one; one that writes none is Declaration base type's alone (lane NIL's audit, B12). An
+  // outcome that writes no cardinality is refused by AL3 alone, and one that writes its cardinality
+  // or base type outside its value domain (empty, spelling nothing, or padded, as the type's
+  // whiteSpace is `preserve`) by that domain alone, never judged as a type the outcome does not have
+  // (the orchestrator's ruling of 2026-11-06; lane NIL's audit, B11).
   const typed = outcome.pipe(
     Option.flatMap((held) =>
       Option.all({
-        baseType: typedOr(held.rows, held.node.id, "base-type", ""),
+        baseType: typedOptionalOf(held.rows, held.node.id, "base-type"),
         cardinality: typedValueOf(held.rows, held.node.id, "cardinality"),
       }),
     ),
@@ -899,10 +901,15 @@ const contentBreachesOf = (
     ...Option.toArray(typed)
       .filter(
         ({ baseType, cardinality }) =>
-          baseType !== "identifier" || (cardinality !== "single" && cardinality !== "multiple"),
+          (cardinality !== "single" && cardinality !== "multiple") ||
+          Option.exists(baseType, (held) => held !== "identifier"),
       )
       .map(({ baseType, cardinality }) =>
-        breachAt(rows, node, "Feedback outcome type", { baseType, cardinality, identifier }),
+        breachAt(rows, node, "Feedback outcome type", {
+          ...Option.match(baseType, { onNone: () => ({}), onSome: (held) => ({ baseType: held }) }),
+          cardinality,
+          identifier,
+        }),
       ),
   ];
 };

@@ -9,11 +9,14 @@
  * - {@link Declaration}, one per `qti-{response,outcome,template,context}-declaration`: its
  *   identifier, its kind as a `DeclarationKind`, and its base type and cardinality as the codes
  *   their lexical forms spell (C17). Every containment into it targets {@link declarationRef}.
- * - {@link DeclarationBaseType}, a declaration's `base-type`, where it writes one.
+ * - {@link DeclarationBaseType}, a declaration's `base-type`, where it writes one, a counted member
+ *   of its {@link Declaration}.
  * - {@link ValueSet}, one per `qti-default-value` and `qti-correct-response` of a declaration: its
- *   declaration's types, and its count of values, `Node.elementChildren`.
+ *   declaration's {@link declarationRef} tuple, and its count of values, `Node.elementChildren`.
  * - {@link Value}, one per `qti-value` of a value set: its text, Node's string value of it, and its
- *   set's base type and cardinality.
+ *   set's cardinality, declaration and count of base types.
+ * - {@link DeclaredValue}, a value's text beside its declaration's base type, where its set is no
+ *   record's and its declaration has one: the base type the text is read in.
  * - {@link ValueBaseType}, a value's own `base-type`, where it writes one that spells a code: the
  *   base type a record's field's text is read in.
  * - {@link RecordField}, one per `qti-value` of a value set that writes both a `field-identifier` and
@@ -26,9 +29,10 @@
  *   as `xs:double` values, where it has both.
  *
  * No field stands for an attribute its element does not write: a value that may be missing is a row
- * of its own relation, written only where it is (AGENTS.md, Schema intent). One sentinel is left,
- * a record's base type `none`, which {@link declarationRef} copies into every row that names a
- * declaration (lane NIL's audit, B12).
+ * of its own relation, written only where it is (AGENTS.md, Schema intent). A record has no base
+ * type, so it has no {@link DeclarationBaseType}, and every row that names a declaration copies its
+ * count of them, `baseTypes`, never a base type: a row that reads the base type reads the typed
+ * row, which exists only where the declaration has one (lane NIL's audit, B12).
  *
  * An identifier's types (`IdentifierDType`, `UniqueIdentifierDType`) collapse whitespace, so the
  * declared name is the lexical form without its outer whitespace (XML Schema Part 2, §4.3.6;
@@ -76,7 +80,12 @@ import {
 } from "#pantry/grammar/install.ts";
 import { ncNamePattern } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
-import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
+import {
+  BaseTypePattern,
+  unjudgedBaseTypes,
+  ValueBase,
+  ValueBaseOf,
+} from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
@@ -193,10 +202,9 @@ export const contextVariable = {
  * - `identifier`, the declared name, its `identifier` attribute's lexical form without its outer
  *   whitespace; `identifierLexical`, that lexical form as written (C18's copy); and
  *   `identifierLead` and `identifierTrail`, the whitespace written around the name;
- * - `baseType`, the `BaseType` its {@link DeclarationBaseType} holds, and `none`, a record's, where
- *   it has none: the one field that stands for an unwritten attribute, since {@link declarationRef}
- *   copies it into every row that names the declaration (lane NIL's audit, B12, open);
  * - `cardinality`, the `Cardinality` its `cardinality` spells, and `cardinalityLexical`;
+ * - `baseTypes`, drawn: its count of {@link DeclarationBaseType} rows, 1 where it writes a
+ *   `base-type` and 0 where it does not, a record's (lane NIL's audit, B12);
  * - `masteries`, `minimums` and `maximums`, drawn: its counts of {@link MasteryValue},
  *   {@link NormalMinimum} and {@link NormalMaximum} rows, 1 where it has the value and 0 where it
  *   does not: a mastery value or a normal maximum where it writes one, and a normal minimum where
@@ -208,7 +216,7 @@ export const contextVariable = {
 export const Declaration = relation(
   "Declaration",
   {
-    baseType: closedId(BaseType),
+    baseTypes: drawn(natural),
     cardinality: closedId(Cardinality),
     cardinalityLexical: keyText,
     declarationKind: closedId(DeclarationKind),
@@ -231,24 +239,35 @@ export const Declaration = relation(
 );
 
 /**
- * A declaration's `base-type`, keyed by its node, where it writes one: `baseTypeLexical`, its
- * lexical form as written (C18's copy), and `baseType`, the `BaseType` that form spells (C17),
- * which its {@link Declaration} holds. A record writes none ("Variables with record cardinality
- * have no base-type", QTI 3.0 information model, tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3), and
- * has no row.
+ * A declaration's `base-type`, keyed by its node, where it writes one, a counted member of its
+ * {@link Declaration}: `baseTypeLexical`, its lexical form as written (C18's copy), `baseType`, the
+ * `BaseType` that form spells (C17), and `valueBase`, that code as an expression's type
+ * (`ValueBaseOf`). A record writes none ("Variables with record cardinality have no base-type",
+ * QTI 3.0 information model, tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3), and has no row.
+ *
+ * It is the one row a declaration's base type is read from: every row that names a declaration
+ * copies whether it has one (`baseTypes`), and one that reads the type copies it from here, so
+ * only where it is.
  */
 export const DeclarationBaseType = relation(
   "DeclarationBaseType",
-  { baseType: closedId(BaseType), baseTypeLexical: keyText, node: uuid },
+  {
+    baseType: closedId(BaseType),
+    baseTypeLexical: keyText,
+    node: uuid,
+    valueBase: closedId(ValueBase),
+  },
   ["node"],
 );
 
 /**
  * The one tuple of a declaration every containment into `Declaration` targets, as `nodeRef` is
  * Node's (C18; the orchestrator's ruling of 2026-11-06): its node, document, identifier,
- * declaration kind, base type and cardinality. A row that references a declaration by identifier
- * and one that hangs from it by node copy the fields they lack, so `Declaration` carries one
- * superkey UNIQUE for them all.
+ * declaration kind, cardinality and count of base types. A row that references a declaration by
+ * identifier and one that hangs from it by node copy the fields they lack, so `Declaration`
+ * carries one superkey UNIQUE for them all. The base type itself is no field of it: a record has
+ * none, so a row that reads one reads {@link DeclarationBaseType}, where `baseTypes` is 1 (lane
+ * NIL's audit, B12).
  */
 export const declarationRef = on(
   Declaration,
@@ -256,8 +275,8 @@ export const declarationRef = on(
   "document",
   "identifier",
   "declarationKind",
-  "baseType",
   "cardinality",
+  "baseTypes",
 );
 
 /**
@@ -267,7 +286,7 @@ export const declarationRef = on(
  * Its fields, every one written by the host but `fields`:
  *
  * - The node's {@link nodeRef} tuple;
- * - `identifier`, `declarationKind`, `baseType` and `cardinality`, its declaration's, copied through
+ * - `identifier`, `declarationKind`, `cardinality` and `baseTypes`, its declaration's, copied through
  *   {@link declarationRef};
  * - `elements` and `elementChildren`, its node's element rank and element children, copied through
  *   `nodeCounts`: its children are its `qti-value`s alone (`CorrectResponseDType`,
@@ -277,7 +296,7 @@ export const declarationRef = on(
 export const ValueSet = relation(
   "ValueSet",
   {
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declarationKind: closedId(DeclarationKind),
     document: uuid,
@@ -303,16 +322,18 @@ export const ValueSet = relation(
  * - The node's {@link nodeRef} tuple;
  * - `text`, its node's string value, the concatenation of its character data (Q5.03's fold over
  *   `copiedTextKinds`), copied from `Node`;
- * - `baseType` and `cardinality`, its set's: the base type its text is read in, but in a record's
- *   set, whose `none` reads nothing, where a field's text is read in its own {@link ValueBaseType}
+ * - `cardinality` and `baseTypes`, its set's, and `declaration`, its set's parent: where the set is
+ *   no record's and its declaration has a base type, its text is read in that base type, its
+ *   {@link DeclaredValue}; a record's field's text is read in its own {@link ValueBaseType}
  *   (information model §7.46, Value: "The base-type is defined by the 'base-type' attribute of the
  *   declaration except in the case of variables with record cardinality").
  */
 export const Value = relation(
   "Value",
   {
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
+    declaration: uuid,
     document: uuid,
     kind: closedId(NodeKind),
     nearest: uuid,
@@ -322,6 +343,19 @@ export const Value = relation(
     text: keyText,
     version: closedId(SchemaVersion),
   },
+  ["node"],
+);
+
+/**
+ * A value's text in its declaration's base type, keyed by its `qti-value` node, where its set is no
+ * record's and its declaration has a base type: `text` and `declaration`, its {@link Value}'s, and
+ * `baseType`, its declaration's {@link DeclarationBaseType}'s, the base type `Typed_value` reads
+ * the text in. A record's value is a field, whose text is read in its own base type
+ * ({@link ValueBaseType}); a declaration with no base type gives its values none to be read in.
+ */
+export const DeclaredValue = relation(
+  "DeclaredValue",
+  { baseType: closedId(BaseType), declaration: uuid, node: uuid, text: keyText },
   ["node"],
 );
 
@@ -476,6 +510,14 @@ export const MasteryCeiling = relation(
 export const recordFieldFamily = counted(on(RecordField, "parent"), fin(ValueSet, "fields"));
 
 /**
+ * Each declaration's base type, counted by `Declaration.baseTypes`: one row or none, a record's.
+ */
+export const declarationBaseTypeFamily = counted(
+  on(DeclarationBaseType, "node"),
+  fin(Declaration, "baseTypes"),
+);
+
+/**
  * Each outcome declaration's mastery value, counted by `Declaration.masteries`: one row or none.
  */
 export const masteryValueFamily = counted(on(MasteryValue, "node"), fin(Declaration, "masteries"));
@@ -608,9 +650,9 @@ type DeclarationRow = RowScalars<typeof Declaration>;
 type RecordFieldNameRow = RowScalars<typeof RecordFieldName>;
 
 /**
- * A `Value` row as a row check reads it.
+ * A `DeclaredValue` row as a row check reads it.
  */
-type ValueRow = RowScalars<typeof Value>;
+type DeclaredValueRow = RowScalars<typeof DeclaredValue>;
 
 /**
  * A `ValueBaseType` row as a row check reads it.
@@ -660,19 +702,46 @@ const collapsedField = (f: RecordFieldNameRow) =>
   );
 
 /**
- * State that a declaration of a typed outcome name has the declaration kind and base type the
- * specification gives it, or names another identifier.
+ * State that a declaration of a typed outcome name is no record, which has no base type, or names
+ * another identifier: the law over the name's whole value, judged by its cardinality alone. Its
+ * base type, where it has one, is judged against the type the specification gives it by
+ * {@link reservedBaseTypeLaws}.
  *
  * @param d - The row.
  * @param reserved - The typed name.
  * @returns The predicate.
  */
-const keepsReservedBaseType = (d: DeclarationRow, reserved: ReservedBaseType) =>
+const reservedNotRecord = (d: DeclarationRow, reserved: ReservedBaseType) =>
   d.or(
     d.ne(d.declarationKind, reserved.kind),
     d.ne(d.identifier, reserved.identifier),
-    d.eq(d.baseType, reserved.baseType),
+    d.ne(d.cardinality, "record"),
   );
+
+/**
+ * State that a declaration of each typed outcome name that has a base type has the one the
+ * specification gives it: its {@link DeclarationBaseType} is that type's. A declaration of the name
+ * with no base type is a record, which {@link reservedNotRecord} refuses, or one `Declaration base
+ * type` refuses alone.
+ */
+const reservedBaseTypeLaws = reservedBaseTypes.map((reserved) =>
+  contained(
+    on(
+      select(Declaration, (d) =>
+        d.and(
+          d.eq(d.declarationKind, reserved.kind),
+          d.eq(d.identifier, reserved.identifier),
+          d.eq(d.baseTypes, 1n),
+        ),
+      ),
+      "node",
+    ),
+    on(
+      select(DeclarationBaseType, (b) => b.eq(b.baseType, reserved.baseType)),
+      "node",
+    ),
+  ),
+);
 
 /**
  * The typed-value patterns, stated once in `#pantry/qti/expression-types.ts` as `BaseTypePattern`'s
@@ -689,16 +758,15 @@ export {
 } from "#pantry/qti/expression-types.ts";
 
 /**
- * State `Typed_value` over a value set's value: its text is a lexical form of its set's base type,
- * by `BaseTypePattern`, the one pattern per base type that a base value's text and a map key are
- * judged by too; every text of a base type of `unjudgedBaseTypes` is one, so it is matched against
- * nothing. A record's set has the base type `none`, an unjudged one: a field's text is judged by
- * {@link fieldValueCheck}.
+ * State `Typed_value` over a value set's value: its text is a lexical form of its declaration's
+ * base type, by `BaseTypePattern`, the one pattern per base type that a base value's text and a map
+ * key are judged by too; every text of a base type of `unjudgedBaseTypes` is one, so it is matched
+ * against nothing. A record's value is a field, whose text {@link fieldValueCheck} judges.
  *
  * @param v - The row.
  * @returns The predicate.
  */
-const valueCheck = (v: ValueRow) =>
+const valueCheck = (v: DeclaredValueRow) =>
   v.or(
     v.in(v.baseType, unjudgedBaseTypes),
     Compute.matches(v.text, BaseTypePattern.at("pattern", v.baseType)),
@@ -706,8 +774,8 @@ const valueCheck = (v: ValueRow) =>
 
 /**
  * State `Typed_value` over a value's own base type: in a record's set, the field's text is a
- * lexical form of it, as {@link valueCheck} judges a set's; in any other set, the value's text is
- * judged by its set's.
+ * lexical form of it, as {@link valueCheck} judges a declared value's; in any other set, the
+ * value's text is judged in its declaration's.
  *
  * @param b - The row.
  * @returns The predicate.
@@ -718,6 +786,14 @@ const fieldValueCheck = (b: ValueBaseTypeRow) =>
     b.in(b.baseType, unjudgedBaseTypes),
     Compute.matches(b.text, BaseTypePattern.at("pattern", b.baseType)),
   );
+
+/**
+ * The values read in their declaration's base type: each value of a set that is no record's, whose
+ * declaration has a base type. Each has its {@link DeclaredValue}, and only these do.
+ */
+const declaredValues = select(Value, (v) =>
+  v.and(v.eq(v.baseTypes, 1n), v.ne(v.cardinality, "record")),
+);
 
 /**
  * The lexical form of an `xs:double` that `Compute.cast` reads exactly: XML Schema's, cut to the
@@ -782,13 +858,14 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *
  * - **the copies (C18):** each overlay copies its node's {@link nodeRef} tuple; `Declaration` its
  *   `identifier` and `cardinality`, {@link DeclarationBaseType} its `base-type`, a value set its
- *   declaration's, a value its text and its set's types, {@link ValueBaseType} a value's own
- *   `base-type` that spells a code, a record field its `field-identifier` and `base-type`,
- *   {@link RecordFieldName} its field's `field-identifier` where that names something, and each
- *   scale row its attribute. Each optional attribute's copy has a reverse containment, so a row
- *   holds a lexical form exactly where its element writes one; a normal minimum's, over its
- *   `written` rows, since an outcome declaration of a version whose XSD defaults it has its row
- *   whether it writes it or not (reading 149).
+ *   declaration's, a value its text and its set's, {@link DeclaredValue} a typed value's text and
+ *   its declaration's base type, {@link ValueBaseType} a value's own `base-type` that spells a
+ *   code, a record field its `field-identifier` and `base-type`, {@link RecordFieldName} its
+ *   field's `field-identifier` where that names something, and each scale row its attribute. Each
+ *   optional attribute's copy has a reverse containment, so a row holds a lexical form exactly
+ *   where its element writes one; a normal minimum's, over its `written` rows, since an outcome
+ *   declaration of a version whose XSD defaults it has its row whether it writes it or not (reading
+ *   149).
  * - **existence:** a declaration has its row exactly where it writes its required `identifier` and
  *   `cardinality`, through each one's copy and its reverse, and `E1_derived` holds each code to the
  *   one its lexical form spells; one that writes either none, or one that spells nothing, has no
@@ -802,21 +879,23 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   {@link MasteryCeiling}, through its counts. A field whose `field-identifier` is whitespace
  *   alone has no name, and its value domain refuses it alone.
  * - **E1 (C17), `E1_derived`:** a declaration's kind is its `Declares` kind; each code is the one its
- *   lexical form spells (`<Roster>Lexical`), a declaration's base type its
- *   {@link DeclarationBaseType}'s, and `none` exactly where it has none; each identifier is its
- *   lexical form collapsed; a normal minimum not written is its version's default.
+ *   lexical form spells (`<Roster>Lexical`), and a base type's expression type its `ValueBaseOf`
+ *   image; each identifier is its lexical form collapsed; a normal minimum not written is its
+ *   version's default.
  * - **`Declaration key`** (spec reading 74): `key(document, identifier)`.
  * - **`Declaration not reserved`** (reading 72): no declaration names a built-in session variable, in
  *   any document, an item's, a test's or a section's alike, since every declaration element has its
  *   row whatever its root (information model tables 4.5.1, 5.115.1 and 5.151.1).
- * - **`Reserved type`**: SCORE, MAXSCORE, PASSED and QTI_CONTEXT keep their specified types.
- * - **`Declaration base type`**: a record has no base type, and every other variable has one.
+ * - **`Reserved type`**: SCORE, MAXSCORE, PASSED and QTI_CONTEXT keep their specified types: a typed
+ *   name is no record, and has its type where it has a base type.
+ * - **`Declaration base type`**: a record has no base type, and every other variable has one, counted
+ *   by `baseTypes`.
  * - **`Value cardinality`**: a single variable's value set holds one value, and a record's set holds
  *   only fields, one per value, distinct by name (`Record field key`, over
  *   {@link RecordFieldName}); a value writes a `field-identifier` or a `base-type` only as a
  *   field.
- * - **`Typed value`** (C1, G-match): each value's text is a lexical form of its base type, its set's
- *   or, a record's field's, its own.
+ * - **`Typed value`** (C1, G-match): each value's text is a lexical form of its base type: its
+ *   declaration's ({@link DeclaredValue}) or, a record's field's, its own.
  * - **`Mastery range`** (C2, G-parse): the mastery value lies in the normal range, each pair judged
  *   where both have a value: written, or a normal minimum's version default (reading 149).
  */
@@ -824,8 +903,8 @@ export const declarationLawsByName = {
   "Declaration base type": [
     check("Declaration_base_type", Declaration, (d) =>
       d.or(
-        d.and(d.eq(d.cardinality, "record"), d.eq(d.baseType, "none")),
-        d.and(d.ne(d.cardinality, "record"), d.ne(d.baseType, "none")),
+        d.and(d.eq(d.cardinality, "record"), d.eq(d.baseTypes, 0n)),
+        d.and(d.ne(d.cardinality, "record"), d.eq(d.baseTypes, 1n)),
       ),
     ),
   ],
@@ -846,7 +925,7 @@ export const declarationLawsByName = {
     contained(on(Declaration, "node"), on(cardinalities, "node")),
     contained(on(baseTypes, "node", "lexical"), on(DeclarationBaseType, "node", "baseTypeLexical")),
     contained(on(DeclarationBaseType, "node"), on(baseTypes, "node")),
-    contained(on(DeclarationBaseType, "node", "baseType"), on(Declaration, "node", "baseType")),
+    declarationBaseTypeFamily,
     contained(
       on(ValueSet, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
@@ -867,8 +946,8 @@ export const declarationLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
@@ -885,8 +964,17 @@ export const declarationLawsByName = {
     ),
     contained(on(Value, "node", "text"), on(Node, "id", "stringValue")),
     contained(
-      on(Value, "parent", "baseType", "cardinality"),
-      on(ValueSet, "node", "baseType", "cardinality"),
+      on(Value, "parent", "cardinality", "baseTypes", "declaration"),
+      on(ValueSet, "node", "cardinality", "baseTypes", "parent"),
+    ),
+    contained(on(declaredValues, "node"), on(DeclaredValue, "node")),
+    contained(
+      on(DeclaredValue, "node", "declaration", "text"),
+      on(declaredValues, "node", "declaration", "text"),
+    ),
+    contained(
+      on(DeclaredValue, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
     ),
     contained(
       on(spelledFieldBaseTypes, "node", "lexical"),
@@ -968,16 +1056,11 @@ export const declarationLawsByName = {
         d.eq(CardinalityLexical.at("lexical", d.cardinality), d.cardinalityLexical),
       ),
     ),
-    contained(
-      on(
-        select(Declaration, (d) => d.ne(d.baseType, "none")),
-        "node",
-        "baseType",
-      ),
-      on(DeclarationBaseType, "node", "baseType"),
-    ),
     check("E1_derived", DeclarationBaseType, (b) =>
-      b.eq(BaseTypeLexical.at("lexical", b.baseType), b.baseTypeLexical),
+      b.and(
+        b.eq(BaseTypeLexical.at("lexical", b.baseType), b.baseTypeLexical),
+        b.eq(ValueBaseOf.at("value", b.baseType), b.valueBase),
+      ),
     ),
     check("E1_derived", ValueBaseType, (b) =>
       b.eq(BaseTypeLexical.at("lexical", b.baseType), b.baseTypeLexical),
@@ -998,9 +1081,10 @@ export const declarationLawsByName = {
   ],
   "Record field key": [key(on(RecordFieldName, "parent", "identifier"))],
   "Reserved type": [
+    ...reservedBaseTypeLaws,
     check("Reserved_type", Declaration, (d) =>
       d.and(
-        ...reservedBaseTypes.map((reserved) => keepsReservedBaseType(d, reserved)),
+        ...reservedBaseTypes.map((reserved) => reservedNotRecord(d, reserved)),
         d.or(
           d.ne(d.identifier, contextVariable.identifier),
           d.and(
@@ -1012,7 +1096,7 @@ export const declarationLawsByName = {
     ),
   ],
   "Typed value": [
-    check("Typed_value", Value, valueCheck),
+    check("Typed_value", DeclaredValue, valueCheck),
     check("Typed_value", ValueBaseType, fieldValueCheck),
   ],
   "Value cardinality": [

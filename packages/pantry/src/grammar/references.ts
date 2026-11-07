@@ -74,10 +74,11 @@ export interface ReferenceRow {
 /**
  * One variable QTI declares itself in the processing a document's root holds, so that the document
  * names it undeclared: the root, the variable, and the declaration kind, base type and cardinality
- * it stands as there.
+ * it stands as there. A record has no base type ("Variables with record cardinality have no
+ * base-type", information model tables 4.5.3 and 5.34.3), so `QTI_CONTEXT`'s is none.
  */
 export interface BuiltInRow {
-  readonly baseType: string;
+  readonly baseType: Option.Option<string>;
   readonly cardinality: string;
   readonly declaration: string;
   readonly root: string;
@@ -376,7 +377,7 @@ export const testRoots = ["qti-assessment-test", "qti-assessment-section"] as co
  *   `completionStatus`, a single identifier;
  * - A test's, a section's and a part's `duration`, "a single value of base-type duration";
  * - The built-in context variable `QTI_CONTEXT`, a record, which has no base type ("Variables with
- *   record cardinality have no base-type"), so its base type is `none`, in both.
+ *   record cardinality have no base-type"), in both.
  *
  * `duration` stands as a response declaration wherever it is read; only its base type follows the
  * root. The variables' order is their codes'. No XSD names them.
@@ -384,21 +385,21 @@ export const testRoots = ["qti-assessment-test", "qti-assessment-section"] as co
 const builtIns: readonly BuiltInRow[] = [
   ...itemRoots.flatMap((root): readonly BuiltInRow[] => [
     {
-      baseType: "integer",
+      baseType: Option.some("integer"),
       cardinality: "single",
       declaration: "qti-response-declaration",
       root,
       variable: "numAttempts",
     },
     {
-      baseType: "float",
+      baseType: Option.some("float"),
       cardinality: "single",
       declaration: "qti-response-declaration",
       root,
       variable: "duration",
     },
     {
-      baseType: "identifier",
+      baseType: Option.some("identifier"),
       cardinality: "single",
       declaration: "qti-outcome-declaration",
       root,
@@ -406,14 +407,14 @@ const builtIns: readonly BuiltInRow[] = [
     },
   ]),
   ...testRoots.map((root): BuiltInRow => ({
-    baseType: "duration",
+    baseType: Option.some("duration"),
     cardinality: "single",
     declaration: "qti-response-declaration",
     root,
     variable: "duration",
   })),
   ...[...itemRoots, ...testRoots].map((root): BuiltInRow => ({
-    baseType: "none",
+    baseType: Option.none(),
     cardinality: "record",
     declaration: "qti-context-declaration",
     root,
@@ -912,13 +913,22 @@ type DeclarationField = IdField<"declaration", string>;
  */
 export interface References {
   /**
-   * `BuiltInVariable` as a function: each (root, built-in variable) → the declaration kind, base
-   * type and cardinality it stands as under the root, so a reference to it there reads as one to a
-   * declaration of that kind and type.
+   * `BuiltInVariable` as a function: each (root, built-in variable) → the declaration kind and
+   * cardinality it stands as under the root, so a reference to it there reads as one to a
+   * declaration of that kind and cardinality.
    */
   readonly builtIn: Closed<
     readonly [IdField<"root", string>, IdField<"variable", string>],
-    readonly [DeclarationField, ValueField<"baseType", string>, ValueField<"cardinality", string>]
+    readonly [DeclarationField, ValueField<"cardinality", string>]
+  >;
+  /**
+   * `BuiltInBaseType`: each (root, built-in variable) that has a base type → that base type, so a
+   * reference to it reads as one to a declaration of that base type. The record `QTI_CONTEXT` has
+   * none, and no row.
+   */
+  readonly builtInBaseType: Closed<
+    readonly [IdField<"root", string>, IdField<"variable", string>],
+    readonly [ValueField<"baseType", string>]
   >;
   /**
    * The `BuiltInVariable` roster: a reference whose identifier is one of its handles names that
@@ -1031,6 +1041,12 @@ export const references = (input: {
     );
     const declaration = idField("declaration", declarationKind);
     const stated = facets.flatMap((facet) => facet.builtIns);
+    const typedBuiltIns = stated.flatMap(({ baseType, root, variable }) =>
+      baseType.pipe(
+        Option.map((typed) => ({ baseType: typed, root, variable })),
+        Option.toArray,
+      ),
+    );
     const builtInVariable = yield* roster("BuiltInVariable", [
       ...new Set(stated.map(({ variable }) => variable)),
     ]);
@@ -1045,15 +1061,22 @@ export const references = (input: {
         payload: [
           declaration,
           valueField(
-            "baseType",
-            stated.map(({ baseType }) => baseType),
-          ),
-          valueField(
             "cardinality",
             stated.map(({ cardinality }) => cardinality),
           ),
         ],
         rows: stated,
+      }),
+      builtInBaseType: yield* closed({
+        key: [idField("root", input.kinds), idField("variable", builtInVariable)],
+        name: "BuiltInBaseType",
+        payload: [
+          valueField(
+            "baseType",
+            typedBuiltIns.map(({ baseType }) => baseType),
+          ),
+        ],
+        rows: typedBuiltIns,
       }),
       builtInVariable,
       choiceBound: yield* closed({

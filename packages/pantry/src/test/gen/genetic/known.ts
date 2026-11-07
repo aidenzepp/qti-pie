@@ -110,7 +110,7 @@ export const known = {
     fix: 'a read attribute whose collapsed value holds whitespace inside (max-choices="1 2", a reference "a b") gets an InteractionAttribute row whose value E1_derived holds to no whitespace, beside its value domain: the copy and its atomic split cannot both hold, so such a value wants a representation of its own',
     owner: "unassigned, found by FIX-NCNAME",
   },
-  "import-only-law: E1 derived, contained Declaration(document, identifier, node, declarationKind, baseType, cardinality) in VariableLookup(document, name, declaration, declarationKind, baseType, cardinality)":
+  "import-only-law: E1 derived, contained Declaration(document, identifier, node, declarationKind, cardinality, baseTypes) in VariableLookup(document, name, declaration, declarationKind, cardinality, baseTypes)":
     {
       files: [
         [

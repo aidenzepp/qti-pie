@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Equal, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import {
   builtInTypes,
@@ -466,9 +466,11 @@ const resolves = (v: Reference, rows: ExpressionRows): boolean => {
   const declared = declarationOf(v, rows);
   switch (v.resolution) {
     case "declared": {
+      // A declared variable with no base type, a record, is `unknown`; one with a base type has its
+      // declaration's, which the containment into `DeclarationBaseType` copies.
       return (
         declared !== undefined &&
-        v.baseType === valueBaseOf.get(declared.declBaseType) &&
+        (declared.declBaseTypes === 1n || v.baseType === "unknown") &&
         v.cardinality === valueCardinalityOf.get(declared.declCardinality)
       );
     }
@@ -1363,7 +1365,7 @@ const lookupsOfPackage = (
   const lookups = new Map(rows.documents.flatMap((input) => [...input.expressions.VariableLookup]));
   for (const [at, probe] of rows.together.VariableLookup) {
     const held = lookups.get(at);
-    if (held !== undefined && JSON.stringify(held) !== JSON.stringify(probe)) {
+    if (held !== undefined && !Equal.equals(held, probe)) {
       breaches.push(`VariableLookup ${at}: a probe beside a document's row`);
     }
 
@@ -2295,8 +2297,7 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
             );
             assert.strictEqual(
               template !== "T" ||
-                (templateTarget?.heldBase === "integer" &&
-                  templateTarget.declBaseType === "integer"),
+                (templateTarget?.heldBase === "integer" && templateTarget.declBaseTypes === 1n),
               template !== "T" || heldBase === "integer",
               where,
             );

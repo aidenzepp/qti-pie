@@ -910,6 +910,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    153,
+    {
+      owner:
+        "the import's `DeclarationBaseType`, counted by `Declaration.baseTypes`, which `declarationRef` copies into every row that names a declaration, and the typed rows each law over a base type reads (`DeclaredValue`, `src/qti/declarations.ts`; `BindingBaseType` and `PlacedBindingBaseType`, `src/qti/interactions.ts`; `MappingBaseType`, `MapKeyType` and `LookupValueType`, `src/qti/mapping.ts`), with each record judged by its cardinality (`Reserved_type`, `MappableBaseType`, `AreaMapping_base_type`, `Feedback_outcome_type` and the string binding's `BindingFit`); the oracle's `typedOptionalOf` (`src/test/oracle-view.ts`), read by `baseTypeOf` and the laws over a type (`src/test/oracle.ts`, `src/test/oracle-laws/documents.ts`, `src/test/oracle-laws/expressions.ts`, `src/test/oracle-laws/tests.ts`); held by `src/test/record-declarations.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

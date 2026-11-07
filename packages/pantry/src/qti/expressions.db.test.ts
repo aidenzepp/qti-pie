@@ -214,7 +214,7 @@ const referenceChange = (
               attribute: reference.attribute,
               baseType: reference.baseType,
               cardinality: reference.cardinality,
-              declBaseType: "integer",
+              declBaseTypes: 1n,
               declCardinality: "single",
               declaration: strayNode,
               declarationKind: "qti-outcome-declaration",
@@ -299,7 +299,7 @@ const names = (outcome: ApplyOutcome<unknown>, relation: string, name: string): 
 const readingRow = (fields: Partial<Addition<typeof Reading>>): Addition<typeof Reading> => ({
   assembly: strayNode,
   attribute: "identifier",
-  declBaseType: "float",
+  declBaseTypes: 1n,
   declCardinality: "single",
   declaration: nodeOf(50),
   declarationKind: "qti-outcome-declaration",
@@ -635,11 +635,11 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 cardinality: "single",
                 kind: "qti-equal-rounded",
               }),
-              declaration: { declBaseType: "float" },
+              declaration: {},
               law: "Reference_type",
               on: "VariableRefDeclaration",
               repaired: { baseType: "integer" },
-              repairedDeclaration: { declBaseType: "integer" },
+              repairedDeclaration: {},
             },
             {
               broken: referenceRow({
@@ -768,7 +768,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           Effect.gen(function* readingLaws() {
             const client = yield* loginSession;
             const undeclared = {
-              declBaseType: "none",
+              declBaseTypes: 0n,
               declCardinality: "single",
               declaration: strayNode,
               declarationKind: "qti-outcome-declaration",
@@ -787,9 +787,15 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 repaired: { identifier: "a.X", variable: "a.X" },
               },
               {
-                broken: readingRow({ attribute: "max", kind: "qti-random-integer" }),
+                // The check judges a reading's cardinality; its base type, where its declaration has
+                // one, is the containment into `DeclarationBaseType`'s, a key the host tier holds.
+                broken: readingRow({
+                  attribute: "max",
+                  declCardinality: "multiple",
+                  kind: "qti-random-integer",
+                }),
                 check: "reference_type",
-                repaired: { declBaseType: "integer" },
+                repaired: { declCardinality: "single" },
               },
               {
                 broken: readingRow({
@@ -940,7 +946,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                     first,
                     {
                       ...second,
-                      declBaseType: "none",
+                      declBaseTypes: 0n,
                       declaration: nodeOf(70),
                       declared: false,
                       source: "none",
@@ -962,25 +968,27 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           // Oracle: PostgreSQL, `Template_default_target` and `Template_default_type` (A37, A38,
           // spec reading 108) and `Variable_mapping_source` and `Variable_mapping_target` (A34,
           // reading 97), each a CHECK on the declaration's own row (`TemplateDefaultTarget`,
-          // `MappingSourceDeclaration`). Bound: one breach of each, breaking that law alone,
-          // since PostgreSQL names the first CHECK a row breaks by name, beside its repair, which
-          // keeps all four.
+          // `MappingSourceDeclaration`): `Template_default_type`'s over the cardinality, since the
+          // declaration's base type, where it has one, is `DeclarationBaseType`'s, which a
+          // containment reads. Bound: one breach of each, breaking that law alone, since
+          // PostgreSQL names the first CHECK a row breaks by name, beside its repair, which keeps
+          // all four.
           Effect.gen(function* itemRefLaws() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const templateDefault: Addition<typeof TemplateDefaultTarget> = {
-              declBaseType: "integer",
+              declBaseTypes: 1n,
               declCardinality: "single",
               declaration: nodeOf(80),
               declarationKind: "qti-template-declaration",
-              heldBase: "float",
-              heldCardinality: "single",
+              heldBase: "integer",
+              heldCardinality: "multiple",
               itemDocument: nodeOf(70),
               itemRef: nodeOf(60),
               node: nodeOf(1),
               template: "T",
             };
             const mapping: Addition<typeof MappingSourceDeclaration> = {
-              declBaseType: "float",
+              declBaseTypes: 1n,
               declCardinality: "single",
               declaration: nodeOf(81),
               declarationKind: "qti-outcome-declaration",
@@ -999,16 +1007,16 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               {
                 broken: templateDefault,
                 law: "Template_default_type",
-                repaired: { ...templateDefault, heldBase: "integer" },
+                repaired: { ...templateDefault, heldCardinality: "single" },
               },
               {
                 broken: {
                   ...templateDefault,
                   declarationKind: "qti-outcome-declaration",
-                  heldBase: "integer",
+                  heldCardinality: "single",
                 },
                 law: "Template_default_target",
-                repaired: { ...templateDefault, heldBase: "integer" },
+                repaired: { ...templateDefault, heldCardinality: "single" },
               },
             ];
             for (const { broken, law, repaired } of templateCases) {

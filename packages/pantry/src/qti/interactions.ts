@@ -124,7 +124,7 @@ import {
 import { booleanTrue, ncNamePattern } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { Declaration, declarationRef } from "#pantry/qti/declarations.ts";
+import { Declaration, DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, itemInstances, itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
@@ -521,8 +521,8 @@ export const BoundVariable = relation(
  *
  * - `node`, `attribute`, `kind`, `document` and `identifier`, its binding's, copied from
  *   {@link BoundVariable};
- * - `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration's, copied through
- *   `declarationRef`;
+ * - `declaration`, `declarationKind`, `cardinality` and `baseTypes`, the declaration's, copied
+ *   through `declarationRef`: its base type, where it has one, is its {@link BindingBaseType}'s;
  * - `mosts`, its interaction's count of most values, its {@link CountBound}'s `mosts` where
  *   `ChoiceBound` pairs the kind's counts, and 0 on any other kind, which has none: "Binding
  *   cardinality" judges a binding only where its interaction's most has a value.
@@ -531,7 +531,7 @@ export const BindingDeclaration = relation(
   "BindingDeclaration",
   {
     attribute: closedId(AttributeName),
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -598,15 +598,16 @@ export const PlacedBinding = relation(
  *
  * Its fields, every one written by the host: `instance`, `node`, `attribute`, `assembly`,
  * `document`, `kind` and `identifier`, its binding's, copied from `PlacedBinding`; and
- * `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration's, copied through
- * `declarationRef`; and `mosts`, as {@link BindingDeclaration}'s.
+ * `declaration`, `declarationKind`, `cardinality` and `baseTypes`, the declaration's, copied
+ * through `declarationRef`; and `mosts`, as {@link BindingDeclaration}'s. Its base type, where it
+ * has one, is its {@link PlacedBindingBaseType}'s.
  */
 export const PlacedBindingDeclaration = relation(
   "PlacedBindingDeclaration",
   {
     assembly: uuid,
     attribute: closedId(AttributeName),
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -615,6 +616,43 @@ export const PlacedBindingDeclaration = relation(
     instance: uuid,
     kind: closedId(NodeKind),
     mosts: natural,
+    node: uuid,
+  },
+  ["instance", "node", "attribute"],
+);
+
+/**
+ * A bound variable's base type, keyed as its {@link BindingDeclaration} is, where its declaration
+ * has one: `baseType`, the declaration's {@link DeclarationBaseType}'s, beside the binding's
+ * `declaration`, `cardinality` and interaction `kind`, the fields `BindingFit` judges together. A
+ * record has no base type, and its binding no row (lane NIL's audit, B12).
+ */
+export const BindingBaseType = relation(
+  "BindingBaseType",
+  {
+    attribute: closedId(AttributeName),
+    baseType: closedId(BaseType),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
+  ["node", "attribute"],
+);
+
+/**
+ * A placed binding's variable's base type, keyed as its {@link PlacedBindingDeclaration} is, where
+ * its declaration has one, as {@link BindingBaseType} is an item's own binding's.
+ */
+export const PlacedBindingBaseType = relation(
+  "PlacedBindingBaseType",
+  {
+    attribute: closedId(AttributeName),
+    baseType: closedId(BaseType),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    instance: uuid,
+    kind: closedId(NodeKind),
     node: uuid,
   },
   ["instance", "node", "attribute"],
@@ -1030,7 +1068,7 @@ const referenceFields = {
 const referenceDeclarationFields = {
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
-  baseType: closedId(BaseType),
+  baseTypes: natural,
   cardinality: closedId(Cardinality),
   declaration: uuid,
   declarationKind: closedId(DeclarationKind),
@@ -1255,7 +1293,7 @@ const sectionReferenceDeclarationFields = {
   assembly: uuid,
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
-  baseType: closedId(BaseType),
+  baseTypes: natural,
   cardinality: closedId(Cardinality),
   declaration: uuid,
   declarationKind: closedId(DeclarationKind),
@@ -1389,6 +1427,7 @@ export const interactionRelations = {
   AriaRange,
   AriaValue,
   Binding,
+  BindingBaseType,
   BindingDeclaration,
   BindingName,
   BoundVariable,
@@ -1409,6 +1448,7 @@ export const interactionRelations = {
   LeastCount,
   MostCount,
   PlacedBinding,
+  PlacedBindingBaseType,
   PlacedBindingDeclaration,
   PlacedChoice,
   PlacedHottext,
@@ -2061,8 +2101,8 @@ const contentReferenceLaws = ({
       "document",
       "identifier",
       "declarationKind",
-      "baseType",
       "cardinality",
+      "baseTypes",
     ),
     declarationRef,
   ),
@@ -2108,14 +2148,43 @@ const contentReferenceLaws = ({
       "assembly",
       "identifier",
       "declarationKind",
-      "baseType",
       "cardinality",
+      "baseTypes",
     ),
     declarationRef,
   ),
   check(rule, placedDeclared, namesNoBuiltIn),
   check(rule, placed, namesAllowedBuiltIn),
 ];
+
+/**
+ * The bindings whose variable has a base type: each has its {@link BindingBaseType}, and only these
+ * do.
+ */
+const typedBindings = select(BindingDeclaration, (r) => r.eq(r.baseTypes, 1n));
+
+/**
+ * The placed bindings whose variable has a base type: each has its {@link PlacedBindingBaseType},
+ * and only these do.
+ */
+const typedPlacedBindings = select(PlacedBindingDeclaration, (r) => r.eq(r.baseTypes, 1n));
+
+/**
+ * The cardinalities a feedback element's outcome may have (§5.49.1, §5.52.1: "an outcome variable
+ * of base-type identifier and single or multiple cardinality"): a record's is none of them, so
+ * its whole value is judged by its cardinality alone.
+ */
+const feedbackCardinalities = ["single", "multiple"] as const;
+
+/**
+ * The declarations whose base type is `identifier`, a feedback outcome's, where the declaration has
+ * a base type: the target of `Feedback_outcome_type`'s containment over a feedback reference's
+ * declaration.
+ */
+const identifierTyped = on(
+  select(DeclarationBaseType, (b) => b.eq(b.baseType, "identifier")),
+  "node",
+);
 
 /**
  * Every statement over the O3 overlays, each `check` named by its oracle law:
@@ -2265,13 +2334,22 @@ export const interactionLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
     check("Binding_declared", BindingDeclaration, (r) =>
       r.eq(r.declarationKind, "qti-response-declaration"),
+    ),
+    contained(on(typedBindings, "node", "attribute"), on(BindingBaseType, "node", "attribute")),
+    contained(
+      on(BindingBaseType, "node", "attribute", "declaration", "cardinality", "kind"),
+      on(typedBindings, "node", "attribute", "declaration", "cardinality", "kind"),
+    ),
+    contained(
+      on(BindingBaseType, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
     ),
     contained(
       on(
@@ -2302,13 +2380,41 @@ export const interactionLawsByName = {
         "assembly",
         "identifier",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
     check("Binding_declared", PlacedBindingDeclaration, (r) =>
       r.eq(r.declarationKind, "qti-response-declaration"),
+    ),
+    contained(
+      on(typedPlacedBindings, "instance", "node", "attribute"),
+      on(PlacedBindingBaseType, "instance", "node", "attribute"),
+    ),
+    contained(
+      on(
+        PlacedBindingBaseType,
+        "instance",
+        "node",
+        "attribute",
+        "declaration",
+        "cardinality",
+        "kind",
+      ),
+      on(
+        typedPlacedBindings,
+        "instance",
+        "node",
+        "attribute",
+        "declaration",
+        "cardinality",
+        "kind",
+      ),
+    ),
+    contained(
+      on(PlacedBindingBaseType, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
     ),
   ],
   "Binding unique": [
@@ -2318,7 +2424,7 @@ export const interactionLawsByName = {
   BindingFit: [
     contained(
       on(
-        select(BindingDeclaration, (r) =>
+        select(BindingBaseType, (r) =>
           r.and(
             r.eq(r.attribute, "response-identifier"),
             r.ne(r.cardinality, "record"),
@@ -2331,12 +2437,18 @@ export const interactionLawsByName = {
       ),
       on(BindingFit, "baseType", "cardinality", "kind"),
     ),
+    // A string identifier's variable is "of base-type string" (§5.48.2, §5.162.3), which a record,
+    // having no base type, is not: its whole value is judged by its cardinality alone, and a
+    // typed variable's base type by its `BindingBaseType`.
     check("BindingFit", BindingDeclaration, (r) =>
+      r.or(r.ne(r.attribute, "string-identifier"), r.ne(r.cardinality, "record")),
+    ),
+    check("BindingFit", BindingBaseType, (r) =>
       r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
     ),
     contained(
       on(
-        select(PlacedBindingDeclaration, (r) =>
+        select(PlacedBindingBaseType, (r) =>
           r.and(
             r.eq(r.attribute, "response-identifier"),
             r.ne(r.cardinality, "record"),
@@ -2350,6 +2462,9 @@ export const interactionLawsByName = {
       on(BindingFit, "baseType", "cardinality", "kind"),
     ),
     check("BindingFit", PlacedBindingDeclaration, (r) =>
+      r.or(r.ne(r.attribute, "string-identifier"), r.ne(r.cardinality, "record")),
+    ),
+    check("BindingFit", PlacedBindingBaseType, (r) =>
       r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
     ),
   ],
@@ -2785,10 +2900,24 @@ export const interactionLawsByName = {
   ],
   "Feedback outcome type": [
     check("Feedback_outcome_type", FeedbackRefDeclaration, (r) =>
-      r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+      r.in(r.cardinality, feedbackCardinalities),
+    ),
+    contained(
+      on(
+        select(FeedbackRefDeclaration, (r) => r.eq(r.baseTypes, 1n)),
+        "declaration",
+      ),
+      identifierTyped,
     ),
     check("Feedback_outcome_type", SectionFeedbackRefDeclaration, (r) =>
-      r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+      r.in(r.cardinality, feedbackCardinalities),
+    ),
+    contained(
+      on(
+        select(SectionFeedbackRefDeclaration, (r) => r.eq(r.baseTypes, 1n)),
+        "declaration",
+      ),
+      identifierTyped,
     ),
   ],
   "Graphic gap match default hotspot": [

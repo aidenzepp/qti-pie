@@ -29,11 +29,11 @@ import type {
   ValueCardinality,
 } from "#pantry/grammar/expression.ts";
 import { isNcName } from "#pantry/grammar/domains.ts";
-import { BuiltInVariable, nonElementKinds } from "#pantry/grammar/install.ts";
+import { builtInBaseTypes, BuiltInVariable, nonElementKinds } from "#pantry/grammar/install.ts";
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
 import {
-  heldBaseTypeOf,
+  baseTypesOf,
   piecesOf,
   spelledBaseTypeOf,
   typedDeclarationOf,
@@ -103,7 +103,7 @@ import {
   testKind,
 } from "#pantry/qti/tests.ts";
 import type { ItemRefDocument, ItemRefTarget } from "#pantry/qti/tests.ts";
-import type { Declaration } from "#pantry/qti/declarations.ts";
+import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -150,7 +150,7 @@ export interface ExpressionRows {
  * proved by the key of a row of its own) and for a `Reading` whose source is none.
  */
 const undeclared = {
-  baseType: "none",
+  baseTypes: 0n,
   cardinality: "single",
   declarationKind: "qti-outcome-declaration",
 } as const;
@@ -169,6 +169,16 @@ interface Typed {
 const unknownType: Typed = { baseType: "unknown", cardinality: "unknown" };
 
 /**
+ * Read a variable's base type as an expression's: its declaration code's `ValueBase`, and
+ * `unknown` where it has none, a record's (lane NIL's audit, B12).
+ *
+ * @param baseType - The variable's base type, none where it has none.
+ * @returns The expression-typing code.
+ */
+const baseOf = (baseType: Option.Option<(typeof BaseType.handles)[number]>): ValueBase =>
+  Option.match(baseType, { onNone: () => unknownType.baseType, onSome: valueBaseOf });
+
+/**
  * A reference's element type and its held expression's type as {@link unknownType} gives them,
  * which `withTypes` fills once every expression is typed, and which stay where its element holds
  * none: the null objects `VariableRef` holds in the fields its case leaves unread.
@@ -181,10 +191,11 @@ const unfilledTypes = {
 } as const;
 
 /**
- * One declaration of the document as a reference resolves to it: its node, kind and codes.
+ * One declaration of the document as a reference resolves to it: its node, kind and codes, its
+ * base type none where it writes none, a record's (lane NIL's audit, B12).
  */
 interface DeclarationEntry {
-  readonly baseType: (typeof BaseType.handles)[number];
+  readonly baseType: Option.Option<(typeof BaseType.handles)[number]>;
   readonly cardinality: (typeof Cardinality.handles)[number];
   readonly kind: string;
   readonly node: NodeId;
@@ -349,11 +360,22 @@ const builtInsByRoot: ReadonlyMap<string, ReadonlyMap<string, BuiltIn>> = new Ma
   [...Map.groupBy(BuiltInVariable.rows, ({ root }) => root)].map(([root, rows]) => [
     root,
     new Map(
-      rows.map(({ baseType, cardinality, declaration, variable }) => [
+      rows.map(({ cardinality, declaration, variable }) => [
         variable,
         {
           declarationKind: declaration,
-          type: { baseType: valueBaseOf(baseType), cardinality: valueCardinalityOf(cardinality) },
+          type: {
+            baseType: baseOf(
+              Option.map(
+                Arr.findFirst(
+                  builtInBaseTypes,
+                  (typed) => typed.root === root && typed.variable === variable,
+                ),
+                ({ baseType }) => baseType,
+              ),
+            ),
+            cardinality: valueCardinalityOf(cardinality),
+          },
         },
       ]),
     ),
@@ -830,7 +852,7 @@ const declarationsOf = (
         unnamed.add(name);
       } else if (!declarations.has(name)) {
         declarations.set(name, {
-          baseType: heldBaseTypeOf(typed.value),
+          baseType: typed.value.baseType,
           cardinality: typed.value.cardinality,
           kind: node.kind,
           node: node.id,
@@ -926,7 +948,7 @@ const resolve = (doc: Document, name: string) => {
       declared,
       resolution: "declared" as const,
       type: {
-        baseType: valueBaseOf(declared.baseType),
+        baseType: baseOf(declared.baseType),
         cardinality: valueCardinalityOf(declared.cardinality),
       },
     };
@@ -1242,7 +1264,7 @@ const declaredLookup = (
   name: string,
   declared: DeclarationEntry,
 ): Addition<typeof VariableLookup> => ({
-  baseType: declared.baseType,
+  baseTypes: baseTypesOf(declared.baseType),
   cardinality: declared.cardinality,
   declaration: declared.node,
   declarationKind: declared.kind,
@@ -1333,7 +1355,7 @@ const referenceDeclarationsOf = (
             attribute: reference.attribute,
             baseType: reference.baseType,
             cardinality: reference.cardinality,
-            declBaseType: declared.baseType,
+            declBaseTypes: baseTypesOf(declared.baseType),
             declCardinality: declared.cardinality,
             declaration: declared.node,
             declarationKind: declared.kind,
@@ -1861,11 +1883,11 @@ const sourceOf = (
   scope: Scope,
 ): Pick<
   Addition<typeof Reading>,
-  "declBaseType" | "declCardinality" | "declaration" | "declarationKind" | "source"
+  "declBaseTypes" | "declCardinality" | "declaration" | "declarationKind" | "source"
 > => {
   if (declared?.declared === true) {
     return {
-      declBaseType: declared.baseType,
+      declBaseTypes: declared.baseTypes,
       declCardinality: declared.cardinality,
       declaration: declared.declaration,
       declarationKind: declared.declarationKind,
@@ -1876,14 +1898,14 @@ const sourceOf = (
   if (mapped?.mapped === true) {
     return mappedSource === undefined
       ? {
-          declBaseType: undeclared.baseType,
+          declBaseTypes: undeclared.baseTypes,
           declCardinality: undeclared.cardinality,
           declaration: scope.itemDocument,
           declarationKind: undeclared.declarationKind,
           source: "mapped",
         }
       : {
-          declBaseType: mappedSource.declBaseType,
+          declBaseTypes: mappedSource.declBaseTypes,
           declCardinality: mappedSource.declCardinality,
           declaration: mappedSource.declaration,
           declarationKind: mappedSource.declarationKind,
@@ -1893,14 +1915,14 @@ const sourceOf = (
 
   return Option.match(builtIn, {
     onNone: () => ({
-      declBaseType: undeclared.baseType,
+      declBaseTypes: undeclared.baseTypes,
       declCardinality: undeclared.cardinality,
       declaration: scope.itemDocument,
       declarationKind: undeclared.declarationKind,
       source: "none" as const,
     }),
     onSome: ({ declarationKind }) => ({
-      declBaseType: undeclared.baseType,
+      declBaseTypes: undeclared.baseTypes,
       declCardinality: undeclared.cardinality,
       declaration: scope.itemDocument,
       declarationKind,
@@ -2112,7 +2134,7 @@ const templateDefaultsOf = (
             [
               node.id,
               {
-                declBaseType: declared.baseType,
+                declBaseTypes: declared.baseTypes,
                 declCardinality: declared.cardinality,
                 declaration: declared.declaration,
                 declarationKind: declared.declarationKind,
@@ -2251,7 +2273,7 @@ const mappingSourcesOf = (
 
       if (itemDocument !== undefined && source?.declared === true) {
         const row: Addition<typeof MappingSourceDeclaration> = {
-          declBaseType: source.baseType,
+          declBaseTypes: source.baseTypes,
           declCardinality: source.cardinality,
           declaration: source.declaration,
           declarationKind: source.declarationKind,
@@ -2522,6 +2544,8 @@ const placedResolutionOf = (
  * row holds is placed nowhere, as its own references are written nowhere (`declarationsOf`).
  *
  * @param input - The package's rows the placed references read.
+ * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
+ *   `DeclarationBaseType` rows).
  * @param input.declarations - Every declaration of the package (Q5.08's `Declaration` rows).
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
@@ -2531,6 +2555,7 @@ const placedResolutionOf = (
  * @returns The rows.
  */
 export const placedVariableRowsOf = (input: {
+  readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
   readonly declarations: Iterable<Addition<typeof Declaration>>;
   readonly instances: Iterable<InstanceRoot>;
   readonly references: Iterable<Addition<typeof VariableRef>>;
@@ -2540,6 +2565,7 @@ export const placedVariableRowsOf = (input: {
     [...input.declarations].map((row) => [keyOf([row.document, row.identifier]), row] as const),
   );
   const untyped = new Set([...input.untyped].map(({ document, name }) => keyOf([document, name])));
+  const baseTyped = new Set([...input.baseTypes].map(({ node }) => node));
   const referencesOf = Map.groupBy(input.references, ({ document }) => document);
   const placed = new Map<string, Addition<typeof PlacedVariableRef>>();
   const placedDeclarations = new Map<string, Addition<typeof PlacedVariableRefDeclaration>>();
@@ -2572,7 +2598,7 @@ export const placedVariableRowsOf = (input: {
           placedDeclarations.set(at, {
             assembly: root.assembly,
             attribute: reference.attribute,
-            declBaseType: declaration.baseType,
+            declBaseTypes: baseTyped.has(declaration.node) ? 1n : 0n,
             declCardinality: declaration.cardinality,
             declaration: declaration.node,
             declarationKind: declaration.declarationKind,

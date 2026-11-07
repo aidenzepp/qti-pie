@@ -209,7 +209,7 @@ export const lawTable = {
   "AreaMapping base type": {
     rule: "mapping-base-type",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_AreaMapping (§5.5, the AreaMapping class: 'A special class used to create a mapping from a source set of point values to a target set of float values'): an area mapping's response declaration is of base type point (mapping.ts AreaMapping_base_type)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_AreaMapping (§5.5, the AreaMapping class: 'A special class used to create a mapping from a source set of point values to a target set of float values'): an area mapping's response declaration is no record, which has no base type, and is of base type point where it has one (mapping.ts AreaMapping_base_type)",
   },
   "Aria value range": {
     rule: "aria-value-range",
@@ -288,7 +288,7 @@ export const lawTable = {
   "Declaration base type": {
     rule: "declaration-type",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_base-type (§4.5.3, and §5.34.3, §5.115.3, §5.151.3: 'The value space from which the variable's value can be drawn (or in the case of containers, from which the individual values are drawn) is identified with a base-type', 'Variables with record cardinality have no base-type'): a record declares no base type (BaseType none), and every other variable declares one",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_base-type (§4.5.3, and §5.34.3, §5.115.3, §5.151.3: 'The value space from which the variable's value can be drawn (or in the case of containers, from which the individual values are drawn) is identified with a base-type', 'Variables with record cardinality have no base-type'): a record declares no base type (no DeclarationBaseType row, counted by Declaration.baseTypes), and every other variable declares one",
   },
   "Declaration key": {
     rule: "declaration-key",
@@ -303,7 +303,7 @@ export const lawTable = {
   "Declaration overlay": {
     rule: "reachability",
     source:
-      "plan §1.7 O2 and the W5 amendment's C18: each O2 overlay (Declaration, ValueSet, Value, RecordField) is its element's row, keyed by its node: it copies its node's nodeRef tuple and takes its values from its element's attributes and Node's string value, a value set copies its declaration through declarationRef, and every value set and value has its row (Q5.08); each optional attribute it reads (a declaration's and a value's base-type, a record field's name where its field-identifier names one, an outcome's mastery-value, normal-minimum and normal-maximum, and each pair of the scale Mastery range orders) is a row of its own (DeclarationBaseType, ValueBaseType, RecordFieldName, MasteryValue, NormalMinimum, NormalMaximum, MasteryFloor, MasteryCeiling), written exactly where its element writes it (AGENTS.md, Schema intent: a value that may be missing is a row of its own relation)",
+      "plan §1.7 O2 and the W5 amendment's C18: each O2 overlay (Declaration, ValueSet, Value, RecordField) is its element's row, keyed by its node: it copies its node's nodeRef tuple and takes its values from its element's attributes and Node's string value, a value set copies its declaration through declarationRef, and every value set and value has its row (Q5.08); each optional attribute it reads (a declaration's and a value's base-type, a record field's name where its field-identifier names one, an outcome's mastery-value, normal-minimum and normal-maximum, and each pair of the scale Mastery range orders) is a row of its own (DeclarationBaseType, ValueBaseType, RecordFieldName, MasteryValue, NormalMinimum, NormalMaximum, MasteryFloor, MasteryCeiling), written exactly where its element writes it, and a value of a set that is no record's has its text beside its declaration's base type exactly where the declaration has one (DeclaredValue): a record has no base type, so every row that names a declaration copies only its count of them (AGENTS.md, Schema intent: a value that may be missing is a row of its own relation; lane NIL's audit, B12)",
   },
   "Dependency target": {
     rule: "idref-target",
@@ -497,7 +497,7 @@ export const lawTable = {
   MappableBaseType: {
     rule: "mapping-base-type",
     source:
-      "reading 78: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88, the Mapping class: \"A special class used to create a mapping from a source set of any base-type (except file and duration) to a single 'float'\") (expression.ts MappableBaseType)",
+      "reading 78: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88, the Mapping class: \"A special class used to create a mapping from a source set of any base-type (except file and duration) to a single 'float'\"), and its map response 'cannot be applied to variables of record cardinality' (§2.11.1.5): a mapping is of no record, judged by its cardinality alone, and of a base type MappableBaseType holds where its declaration has one (expression.ts MappableBaseType)",
   },
   "Mapped response": {
     rule: "P27",
@@ -507,7 +507,7 @@ export const lawTable = {
   "Mapping overlay": {
     rule: "reachability",
     source:
-      "plan §1.7 O5 and the W5 amendment's C18: each O5 overlay (Mapping, MapKey, MapKeyInteger, MapKeyFloat, AreaMapping, LookupTable) is its element's row, keyed by its node: it copies its node's nodeRef tuple and its declaration's declarationRef tuple, names a node of its kind, takes its key from its element's map-key attribute, and a typed key is the row of exactly the map keys of its form (Q5.11)",
+      "plan §1.7 O5 and the W5 amendment's C18: each O5 overlay (Mapping, MapKey, MapKeyInteger, MapKeyFloat, AreaMapping, LookupTable) is its element's row, keyed by its node: it copies its node's nodeRef tuple and its declaration's declarationRef tuple, names a node of its kind, takes its key from its element's map-key attribute, and a typed key is the row of exactly the map keys of its form (Q5.11); a mapping, a map key and a lookup value each has its row beside its declaration's base type (MappingBaseType, MapKeyType, LookupValueType) exactly where the declaration has one, a record's having none (lane NIL's audit, B12)",
   },
   "Mastery range": {
     rule: "mastery-range",

@@ -22,11 +22,11 @@ import { booleanOf, isNcName } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
-import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
+import { baseTypesOf, declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import type { Declaration } from "#pantry/qti/declarations.ts";
+import type { Declaration, DeclarationBaseType } from "#pantry/qti/declarations.ts";
 import { declarationKinds } from "#pantry/qti/declarations.ts";
 import { itemKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
@@ -49,6 +49,7 @@ import type {
   AriaRange,
   AriaValue,
   Binding,
+  BindingBaseType,
   BindingDeclaration,
   BindingName,
   BoundVariable,
@@ -69,6 +70,7 @@ import type {
   LeastCount,
   MostCount,
   PlacedBinding,
+  PlacedBindingBaseType,
   PlacedBindingDeclaration,
   PlacedChoice,
   PlacedHottext,
@@ -120,6 +122,7 @@ export interface InteractionRows {
   readonly AriaRange: ReadonlyMap<string, Addition<typeof AriaRange>>;
   readonly AriaValue: ReadonlyMap<string, Addition<typeof AriaValue>>;
   readonly Binding: ReadonlyMap<string, Addition<typeof Binding>>;
+  readonly BindingBaseType: ReadonlyMap<string, Addition<typeof BindingBaseType>>;
   readonly BindingDeclaration: ReadonlyMap<string, Addition<typeof BindingDeclaration>>;
   readonly BindingName: ReadonlyMap<string, Addition<typeof BindingName>>;
   readonly BoundVariable: ReadonlyMap<string, Addition<typeof BoundVariable>>;
@@ -162,10 +165,12 @@ type ReferenceDeclarationRow = Addition<typeof FeedbackRefDeclaration>;
 
 /**
  * A declaration as the bindings and references resolve against it: its node, kind as a
- * `DeclarationKind`, identifier collapsed, and the codes its `base-type` and `cardinality` spell.
+ * `DeclarationKind`, identifier collapsed, and the codes its `base-type` and `cardinality` spell,
+ * its base type none where it writes none, a record's (lane NIL's audit, B12), which a row copies
+ * only as its count ({@link baseTypesOf}).
  */
 interface DeclaredVariable {
-  readonly baseType: ReferenceDeclarationRow["baseType"];
+  readonly baseType: Option.Option<Addition<typeof BindingBaseType>["baseType"]>;
   readonly cardinality: ReferenceDeclarationRow["cardinality"];
   readonly declarationKind: ReferenceDeclarationRow["declarationKind"];
   readonly node: NodeId;
@@ -831,6 +836,7 @@ const bindingsOf = (context: Context) => {
   const names = new Map<string, Addition<typeof BindingName>>();
   const bound = new Map<string, Addition<typeof BoundVariable>>();
   const declarations = new Map<string, Addition<typeof BindingDeclaration>>();
+  const baseTyped = new Map<string, Addition<typeof BindingBaseType>>();
   for (const node of context.rows.nodes.filter(({ kind }) => interactions.has(kind))) {
     if (Option.isSome(valueOf(context, node.id, "response-identifier"))) {
       bindings.set(node.id, tupleOf(context, node));
@@ -862,19 +868,29 @@ const bindingsOf = (context: Context) => {
           for (const variable of Option.toArray(responseIn(context.declared, identifier))) {
             declarations.set(keyOf([node.id, attribute]), {
               ...binding,
-              baseType: variable.baseType,
+              baseTypes: baseTypesOf(variable.baseType),
               cardinality: variable.cardinality,
               declaration: variable.node,
               declarationKind: variable.declarationKind,
               mosts: mostsOf(context, node),
             });
+            for (const baseType of Option.toArray(variable.baseType)) {
+              baseTyped.set(keyOf([node.id, attribute]), {
+                attribute,
+                baseType,
+                cardinality: variable.cardinality,
+                declaration: variable.node,
+                kind: node.kind,
+                node: node.id,
+              });
+            }
           }
         }
       }
     }
   }
 
-  return { bindings, bound, declarations, names };
+  return { baseTyped, bindings, bound, declarations, names };
 };
 
 /**
@@ -1129,7 +1145,7 @@ const referencesOf = (
               key,
               {
                 ...referred,
-                baseType: variable.baseType,
+                baseTypes: baseTypesOf(variable.baseType),
                 cardinality: variable.cardinality,
                 declaration: variable.node,
                 declarationKind: variable.declarationKind,
@@ -1226,7 +1242,7 @@ const sectionPrints = [references.printed, references.variable] as const;
 export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): InteractionRows => {
   const context = contextOf(doc, ids);
   const read = interactionAttributesOf(context);
-  const { bindings, bound, declarations, names } = bindingsOf(context);
+  const { baseTyped, bindings, bound, declarations, names } = bindingsOf(context);
   const choices = choicesOf(context);
   const owned = choiceInteractionsOf(context, choices);
   const hottexts = hottextsOf(context);
@@ -1245,6 +1261,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     AriaRange: aria.ranges,
     AriaValue: aria.values,
     Binding: bindings,
+    BindingBaseType: baseTyped,
     BindingDeclaration: declarations,
     BindingName: names,
     BoundVariable: bound,
@@ -1429,7 +1446,7 @@ const placedOf = (
     return {
       declaration: Option.map(declarationIn(declared, placed), (variable) => ({
         ...placed,
-        baseType: variable.baseType,
+        baseTypes: baseTypesOf(variable.baseType),
         cardinality: variable.cardinality,
         declaration: variable.node,
         declarationKind: variable.declarationKind,
@@ -1438,6 +1455,34 @@ const placedOf = (
       placed,
     };
   });
+
+/**
+ * Read a package's declarations as the placed bindings and references resolve against them: each
+ * `Declaration` row with its document and its base type, its `DeclarationBaseType`'s, none where it
+ * has none, a record's (lane NIL's audit, B12).
+ *
+ * @param declarations - Every declaration of the package (Q5.08's `Declaration` rows).
+ * @param baseTypes - Every declaration's base type, where it has one.
+ * @returns The declarations.
+ */
+const declaredVariablesOf = (
+  declarations: Iterable<Addition<typeof Declaration>>,
+  baseTypes: Iterable<Addition<typeof DeclarationBaseType>>,
+): readonly (DeclaredVariable & {
+  readonly document: NodeId;
+  readonly identifier: string;
+})[] => {
+  const baseTypeOf = new Map([...baseTypes].map(({ baseType, node }) => [node, baseType]));
+
+  return [...declarations].map(({ cardinality, declarationKind, document, identifier, node }) => ({
+    baseType: Option.fromUndefinedOr(baseTypeOf.get(node)),
+    cardinality,
+    declarationKind,
+    document,
+    identifier,
+    node,
+  }));
+};
 
 /**
  * Decide whether an instance is a placement `SectionScope` holds: an instance of an item's or a
@@ -1461,6 +1506,8 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  * (lane NIL's NS2: never the nil uuid).
  *
  * @param input - The package's rows the placements read.
+ * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
+ *   `DeclarationBaseType` rows).
  * @param input.contexts - Every fragment's context variable references ({@link rowsOf}'s
  *   `SectionContextName`).
  * @param input.declarations - Every declaration of the package (Q5.08's `Declaration` rows).
@@ -1475,6 +1522,7 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  * @returns The rows.
  */
 export const sectionRowsOf = (input: {
+  readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
   readonly contexts: Iterable<Addition<typeof SectionContextName>>;
   readonly declarations: Iterable<Addition<typeof Declaration>>;
   readonly feedbacks: Iterable<Addition<typeof SectionFeedbackName>>;
@@ -1488,7 +1536,7 @@ export const sectionRowsOf = (input: {
   const scoped = joinOn(
     placements,
     ({ assembly }) => assembly,
-    input.declarations,
+    declaredVariablesOf(input.declarations, input.baseTypes),
     ({ document }) => document,
   );
   const resolvedOf = (names: Iterable<Addition<typeof SectionFeedbackName>>) => {
@@ -1543,6 +1591,7 @@ export const sectionRowsOf = (input: {
 export interface PlacedBindingRows {
   readonly ChoiceVariableName: ReadonlyMap<string, Addition<typeof ChoiceVariableName>>;
   readonly PlacedBinding: ReadonlyMap<string, Addition<typeof PlacedBinding>>;
+  readonly PlacedBindingBaseType: ReadonlyMap<string, Addition<typeof PlacedBindingBaseType>>;
   readonly PlacedBindingDeclaration: ReadonlyMap<string, Addition<typeof PlacedBindingDeclaration>>;
   readonly PlacedChoice: ReadonlyMap<string, Addition<typeof PlacedChoice>>;
   readonly PlacedHottext: ReadonlyMap<string, Addition<typeof PlacedHottext>>;
@@ -1560,6 +1609,8 @@ export interface PlacedBindingRows {
  *
  * @param input - The package's rows the bindings read.
  * @param input.adaptive - Every item's mode ({@link rowsOf}'s `ItemMode`).
+ * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
+ *   `DeclarationBaseType` rows).
  * @param input.choices - Every document's choices ({@link rowsOf}'s `Choice`).
  * @param input.declarations - Every declaration of the package (Q5.08's `Declaration` rows).
  * @param input.hottexts - Every document's hottexts ({@link rowsOf}'s `Hottext`).
@@ -1572,6 +1623,7 @@ export interface PlacedBindingRows {
  */
 export const placedBindingRowsOf = (input: {
   readonly adaptive: Iterable<Addition<typeof ItemMode>>;
+  readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
   readonly choices: Iterable<Addition<typeof Choice>>;
   readonly declarations: Iterable<Addition<typeof Declaration>>;
   readonly hottexts: Iterable<Addition<typeof Hottext>>;
@@ -1580,6 +1632,7 @@ export const placedBindingRowsOf = (input: {
   readonly names: Iterable<Addition<typeof BindingName>>;
 }): PlacedBindingRows => {
   const counted = new Set([...input.mosts].map(({ node }) => node));
+  const declarations = declaredVariablesOf(input.declarations, input.baseTypes);
   const modes = new Map([...input.adaptive].map((row) => [row.document, row.adaptive] as const));
   const placements = [...input.instances].flatMap((root) => instancesOf(root));
   const placedOfDocument = <Row extends { readonly document: NodeId }>(rows: Iterable<Row>) =>
@@ -1595,7 +1648,7 @@ export const placedBindingRowsOf = (input: {
     joinOn(
       placements.filter(({ assemblyKind }) => assemblyKind === itemKind),
       ({ assembly }) => assembly,
-      input.declarations,
+      declarations,
       ({ document }) => document,
     ),
     ([{ instance }]) => instance.document,
@@ -1636,6 +1689,27 @@ export const placedBindingRowsOf = (input: {
           ] as const,
       ),
     ),
+    PlacedBindingBaseType: new Map(
+      bound.flatMap(({ binding, declared, key }) =>
+        Option.toArray(responseIn(declared, binding.identifier)).flatMap((variable) =>
+          Option.toArray(variable.baseType).map(
+            (baseType) =>
+              [
+                key,
+                {
+                  attribute: binding.attribute,
+                  baseType,
+                  cardinality: variable.cardinality,
+                  declaration: variable.node,
+                  instance: binding.instance,
+                  kind: binding.kind,
+                  node: binding.node,
+                },
+              ] as const,
+          ),
+        ),
+      ),
+    ),
     PlacedBindingDeclaration: new Map(
       bound.flatMap(({ binding, declared, key }) =>
         Option.toArray(responseIn(declared, binding.identifier)).map(
@@ -1644,7 +1718,7 @@ export const placedBindingRowsOf = (input: {
               key,
               {
                 ...binding,
-                baseType: variable.baseType,
+                baseTypes: baseTypesOf(variable.baseType),
                 cardinality: variable.cardinality,
                 declaration: variable.node,
                 declarationKind: variable.declarationKind,

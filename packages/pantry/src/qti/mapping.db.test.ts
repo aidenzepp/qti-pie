@@ -27,14 +27,16 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
   AreaMapping,
-  LookupValue,
+  LookupValueType,
   MapKey,
   MapKeyDirectedPair,
   MapKeyFloat,
   MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
+  MapKeyType,
   Mapping,
+  MappingBaseType,
   LookupTable,
 } from "#pantry/qti/mapping.ts";
 import { Author } from "#pantry/qti/roles.ts";
@@ -114,7 +116,7 @@ const containedIn =
  * @returns The row.
  */
 const declaredRow = <const F extends Partial<Fact<typeof AreaMapping>>>(fields: F) => ({
-  baseType: "point" as const,
+  baseTypes: 1n,
   cardinality: "single" as const,
   declaration: stray,
   declarationKind: "qti-response-declaration" as const,
@@ -129,19 +131,14 @@ const declaredRow = <const F extends Partial<Fact<typeof AreaMapping>>>(fields: 
 });
 
 /**
- * A stray map key of one mapping, entry `at`.
+ * A stray map key of one mapping, entry `at`, of a mapping whose declaration has a base type.
  *
  * @param at - The entry's number.
  * @param key - Its key.
- * @param baseType - Its mapping's base type, `string` unless the case says.
  * @returns The row.
  */
-const mapKeyRow = (
-  at: number,
-  key: string,
-  baseType: Fact<typeof MapKey>["baseType"] = "string",
-): Fact<typeof MapKey> => ({
-  baseType,
+const mapKeyRow = (at: number, key: string): Fact<typeof MapKey> => ({
+  baseTypes: 1n,
   document: stray,
   key,
   kind: "qti-map-entry",
@@ -178,27 +175,36 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
     "the mapping overlays' laws, judged by PostgreSQL",
     (it) => {
       it.effect(
-        "refuses a mapping of a base type MappableBaseType does not hold, by its containment into MappableBaseType",
+        "refuses a mapping of a base type MappableBaseType does not hold, by its containment into MappableBaseType, and a record's mapping by its cardinality",
         () =>
-          // Oracle: PostgreSQL, the containment of Mapping.baseType into MappableBaseType, a CHECK
-          // on Mapping's table (reading 78).
-          // Bound: every BaseType handle MappableBaseType leaves out: file, duration, and a
-          // record's none.
+          // Oracle: PostgreSQL, the containment of MappingBaseType.baseType into MappableBaseType,
+          // a CHECK on MappingBaseType's table, and the MappableBaseType CHECK on Mapping's
+          // (reading 78: a mapping is of no record, §2.11.1.5).
+          // Bound: every BaseType handle MappableBaseType leaves out, file and duration, and a
+          // record's mapping, which has no base type.
           Effect.gen(function* unmappable() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const baseType of ["file", "duration", "none"] as const) {
+            for (const baseType of ["file", "duration"] as const) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(Mapping, [
-                  declaredRow({ baseType, kind: "qti-mapping" }),
+                ChangeSet.empty(Author).insert(MappingBaseType, [
+                  { baseType, declaration: stray, node: strayNode(0) },
                 ]),
                 {},
               );
 
               assert.isTrue(
-                rejectedBy(outcome, containedIn("Mapping", "MappableBaseType")),
+                rejectedBy(outcome, containedIn("MappingBaseType", "MappableBaseType")),
                 baseType,
               );
             }
+
+            const record = yield* db.apply(
+              ChangeSet.empty(Author).insert(Mapping, [
+                declaredRow({ baseTypes: 0n, cardinality: "record", kind: "qti-mapping" }),
+              ]),
+              {},
+            );
+            assert.isTrue(rejectedBy(record, checkNamed("Mapping", "MappableBaseType")), "record");
           }),
       );
 
@@ -380,24 +386,27 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses an area mapping of a declaration whose base type is not point, by AreaMapping_base_type",
+        "refuses an area mapping of a record, which has no base type, by AreaMapping_base_type",
         () =>
           // Oracle: PostgreSQL, the AreaMapping_base_type CHECK, judged as the row is inserted
-          // (information model §5.5).
-          // Bound: a base type of each other shape of value: a pair, an identifier and a float.
+          // (information model §5.5: "a mapping from a source set of point values"; a record has
+          // no base type, so it is judged by its cardinality alone). A typed declaration's base
+          // type is judged by the containment into `DeclarationBaseType`'s point rows, which the
+          // host tier holds (`test/record-declarations.oracle.test.ts`).
+          // Bound: a record's area mapping.
           Effect.gen(function* areaBaseType() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const baseType of ["pair", "identifier", "float"] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(AreaMapping, [declaredRow({ baseType })]),
-                {},
-              );
+            const record = yield* db.apply(
+              ChangeSet.empty(Author).insert(AreaMapping, [
+                declaredRow({ baseTypes: 0n, cardinality: "record" }),
+              ]),
+              {},
+            );
 
-              assert.isTrue(
-                rejectedBy(outcome, checkNamed("AreaMapping", "AreaMapping_base_type")),
-                baseType,
-              );
-            }
+            assert.isTrue(
+              rejectedBy(record, checkNamed("AreaMapping", "AreaMapping_base_type")),
+              "record",
+            );
           }),
       );
 
@@ -410,11 +419,11 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           Effect.gen(function* lookupCardinality() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const cardinality of ["multiple", "ordered", "record"] as const) {
-              const baseType = cardinality === "record" ? "none" : "integer";
+              const baseTypes = cardinality === "record" ? 0n : 1n;
               const match = yield* db.apply(
                 ChangeSet.empty(Author).insert(LookupTable, [
                   declaredRow({
-                    baseType,
+                    baseTypes,
                     cardinality,
                     declarationKind: "qti-outcome-declaration",
                     kind: "qti-match-table",
@@ -425,7 +434,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               const interpolation = yield* db.apply(
                 ChangeSet.empty(Author).insert(LookupTable, [
                   declaredRow({
-                    baseType,
+                    baseTypes,
                     cardinality,
                     declarationKind: "qti-outcome-declaration",
                     kind: "qti-interpolation-table",
@@ -449,7 +458,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a map key or a lookup value that is no lexical form of its base type, written exactly, by Typed_attribute_value",
         () =>
-          // Oracle: PostgreSQL, the Typed_attribute_value CHECK on MapKey and on LookupValue,
+          // Oracle: PostgreSQL, the Typed_attribute_value CHECK on MapKeyType and LookupValueType,
           // judged as the row is inserted: BaseTypePattern's row of the base type, and no
           // whitespace around a value of any base type but string (readings 7, 8 and 34).
           // Bound: a text of no integer, a padded integer, a boolean written 1, a point of one
@@ -465,12 +474,14 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               ["float", "1,5"],
             ] as const) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKey, [mapKeyRow(0, key, baseType)]),
+                ChangeSet.empty(Author).insert(MapKeyType, [
+                  { baseType, key, mapping: stray, node: strayNode(0) },
+                ]),
                 {},
               );
 
               assert.isTrue(
-                rejectedBy(outcome, checkNamed("MapKey", "Typed_attribute_value")),
+                rejectedBy(outcome, checkNamed("MapKeyType", "Typed_attribute_value")),
                 `${baseType} ${key}`,
               );
             }
@@ -481,24 +492,14 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               ["identifier", "1a"],
             ] as const) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(LookupValue, [
-                  {
-                    baseType,
-                    document: stray,
-                    kind: "qti-match-table-entry",
-                    nearest: stray,
-                    node: strayNode(0),
-                    parent: stray,
-                    start: 5n,
-                    value,
-                    version: "3.0.1",
-                  },
+                ChangeSet.empty(Author).insert(LookupValueType, [
+                  { baseType, declaration: stray, node: strayNode(0), value },
                 ]),
                 {},
               );
 
               assert.isTrue(
-                rejectedBy(outcome, checkNamed("LookupValue", "Typed_attribute_value")),
+                rejectedBy(outcome, checkNamed("LookupValueType", "Typed_attribute_value")),
                 `${baseType} ${value}`,
               );
             }

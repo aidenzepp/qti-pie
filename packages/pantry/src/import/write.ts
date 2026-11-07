@@ -988,16 +988,16 @@ type RowOf<Name extends keyof PackageInputs> =
  * (grizzle's `write/family/nesting.ts`), so the `Attribute` statement, whose `value_domain` reads
  * a pattern per domain, and `Node`'s TextDomain keep document order: no caller can sort them.
  *
- * `Value`'s `Typed_value` reads the pattern of its base type's domain (Q5.08), `Literal_lexical`
- * its type code's and `ExpressionAttribute`'s `E1_derived` its attribute's and base type's
- * (Q5.10), and `UsageValue`'s `Usage_typed_value` its base type's (spec reading 105). A relation
- * joins this table when a check over it reads a pattern by a field.
+ * `DeclaredValue`'s `Typed_value` reads the pattern of its base type's domain (Q5.08),
+ * `Literal_lexical` its type code's and `ExpressionAttribute`'s `E1_derived` its attribute's and
+ * base type's (Q5.10), and `UsageValue`'s `Usage_typed_value` its base type's (spec reading 105). A
+ * relation joins this table when a check over it reads a pattern by a field.
  */
 export const patternInputs = {
+  DeclaredValue: ["baseType"],
   ExpressionAttribute: ["attribute", "baseType"],
   LiteralTyped: ["typeCode"],
   UsageValue: ["baseType"],
-  Value: ["baseType"],
 } as const satisfies Partial<Readonly<Record<keyof PackageInputs, readonly string[]>>>;
 
 /**
@@ -1027,13 +1027,13 @@ export const domainOrdered = <const F extends string, R extends Readonly<Record<
  */
 const patternOrdered = (inputs: PackageInputs) =>
   ({
+    DeclaredValue: domainOrdered(inputs.DeclaredValue.values(), patternInputs.DeclaredValue),
     ExpressionAttribute: domainOrdered(
       inputs.ExpressionAttribute.values(),
       patternInputs.ExpressionAttribute,
     ),
     LiteralTyped: domainOrdered(inputs.LiteralTyped.values(), patternInputs.LiteralTyped),
     UsageValue: domainOrdered(inputs.UsageValue.values(), patternInputs.UsageValue),
-    Value: domainOrdered(inputs.Value.values(), patternInputs.Value),
   }) satisfies { readonly [Name in keyof typeof patternInputs]: readonly RowOf<Name>[] };
 
 /**

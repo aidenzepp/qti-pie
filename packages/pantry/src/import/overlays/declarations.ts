@@ -16,7 +16,7 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { isNcName } from "#pantry/grammar/domains.ts";
-import { spelledCardinalities } from "#pantry/grammar/compose.ts";
+import { recordCardinality, spelledCardinalities } from "#pantry/grammar/compose.ts";
 import { DeclarationKind } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -24,6 +24,7 @@ import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.t
 import type {
   Declaration,
   DeclarationBaseType,
+  DeclaredValue,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -36,6 +37,7 @@ import type {
   ValueSet,
 } from "#pantry/qti/declarations.ts";
 import { normalMinimumDefaults } from "#pantry/qti/declarations.ts";
+import { valueBaseOf } from "#pantry/qti/expression-types.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -60,6 +62,7 @@ export interface DocumentIds {
 export interface DeclarationRows {
   readonly Declaration: ReadonlyMap<string, Addition<typeof Declaration>>;
   readonly DeclarationBaseType: ReadonlyMap<string, Addition<typeof DeclarationBaseType>>;
+  readonly DeclaredValue: ReadonlyMap<string, Addition<typeof DeclaredValue>>;
   readonly MasteryCeiling: ReadonlyMap<string, Addition<typeof MasteryCeiling>>;
   readonly MasteryFloor: ReadonlyMap<string, Addition<typeof MasteryFloor>>;
   readonly MasteryValue: ReadonlyMap<string, Addition<typeof MasteryValue>>;
@@ -81,7 +84,7 @@ type RowOf<Relation extends keyof DeclarationRows> =
 /**
  * A `BaseType` handle.
  */
-type BaseTypeHandle = Addition<typeof Declaration>["baseType"];
+type BaseTypeHandle = Addition<typeof DeclarationBaseType>["baseType"];
 
 /**
  * A `Cardinality` handle.
@@ -107,16 +110,6 @@ export interface Pieces {
   readonly name: string;
   readonly trail: Space;
 }
-
-/**
- * The `BaseType` a declaration that writes no `base-type` holds, `none`, which no lexical form
- * spells: a record's ("Variables with record cardinality have no base-type", QTI 3.0 information
- * model, tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3), which `Declaration_base_type` refuses on any
- * other cardinality. It is the one sentinel this builder writes: `declarationRef` copies a
- * declaration's base type into every row that names it, so it is open until those rows read
- * {@link DeclarationBaseType} instead (lane NIL's audit, B12).
- */
-const noBaseType: BaseTypeHandle = "none";
 
 /**
  * The declaration kinds, each a `NodeKind` handle that is its own `DeclarationKind` handle.
@@ -290,21 +283,23 @@ export const typedDeclarationOf = ({
 };
 
 /**
- * Read the base type a declaration's row holds, and every row that copies it: the code its
- * `base-type` spells, or {@link noBaseType} where it writes none.
+ * Count a declaration's base types, the rows of `DeclarationBaseType` it has and the `baseTypes`
+ * every row that copies it holds: 1 where its `base-type` spells a code, and 0 where it writes
+ * none, a record's (lane NIL's audit, B12).
  *
- * @param declared - The declaration.
- * @returns The base type.
+ * @param baseType - Its base type, none where it writes none.
+ * @returns The count.
  */
-export const heldBaseTypeOf = (declared: TypedDeclaration): BaseTypeHandle =>
-  Option.getOrElse(declared.baseType, () => noBaseType);
+export const baseTypesOf = (baseType: Option.Option<BaseTypeHandle>): bigint =>
+  BigInt(Option.toArray(baseType).length);
 
 /**
  * The fields a declaration gives every row that copies it, and its kind's `DeclarationKind`: its
- * base type as {@link heldBaseTypeOf} reads it.
+ * base type, none where it writes none, a record's, which a row copies only as its count
+ * ({@link baseTypesOf}) and reads only from `DeclarationBaseType`.
  */
 export interface DeclaredFields {
-  readonly baseType: BaseTypeHandle;
+  readonly baseType: Option.Option<BaseTypeHandle>;
   readonly cardinality: CardinalityHandle;
   readonly declarationKind: DeclarationKindHandle;
   readonly identifier: string;
@@ -337,7 +332,7 @@ export const declaredFieldsOf = (
         identifier: attribute("identifier"),
       }),
       (declared) => ({
-        baseType: heldBaseTypeOf(declared),
+        baseType: declared.baseType,
         cardinality: declared.cardinality,
         declarationKind,
         identifier: declared.identifier.name,
@@ -546,7 +541,6 @@ const addDeclaration = (
   const declared = typed.value;
   reading.rows.Declaration.set(node.id, {
     ...tupleOf(reading, node),
-    baseType: heldBaseTypeOf(declared),
     cardinality: declared.cardinality,
     cardinalityLexical: declared.cardinalityLexical,
     declarationKind,
@@ -560,6 +554,7 @@ const addDeclaration = (
       baseType,
       baseTypeLexical: baseType,
       node: node.id,
+      valueBase: valueBaseOf(baseType),
     });
   }
 
@@ -567,6 +562,20 @@ const addDeclaration = (
     addScale(reading, node);
   }
 };
+
+/**
+ * Read the base type of a declaration of the document: its `DeclarationBaseType`'s, written before
+ * any row below it, since a declaration precedes its children in document order.
+ *
+ * @param reading - The document.
+ * @param declaration - The declaration's node.
+ * @returns Its base type, none where it writes none, a record's.
+ */
+const baseTypeAt = (reading: Reading, declaration: NodeId): Option.Option<BaseTypeHandle> =>
+  Option.map(
+    Option.fromUndefinedOr(reading.rows.DeclarationBaseType.get(declaration)),
+    ({ baseType }) => baseType,
+  );
 
 /**
  * Add a value set's row: its declaration's fields, through `declarationRef`, and its count of
@@ -583,7 +592,7 @@ const addValueSet = (
 ): void => {
   reading.rows.ValueSet.set(node.id, {
     ...tupleOf(reading, node),
-    baseType: declaration.baseType,
+    baseTypes: baseTypesOf(baseTypeAt(reading, node.parent)),
     cardinality: declaration.cardinality,
     declarationKind: declaration.declarationKind,
     elementChildren: foldAt(reading.derived.folds, node.id).elementChildren,
@@ -593,8 +602,9 @@ const addValueSet = (
 };
 
 /**
- * Add a value's row, its own base type's where it writes one that spells a code, its field's where
- * it writes both a `field-identifier` and a `base-type`, and its field's name where that
+ * Add a value's row, its text in its declaration's base type where its set is no record's and the
+ * declaration has one, its own base type's where it writes one that spells a code, its field's
+ * where it writes both a `field-identifier` and a `base-type`, and its field's name where that
  * `field-identifier` names something once collapsed.
  *
  * A value writes either only as a record's field (information model §7.46.1 and §7.46.2: each "is
@@ -618,10 +628,21 @@ const addValue = (
   const text = reading.derived.text.get(node.id) ?? noCharacters;
   reading.rows.Value.set(node.id, {
     ...tupleOf(reading, node),
-    baseType: set.baseType,
+    baseTypes: set.baseTypes,
     cardinality: set.cardinality,
+    declaration: set.parent,
     text,
   });
+  if (set.cardinality !== recordCardinality) {
+    for (const baseType of Option.toArray(baseTypeAt(reading, set.parent))) {
+      reading.rows.DeclaredValue.set(node.id, {
+        baseType,
+        declaration: set.parent,
+        node: node.id,
+        text,
+      });
+    }
+  }
 
   const fieldIdentifier = valueOf(reading, node, "field-identifier");
   const fieldBaseType = valueOf(reading, node, "base-type");
@@ -673,6 +694,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
     rows: {
       Declaration: new Map(),
       DeclarationBaseType: new Map(),
+      DeclaredValue: new Map(),
       MasteryCeiling: new Map(),
       MasteryFloor: new Map(),
       MasteryValue: new Map(),

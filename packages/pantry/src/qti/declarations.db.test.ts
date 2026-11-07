@@ -37,11 +37,11 @@ import {
   Declaration,
   DeclarationBaseType,
   declarationKinds,
+  DeclaredValue,
   MasteryCeiling,
   MasteryFloor,
   reservedBaseTypes,
   sessionVariables,
-  Value,
   ValueBaseType,
   ValueSet,
 } from "#pantry/qti/declarations.ts";
@@ -67,11 +67,10 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
 const strayDocument = strayNode(255);
 
 /**
- * A declaration fact, lawful on its own: an outcome `A` of base type float and single cardinality,
- * its lexical forms the handles' own.
+ * A declaration fact, lawful on its own beside its base type's row ({@link declared}): an outcome
+ * `A` of single cardinality, its lexical forms the handles' own.
  *
  * @param fields - The fields the case sets.
- * @param fields.baseType - Its base type.
  * @param fields.cardinality - Its cardinality.
  * @param fields.cardinalityLexical - Its `cardinality` as written.
  * @param fields.identifier - Its collapsed identifier, written bare.
@@ -79,19 +78,16 @@ const strayDocument = strayNode(255);
  * @returns The fact.
  */
 const declarationRow = (fields: {
-  readonly baseType?: string;
   readonly cardinality?: string;
   readonly cardinalityLexical?: string;
   readonly identifier?: string;
   readonly kind?: string;
 }) => {
   const kind = fields.kind ?? "qti-outcome-declaration";
-  const baseType = fields.baseType ?? "float";
   const cardinality = fields.cardinality ?? "single";
   const identifier = fields.identifier ?? "A";
 
   return {
-    baseType,
     cardinality,
     cardinalityLexical: fields.cardinalityLexical ?? cardinality,
     declarationKind: kind,
@@ -117,10 +113,12 @@ const declarationRow = (fields: {
  * family's owner axis is not deferrable, so the declaration is judged against its owner at its
  * INSERT, and the owner's own foreign keys are deferred.
  *
- * @param row - The declaration's fact.
+ * @param row - The declaration's fact, {@link declarationRow}'s, whose node is `strayNode(1)`.
+ * @param baseType - Its base type, a member of its family, `float` unless the case sets one, and
+ *   none for a declaration that writes none, a record's.
  * @returns The rows, in writing order.
  */
-const declared = (row: Stated["fact"]) =>
+const declared = (row: Stated["fact"], baseType: Option.Option<string> = Option.some("float")) =>
   statedInserts([
     {
       fact: {
@@ -131,6 +129,10 @@ const declared = (row: Stated["fact"]) =>
       relation: ChoiceVariableName,
     },
     { fact: row, relation: Declaration },
+    ...Option.toArray(baseType).map((code): Stated => ({
+      fact: { baseType: code, baseTypeLexical: code, node: strayNode(1), valueBase: code },
+      relation: DeclarationBaseType,
+    })),
   ]);
 
 /**
@@ -154,7 +156,6 @@ const declarationFact = (
   node: number,
   identifierLexical: string,
 ): Addition<typeof Declaration> => ({
-  baseType: "float",
   cardinality: "single",
   cardinalityLexical: "single",
   declarationKind: "qti-outcome-declaration",
@@ -324,11 +325,8 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                   yield* judged(
                     client,
                     declared(
-                      declarationRow({
-                        baseType: identifier === "SCORE" ? "float" : "identifier",
-                        identifier,
-                        kind,
-                      }),
+                      declarationRow({ identifier, kind }),
+                      Option.some(identifier === "SCORE" ? "float" : "identifier"),
                     ),
                   ),
                   "declaration_not_reserved",
@@ -348,15 +346,18 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // MUST be a float", "PASSED MUST be a boolean") of an outcome, and §2.2.2.1's record
           // context variable QTI_CONTEXT, with reading 74.
           // Bound: each typed outcome name under every declaration kind against every base type
-          // but `none` (3 × 4 × 11), so the same name of another kind is the control, then
-          // QTI_CONTEXT against every declaration kind and cardinality (4 × 4), 148 cases.
+          // (3 × 4 × 11), so the same name of another kind is the control, then QTI_CONTEXT
+          // against every declaration kind and cardinality (4 × 4), 148 cases.
           Effect.gen(function* reservedType() {
             const client = yield* loginSession;
             for (const { baseType: kept, identifier, kind: typedKind } of reservedBaseTypes) {
               for (const kind of declarationKinds) {
-                for (const baseType of BaseType.handles.filter((handle) => handle !== "none")) {
+                for (const baseType of BaseType.handles) {
                   assertVerdict(
-                    yield* judged(client, declared(declarationRow({ baseType, identifier, kind }))),
+                    yield* judged(
+                      client,
+                      declared(declarationRow({ identifier, kind }), Option.some(baseType)),
+                    ),
                     "reserved_type",
                     kind === typedKind && baseType !== kept,
                     `${kind} ${identifier} ${baseType}`,
@@ -368,13 +369,15 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
             for (const kind of declarationKinds) {
               for (const cardinality of Cardinality.handles) {
                 const row = declarationRow({
-                  baseType: cardinality === "record" ? "none" : "string",
                   cardinality,
                   identifier: contextVariable.identifier,
                   kind,
                 });
                 assertVerdict(
-                  yield* judged(client, declared(row)),
+                  yield* judged(
+                    client,
+                    declared(row, cardinality === "record" ? Option.none() : Option.some("string")),
+                  ),
                   "reserved_type",
                   kind !== contextVariable.kind || cardinality !== contextVariable.cardinality,
                   `QTI_CONTEXT ${kind} ${cardinality}`,
@@ -390,30 +393,59 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the closed relations, `BaseTypeLexical` and `CardinalityLexical` (C17): a code
           // is the handle its lexical form spells, and `base-type` and `cardinality` restrict
-          // xs:string, so a padded form spells no handle, and `none` none at all.
+          // xs:string, so a padded form spells no handle; and a base type's `ValueBaseOf` image is
+          // its expression type.
           // Bound: each kind of disagreement, named, and its control, on a declaration's row and on
           // a declaration's and a value's base type row.
           Effect.gen(function* codes() {
             const client = yield* loginSession;
             const baseTypes = [
-              { baseType: "float", baseTypeLexical: "float", label: "control", refused: false },
+              {
+                baseType: "float",
+                baseTypeLexical: "float",
+                label: "control",
+                refused: false,
+                valueBase: "float",
+              },
               {
                 baseType: "integer",
                 baseTypeLexical: "float",
                 label: "integer written float",
                 refused: true,
+                valueBase: "integer",
               },
-              { baseType: "float", baseTypeLexical: " float", label: "padded", refused: true },
-              { baseType: "none", baseTypeLexical: "float", label: "none", refused: true },
-              { baseType: "float", baseTypeLexical: "", label: "empty", refused: true },
+              {
+                baseType: "float",
+                baseTypeLexical: " float",
+                label: "padded",
+                refused: true,
+                valueBase: "float",
+              },
+              {
+                baseType: "float",
+                baseTypeLexical: "",
+                label: "empty",
+                refused: true,
+                valueBase: "float",
+              },
+              {
+                baseType: "float",
+                baseTypeLexical: "float",
+                label: "expression type integer",
+                refused: true,
+                valueBase: "integer",
+              },
             ];
-            for (const { baseType, baseTypeLexical, label, refused } of baseTypes) {
+            // A value's own base type has no expression type, so its row is lawful where only a
+            // declaration's expression type disagrees.
+            for (const { baseType, baseTypeLexical, label, refused, valueBase } of baseTypes) {
+              const valueRefused = refused && baseType === valueBase;
               assertVerdict(
                 yield* judged(
                   client,
                   statedInserts([
                     {
-                      fact: { baseType, baseTypeLexical, node: strayNode(1) },
+                      fact: { baseType, baseTypeLexical, node: strayNode(1), valueBase },
                       relation: DeclarationBaseType,
                     },
                   ]),
@@ -439,7 +471,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                   ]),
                 ),
                 "e_1_derived",
-                refused,
+                valueRefused,
                 `value base type ${label}`,
               );
             }
@@ -480,16 +512,16 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // Oracle: the specification as a checker, the information model's tables 4.5.3,
           // 5.34.3, 5.115.3 and 5.151.3: "Variables with record cardinality have no base-type",
           // and every other variable's value space "is identified with a base-type".
-          // Bound: every cardinality (4) against `none` and `float`, 8 cases.
+          // Bound: every cardinality (4) without a base type's row and with `float`'s, 8 cases.
           Effect.gen(function* baseTypeLaw() {
             const client = yield* loginSession;
             for (const cardinality of Cardinality.handles) {
-              for (const baseType of ["none", "float"]) {
+              for (const baseType of [Option.none(), Option.some("float")]) {
                 assertVerdict(
-                  yield* judged(client, declared(declarationRow({ baseType, cardinality }))),
+                  yield* judged(client, declared(declarationRow({ cardinality }), baseType)),
                   "declaration_base_type",
-                  (cardinality === "record") !== (baseType === "none"),
-                  `${cardinality} ${baseType}`,
+                  (cardinality === "record") === Option.isSome(baseType),
+                  `${cardinality} ${Option.getOrElse(baseType, () => "no base type")}`,
                 );
               }
             }
@@ -519,7 +551,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                       statedInserts([
                         {
                           fact: {
-                            baseType: record ? "none" : "float",
+                            baseTypes: record ? 0n : 1n,
                             cardinality,
                             declarationKind: "qti-outcome-declaration",
                             document: strayDocument,
@@ -556,9 +588,10 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // readings 7, 34 and 45, xs:double and §8.13, as the free test's box: PostgreSQL's regex
           // engine judging the same patterns a JavaScript host checks there.
           // Bound: 8 judged base types against 13 texts, 104 cases, and each text under `string`,
-          // which admits every text, 13 more; each as a single set's value, and as a value's own
-          // base type in a record's set, where it is judged, and in a single set, where it is not
-          // (§7.46.2: a value's base-type "is only used for" a record's field).
+          // which admits every text, 13 more; each as a single set's value in its declaration's
+          // base type (`DeclaredValue`), and as a value's own base type in a record's set, where it
+          // is judged, and in a single set, where it is not (§7.46.2: a value's base-type "is only
+          // used for" a record's field).
           Effect.gen(function* typedValue() {
             const client = yield* loginSession;
             for (const baseType of [...judgedBaseTypes, "string"]) {
@@ -569,19 +602,8 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                     client,
                     statedInserts([
                       {
-                        fact: {
-                          baseType,
-                          cardinality: "single",
-                          document: strayDocument,
-                          kind: "qti-value",
-                          nearest: strayDocument,
-                          node: strayNode(3),
-                          parent: strayNode(2),
-                          start: 3n,
-                          text,
-                          version: "3.0.1",
-                        },
-                        relation: Value,
+                        fact: { baseType, declaration: strayNode(1), node: strayNode(3), text },
+                        relation: DeclaredValue,
                       },
                     ]),
                   ),

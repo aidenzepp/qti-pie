@@ -101,6 +101,7 @@ import {
   AriaRange,
   AriaValue,
   Binding,
+  BindingBaseType,
   BindingDeclaration,
   BindingName,
   BoundVariable,
@@ -122,6 +123,7 @@ import {
   LeastCount,
   MostCount,
   PlacedBinding,
+  PlacedBindingBaseType,
   PlacedBindingDeclaration,
   PlacedChoice,
   PlacedHottext,
@@ -151,6 +153,7 @@ import {
   Gap,
   Item,
   LookupValue,
+  LookupValueType,
   MapKeyDirectedPair,
   MapKeyFloat,
   MapKeyInteger,
@@ -608,6 +611,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
       "DeclarationBaseType",
       "ValueSet",
       "Value",
+      "DeclaredValue",
       "ValueBaseType",
       "RecordField",
       "RecordFieldName",
@@ -626,7 +630,16 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   [generatedOf(Operand, "baseTypeBit"), "E1 derived"],
   [generatedOf(Operand, "cardinalityBit"), "E1 derived"],
   ...(
-    ["Mapping", "MapKey", "MapKeyInteger", "MapKeyFloat", "AreaMapping", "LookupTable"] as const
+    [
+      "Mapping",
+      "MappingBaseType",
+      "MapKey",
+      "MapKeyType",
+      "MapKeyInteger",
+      "MapKeyFloat",
+      "AreaMapping",
+      "LookupTable",
+    ] as const
   ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
   ...Object.values(testRelations).map(
     ({ name, primaryKey }) =>
@@ -683,6 +696,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     AriaRange,
     AriaValue,
     Binding,
+    BindingBaseType,
     BindingDeclaration,
     BindingName,
     BoundVariable,
@@ -703,6 +717,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     LeastCount,
     MostCount,
     PlacedBinding,
+    PlacedBindingBaseType,
     PlacedBindingDeclaration,
     PlacedChoice,
     PlacedHottext,
@@ -732,7 +747,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
-  ...[MapKeyPoint, MapKeyPair, MapKeyDirectedPair, LookupValue].map(
+  ...[MapKeyPoint, MapKeyPair, MapKeyDirectedPair, LookupValue, LookupValueType].map(
     ({ name, primaryKey }) =>
       [
         { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,

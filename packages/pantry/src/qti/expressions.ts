@@ -76,6 +76,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
+import { Array as Arr, Option } from "effect";
 import {
   integerMathOperators,
   rpTemplatePattern,
@@ -85,6 +86,7 @@ import { ncNamePattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeName,
   BaseType,
+  builtInBaseTypes,
   BuiltInVariable,
   Cardinality,
   DeclarationKind,
@@ -96,7 +98,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { Declaration, declarationRef } from "#pantry/qti/declarations.ts";
+import { Declaration, DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
 import {
   BaseTypePattern,
   conditionKindHandles,
@@ -346,9 +348,11 @@ export const VariableRef = relation(
 
 /**
  * The declaration a declared {@link VariableRef} names, keyed as the reference: its
- * `declarationRef` tuple (`declaration`, `declarationKind`, `declBaseType`, `declCardinality`, with
- * its reference's `document` and `identifier`), and the reference's fields its laws read beside
- * it, each copied from the reference. A reference exactly where its `resolution` is `declared` has
+ * `declarationRef` tuple (`declaration`, `declarationKind`, `declCardinality` and `declBaseTypes`,
+ * with its reference's `document` and `identifier`), and the reference's fields its laws read
+ * beside it, each copied from the reference: its `baseType` is `unknown` where the declaration has
+ * no base type, a record's, and else its {@link DeclarationBaseType}'s `valueBase` (lane NIL's
+ * audit, B12). A reference exactly where its `resolution` is `declared` has
  * one (lane NIL's NS1), so one that names a built-in variable or nothing has none.
  */
 export const VariableRefDeclaration = relation(
@@ -357,7 +361,7 @@ export const VariableRefDeclaration = relation(
     attribute: closedId(AttributeName),
     baseType: closedId(ValueBase),
     cardinality: closedId(ValueCardinality),
-    declBaseType: closedId(BaseType),
+    declBaseTypes: natural,
     declCardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -407,7 +411,7 @@ export const PlacedVariableRefDeclaration = relation(
   {
     assembly: uuid,
     attribute: closedId(AttributeName),
-    declBaseType: closedId(BaseType),
+    declBaseTypes: natural,
     declCardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -534,16 +538,17 @@ export const DeclarationTable = relation(
 
 /**
  * Whether a document declares a name, keyed by the document and the name (M2): each declaration of
- * every document is forced in, `declared`, with its node and its codes; every other row is a probe
- * of a name the document does not declare, its declaration the document itself and its codes the
- * null objects (`qti-outcome-declaration`, `none`, `single`). The key leaves no room for an absent
+ * every document is forced in, `declared`, with its node, its codes and its count of base types;
+ * every other row is a probe of a name the document does not declare, its declaration the document
+ * itself and its codes the null objects (`qti-outcome-declaration`, `single`, and no base type).
+ * The key leaves no room for an absent
  * row where a declaration is, so a probe reads the truth: a reference's claim that it names no
  * declaration, a reading's variable, a mapping target.
  */
 export const VariableLookup = relation(
   "VariableLookup",
   {
-    baseType: closedId(BaseType),
+    baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -592,7 +597,7 @@ export const TemplateDefault = relation(
 export const TemplateDefaultTarget = relation(
   "TemplateDefaultTarget",
   {
-    declBaseType: closedId(BaseType),
+    declBaseTypes: natural,
     declCardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -620,7 +625,7 @@ export const TemplateDefaultTarget = relation(
 export const MappingSourceDeclaration = relation(
   "MappingSourceDeclaration",
   {
-    declBaseType: closedId(BaseType),
+    declBaseTypes: natural,
     declCardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -854,7 +859,7 @@ export const Reading = relation(
   {
     assembly: uuid,
     attribute: closedId(AttributeName),
-    declBaseType: closedId(BaseType),
+    declBaseTypes: natural,
     declCardinality: closedId(Cardinality),
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
@@ -1106,18 +1111,19 @@ const spells = (v: VariableRefRow) =>
  * The built-in variables, as the installed `BuiltInVariable` holds them (the UP audit's A63; spec
  * reading 29): each root's variables with the expression-typing codes of the base type and the
  * cardinality each stands as there, `ValueBaseOf`'s and `ValueCardinalityOf`'s images of its
- * declaration codes ({@link valueBaseOf}, {@link valueCardinalityOf}), so a record's `none` reads
- * `unknown`.
+ * declaration codes ({@link valueBaseOf}, {@link valueCardinalityOf}), and `unknown` for the base
+ * type of the record `QTI_CONTEXT`, which has none (`builtInBaseTypes` holds no row for it).
  */
-const builtIns = BuiltInVariable.rows.map(
-  ({ baseType, cardinality, declaration, root, variable }) => ({
-    baseType: valueBaseOf(baseType),
-    cardinality: valueCardinalityOf(cardinality),
-    declaration,
-    root,
-    variable,
-  }),
-);
+const builtIns = BuiltInVariable.rows.map(({ cardinality, declaration, root, variable }) => ({
+  baseType: Option.match(
+    Arr.findFirst(builtInBaseTypes, (typed) => typed.root === root && typed.variable === variable),
+    { onNone: () => "unknown" as const, onSome: ({ baseType }) => valueBaseOf(baseType) },
+  ),
+  cardinality: valueCardinalityOf(cardinality),
+  declaration,
+  root,
+  variable,
+}));
 
 /**
  * The roots that hold built-in variables, each with the names of its built-ins.
@@ -1142,10 +1148,12 @@ const builtInNamesOf = (root: string): readonly string[] =>
 const prefixedName = "^.*[.].*$";
 
 /**
- * State the type a reference's resolution gives it: a declared variable's through `ValueBaseOf`
- * and `ValueCardinalityOf`, which its {@link VariableRefDeclaration}'s `E1_derived` states; a
- * built-in's by its name, among its root's built-ins; nothing for an unresolved one, whose name is
- * none of them.
+ * State the type a reference's resolution gives it: a declared variable's, which its
+ * {@link VariableRefDeclaration}'s `E1_derived` states: its cardinality through
+ * `ValueCardinalityOf`, and its base type `unknown` where it has none, a record's (lane NIL's
+ * audit, B12), and else its {@link DeclarationBaseType}'s `valueBase`, which
+ * {@link typedVariableRefs} copies; a built-in's by its name, among its root's built-ins; nothing
+ * for an unresolved one, whose name is none of them.
  *
  * @param v - The row.
  * @returns The predicate.
@@ -1175,6 +1183,19 @@ const resolvedType = (v: VariableRefRow) =>
       v.eq(v.cardinality, "unknown"),
     ),
   );
+
+/**
+ * The references that name a declared variable with a base type: each one's base type is the
+ * declaration's, read from its {@link DeclarationBaseType}.
+ */
+const typedVariableRefs = select(VariableRefDeclaration, (d) => d.eq(d.declBaseTypes, 1n));
+
+/**
+ * The base types a variable named in place of a literal must have (`ReferenceBase`'s), each once:
+ * a reading of each is judged against its declaration's {@link DeclarationBaseType}, one
+ * containment per base type, where the declaration has one.
+ */
+const referenceBases = [...new Set(ReferenceBase.rows.map(({ base }) => base))];
 
 /**
  * State where a reference may claim a table of its declaration: none, or one where it names a
@@ -1723,8 +1744,8 @@ export const referenceLawsByName = {
         "identifier",
         "node",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       on(
         VariableLookup,
@@ -1732,8 +1753,8 @@ export const referenceLawsByName = {
         "name",
         "declaration",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
     ),
     contained(
@@ -1743,8 +1764,8 @@ export const referenceLawsByName = {
         "document",
         "name",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
       declarationRef,
     ),
@@ -1756,7 +1777,7 @@ export const referenceLawsByName = {
           l.eq(l.declared, false),
           l.eq(l.declaration, l.document),
           l.eq(l.declarationKind, "qti-outcome-declaration"),
-          l.eq(l.baseType, "none"),
+          l.eq(l.baseTypes, 0n),
           l.eq(l.cardinality, "single"),
         ),
       ),
@@ -2056,8 +2077,8 @@ export const referenceLawsByName = {
         "variable",
         "declaration",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ),
       on(
         VariableLookup,
@@ -2065,8 +2086,8 @@ export const referenceLawsByName = {
         "name",
         "declaration",
         "declarationKind",
-        "baseType",
         "cardinality",
+        "baseTypes",
       ),
     ),
     check("E1_derived", Reading, (r) =>
@@ -2138,7 +2159,7 @@ export const referenceLawsByName = {
           r.in(r.source, ["declared", "mapped"]),
           r.and(
             r.eq(r.declaration, r.lookupDocument),
-            r.eq(r.declBaseType, "none"),
+            r.eq(r.declBaseTypes, 0n),
             r.eq(r.declCardinality, "single"),
             r.or(
               r.and(r.eq(r.source, "none"), r.eq(r.declarationKind, "qti-outcome-declaration")),
@@ -2179,14 +2200,33 @@ export const referenceLawsByName = {
         r.and(
           r.in(r.source, ["declared", "mapped"]),
           r.in(r.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
-          r.or(
-            r.eq(
-              ValueBaseOf.at("value", r.declBaseType),
-              ReferenceBase.at("base", r.kind, r.attribute),
-            ),
-            r.eq(ValueBaseOf.at("value", r.declBaseType), "unknown"),
-          ),
           r.in(ValueCardinalityOf.at("value", r.declCardinality), ["single", "unknown"]),
+        ),
+      ),
+    ),
+    ...referenceBases.map((base) =>
+      contained(
+        on(
+          select(Reading, (r) =>
+            r.and(
+              r.ne(r.attribute, "identifier"),
+              resolves(r),
+              r.in(r.source, ["declared", "mapped"]),
+              r.eq(r.declBaseTypes, 1n),
+              r.or(
+                ...ReferenceBase.rows
+                  .filter((row) => row.base === base)
+                  .map(({ attribute, kind }) =>
+                    r.and(r.eq(r.kind, kind), r.eq(r.attribute, attribute)),
+                  ),
+              ),
+            ),
+          ),
+          "declaration",
+        ),
+        on(
+          select(DeclarationBaseType, (b) => b.eq(b.valueBase, base)),
+          "node",
         ),
       ),
     ),
@@ -2216,8 +2256,8 @@ export const referenceLawsByName = {
         "itemDocument",
         "template",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ),
       declarationRef,
     ),
@@ -2227,17 +2267,20 @@ export const referenceLawsByName = {
   ],
   "Template default type": [
     check("Template_default_type", TemplateDefaultTarget, (t) =>
-      t.and(
-        t.or(
-          t.eq(t.heldBase, ValueBaseOf.at("value", t.declBaseType)),
-          t.in(t.heldBase, silentBases),
-          t.eq(ValueBaseOf.at("value", t.declBaseType), "unknown"),
-        ),
-        t.or(
-          t.eq(t.heldCardinality, ValueCardinalityOf.at("value", t.declCardinality)),
-          t.eq(t.heldCardinality, "unknown"),
-        ),
+      t.or(
+        t.eq(t.heldCardinality, ValueCardinalityOf.at("value", t.declCardinality)),
+        t.eq(t.heldCardinality, "unknown"),
       ),
+    ),
+    contained(
+      on(
+        select(TemplateDefaultTarget, (t) =>
+          t.and(t.eq(t.declBaseTypes, 1n), t.not(t.in(t.heldBase, silentBases))),
+        ),
+        "declaration",
+        "heldBase",
+      ),
+      on(DeclarationBaseType, "node", "valueBase"),
     ),
   ],
   "Variable declared": [
@@ -2280,8 +2323,8 @@ export const referenceLawsByName = {
         "itemDocument",
         "source",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ),
       declarationRef,
     ),
@@ -2297,8 +2340,8 @@ export const referenceLawsByName = {
         "variable",
         "declaration",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ),
       on(
         MappingSourceDeclaration,
@@ -2306,8 +2349,8 @@ export const referenceLawsByName = {
         "target",
         "declaration",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ),
     ),
   ],
@@ -2615,9 +2658,13 @@ export const expressionLawsByName = {
     ),
     check("E1_derived", VariableRefDeclaration, (d) =>
       d.and(
-        d.eq(d.baseType, ValueBaseOf.at("value", d.declBaseType)),
+        d.or(d.eq(d.declBaseTypes, 1n), d.eq(d.baseType, "unknown")),
         d.eq(d.cardinality, ValueCardinalityOf.at("value", d.declCardinality)),
       ),
+    ),
+    contained(
+      on(typedVariableRefs, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "valueBase"),
     ),
     // PlacedVariableRef (spec reading 117): each item instance's references, its document's,
     // resolved among the item's declarations, under "Variable declared" over the assembly.
@@ -2913,8 +2960,8 @@ export const expressionLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ),
       declarationRef,
     ),
@@ -2932,8 +2979,8 @@ export const expressionLawsByName = {
         "assembly",
         "identifier",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ),
       declarationRef,
     ),

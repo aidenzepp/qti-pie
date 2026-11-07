@@ -2729,3 +2729,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
      before; that wants the declaration's name as a row of its own, as `RecordFieldName` is a field's. This
      binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NCNAME.)
+153. **A record has no base type, so no value stands for one: a law about a record's whole value judges its cardinality,
+     and a law over a base type reads the declaration's own, where it writes one.** The information model says
+     "Variables with record cardinality have no base-type" (tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3,
+     https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_base-type), and of a value
+     "The base-type is defined by the 'base-type' attribute of the declaration except in the case of variables with
+     record cardinality" (section 7.46). So a record's value is a field, read in its own base type, never in its
+     declaration's, even where a record writes one, which Declaration base type refuses. A mapping is of no record
+     (reading 78: its map response "cannot be applied to variables of record cardinality", section 2.11.1.5); an area
+     mapping maps "a source set of point values" (section 5.5); a feedback element's outcome is "of either single or
+     multiple cardinality" (section 5.49.1); a string identifier's variable is "of base-type string" (section 5.48.2);
+     and SCORE, MAXSCORE and PASSED are typed (section 2.2.2.3): each refuses a record by its cardinality, as the
+     specification states it, and judges any other variable's base type where it has one. A variable that is no
+     record and writes no base type is refused by Declaration base type alone, never by a law over a type it does not
+     have (the orchestrator's ruling of 2026-11-06: one cause is refused under one rule), and an expression reads its
+     type as `unknown`. A declaration's base type is a row of its own (`DeclarationBaseType`), every row that names a
+     declaration copies only its count of them, and each row that reads one copies it from that row, so only where it
+     is. This sets aside the importer's reading of a record's base type as `none`, a code no lexical form spells,
+     which every row that named a declaration copied (lane NIL's audit, B12), under which a record's mapping was
+     refused as a base type `MappableBaseType` does not hold and a record's values were read in `none`, every text;
+     and the law oracle's reading of an unwritten base type as empty or `none`, under which it refused a single
+     variable that writes none under each law over a type, read a single variable's values in their own base type,
+     and a record's in its declaration's. This binds pantry and plate alike. This is not a case of documents in
+     conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
+     FIX-B12.)

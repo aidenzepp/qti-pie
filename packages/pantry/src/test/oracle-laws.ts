@@ -160,13 +160,13 @@ export const statedInParts = {
  */
 export const hostlessLaws = {
   "Declaration overlay":
-    "its rows (Declaration, DeclarationBaseType, ValueSet, Value, ValueBaseType, RecordField, RecordFieldName, MasteryValue, NormalMinimum, NormalMaximum, MasteryFloor, MasteryCeiling) are copies the importer writes of each declaration element's node, attributes and string value (plan §1.7 O2, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
+    "its rows (Declaration, DeclarationBaseType, ValueSet, Value, DeclaredValue, ValueBaseType, RecordField, RecordFieldName, MasteryValue, NormalMinimum, NormalMaximum, MasteryFloor, MasteryCeiling) are copies the importer writes of each declaration element's node, attributes and string value (plan §1.7 O2, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
   "Entry family":
     "its rows are the package's entries in listing order, one per path, which the importer numbers; two entries of one path never reach a row, since the ZIP reader refuses them under zip-format (src/package/zip.ts, 'the archive holds two entries with this name')",
   "Manifest overlay":
     "its rows (ManifestId, Resource, ResourceHref, File, Dependency) are copies the importer writes of each manifest element's node and attributes (plan §1.6, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
   "Mapping overlay":
-    "its rows (Mapping, MapKey and its typed forms, AreaMapping, LookupTable) are copies the importer writes of each mapping element's node, its declaration's reference and its map key (plan §1.7 O5, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
+    "its rows (Mapping, MappingBaseType, MapKey and its typed forms, AreaMapping, LookupTable, LookupValue and LookupValueType) are copies the importer writes of each mapping element's node, its declaration's reference and base type and its map key (plan §1.7 O5, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
   "Package key":
     "its one row per package is keyed by the id the importer mints, which no package states, so no package text can repeat or omit it",
   "Reference overlay":

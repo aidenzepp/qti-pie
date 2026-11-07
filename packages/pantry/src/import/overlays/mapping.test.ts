@@ -273,8 +273,18 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
                 [...walked].map(([node, { key, mapping }]) => [node, node, mapping, key]),
               );
               for (const row of rows.MapKey.values()) {
-                assert.strictEqual(row.baseType, input.baseType);
+                assert.strictEqual(row.baseTypes, 1n);
               }
+
+              assert.deepStrictEqual(
+                [...rows.MapKeyType].map(([node, row]) => [
+                  node,
+                  row.mapping,
+                  row.key,
+                  row.baseType,
+                ]),
+                [...walked].map(([node, { key, mapping }]) => [node, mapping, key, input.baseType]),
+              );
 
               assert.deepStrictEqual(
                 [...rows.MapKeyInteger].map(([node, row]) => [node, row.key]),
@@ -293,8 +303,13 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
                   : [],
               );
               assert.deepStrictEqual([...rows.Mapping.keys()], [ids.idOf(3)]);
-              assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.baseType, input.baseType);
+              assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.baseTypes, 1n);
               assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.declaration, ids.idOf(2));
+              assert.deepStrictEqual(rows.MappingBaseType.get(ids.idOf(3)), {
+                baseType: input.baseType,
+                declaration: ids.idOf(2),
+                node: ids.idOf(3),
+              });
             }),
         ),
       ),
@@ -669,8 +684,13 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
                 expected,
               );
               for (const row of rows.LookupValue.values()) {
-                assert.strictEqual(row.baseType, "integer");
+                assert.strictEqual(row.baseTypes, 1n);
               }
+
+              assert.sameDeepMembers(
+                [...rows.LookupValueType].map(([node, row]) => [node, row.value, row.baseType]),
+                expected.map(([node, , value]) => [node, value, "integer"]),
+              );
 
               assert.deepStrictEqual(
                 [...rows.LookupTable].map(([node, { kind }]) => [node, kind]),

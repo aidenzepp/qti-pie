@@ -872,10 +872,10 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
  * - **the date:** each statistic's `lastUpdated` is copied into its {@link StatisticDate}, and every
  *   such row has its attribute; its pieces concatenate to the lexical form, and `day`'s type is the
  *   language of the attribute's value domain ("value domain").
- * - **Usage typed value:** each usage value's `baseType` is copied into its {@link UsageValue}, and
- *   every such row has its attribute; its `text` is its node's string value; its code is the one
- *   its lexical form spells ("E1 derived"); and its text is a lexical form of that base type
- *   ("Usage typed value").
+ * - **Usage typed value:** each usage value's `baseType` that spells a code is copied into its
+ *   {@link UsageValue}, and every such row has its attribute; its `text` is its node's string
+ *   value; its code is the one its lexical form spells ("E1 derived"); and its text is a lexical
+ *   form of that base type ("Usage typed value").
  */
 export const metadataLawsByName = {
   "Document entry": [contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named"))],
@@ -1111,10 +1111,7 @@ export const metadataLawsByName = {
     contained(on(UsageValue, "node"), on(usageBaseTypes, "node")),
     contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
     check("E1_derived", UsageValue, (u) =>
-      u.and(
-        u.ne(u.baseType, "none"),
-        u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
-      ),
+      u.eq(BaseTypeLexical.at("lexical", u.baseType), u.baseTypeLexical),
     ),
   ],
   "LOM learning resource type": [

@@ -124,6 +124,7 @@ describe("qti/mapping.ts, declared", { timeout: searchTimeout }, () => {
       "AreaMapping base type",
       "E1 derived",
       "Lookup table cardinality",
+      "MappableBaseType",
       "Typed attribute value",
     ]);
   });
