@@ -143,7 +143,26 @@ describe("givesText", () => {
       ],
       [
         "an unsupported part, the notice it is copied into",
-        [{ feature: "qti-printed-variable", kind: "unsupported", path: "qti-label/x" }],
+        [{ feature: "qti-feedback-inline", kind: "unsupported", path: "qti-label/x" }],
+        [{ feature: "qti-feedback-inline", kind: "notice" }],
+        true,
+      ],
+      [
+        "a printed variable, the notice it is copied into",
+        [
+          {
+            base: { _tag: "literal", value: 10n },
+            delimiter: ";",
+            field: Option.none(),
+            format: Option.none(),
+            identifier: "SCORE",
+            index: Option.none(),
+            kind: "printed-variable",
+            mappingIndicator: "=",
+            path: "qti-label/qti-printed-variable",
+            powerForm: false,
+          },
+        ],
         [{ feature: "qti-printed-variable", kind: "notice" }],
         true,
       ],

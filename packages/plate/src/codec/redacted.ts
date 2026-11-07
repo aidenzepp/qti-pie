@@ -228,6 +228,49 @@ const Choices = Schema.Array(
 );
 
 /**
+ * A printed variable's `base` or `index`: an exact integer, or the name of the variable that holds
+ * one.
+ */
+const IntegerOrRef = Schema.Union([
+  Schema.Struct({ _tag: Schema.Literal("literal"), value: Schema.BigInt }),
+  Schema.Struct({ _tag: Schema.Literal("ref"), identifier: Schema.String }),
+]);
+
+/**
+ * Why the JSON form holds no printed variable, the message of the refusal on either side.
+ */
+const noPrintedVariable =
+  "a redacted body holds no printed variable; redact puts its notice in its place (OD-P8-14)";
+
+/**
+ * A printed variable, which the JSON form never holds (OD-P8-14): `redact` puts each one's notice
+ * in its place before the item leaves the server. Its encoded side is `Never`, so decoding refuses
+ * a body node of its kind and encoding refuses a body that holds one, as a second line behind
+ * `redact`, as the emitter is one behind `url.ts`. Its type side holds every field of the model's
+ * printed variable, so the codec's body-node union stays the model's `BodyNode`.
+ */
+const NoPrintedVariable = Schema.Never.pipe(
+  Schema.decodeTo(
+    Schema.Struct({
+      base: IntegerOrRef,
+      delimiter: Schema.String,
+      field: Schema.Option(Schema.String),
+      format: Schema.Option(Schema.String),
+      identifier: Schema.String,
+      index: Schema.Option(IntegerOrRef),
+      kind: Schema.Literal("printed-variable"),
+      mappingIndicator: Schema.String,
+      path: Schema.String,
+      powerForm: Schema.Boolean,
+    }),
+    {
+      decode: SchemaGetter.forbidden(() => noPrintedVariable),
+      encode: SchemaGetter.forbidden(() => noPrintedVariable),
+    },
+  ),
+);
+
+/**
  * The fields a Text Entry and an Extended Text share, as `TextEntryInteraction` declares them.
  */
 const textControlFields = {
@@ -245,8 +288,9 @@ const textControlFields = {
 };
 
 /**
- * The Schema of one body node, a union over the seven kinds of `BodyNode`, every field included;
- * its type is {@link BodyNode} and its encoded form {@link BodyNodeJson}.
+ * The Schema of one body node, a union over the eight kinds of `BodyNode`, every field included;
+ * its type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no printed
+ * variable ({@link NoPrintedVariable}).
  */
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
@@ -304,6 +348,7 @@ const BodyNodeSchema = Schema.Union([
     kind: Schema.Literal("unsupported"),
     path: Schema.String,
   }),
+  NoPrintedVariable,
 ]);
 
 /**
@@ -540,6 +585,7 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
         enqueue(node.children, within);
         break;
       }
+      case "printed-variable":
       case "text":
       case "unsupported": {
         break;
@@ -601,13 +647,14 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  * Check the JSON form of a redacted item and make the {@link Redacted} `render` takes. It never
  * throws, whatever it is handed.
  *
- * It checks the JSON's shape, every field against {@link RedactedSchema}, and one rule of the
- * body's content: no interaction stands, at any depth, inside a Choice's Prompt or a choice's
- * content, inside an Extended Text's Prompt, or inside an Inline Choice's Label or a choice's
- * content, where QTI's schema admits none and `render` cannot emit one, so `render` never meets
- * such an interaction in a `Redacted` it returns. It checks the item against no other rule of
- * QTI's, so a host trusts redacted JSON only as far as the item it came from; the emitter still
- * keeps only the HTML subset's elements and attributes, and the URLs `url.ts` keeps.
+ * It checks the JSON's shape, every field against {@link RedactedSchema}, which admits no printed
+ * variable, since `redact` leaves none, and one rule of the body's content: no interaction stands,
+ * at any depth, inside a Choice's Prompt or a choice's content, inside an Extended Text's Prompt,
+ * or inside an Inline Choice's Label or a choice's content, where QTI's schema admits none and
+ * `render` cannot emit one, so `render` never meets such an interaction in a `Redacted` it
+ * returns. It checks the item against no other rule of QTI's, so a host trusts redacted JSON only
+ * as far as the item it came from; the emitter still keeps only the HTML subset's elements and
+ * attributes, and the URLs `url.ts` keeps.
  *
  * @param input The JSON form as the host handed it over: the {@link RedactedJson}
  *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is

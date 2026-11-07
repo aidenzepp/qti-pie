@@ -663,6 +663,7 @@ const placeNode = (
       };
     }
 
+    case "printed-variable":
     case "text":
     case "text-entry":
     case "unsupported": {

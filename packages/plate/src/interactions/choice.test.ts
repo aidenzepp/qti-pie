@@ -723,9 +723,9 @@ describe("renderChoice", () => {
           prompt: Option.some([
             words("Pick a colour "),
             {
-              feature: "qti-printed-variable",
+              feature: "qti-feedback-inline",
               kind: "unsupported",
-              path: "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-prompt/qti-printed-variable",
+              path: "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-prompt/qti-feedback-inline",
             },
           ]),
         });
@@ -1134,9 +1134,9 @@ describe("renderChoice", () => {
             {
               content: [
                 {
-                  feature: "qti-printed-variable",
+                  feature: "qti-feedback-inline",
                   kind: "unsupported",
-                  path: `${choicePath}/qti-printed-variable`,
+                  path: `${choicePath}/qti-feedback-inline`,
                 },
               ],
               fixed: false,

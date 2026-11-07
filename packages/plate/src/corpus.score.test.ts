@@ -156,6 +156,7 @@ const interactionsOf = (nodes: readonly BodyNode[]): readonly Bound[] =>
       case "text-entry": {
         return [node];
       }
+      case "printed-variable":
       case "text":
       case "unsupported": {
         return [];

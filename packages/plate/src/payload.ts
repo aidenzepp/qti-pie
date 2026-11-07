@@ -35,6 +35,7 @@ import type {
   Item,
   SimpleChoice,
   TextEntryInteraction,
+  UnsupportedFeature,
 } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
@@ -544,6 +545,7 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
       case "inline-choice": {
         return authoredIdsIn(Option.getOrElse(node.label, () => []));
       }
+      case "printed-variable":
       case "text-entry":
       case "text":
       case "unsupported": {
@@ -1044,11 +1046,20 @@ const unnamedPositions = (
 };
 
 /**
+ * The feature a printed variable's notice names: its element's name, as for any `qti-*` element
+ * the body shows as a notice.
+ */
+const printedNotice = "qti-printed-variable";
+
+/**
  * Copy one body node into its payload node.
+ *
+ * A printed variable becomes its notice. {@link redactItem} leaves none in a redacted body, so the
+ * case is reached only by a body built by hand, which is given the notice the variable stands for.
  *
  * @param node The body node.
  * @param build The build.
- * @returns The payload node: an unsupported part becomes its notice.
+ * @returns The payload node: an unsupported part, or a printed variable, becomes its notice.
  */
 const copyNode = (node: BodyNode, build: Build): PayloadNode => {
   switch (node.kind) {
@@ -1065,6 +1076,9 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
     }
     case "unsupported": {
       return { feature: node.feature, kind: "notice" };
+    }
+    case "printed-variable": {
+      return { feature: printedNotice, kind: "notice" };
     }
     case "choice": {
       return choicePayload(node, build);
@@ -1085,23 +1099,128 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
 };
 
 /**
+ * A redacted body and the features it shows as notices.
+ */
+interface RedactedBody {
+  readonly body: readonly BodyNode[];
+  readonly notices: readonly string[];
+}
+
+/**
+ * Withhold each printed variable of an item's body behind its notice, `qti-printed-variable` at
+ * the variable's path, and list the features the body then shows as notices: the item's
+ * notice-shown features in their order, with each printed variable's notice where the item would
+ * list it were the notice one of its unsupported features.
+ *
+ * The item lists its notices in the order of the elements they sit at: in document order once
+ * `check` has accepted it, and in the order the model read the body when the item was built by
+ * hand. The walk goes through the body in document order and passes each listed notice when it
+ * reaches the node the notice stands for, so a printed variable's notice goes down where the walk
+ * stands. Entering an element or an interaction passes first the notices listed at its own path
+ * that no node it holds stands for, as `check` lists them: the notices of URLs dropped from it, and
+ * an Extended Text's notice in place of its Controls. A listed notice no node stands for keeps its
+ * place after the rest.
+ *
+ * @param item The item.
+ * @returns The body, every printed variable its notice, and the features shown as notices.
+ */
+const withholdPrinted = (item: Item): RedactedBody => {
+  const listed = item.unsupported.filter((entry) => entry.shown === "notice");
+  const notices: string[] = [];
+  let next = 0;
+  const pass = (passes: (entry: UnsupportedFeature) => boolean): void => {
+    for (let entry = listed[next]; entry !== undefined && passes(entry); entry = listed[next]) {
+      notices.push(entry.feature);
+      next += 1;
+    }
+  };
+  const nodesOf = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
+    nodes.map((node): BodyNode => {
+      switch (node.kind) {
+        case "element": {
+          const held = new Set(
+            node.children.flatMap((child) =>
+              child.kind === "unsupported" && child.path === node.path ? [child.feature] : [],
+            ),
+          );
+          pass((entry) => entry.path === node.path && !held.has(entry.feature));
+
+          return { ...node, children: nodesOf(node.children) };
+        }
+        case "unsupported": {
+          pass((entry) => entry.feature === node.feature && entry.path === node.path);
+
+          return node;
+        }
+        case "printed-variable": {
+          notices.push(printedNotice);
+
+          return { feature: printedNotice, kind: "unsupported", path: node.path };
+        }
+        case "choice": {
+          pass((entry) => entry.path === node.path);
+
+          const prompt = node.prompt.pipe(Option.map(nodesOf));
+          const choices = node.choices.map((choice) => ({
+            ...choice,
+            content: nodesOf(choice.content),
+          }));
+
+          return { ...node, choices, prompt };
+        }
+        case "extended-text": {
+          pass((entry) => entry.path === node.path);
+
+          return { ...node, prompt: node.prompt.pipe(Option.map(nodesOf)) };
+        }
+        case "inline-choice": {
+          pass((entry) => entry.path === node.path);
+
+          const label = node.label.pipe(Option.map(nodesOf));
+          const choices = node.choices.map((choice) => ({
+            ...choice,
+            content: nodesOf(choice.content),
+          }));
+
+          return { ...node, choices, label };
+        }
+        case "text":
+        case "text-entry": {
+          return node;
+        }
+        default: {
+          return node satisfies never;
+        }
+      }
+    });
+  const body = nodesOf(item.body);
+
+  return { body, notices: [...notices, ...listed.slice(next).map((entry) => entry.feature)] };
+};
+
+/**
  * Copy the parts of an item the page may know: the allowlist, and the only way to make a
  * {@link Redacted} from an item.
  *
  * It copies, each by name, the document location, the identifier, the title, `lang`, the body,
  * each response's binding and the features shown as notices. It copies no outcome declaration,
  * correct response, mapping, response default or processing rule, and no field it does not name.
+ * The body's printed variables are not copied: each becomes its notice, `qti-printed-variable`,
+ * which `notices` names in document order among the item's notice-shown features, so the result is
+ * what it was when the model held a printed variable as that notice.
  *
  * @param item The item.
  * @returns The redacted item.
  */
-export const redactItem = (item: Item): Redacted =>
-  brandRedacted({
-    body: item.body,
+export const redactItem = (item: Item): Redacted => {
+  const { body, notices } = withholdPrinted(item);
+
+  return brandRedacted({
+    body,
     document: item.document,
     identifier: item.identifier,
     lang: item.lang,
-    notices: item.unsupported.flatMap((entry) => (entry.shown === "notice" ? [entry.feature] : [])),
+    notices,
     responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
       baseType,
       cardinality,
@@ -1109,6 +1228,7 @@ export const redactItem = (item: Item): Redacted =>
     })),
     title: item.title,
   });
+};
 
 /**
  * How one response travels through a host's form: its identifier, its binding, and the options

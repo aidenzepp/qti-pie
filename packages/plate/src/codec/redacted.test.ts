@@ -15,6 +15,7 @@ import type {
   ExtendedTextInteraction,
   InlineChoiceInteraction,
   Item,
+  PrintedVariable,
   ResponseDeclaration,
   TextEntryInteraction,
   UnsupportedFeature,
@@ -781,6 +782,130 @@ describe("decodeRedacted", () => {
       assert.strictEqual(error._tag, "InvalidRedacted");
       assert.strictEqual(error.stage, "decode");
     }),
+  );
+});
+
+/**
+ * The path every printed variable in the printed-variable cases sits at.
+ */
+const printedPath = "qti-assessment-item/qti-item-body/p/qti-printed-variable";
+
+/**
+ * A printed variable as the JSON form would write one if it held any; it holds none.
+ */
+interface PrintedVariableJson {
+  readonly base: { readonly _tag: "literal"; readonly value: string };
+  readonly delimiter: string;
+  readonly identifier: string;
+  readonly kind: "printed-variable";
+  readonly mappingIndicator: string;
+  readonly path: string;
+  readonly powerForm: boolean;
+}
+
+/**
+ * A paragraph in the JSON form whose children may hold a printed variable.
+ */
+interface HoldingJson {
+  readonly attributes: Extract<BodyNodeJson, { readonly kind: "element" }>["attributes"];
+  readonly children: readonly (BodyNodeJson | PrintedVariableJson)[];
+  readonly kind: "element";
+  readonly path: string;
+  readonly tag: string;
+}
+
+/**
+ * The JSON form with a body that may hold a printed variable, at the top or in a paragraph.
+ */
+type PrintingJson = Omit<RedactedJson, "body"> & {
+  readonly body: readonly (BodyNodeJson | HoldingJson | PrintedVariableJson)[];
+};
+
+/**
+ * A printed variable in the JSON form, which decoding must refuse.
+ */
+const printedJson: PrintedVariableJson = {
+  base: { _tag: "literal", value: "10" },
+  delimiter: ";",
+  identifier: "SCORE",
+  kind: "printed-variable",
+  mappingIndicator: "=",
+  path: printedPath,
+  powerForm: false,
+};
+
+/**
+ * Put a node at the end of the choice item's JSON body, inside a paragraph or beside it.
+ *
+ * @param node The node.
+ * @param nested Whether a paragraph holds it.
+ * @returns The JSON form, the node added.
+ */
+const withNode = (node: BodyNodeJson | PrintedVariableJson, nested: boolean): PrintingJson => {
+  const json = Result.getOrThrow(encodeRedacted(redact(acceptForTest(choiceItem))));
+
+  return {
+    ...json,
+    body: [
+      ...json.body,
+      nested
+        ? {
+            attributes: [],
+            children: [node],
+            kind: "element",
+            path: "qti-assessment-item/qti-item-body/p",
+            tag: "p",
+          }
+        : node,
+    ],
+  };
+};
+
+describe("the codec on a printed variable (OD-P8-14)", () => {
+  for (const nested of [false, true]) {
+    it.effect(
+      `[I-5] decodeRedacted refuses a body that holds a printed variable${nested ? " inside a paragraph" : ""}: InvalidRedacted at stage decode, where its notice decodes`,
+      () =>
+        Effect.gen(function* refusesPrintedVariable() {
+          const error = yield* failureOf(decodeRedacted(withNode(printedJson, nested)));
+          const notice = decodeRedacted(
+            withNode(
+              { feature: "qti-printed-variable", kind: "unsupported", path: printedPath },
+              nested,
+            ),
+          );
+
+          assert.strictEqual(error._tag, "InvalidRedacted");
+          assert.strictEqual(error.stage, "decode");
+          assert.isTrue(Result.isSuccess(notice));
+        }),
+    );
+  }
+
+  it.effect(
+    "[I-5] encodeRedacted refuses a body built by hand that holds a printed variable: InvalidRedacted at stage encode",
+    () =>
+      Effect.gen(function* refusesPrintedVariableOut() {
+        const node: PrintedVariable = {
+          base: { _tag: "literal", value: 10n },
+          delimiter: ";",
+          field: Option.none(),
+          format: Option.none(),
+          identifier: "SCORE",
+          index: Option.none(),
+          kind: "printed-variable",
+          mappingIndicator: "=",
+          path: printedPath,
+          powerForm: false,
+        };
+        const redacted = redact(acceptForTest(choiceItem));
+        const error = yield* failureOf(
+          encodeRedacted(brandRedacted({ ...redacted, body: [...redacted.body, node] })),
+        );
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "encode");
+      }),
   );
 });
 

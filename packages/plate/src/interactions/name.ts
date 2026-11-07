@@ -62,7 +62,7 @@ const attributeOf = (
  *
  * It reads body nodes as well as payload nodes, so the payload's naming (`isUnnamed`, over the
  * model) and the emitter's (over the payload) apply this one rule to the same content. An
- * unsupported part counts as the notice the payload copies it into.
+ * unsupported part, and a printed variable, count as the notice the payload copies each into.
  *
  * @param nodes The nodes: a Choice's content or an Inline Choice's Label, as the model or the
  *   payload holds it.
@@ -83,6 +83,7 @@ export const givesText = (nodes: readonly (BodyNode | PayloadNode)[]): boolean =
         );
       }
       case "notice":
+      case "printed-variable":
       case "unsupported": {
         return true;
       }

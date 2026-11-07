@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Result } from "effect";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
-import { configure } from "#plate/index.ts";
+import { configure, redact } from "#plate/index.ts";
 import type { Accepted, Configuration, Element, Node, Verdict } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import type { BodyNode, InlineChoiceInteraction } from "#plate/model/item.ts";
@@ -106,6 +106,11 @@ const rootOf = (html: string): Option.Option<Element> => {
 };
 
 /**
+ * The feature of a printed variable's notice.
+ */
+const printedNotice = "qti-printed-variable";
+
+/**
  * One accepted member's render: its three states, or the error `render` gave.
  */
 interface Rendering {
@@ -115,6 +120,11 @@ interface Rendering {
    */
   readonly locale: Configuration["locale"];
   readonly location: string;
+  /**
+   * The notice of each printed variable `redact` shows as a notice: the model holds a printed
+   * variable as a body node, so the verdict names none of them.
+   */
+  readonly printed: readonly string[];
   readonly states: ReturnType<typeof threeStates>;
 }
 
@@ -137,6 +147,7 @@ const renderingsOf = (
           accepted,
           locale: configuration.locale,
           location: member.location,
+          printed: redact(accepted).notices.filter((feature) => feature === printedNotice),
           states: threeStates(accepted, configuration),
         },
       ],
@@ -174,8 +185,8 @@ const statesProblems = (
 
 /**
  * Check one state against the round trip and R1: its HTML round-trips, shows a notice for exactly
- * the verdict's notice-shown features, and shows none for the features the verdict marks, which
- * render nowhere.
+ * the verdict's notice-shown features and the printed variables `redact` shows as notices, and
+ * shows none for the features the verdict marks, which render nowhere.
  *
  * @param rendering The render, with its accepted document.
  * @param where The member and state, which every problem names.
@@ -185,9 +196,8 @@ const statesProblems = (
 const r1Problems = (rendering: Rendering, where: string, root: Element): readonly string[] => {
   const { unsupported } = rendering.accepted;
   const featureOf = new Map(
-    unsupported.map(
-      (entry) =>
-        [message(rendering.locale, "notice", { feature: entry.feature }), entry.feature] as const,
+    [...unsupported.map((entry) => entry.feature), ...rendering.printed].map(
+      (feature) => [message(rendering.locale, "notice", { feature }), feature] as const,
     ),
   );
   const shown = elementsOf([root])
@@ -198,10 +208,10 @@ const r1Problems = (rendering: Rendering, where: string, root: Element): readonl
       return featureOf.get(text) ?? `(a notice no feature gives: ${JSON.stringify(text)})`;
     })
     .toSorted();
-  const noticed = unsupported
-    .filter((entry) => entry.shown === "notice")
-    .map((entry) => entry.feature)
-    .toSorted();
+  const noticed = [
+    ...unsupported.filter((entry) => entry.shown === "notice").map((entry) => entry.feature),
+    ...rendering.printed,
+  ].toSorted();
   const marked = unsupported
     .filter((entry) => entry.shown === "mark")
     .map((entry) => entry.feature)
@@ -260,6 +270,7 @@ const inlineChoicesOf = (nodes: readonly BodyNode[]): readonly InlineChoiceInter
       }
       case "choice":
       case "extended-text":
+      case "printed-variable":
       case "text":
       case "text-entry":
       case "unsupported": {

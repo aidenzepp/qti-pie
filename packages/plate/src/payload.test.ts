@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
@@ -10,7 +11,9 @@ import type {
   ExtendedTextInteraction,
   InlineChoiceInteraction,
   Item,
+  PrintedVariable,
   TextEntryInteraction,
+  Unsupported,
 } from "#plate/model/item.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -30,7 +33,8 @@ import type {
 import { redact, render } from "#plate/render.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
-import { acceptForTest } from "#plate/validate/verdict.ts";
+import { tables } from "#plate/validate/tables.ts";
+import { acceptForTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 
 /**
  * The strings only the hidden parts of {@link item} hold: its correct responses, a mapping key, a
@@ -706,6 +710,7 @@ const referencingNode = (node: BodyNode, ids: string): BodyNode => {
       };
     }
     case "inline-choice":
+    case "printed-variable":
     case "text":
     case "text-entry":
     case "unsupported": {
@@ -799,6 +804,231 @@ describe("redactItem", () => {
     assert.deepStrictEqual(copied.notices, ["qti-feedback-block"]);
     assert.strictEqual(copied.document, "items/capitals.xml");
     assert.strictEqual(copied.identifier, "capitals");
+  });
+});
+
+/**
+ * A `javascript:` URL, which `check` drops from a link.
+ */
+// oxlint-disable-next-line eslint/no-script-url -- the value is test input check must drop, never a URL this code navigates to.
+const scriptUrl = "javascript:alert(1)";
+
+/**
+ * The path of the item body, which every body path in the printed-variable cases starts with.
+ */
+const bodyPath = "qti-assessment-item/qti-item-body";
+
+/**
+ * Construct a printed variable at its attributes' defaults.
+ *
+ * @param identifier The variable it writes.
+ * @param path Its path.
+ * @returns The body node.
+ */
+const printed = (identifier: string, path: string): PrintedVariable => ({
+  base: { _tag: "literal", value: 10n },
+  delimiter: ";",
+  field: Option.none(),
+  format: Option.none(),
+  identifier,
+  index: Option.none(),
+  kind: "printed-variable",
+  mappingIndicator: "=",
+  path,
+  powerForm: false,
+});
+
+/**
+ * Construct the notice a body part is shown as.
+ *
+ * @param feature The feature.
+ * @param path The part's path.
+ * @returns The body node.
+ */
+const noticeOf = (feature: string, path: string): Unsupported => ({
+  feature,
+  kind: "unsupported",
+  path,
+});
+
+/**
+ * The paths of the printed variables in {@link printing}, in document order: in a paragraph, in
+ * the Choice's Prompt, in its second choice's content, and in a second paragraph.
+ */
+const printedPaths = [
+  `${bodyPath}/p[1]/qti-printed-variable`,
+  `${bodyPath}/qti-choice-interaction/qti-prompt/qti-printed-variable`,
+  `${bodyPath}/qti-choice-interaction/qti-simple-choice[2]/qti-printed-variable`,
+  `${bodyPath}/p[2]/qti-printed-variable`,
+] as const;
+
+/**
+ * Construct the body of {@link printing} with each printed variable's place filled by a node.
+ *
+ * @param place The node for the printed variable at a path, given the variable's identifier.
+ * @returns The body: a paragraph, a hotspot's notice, a Choice, a second paragraph and a feedback
+ *   block's notice.
+ */
+const printingBody = (
+  place: (identifier: string, path: string) => BodyNode,
+): readonly BodyNode[] => [
+  {
+    attributes: [],
+    children: [text("Score: "), place("SCORE", printedPaths[0])],
+    kind: "element",
+    path: `${bodyPath}/p[1]`,
+    tag: "p",
+  },
+  noticeOf("qti-hotspot-interaction", `${bodyPath}/qti-hotspot-interaction`),
+  {
+    ...choice,
+    choices: [
+      {
+        content: [text("Paris")],
+        fixed: false,
+        identifier: "A",
+        templateVisibility: Option.none(),
+      },
+      {
+        content: [text("Lyon, "), place("ROUND", printedPaths[2])],
+        fixed: false,
+        identifier: "B",
+        templateVisibility: Option.none(),
+      },
+    ],
+    prompt: Option.some([text("Round "), place("ROUND", printedPaths[1])]),
+  },
+  {
+    attributes: [],
+    children: [place("TOTAL", printedPaths[3])],
+    kind: "element",
+    path: `${bodyPath}/p[2]`,
+    tag: "p",
+  },
+  noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
+];
+
+/**
+ * An item that prints variables at four places among two notices and a mark, as the model holds
+ * it: each printed variable a body node, and none among the unsupported features.
+ */
+const printing: Item = {
+  ...item,
+  body: printingBody(printed),
+  unsupported: [
+    {
+      feature: "qti-hotspot-interaction",
+      path: `${bodyPath}/qti-hotspot-interaction`,
+      shown: "notice",
+    },
+    { feature: "qti-feedback-block", path: `${bodyPath}/qti-feedback-block`, shown: "notice" },
+    { feature: "xml:base", path: `${bodyPath}/p[2]`, shown: "mark" },
+  ],
+};
+
+describe("redactItem on printed variables", () => {
+  it("[I-5] withholds each printed variable behind its notice, named among the notices in document order: the redaction of the item holding each as that notice", () => {
+    const asNotices: Item = {
+      ...printing,
+      body: printingBody((_, path) => noticeOf("qti-printed-variable", path)),
+      unsupported: [
+        { feature: "qti-printed-variable", path: printedPaths[0], shown: "notice" },
+        ...printing.unsupported.slice(0, 1),
+        ...printedPaths
+          .slice(1)
+          .map((path) => ({ feature: "qti-printed-variable", path, shown: "notice" as const })),
+        ...printing.unsupported.slice(1),
+      ],
+    };
+    const withheld = redactItem(printing);
+
+    assert.deepStrictEqual(withheld, redactItem(asNotices));
+    assert.deepStrictEqual(withheld.notices, [
+      "qti-printed-variable",
+      "qti-hotspot-interaction",
+      "qti-printed-variable",
+      "qti-printed-variable",
+      "qti-printed-variable",
+      "qti-feedback-block",
+    ]);
+  });
+
+  it("[I-5] puts a printed variable's notice after the notice of a URL dropped from the link that holds it, in the order check lists them", () => {
+    const verdict = check(
+      doc(
+        "item.xml",
+        el(
+          "qti-assessment-item",
+          [
+            attr("identifier", "printing"),
+            attr("time-dependent", "false"),
+            attr("title", "Printing"),
+          ],
+          [
+            el("qti-outcome-declaration", [
+              attr("base-type", "float"),
+              attr("cardinality", "single"),
+              attr("identifier", "SCORE"),
+            ]),
+            el(
+              "qti-item-body",
+              [],
+              [
+                el(
+                  "p",
+                  [],
+                  [
+                    el(
+                      "a",
+                      [attr("href", scriptUrl)],
+                      [el("qti-printed-variable", [attr("identifier", "SCORE")])],
+                    ),
+                    sourceText("."),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      tables,
+    );
+    const accepted = Option.getOrThrow(acceptedItem(verdict));
+    const withheld = redact(accepted);
+    const link = `${bodyPath}/p/a`;
+
+    assert.deepStrictEqual(accepted.unsupported, [
+      { feature: "url-scheme:javascript", path: link, shown: "notice" },
+    ]);
+    assert.deepStrictEqual(withheld.notices, ["url-scheme:javascript", "qti-printed-variable"]);
+    assert.deepStrictEqual(withheld.body, [
+      {
+        attributes: [],
+        children: [
+          {
+            attributes: [],
+            children: [noticeOf("qti-printed-variable", `${link}/qti-printed-variable`)],
+            kind: "element",
+            path: link,
+            tag: "a",
+          },
+          noticeOf("url-scheme:javascript", link),
+          text("."),
+        ],
+        kind: "element",
+        path: `${bodyPath}/p`,
+        tag: "p",
+      },
+    ]);
+  });
+
+  it("[I-5] copies a printed variable that reaches the payload by hand as its notice", () => {
+    const handBuilt = payload(
+      { ...redacted, body: [printed("SCORE", printedPaths[0])] },
+      answering,
+    );
+
+    assert.deepStrictEqual(handBuilt.body, [{ feature: "qti-printed-variable", kind: "notice" }]);
   });
 });
 
