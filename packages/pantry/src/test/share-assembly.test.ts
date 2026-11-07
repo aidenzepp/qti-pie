@@ -2,8 +2,8 @@
  * An assembled document's `m:share` elements, judged over the assembly (spec reading 117): a share
  * in an item names an element of a fragment the item includes, or the reverse, and "MathML share
  * cycle" follows the merged document's edges, per placement. The law oracle judges the package
- * (`#pantry/test/locate.ts` `oracleVerdict`), and the import's rows are judged by the schema's own
- * laws on the host (`#pantry/test/host-judge.ts`), and the two verdicts must be one.
+ * (`#pantry/test/oracle-verdict.ts` `oracleVerdict`), and the import's rows are judged by the
+ * schema's own laws on the host (`#pantry/test/host-judge.ts`), and the two verdicts must be one.
  *
  * Each case is a package of one or two items and the fragment they include. The shares that cross
  * the include (a fragment's share naming its item's element, and the reverse) are accepted by both;
@@ -22,7 +22,7 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/key-copies.ts";
-import { oracleVerdict } from "#pantry/test/locate.ts";
+import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
  * The QTI items' namespace.

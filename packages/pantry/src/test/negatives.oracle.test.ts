@@ -4,13 +4,14 @@
  * rule to expect where the oracle finds one.
  *
  * Each negative is materialized and read as `importAgreesWithOracle` reads a package
- * (`#pantry/test/locate.ts` `oracleVerdict`), and its verdict is held to {@link expectations}: the
- * rules the oracle's breaches name, or accepted. The oracle judges every breach of a package, so
- * the import, which refuses a package under the rule of the first object that fails, may name any
- * of the set. The positives these negatives are built over are accepted ({@link positives}), so a
- * set holds only the negative's own breaches. The table also records `main`'s rule for each
- * negative (`main:packages/pantry/src/import/tests.db.test.ts:190-325`, at `2b276d76`), the name
- * the database-era suite expected, which several laws have since renamed or retired.
+ * (`#pantry/test/oracle-verdict.ts` `oracleVerdict`), and its verdict is held to
+ * {@link expectations}: the rules the oracle's breaches name, or accepted. The oracle judges every
+ * breach of a package, so the import, which refuses a package under the rule of the first object
+ * that fails, may name any of the set. The positives these negatives are built over are accepted
+ * ({@link positives}), so a set holds only the negative's own breaches. The table also records
+ * `main`'s rule for each negative (`main:packages/pantry/src/import/tests.db.test.ts:190-325`, at
+ * `2b276d76`), the name the database-era suite expected, which several laws have since renamed or
+ * retired.
  *
  * Four negatives are "(direct)" only: their spec is the positive's own, and the leased suite alters
  * the positive's rows by hand because the importer cannot write their breach. Their representation
@@ -24,7 +25,7 @@ import { ConfigProvider, Effect, FileSystem } from "effect";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize, negativeNames } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { oracleVerdict } from "#pantry/test/locate.ts";
+import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**
  * The directory every test root is made under: the package's gitignored `work/`.
