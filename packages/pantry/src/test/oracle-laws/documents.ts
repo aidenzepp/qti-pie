@@ -99,7 +99,7 @@ export const addedLawSources = {
   "Dependency target":
     'IMS Content Packaging 1.2: a dependency\'s identifierref names a resource of its manifest, contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")) (Q5.06)',
   "Max strings required":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BoundVariable, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BindingDeclaration, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
   "XML production":
     "XML 1.0 §2.2 Char, §2.5 Comment, §2.6 PI, §2.8 doctypedecl and VersionNum, §4.3.3 EncName, and Namespaces in XML 1.0 §3 NCName: a stored text outside its production is no well-formed XML, which crust's reader refuses before any row exists, so only an importer defect reaches the law",
 } as const satisfies Readonly<Record<AddedLaw, string>>;
@@ -293,8 +293,9 @@ const declarationLawsOf = (
     cardinality: collapsedOf(rows, node.id, "cardinality"),
     identifier: collapsedOf(rows, node.id, "identifier"),
   };
-  // A declaration that writes no identifier or no cardinality has no Declaration row for these
-  // laws to read: AL3 ("required-attribute") is its one refusal, an absent attribute no empty one.
+  // A declaration that writes no identifier or no cardinality is refused by AL3
+  // ("required-attribute") alone: an absent attribute is no empty one, and these laws do not read
+  // the `single` the schema holds an unwritten cardinality as.
   if (Option.isNone(written.identifier) || Option.isNone(written.cardinality)) {
     return [];
   }
@@ -366,10 +367,12 @@ const interactionLawsOf = (rows: Rows, grammar: ComposedGrammar): readonly Breac
     return Option.toArray(collapsedOf(rows, node.id, "response-identifier")).flatMap(
       (identifier) => {
         const declaration = declared.get(identifier);
+        // The cardinality as written, which max-strings judges only where it spells a container
+        // (the orchestrator's ruling of 2026-11-06: an absent attribute is no empty one).
         const cardinality =
           declaration === undefined
             ? ""
-            : Option.getOrElse(collapsedOf(rows, declaration.id, "cardinality"), () => "");
+            : Option.getOrElse(valueOf(rows, declaration.id, "cardinality"), () => "");
         const inFeedback = [...step(grammar.ancestry, node.parentAncestry, node.kind)].some(
           (flag) => feedback.has(flag),
         );

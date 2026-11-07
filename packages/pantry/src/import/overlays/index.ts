@@ -74,6 +74,7 @@ import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/t
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { ListedDocument, NodeIds } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
+import { overlayNames } from "#pantry/import/roster.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 
 /**
@@ -209,684 +210,55 @@ export const unionOf = <Row>(
 };
 
 /**
- * Union every part's keyed sets, relation by relation: {@link unionOf} of each relation of
- * {@link OverlayRows}. The record names every relation, so a builder whose rows join the type and
- * not the record is a type error here.
+ * Union every part's keyed sets, relation by relation: {@link unionOf} of each relation `names`
+ * lists, in their order, so a relation no part holds is its empty set. The relations are a set of
+ * keys of one record type, `OverlayRows` or the document layer's, each of which
+ * `#pantry/import/roster.ts` reads from the schema, so a relation the schema gains is unioned with
+ * no edit here.
  *
+ * @param names - The record's relation names, each once.
  * @param parts - The builders' rows, each holding some of the relations.
- * @returns Every relation's union; or the first relation's {@link OverlayConflict}.
+ * @returns Every relation's union; or the {@link OverlayConflict} of the first relation, in
+ *   `names`' order, met with two different rows at one key.
  */
-const mergedOf = (
-  parts: readonly Partial<OverlayRows>[],
-): Result.Result<OverlayRows, OverlayConflict> =>
-  Result.all({
-    AreaMapping: unionOf(
-      "AreaMapping",
-      parts.map(({ AreaMapping: rows }) => rows),
-    ),
-    AriaElement: unionOf(
-      "AriaElement",
-      parts.map(({ AriaElement: rows }) => rows),
-    ),
-    AriaRange: unionOf(
-      "AriaRange",
-      parts.map(({ AriaRange: rows }) => rows),
-    ),
-    AriaValue: unionOf(
-      "AriaValue",
-      parts.map(({ AriaValue: rows }) => rows),
-    ),
-    AssembledId: unionOf(
-      "AssembledId",
-      parts.map(({ AssembledId: rows }) => rows),
-    ),
-    AssembledLang: unionOf(
-      "AssembledLang",
-      parts.map(({ AssembledLang: rows }) => rows),
-    ),
-    AssembledName: unionOf(
-      "AssembledName",
-      parts.map(({ AssembledName: rows }) => rows),
-    ),
-    AssembledReference: unionOf(
-      "AssembledReference",
-      parts.map(({ AssembledReference: rows }) => rows),
-    ),
-    AssessmentObject: unionOf(
-      "AssessmentObject",
-      parts.map(({ AssessmentObject: rows }) => rows),
-    ),
-    Binding: unionOf(
-      "Binding",
-      parts.map(({ Binding: rows }) => rows),
-    ),
-    BindingName: unionOf(
-      "BindingName",
-      parts.map(({ BindingName: rows }) => rows),
-    ),
-    BoundVariable: unionOf(
-      "BoundVariable",
-      parts.map(({ BoundVariable: rows }) => rows),
-    ),
-    BranchResolution: unionOf(
-      "BranchResolution",
-      parts.map(({ BranchResolution: rows }) => rows),
-    ),
-    BranchRule: unionOf(
-      "BranchRule",
-      parts.map(({ BranchRule: rows }) => rows),
-    ),
-    CellHeaders: unionOf(
-      "CellHeaders",
-      parts.map(({ CellHeaders: rows }) => rows),
-    ),
-    Choice: unionOf(
-      "Choice",
-      parts.map(({ Choice: rows }) => rows),
-    ),
-    ChoiceVariableName: unionOf(
-      "ChoiceVariableName",
-      parts.map(({ ChoiceVariableName: rows }) => rows),
-    ),
-    CnAttribute: unionOf(
-      "CnAttribute",
-      parts.map(({ CnAttribute: rows }) => rows),
-    ),
-    CnPartText: unionOf(
-      "CnPartText",
-      parts.map(({ CnPartText: rows }) => rows),
-    ),
-    ContextRef: unionOf(
-      "ContextRef",
-      parts.map(({ ContextRef: rows }) => rows),
-    ),
-    CountBound: unionOf(
-      "CountBound",
-      parts.map(({ CountBound: rows }) => rows),
-    ),
-    Declaration: unionOf(
-      "Declaration",
-      parts.map(({ Declaration: rows }) => rows),
-    ),
-    DeclarationTable: unionOf(
-      "DeclarationTable",
-      parts.map(({ DeclarationTable: rows }) => rows),
-    ),
-    Dependency: unionOf(
-      "Dependency",
-      parts.map(({ Dependency: rows }) => rows),
-    ),
-    DocumentGenerals: unionOf(
-      "DocumentGenerals",
-      parts.map(({ DocumentGenerals: rows }) => rows),
-    ),
-    DocumentId: unionOf(
-      "DocumentId",
-      parts.map(({ DocumentId: rows }) => rows),
-    ),
-    DocumentLang: unionOf(
-      "DocumentLang",
-      parts.map(({ DocumentLang: rows }) => rows),
-    ),
-    Expression: unionOf(
-      "Expression",
-      parts.map(({ Expression: rows }) => rows),
-    ),
-    ExpressionAttribute: unionOf(
-      "ExpressionAttribute",
-      parts.map(({ ExpressionAttribute: rows }) => rows),
-    ),
-    FeedbackRef: unionOf(
-      "FeedbackRef",
-      parts.map(({ FeedbackRef: rows }) => rows),
-    ),
-    File: unionOf(
-      "File",
-      parts.map(({ File: rows }) => rows),
-    ),
-    FileHref: unionOf(
-      "FileHref",
-      parts.map(({ FileHref: rows }) => rows),
-    ),
-    FragmentValue: unionOf(
-      "FragmentValue",
-      parts.map(({ FragmentValue: rows }) => rows),
-    ),
-    GeneralLang: unionOf(
-      "GeneralLang",
-      parts.map(({ GeneralLang: rows }) => rows),
-    ),
-    GeneralNamed: unionOf(
-      "GeneralNamed",
-      parts.map(({ GeneralNamed: rows }) => rows),
-    ),
-    GeneralObject: unionOf(
-      "GeneralObject",
-      parts.map(({ GeneralObject: rows }) => rows),
-    ),
-    Hotspot: unionOf(
-      "Hotspot",
-      parts.map(({ Hotspot: rows }) => rows),
-    ),
-    Hottext: unionOf(
-      "Hottext",
-      parts.map(({ Hottext: rows }) => rows),
-    ),
-    IdBinding: unionOf(
-      "IdBinding",
-      parts.map(({ IdBinding: rows }) => rows),
-    ),
-    IdentityText: unionOf(
-      "IdentityText",
-      parts.map(({ IdentityText: rows }) => rows),
-    ),
-    IdrefTarget: unionOf(
-      "IdrefTarget",
-      parts.map(({ IdrefTarget: rows }) => rows),
-    ),
-    Inclusion: unionOf(
-      "Inclusion",
-      parts.map(({ Inclusion: rows }) => rows),
-    ),
-    Instance: unionOf(
-      "Instance",
-      parts.map(({ Instance: rows }) => rows),
-    ),
-    InstanceName: unionOf(
-      "InstanceName",
-      parts.map(({ InstanceName: rows }) => rows),
-    ),
-    InteractionAttribute: unionOf(
-      "InteractionAttribute",
-      parts.map(({ InteractionAttribute: rows }) => rows),
-    ),
-    InterpolationTable: unionOf(
-      "InterpolationTable",
-      parts.map(({ InterpolationTable: rows }) => rows),
-    ),
-    ItemMode: unionOf(
-      "ItemMode",
-      parts.map(({ ItemMode: rows }) => rows),
-    ),
-    ItemRefDocument: unionOf(
-      "ItemRefDocument",
-      parts.map(({ ItemRefDocument: rows }) => rows),
-    ),
-    ItemRefTarget: unionOf(
-      "ItemRefTarget",
-      parts.map(({ ItemRefTarget: rows }) => rows),
-    ),
-    ItemTiming: unionOf(
-      "ItemTiming",
-      parts.map(({ ItemTiming: rows }) => rows),
-    ),
-    LabelUse: unionOf(
-      "LabelUse",
-      parts.map(({ LabelUse: rows }) => rows),
-    ),
-    Literal: unionOf(
-      "Literal",
-      parts.map(({ Literal: rows }) => rows),
-    ),
-    LomEntry: unionOf(
-      "LomEntry",
-      parts.map(({ LomEntry: rows }) => rows),
-    ),
-    LomGeneral: unionOf(
-      "LomGeneral",
-      parts.map(({ LomGeneral: rows }) => rows),
-    ),
-    LomLanguage: unionOf(
-      "LomLanguage",
-      parts.map(({ LomLanguage: rows }) => rows),
-    ),
-    LomObject: unionOf(
-      "LomObject",
-      parts.map(({ LomObject: rows }) => rows),
-    ),
-    LomObjectIdentifier: unionOf(
-      "LomObjectIdentifier",
-      parts.map(({ LomObjectIdentifier: rows }) => rows),
-    ),
-    LomObjectTitle: unionOf(
-      "LomObjectTitle",
-      parts.map(({ LomObjectTitle: rows }) => rows),
-    ),
-    LomRecord: unionOf(
-      "LomRecord",
-      parts.map(({ LomRecord: rows }) => rows),
-    ),
-    LomResource: unionOf(
-      "LomResource",
-      parts.map(({ LomResource: rows }) => rows),
-    ),
-    LomResourceType: unionOf(
-      "LomResourceType",
-      parts.map(({ LomResourceType: rows }) => rows),
-    ),
-    LomResourceTypeSource: unionOf(
-      "LomResourceTypeSource",
-      parts.map(({ LomResourceTypeSource: rows }) => rows),
-    ),
-    LomString: unionOf(
-      "LomString",
-      parts.map(({ LomString: rows }) => rows),
-    ),
-    LomStringLanguage: unionOf(
-      "LomStringLanguage",
-      parts.map(({ LomStringLanguage: rows }) => rows),
-    ),
-    LomTitle: unionOf(
-      "LomTitle",
-      parts.map(({ LomTitle: rows }) => rows),
-    ),
-    LomTitleString: unionOf(
-      "LomTitleString",
-      parts.map(({ LomTitleString: rows }) => rows),
-    ),
-    LookupValue: unionOf(
-      "LookupValue",
-      parts.map(({ LookupValue: rows }) => rows),
-    ),
-    ManifestId: unionOf(
-      "ManifestId",
-      parts.map(({ ManifestId: rows }) => rows),
-    ),
-    MapKey: unionOf(
-      "MapKey",
-      parts.map(({ MapKey: rows }) => rows),
-    ),
-    MapKeyDirectedPair: unionOf(
-      "MapKeyDirectedPair",
-      parts.map(({ MapKeyDirectedPair: rows }) => rows),
-    ),
-    MapKeyFloat: unionOf(
-      "MapKeyFloat",
-      parts.map(({ MapKeyFloat: rows }) => rows),
-    ),
-    MapKeyInteger: unionOf(
-      "MapKeyInteger",
-      parts.map(({ MapKeyInteger: rows }) => rows),
-    ),
-    MapKeyPair: unionOf(
-      "MapKeyPair",
-      parts.map(({ MapKeyPair: rows }) => rows),
-    ),
-    MapKeyPoint: unionOf(
-      "MapKeyPoint",
-      parts.map(({ MapKeyPoint: rows }) => rows),
-    ),
-    Mapping: unionOf(
-      "Mapping",
-      parts.map(({ Mapping: rows }) => rows),
-    ),
-    MappingLookup: unionOf(
-      "MappingLookup",
-      parts.map(({ MappingLookup: rows }) => rows),
-    ),
-    MappingSource: unionOf(
-      "MappingSource",
-      parts.map(({ MappingSource: rows }) => rows),
-    ),
-    MatchTable: unionOf(
-      "MatchTable",
-      parts.map(({ MatchTable: rows }) => rows),
-    ),
-    MathAction: unionOf(
-      "MathAction",
-      parts.map(({ MathAction: rows }) => rows),
-    ),
-    MathAlignGroup: unionOf(
-      "MathAlignGroup",
-      parts.map(({ MathAlignGroup: rows }) => rows),
-    ),
-    MathAlignScope: unionOf(
-      "MathAlignScope",
-      parts.map(({ MathAlignScope: rows }) => rows),
-    ),
-    MathApply: unionOf(
-      "MathApply",
-      parts.map(({ MathApply: rows }) => rows),
-    ),
-    MathArgument: unionOf(
-      "MathArgument",
-      parts.map(({ MathArgument: rows }) => rows),
-    ),
-    MathCell: unionOf(
-      "MathCell",
-      parts.map(({ MathCell: rows }) => rows),
-    ),
-    MathCn: unionOf(
-      "MathCn",
-      parts.map(({ MathCn: rows }) => rows),
-    ),
-    MathDir: unionOf(
-      "MathDir",
-      parts.map(({ MathDir: rows }) => rows),
-    ),
-    MathQualifier: unionOf(
-      "MathQualifier",
-      parts.map(({ MathQualifier: rows }) => rows),
-    ),
-    MathRank: unionOf(
-      "MathRank",
-      parts.map(({ MathRank: rows }) => rows),
-    ),
-    NameLookup: unionOf(
-      "NameLookup",
-      parts.map(({ NameLookup: rows }) => rows),
-    ),
-    Named: unionOf(
-      "Named",
-      parts.map(({ Named: rows }) => rows),
-    ),
-    NamedHref: unionOf(
-      "NamedHref",
-      parts.map(({ NamedHref: rows }) => rows),
-    ),
-    ObjectLang: unionOf(
-      "ObjectLang",
-      parts.map(({ ObjectLang: rows }) => rows),
-    ),
-    Operand: unionOf(
-      "Operand",
-      parts.map(({ Operand: rows }) => rows),
-    ),
-    OutcomeRange: unionOf(
-      "OutcomeRange",
-      parts.map(({ OutcomeRange: rows }) => rows),
-    ),
-    PlacedBinding: unionOf(
-      "PlacedBinding",
-      parts.map(({ PlacedBinding: rows }) => rows),
-    ),
-    PlacedChoice: unionOf(
-      "PlacedChoice",
-      parts.map(({ PlacedChoice: rows }) => rows),
-    ),
-    PlacedDocument: unionOf(
-      "PlacedDocument",
-      parts.map(({ PlacedDocument: rows }) => rows),
-    ),
-    PlacedGeneralLang: unionOf(
-      "PlacedGeneralLang",
-      parts.map(({ PlacedGeneralLang: rows }) => rows),
-    ),
-    PlacedHottext: unionOf(
-      "PlacedHottext",
-      parts.map(({ PlacedHottext: rows }) => rows),
-    ),
-    PlacedId: unionOf(
-      "PlacedId",
-      parts.map(({ PlacedId: rows }) => rows),
-    ),
-    PlacedIdref: unionOf(
-      "PlacedIdref",
-      parts.map(({ PlacedIdref: rows }) => rows),
-    ),
-    PlacedReference: unionOf(
-      "PlacedReference",
-      parts.map(({ PlacedReference: rows }) => rows),
-    ),
-    PlacedVariableRef: unionOf(
-      "PlacedVariableRef",
-      parts.map(({ PlacedVariableRef: rows }) => rows),
-    ),
-    PlacedXmlLang: unionOf(
-      "PlacedXmlLang",
-      parts.map(({ PlacedXmlLang: rows }) => rows),
-    ),
-    PrintedVariableRef: unionOf(
-      "PrintedVariableRef",
-      parts.map(({ PrintedVariableRef: rows }) => rows),
-    ),
-    Processing: unionOf(
-      "Processing",
-      parts.map(({ Processing: rows }) => rows),
-    ),
-    ProcessingTemplate: unionOf(
-      "ProcessingTemplate",
-      parts.map(({ ProcessingTemplate: rows }) => rows),
-    ),
-    Quotation: unionOf(
-      "Quotation",
-      parts.map(({ Quotation: rows }) => rows),
-    ),
-    Reading: unionOf(
-      "Reading",
-      parts.map(({ Reading: rows }) => rows),
-    ),
-    RecordField: unionOf(
-      "RecordField",
-      parts.map(({ RecordField: rows }) => rows),
-    ),
-    Reference: unionOf(
-      "Reference",
-      parts.map(({ Reference: rows }) => rows),
-    ),
-    ReferenceDocument: unionOf(
-      "ReferenceDocument",
-      parts.map(({ ReferenceDocument: rows }) => rows),
-    ),
-    ReferencePath: unionOf(
-      "ReferencePath",
-      parts.map(({ ReferencePath: rows }) => rows),
-    ),
-    ReferringDocument: unionOf(
-      "ReferringDocument",
-      parts.map(({ ReferringDocument: rows }) => rows),
-    ),
-    Resource: unionOf(
-      "Resource",
-      parts.map(({ Resource: rows }) => rows),
-    ),
-    ResourceFile: unionOf(
-      "ResourceFile",
-      parts.map(({ ResourceFile: rows }) => rows),
-    ),
-    ResourceHref: unionOf(
-      "ResourceHref",
-      parts.map(({ ResourceHref: rows }) => rows),
-    ),
-    ResourceLomGeneral: unionOf(
-      "ResourceLomGeneral",
-      parts.map(({ ResourceLomGeneral: rows }) => rows),
-    ),
-    ResourceLomLanguageSet: unionOf(
-      "ResourceLomLanguageSet",
-      parts.map(({ ResourceLomLanguageSet: rows }) => rows),
-    ),
-    Rounding: unionOf(
-      "Rounding",
-      parts.map(({ Rounding: rows }) => rows),
-    ),
-    Section: unionOf(
-      "Section",
-      parts.map(({ Section: rows }) => rows),
-    ),
-    SectionContextName: unionOf(
-      "SectionContextName",
-      parts.map(({ SectionContextName: rows }) => rows),
-    ),
-    SectionContextRef: unionOf(
-      "SectionContextRef",
-      parts.map(({ SectionContextRef: rows }) => rows),
-    ),
-    SectionFeedbackName: unionOf(
-      "SectionFeedbackName",
-      parts.map(({ SectionFeedbackName: rows }) => rows),
-    ),
-    SectionFeedbackRef: unionOf(
-      "SectionFeedbackRef",
-      parts.map(({ SectionFeedbackRef: rows }) => rows),
-    ),
-    SectionIdentifier: unionOf(
-      "SectionIdentifier",
-      parts.map(({ SectionIdentifier: rows }) => rows),
-    ),
-    SectionMember: unionOf(
-      "SectionMember",
-      parts.map(({ SectionMember: rows }) => rows),
-    ),
-    SectionOrdering: unionOf(
-      "SectionOrdering",
-      parts.map(({ SectionOrdering: rows }) => rows),
-    ),
-    SectionPrintedName: unionOf(
-      "SectionPrintedName",
-      parts.map(({ SectionPrintedName: rows }) => rows),
-    ),
-    SectionPrintedRef: unionOf(
-      "SectionPrintedRef",
-      parts.map(({ SectionPrintedRef: rows }) => rows),
-    ),
-    SectionScope: unionOf(
-      "SectionScope",
-      parts.map(({ SectionScope: rows }) => rows),
-    ),
-    SectionSelection: unionOf(
-      "SectionSelection",
-      parts.map(({ SectionSelection: rows }) => rows),
-    ),
-    SectionTemplateName: unionOf(
-      "SectionTemplateName",
-      parts.map(({ SectionTemplateName: rows }) => rows),
-    ),
-    SectionTemplateRef: unionOf(
-      "SectionTemplateRef",
-      parts.map(({ SectionTemplateRef: rows }) => rows),
-    ),
-    ShareFragment: unionOf(
-      "ShareFragment",
-      parts.map(({ ShareFragment: rows }) => rows),
-    ),
-    ShareTarget: unionOf(
-      "ShareTarget",
-      parts.map(({ ShareTarget: rows }) => rows),
-    ),
-    Site: unionOf(
-      "Site",
-      parts.map(({ Site: rows }) => rows),
-    ),
-    SiteTarget: unionOf(
-      "SiteTarget",
-      parts.map(({ SiteTarget: rows }) => rows),
-    ),
-    Slider: unionOf(
-      "Slider",
-      parts.map(({ Slider: rows }) => rows),
-    ),
-    SsmlAttribute: unionOf(
-      "SsmlAttribute",
-      parts.map(({ SsmlAttribute: rows }) => rows),
-    ),
-    SsmlScope: unionOf(
-      "SsmlScope",
-      parts.map(({ SsmlScope: rows }) => rows),
-    ),
-    StatisticDate: unionOf(
-      "StatisticDate",
-      parts.map(({ StatisticDate: rows }) => rows),
-    ),
-    StimulusRef: unionOf(
-      "StimulusRef",
-      parts.map(({ StimulusRef: rows }) => rows),
-    ),
-    TableHeader: unionOf(
-      "TableHeader",
-      parts.map(({ TableHeader: rows }) => rows),
-    ),
-    TableScope: unionOf(
-      "TableScope",
-      parts.map(({ TableScope: rows }) => rows),
-    ),
-    TemplateDefault: unionOf(
-      "TemplateDefault",
-      parts.map(({ TemplateDefault: rows }) => rows),
-    ),
-    TemplateRef: unionOf(
-      "TemplateRef",
-      parts.map(({ TemplateRef: rows }) => rows),
-    ),
-    TestDocument: unionOf(
-      "TestDocument",
-      parts.map(({ TestDocument: rows }) => rows),
-    ),
-    TestFlag: unionOf(
-      "TestFlag",
-      parts.map(({ TestFlag: rows }) => rows),
-    ),
-    TestReference: unionOf(
-      "TestReference",
-      parts.map(({ TestReference: rows }) => rows),
-    ),
-    TestToken: unionOf(
-      "TestToken",
-      parts.map(({ TestToken: rows }) => rows),
-    ),
-    Tolerance: unionOf(
-      "Tolerance",
-      parts.map(({ Tolerance: rows }) => rows),
-    ),
-    UsageBaseType: unionOf(
-      "UsageBaseType",
-      parts.map(({ UsageBaseType: rows }) => rows),
-    ),
-    UsageValue: unionOf(
-      "UsageValue",
-      parts.map(({ UsageValue: rows }) => rows),
-    ),
-    Value: unionOf(
-      "Value",
-      parts.map(({ Value: rows }) => rows),
-    ),
-    ValueSet: unionOf(
-      "ValueSet",
-      parts.map(({ ValueSet: rows }) => rows),
-    ),
-    VarRef: unionOf(
-      "VarRef",
-      parts.map(({ VarRef: rows }) => rows),
-    ),
-    VariableLookup: unionOf(
-      "VariableLookup",
-      parts.map(({ VariableLookup: rows }) => rows),
-    ),
-    VariableMapping: unionOf(
-      "VariableMapping",
-      parts.map(({ VariableMapping: rows }) => rows),
-    ),
-    VariableRef: unionOf(
-      "VariableRef",
-      parts.map(({ VariableRef: rows }) => rows),
-    ),
-    XmlLang: unionOf(
-      "XmlLang",
-      parts.map(({ XmlLang: rows }) => rows),
-    ),
-  });
+export const unionsOf = <R extends { readonly [K in keyof R]: ReadonlyMap<string, unknown> }>(
+  names: readonly (keyof R & string)[],
+  parts: readonly Partial<R>[],
+): Result.Result<R, OverlayConflict> =>
+  Result.map(
+    Result.all(
+      Object.fromEntries(
+        names.map(
+          (name) =>
+            [
+              name,
+              unionOf(
+                name,
+                parts.map((part) => part[name]),
+              ),
+            ] as const,
+        ),
+      ),
+    ),
+    // SAFETY: the record holds one union at each of `names`, the keys of `R`, each a keyed set of
+    // the rows the parts give that relation, which are `R`'s rows there.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+    (unions) => unions as R,
+  );
 
 /**
- * Build every overlay's rows of one package: each document builder over each document, under its
- * ids, then the four that read the whole package: the assemblies from every document's test rows
- * (`assembledRowsOf`), the sections' placements under each test from the declarations, the
- * assemblies and the sections' and fragments' references (`sectionRowsOf`), the LOM records'
- * objects from the manifest and each document's assessment object (`objectRowsOfPackage`), and the
- * LOM languages' witnesses from every document's identity rows (`languageRowsOf`), and in place
- * under each item's assembly (`placedLanguageRowsOf`). The results are merged into one keyed set
- * per relation.
+ * Build every overlay builder's rows of one package, unmerged: each document builder's over each
+ * document, then those of the builders that read the whole package, each a part holding every
+ * relation its builder writes.
  *
- * @param documents - The package's documents, each listed and under its ids; the manifest is the
- *   one no resource names (resource type `none`).
- * @param mint - Draws a fresh uuid for each assembled instance but a root, whose id is its
- *   document's node.
- * @returns The rows, every relation of {@link OverlayRows} present; or the {@link OverlayConflict}
- *   of two builders that give one key two rows.
+ * @param documents - The package's documents, each listed and under its ids.
+ * @param mint - Draws a fresh uuid for each assembled instance but a root.
+ * @returns The parts, in the order {@link overlayRowsOf} merges them.
  */
-export const overlayRowsOf = (
+export const overlayPartsOf = (
   documents: readonly { readonly ids: NodeIds; readonly listed: ListedDocument }[],
   mint: () => NodeId,
-): Result.Result<OverlayRows, OverlayConflict> => {
+): readonly Partial<OverlayRows>[] => {
   const built = documents.map((document) => ({ document, rows: documentRowsOf(document) }));
   const assembled = assembledRowsOf(
     built.map(({ rows }) => rows.tests),
@@ -914,7 +286,7 @@ export const overlayRowsOf = (
 
   const manifest = built.find(({ document }) => document.listed.resourceType === "none");
 
-  return mergedOf([
+  return [
     ...built.flatMap(({ rows }) => [
       rows.declarations,
       rows.expressions,
@@ -966,5 +338,29 @@ export const overlayRowsOf = (
       prints: built.flatMap(({ rows }) => [...rows.interactions.SectionPrintedName.values()]),
       templates: built.flatMap(({ rows }) => [...rows.interactions.SectionTemplateName.values()]),
     }),
-  ]);
+  ];
 };
+
+/**
+ * Build every overlay's rows of one package: each document builder over each document, under its
+ * ids, then the four that read the whole package: the assemblies from every document's test rows
+ * (`assembledRowsOf`), the sections' placements under each test from the declarations, the
+ * assemblies and the sections' and fragments' references (`sectionRowsOf`), the LOM records'
+ * objects from the manifest and each document's assessment object (`objectRowsOfPackage`), and the
+ * LOM languages' witnesses from every document's identity rows (`languageRowsOf`), and in place
+ * under each item's assembly (`placedLanguageRowsOf`). The results are merged into one keyed set
+ * per relation by {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads from
+ * the schema.
+ *
+ * @param documents - The package's documents, each listed and under its ids; the manifest is the
+ *   one no resource names (resource type `none`).
+ * @param mint - Draws a fresh uuid for each assembled instance but a root, whose id is its
+ *   document's node.
+ * @returns The rows, every relation of {@link OverlayRows} present; or the {@link OverlayConflict}
+ *   of two builders that give one key two rows.
+ */
+export const overlayRowsOf = (
+  documents: readonly { readonly ids: NodeIds; readonly listed: ListedDocument }[],
+  mint: () => NodeId,
+): Result.Result<OverlayRows, OverlayConflict> =>
+  unionsOf<OverlayRows>(overlayNames, overlayPartsOf(documents, mint));

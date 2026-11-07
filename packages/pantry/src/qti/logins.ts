@@ -14,9 +14,10 @@
 import { login, workload } from "@bjornpagen/grizzle";
 import { Result } from "effect";
 import { documentScan, documentsOf, entriesOf } from "#pantry/export/scan.ts";
-import { overlayRowsOf } from "#pantry/import/overlays/index.ts";
-import { changeSetOf } from "#pantry/import/write.ts";
+import { unionsOf } from "#pantry/import/overlays/index.ts";
+import { writtenNames } from "#pantry/import/roster.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
+import { changeSetOf } from "#pantry/import/write.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -28,22 +29,13 @@ import { Qti } from "#pantry/qti/schema.ts";
 export const exportWork = workload(Author, { documentScan, documentsOf, entriesOf });
 
 /**
- * A package's inputs with no row: the overlays of no document, and every other keyed set empty.
- * `overlayRowsOf` of no document mints no id and has no two rows to conflict.
+ * A package's inputs with no row: each written relation's empty keyed set, the union of no part,
+ * which has no two rows to conflict.
  */
-const noRows: PackageInputs = {
-  ...Result.getOrThrowWith(
-    overlayRowsOf([], () => crypto.randomUUID()),
-    (conflict) => conflict,
-  ),
-  Comment: new Map(),
-  Doctype: new Map(),
-  Document: new Map(),
-  Node: new Map(),
-  OpenElementName: new Map(),
-  Package: new Map(),
-  Pi: new Map(),
-};
+const noInputs = Result.getOrThrowWith(
+  unionsOf<PackageInputs>(writtenNames, []),
+  (conflict) => conflict,
+);
 
 /**
  * The import's write program: `changeSetOf`'s ChangeSet with no rows. grizzle compiles a ChangeSet
@@ -51,7 +43,7 @@ const noRows: PackageInputs = {
  * package's import compiles, and its compilation runs grizzle's write filler over every family of
  * the schema. It is declared to be compiled, never run.
  */
-export const importWork = workload(Author, { importWrite: changeSetOf(Author, noRows) });
+export const importWork = workload(Author, { importWrite: changeSetOf(Author, noInputs) });
 
 /**
  * The author application's login, `qti__author_app` on the cluster. Its name is the one every

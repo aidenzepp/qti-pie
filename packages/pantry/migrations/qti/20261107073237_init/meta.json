@@ -1679,11 +1679,15 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "CREATE TABLE \"qti\".\"binding_declaration\" (\n  \"attribute\" \"qti\".\"attribute_name\" NOT NULL,\n  \"base_type\" \"qti\".\"base_type\" NOT NULL,\n  \"cardinality\" \"qti\".\"cardinality\" NOT NULL,\n  \"declaration\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"declaration_kind\" \"qti\".\"declaration_kind\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__binding_declaration_pk_jvfyvs6lit\" PRIMARY KEY (\"node\", \"attribute\"),\n  CONSTRAINT \"binding_fit\" CHECK ((\"attribute\" <> 78::smallint OR \"base_type\" = 3::smallint) IS TRUE),\n  CONSTRAINT \"binding_declared\" CHECK ((\"declaration_kind\" = 1::smallint) IS TRUE),\n  CONSTRAINT \"__binding_declaration_check_binding_declaration_kind_yyitockgct\" CHECK ((NOT (NOT \"kind\" IN (18::smallint, 117::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" = 3::smallint) IS TRUE OR \"pg_catalog\".\"substring\"(\"qti\".\"__constant_xvmgsamjvy\"(), \"kind\" + 1, 1)::integer = 1) IS TRUE),\n  CONSTRAINT \"__binding_declaration_check_binding_declaration_kind_tzf5hoyfow\" CHECK ((NOT (NOT \"kind\" IN (18::smallint, 117::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" <> 3::smallint) IS TRUE OR \"pg_catalog\".\"substring\"(\"qti\".\"__constant_s4yes4w2dp\"(), (\"base_type\" * 4 + \"cardinality\") * 644 + \"kind\" + 1, 1)::integer = 1) IS TRUE),\n  CONSTRAINT \"__binding_declaration_key_node_attribute_kind_cfz6qtibon\" UNIQUE NULLS DISTINCT (\"node\", \"attribute\", \"kind\", \"document\", \"identifier\")\n)"
+					},
+					{
+						"kind": "statement",
 						"statement": "CREATE TABLE \"qti\".\"binding_name\" (\n  \"attribute\" \"qti\".\"attribute_name\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__binding_name_pk_k6l2t2abun\" PRIMARY KEY (\"node\", \"attribute\"),\n  CONSTRAINT \"__binding_name_key_node_attribute_kind_document_ftrs3xna4p\" UNIQUE NULLS DISTINCT (\"node\", \"attribute\", \"kind\", \"document\", \"identifier\"),\n  CONSTRAINT \"__binding_name_key_node_attribute_document_kind_earrsqclis\" UNIQUE NULLS DISTINCT (\"node\", \"attribute\", \"document\", \"kind\", \"identifier\")\n)"
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE TABLE \"qti\".\"bound_variable\" (\n  \"adaptive\" boolean NOT NULL,\n  \"attribute\" \"qti\".\"attribute_name\" NOT NULL,\n  \"base_type\" \"qti\".\"base_type\" NOT NULL,\n  \"cardinality\" \"qti\".\"cardinality\" NOT NULL,\n  \"declaration\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"declaration_kind\" \"qti\".\"declaration_kind\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__bound_variable_pk_iz45qegzkf\" PRIMARY KEY (\"node\", \"attribute\"),\n  CONSTRAINT \"__bound_variable_key_document_identifier_poylxocl4p\" UNIQUE NULLS DISTINCT (\"document\", \"identifier\"),\n  CONSTRAINT \"binding_fit\" CHECK ((\"attribute\" <> 78::smallint OR \"base_type\" = 3::smallint) IS TRUE),\n  CONSTRAINT \"binding_declared\" CHECK ((\"declaration_kind\" = 1::smallint) IS TRUE),\n  CONSTRAINT \"__bound_variable_check_bound_variable_kind_attribute_4jjaajwa5m\" CHECK ((NOT (NOT \"kind\" IN (18::smallint, 117::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" = 3::smallint) IS TRUE OR \"pg_catalog\".\"substring\"(\"qti\".\"__constant_xvmgsamjvy\"(), \"kind\" + 1, 1)::integer = 1) IS TRUE),\n  CONSTRAINT \"__bound_variable_check_bound_variable_kind_attribute_7zsy2o5xwx\" CHECK ((NOT (NOT \"kind\" IN (18::smallint, 117::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" <> 3::smallint) IS TRUE OR \"pg_catalog\".\"substring\"(\"qti\".\"__constant_s4yes4w2dp\"(), (\"base_type\" * 4 + \"cardinality\") * 644 + \"kind\" + 1, 1)::integer = 1) IS TRUE),\n  CONSTRAINT \"__bound_variable_key_node_attribute_kind_document_grf63knftr\" UNIQUE NULLS DISTINCT (\"node\", \"attribute\", \"kind\", \"document\", \"identifier\")\n)"
+						"statement": "CREATE TABLE \"qti\".\"bound_variable\" (\n  \"adaptive\" boolean NOT NULL,\n  \"attribute\" \"qti\".\"attribute_name\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__bound_variable_pk_iz45qegzkf\" PRIMARY KEY (\"node\", \"attribute\"),\n  CONSTRAINT \"__bound_variable_key_document_identifier_poylxocl4p\" UNIQUE NULLS DISTINCT (\"document\", \"identifier\"),\n  CONSTRAINT \"__bound_variable_key_node_attribute_kind_document_grf63knftr\" UNIQUE NULLS DISTINCT (\"node\", \"attribute\", \"kind\", \"document\", \"identifier\")\n)"
 					},
 					{
 						"kind": "statement",
@@ -2015,7 +2019,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE TABLE \"qti\".\"placed_binding\" (\n  \"adaptive\" boolean NOT NULL,\n  \"assembly\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"attribute\" \"qti\".\"attribute_name\" NOT NULL,\n  \"base_type\" \"qti\".\"base_type\" NOT NULL,\n  \"cardinality\" \"qti\".\"cardinality\" NOT NULL,\n  \"declaration\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"declaration_kind\" \"qti\".\"declaration_kind\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"instance\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__placed_binding_pk_kvet6cuoq5\" PRIMARY KEY (\"instance\", \"node\", \"attribute\"),\n  CONSTRAINT \"__placed_binding_key_assembly_identifier_3sykzofz5f\" UNIQUE NULLS DISTINCT (\"assembly\", \"identifier\"),\n  CONSTRAINT \"binding_fit\" CHECK ((\"attribute\" <> 78::smallint OR \"base_type\" = 3::smallint) IS TRUE),\n  CONSTRAINT \"binding_declared\" CHECK ((\"declaration_kind\" = 1::smallint) IS TRUE),\n  CONSTRAINT \"__placed_binding_check_placed_binding_kind_attribute_pdxlqzdqni\" CHECK ((NOT (NOT \"kind\" IN (18::smallint, 117::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" = 3::smallint) IS TRUE OR \"pg_catalog\".\"substring\"(\"qti\".\"__constant_xvmgsamjvy\"(), \"kind\" + 1, 1)::integer = 1) IS TRUE),\n  CONSTRAINT \"__placed_binding_check_placed_binding_kind_attribute_ajzarq5qh5\" CHECK ((NOT (NOT \"kind\" IN (18::smallint, 117::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" <> 3::smallint) IS TRUE OR \"pg_catalog\".\"substring\"(\"qti\".\"__constant_s4yes4w2dp\"(), (\"base_type\" * 4 + \"cardinality\") * 644 + \"kind\" + 1, 1)::integer = 1) IS TRUE)\n)"
+						"statement": "CREATE TABLE \"qti\".\"placed_binding\" (\n  \"adaptive\" boolean NOT NULL,\n  \"assembly\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"attribute\" \"qti\".\"attribute_name\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"instance\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__placed_binding_pk_kvet6cuoq5\" PRIMARY KEY (\"instance\", \"node\", \"attribute\"),\n  CONSTRAINT \"__placed_binding_key_assembly_identifier_3sykzofz5f\" UNIQUE NULLS DISTINCT (\"assembly\", \"identifier\")\n)"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE TABLE \"qti\".\"placed_binding_declaration\" (\n  \"assembly\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"attribute\" \"qti\".\"attribute_name\" NOT NULL,\n  \"base_type\" \"qti\".\"base_type\" NOT NULL,\n  \"cardinality\" \"qti\".\"cardinality\" NOT NULL,\n  \"declaration\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"declaration_kind\" \"qti\".\"declaration_kind\" NOT NULL,\n  \"document\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"identifier\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"instance\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"kind\" \"qti\".\"node_kind\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  CONSTRAINT \"__placed_binding_declaration_pk_55r2hs74bx\" PRIMARY KEY (\"instance\", \"node\", \"attribute\"),\n  CONSTRAINT \"binding_fit\" CHECK ((\"attribute\" <> 78::smallint OR \"base_type\" = 3::smallint) IS TRUE),\n  CONSTRAINT \"binding_declared\" CHECK ((\"declaration_kind\" = 1::smallint) IS TRUE),\n  CONSTRAINT \"__placed_binding_declaration_key_instance_node_otkicbas2v\" UNIQUE NULLS DISTINCT (\"instance\", \"node\", \"attribute\", \"assembly\", \"document\", \"kind\", \"identifier\"),\n  CONSTRAINT \"__placed_binding_declaration_check_placed_binding_wgdnyancxq\" CHECK ((NOT (NOT \"kind\" IN (18::smallint, 117::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" = 3::smallint) IS TRUE OR \"pg_catalog\".\"substring\"(\"qti\".\"__constant_xvmgsamjvy\"(), \"kind\" + 1, 1)::integer = 1) IS TRUE),\n  CONSTRAINT \"__placed_binding_declaration_check_placed_binding_pzuzm5qlka\" CHECK ((NOT (NOT \"kind\" IN (18::smallint, 117::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" <> 3::smallint) IS TRUE OR \"pg_catalog\".\"substring\"(\"qti\".\"__constant_s4yes4w2dp\"(), (\"base_type\" * 4 + \"cardinality\") * 644 + \"kind\" + 1, 1)::integer = 1) IS TRUE)\n)"
 					},
 					{
 						"kind": "statement",
@@ -2951,6 +2959,26 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD COLUMN \"__tag_max_written_true_6phmyjuam6\" boolean GENERATED ALWAYS AS (true) STORED NOT NULL"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD COLUMN \"__tag_most_value_1_potsaavtbt\" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD COLUMN \"__kind_wpz27h2czt\" smallint GENERATED ALWAYS AS (CASE WHEN \"cardinality\" IN (1::smallint, 2::smallint) AND \"attribute\" = 76::smallint AND \"kind\" = 131::smallint THEN \"kind\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD COLUMN \"__node_6hhkc3nqmt\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"cardinality\" IN (1::smallint, 2::smallint) AND \"attribute\" = 76::smallint AND \"kind\" = 131::smallint THEN \"node\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD COLUMN \"__node_zk4w23iiot\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (133::smallint, 127::smallint, 119::smallint, 125::smallint, 121::smallint, 122::smallint, 129::smallint, 120::smallint, 187::smallint, 124::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" = 0::smallint THEN \"node\" END) STORED"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"binding_name\" ADD COLUMN \"__copy_bindings_pble3k2v23\" bigint NOT NULL"
 					},
 					{
@@ -2960,26 +2988,6 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"binding_name\" ADD COLUMN \"__predecessor_bindings_o6hyynvl6x\" bigint GENERATED ALWAYS AS (CASE WHEN \"__index_bindings_crowx3f6zn\" > 0::bigint THEN \"__index_bindings_crowx3f6zn\"::numeric - (1::bigint)::numeric END) STORED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD COLUMN \"__tag_max_written_true_6phmyjuam6\" boolean GENERATED ALWAYS AS (true) STORED NOT NULL"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD COLUMN \"__tag_most_value_1_potsaavtbt\" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD COLUMN \"__kind_wpz27h2czt\" smallint GENERATED ALWAYS AS (CASE WHEN \"cardinality\" IN (1::smallint, 2::smallint) AND \"attribute\" = 76::smallint AND \"kind\" = 131::smallint THEN \"kind\" END) STORED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD COLUMN \"__node_6hhkc3nqmt\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"cardinality\" IN (1::smallint, 2::smallint) AND \"attribute\" = 76::smallint AND \"kind\" = 131::smallint THEN \"node\" END) STORED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD COLUMN \"__node_zk4w23iiot\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (133::smallint, 127::smallint, 119::smallint, 125::smallint, 121::smallint, 122::smallint, 129::smallint, 120::smallint, 187::smallint, 124::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" = 0::smallint THEN \"node\" END) STORED"
 					},
 					{
 						"kind": "statement",
@@ -4931,14 +4939,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD COLUMN \"__tag_max_written_true_6phmyjuam6\" boolean GENERATED ALWAYS AS (true) STORED NOT NULL"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD COLUMN \"__tag_most_value_1_potsaavtbt\" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD COLUMN \"__tag_assembly_kind_qti_assessment_item_qf7qyzopnq\" smallint GENERATED ALWAYS AS (299::smallint) STORED NOT NULL"
 					},
 					{
@@ -4955,19 +4955,27 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD COLUMN \"__kind_wpz27h2czt\" smallint GENERATED ALWAYS AS (CASE WHEN \"cardinality\" IN (1::smallint, 2::smallint) AND \"attribute\" = 76::smallint AND \"kind\" = 131::smallint THEN \"kind\" END) STORED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD COLUMN \"__node_6hhkc3nqmt\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"cardinality\" IN (1::smallint, 2::smallint) AND \"attribute\" = 76::smallint AND \"kind\" = 131::smallint THEN \"node\" END) STORED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD COLUMN \"__node_zk4w23iiot\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (133::smallint, 127::smallint, 119::smallint, 125::smallint, 121::smallint, 122::smallint, 129::smallint, 120::smallint, 187::smallint, 124::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" = 0::smallint THEN \"node\" END) STORED"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD COLUMN \"__node_nqyr3apalb\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"adaptive\" = false AND \"attribute\" = 76::smallint THEN \"node\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD COLUMN \"__tag_max_written_true_6phmyjuam6\" boolean GENERATED ALWAYS AS (true) STORED NOT NULL"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD COLUMN \"__tag_most_value_1_potsaavtbt\" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD COLUMN \"__kind_wpz27h2czt\" smallint GENERATED ALWAYS AS (CASE WHEN \"cardinality\" IN (1::smallint, 2::smallint) AND \"attribute\" = 76::smallint AND \"kind\" = 131::smallint THEN \"kind\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD COLUMN \"__node_6hhkc3nqmt\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"cardinality\" IN (1::smallint, 2::smallint) AND \"attribute\" = 76::smallint AND \"kind\" = 131::smallint THEN \"node\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD COLUMN \"__node_zk4w23iiot\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (133::smallint, 127::smallint, 119::smallint, 125::smallint, 121::smallint, 122::smallint, 129::smallint, 120::smallint, 187::smallint, 124::smallint) AND \"attribute\" = 76::smallint AND \"cardinality\" = 0::smallint THEN \"node\" END) STORED"
 					},
 					{
 						"kind": "statement",
@@ -7483,6 +7491,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "CREATE TRIGGER \"__isolation\"\n  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON \"qti\".\"binding_declaration\"\n  FOR EACH STATEMENT EXECUTE FUNCTION \"qti\".\"__require_serializable\"()"
+					},
+					{
+						"kind": "statement",
 						"statement": "CREATE TRIGGER \"__isolation\"\n  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON \"qti\".\"binding_name\"\n  FOR EACH STATEMENT EXECUTE FUNCTION \"qti\".\"__require_serializable\"()"
 					},
 					{
@@ -7820,6 +7832,10 @@
 					{
 						"kind": "statement",
 						"statement": "CREATE TRIGGER \"__isolation\"\n  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON \"qti\".\"placed_binding\"\n  FOR EACH STATEMENT EXECUTE FUNCTION \"qti\".\"__require_serializable\"()"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE TRIGGER \"__isolation\"\n  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON \"qti\".\"placed_binding_declaration\"\n  FOR EACH STATEMENT EXECUTE FUNCTION \"qti\".\"__require_serializable\"()"
 					},
 					{
 						"kind": "statement",
@@ -8435,6 +8451,22 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD CONSTRAINT \"__binding_declaration_fk_declaration_document_72vmrzu6ky\" FOREIGN KEY (\"declaration\", \"document\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\") REFERENCES \"qti\".\"declaration\" (\"node\", \"document\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD CONSTRAINT \"__binding_declaration_fk_node_attribute_ri6ze7ovno\" FOREIGN KEY (\"node\", \"attribute\") REFERENCES \"qti\".\"bound_variable\" (\"node\", \"attribute\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD CONSTRAINT \"__binding_declaration_fk_node_kind_tag_max_written_5gg6err4rk\" FOREIGN KEY (\"__node_6hhkc3nqmt\", \"__kind_wpz27h2czt\", \"__tag_max_written_true_6phmyjuam6\") REFERENCES \"qti\".\"count_bound\" (\"node\", \"kind\", \"max_written\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"binding_declaration\" ADD CONSTRAINT \"__binding_declaration_fk_node_tag_most_value_1_gspfr6u5q7\" FOREIGN KEY (\"__node_zk4w23iiot\", \"__tag_most_value_1_potsaavtbt\") REFERENCES \"qti\".\"count_bound\" (\"node\", \"most_value\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"binding_name\" ADD CONSTRAINT \"__binding_name_fk_document_copy_bindings_f5f6ysw45x\" FOREIGN KEY (\"document\", \"__copy_bindings_pble3k2v23\") REFERENCES \"qti\".\"document\" (\"node\", \"bindings\") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
@@ -8447,23 +8479,15 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD CONSTRAINT \"__bound_variable_fk_declaration_document_identifier_udsitvgc5x\" FOREIGN KEY (\"declaration\", \"document\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\") REFERENCES \"qti\".\"declaration\" (\"node\", \"document\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD CONSTRAINT \"__bound_variable_fk_document_adaptive_glyrkbpi4r\" FOREIGN KEY (\"document\", \"adaptive\") REFERENCES \"qti\".\"item_mode\" (\"document\", \"adaptive\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD CONSTRAINT \"__bound_variable_fk_node_attribute_kind_document_hjzo3ysz2w\" FOREIGN KEY (\"node\", \"attribute\", \"kind\", \"document\", \"identifier\") REFERENCES \"qti\".\"binding_declaration\" (\"node\", \"attribute\", \"kind\", \"document\", \"identifier\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD CONSTRAINT \"__bound_variable_fk_node_kind_ecgzutnkph\" FOREIGN KEY (\"node\", \"kind\") REFERENCES \"qti\".\"binding\" (\"node\", \"kind\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD CONSTRAINT \"__bound_variable_fk_node_kind_tag_max_written_true_kyi3yt5y4q\" FOREIGN KEY (\"__node_6hhkc3nqmt\", \"__kind_wpz27h2czt\", \"__tag_max_written_true_6phmyjuam6\") REFERENCES \"qti\".\"count_bound\" (\"node\", \"kind\", \"max_written\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"bound_variable\" ADD CONSTRAINT \"__bound_variable_fk_node_tag_most_value_1_g3bxxfwd2r\" FOREIGN KEY (\"__node_zk4w23iiot\", \"__tag_most_value_1_potsaavtbt\") REFERENCES \"qti\".\"count_bound\" (\"node\", \"most_value\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
@@ -9927,11 +9951,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD CONSTRAINT \"__placed_binding_fk_declaration_assembly_identifier_4csanlsw3k\" FOREIGN KEY (\"declaration\", \"assembly\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\") REFERENCES \"qti\".\"declaration\" (\"node\", \"document\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD CONSTRAINT \"__placed_binding_fk_instance_document_assembly_tag_hesskxaybw\" FOREIGN KEY (\"instance\", \"document\", \"assembly\", \"__tag_assembly_kind_qti_assessment_item_qf7qyzopnq\") REFERENCES \"qti\".\"instance\" (\"id\", \"document\", \"assembly\", \"assembly_kind\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD CONSTRAINT \"__placed_binding_fk_instance_document_assembly_tag_hesskxaybw\" FOREIGN KEY (\"instance\", \"document\", \"assembly\", \"__tag_assembly_kind_qti_assessment_item_qf7qyzopnq\") REFERENCES \"qti\".\"instance\" (\"id\", \"document\", \"assembly\", \"assembly_kind\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD CONSTRAINT \"__placed_binding_fk_instance_node_attribute_assembly_2px7e5svab\" FOREIGN KEY (\"instance\", \"node\", \"attribute\", \"assembly\", \"document\", \"kind\", \"identifier\") REFERENCES \"qti\".\"placed_binding_declaration\" (\"instance\", \"node\", \"attribute\", \"assembly\", \"document\", \"kind\", \"identifier\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
@@ -9947,15 +9971,23 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD CONSTRAINT \"__placed_binding_fk_node_kind_tag_max_written_true_efbmt2ree4\" FOREIGN KEY (\"__node_6hhkc3nqmt\", \"__kind_wpz27h2czt\", \"__tag_max_written_true_6phmyjuam6\") REFERENCES \"qti\".\"count_bound\" (\"node\", \"kind\", \"max_written\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD CONSTRAINT \"__placed_binding_fk_node_tag_most_value_1_a7ffxujq3a\" FOREIGN KEY (\"__node_zk4w23iiot\", \"__tag_most_value_1_potsaavtbt\") REFERENCES \"qti\".\"count_bound\" (\"node\", \"most_value\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD CONSTRAINT \"__placed_binding_fk_node_of2jpbuqxv\" FOREIGN KEY (\"__node_nqyr3apalb\") REFERENCES \"qti\".\"node\" (\"__id_i3372l665q\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD CONSTRAINT \"__placed_binding_declaration_fk_declaration_assembly_vk5rjqthtr\" FOREIGN KEY (\"declaration\", \"assembly\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\") REFERENCES \"qti\".\"declaration\" (\"node\", \"document\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD CONSTRAINT \"__placed_binding_declaration_fk_instance_node_szfcpoghq5\" FOREIGN KEY (\"instance\", \"node\", \"attribute\") REFERENCES \"qti\".\"placed_binding\" (\"instance\", \"node\", \"attribute\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD CONSTRAINT \"__placed_binding_declaration_fk_node_kind_tag_max_vhzd67j2xm\" FOREIGN KEY (\"__node_6hhkc3nqmt\", \"__kind_wpz27h2czt\", \"__tag_max_written_true_6phmyjuam6\") REFERENCES \"qti\".\"count_bound\" (\"node\", \"kind\", \"max_written\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"placed_binding_declaration\" ADD CONSTRAINT \"__placed_binding_declaration_fk_node_tag_most_value_u6bjipksnw\" FOREIGN KEY (\"__node_zk4w23iiot\", \"__tag_most_value_1_potsaavtbt\") REFERENCES \"qti\".\"count_bound\" (\"node\", \"most_value\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
@@ -11044,15 +11076,19 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE INDEX \"__bound_variable_ix_node_6_hhkc_3_nqmt_kind_wpz_27_h_ae4w42pcdf\" ON \"qti\".\"bound_variable\" USING btree (\"__node_6hhkc3nqmt\", \"__kind_wpz27h2czt\")"
+						"statement": "CREATE INDEX \"__binding_declaration_ix_node_6_hhkc_3_nqmt_kind_wpz_rfgek7meu3\" ON \"qti\".\"binding_declaration\" USING btree (\"__node_6hhkc3nqmt\", \"__kind_wpz27h2czt\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__binding_declaration_ix_node_zk_4_w_23_iiot_ioynj4fekh\" ON \"qti\".\"binding_declaration\" USING btree (\"__node_zk4w23iiot\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__binding_declaration_ix_declaration_document_bo7igokpag\" ON \"qti\".\"binding_declaration\" USING btree (\"declaration\", \"document\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\")"
 					},
 					{
 						"kind": "statement",
 						"statement": "CREATE INDEX \"__bound_variable_ix_node_nqyr_3_apalb_boea2xstsg\" ON \"qti\".\"bound_variable\" USING btree (\"__node_nqyr3apalb\")"
-					},
-					{
-						"kind": "statement",
-						"statement": "CREATE INDEX \"__bound_variable_ix_node_zk_4_w_23_iiot_awwtpgh63t\" ON \"qti\".\"bound_variable\" USING btree (\"__node_zk4w23iiot\")"
 					},
 					{
 						"kind": "statement",
@@ -11720,15 +11756,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE INDEX \"__placed_binding_ix_node_6_hhkc_3_nqmt_kind_wpz_27_h_h3kqjxw3za\" ON \"qti\".\"placed_binding\" USING btree (\"__node_6hhkc3nqmt\", \"__kind_wpz27h2czt\")"
-					},
-					{
-						"kind": "statement",
 						"statement": "CREATE INDEX \"__placed_binding_ix_node_nqyr_3_apalb_ymanobq2y7\" ON \"qti\".\"placed_binding\" USING btree (\"__node_nqyr3apalb\")"
-					},
-					{
-						"kind": "statement",
-						"statement": "CREATE INDEX \"__placed_binding_ix_node_zk_4_w_23_iiot_6mh2snmg6q\" ON \"qti\".\"placed_binding\" USING btree (\"__node_zk4w23iiot\")"
 					},
 					{
 						"kind": "statement",
@@ -11741,6 +11769,18 @@
 					{
 						"kind": "statement",
 						"statement": "CREATE INDEX \"__placed_binding_ix_node_attribute_document_kind_lxjppajjyw\" ON \"qti\".\"placed_binding\" USING btree (\"node\", \"attribute\", \"document\", \"kind\", \"identifier\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__placed_binding_declaration_ix_node_6_hhkc_3_nqmt_ff56uxlvmg\" ON \"qti\".\"placed_binding_declaration\" USING btree (\"__node_6hhkc3nqmt\", \"__kind_wpz27h2czt\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__placed_binding_declaration_ix_node_zk_4_w_23_iiot_j7uicwiemx\" ON \"qti\".\"placed_binding_declaration\" USING btree (\"__node_zk4w23iiot\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__placed_binding_declaration_ix_declaration_assembly_k7uproog5g\" ON \"qti\".\"placed_binding_declaration\" USING btree (\"declaration\", \"assembly\", \"identifier\", \"declaration_kind\", \"base_type\", \"cardinality\")"
 					},
 					{
 						"kind": "statement",
@@ -12209,11 +12249,15 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "CREATE VIEW \"qti__author\".\"binding_declaration\" (\"attribute\", \"attribute_name\", \"base_type\", \"base_type_name\", \"cardinality\", \"cardinality_name\", \"declaration\", \"declaration_kind\", \"declaration_kind_name\", \"document\", \"identifier\", \"kind\", \"kind_name\", \"node\") AS\nSELECT \"r1\".\"attribute\", (\"qti\".\"__attribute_name_names_q6tmzcty4e\"())[\"r1\".\"attribute\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"base_type\", (\"qti\".\"__base_type_names_nr3sstjolj\"())[\"r1\".\"base_type\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"cardinality\", (\"qti\".\"__cardinality_names_kqiairsoqa\"())[\"r1\".\"cardinality\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"declaration\", \"r1\".\"declaration_kind\", (\"qti\".\"__declaration_kind_names_o62wpad2p7\"())[\"r1\".\"declaration_kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"document\", \"r1\".\"identifier\", \"r1\".\"kind\", (\"qti\".\"__node_kind_names_ulbko553n7\"())[\"r1\".\"kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"node\"\nFROM \"qti\".\"binding_declaration\" AS \"r1\""
+					},
+					{
+						"kind": "statement",
 						"statement": "CREATE VIEW \"qti__author\".\"binding_name\" (\"attribute\", \"attribute_name\", \"document\", \"identifier\", \"kind\", \"kind_name\", \"node\") AS\nSELECT \"r1\".\"attribute\", (\"qti\".\"__attribute_name_names_q6tmzcty4e\"())[\"r1\".\"attribute\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"document\", \"r1\".\"identifier\", \"r1\".\"kind\", (\"qti\".\"__node_kind_names_ulbko553n7\"())[\"r1\".\"kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"node\"\nFROM \"qti\".\"binding_name\" AS \"r1\""
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE VIEW \"qti__author\".\"bound_variable\" (\"adaptive\", \"attribute\", \"attribute_name\", \"base_type\", \"base_type_name\", \"cardinality\", \"cardinality_name\", \"declaration\", \"declaration_kind\", \"declaration_kind_name\", \"document\", \"identifier\", \"kind\", \"kind_name\", \"node\") AS\nSELECT \"r1\".\"adaptive\", \"r1\".\"attribute\", (\"qti\".\"__attribute_name_names_q6tmzcty4e\"())[\"r1\".\"attribute\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"base_type\", (\"qti\".\"__base_type_names_nr3sstjolj\"())[\"r1\".\"base_type\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"cardinality\", (\"qti\".\"__cardinality_names_kqiairsoqa\"())[\"r1\".\"cardinality\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"declaration\", \"r1\".\"declaration_kind\", (\"qti\".\"__declaration_kind_names_o62wpad2p7\"())[\"r1\".\"declaration_kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"document\", \"r1\".\"identifier\", \"r1\".\"kind\", (\"qti\".\"__node_kind_names_ulbko553n7\"())[\"r1\".\"kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"node\"\nFROM \"qti\".\"bound_variable\" AS \"r1\""
+						"statement": "CREATE VIEW \"qti__author\".\"bound_variable\" (\"adaptive\", \"attribute\", \"attribute_name\", \"document\", \"identifier\", \"kind\", \"kind_name\", \"node\") AS\nSELECT \"r1\".\"adaptive\", \"r1\".\"attribute\", (\"qti\".\"__attribute_name_names_q6tmzcty4e\"())[\"r1\".\"attribute\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"document\", \"r1\".\"identifier\", \"r1\".\"kind\", (\"qti\".\"__node_kind_names_ulbko553n7\"())[\"r1\".\"kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"node\"\nFROM \"qti\".\"bound_variable\" AS \"r1\""
 					},
 					{
 						"kind": "statement",
@@ -12545,7 +12589,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE VIEW \"qti__author\".\"placed_binding\" (\"adaptive\", \"assembly\", \"attribute\", \"attribute_name\", \"base_type\", \"base_type_name\", \"cardinality\", \"cardinality_name\", \"declaration\", \"declaration_kind\", \"declaration_kind_name\", \"document\", \"identifier\", \"instance\", \"kind\", \"kind_name\", \"node\") AS\nSELECT \"r1\".\"adaptive\", \"r1\".\"assembly\", \"r1\".\"attribute\", (\"qti\".\"__attribute_name_names_q6tmzcty4e\"())[\"r1\".\"attribute\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"base_type\", (\"qti\".\"__base_type_names_nr3sstjolj\"())[\"r1\".\"base_type\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"cardinality\", (\"qti\".\"__cardinality_names_kqiairsoqa\"())[\"r1\".\"cardinality\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"declaration\", \"r1\".\"declaration_kind\", (\"qti\".\"__declaration_kind_names_o62wpad2p7\"())[\"r1\".\"declaration_kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"document\", \"r1\".\"identifier\", \"r1\".\"instance\", \"r1\".\"kind\", (\"qti\".\"__node_kind_names_ulbko553n7\"())[\"r1\".\"kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"node\"\nFROM \"qti\".\"placed_binding\" AS \"r1\""
+						"statement": "CREATE VIEW \"qti__author\".\"placed_binding\" (\"adaptive\", \"assembly\", \"attribute\", \"attribute_name\", \"document\", \"identifier\", \"instance\", \"kind\", \"kind_name\", \"node\") AS\nSELECT \"r1\".\"adaptive\", \"r1\".\"assembly\", \"r1\".\"attribute\", (\"qti\".\"__attribute_name_names_q6tmzcty4e\"())[\"r1\".\"attribute\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"document\", \"r1\".\"identifier\", \"r1\".\"instance\", \"r1\".\"kind\", (\"qti\".\"__node_kind_names_ulbko553n7\"())[\"r1\".\"kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"node\"\nFROM \"qti\".\"placed_binding\" AS \"r1\""
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE VIEW \"qti__author\".\"placed_binding_declaration\" (\"assembly\", \"attribute\", \"attribute_name\", \"base_type\", \"base_type_name\", \"cardinality\", \"cardinality_name\", \"declaration\", \"declaration_kind\", \"declaration_kind_name\", \"document\", \"identifier\", \"instance\", \"kind\", \"kind_name\", \"node\") AS\nSELECT \"r1\".\"assembly\", \"r1\".\"attribute\", (\"qti\".\"__attribute_name_names_q6tmzcty4e\"())[\"r1\".\"attribute\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"base_type\", (\"qti\".\"__base_type_names_nr3sstjolj\"())[\"r1\".\"base_type\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"cardinality\", (\"qti\".\"__cardinality_names_kqiairsoqa\"())[\"r1\".\"cardinality\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"declaration\", \"r1\".\"declaration_kind\", (\"qti\".\"__declaration_kind_names_o62wpad2p7\"())[\"r1\".\"declaration_kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"document\", \"r1\".\"identifier\", \"r1\".\"instance\", \"r1\".\"kind\", (\"qti\".\"__node_kind_names_ulbko553n7\"())[\"r1\".\"kind\" + 1]::\"pg_catalog\".\"text\", \"r1\".\"node\"\nFROM \"qti\".\"placed_binding_declaration\" AS \"r1\""
 					},
 					{
 						"kind": "statement",
@@ -12825,7 +12873,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "GRANT SELECT ON TABLE \"qti__author\".\"area_mapping\", \"qti__author\".\"aria_element\", \"qti__author\".\"aria_range\", \"qti__author\".\"aria_value\", \"qti__author\".\"assembled_id\", \"qti__author\".\"assembled_lang\", \"qti__author\".\"assembled_name\", \"qti__author\".\"assembled_reference\", \"qti__author\".\"assessment_object\", \"qti__author\".\"attribute\", \"qti__author\".\"attribute_entity\", \"qti__author\".\"binding\", \"qti__author\".\"binding_name\", \"qti__author\".\"bound_variable\", \"qti__author\".\"branch_resolution\", \"qti__author\".\"branch_rule\", \"qti__author\".\"cell_headers\", \"qti__author\".\"choice\", \"qti__author\".\"choice_variable_name\", \"qti__author\".\"comment\", \"qti__author\".\"context_ref\", \"qti__author\".\"count_bound\", \"qti__author\".\"declaration\", \"qti__author\".\"declaration_table\", \"qti__author\".\"dependency\", \"qti__author\".\"doctype\", \"qti__author\".\"document\", \"qti__author\".\"document_generals\", \"qti__author\".\"document_id\", \"qti__author\".\"document_lang\", \"qti__author\".\"entry\", \"qti__author\".\"expression\", \"qti__author\".\"expression_attribute\", \"qti__author\".\"feedback_ref\", \"qti__author\".\"file\", \"qti__author\".\"file_href\", \"qti__author\".\"fragment_value\", \"qti__author\".\"general_lang\", \"qti__author\".\"general_named\", \"qti__author\".\"general_object\", \"qti__author\".\"header_token\", \"qti__author\".\"hotspot\", \"qti__author\".\"hottext\", \"qti__author\".\"id_binding\", \"qti__author\".\"identity_text\", \"qti__author\".\"idref\", \"qti__author\".\"idref_target\", \"qti__author\".\"inclusion\", \"qti__author\".\"instance\", \"qti__author\".\"instance_name\", \"qti__author\".\"interaction_attribute\", \"qti__author\".\"interpolation_table\", \"qti__author\".\"item_mode\", \"qti__author\".\"item_ref_document\", \"qti__author\".\"item_ref_target\", \"qti__author\".\"item_timing\", \"qti__author\".\"label_use\", \"qti__author\".\"literal\", \"qti__author\".\"lom_entry\", \"qti__author\".\"lom_general\", \"qti__author\".\"lom_language\", \"qti__author\".\"lom_object\", \"qti__author\".\"lom_object_identifier\", \"qti__author\".\"lom_object_title\", \"qti__author\".\"lom_record\", \"qti__author\".\"lom_resource\", \"qti__author\".\"lom_resource_type\", \"qti__author\".\"lom_resource_type_source\", \"qti__author\".\"lom_string\", \"qti__author\".\"lom_string_language\", \"qti__author\".\"lom_title\", \"qti__author\".\"lom_title_string\", \"qti__author\".\"lookup_value\", \"qti__author\".\"manifest_id\", \"qti__author\".\"map_key\", \"qti__author\".\"map_key_directed_pair\", \"qti__author\".\"map_key_float\", \"qti__author\".\"map_key_integer\", \"qti__author\".\"map_key_pair\", \"qti__author\".\"map_key_point\", \"qti__author\".\"mapping\", \"qti__author\".\"mapping_lookup\", \"qti__author\".\"mapping_source\", \"qti__author\".\"match_table\", \"qti__author\".\"name_lookup\", \"qti__author\".\"named\", \"qti__author\".\"named_href\", \"qti__author\".\"namespace\", \"qti__author\".\"node\", \"qti__author\".\"object_lang\", \"qti__author\".\"open_attribute_name\", \"qti__author\".\"open_element_name\", \"qti__author\".\"operand\", \"qti__author\".\"outcome_range\", \"qti__author\".\"package\", \"qti__author\".\"pi\", \"qti__author\".\"placed_binding\", \"qti__author\".\"placed_choice\", \"qti__author\".\"placed_document\", \"qti__author\".\"placed_general_lang\", \"qti__author\".\"placed_hottext\", \"qti__author\".\"placed_id\", \"qti__author\".\"placed_idref\", \"qti__author\".\"placed_reference\", \"qti__author\".\"placed_variable_ref\", \"qti__author\".\"placed_xml_lang\", \"qti__author\".\"printed_variable_ref\", \"qti__author\".\"processing\", \"qti__author\".\"processing_template\", \"qti__author\".\"quotation\", \"qti__author\".\"reading\", \"qti__author\".\"record_field\", \"qti__author\".\"reference\", \"qti__author\".\"reference_document\", \"qti__author\".\"reference_path\", \"qti__author\".\"reference_segment\", \"qti__author\".\"referring_document\", \"qti__author\".\"resource\", \"qti__author\".\"resource_file\", \"qti__author\".\"resource_href\", \"qti__author\".\"resource_lom_general\", \"qti__author\".\"resource_lom_language_set\", \"qti__author\".\"rounding\", \"qti__author\".\"section\", \"qti__author\".\"section_context_name\", \"qti__author\".\"section_context_ref\", \"qti__author\".\"section_feedback_name\", \"qti__author\".\"section_feedback_ref\", \"qti__author\".\"section_identifier\", \"qti__author\".\"section_member\", \"qti__author\".\"section_ordering\", \"qti__author\".\"section_printed_name\", \"qti__author\".\"section_printed_ref\", \"qti__author\".\"section_scope\", \"qti__author\".\"section_selection\", \"qti__author\".\"section_template_name\", \"qti__author\".\"section_template_ref\", \"qti__author\".\"site\", \"qti__author\".\"site_target\", \"qti__author\".\"slider\", \"qti__author\".\"ssml_attribute\", \"qti__author\".\"ssml_scope\", \"qti__author\".\"statistic_date\", \"qti__author\".\"stimulus_ref\", \"qti__author\".\"table_header\", \"qti__author\".\"table_scope\", \"qti__author\".\"template_default\", \"qti__author\".\"template_ref\", \"qti__author\".\"test_document\", \"qti__author\".\"test_flag\", \"qti__author\".\"test_reference\", \"qti__author\".\"test_token\", \"qti__author\".\"text_idref\", \"qti__author\".\"tolerance\", \"qti__author\".\"tolerance_token\", \"qti__author\".\"usage_value\", \"qti__author\".\"value\", \"qti__author\".\"value_set\", \"qti__author\".\"var_ref\", \"qti__author\".\"variable_lookup\", \"qti__author\".\"variable_mapping\", \"qti__author\".\"variable_ref\", \"qti__author\".\"xml_lang\" TO \"qti__author\""
+						"statement": "GRANT SELECT ON TABLE \"qti__author\".\"area_mapping\", \"qti__author\".\"aria_element\", \"qti__author\".\"aria_range\", \"qti__author\".\"aria_value\", \"qti__author\".\"assembled_id\", \"qti__author\".\"assembled_lang\", \"qti__author\".\"assembled_name\", \"qti__author\".\"assembled_reference\", \"qti__author\".\"assessment_object\", \"qti__author\".\"attribute\", \"qti__author\".\"attribute_entity\", \"qti__author\".\"binding\", \"qti__author\".\"binding_declaration\", \"qti__author\".\"binding_name\", \"qti__author\".\"bound_variable\", \"qti__author\".\"branch_resolution\", \"qti__author\".\"branch_rule\", \"qti__author\".\"cell_headers\", \"qti__author\".\"choice\", \"qti__author\".\"choice_variable_name\", \"qti__author\".\"comment\", \"qti__author\".\"context_ref\", \"qti__author\".\"count_bound\", \"qti__author\".\"declaration\", \"qti__author\".\"declaration_table\", \"qti__author\".\"dependency\", \"qti__author\".\"doctype\", \"qti__author\".\"document\", \"qti__author\".\"document_generals\", \"qti__author\".\"document_id\", \"qti__author\".\"document_lang\", \"qti__author\".\"entry\", \"qti__author\".\"expression\", \"qti__author\".\"expression_attribute\", \"qti__author\".\"feedback_ref\", \"qti__author\".\"file\", \"qti__author\".\"file_href\", \"qti__author\".\"fragment_value\", \"qti__author\".\"general_lang\", \"qti__author\".\"general_named\", \"qti__author\".\"general_object\", \"qti__author\".\"header_token\", \"qti__author\".\"hotspot\", \"qti__author\".\"hottext\", \"qti__author\".\"id_binding\", \"qti__author\".\"identity_text\", \"qti__author\".\"idref\", \"qti__author\".\"idref_target\", \"qti__author\".\"inclusion\", \"qti__author\".\"instance\", \"qti__author\".\"instance_name\", \"qti__author\".\"interaction_attribute\", \"qti__author\".\"interpolation_table\", \"qti__author\".\"item_mode\", \"qti__author\".\"item_ref_document\", \"qti__author\".\"item_ref_target\", \"qti__author\".\"item_timing\", \"qti__author\".\"label_use\", \"qti__author\".\"literal\", \"qti__author\".\"lom_entry\", \"qti__author\".\"lom_general\", \"qti__author\".\"lom_language\", \"qti__author\".\"lom_object\", \"qti__author\".\"lom_object_identifier\", \"qti__author\".\"lom_object_title\", \"qti__author\".\"lom_record\", \"qti__author\".\"lom_resource\", \"qti__author\".\"lom_resource_type\", \"qti__author\".\"lom_resource_type_source\", \"qti__author\".\"lom_string\", \"qti__author\".\"lom_string_language\", \"qti__author\".\"lom_title\", \"qti__author\".\"lom_title_string\", \"qti__author\".\"lookup_value\", \"qti__author\".\"manifest_id\", \"qti__author\".\"map_key\", \"qti__author\".\"map_key_directed_pair\", \"qti__author\".\"map_key_float\", \"qti__author\".\"map_key_integer\", \"qti__author\".\"map_key_pair\", \"qti__author\".\"map_key_point\", \"qti__author\".\"mapping\", \"qti__author\".\"mapping_lookup\", \"qti__author\".\"mapping_source\", \"qti__author\".\"match_table\", \"qti__author\".\"name_lookup\", \"qti__author\".\"named\", \"qti__author\".\"named_href\", \"qti__author\".\"namespace\", \"qti__author\".\"node\", \"qti__author\".\"object_lang\", \"qti__author\".\"open_attribute_name\", \"qti__author\".\"open_element_name\", \"qti__author\".\"operand\", \"qti__author\".\"outcome_range\", \"qti__author\".\"package\", \"qti__author\".\"pi\", \"qti__author\".\"placed_binding\", \"qti__author\".\"placed_binding_declaration\", \"qti__author\".\"placed_choice\", \"qti__author\".\"placed_document\", \"qti__author\".\"placed_general_lang\", \"qti__author\".\"placed_hottext\", \"qti__author\".\"placed_id\", \"qti__author\".\"placed_idref\", \"qti__author\".\"placed_reference\", \"qti__author\".\"placed_variable_ref\", \"qti__author\".\"placed_xml_lang\", \"qti__author\".\"printed_variable_ref\", \"qti__author\".\"processing\", \"qti__author\".\"processing_template\", \"qti__author\".\"quotation\", \"qti__author\".\"reading\", \"qti__author\".\"record_field\", \"qti__author\".\"reference\", \"qti__author\".\"reference_document\", \"qti__author\".\"reference_path\", \"qti__author\".\"reference_segment\", \"qti__author\".\"referring_document\", \"qti__author\".\"resource\", \"qti__author\".\"resource_file\", \"qti__author\".\"resource_href\", \"qti__author\".\"resource_lom_general\", \"qti__author\".\"resource_lom_language_set\", \"qti__author\".\"rounding\", \"qti__author\".\"section\", \"qti__author\".\"section_context_name\", \"qti__author\".\"section_context_ref\", \"qti__author\".\"section_feedback_name\", \"qti__author\".\"section_feedback_ref\", \"qti__author\".\"section_identifier\", \"qti__author\".\"section_member\", \"qti__author\".\"section_ordering\", \"qti__author\".\"section_printed_name\", \"qti__author\".\"section_printed_ref\", \"qti__author\".\"section_scope\", \"qti__author\".\"section_selection\", \"qti__author\".\"section_template_name\", \"qti__author\".\"section_template_ref\", \"qti__author\".\"site\", \"qti__author\".\"site_target\", \"qti__author\".\"slider\", \"qti__author\".\"ssml_attribute\", \"qti__author\".\"ssml_scope\", \"qti__author\".\"statistic_date\", \"qti__author\".\"stimulus_ref\", \"qti__author\".\"table_header\", \"qti__author\".\"table_scope\", \"qti__author\".\"template_default\", \"qti__author\".\"template_ref\", \"qti__author\".\"test_document\", \"qti__author\".\"test_flag\", \"qti__author\".\"test_reference\", \"qti__author\".\"test_token\", \"qti__author\".\"text_idref\", \"qti__author\".\"tolerance\", \"qti__author\".\"tolerance_token\", \"qti__author\".\"usage_value\", \"qti__author\".\"value\", \"qti__author\".\"value_set\", \"qti__author\".\"var_ref\", \"qti__author\".\"variable_lookup\", \"qti__author\".\"variable_mapping\", \"qti__author\".\"variable_ref\", \"qti__author\".\"xml_lang\" TO \"qti__author\""
 					},
 					{
 						"kind": "statement",
@@ -12874,6 +12922,10 @@
 					{
 						"kind": "statement",
 						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"binding\" TO \"qti__author\""
+					},
+					{
+						"kind": "statement",
+						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"binding_declaration\" TO \"qti__author\""
 					},
 					{
 						"kind": "statement",
@@ -13217,6 +13269,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_binding_declaration\" TO \"qti__author\""
+					},
+					{
+						"kind": "statement",
 						"statement": "GRANT SELECT, INSERT, DELETE ON TABLE \"qti\".\"placed_choice\" TO \"qti__author\""
 					},
 					{
@@ -13529,7 +13585,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "REVOKE ALL ON TABLE \"qti\".\"area_mapping\", \"qti\".\"aria_element\", \"qti\".\"aria_range\", \"qti\".\"aria_value\", \"qti\".\"assembled_id\", \"qti\".\"assembled_lang\", \"qti\".\"assembled_name\", \"qti\".\"assembled_reference\", \"qti\".\"assessment_object\", \"qti\".\"attribute\", \"qti\".\"attribute_entity\", \"qti\".\"binding\", \"qti\".\"binding_name\", \"qti\".\"bound_variable\", \"qti\".\"branch_resolution\", \"qti\".\"branch_rule\", \"qti\".\"cell_headers\", \"qti\".\"choice\", \"qti\".\"choice_variable_name\", \"qti\".\"comment\", \"qti\".\"context_ref\", \"qti\".\"count_bound\", \"qti\".\"declaration\", \"qti\".\"declaration_table\", \"qti\".\"dependency\", \"qti\".\"doctype\", \"qti\".\"document\", \"qti\".\"document_generals\", \"qti\".\"document_id\", \"qti\".\"document_lang\", \"qti\".\"entry\", \"qti\".\"expression\", \"qti\".\"expression_attribute\", \"qti\".\"feedback_ref\", \"qti\".\"file\", \"qti\".\"file_href\", \"qti\".\"fragment_value\", \"qti\".\"general_lang\", \"qti\".\"general_named\", \"qti\".\"general_object\", \"qti\".\"header_token\", \"qti\".\"hotspot\", \"qti\".\"hottext\", \"qti\".\"id_binding\", \"qti\".\"identity_text\", \"qti\".\"idref\", \"qti\".\"idref_target\", \"qti\".\"inclusion\", \"qti\".\"instance\", \"qti\".\"instance_name\", \"qti\".\"interaction_attribute\", \"qti\".\"interpolation_table\", \"qti\".\"item_mode\", \"qti\".\"item_ref_document\", \"qti\".\"item_ref_target\", \"qti\".\"item_timing\", \"qti\".\"label_use\", \"qti\".\"literal\", \"qti\".\"lom_entry\", \"qti\".\"lom_general\", \"qti\".\"lom_language\", \"qti\".\"lom_object\", \"qti\".\"lom_object_identifier\", \"qti\".\"lom_object_title\", \"qti\".\"lom_record\", \"qti\".\"lom_resource\", \"qti\".\"lom_resource_type\", \"qti\".\"lom_resource_type_source\", \"qti\".\"lom_string\", \"qti\".\"lom_string_language\", \"qti\".\"lom_title\", \"qti\".\"lom_title_string\", \"qti\".\"lookup_value\", \"qti\".\"manifest_id\", \"qti\".\"map_key\", \"qti\".\"map_key_directed_pair\", \"qti\".\"map_key_float\", \"qti\".\"map_key_integer\", \"qti\".\"map_key_pair\", \"qti\".\"map_key_point\", \"qti\".\"mapping\", \"qti\".\"mapping_lookup\", \"qti\".\"mapping_source\", \"qti\".\"match_table\", \"qti\".\"name_lookup\", \"qti\".\"named\", \"qti\".\"named_href\", \"qti\".\"namespace\", \"qti\".\"node\", \"qti\".\"object_lang\", \"qti\".\"open_attribute_name\", \"qti\".\"open_element_name\", \"qti\".\"operand\", \"qti\".\"outcome_range\", \"qti\".\"package\", \"qti\".\"pi\", \"qti\".\"placed_binding\", \"qti\".\"placed_choice\", \"qti\".\"placed_document\", \"qti\".\"placed_general_lang\", \"qti\".\"placed_hottext\", \"qti\".\"placed_id\", \"qti\".\"placed_idref\", \"qti\".\"placed_reference\", \"qti\".\"placed_variable_ref\", \"qti\".\"placed_xml_lang\", \"qti\".\"printed_variable_ref\", \"qti\".\"processing\", \"qti\".\"processing_template\", \"qti\".\"quotation\", \"qti\".\"reading\", \"qti\".\"record_field\", \"qti\".\"reference\", \"qti\".\"reference_document\", \"qti\".\"reference_path\", \"qti\".\"reference_segment\", \"qti\".\"referring_document\", \"qti\".\"resource\", \"qti\".\"resource_file\", \"qti\".\"resource_href\", \"qti\".\"resource_lom_general\", \"qti\".\"resource_lom_language_set\", \"qti\".\"rounding\", \"qti\".\"section\", \"qti\".\"section_context_name\", \"qti\".\"section_context_ref\", \"qti\".\"section_feedback_name\", \"qti\".\"section_feedback_ref\", \"qti\".\"section_identifier\", \"qti\".\"section_member\", \"qti\".\"section_ordering\", \"qti\".\"section_printed_name\", \"qti\".\"section_printed_ref\", \"qti\".\"section_scope\", \"qti\".\"section_selection\", \"qti\".\"section_template_name\", \"qti\".\"section_template_ref\", \"qti\".\"site\", \"qti\".\"site_target\", \"qti\".\"slider\", \"qti\".\"ssml_attribute\", \"qti\".\"ssml_scope\", \"qti\".\"statistic_date\", \"qti\".\"stimulus_ref\", \"qti\".\"table_header\", \"qti\".\"table_scope\", \"qti\".\"template_default\", \"qti\".\"template_ref\", \"qti\".\"test_document\", \"qti\".\"test_flag\", \"qti\".\"test_reference\", \"qti\".\"test_token\", \"qti\".\"text_idref\", \"qti\".\"tolerance\", \"qti\".\"tolerance_token\", \"qti\".\"usage_value\", \"qti\".\"value\", \"qti\".\"value_set\", \"qti\".\"var_ref\", \"qti\".\"variable_lookup\", \"qti\".\"variable_mapping\", \"qti\".\"variable_ref\", \"qti\".\"xml_lang\", \"qti__author\".\"area_mapping\", \"qti__author\".\"aria_element\", \"qti__author\".\"aria_range\", \"qti__author\".\"aria_value\", \"qti__author\".\"assembled_id\", \"qti__author\".\"assembled_lang\", \"qti__author\".\"assembled_name\", \"qti__author\".\"assembled_reference\", \"qti__author\".\"assessment_object\", \"qti__author\".\"attribute\", \"qti__author\".\"attribute_entity\", \"qti__author\".\"binding\", \"qti__author\".\"binding_name\", \"qti__author\".\"bound_variable\", \"qti__author\".\"branch_resolution\", \"qti__author\".\"branch_rule\", \"qti__author\".\"cell_headers\", \"qti__author\".\"choice\", \"qti__author\".\"choice_variable_name\", \"qti__author\".\"comment\", \"qti__author\".\"context_ref\", \"qti__author\".\"count_bound\", \"qti__author\".\"declaration\", \"qti__author\".\"declaration_table\", \"qti__author\".\"dependency\", \"qti__author\".\"doctype\", \"qti__author\".\"document\", \"qti__author\".\"document_generals\", \"qti__author\".\"document_id\", \"qti__author\".\"document_lang\", \"qti__author\".\"entry\", \"qti__author\".\"expression\", \"qti__author\".\"expression_attribute\", \"qti__author\".\"feedback_ref\", \"qti__author\".\"file\", \"qti__author\".\"file_href\", \"qti__author\".\"fragment_value\", \"qti__author\".\"general_lang\", \"qti__author\".\"general_named\", \"qti__author\".\"general_object\", \"qti__author\".\"header_token\", \"qti__author\".\"hotspot\", \"qti__author\".\"hottext\", \"qti__author\".\"id_binding\", \"qti__author\".\"identity_text\", \"qti__author\".\"idref\", \"qti__author\".\"idref_target\", \"qti__author\".\"inclusion\", \"qti__author\".\"instance\", \"qti__author\".\"instance_name\", \"qti__author\".\"interaction_attribute\", \"qti__author\".\"interpolation_table\", \"qti__author\".\"item_mode\", \"qti__author\".\"item_ref_document\", \"qti__author\".\"item_ref_target\", \"qti__author\".\"item_timing\", \"qti__author\".\"label_use\", \"qti__author\".\"literal\", \"qti__author\".\"lom_entry\", \"qti__author\".\"lom_general\", \"qti__author\".\"lom_language\", \"qti__author\".\"lom_object\", \"qti__author\".\"lom_object_identifier\", \"qti__author\".\"lom_object_title\", \"qti__author\".\"lom_record\", \"qti__author\".\"lom_resource\", \"qti__author\".\"lom_resource_type\", \"qti__author\".\"lom_resource_type_source\", \"qti__author\".\"lom_string\", \"qti__author\".\"lom_string_language\", \"qti__author\".\"lom_title\", \"qti__author\".\"lom_title_string\", \"qti__author\".\"lookup_value\", \"qti__author\".\"manifest_id\", \"qti__author\".\"map_key\", \"qti__author\".\"map_key_directed_pair\", \"qti__author\".\"map_key_float\", \"qti__author\".\"map_key_integer\", \"qti__author\".\"map_key_pair\", \"qti__author\".\"map_key_point\", \"qti__author\".\"mapping\", \"qti__author\".\"mapping_lookup\", \"qti__author\".\"mapping_source\", \"qti__author\".\"match_table\", \"qti__author\".\"name_lookup\", \"qti__author\".\"named\", \"qti__author\".\"named_href\", \"qti__author\".\"namespace\", \"qti__author\".\"node\", \"qti__author\".\"object_lang\", \"qti__author\".\"open_attribute_name\", \"qti__author\".\"open_element_name\", \"qti__author\".\"operand\", \"qti__author\".\"outcome_range\", \"qti__author\".\"package\", \"qti__author\".\"pi\", \"qti__author\".\"placed_binding\", \"qti__author\".\"placed_choice\", \"qti__author\".\"placed_document\", \"qti__author\".\"placed_general_lang\", \"qti__author\".\"placed_hottext\", \"qti__author\".\"placed_id\", \"qti__author\".\"placed_idref\", \"qti__author\".\"placed_reference\", \"qti__author\".\"placed_variable_ref\", \"qti__author\".\"placed_xml_lang\", \"qti__author\".\"printed_variable_ref\", \"qti__author\".\"processing\", \"qti__author\".\"processing_template\", \"qti__author\".\"quotation\", \"qti__author\".\"reading\", \"qti__author\".\"record_field\", \"qti__author\".\"reference\", \"qti__author\".\"reference_document\", \"qti__author\".\"reference_path\", \"qti__author\".\"reference_segment\", \"qti__author\".\"referring_document\", \"qti__author\".\"resource\", \"qti__author\".\"resource_file\", \"qti__author\".\"resource_href\", \"qti__author\".\"resource_lom_general\", \"qti__author\".\"resource_lom_language_set\", \"qti__author\".\"rounding\", \"qti__author\".\"section\", \"qti__author\".\"section_context_name\", \"qti__author\".\"section_context_ref\", \"qti__author\".\"section_feedback_name\", \"qti__author\".\"section_feedback_ref\", \"qti__author\".\"section_identifier\", \"qti__author\".\"section_member\", \"qti__author\".\"section_ordering\", \"qti__author\".\"section_printed_name\", \"qti__author\".\"section_printed_ref\", \"qti__author\".\"section_scope\", \"qti__author\".\"section_selection\", \"qti__author\".\"section_template_name\", \"qti__author\".\"section_template_ref\", \"qti__author\".\"site\", \"qti__author\".\"site_target\", \"qti__author\".\"slider\", \"qti__author\".\"ssml_attribute\", \"qti__author\".\"ssml_scope\", \"qti__author\".\"statistic_date\", \"qti__author\".\"stimulus_ref\", \"qti__author\".\"table_header\", \"qti__author\".\"table_scope\", \"qti__author\".\"template_default\", \"qti__author\".\"template_ref\", \"qti__author\".\"test_document\", \"qti__author\".\"test_flag\", \"qti__author\".\"test_reference\", \"qti__author\".\"test_token\", \"qti__author\".\"text_idref\", \"qti__author\".\"tolerance\", \"qti__author\".\"tolerance_token\", \"qti__author\".\"usage_value\", \"qti__author\".\"value\", \"qti__author\".\"value_set\", \"qti__author\".\"var_ref\", \"qti__author\".\"variable_lookup\", \"qti__author\".\"variable_mapping\", \"qti__author\".\"variable_ref\", \"qti__author\".\"xml_lang\" FROM PUBLIC"
+						"statement": "REVOKE ALL ON TABLE \"qti\".\"area_mapping\", \"qti\".\"aria_element\", \"qti\".\"aria_range\", \"qti\".\"aria_value\", \"qti\".\"assembled_id\", \"qti\".\"assembled_lang\", \"qti\".\"assembled_name\", \"qti\".\"assembled_reference\", \"qti\".\"assessment_object\", \"qti\".\"attribute\", \"qti\".\"attribute_entity\", \"qti\".\"binding\", \"qti\".\"binding_declaration\", \"qti\".\"binding_name\", \"qti\".\"bound_variable\", \"qti\".\"branch_resolution\", \"qti\".\"branch_rule\", \"qti\".\"cell_headers\", \"qti\".\"choice\", \"qti\".\"choice_variable_name\", \"qti\".\"comment\", \"qti\".\"context_ref\", \"qti\".\"count_bound\", \"qti\".\"declaration\", \"qti\".\"declaration_table\", \"qti\".\"dependency\", \"qti\".\"doctype\", \"qti\".\"document\", \"qti\".\"document_generals\", \"qti\".\"document_id\", \"qti\".\"document_lang\", \"qti\".\"entry\", \"qti\".\"expression\", \"qti\".\"expression_attribute\", \"qti\".\"feedback_ref\", \"qti\".\"file\", \"qti\".\"file_href\", \"qti\".\"fragment_value\", \"qti\".\"general_lang\", \"qti\".\"general_named\", \"qti\".\"general_object\", \"qti\".\"header_token\", \"qti\".\"hotspot\", \"qti\".\"hottext\", \"qti\".\"id_binding\", \"qti\".\"identity_text\", \"qti\".\"idref\", \"qti\".\"idref_target\", \"qti\".\"inclusion\", \"qti\".\"instance\", \"qti\".\"instance_name\", \"qti\".\"interaction_attribute\", \"qti\".\"interpolation_table\", \"qti\".\"item_mode\", \"qti\".\"item_ref_document\", \"qti\".\"item_ref_target\", \"qti\".\"item_timing\", \"qti\".\"label_use\", \"qti\".\"literal\", \"qti\".\"lom_entry\", \"qti\".\"lom_general\", \"qti\".\"lom_language\", \"qti\".\"lom_object\", \"qti\".\"lom_object_identifier\", \"qti\".\"lom_object_title\", \"qti\".\"lom_record\", \"qti\".\"lom_resource\", \"qti\".\"lom_resource_type\", \"qti\".\"lom_resource_type_source\", \"qti\".\"lom_string\", \"qti\".\"lom_string_language\", \"qti\".\"lom_title\", \"qti\".\"lom_title_string\", \"qti\".\"lookup_value\", \"qti\".\"manifest_id\", \"qti\".\"map_key\", \"qti\".\"map_key_directed_pair\", \"qti\".\"map_key_float\", \"qti\".\"map_key_integer\", \"qti\".\"map_key_pair\", \"qti\".\"map_key_point\", \"qti\".\"mapping\", \"qti\".\"mapping_lookup\", \"qti\".\"mapping_source\", \"qti\".\"match_table\", \"qti\".\"name_lookup\", \"qti\".\"named\", \"qti\".\"named_href\", \"qti\".\"namespace\", \"qti\".\"node\", \"qti\".\"object_lang\", \"qti\".\"open_attribute_name\", \"qti\".\"open_element_name\", \"qti\".\"operand\", \"qti\".\"outcome_range\", \"qti\".\"package\", \"qti\".\"pi\", \"qti\".\"placed_binding\", \"qti\".\"placed_binding_declaration\", \"qti\".\"placed_choice\", \"qti\".\"placed_document\", \"qti\".\"placed_general_lang\", \"qti\".\"placed_hottext\", \"qti\".\"placed_id\", \"qti\".\"placed_idref\", \"qti\".\"placed_reference\", \"qti\".\"placed_variable_ref\", \"qti\".\"placed_xml_lang\", \"qti\".\"printed_variable_ref\", \"qti\".\"processing\", \"qti\".\"processing_template\", \"qti\".\"quotation\", \"qti\".\"reading\", \"qti\".\"record_field\", \"qti\".\"reference\", \"qti\".\"reference_document\", \"qti\".\"reference_path\", \"qti\".\"reference_segment\", \"qti\".\"referring_document\", \"qti\".\"resource\", \"qti\".\"resource_file\", \"qti\".\"resource_href\", \"qti\".\"resource_lom_general\", \"qti\".\"resource_lom_language_set\", \"qti\".\"rounding\", \"qti\".\"section\", \"qti\".\"section_context_name\", \"qti\".\"section_context_ref\", \"qti\".\"section_feedback_name\", \"qti\".\"section_feedback_ref\", \"qti\".\"section_identifier\", \"qti\".\"section_member\", \"qti\".\"section_ordering\", \"qti\".\"section_printed_name\", \"qti\".\"section_printed_ref\", \"qti\".\"section_scope\", \"qti\".\"section_selection\", \"qti\".\"section_template_name\", \"qti\".\"section_template_ref\", \"qti\".\"site\", \"qti\".\"site_target\", \"qti\".\"slider\", \"qti\".\"ssml_attribute\", \"qti\".\"ssml_scope\", \"qti\".\"statistic_date\", \"qti\".\"stimulus_ref\", \"qti\".\"table_header\", \"qti\".\"table_scope\", \"qti\".\"template_default\", \"qti\".\"template_ref\", \"qti\".\"test_document\", \"qti\".\"test_flag\", \"qti\".\"test_reference\", \"qti\".\"test_token\", \"qti\".\"text_idref\", \"qti\".\"tolerance\", \"qti\".\"tolerance_token\", \"qti\".\"usage_value\", \"qti\".\"value\", \"qti\".\"value_set\", \"qti\".\"var_ref\", \"qti\".\"variable_lookup\", \"qti\".\"variable_mapping\", \"qti\".\"variable_ref\", \"qti\".\"xml_lang\", \"qti__author\".\"area_mapping\", \"qti__author\".\"aria_element\", \"qti__author\".\"aria_range\", \"qti__author\".\"aria_value\", \"qti__author\".\"assembled_id\", \"qti__author\".\"assembled_lang\", \"qti__author\".\"assembled_name\", \"qti__author\".\"assembled_reference\", \"qti__author\".\"assessment_object\", \"qti__author\".\"attribute\", \"qti__author\".\"attribute_entity\", \"qti__author\".\"binding\", \"qti__author\".\"binding_declaration\", \"qti__author\".\"binding_name\", \"qti__author\".\"bound_variable\", \"qti__author\".\"branch_resolution\", \"qti__author\".\"branch_rule\", \"qti__author\".\"cell_headers\", \"qti__author\".\"choice\", \"qti__author\".\"choice_variable_name\", \"qti__author\".\"comment\", \"qti__author\".\"context_ref\", \"qti__author\".\"count_bound\", \"qti__author\".\"declaration\", \"qti__author\".\"declaration_table\", \"qti__author\".\"dependency\", \"qti__author\".\"doctype\", \"qti__author\".\"document\", \"qti__author\".\"document_generals\", \"qti__author\".\"document_id\", \"qti__author\".\"document_lang\", \"qti__author\".\"entry\", \"qti__author\".\"expression\", \"qti__author\".\"expression_attribute\", \"qti__author\".\"feedback_ref\", \"qti__author\".\"file\", \"qti__author\".\"file_href\", \"qti__author\".\"fragment_value\", \"qti__author\".\"general_lang\", \"qti__author\".\"general_named\", \"qti__author\".\"general_object\", \"qti__author\".\"header_token\", \"qti__author\".\"hotspot\", \"qti__author\".\"hottext\", \"qti__author\".\"id_binding\", \"qti__author\".\"identity_text\", \"qti__author\".\"idref\", \"qti__author\".\"idref_target\", \"qti__author\".\"inclusion\", \"qti__author\".\"instance\", \"qti__author\".\"instance_name\", \"qti__author\".\"interaction_attribute\", \"qti__author\".\"interpolation_table\", \"qti__author\".\"item_mode\", \"qti__author\".\"item_ref_document\", \"qti__author\".\"item_ref_target\", \"qti__author\".\"item_timing\", \"qti__author\".\"label_use\", \"qti__author\".\"literal\", \"qti__author\".\"lom_entry\", \"qti__author\".\"lom_general\", \"qti__author\".\"lom_language\", \"qti__author\".\"lom_object\", \"qti__author\".\"lom_object_identifier\", \"qti__author\".\"lom_object_title\", \"qti__author\".\"lom_record\", \"qti__author\".\"lom_resource\", \"qti__author\".\"lom_resource_type\", \"qti__author\".\"lom_resource_type_source\", \"qti__author\".\"lom_string\", \"qti__author\".\"lom_string_language\", \"qti__author\".\"lom_title\", \"qti__author\".\"lom_title_string\", \"qti__author\".\"lookup_value\", \"qti__author\".\"manifest_id\", \"qti__author\".\"map_key\", \"qti__author\".\"map_key_directed_pair\", \"qti__author\".\"map_key_float\", \"qti__author\".\"map_key_integer\", \"qti__author\".\"map_key_pair\", \"qti__author\".\"map_key_point\", \"qti__author\".\"mapping\", \"qti__author\".\"mapping_lookup\", \"qti__author\".\"mapping_source\", \"qti__author\".\"match_table\", \"qti__author\".\"name_lookup\", \"qti__author\".\"named\", \"qti__author\".\"named_href\", \"qti__author\".\"namespace\", \"qti__author\".\"node\", \"qti__author\".\"object_lang\", \"qti__author\".\"open_attribute_name\", \"qti__author\".\"open_element_name\", \"qti__author\".\"operand\", \"qti__author\".\"outcome_range\", \"qti__author\".\"package\", \"qti__author\".\"pi\", \"qti__author\".\"placed_binding\", \"qti__author\".\"placed_binding_declaration\", \"qti__author\".\"placed_choice\", \"qti__author\".\"placed_document\", \"qti__author\".\"placed_general_lang\", \"qti__author\".\"placed_hottext\", \"qti__author\".\"placed_id\", \"qti__author\".\"placed_idref\", \"qti__author\".\"placed_reference\", \"qti__author\".\"placed_variable_ref\", \"qti__author\".\"placed_xml_lang\", \"qti__author\".\"printed_variable_ref\", \"qti__author\".\"processing\", \"qti__author\".\"processing_template\", \"qti__author\".\"quotation\", \"qti__author\".\"reading\", \"qti__author\".\"record_field\", \"qti__author\".\"reference\", \"qti__author\".\"reference_document\", \"qti__author\".\"reference_path\", \"qti__author\".\"reference_segment\", \"qti__author\".\"referring_document\", \"qti__author\".\"resource\", \"qti__author\".\"resource_file\", \"qti__author\".\"resource_href\", \"qti__author\".\"resource_lom_general\", \"qti__author\".\"resource_lom_language_set\", \"qti__author\".\"rounding\", \"qti__author\".\"section\", \"qti__author\".\"section_context_name\", \"qti__author\".\"section_context_ref\", \"qti__author\".\"section_feedback_name\", \"qti__author\".\"section_feedback_ref\", \"qti__author\".\"section_identifier\", \"qti__author\".\"section_member\", \"qti__author\".\"section_ordering\", \"qti__author\".\"section_printed_name\", \"qti__author\".\"section_printed_ref\", \"qti__author\".\"section_scope\", \"qti__author\".\"section_selection\", \"qti__author\".\"section_template_name\", \"qti__author\".\"section_template_ref\", \"qti__author\".\"site\", \"qti__author\".\"site_target\", \"qti__author\".\"slider\", \"qti__author\".\"ssml_attribute\", \"qti__author\".\"ssml_scope\", \"qti__author\".\"statistic_date\", \"qti__author\".\"stimulus_ref\", \"qti__author\".\"table_header\", \"qti__author\".\"table_scope\", \"qti__author\".\"template_default\", \"qti__author\".\"template_ref\", \"qti__author\".\"test_document\", \"qti__author\".\"test_flag\", \"qti__author\".\"test_reference\", \"qti__author\".\"test_token\", \"qti__author\".\"text_idref\", \"qti__author\".\"tolerance\", \"qti__author\".\"tolerance_token\", \"qti__author\".\"usage_value\", \"qti__author\".\"value\", \"qti__author\".\"value_set\", \"qti__author\".\"var_ref\", \"qti__author\".\"variable_lookup\", \"qti__author\".\"variable_mapping\", \"qti__author\".\"variable_ref\", \"qti__author\".\"xml_lang\" FROM PUBLIC"
 					},
 					{
 						"kind": "statement",
@@ -14529,6 +14585,22 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__binding_declaration_pk_jvfyvs6lit\" ON \"qti\".\"binding_declaration\" IS 'primary key of BindingDeclaration'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__binding_declaration_check_binding_declaration_kind_yyitockgct\" ON \"qti\".\"binding_declaration\" IS 'check of BindingDeclaration for law BindingDeclaration(kind) where {\"arg\":{\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-custom-interaction\",\"qti-portable-custom-interaction\"]},\"kind\":\"not\"} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"record\"}} in RecordBindingFit(kind)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__binding_declaration_check_binding_declaration_kind_tzf5hoyfow\" ON \"qti\".\"binding_declaration\" IS 'check of BindingDeclaration for law BindingDeclaration(baseType, cardinality, kind) where {\"arg\":{\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-custom-interaction\",\"qti-portable-custom-interaction\"]},\"kind\":\"not\"} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"record\"}} in BindingFit(baseType, cardinality, kind)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__binding_declaration_key_node_attribute_kind_cfz6qtibon\" ON \"qti\".\"binding_declaration\" IS 'key BindingDeclaration(node, attribute, kind, document, identifier)'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__binding_name_pk_k6l2t2abun\" ON \"qti\".\"binding_name\" IS 'primary key of BindingName'"
 					},
 					{
@@ -14546,14 +14618,6 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_key_document_identifier_poylxocl4p\" ON \"qti\".\"bound_variable\" IS 'key BoundVariable(document, identifier)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_check_bound_variable_kind_attribute_4jjaajwa5m\" ON \"qti\".\"bound_variable\" IS 'check of BoundVariable for law BoundVariable(kind) where {\"arg\":{\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-custom-interaction\",\"qti-portable-custom-interaction\"]},\"kind\":\"not\"} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"record\"}} in RecordBindingFit(kind)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_check_bound_variable_kind_attribute_7zsy2o5xwx\" ON \"qti\".\"bound_variable\" IS 'check of BoundVariable for law BoundVariable(baseType, cardinality, kind) where {\"arg\":{\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-custom-interaction\",\"qti-portable-custom-interaction\"]},\"kind\":\"not\"} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"record\"}} in BindingFit(baseType, cardinality, kind)'"
 					},
 					{
 						"kind": "statement",
@@ -15749,11 +15813,19 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_check_placed_binding_kind_attribute_pdxlqzdqni\" ON \"qti\".\"placed_binding\" IS 'check of PlacedBinding for law PlacedBinding(kind) where {\"arg\":{\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-custom-interaction\",\"qti-portable-custom-interaction\"]},\"kind\":\"not\"} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"record\"}} in RecordBindingFit(kind)'"
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_declaration_pk_55r2hs74bx\" ON \"qti\".\"placed_binding_declaration\" IS 'primary key of PlacedBindingDeclaration'"
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_check_placed_binding_kind_attribute_ajzarq5qh5\" ON \"qti\".\"placed_binding\" IS 'check of PlacedBinding for law PlacedBinding(baseType, cardinality, kind) where {\"arg\":{\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-custom-interaction\",\"qti-portable-custom-interaction\"]},\"kind\":\"not\"} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"record\"}} in BindingFit(baseType, cardinality, kind)'"
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_declaration_key_instance_node_otkicbas2v\" ON \"qti\".\"placed_binding_declaration\" IS 'key PlacedBindingDeclaration(instance, node, attribute, assembly, document, kind, identifier)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_declaration_check_placed_binding_wgdnyancxq\" ON \"qti\".\"placed_binding_declaration\" IS 'check of PlacedBindingDeclaration for law PlacedBindingDeclaration(kind) where {\"arg\":{\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-custom-interaction\",\"qti-portable-custom-interaction\"]},\"kind\":\"not\"} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"record\"}} in RecordBindingFit(kind)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_declaration_check_placed_binding_pzuzm5qlka\" ON \"qti\".\"placed_binding_declaration\" IS 'check of PlacedBindingDeclaration for law PlacedBindingDeclaration(baseType, cardinality, kind) where {\"arg\":{\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-custom-interaction\",\"qti-portable-custom-interaction\"]},\"kind\":\"not\"} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"kind\":\"literal\",\"value\":\"record\"}} in BindingFit(baseType, cardinality, kind)'"
 					},
 					{
 						"kind": "statement",
@@ -17177,6 +17249,26 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"binding_declaration\".\"__tag_max_written_true_6phmyjuam6\" IS 'tag CountBound.maxWritten = true'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"binding_declaration\".\"__tag_most_value_1_potsaavtbt\" IS 'tag CountBound.mostValue = 1'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"binding_declaration\".\"__kind_wpz27h2czt\" IS 'kind where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"binding_declaration\".\"__node_6hhkc3nqmt\" IS 'node where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"binding_declaration\".\"__node_zk4w23iiot\" IS 'node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-match-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"single\"}}'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"binding_name\".\"__copy_bindings_pble3k2v23\" IS 'the owner''s count of the family Document.bindings'"
 					},
 					{
@@ -17186,26 +17278,6 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"binding_name\".\"__predecessor_bindings_o6hyynvl6x\" IS 'the predecessor of the index of the family Document.bindings'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"bound_variable\".\"__tag_max_written_true_6phmyjuam6\" IS 'tag CountBound.maxWritten = true'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"bound_variable\".\"__tag_most_value_1_potsaavtbt\" IS 'tag CountBound.mostValue = 1'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"bound_variable\".\"__kind_wpz27h2czt\" IS 'kind where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"bound_variable\".\"__node_6hhkc3nqmt\" IS 'node where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"bound_variable\".\"__node_zk4w23iiot\" IS 'node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-match-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"single\"}}'"
 					},
 					{
 						"kind": "statement",
@@ -19157,14 +19229,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding\".\"__tag_max_written_true_6phmyjuam6\" IS 'tag CountBound.maxWritten = true'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding\".\"__tag_most_value_1_potsaavtbt\" IS 'tag CountBound.mostValue = 1'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding\".\"__tag_assembly_kind_qti_assessment_item_qf7qyzopnq\" IS 'tag Instance.assemblyKind = qti-assessment-item'"
 					},
 					{
@@ -19181,19 +19245,27 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding\".\"__kind_wpz27h2czt\" IS 'kind where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding\".\"__node_6hhkc3nqmt\" IS 'node where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding\".\"__node_zk4w23iiot\" IS 'node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-match-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"single\"}}'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding\".\"__node_nqyr3apalb\" IS 'node where {\"kind\":\"compare\",\"left\":{\"field\":\"adaptive\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":false}} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding_declaration\".\"__tag_max_written_true_6phmyjuam6\" IS 'tag CountBound.maxWritten = true'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding_declaration\".\"__tag_most_value_1_potsaavtbt\" IS 'tag CountBound.mostValue = 1'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding_declaration\".\"__kind_wpz27h2czt\" IS 'kind where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding_declaration\".\"__node_6hhkc3nqmt\" IS 'node where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"placed_binding_declaration\".\"__node_zk4w23iiot\" IS 'node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-match-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"single\"}}'"
 					},
 					{
 						"kind": "statement",
@@ -22009,6 +22081,22 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__binding_declaration_fk_declaration_document_72vmrzu6ky\" ON \"qti\".\"binding_declaration\" IS 'foreign key BindingDeclaration(declaration, document, identifier, declarationKind, baseType, cardinality) to Declaration(node, document, identifier, declarationKind, baseType, cardinality)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__binding_declaration_fk_node_attribute_ri6ze7ovno\" ON \"qti\".\"binding_declaration\" IS 'foreign key BindingDeclaration(node, attribute) to BoundVariable(node, attribute)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__binding_declaration_fk_node_kind_tag_max_written_5gg6err4rk\" ON \"qti\".\"binding_declaration\" IS 'foreign key BindingDeclaration(node where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}, kind where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}, tag CountBound.maxWritten = true) to CountBound(node, kind, maxWritten)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__binding_declaration_fk_node_tag_most_value_1_gspfr6u5q7\" ON \"qti\".\"binding_declaration\" IS 'foreign key BindingDeclaration(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-match-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"single\"}}, tag CountBound.mostValue = 1) to CountBound(node, mostValue)'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__binding_name_fk_document_copy_bindings_f5f6ysw45x\" ON \"qti\".\"binding_name\" IS 'foreign key BindingName(document, the owner''s count of the family Document.bindings) to Document(node, bindings)'"
 					},
 					{
@@ -22021,23 +22109,15 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_fk_declaration_document_identifier_udsitvgc5x\" ON \"qti\".\"bound_variable\" IS 'foreign key BoundVariable(declaration, document, identifier, declarationKind, baseType, cardinality) to Declaration(node, document, identifier, declarationKind, baseType, cardinality)'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_fk_document_adaptive_glyrkbpi4r\" ON \"qti\".\"bound_variable\" IS 'foreign key BoundVariable(document, adaptive) to ItemMode(document, adaptive)'"
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_fk_node_attribute_kind_document_hjzo3ysz2w\" ON \"qti\".\"bound_variable\" IS 'foreign key BoundVariable(node, attribute, kind, document, identifier) to BindingDeclaration(node, attribute, kind, document, identifier)'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_fk_node_kind_ecgzutnkph\" ON \"qti\".\"bound_variable\" IS 'foreign key BoundVariable(node, kind) to Binding(node, kind)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_fk_node_kind_tag_max_written_true_kyi3yt5y4q\" ON \"qti\".\"bound_variable\" IS 'foreign key BoundVariable(node where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}, kind where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}, tag CountBound.maxWritten = true) to CountBound(node, kind, maxWritten)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__bound_variable_fk_node_tag_most_value_1_g3bxxfwd2r\" ON \"qti\".\"bound_variable\" IS 'foreign key BoundVariable(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-match-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"single\"}}, tag CountBound.mostValue = 1) to CountBound(node, mostValue)'"
 					},
 					{
 						"kind": "statement",
@@ -23501,11 +23581,11 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_fk_declaration_assembly_identifier_4csanlsw3k\" ON \"qti\".\"placed_binding\" IS 'foreign key PlacedBinding(declaration, assembly, identifier, declarationKind, baseType, cardinality) to Declaration(node, document, identifier, declarationKind, baseType, cardinality)'"
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_fk_instance_document_assembly_tag_hesskxaybw\" ON \"qti\".\"placed_binding\" IS 'foreign key PlacedBinding(instance, document, assembly, tag Instance.assemblyKind = qti-assessment-item) to Instance(id, document, assembly, assemblyKind)'"
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_fk_instance_document_assembly_tag_hesskxaybw\" ON \"qti\".\"placed_binding\" IS 'foreign key PlacedBinding(instance, document, assembly, tag Instance.assemblyKind = qti-assessment-item) to Instance(id, document, assembly, assemblyKind)'"
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_fk_instance_node_attribute_assembly_2px7e5svab\" ON \"qti\".\"placed_binding\" IS 'foreign key PlacedBinding(instance, node, attribute, assembly, document, kind, identifier) to PlacedBindingDeclaration(instance, node, attribute, assembly, document, kind, identifier)'"
 					},
 					{
 						"kind": "statement",
@@ -23521,15 +23601,23 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_fk_node_kind_tag_max_written_true_efbmt2ree4\" ON \"qti\".\"placed_binding\" IS 'foreign key PlacedBinding(node where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}, kind where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}, tag CountBound.maxWritten = true) to CountBound(node, kind, maxWritten)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_fk_node_tag_most_value_1_a7ffxujq3a\" ON \"qti\".\"placed_binding\" IS 'foreign key PlacedBinding(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-match-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"single\"}}, tag CountBound.mostValue = 1) to CountBound(node, mostValue)'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_fk_node_of2jpbuqxv\" ON \"qti\".\"placed_binding\" IS 'foreign key PlacedBinding(node where {\"kind\":\"compare\",\"left\":{\"field\":\"adaptive\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":false}} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}}) to Node(id where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-custom-interaction\",\"qti-drawing-interaction\",\"qti-end-attempt-interaction\",\"qti-extended-text-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-graphic-order-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-inline-choice-interaction\",\"qti-match-interaction\",\"qti-media-interaction\",\"qti-order-interaction\",\"qti-portable-custom-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\",\"qti-slider-interaction\",\"qti-text-entry-interaction\",\"qti-upload-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"args\":[{\"field\":\"ancestry\",\"kind\":\"field\"},{\"args\":[{\"kind\":\"literal\",\"value\":\"qti-feedback-block\"}],\"kind\":\"closedRow\",\"relation\":\"Enters\"}],\"fn\":\"disjoint\",\"kind\":\"compute\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":true}})'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_declaration_fk_declaration_assembly_vk5rjqthtr\" ON \"qti\".\"placed_binding_declaration\" IS 'foreign key PlacedBindingDeclaration(declaration, assembly, identifier, declarationKind, baseType, cardinality) to Declaration(node, document, identifier, declarationKind, baseType, cardinality)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_declaration_fk_instance_node_szfcpoghq5\" ON \"qti\".\"placed_binding_declaration\" IS 'foreign key PlacedBindingDeclaration(instance, node, attribute) to PlacedBinding(instance, node, attribute)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_declaration_fk_node_kind_tag_max_vhzd67j2xm\" ON \"qti\".\"placed_binding_declaration\" IS 'foreign key PlacedBindingDeclaration(node where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}, kind where {\"arg\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"multiple\",\"ordered\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-extended-text-interaction\"}}, tag CountBound.maxWritten = true) to CountBound(node, kind, maxWritten)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_declaration_fk_node_tag_most_value_u6bjipksnw\" ON \"qti\".\"placed_binding_declaration\" IS 'foreign key PlacedBindingDeclaration(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-associate-interaction\",\"qti-choice-interaction\",\"qti-gap-match-interaction\",\"qti-graphic-associate-interaction\",\"qti-graphic-gap-match-interaction\",\"qti-hotspot-interaction\",\"qti-hottext-interaction\",\"qti-match-interaction\",\"qti-position-object-interaction\",\"qti-select-point-interaction\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"response-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"cardinality\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"single\"}}, tag CountBound.mostValue = 1) to CountBound(node, mostValue)'"
 					},
 					{
 						"kind": "statement",
@@ -24613,15 +24701,19 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__bound_variable_ix_node_6_hhkc_3_nqmt_kind_wpz_27_h_ae4w42pcdf\" IS 'btree index BoundVariable(__node_6hhkc3nqmt, __kind_wpz27h2czt)'"
+						"statement": "COMMENT ON INDEX \"qti\".\"__binding_declaration_ix_node_6_hhkc_3_nqmt_kind_wpz_rfgek7meu3\" IS 'btree index BindingDeclaration(__node_6hhkc3nqmt, __kind_wpz27h2czt)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__binding_declaration_ix_node_zk_4_w_23_iiot_ioynj4fekh\" IS 'btree index BindingDeclaration(__node_zk4w23iiot)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__binding_declaration_ix_declaration_document_bo7igokpag\" IS 'btree index BindingDeclaration(declaration, document, identifier, declarationKind, baseType, cardinality)'"
 					},
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__bound_variable_ix_node_nqyr_3_apalb_boea2xstsg\" IS 'btree index BoundVariable(__node_nqyr3apalb)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__bound_variable_ix_node_zk_4_w_23_iiot_awwtpgh63t\" IS 'btree index BoundVariable(__node_zk4w23iiot)'"
 					},
 					{
 						"kind": "statement",
@@ -25289,15 +25381,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__placed_binding_ix_node_6_hhkc_3_nqmt_kind_wpz_27_h_h3kqjxw3za\" IS 'btree index PlacedBinding(__node_6hhkc3nqmt, __kind_wpz27h2czt)'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__placed_binding_ix_node_nqyr_3_apalb_ymanobq2y7\" IS 'btree index PlacedBinding(__node_nqyr3apalb)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__placed_binding_ix_node_zk_4_w_23_iiot_6mh2snmg6q\" IS 'btree index PlacedBinding(__node_zk4w23iiot)'"
 					},
 					{
 						"kind": "statement",
@@ -25310,6 +25394,18 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__placed_binding_ix_node_attribute_document_kind_lxjppajjyw\" IS 'btree index PlacedBinding(node, attribute, document, kind, identifier)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__placed_binding_declaration_ix_node_6_hhkc_3_nqmt_ff56uxlvmg\" IS 'btree index PlacedBindingDeclaration(__node_6hhkc3nqmt, __kind_wpz27h2czt)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__placed_binding_declaration_ix_node_zk_4_w_23_iiot_j7uicwiemx\" IS 'btree index PlacedBindingDeclaration(__node_zk4w23iiot)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__placed_binding_declaration_ix_declaration_assembly_k7uproog5g\" IS 'btree index PlacedBindingDeclaration(declaration, assembly, identifier, declarationKind, baseType, cardinality)'"
 					},
 					{
 						"kind": "statement",
@@ -25714,7 +25810,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "fa83e7645d7f7855285866a72841cdbdf64ccd39e6139c5a7e900129b567127a"
+		"target": "1d56b6b5682e817529f1bfd2a1267afdb1b74db03e34dc496af4aafdd2bb6d0d"
 	},
-	"seal": "1a87a716d17d4dc7ded85577d8cd648119cd4715b5389e4d3646a946e81a0ea7"
+	"seal": "e0677e1d97eed36547c511b70088a40aa6844e6b6fcde282d02d060bf5bb2f19"
 }

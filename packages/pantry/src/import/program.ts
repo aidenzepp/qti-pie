@@ -16,17 +16,18 @@
  * module is evaluated.
  */
 import type { Uuid } from "@bjornpagen/grizzle";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { grammar, versions } from "#pantry/grammar/install.ts";
-import { overlayRowsOf, unionOf } from "#pantry/import/overlays/index.ts";
+import { overlayRowsOf, unionsOf } from "#pantry/import/overlays/index.ts";
 import { namedDocuments, rowsOf as packageRowsOf } from "#pantry/import/overlays/package.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
 import { dataSsmlFaultIn } from "#pantry/import/data-ssml.ts";
 import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
+import { documentLayerNames } from "#pantry/import/roster.ts";
 import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
   DocumentLayerRows,
@@ -208,31 +209,8 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
   });
   const overlays = yield* Effect.orDie(Effect.fromResult(overlayRowsOf(placed, draw)));
   const layers = placed.map(({ ids: held, listed }) => documentRowsOf(listed, held));
-  const layer: DocumentLayerRows = yield* Effect.orDie(
-    Effect.fromResult(
-      Result.all({
-        Comment: unionOf(
-          "Comment",
-          layers.map(({ Comment: rows }) => rows),
-        ),
-        Doctype: unionOf(
-          "Doctype",
-          layers.map(({ Doctype: rows }) => rows),
-        ),
-        Document: unionOf(
-          "Document",
-          layers.map(({ Document: rows }) => rows),
-        ),
-        OpenElementName: unionOf(
-          "OpenElementName",
-          layers.map(({ OpenElementName: rows }) => rows),
-        ),
-        Pi: unionOf(
-          "Pi",
-          layers.map(({ Pi: rows }) => rows),
-        ),
-      }),
-    ),
+  const layer = yield* Effect.orDie(
+    Effect.fromResult(unionsOf<DocumentLayerRows>(documentLayerNames, layers)),
   );
   const roots = new Map<string, NodeRoot>(
     placed.map(({ ids: held, listed }) => {

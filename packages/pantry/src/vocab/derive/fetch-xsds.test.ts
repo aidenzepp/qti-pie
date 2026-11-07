@@ -52,6 +52,7 @@ import {
   XsdSourceMismatch,
   XsdSourceMissing,
 } from "#pantry/vocab/derive/sources.ts";
+import { scratchDirectory } from "#pantry/test/scratch.ts";
 import type { XsdSource } from "#pantry/vocab/derive/sources.ts";
 
 /**
@@ -745,7 +746,7 @@ const checkFailures = (pins: readonly PinCase[], failure: XsdFetchIncomplete): v
  */
 const checkRun = Effect.fn("test.fetchXsds.checkRun")(function* checkRun(pins: readonly PinCase[]) {
   const fs = yield* FileSystem.FileSystem;
-  const home = yield* fs.makeTempDirectoryScoped({ prefix: "fetch-xsds-" });
+  const home = yield* scratchDirectory("fetch-xsds-home-");
   const directory = `${home}/.cache/gr8des/qti3/xsd`;
   const table: XsdPins = Object.fromEntries(
     pins.map((pin, index) => [pinPath(index), { sha256: sha256Of(pin.bytes), url: pinUrl(index) }]),

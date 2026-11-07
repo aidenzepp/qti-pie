@@ -1,0 +1,205 @@
+/**
+ * The genetic differential's hunt: one run of the genetic loop
+ * (`#pantry/test/gen/genetic/engine.ts`) over the seed population (`corpus.ts`), bred by the
+ * package edits (`mutate.ts`) under the run's swarm, each candidate judged by the law oracle and
+ * the import's host path (`judge.ts`); then each class of disagreement it found reduced to the
+ * smallest package that still shows it.
+ *
+ * A run is drawn as a {@link RunSketch}, its seed and its swarm, on the tape of one `explore` case,
+ * so the case's replay token replays the whole run, and with it every candidate it bred.
+ */
+import { int } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { swarm } from "@grizzle/testing/swarm";
+import type { Swarm } from "@grizzle/testing/swarm";
+import { Effect } from "effect";
+import type { Corpus } from "#pantry/test/gen/genetic/corpus.ts";
+import { evolve, reduce } from "#pantry/test/gen/genetic/engine.ts";
+import type { Budget, Evolved } from "#pantry/test/gen/genetic/engine.ts";
+import { cutsOf, entriesOf, shownEntries } from "#pantry/test/gen/genetic/genome.ts";
+import type { Genome } from "#pantry/test/gen/genetic/genome.ts";
+import {
+  familyOf,
+  judgeOne,
+  movedBy,
+  shownDisagreement,
+  signatureOf,
+} from "#pantry/test/gen/genetic/judge.ts";
+import type { Bench, Disagreement, Feature, Judged } from "#pantry/test/gen/genetic/judge.ts";
+import { noised, noises } from "#pantry/test/gen/genetic/noise.ts";
+import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
+import { mutationOf, operators } from "#pantry/test/gen/genetic/mutate.ts";
+import type { Operator } from "#pantry/test/gen/genetic/mutate.ts";
+
+/**
+ * How often a candidate is judged beside a noised copy: one in this many, each noise in turn.
+ */
+const noiseEvery = 2;
+
+/**
+ * One run as its case draws it: the swarm its edits are weighed by, and the seed its every choice
+ * is drawn from.
+ */
+export interface RunSketch {
+  readonly seed: number;
+  readonly swarm: Swarm<Operator>;
+}
+
+/**
+ * The largest seed a run draws: 2^31 − 1, a whole 31-bit word.
+ */
+const largestSeed = 0x7f_ff_ff_ff;
+
+/**
+ * Draw a run: its swarm over every operator first, one of them always on, then its seed.
+ */
+export const runSketch: Gen<RunSketch> = (source) => ({
+  seed: source.draw(int(0, largestSeed)),
+  swarm: source.draw(swarm(operators)),
+});
+
+/**
+ * Write a run's sketch as the literal a kept case pastes back.
+ *
+ * @param sketch - The sketch.
+ * @returns The literal.
+ */
+export const runLiteral = (sketch: RunSketch): string =>
+  `{ seed: ${String(sketch.seed)}, swarm: { ${Object.entries(sketch.swarm)
+    .map(([operator, weight]) => `"${operator}": ${String(weight)}`)
+    .join(", ")} } }`;
+
+/**
+ * One class of disagreement a run found, reduced: its signature, the disagreement as the reduced
+ * package shows it, the edits that bred the first candidate that showed it, and the reduced
+ * package's text.
+ */
+export interface Reduced {
+  readonly disagreement: Disagreement;
+  readonly lineage: readonly string[];
+  readonly package: string;
+  readonly signature: string;
+  readonly tries: number;
+}
+
+/**
+ * What one run found: the engine's report, and each class of disagreement, reduced.
+ */
+export interface HuntReport {
+  readonly evolved: Evolved<Genome, Feature, Disagreement>;
+  readonly reduced: readonly Reduced[];
+}
+
+/**
+ * Run the hunt for one sketch.
+ *
+ * @param corpus - The seed population.
+ * @param bench - The bench the judge reads.
+ * @param budget - The run's budget.
+ * @param tries - The most candidates each reduction judges.
+ * @param sketch - The run.
+ * @returns The report.
+ */
+export const hunt = Effect.fnUntraced(function* hunt(
+  corpus: Corpus,
+  bench: Bench,
+  budget: Budget,
+  tries: number,
+  sketch: RunSketch,
+) {
+  let judged = 0;
+  const judgeAt = (genome: Genome) => {
+    judged += 1;
+
+    return judgeOne(genome, bench, judged);
+  };
+  const withTwin = (genome: Genome, noise: Noise, salt: number) =>
+    Effect.gen(function* withNoise() {
+      const own = yield* judgeAt(genome);
+      const twin = yield* judgeAt(noised(genome, noise, salt));
+
+      return {
+        ...own,
+        disagreements: [...own.disagreements, ...movedBy(own, twin, noise, salt)],
+      } satisfies Judged;
+    });
+  const judgeAll = (genomes: readonly Genome[]) =>
+    Effect.forEach([...genomes], (genome) => {
+      const noise = noises[judged % (noises.length * noiseEvery)];
+
+      return noise === undefined ? judgeAt(genome) : withTwin(genome, noise, judged);
+    });
+  const evolved = yield* evolve(
+    {
+      familyOf,
+      judge: judgeAll,
+      mutate: mutationOf({ corpus, grammar: bench.grammar, swarm: sketch.swarm }),
+      seeds: corpus.seeds.map(({ genome }) => genome),
+      signatureOf,
+    },
+    budget,
+    sketch.seed,
+  );
+  const reduced = yield* Effect.forEach([...evolved.found], ([signature, found]) =>
+    Effect.gen(function* reduceOne() {
+      const { disagreement: first } = found;
+      const shown = (genome: Genome) =>
+        first.kind === "noise-moved" ? withTwin(genome, first.noise, first.salt) : judgeAt(genome);
+      const { genome, tries: spent } = yield* reduce(
+        found.genome,
+        cutsOf,
+        (genomes) =>
+          Effect.forEach([...genomes], (candidate) =>
+            Effect.map(shown(candidate), ({ disagreements }) =>
+              disagreements.some((disagreement) => signatureOf(disagreement) === signature),
+            ),
+          ),
+        tries,
+        1,
+      );
+      const last = yield* shown(genome);
+
+      return {
+        disagreement:
+          last?.disagreements.find((disagreement) => signatureOf(disagreement) === signature) ??
+          found.disagreement,
+        lineage: found.lineage,
+        package: shownEntries(yield* Effect.orDie(entriesOf(genome))),
+        signature,
+        tries: spent,
+      } satisfies Reduced;
+    }),
+  );
+
+  return { evolved, reduced } satisfies HuntReport;
+});
+
+/**
+ * Write a run's findings as its failure report: each class of disagreement, the edits that bred
+ * it, and its reduced package.
+ *
+ * @param report - The run's report.
+ * @returns The report's text.
+ */
+export const shownReport = (report: HuntReport): string =>
+  report.reduced
+    .map(
+      ({ disagreement, lineage, package: shown, signature, tries }) =>
+        `== ${signature}\n${shownDisagreement(disagreement)}\nbred by: ${lineage.join("; ") || "a seed, unedited"}\nreduced in ${String(tries)} tries to:\n${shown}`,
+    )
+    .join("\n\n");
+
+/**
+ * Write a run's residual risk: Good–Turing's estimate for each feature family, singletons over
+ * candidates.
+ *
+ * @param report - The run's report.
+ * @returns One line.
+ */
+export const shownResidual = (report: HuntReport): string =>
+  `${String(report.evolved.evaluated)} candidates, ${String(report.evolved.population)} kept; ${report.evolved.residual
+    .map(
+      ({ estimate, family, observed, singletons }) =>
+        `${family} ${String(singletons)}/${String(report.evolved.evaluated)} = ${estimate.toFixed(3)} (${String(observed)} features)`,
+    )
+    .join(", ")}`;

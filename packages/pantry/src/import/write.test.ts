@@ -10,7 +10,7 @@
  * - Every keyed set is a set: a repeat of one row is one row, two rows at one key a conflict.
  * - The flat inputs a per-row pattern judges are written in runs of their pattern's inputs.
  */
-import type { Addition, ChangeSet, Fact } from "@bjornpagen/grizzle";
+import type { Addition, Fact } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -35,7 +35,6 @@ import {
   rootInsertOf,
 } from "#pantry/import/write.ts";
 import type {
-  changeSetOf,
   AttributeInsert,
   DocumentLayerRows,
   EntityInsert,
@@ -792,24 +791,6 @@ describe("the written types", () => {
       [openName, idref, entity, namespace, entry].flatMap((record) => Object.keys(record)),
       13,
     );
-  });
-});
-
-/**
- * The relations a ChangeSet writes, its `Writes` parameter.
- */
-type WritesOf<C> =
-  C extends ChangeSet<infer _Schema, infer _Params, infer Writes, infer _Reads> ? Writes : never;
-
-describe("changeSetOf", () => {
-  it("inserts every relation of a package's inputs", () => {
-    // Oracle: the specification as a checker, the brief's "one .insert per relation", held by the
-    // compiler: every key of `PackageInputs` is among the relations the ChangeSet writes, so a
-    // builder whose rows join the inputs and miss the ChangeSet is a type error here.
-    type Uninserted = Exclude<keyof PackageInputs, WritesOf<ReturnType<typeof changeSetOf>>>;
-    const whole: [Uninserted] extends [never] ? true : Uninserted = true;
-
-    assert.isTrue(whole);
   });
 });
 

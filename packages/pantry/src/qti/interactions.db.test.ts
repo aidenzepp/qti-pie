@@ -50,6 +50,7 @@ import { Document } from "#pantry/qti/chardata.ts";
 import {
   AriaRange,
   Binding,
+  BindingDeclaration,
   BoundVariable,
   Choice,
   ChoiceVariableName,
@@ -151,7 +152,7 @@ const keyOver =
     law.side.terms.every((term, at) => term.kind === "field" && term.field === fields[at]);
 
 /**
- * A stray item binding of a choice interaction to a declared single identifier response.
+ * A stray item binding of a choice interaction, by its response identifier `RESPONSE`.
  *
  * @param at - The interaction's number.
  * @param fields - The fields the case sets.
@@ -160,6 +161,23 @@ const keyOver =
 const boundRow = (at: number, fields: Partial<Fact<typeof BoundVariable>> = {}) =>
   ({
     adaptive: false,
+    attribute: "response-identifier",
+    document: stray,
+    identifier: "RESPONSE",
+    kind: "qti-choice-interaction",
+    node: strayNode(at),
+    ...fields,
+  }) satisfies Fact<typeof BoundVariable>;
+
+/**
+ * The declaration row of {@link boundRow}'s binding: a stray single identifier response.
+ *
+ * @param at - The interaction's number.
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const declarationRow = (at: number, fields: Partial<Fact<typeof BindingDeclaration>> = {}) =>
+  ({
     attribute: "response-identifier",
     baseType: "identifier",
     cardinality: "single",
@@ -170,7 +188,7 @@ const boundRow = (at: number, fields: Partial<Fact<typeof BoundVariable>> = {}) 
     kind: "qti-choice-interaction",
     node: strayNode(at),
     ...fields,
-  }) satisfies Fact<typeof BoundVariable>;
+  }) satisfies Fact<typeof BindingDeclaration>;
 
 /**
  * A stray count bound of an order interaction whose least is written, every field true to
@@ -567,6 +585,21 @@ const boundVariableSql = (fields: Fact<typeof BoundVariable>) =>
   ({
     adaptive: fields.adaptive,
     attribute: codeOf(AttributeName.handles, fields.attribute),
+    document: fields.document,
+    identifier: fields.identifier,
+    kind: codeOf(NodeKind.handles, fields.kind),
+    node: fields.node,
+  }) satisfies SqlRow;
+
+/**
+ * A binding's declaration row as a direct writer's row, every closed id by its code.
+ *
+ * @param fields - The row as the API writes it.
+ * @returns The table's row.
+ */
+const declarationSql = (fields: Fact<typeof BindingDeclaration>) =>
+  ({
+    attribute: codeOf(AttributeName.handles, fields.attribute),
     base_type: codeOf(BaseType.handles, fields.baseType),
     cardinality: codeOf(Cardinality.handles, fields.cardinality),
     declaration: fields.declaration,
@@ -668,7 +701,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         "refuses a binding of a type its interaction does not fit, by BindingFit, RecordBindingFit and a string binding's base type",
         () =>
           // Oracle: PostgreSQL, the containments of a typed and a record binding into the closed
-          // `BindingFit` and `RecordBindingFit` (CHECKs on BoundVariable's table), and the
+          // `BindingFit` and `RecordBindingFit` (CHECKs on BindingDeclaration's table), and the
           // `BindingFit` check on a string binding (§5.48.2, §5.162.3).
           // Bound: a choice interaction bound to a single string, and to a record; a text entry's
           // string binding to an integer.
@@ -676,16 +709,16 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const cases = [
               {
-                picks: containedIn("BoundVariable", "BindingFit"),
-                row: boundRow(0, { baseType: "string" }),
+                picks: containedIn("BindingDeclaration", "BindingFit"),
+                row: declarationRow(0, { baseType: "string" }),
               },
               {
-                picks: containedIn("BoundVariable", "RecordBindingFit"),
-                row: boundRow(0, { baseType: "none", cardinality: "record" }),
+                picks: containedIn("BindingDeclaration", "RecordBindingFit"),
+                row: declarationRow(0, { baseType: "none", cardinality: "record" }),
               },
               {
-                picks: checkNamed("BoundVariable", "BindingFit"),
-                row: boundRow(0, {
+                picks: checkNamed("BindingDeclaration", "BindingFit"),
+                row: declarationRow(0, {
                   attribute: "string-identifier",
                   baseType: "integer",
                   kind: "qti-text-entry-interaction",
@@ -694,7 +727,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             ];
             for (const { picks, row } of cases) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(BoundVariable, [row]),
+                ChangeSet.empty(Author).insert(BindingDeclaration, [row]),
                 {},
               );
 
@@ -704,21 +737,74 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
+        "refuses a binding with no declaration row, and a declaration row that names no declaration, by Binding declared",
+        () =>
+          // Oracle: PostgreSQL, the foreign keys of "Binding declared" (reading 75; lane NIL's
+          // audit, B1: a missing value is a row of its own relation, never a sentinel): every
+          // binding has its BindingDeclaration, and each BindingDeclaration names a Declaration.
+          // 23503 on those keys alone.
+          // Bound: a binding alone, refused; a binding with its declaration row, accepted by the
+          // first key; and the old host's nil sentinel, a declaration row of the nil uuid, refused
+          // by the second.
+          Effect.gen(function* bindingDeclaredRows() {
+            const client = yield* loginSession;
+            const existence = yield* foreignKeys(client, "bound_variable", "binding_declaration");
+            const named = yield* foreignKeys(client, "binding_declaration", "declaration");
+            assert.isNotEmpty(existence);
+            assert.isNotEmpty(named);
+
+            const bound = { row: boundVariableSql(boundRow(0)), table: "bound_variable" };
+            const alone = Option.getOrUndefined(yield* deferredInsert(client, [bound], existence));
+            assert.strictEqual(alone?.code, "23503", "a binding with no declaration row");
+            assert.include(existence, alone?.constraint);
+
+            const declared = Option.getOrUndefined(
+              yield* deferredInsert(
+                client,
+                [bound, { row: declarationSql(declarationRow(0)), table: "binding_declaration" }],
+                existence,
+              ),
+            );
+            assert.isUndefined(declared, "a binding beside its declaration row");
+
+            const sentinel = Option.getOrUndefined(
+              yield* deferredInsert(
+                client,
+                [
+                  bound,
+                  {
+                    row: declarationSql(
+                      declarationRow(0, { baseType: "none", declaration: nilUuid }),
+                    ),
+                    table: "binding_declaration",
+                  },
+                ],
+                named,
+              ),
+            );
+            assert.strictEqual(sentinel?.code, "23503", "a declaration row of the nil uuid");
+            assert.include(named, sentinel?.constraint);
+          }).pipe(Effect.scoped),
+      );
+
+      it.effect(
         "refuses a binding to a variable that is no response declaration, by Binding declared",
         () =>
           // Oracle: PostgreSQL, the `Binding_declared` check (reading 75): an interaction binds a
           // response variable.
-          // Bound: a binding resolved to an outcome declaration.
+          // Bound: a declaration row of an outcome declaration.
           Effect.gen(function* bindingDeclared() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const outcome = yield* db.apply(
-              ChangeSet.empty(Author).insert(BoundVariable, [
-                boundRow(0, { declarationKind: "qti-outcome-declaration" }),
+              ChangeSet.empty(Author).insert(BindingDeclaration, [
+                declarationRow(0, { declarationKind: "qti-outcome-declaration" }),
               ]),
               {},
             );
 
-            assert.isTrue(rejectedBy(outcome, checkNamed("BoundVariable", "Binding_declared")));
+            assert.isTrue(
+              rejectedBy(outcome, checkNamed("BindingDeclaration", "Binding_declared")),
+            );
           }),
       );
 
@@ -735,10 +821,9 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             for (const rows of [
               [boundRow(0), boundRow(1)],
               [
-                boundRow(0, { baseType: "string", kind: "qti-text-entry-interaction" }),
+                boundRow(0, { kind: "qti-text-entry-interaction" }),
                 boundRow(0, {
                   attribute: "string-identifier",
-                  baseType: "string",
                   kind: "qti-text-entry-interaction",
                 }),
               ],
@@ -838,7 +923,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // Bound: a choice interaction's most of 2 and of 0, refused, and of 1, accepted.
           Effect.gen(function* bindingCardinality() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeys(client, "bound_variable", "count_bound");
+            const keys = yield* foreignKeys(client, "binding_declaration", "count_bound");
             assert.isNotEmpty(keys);
 
             for (const [most, refusedExpected] of [
@@ -850,7 +935,10 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 yield* deferredInsert(
                   client,
                   [
-                    { row: boundVariableSql(boundRow(0)), table: "bound_variable" },
+                    {
+                      row: declarationSql(declarationRow(0)),
+                      table: "binding_declaration",
+                    },
                     {
                       row: countBoundSql(
                         boundOf({
@@ -889,21 +977,21 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // Bound: a multiple binding with max-strings unwritten, refused, and written, accepted.
           Effect.gen(function* maxStrings() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeys(client, "bound_variable", "count_bound");
+            const keys = yield* foreignKeys(client, "binding_declaration", "count_bound");
             for (const written of [false, true]) {
               const refused = Option.getOrUndefined(
                 yield* deferredInsert(
                   client,
                   [
                     {
-                      row: boundVariableSql(
-                        boundRow(0, {
+                      row: declarationSql(
+                        declarationRow(0, {
                           baseType: "string",
                           cardinality: "multiple",
                           kind: "qti-extended-text-interaction",
                         }),
                       ),
-                      table: "bound_variable",
+                      table: "binding_declaration",
                     },
                     {
                       row: countBoundSql(

@@ -882,8 +882,8 @@ export const expressionPackageBreaches = (
               Option.contains(collapsedOf(item.rows, held.id, "identifier"), template),
           ),
         ).pipe(
-          // A declaration that writes no cardinality has no Declaration row to compare with: AL3
-          // is its one refusal (the orchestrator's ruling of 2026-11-06).
+          // A declaration that writes no cardinality is refused by AL3 alone, not compared as the
+          // `single` the schema holds it as (the orchestrator's ruling of 2026-11-06).
           Option.flatMap((declaration) =>
             Option.map(collapsedOf(item.rows, declaration.id, "cardinality"), (cardinality) => ({
               base: valueBaseOf(

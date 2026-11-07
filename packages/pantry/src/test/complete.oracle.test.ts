@@ -368,13 +368,14 @@ const declarationSites = [
 
 describe("a declaration that writes no cardinality", () => {
   it.effect(
-    "is refused under required-attribute alone, as the database's rows can hold no Declaration for it",
+    "is refused under required-attribute alone, an absent attribute no empty one",
     (ctx) =>
       // Oracle: the specification as a checker. AL3 refuses a declaration with no cardinality, and
-      // every law that reads a declaration's cardinality reads its Declaration row, which the
-      // database cannot write for it, so the oracle may raise no other rule (the orchestrator's
-      // ruling of 2026-11-06: an absent attribute is no empty one). Bound: every declaration of
-      // the every-relation items and test, each its cardinality dropped, exhausted.
+      // no law that reads a declaration's cardinality judges the `single` the schema holds an
+      // unwritten one as, so the oracle raises no other rule (the orchestrator's ruling of
+      // 2026-11-06: an absent attribute is no empty one, and one cause is refused under one rule).
+      // Bound: every declaration of the every-relation items and test, each its cardinality
+      // dropped, exhausted.
       searched(
         ctx,
         exhaust(

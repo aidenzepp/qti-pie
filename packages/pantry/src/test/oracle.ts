@@ -3906,6 +3906,37 @@ const collapsedOf = (overlay: Overlay, node: FoldedNode<Composed>, name: string)
 const spelledCardinalities: ReadonlySet<string> = new Set([...typedCardinalities, "record"]);
 
 /**
+ * The attributes by which an interaction binds a response variable: its `response-identifier`,
+ * and an entry interaction's `string-identifier` (§5.48.2, §5.162.3: "binding the interaction to a
+ * second response variable (of base-type string)").
+ */
+const bindingNames = ["response-identifier", "string-identifier"] as const;
+
+/**
+ * Read the cardinality a response declaration writes, where it writes one as a cardinality is
+ * spelled: the bindings the fit laws judge ("BindingFit", "RecordBindingFit" and "Binding
+ * cardinality"). A cardinality left unwritten is refused by AL3 alone, and one written as no
+ * cardinality by its value domain alone, never by a fit law over a type the declaration does not
+ * have (the orchestrator's ruling of 2026-11-06: an absent attribute is no empty one, and one cause
+ * is refused under one rule). The schema's fit laws read a binding's `BindingDeclaration`
+ * (`#pantry/qti/interactions.ts`), which only a declared binding has, and that row's cardinality is
+ * the `Declaration` row's, which holds an unwritten or unspelled one as `single` (lane NIL's audit,
+ * B11): until no `Declaration` row is written for one, a binding whose `single` its interaction
+ * does not fit is refused by the schema under BindingFit as well as AL3 or the value domain.
+ *
+ * @param overlay - The item.
+ * @param declaration - The response declaration.
+ * @returns The cardinality as written, or none.
+ */
+const spelledCardinalityOf = (
+  overlay: Overlay,
+  declaration: FoldedNode<Composed>,
+): Option.Option<string> =>
+  Option.filter(valueOf(overlay.view, declaration.id, "cardinality"), (written) =>
+    spelledCardinalities.has(written),
+  );
+
+/**
  * `xs:integer`'s lexical space.
  */
 const xsIntegerForm = /^[+-]?[0-9]+$/u;
@@ -4432,38 +4463,51 @@ const overlayLaws: readonly ((
   },
   (node, overlay) => {
     const { grammar } = overlay.laws;
-    const record = Option.isSome(grammar.recordBindingFit.lookup({ kind: node.kind }));
-    const typed = grammar.bindingFit.rows.some(({ kind }) => kind === node.kind);
-    const bound = collapsedOf(overlay, node, "response-identifier");
-    if (!overlay.isItem || !(record || typed) || Option.isNone(bound)) {
+    if (!overlay.isItem || Option.isNone(grammar.kinds.interaction.lookup({ kind: node.kind }))) {
       return [];
     }
 
-    const identifier = bound.value;
-    const response = (overlay.declared.get(identifier) ?? []).find(
-      ({ kind }) => kind === "qti-response-declaration",
-    );
-    if (response === undefined) {
-      return [{ keys: { identifier }, law: "Binding declared" }];
-    }
+    return bindingNames.flatMap((attribute): readonly Finding[] => {
+      const bound = collapsedOf(overlay, node, attribute);
+      if (Option.isNone(bound)) {
+        return [];
+      }
 
-    // A response that writes no cardinality has no Declaration row for a binding to copy, so AL3
-    // ("required-attribute") is its one refusal: an absent attribute is no empty one (the
-    // orchestrator's ruling of 2026-11-06).
-    const written = collapsedOf(overlay, response, "cardinality");
-    if (Option.isNone(written)) {
-      return [];
-    }
+      const identifier = bound.value;
+      const response = (overlay.declared.get(identifier) ?? []).find(
+        ({ kind }) => kind === "qti-response-declaration",
+      );
+      if (response === undefined) {
+        return [{ keys: { attribute, identifier }, law: "Binding declared" }];
+      }
 
-    const cardinality = written.value;
-    const baseType = Option.getOrElse(collapsedOf(overlay, response, "base-type"), () => "");
-    if (cardinality === "record") {
-      return record ? [] : [{ keys: { identifier }, law: "RecordBindingFit" }];
-    }
+      const cardinality = spelledCardinalityOf(overlay, response);
+      if (Option.isNone(cardinality)) {
+        return [];
+      }
 
-    return Option.isSome(grammar.bindingFit.lookup({ baseType, cardinality, kind: node.kind }))
-      ? []
-      : [{ keys: { baseType, cardinality, identifier }, law: "BindingFit" }];
+      const baseType = Option.getOrElse(collapsedOf(overlay, response, "base-type"), () => "");
+      if (attribute === "string-identifier") {
+        return baseType === "string"
+          ? []
+          : [{ keys: { attribute, baseType, identifier }, law: "BindingFit" }];
+      }
+
+      const record = Option.isSome(grammar.recordBindingFit.lookup({ kind: node.kind }));
+      if (!record && !grammar.bindingFit.rows.some(({ kind }) => kind === node.kind)) {
+        return [];
+      }
+
+      if (cardinality.value === "record") {
+        return record ? [] : [{ keys: { identifier }, law: "RecordBindingFit" }];
+      }
+
+      return Option.isSome(
+        grammar.bindingFit.lookup({ baseType, cardinality: cardinality.value, kind: node.kind }),
+      )
+        ? []
+        : [{ keys: { baseType, cardinality: cardinality.value, identifier }, law: "BindingFit" }];
+    });
   },
   (node, overlay) => {
     const { choiceBound, choiceCount } = overlay.laws.grammar.references;
@@ -4753,7 +4797,7 @@ const overlayLaws: readonly ((
     const cardinality =
       response === undefined
         ? ""
-        : Option.getOrElse(collapsedOf(overlay, response, "cardinality"), () => "");
+        : Option.getOrElse(spelledCardinalityOf(overlay, response), () => "");
 
     return Option.exists(most, (count) => count === 0n || count > 1n) && cardinality === "single"
       ? [
@@ -4788,8 +4832,8 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    // An outcome that writes no cardinality has no Declaration row for the law to read, so AL3
-    // ("required-attribute") is its one refusal (the orchestrator's ruling of 2026-11-06).
+    // An outcome that writes no cardinality is refused by AL3 ("required-attribute") alone, not
+    // judged as the `single` the schema holds it as (the orchestrator's ruling of 2026-11-06).
     const written = collapsedOf(overlay, outcome, "cardinality");
     if (Option.isNone(written)) {
       return [];
