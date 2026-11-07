@@ -93,6 +93,10 @@ and both of its entry points are unstable until M3.
   score an item whose template processing runs.
 - `Accepted`'s `item` holds `templates` and `templateProcessing`, its body holds printed
   variables, template blocks and template inlines, and a choice holds its template visibility.
+- `Configuration` gains `outputBudget`, the most characters of HTML one `render` writes,
+  16,777,216 by default. `configure` takes an integer from 1 to 536,870,888 and refuses any other
+  value. Past the budget, `render` fails with the new `OutputTooLarge`, which names the budget and
+  the item, and returns none of the page. `src/index.ts` exports `OutputTooLarge`.
 
 ### How plate reads template processing (2026-11-07)
 
@@ -169,11 +173,14 @@ and both of its entry points are unstable until M3.
 
 ### How plate reads SCORE, MAXSCORE and PASSED (2026-11-07)
 
-- `open` refuses an outcome declaration named `SCORE` or `MAXSCORE` whose base type is not `float`,
-  or one named `PASSED` whose base type is not `boolean`, in an item or a test. The rule is
-  `attribute-type`, at the declaration's `base-type`. The information model says these outcomes
-  must have those types, and pantry refuses the same. A `record` declaration of those names is
-  accepted _(pending)_, and so is a response or template declaration of them.
+- `open` refuses an outcome declaration named `SCORE` or `MAXSCORE` whose base type is not `float`
+  in an item, and one named `PASSED` whose base type is not `boolean` in an item or a test. The
+  rule is `attribute-type`, at the declaration's `base-type`. The information model says these
+  outcomes must have those types, and pantry refuses the same. A test's `SCORE` and `MAXSCORE` may
+  have any base type, since QTI 3.0 types only an item's. pantry refuses them in a test too, so
+  there plate accepts what pantry refuses until pantry follows. No corpus test declares a `SCORE` or
+  `MAXSCORE` of a base type other than `float`, so no verdict moves. A `record` declaration of those
+  names is accepted _(pending)_, and so is a response or template declaration of them.
 - `qtiv3-examples/items/shared-vocabulary/Items/Item_QTI3_WritingPostcard_02/extended_text_qti3.xml`,
   which declares an `integer` `SCORE`, and its copy inside `shared-vocabulary-imsmanifest.zip`, are
   now `refused`. They were `accepted`. The package `shared-vocabulary-imsmanifest.zip` is now
