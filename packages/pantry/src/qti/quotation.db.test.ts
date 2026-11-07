@@ -112,15 +112,20 @@ const ends = [
 /**
  * `simple`'s item with one edit of its first paragraph, materialized once under its own name.
  *
+ * A fixture edit holds a file's bytes, each as the latin1 character of its value
+ * (`#pantry/test/fixtures.ts`, `TextEdit`), and `choice.xml` is UTF-8. So the paragraph is spelled
+ * as its UTF-8 bytes, so a curly quotation mark lands in the file as the character itself, as an
+ * author writes it.
+ *
  * @param name - The fixture's name.
- * @param paragraph - The paragraph that replaces it.
+ * @param paragraph - The paragraph that replaces it, as text.
  * @returns The package's directory.
  */
 const withParagraph = (name: string, paragraph: string) => {
   const edit: TextEdit = {
     _tag: "ReplaceText",
     file: "choice.xml",
-    replacement: paragraph,
+    replacement: Buffer.from(paragraph, "utf-8").toString("latin1"),
     search: "<p>Look at the text in the picture.</p>",
   };
 
@@ -198,7 +203,9 @@ describe.skipIf(!hasLease)(
 
               assert.isTrue(
                 rejectedBy(outcome, quotationCheck("E1_derived")),
-                JSON.stringify(fields),
+                Object.entries(fields)
+                  .map(([field, value]) => `${field} ${String(value)}`)
+                  .join(", "),
               );
             }
           }),

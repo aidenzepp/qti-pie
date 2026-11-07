@@ -55,7 +55,14 @@ import {
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { assertVerdict, judged, loginSession, rowsOf, sqlRowOf } from "#pantry/test/direct-sql.ts";
+import {
+  assertVerdict,
+  familySlot,
+  judged,
+  loginSession,
+  rowsOf,
+  sqlRowOf,
+} from "#pantry/test/direct-sql.ts";
 import type { Insert } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -321,19 +328,6 @@ const referencingDocument = nodeOf(90);
 const allDigits = /^[0-9]+$/u;
 
 /**
- * A family's hidden columns for a member at a slot, by the comment grizzle installs on each.
- *
- * @param family - The family, `Owner.count`.
- * @param index - The member's slot.
- * @param count - The owner's count.
- * @returns The hidden values.
- */
-const slotOf = (family: string, index: number, count: number) => ({
-  [`the index of the family ${family}`]: index,
-  [`the owner's count of the family ${family}`]: count,
-});
-
-/**
  * The rows a direct writer states for one reference's readings, owners first, each owner lawful on
  * its own CHECKs:
  *
@@ -387,13 +381,13 @@ const readingInserts = (
       table: "reference_document",
     },
     {
-      hidden: slotOf("ReferenceDocument.references", 0, 1),
+      hidden: familySlot("ReferenceDocument.references", 0, 1),
       row: sqlRowOf(TestReference, reference),
       table: "test_reference",
     },
     { row: sqlRowOf(AssembledReference, assembled), table: "assembled_reference" },
     ...readings.map((reading, at) => ({
-      hidden: slotOf("AssembledReference.readings", at, count),
+      hidden: familySlot("AssembledReference.readings", at, count),
       row: sqlRowOf(Reading, reading),
       table: "reading",
     })),

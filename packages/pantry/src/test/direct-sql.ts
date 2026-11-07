@@ -156,16 +156,21 @@ const statementOf = (client: Client, { hidden = {}, row, table }: Insert) =>
   });
 
 /**
- * Insert a case's rows, in order, as the author role, every deferrable foreign key deferred, and
- * roll back: the server's verdict on the rows by their own CHECKs, keys, domains and
- * non-deferrable foreign keys.
+ * Insert a case's rows, in order, as the author role, every deferrable foreign key deferred, then
+ * set the given ones immediate, and roll back: the server's verdict on the rows by their own
+ * CHECKs, keys, domains and non-deferrable foreign keys, and by those foreign keys.
  *
  * @param client - The session.
  * @param inserts - The rows, each with its table.
- * @returns The server's error, or none when the rows' own laws accept them; fails with any other
- *   failure.
+ * @param immediate - The deferrable foreign keys to check once the rows are in, by name.
+ * @returns The server's error, or none when the rows' own laws and those keys accept them; fails
+ *   with any other failure.
  */
-export const judged = (client: Client, inserts: readonly Insert[]) =>
+export const judged = (
+  client: Client,
+  inserts: readonly Insert[],
+  immediate: readonly string[] = [],
+) =>
   Effect.gen(function* insertDeferred() {
     const statements = yield* Effect.all(inserts.map((insert) => statementOf(client, insert)));
     yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
@@ -175,6 +180,10 @@ export const judged = (client: Client, inserts: readonly Insert[]) =>
       yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
       for (const { text, values } of statements) {
         yield* rowsOf(client, text, values);
+      }
+
+      for (const name of immediate) {
+        yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchema}."${name}" IMMEDIATE`);
       }
     }).pipe(
       Effect.as(Option.none<DatabaseError>()),
@@ -213,6 +222,20 @@ export const assertVerdict = (
     assert.isUndefined(error, `${label}: ${error?.message ?? ""}`);
   }
 };
+
+/**
+ * A family member's hidden columns at a slot, by the comment grizzle installs on each: its index
+ * and its copy of its owner's count.
+ *
+ * @param family - The family, `Owner.count`.
+ * @param index - The member's slot.
+ * @param count - The owner's count.
+ * @returns The hidden values.
+ */
+export const familySlot = (family: string, index: number, count: number) => ({
+  [`the index of the family ${family}`]: index,
+  [`the owner's count of the family ${family}`]: count,
+});
 
 /**
  * The code of a handle in its roster, the value a direct writer stores in its closed-id column.
