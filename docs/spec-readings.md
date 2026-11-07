@@ -2047,6 +2047,12 @@ against it. A reading that is not an information-model-over-XSD case says which 
      - its catalog references are its assembly's: a `data-catalog-idref` in a fragment names a `qti-catalog` of the
        item that places it, and a test's names one of the test or of a section document it places ("Catalog reference"
        over the assembly, as "Idref target");
+     - its `m:share` elements are its assembly's: a share's `src` names an element of the assembly, and "MathML share
+       cycle" follows the merged document's edges per placement, so a fragment placed in two items is judged in each,
+       apart, and the walk enters an element an include splices from the include's parent, so a cycle that closes
+       through an include is refused by both judges; under a test's assembly, a share naming an element of another
+       document the test places whole is ranked by the schema, while the law oracle reads shares in the document and
+       its splices alone, a recorded difference on a cycle across such documents (no corpus test holds a share);
      - its choices and hottexts are its item's: their identifiers are distinct from the item's and from every other
        placed fragment's ("Choice identifier key" over the assembly), and name no variable of the item ("Choice not
        variable" against the item's declarations and built-in variables);
@@ -2073,7 +2079,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      and expressions (P20 to P29) and the processing language its rules are written in (O4), which read its variables
      untyped and its language as none. This binds pantry and plate alike. This is not a case of documents in conflict.
      (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
-     2026-11-07 by the Mind, decision 416, on audit e8db90e1's F2.)
+     2026-11-07 by the Mind, decision 416, on audit e8db90e1's F2, and decision 417, on its F3.)
 
 118. **An include holds at most one fallback, and its `accept` and `accept-language` hold header characters alone,
      though `XInclude.xsd` admits more.** XInclude says "The children property of the xi:include element may include a

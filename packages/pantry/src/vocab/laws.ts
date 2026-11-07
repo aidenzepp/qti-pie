@@ -581,7 +581,7 @@ export const lawTable = {
   "MathML share cycle": {
     rule: "document-key",
     source:
-      "reading 2: https://www.w3.org/TR/MathML3/chapter4.html#contm.share (MathML 3 §4.2.7, c4#contm.acyclicity: 'An element may not dominate itself'): an element dominates its children and, where it is an m:share whose src is a same-document fragment, the element that fragment names, so an m:share on a cycle of those edges is refused",
+      "reading 2: https://www.w3.org/TR/MathML3/chapter4.html#contm.share (MathML 3 §4.2.7, c4#contm.acyclicity: 'An element may not dominate itself'): an element dominates its children and, where it is an m:share whose src is a same-document fragment, the element that fragment names in its assembly (reading 117), per placement, so an m:share on a cycle of those edges is refused",
   },
   "Max strings required": {
     rule: "max-strings-required",
