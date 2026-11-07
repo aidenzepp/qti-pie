@@ -280,10 +280,6 @@ const mergedOf = (
       "CellHeaders",
       parts.map(({ CellHeaders: rows }) => rows),
     ),
-    CellLeaf: unionOf(
-      "CellLeaf",
-      parts.map(({ CellLeaf: rows }) => rows),
-    ),
     Choice: unionOf(
       "Choice",
       parts.map(({ Choice: rows }) => rows),

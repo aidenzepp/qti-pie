@@ -78,7 +78,6 @@ import {
   select,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { Statement } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
@@ -370,7 +369,7 @@ export const leafStartFold = fold(
  *   starts, and `MathML_align_first`: in slot 0, a leaf is a group where its cell holds one that
  *   stands.
  */
-export const alignLaws: readonly Statement[] = [
+export const alignLaws = [
   mirrors(on(MathAction, "node"), on(actions, "id")),
   contained(on(MathAction, "node", "elements", "elementChildren"), nodeCounts),
   key(on(selectionAttributes, "node")),

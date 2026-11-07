@@ -47,7 +47,6 @@ import {
   select,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { Statement } from "@bjornpagen/grizzle";
 import {
   AttributeName,
   CnBase,
@@ -226,7 +225,7 @@ export const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
  *   is refused;
  * - **`MathML_cn_form`:** each part's text matches the pattern of its form in its base.
  */
-export const cnLaws: readonly Statement[] = [
+export const cnLaws = [
   contained(on(MathCn, "node"), on(cnNodes, "id")),
   key(on(cnAttributes, "node", "name")),
   contained(
