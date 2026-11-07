@@ -184,6 +184,7 @@ describe("the test helpers", () => {
       "test/inclusion-cycles.oracle.test.ts: #pantry/test/oracle.ts",
       "test/key-breaches.oracle.test.ts: #pantry/test/oracle.ts",
       "test/locate.ts: #pantry/test/oracle.ts",
+      "test/lom-records.oracle.test.ts: #pantry/test/oracle.ts",
       "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
       "test/oracle.complete.test.ts: #pantry/test/oracle.ts",
       "test/oracle.empty-section.test.ts: #pantry/test/oracle.ts",

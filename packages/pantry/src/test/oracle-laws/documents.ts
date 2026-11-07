@@ -526,7 +526,10 @@ const folded = (tag: string): string =>
 
 /**
  * Judge `lom-title` over a package (QTI 3.0 Metadata §2.7.1.2): every record of an item's or a
- * test's resource whose general category has a title holds a title string whose value is the
+ * test's resource, a `lom:lom` of the resource's own `cp:metadata` (spec reading 62; a `cp:file`'s
+ * record describes the file: "The scope of Metadata is the parent container class only", IMS
+ * Content Packaging 1.2 §6.7), whose general category has a title holds a title string whose value
+ * is the
  * document's `title`, in the document's language: a string whose `language` is the root's
  * `xml:lang`, without regard to case, or one with no `language`, or any string where the root
  * states no `xml:lang` (an empty or blank one states none, XML 1.0 §2.12).
@@ -561,10 +564,15 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
     );
 
     return manifest.members
-      .filter(
-        (lom) =>
-          lom.kind === "lom:lom" && ancestorsOf(manifest, lom).some(({ id }) => id === resource.id),
-      )
+      .filter((lom) => {
+        const [metadata, owner] = ancestorsOf(manifest, lom);
+
+        return (
+          lom.kind === "lom:lom" &&
+          metadata?.kind === "cp:metadata.resource" &&
+          owner?.id === resource.id
+        );
+      })
       .flatMap((lom): readonly Breach[] => {
         const strings = manifest.members.filter((string) => {
           const [titleNode, general] = ancestorsOf(manifest, string);
