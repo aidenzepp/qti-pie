@@ -13,10 +13,16 @@
  * record of `#pantry/test/xsd-differential.ts` matches is a bug in one of the two, reported with
  * its document reduced by hierarchical delta debugging and the edits that bred it.
  *
- * Seeds are drawn whose roots `xmllint` judges: a root only an included fragment has (reading 114)
- * has no global declaration, so `xmllint` assesses nothing below it and the case compares nothing.
- * A seed holds no doctype and so no unexpanded entity reference, since an entity declared only in
- * an external subset no processor here reads leaves no infoset to compare.
+ * Seeds are rooted where `xmllint` judges: a root only an included fragment has (reading 114) has
+ * no global declaration, so `xmllint` assesses nothing below it and the case compares nothing. The
+ * lawful seeds come first (`#pantry/test/gen/genetic/lawful.ts`): documents built from the
+ * grammar's content automata that both oracles should accept, each root model's accepting states
+ * probed by a path stopped at each of its positions, and every position its models reach passed by
+ * a covering document, so one edit of a lawful seed is the only cause of what it breaks, and a
+ * lawful document the grammar refuses shows. The drawn seeds follow (the XDM generator's), lawful
+ * in their content and attribute admission only. A seed holds no doctype and so no unexpanded
+ * entity reference, since an entity declared only in an external subset no processor here reads
+ * leaves no infoset to compare.
  *
  * Budget: a bounded one in every free run, a longer one under `GR8DES_GENETIC=1`. The search's
  * seed is the run's (`TEST_SEED`); rerunning with it breeds the same documents. It writes the
@@ -28,6 +34,7 @@ import { Console, Effect, FileSystem, Layer, Option, Result } from "effect";
 import { Digest } from "effect/crypto";
 import { encode } from "@qti-pie/crust/encode.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";
 import { floorSeed, rotatingSeed } from "@grizzle/testing/random";
 import { sample } from "@grizzle/testing/source";
@@ -53,6 +60,7 @@ import {
 } from "#pantry/test/gen/genetic/document-xsd.ts";
 import type { XsdFeature, XsdGenome } from "#pantry/test/gen/genetic/document-xsd.ts";
 import { evolve, reduce } from "#pantry/test/gen/genetic/engine.ts";
+import { lawfulDocuments } from "#pantry/test/gen/genetic/lawful.ts";
 import type { Breeding } from "#pantry/test/gen/genetic/mutate.ts";
 import type { Budget, Judgment } from "#pantry/test/gen/genetic/engine.ts";
 import { xdmDocument } from "#pantry/test/gen/xdm.ts";
@@ -108,13 +116,15 @@ const scratchRoot = fileScratchDirectory("genetic-xsd-");
 const oracleRoot = fileScratchDirectory("genetic-xsd-oracle-");
 
 /**
- * The free run's budget: 64 seeds and two generations of 80, so `xmllint` compiles each version's
- * schema sets three times. To be set from a measurement.
+ * The free run's budget: every lawful seed, 64 drawn seeds and two generations of 80, so `xmllint`
+ * compiles each version's schema sets three times. `initial` counts the drawn seeds; the run judges
+ * the lawful ones beside them.
  */
 const freeBudget: Budget = { candidates: 160, edits: 3, generation: 80, initial: 64 };
 
 /**
- * The long budget under `GR8DES_GENETIC=1`: 96 seeds and 25 generations of 96.
+ * The long budget under `GR8DES_GENETIC=1`: every lawful seed, 96 drawn seeds and 25 generations of
+ * 96.
  */
 const longBudget: Budget = { candidates: 2400, edits: 4, generation: 96, initial: 96 };
 
@@ -374,15 +384,21 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
 });
 
 /**
- * The documents every run judges as written, beside the bred ones: the reduced cases a ruling
- * settled, each of which both oracles must judge alike from then on. The template inline's is VD's
- * ruling of 2026-11-07 (an interaction its HTML holds is valid; only a template block refuses one
- * at any depth, §5.145), which disagrees until the grammar's ban comes off the inline.
+ * The documents every run judges as written, beside the bred ones: the reduced cases a ruling or a
+ * record settled, each of which both oracles must judge alike from then on. The template inline's
+ * is VD's ruling of 2026-11-07 (an interaction its HTML holds is valid; only a template block
+ * refuses one at any depth, §5.145), which disagrees until the grammar's ban comes off the inline.
+ * The padded `xsi:type`'s is libxml2's on both sides (`paddedTypeRecord`, `paddedTypeLaw`): a
+ * lawful-seed run bred it from a drawn seed, `xsitype:ENTITY ` on a lax foreign element.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
     name: "an interaction in a template inline's span",
     text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="string"/><qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/><qti-item-body><p><qti-template-inline template-identifier="T" identifier="x"><span><qti-text-entry-interaction response-identifier="R"/></span></qti-template-inline></p></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "an xsi:type padded with a trailing space, on a foreign element a lax wildcard holds",
+    text: '<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-selection xmlns:n="urn:n"><config xmlns="urn:w" xmlns:o="urn:w"><widget xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns="" xmlns:xsitype="http://www.w3.org/2001/XMLSchema" zs:type="xsitype:ENTITY "/></config></qti-selection></qti-assessment-section>',
   },
   {
     name: "an interaction in a template block's paragraph",
@@ -402,31 +418,60 @@ const shown = (genome: XsdGenome) =>
   );
 
 /**
- * Draw the seed documents: the XDM generator's, with no doctype and so no entity reference, and
- * rooted only at kinds whose roots `xmllint` judges, on the run's own stream, each with a swarm of
- * its own.
+ * Whether a root kind's documents are judged: `xmllint` judges every root but one only an included
+ * fragment has (reading 114).
+ *
+ * @param kind - The root's kind.
+ * @returns Whether its documents seed the search.
+ */
+const judgedRoot = (kind: string): boolean => !fragmentOnlyKinds.has(kind);
+
+/**
+ * The seeds of a run: the genomes, lawful first, and each one's name by the root of its document,
+ * which a finding bred from it reads back through its genome's `seed`.
+ */
+interface Seeds {
+  readonly names: ReadonlyMap<Element, string>;
+  readonly seeds: readonly XsdGenome[];
+}
+
+/**
+ * Build the seed documents, rooted only at kinds whose roots `xmllint` judges: every lawful
+ * document, then `count` documents of the XDM generator's, with no doctype and so no entity
+ * reference, drawn on the run's own stream; each with a swarm of its own, and named, a drawn one by
+ * its place.
  *
  * @param grammar - The composed grammar.
  * @param stream - The run's stream.
- * @param count - How many seeds.
+ * @param count - How many drawn seeds.
  * @returns The seeds.
  */
 const seedsOf = (
   grammar: ComposedGrammar,
   stream: ReturnType<typeof rotatingSeed>,
   count: number,
-): readonly XsdGenome[] => {
-  const names = namesOf(grammar);
+): Seeds => {
+  const lawful = lawfulDocuments(grammar, judgedRoot);
   const drawn = sample(
-    xdmDocument(grammar, new Set(["doctype", "entityRef"]), (kind) => !fragmentOnlyKinds.has(kind)),
+    xdmDocument(grammar, new Set(["doctype", "entityRef"]), judgedRoot),
     stream,
     count,
+  ).map(({ document }, at) => ({
+    doc: toXmlDocument(document, namesOf(grammar)),
+    name: `drawn #${String(at)}`,
+  }));
+  const named = [...lawful, ...drawn];
+  const swarms = sample(
+    swarm(xsdOperators),
+    rotatingSeed(stream, floorSeed("swarm")),
+    named.length,
   );
-  const swarms = sample(swarm(xsdOperators), rotatingSeed(stream, floorSeed("swarm")), count);
+  const seeds = named.map(({ doc }, at) => seedGenome(doc, swarms[at] ?? {}));
 
-  return drawn.map(({ document }, at) =>
-    seedGenome(toXmlDocument(document, names), swarms[at] ?? {}),
-  );
+  return {
+    names: new Map(seeds.map(({ seed }, at) => [seed, named[at]?.name ?? ""])),
+    seeds,
+  };
 };
 
 describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
@@ -439,7 +484,8 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
           const laws = lawsOf(grammar);
           const run = yield* runOfProcess;
           const stream = rotatingSeed(run.seed, floorSeed("pantry/genetic-xsd"));
-          const seeds = seedsOf(grammar, stream, budget.initial);
+          const { names: seedNames, seeds } = seedsOf(grammar, stream, budget.initial);
+          const lawful = new Set(seeds.slice(0, seeds.length - budget.initial));
           const oracle = yield* writeXsdOracle(oracleRoot);
           const breeding: Breeding = {
             corpus: corpusFrom(
@@ -453,6 +499,7 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
           };
           let generation = 0;
           let disagreeing = 0;
+          const lawfulVerdicts = new Map<string, number>();
           const started = Date.now();
           const judge = (
             genomes: readonly XsdGenome[],
@@ -469,6 +516,17 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
               versions,
             }).pipe(
               Effect.tap((judgments) => {
+                for (const [at, { features }] of judgments.entries()) {
+                  const genome = genomes[at];
+                  for (const feature of genome !== undefined && lawful.has(genome)
+                    ? features
+                    : []) {
+                    if (feature.startsWith("verdict:")) {
+                      lawfulVerdicts.set(feature, (lawfulVerdicts.get(feature) ?? 0) + 1);
+                    }
+                  }
+                }
+
                 disagreeing += judgments.filter(
                   ({ disagreements }) => disagreements.length > 0,
                 ).length;
@@ -488,14 +546,15 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
               seeds,
               signatureOf,
             },
-            budget,
+            { ...budget, initial: seeds.length },
             stream,
           );
 
           const found = [...evolved.found];
           yield* Console.log(
             [
-              `genetic-xsd: TEST_SEED=${String(run.seed)}, budget ${JSON.stringify(budget)}, ${String(evolved.evaluated)} documents judged in ${schemaVersions.join(" and ")}, population ${String(evolved.population)}, ${String(evolved.features.size)} features, ${String(evolved.found.size)} disagreement classes`,
+              `genetic-xsd: TEST_SEED=${String(run.seed)}, budget ${JSON.stringify(budget)} beside ${String(lawful.size)} lawful seeds, ${String(evolved.evaluated)} documents judged in ${schemaVersions.join(" and ")}, population ${String(evolved.population)}, ${String(evolved.features.size)} features, ${String(evolved.found.size)} disagreement classes`,
+              `  lawful seeds' verdicts: ${[...lawfulVerdicts].map(([verdict, count]) => `${verdict.slice("verdict:".length)} ${String(count)}`).join("; ")}`,
               `  residual (Good–Turing f1/n) by family: ${evolved.residual.map(({ candidates, estimate, family, observed, singletons }) => `${family} ${String(singletons)}/${String(candidates)} = ${estimate.toFixed(3)} of ${String(observed)} seen`).join("; ")}`,
               `  recorded classes matched: ${[...matchedCounts].map(([reason, count]) => `${reason}… ${String(count)}`).join("; ")}`,
               ...found.map(([signature]) => `  class: ${signature.slice(0, 300)}`),
@@ -547,7 +606,7 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
             );
             const report = [
               `${difference.direction} ${difference.class} ${difference.rule} in ${version}: ${difference.detail.slice(0, 600)}`,
-              `  bred by: ${finding.lineage.join(" ; ") || "(a seed)"}`,
+              `  bred from ${seedNames.get(finding.genome.seed) ?? "a seed"} by: ${finding.lineage.join(" ; ") || "(no edit)"}`,
               `  ${reducing ? `reduced in ${String(reduced.tries)} tries` : "unreduced"} to: ${yield* shown(reduced.genome)}`,
             ].join("\n");
             reports.push(report);
@@ -675,9 +734,78 @@ const widenedSchema = (derived: boolean): string =>
   ].join("\n");
 
 /**
- * The folder the libxml2 control writes its toy schemas to, the run's own.
+ * The folder the libxml2 controls write their toy schemas to, the run's own.
  */
 const controlRoot = fileScratchDirectory("genetic-xsd-control-");
+
+/**
+ * The padded-type control's toy schema: an element whose content is an `##other` lax wildcard.
+ */
+const laxSchema = [
+  '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">',
+  '<xs:element name="w"><xs:complexType><xs:sequence><xs:any namespace="##other" processContents="lax" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType></xs:element>',
+  "</xs:schema>",
+].join("\n");
+
+/**
+ * The padded-type control's document: a foreign element in no namespace, inside a foreign element
+ * the lax wildcard holds, naming a built-in type by `xsi:type` and holding a text it refuses.
+ *
+ * @param type - The `xsi:type` value, `xs:` bound to XML Schema's namespace.
+ * @returns The document's text.
+ */
+const laxTyped = (type: string): string =>
+  `<w xmlns="urn:t"><config xmlns="urn:w"><widget xmlns="" xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" zs:type="${type}">a b</widget></config></w>`;
+
+describe.skipIf(!cached)("genetic-xsd.oracle.test.ts, libxml2's padded xsi:type", () => {
+  layer(TestLayer, { excludeTestServices: true })("the control", (it) => {
+    it.effect(
+      "a built-in type named with a trailing space resolves to no type, so the text it refuses is never assessed, and named plain refuses it",
+      () =>
+        Effect.gen(function* paddedType() {
+          const fs = yield* FileSystem.FileSystem;
+          const types = ["xs:ENTITY", "xs:ENTITY ", "xs:NCName", "xs:NCName "];
+
+          yield* fs.makeDirectory(controlRoot, { recursive: true });
+          yield* fs.writeFileString(`${controlRoot}/lax.xsd`, laxSchema);
+          yield* Effect.forEach(
+            types,
+            (type, at) =>
+              fs.writeFileString(`${controlRoot}/typed${String(at)}.xml`, laxTyped(type)),
+            { concurrency: 1 },
+          );
+
+          const verdicts = yield* xmllintValidate({
+            paths: types.map((_, at) => `${controlRoot}/typed${String(at)}.xml`),
+            schema: `${controlRoot}/lax.xsd`,
+          });
+
+          assert.deepStrictEqual(
+            verdicts.map((verdict) =>
+              verdict._tag === "Invalid"
+                ? verdict.messages.map(({ text }) => {
+                    if (
+                      text.endsWith(
+                        "of the xsi:type attribute does not resolve to a type definition.",
+                      )
+                    ) {
+                      return "no type";
+                    }
+
+                    return text.includes("is not a valid value of the atomic type")
+                      ? "text refused"
+                      : text;
+                  })
+                : [],
+            ),
+            [["text refused"], ["no type"], ["text refused"], ["no type"]],
+            "libxml2 resolves a padded xsi:type's QName uncollapsed, and so assesses the element by no type",
+          );
+        }),
+      { timeout: 120_000 },
+    );
+  });
+});
 
 describe.skipIf(!cached)("genetic-xsd.oracle.test.ts, libxml2's widened ##other", () => {
   layer(TestLayer, { excludeTestServices: true })("the control", (it) => {

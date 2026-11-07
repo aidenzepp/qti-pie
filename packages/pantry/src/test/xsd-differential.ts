@@ -206,19 +206,28 @@ export const absentTypeRecord: Recorded = {
 };
 
 /**
- * A padded `xsi:type`: libxml2 2.9.13 resolves an `xsi:type`'s prefix before it collapses the
- * value's whitespace, so `xsi:type=" t:T "` names no declaration of the prefix " t" for it. XML
- * Schema types the attribute `xs:QName` (Part 1, 3.2.7), whose whitespace facet is fixed at
- * collapse (Part 2, 3.2.18), so the value is the QName `t:T`, which the law oracle reads.
+ * One of `xmllint`'s messages that a padded `xsi:type` names nothing: a leading space makes its
+ * prefix one no declaration binds (`' t:T'`), and a trailing one leaves its local name one no type
+ * has (`'{urn:t}T '`, the prefix resolved).
+ */
+const paddedTypeMessage =
+  "line \\d+ \\S+: The QName value '(?:[\\t\\n\\r ]+[^'\\t\\n\\r ]+[\\t\\n\\r ]*|[^'\\t\\n\\r ]+[\\t\\n\\r ]+)' has no corresponding namespace declaration in scope\\.|line \\d+ \\S+: The QName value '(?:\\{[^}]*\\})?[^'\\t\\n\\r ]*[\\t\\n\\r ]+[^'\\t\\n\\r ]*' of the xsi:type attribute does not resolve to a type definition\\.";
+
+/**
+ * A padded `xsi:type`: libxml2 2.9.13 resolves an `xsi:type`'s QName before it collapses the
+ * value's whitespace, so `xsi:type=" t:T"` names no declaration of the prefix " t", and
+ * `xsi:type="t:T "` resolves its prefix and names no type `T `. XML Schema types the attribute
+ * `xs:QName` (Part 1, 3.2.7), whose whitespace facet is fixed at collapse (Part 2, 3.2.18), so the
+ * value is the QName `t:T`, which the law oracle reads. Shown by its control: `xs:ENTITY` and
+ * `xs:NCName` named plain and with a trailing space, on an element a lax wildcard holds.
  */
 export const paddedTypeRecord: Recorded = {
   class: "attribute-value",
-  detail:
-    /^line \d+ \S+: The QName value '(?:[\t\n\r ]+[^'\t\n\r ]+[\t\n\r ]*|[^'\t\n\r ]+[\t\n\r ]+)' has no corresponding namespace declaration in scope\.$/u,
+  detail: new RegExp(`^(?:${paddedTypeMessage})(?: \\| (?:${paddedTypeMessage}))*$`, "u"),
   direction: "xsd-only",
   reason: {
     _tag: "libxml2",
-    why: "libxml2 resolves an xsi:type's prefix before it collapses the QName's whitespace",
+    why: "libxml2 resolves an xsi:type's QName before it collapses the QName's whitespace",
   },
 };
 
@@ -321,12 +330,13 @@ export const laxXsiType: Recorded = {
  * expanded name captured.
  */
 const unresolvedXsiType =
-  /^line \d+ (?<name>(?:\{[^}]*\})?\S+): The QName value '[^']*' of the xsi:type attribute does not resolve to a type definition\.$/u;
+  /^line \d+ (?<name>(?:\{[^}]*\})?\S+): The QName value '[^'\t\n\r ]*' of the xsi:type attribute does not resolve to a type definition\.$/u;
 
 /**
  * Decide whether a difference is reading 60's class ({@link laxXsiType}): every message `xmllint`
  * gave for it says an `xsi:type` resolves to no type definition, each on an element the law
- * oracle's rows hold as laxly assessed.
+ * oracle's rows hold as laxly assessed. A padded value is libxml2's ({@link paddedTypeRecord}),
+ * since its collapsed QName may name a type.
  *
  * @param difference - The difference.
  * @param laxNames - The document's laxly assessed elements' expanded names.
@@ -533,6 +543,43 @@ export const isNestedRootLaw = (
     difference.direction === nestedRootLaw.direction &&
     place !== undefined &&
     nestedPaths.has(place)
+  );
+};
+
+/**
+ * The law oracle's side of a padded `xsi:type` ({@link paddedTypeRecord}): libxml2 assesses the
+ * element by no type, laxly where a lax wildcard holds it, and the law oracle by the type the
+ * collapsed QName names, so it refuses within that element what the type refuses and `xmllint`
+ * never assessed: a text outside a simple type's domain, a child or an attribute the type does
+ * not admit.
+ */
+export const paddedTypeLaw: Recorded = {
+  direction: "oracle-only",
+  reason: {
+    _tag: "libxml2",
+    why: "libxml2 assesses an element whose xsi:type is padded by no type, so the refusals of the type its collapsed QName names are the law oracle's alone",
+  },
+};
+
+/**
+ * Decide whether a difference is {@link paddedTypeLaw}: a law refusal the law oracle states of a
+ * node at or within an element whose `xsi:type` is padded, by the path the comparison writes.
+ *
+ * @param difference - The difference.
+ * @param paddedPaths - The paths of the document's nodes at or within such an element, as the law
+ *   oracle writes a node's place.
+ * @returns Whether it is.
+ */
+export const isPaddedTypeLaw = (
+  difference: Difference,
+  paddedPaths: ReadonlySet<string>,
+): boolean => {
+  const place = breachDetail.exec(difference.detail)?.groups?.["path"];
+
+  return (
+    difference.direction === paddedTypeLaw.direction &&
+    place !== undefined &&
+    paddedPaths.has(place)
   );
 };
 
@@ -972,6 +1019,72 @@ export const generatedRecorded: readonly Recorded[] = [
     },
     rule: "P25",
   },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_base-type (§4.5.3, and §5.34.3, §5.115.3, §5.151.3: 'Variables with record cardinality have no base-type')",
+      why: "a record declares no base type and every other variable declares one; the XSD makes base-type optional on every declaration",
+    },
+    rule: "declaration-type",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 77,
+      says: "A response variable, declared or built in, is refused for both",
+      why: "a feedback element's outcome-identifier names a declared outcome; the XSD types it an identifier and resolves it nowhere",
+    },
+    rule: "feedback-ref",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 77,
+      says: "The outcome variable or template variable must have been defined.",
+      why: "a printed variable names a declared outcome or template variable; the XSD types its identifier and resolves it nowhere",
+    },
+    rule: "printed-variable-ref",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_LookupOutcomeValue_expressionGroup (§5.87.2: 'An expression which must have single cardinality and an effective base-type of either integer, float or duration. Integer type is required when the associated table is a matchTable')",
+      why: "a lookup's expression is a single integer, float or duration, and an integer for a match table; the XSD types no expression",
+    },
+    rule: "P22",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-variable (§6.9.40: 'This expression looks up the value of an itemVariable that has been declared in a corresponding variableDeclaration or is one of the built-in variables'), and #DataCharacteristic_SetValue.Attr_identifier (§5.130.1: 'The identifier of the variable to be set')",
+      why: "a variable reference or setter names a declared or built-in variable; the XSD types its identifier and resolves it nowhere",
+    },
+    rule: "P8",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 79,
+      says: "The number of children to select may exceed the number of child elements defined only if with-replacement is true",
+      why: "a selection without replacement selects at most its section's parts; the XSD bounds select by no count",
+    },
+    rule: "selection-bounds",
+  },
 ];
 
 /**
@@ -999,6 +1112,11 @@ export interface ForeignNames {
   readonly nested: ReadonlySet<string>;
   readonly nestedPaths: ReadonlySet<string>;
   readonly outside: ReadonlySet<string>;
+  /**
+   * The places, as the law oracle writes them, of the nodes at or within an element whose
+   * `xsi:type` is padded ({@link paddedTypeLaw}).
+   */
+  readonly paddedPaths: ReadonlySet<string>;
   readonly set: ReadonlySet<string>;
 }
 
@@ -1042,6 +1160,7 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
       nested: new Set(),
       nestedPaths: new Set(),
       outside: new Set(),
+      paddedPaths: new Set(),
       set: new Set(),
     };
   }
@@ -1070,6 +1189,12 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
 
     return `/${steps.toReversed().join("/")}`;
   };
+  const padded = new Set(
+    rows.attributes.flatMap(({ lexical, name, node }) =>
+      name === "xsi:type" && lexical.trim() !== lexical ? [node] : [],
+    ),
+  );
+  const typed = rows.nodes.filter((node) => padded.has(node.id));
 
   return {
     lax: new Set(opened.values()),
@@ -1090,6 +1215,11 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
           .filter(({ namespace }) => !set.has(namespace))
           .map(writtenName),
       ),
+    ),
+    paddedPaths: new Set(
+      rows.nodes
+        .filter((node) => typed.some((at) => at.start <= node.start && node.end <= at.end))
+        .map(placeOf),
     ),
     set,
   };
@@ -1608,6 +1738,10 @@ export const generatedRecordOf = (
     return nestedRootLaw;
   }
 
+  if (isPaddedTypeLaw(difference, names.paddedPaths)) {
+    return paddedTypeLaw;
+  }
+
   if (isOrderingSlot(difference, root, names.nested)) {
     return orderingSlot;
   }
@@ -1642,4 +1776,5 @@ export const everyRecord: readonly Recorded[] = [
   nestedRootLaw,
   orderingSlot,
   outsideSet,
+  paddedTypeLaw,
 ];

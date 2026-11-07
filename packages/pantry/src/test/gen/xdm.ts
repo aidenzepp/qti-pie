@@ -180,7 +180,7 @@ export interface GeneratedXdm {
  * What a child is drawn as: an element of a kind, a foreign element, or a kind of character data,
  * whose kind is its class.
  */
-type Drawn =
+export type Drawn =
   | { readonly class: "element"; readonly kind: ElementKind<Composed> }
   | { readonly class: "wildcard"; readonly kind: ForeignKind }
   | { readonly class: Exclude<ChildClass, "element" | "wildcard"> };
@@ -190,7 +190,7 @@ type Drawn =
  * character data, which leaves its family's state as it was, and for a kind several positions name,
  * whose position its predecessor's state decides through `Symbol`.
  */
-type Candidate = Drawn & { readonly position: number };
+export type Candidate = Drawn & { readonly position: number };
 
 /**
  * A (version, parent)'s content model as its Glushkov automaton (`#pantry/grammar/content.ts`): the
@@ -198,7 +198,7 @@ type Candidate = Drawn & { readonly position: number };
  * end in (`Last`), the positions each kind several positions name may take (`Symbol`), and the
  * fewest nodes that end the family from each state, which the generator completes a family by.
  */
-interface Automaton {
+export interface Automaton {
   readonly finish: Map<number, number>;
   readonly follow: ReadonlyMap<number, ReadonlySet<number>>;
   readonly into: ReadonlyMap<number, readonly number[]>;
@@ -212,7 +212,7 @@ interface Automaton {
  * each (version, kind)'s closed attributes and open classes, and the foreign names of each class
  * each (version, parent) admits.
  */
-interface Index {
+export interface Index {
   readonly automata: ReadonlyMap<string, Automaton>;
   readonly children: ReadonlyMap<string, readonly Candidate[]>;
   readonly closed: ReadonlyMap<string, readonly ClosedName<Composed>[]>;
@@ -274,7 +274,7 @@ interface Index {
  * @param kind - The kind.
  * @returns One string per (version, kind).
  */
-const keyOf = (version: string, kind: string): string => `${version} ${kind}`;
+export const keyOf = (version: string, kind: string): string => `${version} ${kind}`;
 
 /**
  * How each admitted child kind is drawn.
@@ -311,7 +311,7 @@ const drawnOf = (kind: Kind): Option.Option<Drawn> => {
  * @param drawn - How it is drawn.
  * @returns Its `NodeKind` handle.
  */
-const kindOfDrawn = (drawn: Drawn): Kind => {
+export const kindOfDrawn = (drawn: Drawn): Kind => {
   switch (drawn.class) {
     case "element":
     case "wildcard": {
@@ -765,12 +765,6 @@ const attributeKeyOf = (
 };
 
 /**
- * Gather what the generator reads of a grammar, once per grammar.
- *
- * @param grammar - The composed grammar.
- * @returns Its index.
- */
-/**
  * Read each (version, element kind)'s declared type and the named types its `xsi:type` may name
  * from `XsiType`, the type's handle `{namespace}local` read back as its name; a type in no
  * namespace is left out, since its QName would need the default namespace undeclared.
@@ -883,7 +877,14 @@ const closedNameOf =
  */
 const isXsiType = (handle: string): boolean => handle === "xsi:type";
 
-const indexOf = (grammar: ComposedGrammar): Index => {
+/**
+ * Gather what the generator reads of a grammar, once per grammar. The lawful seeds of the XSD
+ * search (`#pantry/test/gen/genetic/lawful.ts`) build their documents from it too.
+ *
+ * @param grammar - The composed grammar.
+ * @returns Its index.
+ */
+export const indexOf = (grammar: ComposedGrammar): Index => {
   const known = indexes.get(grammar);
   if (known !== undefined) {
     return known;
@@ -1277,7 +1278,7 @@ const openNamesOf = (
  * @param parent - Its parent's kind.
  * @returns The names, as closed handles.
  */
-const requiredUnder = (kind: Kind, parent: Kind): readonly string[] => {
+export const requiredUnder = (kind: string, parent: string): readonly string[] => {
   if (kind === "track") {
     return ["srclang"];
   }
