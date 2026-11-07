@@ -794,6 +794,12 @@ export const PciModuleForm = relation("PciModuleForm", { element: pg.boolean, no
 export const pciModuleFamily = counted(on(PciModuleForm, "node"), fin(Interaction, "moduleForms"));
 
 /**
+ * The custom interaction's kind, the deprecated element a 3.0.0 document holds none of ("Custom
+ * interaction version", R10-b).
+ */
+export const customKind = "qti-custom-interaction";
+
+/**
  * The portable custom interaction's kind, the one element whose module a form names.
  */
 export const pciKind = "qti-portable-custom-interaction";
@@ -2077,6 +2083,11 @@ export const interactionLawsByName = {
           ),
         ),
       ),
+    ),
+  ],
+  "Custom interaction version": [
+    check("Custom_interaction_version", Interaction, (i) =>
+      i.or(i.ne(i.kind, customKind), i.ne(i.version, "3.0.0")),
     ),
   ],
   "DocumentId key": [key(on(moduleAttributes, "node"))],

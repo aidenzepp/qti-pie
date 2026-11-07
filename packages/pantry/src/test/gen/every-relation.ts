@@ -20,13 +20,14 @@
  *   ARIA range and an IDREFS, an SSML fragment with a mark, a MathML formula that applies `log` to
  *   a `logbase` and an argument, a table whose cell's `headers` names its header, a printed
  *   variable whose base names a variable, a `q` with no quotation mark beside or inside it,
- *   template and feedback content, choice, hottext, hotspot, slider, custom (holding a foreign
- *   element) and portable custom interactions (the item's names its module by the `module`
- *   attribute, the included fragment's by both forms, so the package writes each form of "PCI
- *   module source"), a catalog whose keyword-translation card holds two entries (the first its
- *   default, in `es`, the second in `de`, languages the item's LOM does not list, since a catalog
- *   sits outside the body) and whose sign-language card names the image as its file, a span in the
- *   body whose `data-catalog-idref` names the catalog, and response processing that holds a
+ *   template and feedback content, choice, hottext, hotspot, slider and portable custom
+ *   interactions (the item's holds a foreign element in its markup's `template` and names its
+ *   module by the `module` attribute, the included fragment's by both forms, so the package writes
+ *   each form of "PCI module source"; it holds no custom interaction, which a 3.0.0 package may
+ *   not), a catalog whose keyword-translation card holds two entries (the first its default, in
+ *   `es`, the second in `de`, languages the item's LOM does not list, since a catalog sits outside
+ *   the body) and whose sign-language card names the image as its file, a span in the body whose
+ *   `data-catalog-idref` names the catalog, and response processing that holds a
  *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
  *   times;
@@ -258,11 +259,8 @@ const itemOf = (members: MemberCounts): string =>
     ].slice(0, members.hotspots),
     "    </qti-hotspot-interaction>",
     '    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>',
-    '    <qti-custom-interaction response-identifier="WIDGET">',
-    '      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>',
-    "    </qti-custom-interaction>",
     '    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">',
-    "      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>",
+    '      <qti-interaction-markup><div>A portable interaction.</div><template><w:widget xmlns:w="urn:example:widget">A widget.</w:widget></template></qti-interaction-markup>',
     '      <qti-context-variable identifier="CTX"/>',
     "    </qti-portable-custom-interaction>",
     "  </qti-item-body>",

@@ -36,7 +36,16 @@ import {
 import { Qti } from "#pantry/qti/schema.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
-import { base, breachesOf, edit, item, judged, shown } from "#pantry/test/probe.ts";
+import {
+  base,
+  breachesOf,
+  edit,
+  item,
+  itemResource,
+  judged,
+  manifestOf,
+  shown,
+} from "#pantry/test/probe.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
 /**
@@ -112,6 +121,7 @@ describe("qti/interactions.ts, declared", () => {
       "Choice bounds",
       "Choice not variable",
       "Context variable reference",
+      "Custom interaction version",
       "E1 derived",
       "Feedback outcome type",
       "Feedback reference",
@@ -422,5 +432,55 @@ describe("qti/interactions.ts, PCI module source", () => {
   it("is a check of Interaction under the rule of its own: pci-module-source", () => {
     // Oracle: the oracle's own rule table (`ruleOf`).
     assert.strictEqual(ruleOf("PCI module source"), "pci-module-source");
+  });
+});
+
+/**
+ * The breaches of "Custom interaction version" in the base item with its choice interaction
+ * replaced by a custom interaction, under one schema version.
+ *
+ * @param version - The `schemaversion` the package's manifest declares.
+ * @returns The breaches.
+ */
+const customBreachesOf = (version: string) =>
+  Effect.map(
+    judged({
+      "imsmanifest.xml": manifestOf(itemResource, version),
+      "item.xml": edit(
+        item,
+        choiceInteraction,
+        '<qti-custom-interaction response-identifier="RESPONSE"/>',
+      ),
+    }),
+    (judgment) => breachesOf(judgment).filter(({ law }) => law === "Custom interaction version"),
+  );
+
+describe("qti/interactions.ts, Custom interaction version", () => {
+  it.effect(
+    "is broken once by a custom interaction in a 3.0.0 package, and by none in a 3.0.1 one",
+    () =>
+      // Oracle: the information model's §5.106, "PCIs MUST be used instead of custom interactions
+      // (the latter have been deprecated)" in 3.0.0, a sentence the 3.0.1 text drops (R10-b).
+      Effect.gen(function* customVersion() {
+        const old = yield* customBreachesOf("3.0.0");
+        assert.lengthOf(old, 1, shown(old));
+
+        const current = yield* customBreachesOf("3.0.1");
+        assert.lengthOf(current, 0, shown(current));
+      }),
+  );
+
+  it.effect("is not broken by a 3.0.0 package that holds no custom interaction", () =>
+    Effect.gen(function* withoutCustom() {
+      const breaches = breachesOf(
+        yield* judged({ ...base, "imsmanifest.xml": manifestOf(itemResource, "3.0.0") }),
+      ).filter(({ law }) => law === "Custom interaction version");
+      assert.lengthOf(breaches, 0, shown(breaches));
+    }),
+  );
+
+  it("is a check of Interaction under the rule admission", () => {
+    // Oracle: the oracle's own rule table (`ruleOf`).
+    assert.strictEqual(ruleOf("Custom interaction version"), "admission");
   });
 });
