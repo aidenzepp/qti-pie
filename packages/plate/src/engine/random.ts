@@ -1,20 +1,29 @@
 /**
- * OD-3's generator: a 32-bit FNV-1a hash of a key seeds a SplitMix32 stream, whose draws order a
- * shuffled Choice by Fisher-Yates and give the random expression kinds their floats and integers.
+ * OD-3's generator: the draws a shuffled Choice's order and the random expression kinds take, from
+ * two sources chosen by threat, over one core.
  *
- * The algorithm is part of the session contract. A session's presented order and every value a
- * random kind draws are replayed from the stored key alone, so the same key gives the same draws in
- * every build, browser and engine. Every step is pinned to the bit, and nothing here may change
- * without a new pin.
+ * - A shuffle's order is public: the candidate sees it. It comes from a SplitMix32 stream seeded with
+ *   the 32-bit FNV-1a hash of the shuffle's key ({@link shuffleOrder}).
+ * - Template and response processing's values are secret: a template value may be the answer. They
+ *   come from an HMAC-SHA-256 counter-mode stream keyed by the record's seed ({@link drawStream}),
+ *   so while the seed cannot be guessed, neither the page nor the item's XML predicts one draw from
+ *   another.
+ * - The core is one: a stream is a {@link Draw}, and {@link drawFloat} and {@link drawBelow} read
+ *   floats and integers from either.
+ *
+ * The algorithms are part of the session contract. A session's presented order and every value a
+ * random kind draws are replayed from the stored seed and key alone, so the same seed and key give
+ * the same draws in every build, browser and engine. Every step is pinned to the bit, and nothing
+ * here may change without a new pin.
  *
  * Arithmetic is modulo 2^32 throughout: `Math.imul` multiplies modulo 2^32 and `>>> 0` reads a
- * result as an unsigned 32-bit integer. The module is pure and synchronous, and imports nothing. It
- * holds no stream: every draw comes from a stream its caller passes, so no result depends on an
- * earlier call.
+ * result as an unsigned 32-bit integer. The module is pure and synchronous. It holds no stream:
+ * every draw comes from a stream its caller passes, so no result depends on an earlier call.
  *
  * @module
  */
 /* oxlint-disable no-bitwise -- FNV-1a, the MurmurHash3 finaliser and the float draw are defined by XOR, shifts and modulo-2^32 multiplication; the bitwise operators are the specification, not a slip for logical ones. */
+import { hmac, hmacKey } from "#plate/engine/sha256.ts";
 
 /**
  * 2^32, the number of distinct draws; a draw divided by it is a fraction in [0, 1).
@@ -26,13 +35,13 @@ const drawCount = 4_294_967_296;
  * advances the stream.
  *
  * Every draw of one processing run comes from one stream, in evaluation order, so the run's values
- * depend only on the stream's key ({@link drawStream}).
+ * depend only on the stream's seed and label ({@link drawStream}).
  */
 export type Draw = () => number;
 
 /**
- * The encoder of a key's UTF-8 bytes. A lone surrogate encodes as U+FFFD, as the Encoding
- * Standard's UTF-8 encoder writes it.
+ * The encoder of a key's, a seed's and a label's UTF-8 bytes. A lone surrogate encodes as U+FFFD,
+ * as the Encoding Standard's UTF-8 encoder writes it.
  *
  * @see https://encoding.spec.whatwg.org/#utf-8-encoder
  */
@@ -131,16 +140,58 @@ export const shuffleOrder = (key: string, fixed: readonly boolean[]): readonly n
 };
 
 /**
- * Construct the stream of a key: {@link splitMix32} seeded with the key's {@link fnv1a32} hash, as
- * {@link shuffleOrder} draws.
- *
- * Each call starts a fresh stream, so the same key gives the same draws in every call. The
- * construction is part of OD-3's contract.
- *
- * @param key The key, such as {@link templateKey}'s or {@link responseKey}'s.
- * @returns The stream's draws.
+ * The bytes of one HMAC-SHA-256 tag, and so of one block of {@link drawStream}'s draws.
  */
-export const drawStream = (key: string): Draw => splitMix32(fnv1a32(key));
+const tagLength = 32;
+
+/**
+ * Construct the stream template or response processing draws from: HMAC-SHA-256 in counter mode,
+ * keyed by the seed.
+ *
+ * The key K is the seed's UTF-8 bytes. Block b, for b = 0, 1, 2, …, is HMAC-SHA-256(K, UTF-8(label)
+ * ‖ b as four big-endian bytes), and draw j is the unsigned big-endian 32-bit word (j mod 8) of
+ * block ⌊j / 8⌋. The construction is part of OD-3's contract. While the seed cannot be guessed,
+ * the draws of one label tell nothing of another's, nor of a later draw of the same label.
+ *
+ * Each call starts a fresh stream, so the same seed and label give the same draws in every call.
+ * The stream keeps the key's HMAC states, and computes a block when its first word is drawn. The
+ * counter wraps only after 2^35 draws, past every bound of the engine.
+ *
+ * @param seed The record's seed, the HMAC key: the caller's, used as given.
+ * @param label What the stream draws for, such as {@link templateLabel}'s or
+ *   {@link responseLabel}'s.
+ * @returns The stream's draws.
+ * @see https://www.rfc-editor.org/rfc/rfc2104
+ */
+export const drawStream = (seed: string, label: string): Draw => {
+  const key = hmacKey(utf8.encode(seed));
+  const labelBytes = utf8.encode(label);
+  const message = new Uint8Array(labelBytes.length + 4);
+  const counter = new DataView(message.buffer, labelBytes.length, 4);
+  let block = 0;
+  let words: DataView = new DataView(new ArrayBuffer(tagLength));
+  let next = tagLength;
+
+  message.set(labelBytes);
+
+  return () => {
+    if (next === tagLength) {
+      counter.setUint32(0, block);
+
+      const tag = hmac(key, message);
+
+      words = new DataView(tag.buffer, tag.byteOffset, tag.byteLength);
+      block += 1;
+      next = 0;
+    }
+
+    const word = words.getUint32(next);
+
+    next += 4;
+
+    return word;
+  };
+};
 
 /**
  * Draw a float in [0, 1) from two draws `a` and `b`, taken in that order:
@@ -208,33 +259,37 @@ export const drawBelow = (draw: Draw, count: bigint): bigint => {
 };
 
 /**
- * The separator of a key's fields, U+001F INFORMATION SEPARATOR ONE, as a shuffled Choice's key
+ * The separator of a label's fields, U+001F INFORMATION SEPARATOR ONE, as a shuffled Choice's key
  * joins its fields (`choiceOrder` in `#plate/payload.ts`).
  */
-const keySeparator = "\u001F";
+const labelSeparator = "\u001F";
 
 /**
- * Construct the key an item's template processing draws under:
- * `<seed>\u001F<instance>\u001Ftemplate\u001F<item>`.
+ * Construct the label an item's template processing draws under:
+ * `<instance>\u001Ftemplate\u001F<item>`.
  *
- * @param seed The record's seed: the host's seed written with `String`, the empty string when the
- *   host gave none.
+ * The seed is no field: it is the stream's key ({@link drawStream}). The label is injective: every
+ * field after the instance is free of U+001F (a fixed word and an XML identifier), so a label
+ * splits from the right into its fields.
+ *
  * @param instance The item's instance.
  * @param item The item's identifier.
- * @returns The key, for {@link drawStream}.
+ * @returns The label, for {@link drawStream}.
  */
-export const templateKey = (seed: string, instance: string, item: string): string =>
-  [seed, instance, "template", item].join(keySeparator);
+export const templateLabel = (instance: string, item: string): string =>
+  [instance, "template", item].join(labelSeparator);
 
 /**
- * Construct the key an attempt's response processing draws under:
- * `<seed>\u001F<instance>\u001Fresponse\u001F<numAttempts>`, the count written with `String`.
+ * Construct the label an attempt's response processing draws under:
+ * `<instance>\u001Fresponse\u001F<numAttempts>`, the count written with `String`.
  *
- * @param seed The record's seed: the host's seed written with `String`, the empty string when the
- *   host gave none.
+ * The seed is no field: it is the stream's key ({@link drawStream}). The label is injective: every
+ * field after the instance is free of U+001F (a fixed word and decimal digits), so a label splits
+ * from the right into its fields.
+ *
  * @param instance The item's instance.
  * @param numAttempts The attempt's count, the built-in `numAttempts` its processing reads.
- * @returns The key, for {@link drawStream}.
+ * @returns The label, for {@link drawStream}.
  */
-export const responseKey = (seed: string, instance: string, numAttempts: number): string =>
-  [seed, instance, "response", String(numAttempts)].join(keySeparator);
+export const responseLabel = (instance: string, numAttempts: number): string =>
+  [instance, "response", String(numAttempts)].join(labelSeparator);

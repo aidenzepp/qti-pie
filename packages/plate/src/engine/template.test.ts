@@ -361,12 +361,12 @@ const scripted = (words: readonly number[]): Draw => {
  * Run the item's template processing, as the item {@link itemOf} builds for the rules holds it.
  *
  * @param rules The template rules.
- * @param draw The stream; a fixed key's when none is given.
+ * @param draw The stream; a fixed label's, under the seed `""`, when none is given.
  * @returns What the run leaves, or its failure.
  */
 const run = (
   rules: readonly TemplateRule[],
-  draw: Draw = drawStream("template test"),
+  draw: Draw = drawStream("", "template test"),
 ): Result.Result<TemplateValues, EngineFailure> => runTemplates(itemOf(rules), rules, draw);
 
 /**
@@ -469,10 +469,10 @@ describe("runTemplates", () => {
   });
 
   it("[I-5] restarts from declared state at a failing constraint, drawing new values from the same stream until it passes", () => {
-    const key = "constraint 19";
-    const replay = drawStream(key);
+    const key = "constraint 11";
+    const replay = drawStream("", key);
     const drawn = [drawBelow(replay, 8n), drawBelow(replay, 8n), drawBelow(replay, 8n)];
-    const stream = counting(drawStream(key));
+    const stream = counting(drawStream("", key));
     const left = values(
       run(
         [
@@ -483,7 +483,7 @@ describe("runTemplates", () => {
       ),
     );
 
-    assert.deepStrictEqual(drawn, [0n, 4n, 7n]);
+    assert.deepStrictEqual(drawn, [0n, 2n, 7n]);
     assert.strictEqual(stream.count(), 3);
     assert.deepStrictEqual(left.templates["T"], integer(7n));
   });
@@ -520,7 +520,7 @@ describe("runTemplates", () => {
   });
 
   it("[I-5] runs exactly 100 restarts for a constraint that never passes, then applies the declared defaults and runs the rules after it", () => {
-    const stream = counting(drawStream("never"));
+    const stream = counting(drawStream("", "never"));
     const left = values(
       run(
         [
@@ -538,7 +538,7 @@ describe("runTemplates", () => {
   });
 
   it("[I-5] applies the declared state again at a later failing constraint once the restarts are spent, and restarts no more", () => {
-    const stream = counting(drawStream("never"));
+    const stream = counting(drawStream("", "never"));
     const left = values(
       run(
         [
@@ -569,7 +569,7 @@ describe("runTemplates", () => {
       setDefault("RESPONSE", base(identifier("A"))),
     ];
     const item = itemOf(rules);
-    const left = values(runTemplates(item, rules, drawStream("template test")));
+    const left = values(runTemplates(item, rules, drawStream("", "template test")));
 
     assert.deepStrictEqual(left.correct, { RESPONSE: identifier("B") });
     assert.deepStrictEqual(left.defaults, { RESPONSE: identifier("A"), SCORE: float(1) });

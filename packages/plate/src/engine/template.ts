@@ -357,8 +357,8 @@ const runSequence = (
  * @param item The item, whose declarations give each variable's type and default.
  * @param rules The item's template rules, as the item model built them (`Item.templateProcessing`).
  * @param draw The one stream every random kind of the run draws from, in the order the rules
- *   evaluate them, restarts included: the caller's template key's (`templateKey` in
- *   `#plate/engine/random.ts`).
+ *   evaluate them, restarts included: the caller's, keyed by the record's seed under the item's
+ *   template label (`templateLabel` in `#plate/engine/random.ts`).
  * @returns The template values and the correct responses and defaults set; or the first failure,
  *   after which no rule runs: an {@link UnknownIdentifierError} when an expression reads a variable
  *   template processing holds no value of, or a rule sets a variable the item does not declare in

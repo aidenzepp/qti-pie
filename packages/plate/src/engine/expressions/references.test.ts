@@ -454,7 +454,7 @@ interface Counted {
  * @returns The counted stream.
  */
 const counted = (key: string): Counted => {
-  const stream = drawStream(key);
+  const stream = drawStream("", key);
   let taken = 0;
 
   return {
@@ -550,7 +550,7 @@ const keys = 1000;
  */
 const overKeys = (expression: Expression, item: Item, variables: Variables): readonly Value[] =>
   Array.from({ length: keys }, (_, index) =>
-    drawn(expression, item, variables, drawStream(`k${String(index)}`)),
+    drawn(expression, item, variables, drawStream("", `k${String(index)}`)),
   );
 
 /**
@@ -673,7 +673,7 @@ describe("the references family's evaluators of qti-random-integer and qti-rando
         const item = yield* declared();
         const least = 2n ** 999_999n;
         const value = onlyInteger(
-          drawn(randomInteger(least, least + 3n), item, changed, drawStream("bound")),
+          drawn(randomInteger(least, least + 3n), item, changed, drawStream("", "bound")),
         );
 
         assert.isTrue(value >= least && value <= least + 3n, "the value lies in the range");
@@ -766,7 +766,7 @@ describe("the references family's evaluators of qti-random-integer and qti-rando
         { kind: "random-float", max: literal(7), min: reference("SCORE"), operands: [] },
         item,
         changed,
-        drawStream("reference"),
+        drawStream("", "reference"),
       );
 
       assert.deepStrictEqual(value, float(7));

@@ -230,7 +230,7 @@ interface Counted {
  * @returns The counted stream.
  */
 const counted = (key: string): Counted => {
-  const stream = drawStream(key);
+  const stream = drawStream("", key);
   let taken = 0;
 
   return {
@@ -429,11 +429,11 @@ describe("the containers family's evaluators", () => {
       const seen = new Set<string>();
       for (let index = 0; index < keys; index += 1) {
         const key = `k${String(index)}`;
-        const at = Number(drawBelow(drawStream(key), BigInt(container.values.length)));
+        const at = Number(drawBelow(drawStream("", key), BigInt(container.values.length)));
         const member = container.values[at];
         assert.isDefined(member, `${key} drew past the container`);
 
-        const picked = evaluated(randomOf(container), none, drawStream(key));
+        const picked = evaluated(randomOf(container), none, drawStream("", key));
         assert.deepStrictEqual(
           picked,
           {
@@ -753,7 +753,7 @@ const integers = (values: readonly bigint[]): Value => ({
  * @returns The stream, its next draw the key's draw after those skipped.
  */
 const after = (key: string, skipped: number): Draw => {
-  const stream = drawStream(key);
+  const stream = drawStream("", key);
   for (let taken = 0; taken < skipped; taken += 1) {
     stream();
   }
@@ -762,18 +762,18 @@ const after = (key: string, skipped: number): Draw => {
 };
 
 /**
- * The key under which the first draw of a `qti-random-integer` from 0 to 1 gives 0, which the
- * setup of rule (a)'s case found among `repeat 0`, `repeat 1`, …: a draw from 0 to 1 takes one
- * draw, masked to its low bit.
+ * The label under which, with the seed `""`, the first draw of a `qti-random-integer` from 0 to 1
+ * gives 0, which the setup of rule (a)'s case found among `repeat 0`, `repeat 1`, …: a draw from 0
+ * to 1 takes one draw, masked to its low bit.
  */
-const zeroFirst = "repeat 2";
+const zeroFirst = "repeat 3";
 
 describe("the containers family's drawing qti-repeat (an operand holds a random kind)", () => {
   it("[I-9a] evaluates its operands once per pass, left to right, so each pass draws anew", () => {
     const key = "repeat per pass";
     const expected = after(key, 0);
     const draws = Array.from({ length: 5 }, () => drawBelow(expected, 1_000_000n) + 1n);
-    const repeated = evaluated(repeating(literal(5n), wide), none, drawStream(key));
+    const repeated = evaluated(repeating(literal(5n), wide), none, drawStream("", key));
 
     assert.deepStrictEqual(repeated, integers(draws));
     assert.isAbove(new Set(draws).size, 1, "the five passes' values are not all equal");
@@ -784,7 +784,7 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
       drawBelow(pairs, 10n) + 1n,
     ]).flat();
     assert.deepStrictEqual(
-      evaluated(repeating(literal(2n), wide, randomIntegerOf(1n, 10n)), none, drawStream(key)),
+      evaluated(repeating(literal(2n), wide, randomIntegerOf(1n, 10n)), none, drawStream("", key)),
       integers(interleaved),
       "each pass evaluates the first operand, then the second",
     );
@@ -805,7 +805,7 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
       operands: [],
     };
     assert.deepStrictEqual(
-      evaluated(repeating(literal(3n), unit), none, drawStream(key)),
+      evaluated(repeating(literal(3n), unit), none, drawStream("", key)),
       expected,
     );
 
@@ -815,7 +815,7 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
       Number(drawBelow(picks, BigInt(letters.values.length))),
     ).flatMap((at) => letters.values.slice(at, at + 1));
     assert.deepStrictEqual(
-      evaluated(repeating(literal(4n), randomOf(letters)), none, drawStream(key)),
+      evaluated(repeating(literal(4n), randomOf(letters)), none, drawStream("", key)),
       { baseType: "identifier", cardinality: "ordered", values: picked },
     );
 
@@ -825,7 +825,7 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
       evaluated(
         repeating(literal(3n), { kind: "sum", operands: [wide, operandOf(integer(10n))] }),
         none,
-        drawStream(key),
+        drawStream("", key),
       ),
       integers(summed),
     );
@@ -866,12 +866,12 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
 
   it("[I-9a] rule (a): a pass that gives no value gives NULL at once and runs no later pass, so it draws nothing more", () => {
     assert.strictEqual(
-      drawBelow(drawStream(zeroFirst), 2n),
+      drawBelow(drawStream("", zeroFirst), 2n),
       0n,
       `the first draw under ${zeroFirst} from 0 to 1 is 0`,
     );
 
-    const draw = drawStream(zeroFirst);
+    const draw = drawStream("", zeroFirst);
     const quotient: Expression = {
       kind: "divide",
       operands: [operandOf(float(1)), randomIntegerOf(0n, 1n)],
@@ -909,7 +909,7 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
     ];
 
     for (const [title, expression, variables, expected] of cases) {
-      const draw = drawStream(key);
+      const draw = drawStream("", key);
 
       assertUnset(evaluated(expression, variables, draw), expected);
       assert.strictEqual(draw(), after(key, 0)(), `${title}: the next draw is the key's first`);

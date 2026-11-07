@@ -1,13 +1,14 @@
+import { createHmac } from "node:crypto";
 import { assert, describe, it } from "@effect/vitest";
 import {
   drawBelow,
   drawFloat,
   drawStream,
   fnv1a32,
-  responseKey,
+  responseLabel,
   shuffleOrder,
   splitMix32,
-  templateKey,
+  templateLabel,
 } from "#plate/engine/random.ts";
 import { checkAllowlist, sourceModules } from "#plate/test/imports.ts";
 
@@ -55,11 +56,33 @@ const take = (draw: () => number, count: number): readonly number[] =>
 const redrawCount = 2n ** 69n + 1n;
 
 /**
- * A key whose first candidate under {@link redrawCount} is not below it and whose second is: the
- * first key `redraw-<n>`, counting from 0, with that property, found by {@link candidateOf} once
- * and named here.
+ * A label whose stream, under the seed `""`, has a first candidate under {@link redrawCount} that
+ * is not below it and a second that is: the first label `redraw-<n>`, counting from 0, with that
+ * property, found by {@link candidateOf} once and named here.
  */
-const redrawKey = "redraw-16";
+const redrawLabel = "redraw-3";
+
+/**
+ * Draw `index` of `drawStream(seed, label)`, computed apart from it with node:crypto: the
+ * big-endian 32-bit word `index mod 8` of HMAC-SHA-256, keyed by the seed's UTF-8 bytes, of the
+ * label's UTF-8 bytes followed by the block ⌊index / 8⌋ as four big-endian bytes.
+ *
+ * @param seed The seed.
+ * @param label The label.
+ * @param index The draw's index, counting from 0.
+ * @returns The draw.
+ */
+const hmacDraw = (seed: string, label: string, index: number): number => {
+  const block = Buffer.alloc(4);
+
+  block.writeUInt32BE(Math.floor(index / 8));
+
+  return createHmac("sha256", seed)
+    .update(label)
+    .update(block)
+    .digest()
+    .readUInt32BE(4 * (index % 8));
+};
 
 /**
  * Two hundred distinct keys, shaped as a shuffled Choice's key is (seed, instance and response,
@@ -128,38 +151,52 @@ describe("shuffleOrder", () => {
 });
 
 describe("drawStream", () => {
-  it("[I-9a] draws what SplitMix32 seeded with the key's FNV-1a hash draws", () => {
-    const expected = take(splitMix32(fnv1a32("k")), 3);
+  it("[I-9a] draws word j mod 8 of the HMAC-SHA-256 of the label and block ⌊j / 8⌋, keyed by the seed", () => {
+    const seed = "s\u00E9ed \u{1F600}";
+    const label = "instance\u001Ftemplate\u001Fitem";
 
-    assert.deepStrictEqual(take(drawStream("k"), 3), expected);
-    assert.deepStrictEqual(expected, [0xc0_f9_34_19, 0x75_62_cb_e1, 0xc6_cd_ae_84]);
+    assert.deepStrictEqual(
+      take(drawStream(seed, label), 17),
+      Array.from({ length: 17 }, (_, index) => hmacDraw(seed, label, index)),
+    );
   });
 
-  it("[I-9a] draws the same values from the same key every time", () => {
-    const first = drawStream("same");
-    const second = drawStream("same");
+  it("[I-9a] draws the pinned values from one seed and label", () => {
+    assert.deepStrictEqual(
+      take(drawStream("seed", "label"), 3),
+      [0x44_59_a5_54, 0xb3_9e_0d_3d, 0x68_98_c3_58],
+    );
+  });
+
+  it("[I-9a] draws the same values from the same seed and label every time", () => {
+    const first = drawStream("same", "label");
+    const second = drawStream("same", "label");
 
     assert.deepStrictEqual(
       [drawFloat(first), drawBelow(first, 2n ** 70n), drawBelow(first, 6n), first()],
       [drawFloat(second), drawBelow(second, 2n ** 70n), drawBelow(second, 6n), second()],
     );
   });
+
+  it("[I-9a] keys the stream by the seed, which is never part of the message", () => {
+    assert.notDeepEqual(take(drawStream("a\u001Fb", "c"), 8), take(drawStream("a", "b\u001Fc"), 8));
+  });
 });
 
 describe("drawFloat", () => {
   it("[I-9a] reads the stream's next two draws as 53 bits over 2^53", () => {
-    const [a = 0, b = 0, third] = take(drawStream("f"), 3);
-    const draw = drawStream("f");
+    const [a = 0, b = 0, third] = take(drawStream("", "f"), 3);
+    const draw = drawStream("", "f");
     const float = drawFloat(draw);
 
     // oxlint-disable-next-line no-bitwise -- the formula OD-3 pins, written as random.ts's doc writes it.
     assert.strictEqual(float, ((a >>> 5) * 67_108_864 + (b >>> 6)) / 9_007_199_254_740_992);
-    assert.strictEqual(float, 0.4765747664532872);
+    assert.strictEqual(float, 0.8930774168884611);
     assert.strictEqual(draw(), third);
   });
 
   it("[I-9a] lies in [0, 1)", () => {
-    const draw = drawStream("plate");
+    const draw = drawStream("", "plate");
     const floats = Array.from({ length: 1000 }, () => drawFloat(draw));
 
     assert.isTrue(floats.every((float) => float >= 0 && float < 1));
@@ -168,34 +205,34 @@ describe("drawFloat", () => {
 
 describe("drawBelow", () => {
   it("[I-9a] over 2^70 values reads three draws, the first the most significant, masked to 70 bits", () => {
-    const expected = candidateOf(take(drawStream("range"), 3), 70);
+    const expected = candidateOf(take(drawStream("", "range"), 3), 70);
 
-    assert.strictEqual(drawBelow(drawStream("range"), 2n ** 70n), expected);
-    assert.strictEqual(expected, 617_981_431_749_679_864_578n);
+    assert.strictEqual(drawBelow(drawStream("", "range"), 2n ** 70n), expected);
+    assert.strictEqual(expected, 1_019_814_385_092_059_024_122n);
   });
 
   it("[I-9a] draws again while the candidate is not below the count", () => {
-    const draws = take(drawStream(redrawKey), 7);
-    const draw = drawStream(redrawKey);
+    const draws = take(drawStream("", redrawLabel), 7);
+    const draw = drawStream("", redrawLabel);
 
     assert.isTrue(candidateOf(draws.slice(0, 3), 70) >= redrawCount);
     assert.strictEqual(drawBelow(draw, redrawCount), candidateOf(draws.slice(3, 6), 70));
-    assert.strictEqual(candidateOf(draws.slice(3, 6), 70), 121_846_576_565_791_598_454n);
+    assert.strictEqual(candidateOf(draws.slice(3, 6), 70), 359_764_092_779_617_884_586n);
     assert.strictEqual(draw(), draws[6]);
   });
 
   it("[I-9a] gives 0 for a count of 1 and draws nothing", () => {
-    const draw = drawStream("one");
+    const draw = drawStream("", "one");
 
     assert.strictEqual(drawBelow(draw, 1n), 0n);
-    assert.strictEqual(draw(), 0x53_4d_7f_f5);
+    assert.strictEqual(draw(), 0x8b_90_9b_b4);
   });
 });
 
-describe("templateKey and responseKey", () => {
-  it("[I-9a] join their parts with U+001F", () => {
-    assert.strictEqual(templateKey("7", "i", "item"), "7\u001Fi\u001Ftemplate\u001Fitem");
-    assert.strictEqual(responseKey("7", "i", 2), "7\u001Fi\u001Fresponse\u001F2");
+describe("templateLabel and responseLabel", () => {
+  it("[I-9a] join the instance, a fixed word and the item or count with U+001F, and no seed", () => {
+    assert.strictEqual(templateLabel("i", "item"), "i\u001Ftemplate\u001Fitem");
+    assert.strictEqual(responseLabel("i", 2), "i\u001Fresponse\u001F2");
   });
 });
 

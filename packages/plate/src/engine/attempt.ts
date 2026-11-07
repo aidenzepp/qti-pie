@@ -17,7 +17,7 @@
 import { Option, Result } from "effect";
 import { runRules } from "#plate/engine/evaluate.ts";
 import type { EngineFailure, Variables } from "#plate/engine/evaluate.ts";
-import { drawStream, responseKey, templateKey } from "#plate/engine/random.ts";
+import { drawStream, responseLabel, templateLabel } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import { runTemplates } from "#plate/engine/template.ts";
 import type { TemplateValues } from "#plate/engine/template.ts";
@@ -143,10 +143,10 @@ const startingOutcomes = (item: Item, record: ItemRecord): ItemRecord["outcomes"
  * and defaults are copied unchanged, since a stored value always wins over recomputation. The
  * record passed in is not changed, on success or on failure.
  *
- * The rules draw from one stream, under the attempt's response key (`responseKey`):
- * `<seed>\u001F<instance>\u001Fresponse\u001F<numAttempts>`, with the record's seed and instance
- * and the raised count the rules read, so each attempt draws its own values and the same record
- * and responses give the same values every run. Every operand of an expression is evaluated, left
+ * The rules draw from one stream, keyed by the record's seed under the attempt's response label
+ * (`responseLabel`): `<instance>\u001Fresponse\u001F<numAttempts>`, with the record's instance and
+ * the raised count the rules read, so each attempt draws its own values and the same record and
+ * responses give the same values every run. Every operand of an expression is evaluated, left
  * to right, and a condition's branches until the first true one, so each random kind takes its
  * draws in that order; `qti-custom-operator` evaluates none of its operands, so a random kind
  * inside it never draws.
@@ -182,7 +182,7 @@ export const runAttempt = (
         rules,
         item,
         before,
-        drawStream(responseKey(record.seed, record.instance, numAttempts)),
+        drawStream(record.seed, responseLabel(record.instance, numAttempts)),
       ),
   });
 
@@ -205,9 +205,9 @@ export const runAttempt = (
  *
  * - `templates`, `correct` and `defaults`: where the item's template processing runs
  *   (`Item.templateProcessing` is some), what it leaves (`runTemplates` in
- *   `#plate/engine/template.ts`), run from the declared state with one stream under the item's
- *   template key, `<seed>\u001F<instance>\u001Ftemplate\u001F<item>` (`templateKey`), so the same
- *   seed, instance and item give the same values every run. Where the item has no
+ *   `#plate/engine/template.ts`), run from the declared state with one stream, keyed by the seed
+ *   under the item's template label, `<instance>\u001Ftemplate\u001F<item>` (`templateLabel`), so
+ *   the same seed, instance and item give the same values every run. Where the item has no
  *   `qti-template-processing`, each declared template variable at its declared default, else NULL,
  *   the values no processing changes, and no override; an item that declares none holds three empty
  *   maps. Where it has a `qti-template-processing` the engine does not run, which the item model
@@ -223,7 +223,7 @@ export const runAttempt = (
  *
  * @param item The item.
  * @param start `instance`, the host's name for this use of the item, which scopes its ids, and
- *   `seed`, the host's seed written with `String`, or `""` when it gave none.
+ *   `seed`, the key of the stream template processing draws from: the caller's, used as given.
  * @returns The record, or template processing's first failure, an {@link EngineFailure}: an
  *   expression reads a variable template processing holds no value of, a rule sets a variable the
  *   item does not declare in the kind the rule sets, or sets one to a value of another type. The
@@ -234,7 +234,7 @@ export const firstAttempt = (
   item: Item,
   start: { readonly instance: string; readonly seed: string },
 ): Result.Result<ItemRecord, EngineFailure> => {
-  const draw = drawStream(templateKey(start.seed, start.instance, item.identifier));
+  const draw = drawStream(start.seed, templateLabel(start.instance, item.identifier));
   const unrun: TemplateValues = { correct: {}, defaults: {}, templates: {} };
   const set: Result.Result<TemplateValues, EngineFailure> = Option.match(item.templateProcessing, {
     onNone: () =>
