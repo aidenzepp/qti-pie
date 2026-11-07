@@ -1828,7 +1828,7 @@ write program compiles, 152 inserts and none refused (lane R87), so `Node`'s nes
   - No workaround is taken. Making either family counted would change the model, which is the operator's call.
   - grizzle's nesting fix closes it, in `f66c05b`.
 
-### 3. A key over a field PostgreSQL generates (grizzle defect, schema-only refusal at write time)
+### 3. A key over a field PostgreSQL generates (a grizzle defect at `64f0427`, a limit since `f66c05b`)
 
 - **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/generated-unique-key/`.
 - **Case:** `relation.generated("R", { id, text }, ["id"], (r) => ({ value: generated(pg.integer, Compute.cast(r.text,
@@ -1842,14 +1842,17 @@ write program compiles, 152 inserts and none refused (lane R87), so `Node`'s nes
   addition at `:1291-1293`.
 - **Docs:** the README says only that a primary key holds no generated field (`README.md:1367`). It says nothing of
   another key over one.
-- **Classification:** a grizzle defect of the same kind as 1, a schema-only refusal first reached at a write.
+- **Classification:** at `64f0427`, a grizzle defect of the same kind as 1, a schema-only refusal first reached at a
+  write. Since `f66c05b`, grizzle refuses a key over a generated field at schema compile by its own design, with a
+  typed refusal, so it is a documented limit, not a defect. If the operator or grizzle later calls the refusal itself
+  a defect, it becomes one again.
 - **qti-pie:** `key(on(MapKeyFloat, "mapping", "value"))` was over the generated cast.
-  - **Workaround:** the host writes `value` (`floatValueOf` in `src/import/overlays/mapping.ts`), and `E1_derived`
-    holds it to the same cast (`src/qti/mapping.ts`, `e255b860`). The key therefore judges the same values.
+  - **The shape grizzle requires** since `f66c05b`'s compile-time refusal of a key over a generated field: a
+    host-written value proved by an E1 check. The host writes `value` (`floatValueOf` in
+    `src/import/overlays/mapping.ts`), and `E1_derived` holds it to the same cast (`src/qti/mapping.ts`, `e255b860`).
+    The key therefore judges the same values.
   - `floatValueOf` is held to IEEE 754 roundTiesToEven of the key's exact value, computed in BigInt arithmetic, over
     2,000 keys (`src/import/overlays/mapping.test.ts`).
-  - The workaround stays: `f66c05b` refuses such a key at compile, so a key over a host-written value that a check
-    proves is the shape that compiles.
 
 ### The guard qti-pie keeps
 
