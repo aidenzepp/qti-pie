@@ -17,12 +17,7 @@ import { interactionKinds } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import {
-  floatKeyPattern,
-  integerKeyPattern,
-  pairKeyPattern,
-  pointKeyPattern,
-} from "#pantry/qti/mapping.ts";
+import { floatKeyPattern, pairKeyPattern } from "#pantry/qti/mapping.ts";
 import type {
   AreaMapping,
   InterpolationTable,
@@ -96,23 +91,19 @@ type DeclarationKindHandle = Addition<typeof Mapping>["declarationKind"];
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
- * The map keys of an integer mapping that hold a typed value, as `integerKeys` selects them.
- */
-const integerKey = new RegExp(integerKeyPattern, "u");
-
-/**
  * The map keys of a float mapping that hold a typed value, as `floatKeys` selects them.
  */
 const floatKey = new RegExp(floatKeyPattern, "u");
 
 /**
- * The map keys of a point mapping that hold a typed value, as `pointKeys` selects them.
- */
-const pointKey = new RegExp(pointKeyPattern, "u");
-
-/**
  * The map keys of a pair or directed pair mapping that hold a typed value, as `pairKeys` and
  * `directedPairKeys` select them.
+ *
+ * The test stays beside the split ({@link itemsOf}), which is wider: an item of the split is any
+ * run of no XML whitespace, and an item of the pattern a run of XML `Char`s past U+0020. The two
+ * part on the C0 control characters an XML 1.1 document writes as character references (`&#x1;`),
+ * and on any other character no `Char` is. The integer and point keys need no such test, since
+ * their parsers' languages are their patterns' (`mapping.test.ts`).
  */
 const pairKey = new RegExp(pairKeyPattern, "u");
 
@@ -198,7 +189,8 @@ export const floatValueOf = (key: string): number => namedFloats.get(key) ?? Num
  * Schema gives the integer.
  *
  * @param key - The key.
- * @returns The parts, or none for a key that is no member of {@link integerKeyPattern}.
+ * @returns The parts, or none for a key that is no member of `integerKeyPattern`
+ *   (`#pantry/qti/mapping.ts`).
  */
 export const integerValueOf = (key: string): IntegerParts | undefined => {
   const groups = integerParts.exec(key)?.groups;
@@ -254,7 +246,8 @@ const itemsOf = (
  * one space between.
  *
  * @param key - The key.
- * @returns The parts, or none for a key that is no member of {@link pointKeyPattern}.
+ * @returns The parts, or none for a key that is no member of `pointKeyPattern`
+ *   (`#pantry/qti/mapping.ts`).
  */
 export const pointValueOf = (
   key: string,
@@ -366,6 +359,54 @@ interface TypedKeys {
 }
 
 /**
+ * A map key, its mapping and its entry's node, which each typed row holds.
+ */
+interface TypedEntry {
+  readonly key: string;
+  readonly mapping: NodeId;
+  readonly node: NodeId;
+}
+
+/**
+ * Each base type's typed key, where it has one: the parse of its key, which is the one test that
+ * the key holds a typed value, and the relation its row joins. A float key's test is its pattern,
+ * since `Number` reads every text; a pair's is its pattern beside the parse ({@link pairKey}).
+ */
+const typedKeyAdders: Partial<
+  Readonly<Record<BaseTypeHandle, (typed: TypedKeys, entry: TypedEntry) => void>>
+> = {
+  directedPair: (typed, entry) => {
+    const directed = pairKey.test(entry.key) ? directedPairValueOf(entry.key) : undefined;
+    if (directed !== undefined) {
+      typed.MapKeyDirectedPair.set(entry.node, { ...directed, ...entry });
+    }
+  },
+  float: (typed, entry) => {
+    if (floatKey.test(entry.key)) {
+      typed.MapKeyFloat.set(entry.node, { ...entry, value: floatValueOf(entry.key) });
+    }
+  },
+  integer: (typed, entry) => {
+    const integer = integerValueOf(entry.key);
+    if (integer !== undefined) {
+      typed.MapKeyInteger.set(entry.node, { ...integer, ...entry });
+    }
+  },
+  pair: (typed, entry) => {
+    const pair = pairKey.test(entry.key) ? pairValueOf(entry.key) : undefined;
+    if (pair !== undefined) {
+      typed.MapKeyPair.set(entry.node, { ...pair, ...entry });
+    }
+  },
+  point: (typed, entry) => {
+    const point = pointValueOf(entry.key);
+    if (point !== undefined) {
+      typed.MapKeyPoint.set(entry.node, { ...point, ...entry });
+    }
+  },
+};
+
+/**
  * Add a map key's typed row, where its base type gives it one and its key is of the form the
  * row's mirror selects: an integer's, a float of grizzle's double form, a point's two integers, or
  * a pair's or a directed pair's two items. Every other key has no typed row.
@@ -377,37 +418,8 @@ interface TypedKeys {
  * @param entry.mapping - The mapping's node.
  * @param entry.node - The entry's node.
  */
-const addTypedKey = (
-  typed: TypedKeys,
-  baseType: BaseTypeHandle,
-  entry: { readonly key: string; readonly mapping: NodeId; readonly node: NodeId },
-): void => {
-  const { key, node } = entry;
-  const integer = baseType === "integer" && integerKey.test(key) ? integerValueOf(key) : undefined;
-  const point = baseType === "point" && pointKey.test(key) ? pointValueOf(key) : undefined;
-  const pair = baseType === "pair" && pairKey.test(key) ? pairValueOf(key) : undefined;
-  const directed =
-    baseType === "directedPair" && pairKey.test(key) ? directedPairValueOf(key) : undefined;
-
-  if (integer !== undefined) {
-    typed.MapKeyInteger.set(node, { ...integer, ...entry });
-  }
-
-  if (baseType === "float" && floatKey.test(key)) {
-    typed.MapKeyFloat.set(node, { ...entry, value: floatValueOf(key) });
-  }
-
-  if (point !== undefined) {
-    typed.MapKeyPoint.set(node, { ...point, ...entry });
-  }
-
-  if (pair !== undefined) {
-    typed.MapKeyPair.set(node, { ...pair, ...entry });
-  }
-
-  if (directed !== undefined) {
-    typed.MapKeyDirectedPair.set(node, { ...directed, ...entry });
-  }
+const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEntry): void => {
+  typedKeyAdders[baseType]?.(typed, entry);
 };
 
 /**

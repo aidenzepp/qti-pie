@@ -16,9 +16,20 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
-import { floatValueOf, integerValueOf, rowsOf } from "#pantry/import/overlays/mapping.ts";
+import {
+  floatValueOf,
+  integerValueOf,
+  pairValueOf,
+  pointValueOf,
+  rowsOf,
+} from "#pantry/import/overlays/mapping.ts";
 import type { MappingIds } from "#pantry/import/overlays/mapping.ts";
-import { floatKeyPattern } from "#pantry/qti/mapping.ts";
+import {
+  floatKeyPattern,
+  integerKeyPattern,
+  pairKeyPattern,
+  pointKeyPattern,
+} from "#pantry/qti/mapping.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
 import type {
@@ -453,6 +464,74 @@ const twoItemSituationsOf = (repeat: boolean, astral: boolean): readonly TwoItem
 
   return reached.length === 0 ? ["distinct"] : reached;
 };
+
+/**
+ * The characters a typed key's parse and its pattern are drawn over: the signs, two digits, a
+ * letter, the space and the tab, and U+0001, a C0 control character an XML 1.1 document writes as
+ * the character reference `&#x1;`, which no item of a pair key's pattern holds.
+ */
+const keyCharacters = ["+", "-", "0", "1", "a", " ", "\t", "\u{1}"] as const;
+
+/**
+ * A situation the parse box must reach: a key its integer or point parse holds, a pair key its
+ * pattern holds, one its split holds past its pattern, and one no typed form holds.
+ */
+type ParseSituation = "integer" | "point" | "pair" | "pair past its pattern" | "untyped";
+
+describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTimeout }, () => {
+  it.effect(
+    "parses an integer or a point key exactly where its pattern holds it, and splits a pair key past its pattern only on a character no item of it holds",
+    (ctx) =>
+      // Oracle: the schema's selection patterns, `integerKeyPattern`, `pointKeyPattern` and
+      // `pairKeyPattern`, which select the keys whose typed row the database mirrors, read by
+      // JavaScript's engine. The integer and point parses are the one test the builder makes, so
+      // each holds a key exactly where its pattern does; the pair split is wider, so the builder
+      // tests the pattern first, and the two part exactly on a key that holds U+0001.
+      // Bound: every key of 1 to 4 characters over `keyCharacters`, 4,680; residual: longer keys,
+      // which repeat these shapes.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every key of 1 to 4 characters over signs, two digits, a letter, space, tab and U+0001",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<ParseSituation>([
+              "integer",
+              "point",
+              "pair",
+              "pair past its pattern",
+              "untyped",
+            ]),
+            generator: (source) =>
+              source.draw(array(element(keyCharacters), { max: 4, min: 1 })).join(""),
+            limit: 5000,
+            literal: (key) => JSON.stringify(key),
+            oracle: { kind: "specification", name: "the schema's typed-key selection patterns" },
+            suite: "pantry/import/overlays-mapping-parse",
+          },
+          (key: string, c) =>
+            Effect.sync(() => {
+              const integer = new RegExp(integerKeyPattern, "u").test(key);
+              const point = new RegExp(pointKeyPattern, "u").test(key);
+              const pair = new RegExp(pairKeyPattern, "u").test(key);
+              const split = pairValueOf(key) !== undefined;
+              const situations: readonly [ParseSituation, boolean][] = [
+                ["integer", integer],
+                ["point", point],
+                ["pair", pair],
+                ["pair past its pattern", split],
+              ];
+              c.note(situations.find(([, holds]) => holds)?.[0] ?? "untyped");
+
+              assert.strictEqual(integerValueOf(key) !== undefined, integer, key);
+              assert.strictEqual(pointValueOf(key) !== undefined, point, key);
+              assert.isTrue(!pair || split, key);
+              assert.strictEqual(split && !pair, split && key.includes("\u{1}"), key);
+            }),
+        ),
+      ),
+  );
+});
 
 describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }, () => {
   it.effect(
