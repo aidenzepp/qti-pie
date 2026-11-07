@@ -84,6 +84,8 @@ const unjudged = {
   "MapKeyInteger.value": typedKeyValue,
   "MapKeyPair.value": typedKeyValue,
   "MapKeyPoint.value": typedKeyValue,
+  "MasteryCeiling: a when term": unreadTerm("when"),
+  "MasteryFloor: a when term": unreadTerm("when"),
   "MostCount: a base term": unreadTerm("base"),
   "MostCount: a when term": unreadTerm("when"),
   "Node.elements":
@@ -98,7 +100,6 @@ const unjudged = {
   "Node.was": "a copy along a predecessor axis, `pred(at)`, which the host does not restore",
   "Node: a between term": unreadTerm("between"),
   "OpenElementName: a literal term": "its predicate holds a literal of no datum's type",
-  "OutcomeRange: a when term": unreadTerm("when"),
   "Quotation: a base term": unreadTerm("base"),
   "Reference: a base term": unreadTerm("base"),
   "RoundingModeFigures: a when term": unreadTerm("when"),
