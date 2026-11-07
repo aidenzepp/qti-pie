@@ -10,8 +10,14 @@
  * shadowed by an earlier declaration. Crust and libxml2 must agree on whether the document is well
  * formed, and on the root's attributes where it is. libxml2 expands a reference it cannot resolve
  * to nothing, where crust keeps it as a reference, so crust's values are compared with each kept
- * reference cut out and, for a tokenized type, collapsed again. Where crust keeps no reference to
- * an entity the subset declares later, its tree also reads back from its own writing.
+ * reference cut out and, for a tokenized type, collapsed again; and crust's tree reads back from
+ * its own writing.
+ *
+ * One verdict is the reading's, not libxml2's: a default that names an entity the subset declares
+ * after it (`&f;`) breaks section 4.1's "the declaration of a general entity MUST precede any
+ * reference to it which appears in a default value", a validity constraint beside an external
+ * subset, which libxml2 without `--valid` reports only as the warning "Entity 'f' not defined".
+ * Crust refuses it in every context, as reading 1 refuses content that is not valid.
  */
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
@@ -309,12 +315,17 @@ describe("crust's reader on attribute defaults", () => {
                 const document = read._tag === "Success" ? read.success : undefined;
                 c.noteAll(reachedBy(drawnCase, document));
 
+                const expected =
+                  drawnCase.tokens.includes("&f;") && oracle._tag === "Success"
+                    ? "Failure"
+                    : oracle._tag;
+
                 assert.strictEqual(
                   read._tag,
-                  oracle._tag,
+                  expected,
                   `${text}: crust ${read._tag === "Success" ? "accepts" : `refuses (${Formatter.format(read.failure)})`}, xmllint ${oracle._tag === "Success" ? "accepts" : `refuses (${Formatter.format(oracle.failure)})`}`,
                 );
-                if (document === undefined || oracle._tag === "Failure") {
+                if (document === undefined || oracle._tag === "Failure" || expected === "Failure") {
                   return;
                 }
 
@@ -338,17 +349,9 @@ describe("crust's reader on attribute defaults", () => {
                   text,
                 );
 
-                // A kept reference to an entity the subset declares after the list reads back as
-                // that entity once written into the body, so only the other trees are fixpoints.
-                if (
-                  !document.root.attributes.some((attribute) =>
-                    attribute.references.some(({ name }) => name === "f"),
-                  )
-                ) {
-                  const again = yield* readXml(new TextEncoder().encode(yield* writeXml(document)));
+                const again = yield* readXml(new TextEncoder().encode(yield* writeXml(document)));
 
-                  assert.deepStrictEqual(again.root, document.root, `${text}: the round trip`);
-                }
+                assert.deepStrictEqual(again.root, document.root, `${text}: the round trip`);
               }),
           );
         }).pipe(Effect.scoped, Effect.provide(TestLayer)),

@@ -7,7 +7,11 @@
  * The model (`modelOf`) reads a default as units, one per character its value holds and one per
  * reference no declaration supplies, and normalizes the units directly, never through the reader's
  * pieces. Each example below also records libxml2's verdict on its document (`xmllint --noout`,
- * libxml2 2.9.13): exit 0 for every document the reader accepts, exit 1 for every one it refuses.
+ * libxml2 2.9.13): exit 0 for every document the reader accepts, exit 1 for every one it refuses,
+ * but one. Beside an external subset, a default that names an entity the internal subset declares
+ * after it breaks section 4.1's validity constraint, and the reader refuses it as it refuses the
+ * well-formedness one; libxml2 reports it as "Entity 'e' not defined", a warning without
+ * `--valid`.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -81,7 +85,7 @@ describe("an attribute default's references", () => {
   );
 
   it.effect(
-    "are refused when no declaration can exist: no external subset, or standalone yes, whether the default is used or not",
+    "are refused when no declaration can exist, no external subset or standalone yes, whether the default is used or not, and when the internal subset declares the entity after the default",
     () =>
       Effect.gen(function* undeclaredRefused() {
         // xmllint: exit 1, "Entity 'u' not defined", for every one.
@@ -94,6 +98,9 @@ describe("an attribute default's references", () => {
           '<!DOCTYPE r [<!ENTITY e "&u;"><!ATTLIST r a CDATA "&e;">]><r/>',
           '<!DOCTYPE r [<!ATTLIST r a CDATA "&e;"><!ENTITY e "x">]><r/>',
           '<?xml version="1.0" standalone="yes"?><!DOCTYPE r SYSTEM "r.dtd" [<!ATTLIST r a CDATA "&u;">]><r/>',
+          // xmllint: exit 0, warning "Entity 'e' not defined"; the declaration follows the use.
+          '<!DOCTYPE r SYSTEM "r.dtd" [<!ATTLIST r a CDATA "&e;"><!ENTITY e "x">]><r/>',
+          '<!DOCTYPE r SYSTEM "r.dtd" [<!ATTLIST r a CDATA "&e;"><!ENTITY e SYSTEM "e.ent">]><r/>',
         ]) {
           assert.strictEqual(yield* verdictOf(text), "undeclared-entity", text);
         }
@@ -162,10 +169,11 @@ describe("a non-CDATA attribute's value", () => {
 
 /**
  * The tokens a box default is written with: a letter, a space and a semicolon, so text can spell
- * `&a;` once an ampersand stands before it; an ampersand by entity and by character reference; a
- * tab by character reference; and a reference to an entity no declaration supplies.
+ * `&a;` once an ampersand stands before it; an ampersand by entity (by character reference it is
+ * the examples' case); a tab by character reference; a reference to an entity no declaration
+ * supplies; and one to `f`, which the internal subset declares after the default.
  */
-const TOKENS = ["a", " ", ";", "&amp;", "&#38;", "&#9;", "&u;"] as const;
+const TOKENS = ["a", " ", ";", "&amp;", "&#9;", "&u;", "&f;"] as const;
 
 /**
  * A box default's token.
@@ -208,13 +216,14 @@ const boxCase: Gen<BoxCase> = (source) => ({
 const BOX_CASES = (1 + 7 + 49 + 343 + 2401) * TYPES.length * CONTEXTS.length;
 
 /**
- * Write a box case's document: the root `r` lacks the attribute, so the default applies.
+ * Write a box case's document: the root `r` lacks the attribute, so the default applies, and the
+ * subset declares `f` after the default.
  *
  * @param box - The case.
  * @returns The document's text.
  */
 const textOf = (box: BoxCase): string => {
-  const attlist = `<!ATTLIST r a ${box.type} "${box.tokens.join("")}">`;
+  const attlist = `<!ATTLIST r a ${box.type} "${box.tokens.join("")}"><!ENTITY f "later">`;
 
   return {
     external: `<!DOCTYPE r SYSTEM "r.dtd" [${attlist}]><r/>`,
@@ -224,11 +233,11 @@ const textOf = (box: BoxCase): string => {
 };
 
 /**
- * One unit of a default's value in the model: a character, or the kept reference to `u`.
+ * One unit of a default's value in the model: a character, or a reference the default keeps.
  */
 type Unit =
   | { readonly character: string; readonly kind: "character" }
-  | { readonly kind: "reference"; readonly name: "u" };
+  | { readonly kind: "reference"; readonly name: "f" | "u" };
 
 /**
  * A character unit.
@@ -249,21 +258,22 @@ const isSpace = (unit: Unit | undefined): boolean =>
 
 /**
  * The units a token contributes (sections 4.6 and 4.1: a predefined entity and a character
- * reference are characters, an entity no declaration supplies is kept).
+ * reference are characters, an entity no earlier declaration supplies a reference).
  */
 const UNITS: Readonly<Record<Token, readonly Unit[]>> = {
   " ": [characterUnit(" ")],
-  "&#38;": [characterUnit("&")],
   "&#9;": [characterUnit("\t")],
   "&amp;": [characterUnit("&")],
+  "&f;": [{ kind: "reference", name: "f" }],
   "&u;": [{ kind: "reference", name: "u" }],
   ";": [characterUnit(";")],
   a: [characterUnit("a")],
 };
 
 /**
- * What the model predicts of a box case: refused under `undeclared-entity` when it references `u`
- * and no declaration of `u` can exist, else the default's value and references.
+ * What the model predicts of a box case: refused under `undeclared-entity` when it references `f`,
+ * which the subset declares after it, or `u` where no declaration of `u` can exist; else the
+ * default's value and references.
  *
  * Section 3.3.3's second step, for the tokenized type, removes each space (U+0020) that follows a
  * space and the spaces at either end; a reference is no space.
@@ -272,7 +282,7 @@ const UNITS: Readonly<Record<Token, readonly Unit[]>> = {
  * @returns The predicted attribute's value and references, or `refused`.
  */
 const modelOf = (box: BoxCase): Pick<Attribute, "references" | "value"> | "refused" => {
-  if (box.context !== "external" && box.tokens.includes("&u;")) {
+  if (box.tokens.includes("&f;") || (box.context !== "external" && box.tokens.includes("&u;"))) {
     return "refused";
   }
 
@@ -292,7 +302,7 @@ const modelOf = (box: BoxCase): Pick<Attribute, "references" | "value"> | "refus
       value += unit.character;
     } else {
       references.push({ name: unit.name, offset: value.length });
-      value += "&u;";
+      value += `&${unit.name};`;
     }
   }
 
@@ -304,6 +314,7 @@ const modelOf = (box: BoxCase): Pick<Attribute, "references" | "value"> | "refus
  */
 const SITUATIONS = [
   "refused",
+  "refused beside an external subset",
   "kept reference",
   "ampersand as text",
   "collapsed",
@@ -328,7 +339,10 @@ const situationsOf = (
   model: Pick<Attribute, "references" | "value"> | "refused",
 ): readonly Situation[] =>
   model === "refused"
-    ? ["refused"]
+    ? [
+        "refused",
+        ...(box.context === "external" ? (["refused beside an external subset"] as const) : []),
+      ]
     : [
         ...(model.references.length > 0 ? ["kept reference" as const] : []),
         ...(model.value.includes("&") &&
@@ -352,7 +366,7 @@ describe("every short attribute default", () => {
         ctx,
         exhaust(
           {
-            box: "every default of 0 to 4 tokens over a letter, a space, a semicolon, &amp;, &#38;, &#9; and an undeclared &u;, under CDATA and NMTOKENS, in an internal subset alone, beside an external subset, and in a standalone document",
+            box: "every default of 0 to 4 tokens over a letter, a space, a semicolon, &amp;, &#9;, an undeclared &u; and a later-declared &f;, under CDATA and NMTOKENS, in an internal subset alone, beside an external subset, and in a standalone document",
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<Situation>(SITUATIONS),
             generator: boxCase,

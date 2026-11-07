@@ -436,11 +436,11 @@ describe("attribute-list declarations", () => {
   );
 
   it.effect(
-    "keep an entity declared after the list as a reference piece where an external subset may declare it",
+    "keep an entity the internal subset never declares as a reference piece where an external subset may declare it",
     () =>
-      Effect.gen(function* keepsLaterEntity() {
+      Effect.gen(function* keepsUndeclaredEntity() {
         const table = yield* attlistOf(
-          '<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST a d CDATA "1&e;2"><!ENTITY e "x">]><a/>',
+          '<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST a d CDATA "1&u;2">]><a/>',
           "a",
         );
 
@@ -450,13 +450,32 @@ describe("attribute-list declarations", () => {
             {
               default: Option.some<readonly ValuePiece[]>([
                 { kind: "text", text: "1" },
-                { kind: "reference", name: "e" },
+                { kind: "reference", name: "u" },
                 { kind: "text", text: "2" },
               ]),
               type: "CDATA",
             },
           ],
         ]);
+      }),
+  );
+
+  it.effect(
+    "refuse an entity a default names before the internal subset declares it, beside an external subset too",
+    () =>
+      Effect.gen(function* refusesEarlyReference() {
+        for (const declaration of ['<!ENTITY e "x">', '<!ENTITY e SYSTEM "e.ent">']) {
+          const error = yield* refusalOf(
+            `<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST a d CDATA "1&e;2">${declaration}]><a/>`,
+          );
+
+          assert.instanceOf(error, ReaderRefusal);
+          assert.include(
+            error._tag === "ReaderRefusal" ? `${error.rule}: ${error.detail}` : "",
+            'undeclared-entity: the entity "e" is referenced in the default of attribute "d" of element "a" before the internal subset declares it',
+            declaration,
+          );
+        }
       }),
   );
 

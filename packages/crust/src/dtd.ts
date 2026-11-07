@@ -36,7 +36,9 @@ export interface AttlistEntry {
  * A document that says `standalone="yes"` or has no external subset must declare every entity it
  * uses before the use, so such a reference is `refused`, with why no declaration can exist. In any
  * other document the declaration may sit in the external subset, which is never fetched, so the
- * reference is `kept` as written.
+ * reference is `kept` as written, unless it stands in an attribute default and the internal subset
+ * declares the entity after it: a declaration must precede a default's reference, so the lexer
+ * refuses that one at the end of the subset.
  */
 export type Undeclared =
   | { readonly _tag: "kept" }
@@ -109,6 +111,28 @@ export const undeclaredEntity = (
       owner === undefined
         ? `the entity "${name}" is referenced but not declared, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared).`
         : `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" but not declared before that attribute-list declaration, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared). Declare the entity before the attribute-list declaration, or write its text in the default.`,
+    rule: "undeclared-entity",
+  });
+
+/**
+ * Build the refusal for an attribute default that references an entity the internal subset
+ * declares only after it. A declaration must precede every reference in a default value (XML 1.0
+ * section 4.1, "Entity Declared"): a well-formedness constraint where no external subset or a
+ * `standalone` declaration binds it, and otherwise a validity constraint, which a QTI package
+ * meets too.
+ *
+ * @param name - The entity's name.
+ * @param owner - The attribute whose default holds the reference.
+ * @param owner.attribute - The attribute's name.
+ * @param owner.element - The name of the element the attribute is declared for.
+ * @returns The refusal, under rule `undeclared-entity`.
+ */
+const declaredAfterDefault = (
+  name: string,
+  owner: { readonly attribute: string; readonly element: string },
+): ReaderRefusal =>
+  new ReaderRefusal({
+    detail: `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" before the internal subset declares it, and a declaration must precede every reference in an attribute default (XML 1.0 section 4.1, Entity Declared). Move the entity's declaration before the attribute-list declaration.`,
     rule: "undeclared-entity",
   });
 
@@ -337,13 +361,16 @@ export const charge = (
  * first declaration of a name is binding (XML 1.0 section 4.2). `stopped` is set at the first
  * parameter-entity reference that cannot be read (section 5.1). `undeclared` is set when the
  * DOCTYPE's external identifier is read, which precedes the internal subset, so every attribute
- * default is judged under the treatment the body is.
+ * default is judged under the treatment the body is. `kept` lists each reference an attribute
+ * default keeps, with the attribute, so the end of the subset can refuse one the subset declares
+ * after it.
  */
 interface Tables {
   readonly attlists: Map<string, Map<string, AttlistEntry>>;
   readonly bound: Set<string>;
   readonly budget: ExpansionBudget;
   readonly entities: Map<string, string>;
+  readonly kept: { readonly name: string; readonly owner: DefaultOwner }[];
   readonly parameters: Map<string, string>;
   readonly standalone: boolean;
   stopped: boolean;
@@ -826,9 +853,13 @@ const expandDefault = (
 
       const replacement = tables.entities.get(entity);
       if (replacement === undefined) {
-        return tables.undeclared._tag === "refused"
-          ? yield* undeclaredEntity(entity, tables.undeclared.why, owner)
-          : [{ kind: "reference", name: entity }];
+        if (tables.undeclared._tag === "refused") {
+          return yield* undeclaredEntity(entity, tables.undeclared.why, owner);
+        }
+
+        tables.kept.push({ name: entity, owner });
+
+        return [{ kind: "reference", name: entity }];
       }
 
       yield* charge(tables.budget, replacement.length, depth + 1, entity);
@@ -1422,6 +1453,7 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
     bound: new Set(),
     budget: expansionBudget(text.length),
     entities: new Map(),
+    kept: [],
     parameters: new Map(),
     standalone,
     stopped: false,
@@ -1432,6 +1464,11 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
   const doctype = text.startsWith("<!DOCTYPE", cursor.offset)
     ? Option.some(yield* lexDoctype(tables, cursor))
     : Option.none();
+  const early = tables.kept.find(({ name }) => tables.bound.has(`&${name}`));
+  if (early !== undefined) {
+    return yield* declaredAfterDefault(early.name, early.owner);
+  }
+
   const cycle = findCycle(tables.entities);
   if (Option.isSome(cycle)) {
     return yield* new ReaderRefusal({
