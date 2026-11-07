@@ -50,6 +50,7 @@ import type {
   PlacedIdref,
   PlacedXmlLang,
   ResourceLomLanguageSet,
+  ShareFragment,
   SsmlAttribute,
   SsmlScope,
   TextIdref,
@@ -113,6 +114,7 @@ export interface IdentityRows {
   readonly LabelUse: ReadonlyMap<string, Addition<typeof LabelUse>>;
   readonly LomLanguage: ReadonlyMap<string, Addition<typeof LomLanguage>>;
   readonly ResourceLomLanguageSet: ReadonlyMap<string, Addition<typeof ResourceLomLanguageSet>>;
+  readonly ShareFragment: ReadonlyMap<string, Addition<typeof ShareFragment>>;
   readonly SsmlAttribute: ReadonlyMap<string, Addition<typeof SsmlAttribute>>;
   readonly SsmlScope: ReadonlyMap<string, Addition<typeof SsmlScope>>;
   readonly XmlLang: ReadonlyMap<string, Addition<typeof XmlLang>>;
@@ -217,6 +219,11 @@ const labelledRootVersion = "3.0.1";
  * label characteristic asks for its tool (spec reading 128).
  */
 const toolLabelled: ReadonlySet<string> = new Set(toolLabelKinds);
+
+/**
+ * The kind of a MathML `share`, whose `src` of the form `#id` is a {@link ShareFragment}.
+ */
+const shareKind = "m:share";
 
 /**
  * Write the key text of a projection's row.
@@ -473,6 +480,31 @@ const attributeRowsOf = (
     LabelUse: labels,
     XmlLang: xmlLangs,
   };
+};
+
+/**
+ * Build the {@link ShareFragment} of each `m:share` whose `src` is `#` and one or more characters
+ * (MathML 3 §4.2.7), as `#pantry/qti/identity.ts` selects them: its `src` as written and `id`, the
+ * text after the `#`.
+ *
+ * @param tree - The document's tree.
+ * @returns The rows, each by its node.
+ */
+const shareFragmentsOf = (tree: Tree): Map<string, Addition<typeof ShareFragment>> => {
+  const fragments = new Map<string, Addition<typeof ShareFragment>>();
+
+  for (const { lexical, name, node } of tree.rows.attributes) {
+    if (
+      name === "src" &&
+      lexical.length > 1 &&
+      lexical.startsWith("#") &&
+      tree.byId.get(node)?.kind === shareKind
+    ) {
+      fragments.set(node, { document: tree.document, id: lexical.slice(1), node, src: lexical });
+    }
+  }
+
+  return fragments;
 };
 
 /**
@@ -765,6 +797,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
   const texts = textRowsOf(tree);
   const documentIds = new Map([...texts.DocumentId, ...attributed.DocumentId]);
   const assembled = ids.assembled ?? false;
+  const shares = shareFragmentsOf(tree);
   const targets = [
     ...rows.attributes.flatMap((attribute) => {
       const element = tree.byId.get(attribute.node);
@@ -774,6 +807,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
         : [];
     }),
     ...[...texts.IdentityText.values()].flatMap(({ idrefs }) => idrefs.map(({ token }) => token)),
+    ...[...shares.values()].map(({ id }) => id),
   ];
 
   return {
@@ -795,6 +829,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
         { assembled, document: tree.document, id },
       ]),
     ),
+    ShareFragment: shares,
   };
 };
 

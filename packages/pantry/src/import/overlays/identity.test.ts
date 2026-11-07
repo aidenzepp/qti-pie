@@ -76,6 +76,7 @@ type CaseKind =
   | "lom:general"
   | "lom:language"
   | "lom:lom"
+  | "m:share"
   | "qti-assessment-item"
   | "qti-assessment-stimulus"
   | "qti-description"
@@ -111,6 +112,7 @@ const attribute = (
     | "label"
     | "name"
     | "ref"
+    | "src"
     | "startmark"
     | "type"
     | "xml:id"
@@ -1358,4 +1360,53 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
         ),
       ),
   );
+});
+
+/**
+ * Write the rows of an item whose body holds one `m:share` of each `src`.
+ *
+ * @param srcs - Each share's `src`.
+ * @returns The document's identity rows.
+ */
+const sharedRows = (srcs: readonly string[]) => {
+  const shares = srcs.map((src) => elementOf("m:share", [attribute("src", src)], []));
+  const root = elementOf("qti-assessment-item", [], shares);
+
+  return rowsOf(documentOf(root), ids);
+};
+
+describe("import/overlays/identity.ts, a share's same-document fragment (P7)", () => {
+  // Oracle: MathML 3 §4.2.7, a `share`'s `src` of the form `#id` names an element of its own
+  // document, read as the case's model: the shares written, and which of them name a fragment.
+  it("gives a share whose src is # and a name one ShareFragment and its id one IdrefTarget", () => {
+    const rows = sharedRows(["#a"]);
+
+    assert.deepStrictEqual(
+      [...rows.ShareFragment.values()],
+      [{ document: documentNode, id: "a", node: idOf(2), src: "#a" }],
+    );
+    assert.deepStrictEqual(
+      [...rows.IdrefTarget.values()].map(({ assembled, id }) => [assembled, id]),
+      [[false, "a"]],
+    );
+  });
+
+  it("gives a share whose src names another document, or only a #, no row", () => {
+    for (const src of ["other.xml#a", "#", "a", ""]) {
+      const rows = sharedRows([src]);
+
+      assert.strictEqual(rows.ShareFragment.size, 0, src);
+      assert.strictEqual(rows.IdrefTarget.size, 0, src);
+    }
+  });
+
+  it("gives two shares of one fragment two ShareFragments and one IdrefTarget", () => {
+    const rows = sharedRows(["#a", "#a", "#b"]);
+
+    assert.strictEqual(rows.ShareFragment.size, 3);
+    assert.deepStrictEqual([...rows.IdrefTarget.values()].map(({ id }) => id).toSorted(), [
+      "a",
+      "b",
+    ]);
+  });
 });

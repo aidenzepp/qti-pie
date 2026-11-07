@@ -744,6 +744,10 @@ const mergedOf = (
       "SectionTemplateRef",
       parts.map(({ SectionTemplateRef: rows }) => rows),
     ),
+    ShareFragment: unionOf(
+      "ShareFragment",
+      parts.map(({ ShareFragment: rows }) => rows),
+    ),
     Site: unionOf(
       "Site",
       parts.map(({ Site: rows }) => rows),

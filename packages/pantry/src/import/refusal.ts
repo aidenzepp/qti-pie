@@ -1916,6 +1916,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       ] as const,
   ),
   [
+    containedIn(sideOf("ShareFragment", "document", "id"), sideOf("IdrefTarget", "document", "id")),
+    "Idref target",
+  ],
+  [
     containedIn(sideOf("IdrefTarget", "document", "id"), sideOf("IdBinding", "document", "id")),
     "Idref target",
   ],
@@ -2056,6 +2060,21 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     "E1 derived",
   ],
   [primaryKeyOf("DocumentLang", "document", "lang"), "E1 derived"],
+  [primaryKeyOf("ShareFragment", "node"), "E1 derived"],
+  [
+    containedIn(
+      sideOf("Attribute", "node", "document", "lexical"),
+      sideOf("ShareFragment", "node", "document", "src"),
+    ),
+    "E1 derived",
+  ],
+  [
+    containedIn(
+      sideOf("ShareFragment", "node", "document", "src"),
+      sideOf("Attribute", "node", "document", "lexical"),
+    ),
+    "E1 derived",
+  ],
   ...(
     [
       [sideOf("GeneralNamed", "general"), sideOf("ResourceLomGeneral", "node")],
