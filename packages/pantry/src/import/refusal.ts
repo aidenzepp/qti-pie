@@ -423,6 +423,11 @@ export const lawTable = {
     source:
       "the XSDs' use=\"required\", and reading 123: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BDO (§5.11: 'Authors must specify the dir attribute on this tag'), where the XSD declares bdo's dir optional (attributes.ts readingUses): AttributeAdmission's use side (Required)",
   },
+  "AL4 data name": {
+    rule: "attribute-admission",
+    source:
+      "reading 13 of docs/spec-readings.md: HTML's custom data attribute rule read in XML (https://html.spec.whatwg.org/multipage/dom.html#custom-data-attribute: a name in no namespace that starts with data-, has at least one character after the hyphen, is a valid attribute local name and contains no ASCII upper alphas) and the information model's prose (dataExtension): a data-* attribute's name is in that language, and a no-namespace name of an element that is not foreign never begins data- (vocab/open.ts dataName, attributes.ts AL4_data_name)",
+  },
   "AL4 open name key": {
     rule: "attribute-admission",
     source: "fin.md D2, an open-class attribute keeps its exact name; reading 13",

@@ -142,7 +142,7 @@ import {
 import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 import type { OracleResolution, OracleWhiteSpace } from "#pantry/test/resolution.ts";
-import { typeAvailable } from "#pantry/vocab/open.ts";
+import { dataName, typeAvailable } from "#pantry/vocab/open.ts";
 
 /**
  * The rules a refusal is named by: the rule each law keeps from the guard or schema rule it
@@ -353,6 +353,7 @@ const lawRules = {
   "AL2 fold": "attribute-admission",
   "AL2 last slot": "attribute-admission",
   "AL3 required": "required-attribute",
+  "AL4 data name": "attribute-admission",
   "AL4 open name key": "attribute-admission",
   "AL4 open names": "attribute-admission",
   "AL5 attribute count": "attribute-count",
@@ -520,6 +521,8 @@ export const lawSources = {
   "AL2 last slot": "fin.md §16, the attribute family's end value",
   "AL3 required":
     "the XSDs' use=\"required\", and reading 123: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BDO (§5.11: 'Authors must specify the dir attribute on this tag'), where the XSD declares bdo's dir optional (attributes.ts readingUses): AttributeAdmission's use side (Required)",
+  "AL4 data name":
+    "reading 13 of docs/spec-readings.md: HTML's custom data attribute rule read in XML (https://html.spec.whatwg.org/multipage/dom.html#custom-data-attribute: a name in no namespace that starts with data-, has at least one character after the hyphen, is a valid attribute local name and contains no ASCII upper alphas) and the information model's prose (dataExtension): a data-* attribute's name is in that language, and a no-namespace name of an element that is not foreign never begins data- (vocab/open.ts dataName, attributes.ts AL4_data_name)",
   "AL4 open name key": "fin.md D2, an open-class attribute keeps its exact name; reading 13",
   "AL4 open names": "fin.md D2, an open-class attribute keeps its exact name; reading 13",
   "AL5 attribute count":
@@ -1442,6 +1445,7 @@ export const otherLawNames = [
   "AttributeEntity owner",
   "AL4 open names",
   "AL4 open name key",
+  "AL4 data name",
   "OpenElementName",
   "MathML foreign element",
   "OpenElementName canonical",
@@ -3619,6 +3623,7 @@ const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
   const openKeys = new Set(
     rows.attributes.filter(({ name }) => isOpenClass(name)).map(({ id }) => id),
   );
+  const attributeById = new Map(rows.attributes.map((attribute) => [attribute.id, attribute]));
   const openNameKeys = rows.openNames.map(({ attribute }) => attribute);
   const openNameIds = rows.openNames.map(
     ({ attribute, local, uri }) => `${ownerOf.get(attribute) ?? attribute} {${uri}}${local}`,
@@ -3687,6 +3692,16 @@ const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
             openNames: String(openNameIds.length),
           }),
         ]),
+    ...rows.openNames.flatMap(({ attribute, local }) => {
+      const named = attributeById.get(attribute);
+      const kind = (named === undefined ? undefined : view.byId.get(named.node))?.kind ?? "";
+      const broken =
+        named?.name === "data-*"
+          ? !dataName.test(local)
+          : named?.name === "no-namespace" && !isForeignKind(kind) && local.startsWith("data-");
+
+      return broken ? [breach("AL4 data name", { class: named?.name ?? "", kind, local })] : [];
+    }),
     ...(sameSet(foreign, new Set(rows.openElementNames.map(({ node }) => node))) &&
     rows.openElementNames.length === foreign.size
       ? []
@@ -6866,6 +6881,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
         .map(({ name }) => name),
     )}, which Required holds`;
   },
+  "AL4 data name": (keys) =>
+    `the ${field(keys, "class")} attribute ${field(keys, "local")} of ${field(keys, "kind")} is a name outside reading 13's data- language`,
   "AL4 open name key": (keys) =>
     `${field(keys, "openNames")} open names, ${field(keys, "distinct")} distinct by (node, uri, local)`,
   "AL4 open names": (keys) =>
