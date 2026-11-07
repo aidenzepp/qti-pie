@@ -25,8 +25,8 @@
  * the tree and every overlay builder name each node by one id ({@link NodeIds}).
  */
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
-import type { Addition, AnyRelation, Uuid } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, Order } from "effect";
+import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import { Array as Arr, Option, Order, Struct } from "effect";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
@@ -46,7 +46,6 @@ import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
 import type { OverlayRows } from "#pantry/import/overlays/index.ts";
-import { writtenNames } from "#pantry/import/roster.ts";
 import type { documentLayer } from "#pantry/import/roster.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { endsOf } from "#pantry/model/folds.ts";
@@ -70,7 +69,6 @@ import type {
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
 import type { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The ids one document's rows are written under, and where it stands in its package: every overlay
@@ -980,11 +978,6 @@ type RowOf<Name extends keyof PackageInputs> =
   PackageInputs[Name] extends ReadonlyMap<string, infer Row> ? Row : never;
 
 /**
- * A row of any input of a package's ChangeSet.
- */
-type AnyRow = RowOf<keyof PackageInputs>;
-
-/**
  * The fields each flat relation's CHECK reads a per-row pattern by, the pattern's inputs: the
  * relations whose rows are sorted by them before the write, so that rows of one pattern are one run
  * of their statement and PostgreSQL's backend, which caches 32 compiled regexes, compiles each
@@ -1044,27 +1037,25 @@ const patternOrdered = (inputs: PackageInputs) =>
   }) satisfies { readonly [Name in keyof typeof patternInputs]: readonly RowOf<Name>[] };
 
 /**
- * Whether a relation is one of {@link patternInputs}, whose rows are sorted before the write.
- *
- * @param name - The relation.
- * @returns Whether its rows are sorted.
+ * The rows of a keyed set, in the order it holds them, as a ChangeSet's insert takes a relation's
+ * facts: a type-level function, so `Struct.map` gives each relation its own row type.
  */
-const isPatterned = (name: keyof PackageInputs): name is keyof typeof patternInputs =>
-  Object.hasOwn(patternInputs, name);
-
-/**
- * A ChangeSet as the fold below builds it: grizzle's runtime value, whose `insert` takes any
- * relation and its facts and checks each member where the ChangeSet is compiled (grizzle-engine
- * `write/changeset/value.ts`, `ChangeSetValue`).
- */
-interface Inserting {
-  readonly insert: (relation: AnyRelation, facts: readonly AnyRow[]) => Inserting;
+interface RowsOfSet extends Struct.Lambda {
+  <Row>(set: ReadonlyMap<string, Row>): readonly Row[];
+  readonly "~lambda.out": this["~lambda.in"] extends ReadonlyMap<string, infer Row>
+    ? readonly Row[]
+    : never;
 }
 
 /**
+ * Read a keyed set's rows ({@link RowsOfSet}).
+ */
+const rowsOfSet = Struct.lambda<RowsOfSet>((set) => [...set.values()]);
+
+/**
  * Build one package's ChangeSet: one step over the author role, each relation of the package's
- * inputs inserted once (`writtenNames` of `#pantry/import/roster.ts`, every stored relation of
- * `Qti` no ordered family nests), every owner in the same stratum as its whole family (the W5
+ * inputs inserted once, by its key (grizzle's `insertAll`, which types and checks each key's rows
+ * as that relation's own insert), every owner in the same stratum as its whole family (the W5
  * amendment's A, C19). A ChangeSet is canonical, its members sorted by relation, so the order of
  * the inserts is no part of it.
  *
@@ -1080,26 +1071,8 @@ interface Inserting {
  * @param inputs - The package's inputs.
  * @returns The ChangeSet, compiled by `db.apply` for the one call that applies it.
  */
-export const changeSetOf = (
-  author: typeof Author,
-  inputs: PackageInputs,
-): ChangeSet<typeof Author, unknown, keyof PackageInputs> => {
-  // SAFETY: grizzle's ChangeSet value has the runtime `insert` `Inserting` names (grizzle-engine
-  // `write/changeset/value.ts`, `ChangeSetValue`), which checks each member where the ChangeSet
-  // is compiled.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  let changes = ChangeSet.empty(author) as Inserting;
-  const ordered = patternOrdered(inputs);
-  for (const name of writtenNames) {
-    changes = changes.insert(
-      Qti.relations[name],
-      isPatterned(name) ? ordered[name] : [...inputs[name].values()],
-    );
-  }
-
-  // SAFETY: the loop inserted each relation of `writtenNames`, the keys of `PackageInputs`, with its
-  // facts, so the value is a ChangeSet over the role writing exactly those relations, each owner with
-  // its family, which grizzle checks again where it compiles the ChangeSet.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  return changes as ChangeSet<typeof Author, unknown, keyof PackageInputs>;
-};
+export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
+  ChangeSet.empty(author).insertAll({
+    ...Struct.map(rowsOfSet)(inputs),
+    ...patternOrdered(inputs),
+  });
