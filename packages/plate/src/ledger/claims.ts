@@ -1,6 +1,6 @@
 /**
- * The claims: the rows the ledger reports as `limited`, each with the member-only source that
- * bounds what a test can prove for it (rule `f000ce54`).
+ * The claims: the rows the ledger reports as `limited`, each with the source that bounds what a
+ * test can prove for it (rule `f000ce54`).
  *
  * A claim outranks the tests: a row a claim names is `limited` even when a passing test carries its
  * tag, so a passing test never makes such a row `covered`. A claim may also bound a row by a stage
@@ -28,9 +28,8 @@ export interface Claim {
 /**
  * The claims. I-19, whose Basic subset only the member-only certification checklists fix (reading
  * I-8.1), so the tests tagged `[I-19]` cannot make it `covered`; and I-9a, whose full response
- * processing lands in four stages, so the tests tagged `[I-9a]` prove only the kinds landed so far.
- * A claim may also bound a row by a stage of this plan that has not landed, naming the stage that
- * removes it: M3.b-4's P7R-03 removes I-9a's.
+ * processing lands in four stages, so the tests tagged `[I-9a]` prove only the kinds landed so far,
+ * until M3.b-4's P7R-03 removes its claim.
  */
 export const claims: readonly Claim[] = [
   {

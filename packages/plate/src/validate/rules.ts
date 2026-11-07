@@ -1182,12 +1182,12 @@ const variableType = (
  *
  * An expression whose kind's rule declares a declaration facet names a variable of the kind the
  * facet expects: `qti-variable` a response, outcome, template or context declaration of the item,
- * or a built-in variable (`info-compact.txt:9286`); `qti-correct`, `qti-map-response` and
- * `qti-map-response-point` a response declaration. `qti-set-outcome-value` and
- * `qti-lookup-outcome-value` name an outcome declaration or `completionStatus`. Template processing
- * is not checked here. The qti package refuses each as P8 (`reference` and `target` in
- * `packages/pantry/src/processing/check.ts`). A reference attribute that names no variable is
- * {@link attributeReferences}' refusal.
+ * or a built-in variable (`info-compact.txt:9286`), and `qti-default` likewise; `qti-correct`,
+ * `qti-map-response` and `qti-map-response-point` a response declaration.
+ * `qti-set-outcome-value` and `qti-lookup-outcome-value` name an outcome declaration or
+ * `completionStatus`. Template processing is not checked here. The qti package refuses each as P8
+ * (`reference` and `target` in `packages/pantry/src/processing/check.ts`). A reference attribute
+ * that names no variable is {@link attributeReferences}' refusal.
  *
  * One that reads the built-in `duration`, which no declaration of the expected kind answers, in an
  * item that is not time dependent is refused too, with `check: "untimed-duration"`
@@ -1455,11 +1455,6 @@ const setOutcomeType = (
 const conditionBranches: ReadonlySet<string> = new Set(["qti-response-else-if", "qti-response-if"]);
 
 /**
- * The type every condition has.
- */
-const singleBoolean: ExpressionType = { baseType: "boolean", cardinality: "single" };
-
-/**
  * Apply `expression-type` to the condition of a `qti-response-if` or `qti-response-else-if` of
  * inline response processing.
  *
@@ -1491,7 +1486,7 @@ const conditionType = (
   const condition = Option.flatMap(Arr.head(operandsOf(visit.element)), (expression) =>
     expressionType(expression, context),
   );
-  if (Option.isNone(condition) || agree(condition.value, singleBoolean)) {
+  if (Option.isNone(condition) || agree(condition.value, singleOf("boolean"))) {
     return [];
   }
 
@@ -1583,11 +1578,11 @@ const lookupTableRequirements = (
  * Apply `expression-type` to a `qti-lookup-outcome-value`'s operand (reading 28).
  *
  * The operand is a single integer, float or duration, and an integer when the outcome holds a
- * `qti-match-table` (operator ruling `96840ced`, Q15 B: refused although plate's engine never runs
- * a lookup yet). An operand that is untyped ({@link expressionType}) is accepted. An outcome that
- * is undeclared or holds no lookup table is not judged here: they are `undeclared-variable`'s
- * refusal and {@link lookupTableRequirements}'s. The qti package refuses the same as P22
- * (`checkLookup` in `packages/pantry/src/processing/check.ts`).
+ * `qti-match-table` (operator ruling `96840ced`, Q15 B). An operand that is untyped
+ * ({@link expressionType}) is accepted. An outcome that is undeclared or holds no lookup table is
+ * not judged here: they are `undeclared-variable`'s refusal and {@link lookupTableRequirements}'s.
+ * The qti package refuses the same as P22 (`checkLookup` in
+ * `packages/pantry/src/processing/check.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1927,9 +1922,10 @@ const setCorrectResponses = (
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry,
  * and the variables its reference attributes name, through its kind's reference facet, and refuses
- * a read of the built-in `duration` in an item whose `time-dependent` is false.
- * `expression-type` judges what a `qti-set-outcome-value` sets, a lookup's operand, every
- * expression's operands by its kind's rule, and the variables its reference attributes name. Each
+ * a read of the built-in `duration` in an item whose `time-dependent` is false and a rule other
+ * than `qti-set-outcome-value` that sets a built-in. `expression-type` judges what a
+ * `qti-set-outcome-value` sets, a branch's condition, a lookup's operand, every expression's
+ * operands by its kind's rule, and the variables its reference attributes name. Each
  * expression is typed through its kind's rule in the registry (`kindRules` in
  * `#plate/model/expressions/read.ts`), and one whose kind's family has not landed is untyped and
  * not judged.

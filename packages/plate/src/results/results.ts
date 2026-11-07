@@ -428,16 +428,15 @@ const answeredStatusOf = (
 /**
  * Give the value an item result reports for the built-in `completionStatus`.
  *
- * Once an attempt is processed it is the value the reported outcomes hold, where the item holds
- * the built-in ({@link holdsCompletionStatus}) and the value is a single identifier: `unknown`,
- * the value the first attempt starts it at and later ones keep, or the one processing set.
- * Otherwise it is derived:
- * `not_attempted` until an attempt starts and `unknown` after. So a presented item whose attempt
- * is not processed reports `unknown`, though its record still holds `not_attempted`, and a record
- * written before the built-in was held reads as derived.
+ * Once an attempt is processed, where the item holds the built-in ({@link holdsCompletionStatus})
+ * and the reported outcomes hold it as a single identifier, it is that identifier: `unknown`, which
+ * the first attempt starts it at and later ones keep, or the one processing set. Otherwise it is
+ * derived: `not_attempted` until an attempt starts and `unknown` after. So a presented item whose
+ * attempt is not processed reports `unknown`, though its record still holds `not_attempted`, and a
+ * record written before the item held the built-in reads as derived.
  *
  * @param report What the result says about the item.
- * @returns The value.
+ * @returns The single identifier to report.
  */
 const completionOf = (report: ItemReport): Value => {
   const derived = completionValue(report.session.started === 0 ? "not_attempted" : "unknown");

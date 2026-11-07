@@ -182,8 +182,8 @@ const undeclaredWords: Readonly<Record<StoredVariable, string>> = {
  *
  * @param variable Whether it is a response or an outcome.
  * @param identifier The variable's identifier.
- * @param declaration The variable's declaration, none when the item declares no such variable
- *   (or, for a response, declares one it does not score).
+ * @param declaration The variable's declaration, or the built-in's type, none when the item
+ *   declares no such variable (or, for a response, declares one it does not score).
  * @param value The record's value of it.
  * @returns The issue, in words that name the variable, or none when the value fits.
  */
@@ -210,7 +210,8 @@ const storedMisfit = (
  * Find the first of a record's variables of one kind that does not fit the item's declarations.
  *
  * @param variable Whether the values are responses or outcomes.
- * @param declarations The item's declarations of that kind, by identifier.
+ * @param declarations The item's declarations of that kind, with any built-in it holds, by
+ *   identifier.
  * @param values The record's values of that kind, by identifier.
  * @returns The first issue, or none when every value fits.
  */
@@ -301,11 +302,10 @@ const recordOutcomes = (
  * `restore` and `results` run it, so a record that does not fit is refused rather than given back
  * or written into a result. It checks the responses and the built-in as `score` checks the record
  * it is handed, and the declared outcomes too, which `score` leaves alone because an attempt resets
- * them; every record `score`
- * writes fits, since the engine sets only declared outcomes and the built-in `completionStatus`,
- * each to a value of its type. A declared variable the record lacks is not refused, nor is a
- * record that lacks `completionStatus`, as one written before the built-in was held does: the
- * attempt starts it at `unknown`.
+ * them; every record `score` writes fits, since the engine sets only declared outcomes and the
+ * built-in `completionStatus`, each to a value of its type. A declared variable the record lacks is
+ * not refused, nor is a record that lacks `completionStatus`, as one written before the item held
+ * the built-in does: the attempt starts it at `unknown`.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -390,10 +390,10 @@ const checkedResponses = (
  * In order: it decodes the record the host handed back, checks that it belongs to the item, that
  * each response it holds is one the item scores, of its declaration's base type and cardinality,
  * and that the built-in `completionStatus`, which the attempt carries over, is a single identifier,
- * or starts a fresh record when there is none; it checks each response as a value of
- * its declaration; it refuses responses that break a tier (a) limit, under the default
- * configuration; then it runs the attempt and writes the record. It sets no attempt limit:
- * `maxAttempts` is the author's flow.
+ * or starts a fresh record when there is none; it checks each response as a value of its
+ * declaration; it refuses responses that break a tier (a) limit, under the default configuration;
+ * then it runs the attempt and writes the record. It sets no attempt limit: `maxAttempts` is the
+ * author's flow.
  *
  * @example
  *   const stored = score(accepted, { RESPONSE: decoded });
