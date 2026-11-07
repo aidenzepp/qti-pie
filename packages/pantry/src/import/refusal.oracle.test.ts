@@ -599,6 +599,7 @@ const tiers: readonly (readonly Rule[])[] = [
     "template-ref",
     "printed-variable-ref",
     "context-variable-ref",
+    "pci-module-source",
     "slider-bounds",
     "max-strings-required",
     "aria-value-range",
@@ -1131,8 +1132,13 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
   [
     "context-variable-ref",
+    "pci-module-source",
+    "O3: references before a PCI's module source (R10-a)",
+  ],
+  [
+    "pci-module-source",
     "slider-bounds",
-    "O3: references before an interaction's numeric bounds (§5.137)",
+    "O3: a PCI's module source before an interaction's numeric bounds (§5.137)",
   ],
   [
     "slider-bounds",
@@ -1371,7 +1377,7 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
 describe("the precedence over the laws one native object carries", () => {
   it("holds each adjacent pair of the precedence to the reading or source that orders it", () => {
     // Oracle: the readings and the plan's tiers, pair by pair (precedencePairs). Bound: every
-    // adjacent pair of the 102 rules, so a swap of any two neighbours, or a rule moved or added,
+    // adjacent pair of the 103 rules, so a swap of any two neighbours, or a rule moved or added,
     // breaks a pair, and the message names it.
     assert.deepStrictEqual(
       precedencePairs.map(([earlier, later]) => `${earlier} before ${later}`),
