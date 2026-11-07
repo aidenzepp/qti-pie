@@ -22,8 +22,8 @@
  *   one row per such attribute that holds a token, as "Idref target" reads only an attribute the
  *   schema checks as IDREF and only its tokens (an unchecked one, or an empty or blank one, names
  *   nothing), keyed by its node, its token the lexical form collapsed (`xs:IDREF`'s whiteSpace
- *   `collapse`); {@link CatalogId} is one row per `qti-catalog` that writes an `id`, copied from
- *   the attribute as a `TableHeader` is, its `id` the value its {@link DocumentId} holds. A
+ *   `collapse`); {@link CatalogId} is one row per `qti-catalog` whose `id` is an NCName, copied
+ *   from the attribute as a `TableHeader` is, its `id` the value its {@link DocumentId} holds. A
  *   document in no assembly resolves each reference among its own catalogs: the containment of
  *   every reference's `(document, token)` in the catalogs' `(document, id)`, over the tokens
  *   {@link CatalogTarget} holds. A document in an assembly resolves it once per instance, as "Idref
@@ -73,7 +73,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { AssembledId, DocumentId, PlacedIdref } from "#pantry/qti/identity.ts";
+import { AssembledId, DocumentId, namingPattern, PlacedIdref } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { nodeRef } from "#pantry/qti/node.ts";
 import { TestDocument } from "#pantry/qti/tests.ts";
@@ -130,9 +130,10 @@ export const CatalogRef = relation(
 );
 
 /**
- * One `qti-catalog` that carries an `id`, keyed by its node: its document, its `id`, the ID's value
- * as its {@link DocumentId} holds it (an `xs:ID` collapsed), with `owner` the node itself, an
- * attribute ID's binding, so its copy shares the superkey `DocumentId` reads.
+ * One `qti-catalog` that carries an ID, an `id` whose value is an NCName, keyed by its node: its
+ * document, its `id`, the ID's value as its {@link DocumentId} holds it (an `xs:ID` collapsed),
+ * with `owner` the node itself, an attribute ID's binding, so its copy shares the superkey
+ * `DocumentId` reads.
  */
 export const CatalogId = relation(
   "CatalogId",
@@ -272,10 +273,12 @@ const referenceAttributes = select(Attribute, (a) =>
 );
 
 /**
- * Every catalog's `id`, the source of {@link CatalogId}.
+ * Every catalog's `id` that is one of its document's IDs, its lexical form naming something once
+ * collapsed ({@link namingPattern}), the source of {@link CatalogId}: any other names no catalog,
+ * as it has no {@link DocumentId}, and its value domain refuses it alone (spec reading 156).
  */
 const catalogIdAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id")),
+  a.and(a.eq(a.kind, "qti-catalog"), a.eq(a.name, "id"), Compute.matches(a.lexical, namingPattern)),
 );
 
 /**

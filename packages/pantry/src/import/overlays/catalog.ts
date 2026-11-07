@@ -2,8 +2,8 @@
  * The catalog overlays' rows (spec reading R9-a, `#pantry/qti/catalog.ts`): from one document's XDM
  * tree and the ids its nodes are written under, one `CardSupport` row per `qti-card`'s `support`,
  * one `DefaultEntry` row per `qti-card-entry` whose `default` designates it, one `CatalogRef` row
- * per `data-catalog-idref` that holds a token and one `CatalogId` row per `qti-catalog` that
- * writes an `id`, each keyed by its node, and one `CatalogTarget` row per distinct token of the
+ * per `data-catalog-idref` that holds a token and one `CatalogId` row per `qti-catalog` whose
+ * `id` is an NCName, each keyed by its node, and one `CatalogTarget` row per distinct token of the
  * document's references, keyed by its document and token.
  *
  * A document in an assembly resolves its references once per instance (spec reading 117), which
@@ -17,7 +17,7 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
+import { booleanTrue, collapse, isNcName } from "#pantry/grammar/domains.ts";
 import { attributeRows, ValueIdentity } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf, governorOf, ownContext } from "#pantry/import/fold.ts";
@@ -170,8 +170,13 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
       continue;
     }
 
+    // A catalog's `id` that is no NCName is no ID: it names no catalog, as it has no `DocumentId`
+    // (spec reading 156), and its value domain refuses it alone.
     if (node.kind === "qti-catalog" && name === "id") {
-      catalogIds.set(id, { document, id: value, node: id, owner: id });
+      if (isNcName(value)) {
+        catalogIds.set(id, { document, id: value, node: id, owner: id });
+      }
+
       continue;
     }
 
