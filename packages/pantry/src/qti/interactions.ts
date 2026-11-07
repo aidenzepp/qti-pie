@@ -1795,935 +1795,961 @@ const sectionPlacements = select(Instance, (i) =>
  *   variable reference", "Context variable reference"); and "Feedback outcome type" (reading 77: an
  *   outcome of base type identifier, single or multiple).
  */
-export const interactionLaws = [
-  key(on(read, "node", "name")),
-  contained(
-    on(read, "node", "name", "kind", "document", "lexical"),
-    on(InteractionAttribute, "node", "name", "kind", "document", "lexical"),
-  ),
-  contained(on(InteractionAttribute, "node", "name"), on(read, "node", "name")),
-  contained(on(InteractionAttribute, "document", "rootKind"), on(Document, "node", "rootKind")),
-  check("E1_derived", InteractionAttribute, collapsed),
-
-  contained(
-    on(Interaction, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  check("E1_derived", Interaction, (i) => i.in(i.kind, interactionKinds)),
-  contained(
-    on(Binding, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(Binding, "node"), on(Interaction, "node")),
-  contained(
-    on(readOf(["response-identifier"], interactionKinds), "node", "rootKind", "value"),
-    on(Binding, "node", "rootKind", "identifier"),
-  ),
-  check("E1_derived", Binding, (b) => b.in(b.kind, interactionKinds)),
-
-  contained(
-    on(
-      itemReadOf(bindingAttributes, interactionKinds),
-      "node",
-      "name",
-      "kind",
-      "document",
-      "value",
+export const interactionLawsByName = {
+  "Adaptive feedback": [
+    contained(
+      on(
+        select(BoundVariable, (r) =>
+          r.and(r.eq(r.attribute, "response-identifier"), r.eq(r.adaptive, false)),
+        ),
+        "node",
+      ),
+      on(outsideFeedback, "id"),
     ),
-    on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(on(BoundVariable, "node", "kind"), on(Binding, "node", "kind")),
-  contained(
-    on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
-    on(BindingDeclaration, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(on(BindingDeclaration, "node", "attribute"), on(BoundVariable, "node", "attribute")),
-  contained(
-    on(
-      BindingDeclaration,
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
+    contained(
+      on(
+        select(PlacedBinding, (r) =>
+          r.and(r.eq(r.attribute, "response-identifier"), r.eq(r.adaptive, false)),
+        ),
+        "node",
+      ),
+      on(outsideFeedback, "id"),
     ),
-    declarationRef,
-  ),
-  check("Binding_declared", BindingDeclaration, (r) =>
-    r.eq(r.declarationKind, "qti-response-declaration"),
-  ),
-  contained(
-    on(
-      select(BindingDeclaration, (r) =>
-        r.and(
-          r.eq(r.attribute, "response-identifier"),
-          r.ne(r.cardinality, "record"),
-          r.not(r.in(r.kind, anyTypeKinds)),
+  ],
+  "Aria value range": [
+    check("Aria_value_range", AriaRange, (r) =>
+      r.le(
+        Compute.when(
+          Compute.matches(r.min, decimalForm),
+          (min) => Compute.cast(min, AriaDecimal),
+          Decimal.negativeInfinity,
+        ),
+        Compute.when(
+          Compute.matches(r.max, decimalForm),
+          (max) => Compute.cast(max, AriaDecimal),
+          Decimal.infinity,
         ),
       ),
-      "baseType",
-      "cardinality",
-      "kind",
     ),
-    on(BindingFit, "baseType", "cardinality", "kind"),
-  ),
-  contained(
-    on(
-      select(BindingDeclaration, (r) =>
-        r.and(
-          r.eq(r.attribute, "response-identifier"),
-          r.eq(r.cardinality, "record"),
-          r.not(r.in(r.kind, anyTypeKinds)),
+  ],
+  "Binding cardinality": [
+    contained(
+      on(
+        select(BindingDeclaration, (r) =>
+          r.and(
+            r.eq(r.attribute, "response-identifier"),
+            r.in(r.kind, cardinalityKinds),
+            r.eq(r.cardinality, "single"),
+          ),
+        ),
+        "node",
+      ),
+      on(
+        select(CountBound, (b) => b.eq(b.mostValue, 1n)),
+        "node",
+      ),
+    ),
+    contained(
+      on(
+        select(PlacedBindingDeclaration, (r) =>
+          r.and(
+            r.eq(r.attribute, "response-identifier"),
+            r.in(r.kind, cardinalityKinds),
+            r.eq(r.cardinality, "single"),
+          ),
+        ),
+        "node",
+      ),
+      on(
+        select(CountBound, (b) => b.eq(b.mostValue, 1n)),
+        "node",
+      ),
+    ),
+  ],
+  "Binding declared": [
+    contained(
+      on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
+      on(BindingDeclaration, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(
+        BindingDeclaration,
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Binding_declared", BindingDeclaration, (r) =>
+      r.eq(r.declarationKind, "qti-response-declaration"),
+    ),
+    contained(
+      on(
+        PlacedBinding,
+        "instance",
+        "node",
+        "attribute",
+        "assembly",
+        "document",
+        "kind",
+        "identifier",
+      ),
+      on(
+        PlacedBindingDeclaration,
+        "instance",
+        "node",
+        "attribute",
+        "assembly",
+        "document",
+        "kind",
+        "identifier",
+      ),
+    ),
+    contained(
+      on(
+        PlacedBindingDeclaration,
+        "declaration",
+        "assembly",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Binding_declared", PlacedBindingDeclaration, (r) =>
+      r.eq(r.declarationKind, "qti-response-declaration"),
+    ),
+  ],
+  "Binding unique": [
+    key(on(BoundVariable, "document", "identifier")),
+    key(on(PlacedBinding, "assembly", "identifier")),
+  ],
+  BindingFit: [
+    contained(
+      on(
+        select(BindingDeclaration, (r) =>
+          r.and(
+            r.eq(r.attribute, "response-identifier"),
+            r.ne(r.cardinality, "record"),
+            r.not(r.in(r.kind, anyTypeKinds)),
+          ),
+        ),
+        "baseType",
+        "cardinality",
+        "kind",
+      ),
+      on(BindingFit, "baseType", "cardinality", "kind"),
+    ),
+    check("BindingFit", BindingDeclaration, (r) =>
+      r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
+    ),
+    contained(
+      on(
+        select(PlacedBindingDeclaration, (r) =>
+          r.and(
+            r.eq(r.attribute, "response-identifier"),
+            r.ne(r.cardinality, "record"),
+            r.not(r.in(r.kind, anyTypeKinds)),
+          ),
+        ),
+        "baseType",
+        "cardinality",
+        "kind",
+      ),
+      on(BindingFit, "baseType", "cardinality", "kind"),
+    ),
+    check("BindingFit", PlacedBindingDeclaration, (r) =>
+      r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
+    ),
+  ],
+  "Choice bounds": [check("Choice_bounds", CountBound, choiceBounds)],
+  "Choice identifier key": [
+    key(on(Choice, "document", "kind", "identifier")),
+    key(on(Hottext, "document", "identifier")),
+    key(on(PlacedChoice, "assembly", "kind", "identifier")),
+    key(on(PlacedHottext, "assembly", "identifier")),
+  ],
+  "Choice not variable": [check("Choice_not_variable", ChoiceVariableName, choiceNotVariable)],
+  "Context variable reference": [
+    contained(
+      on(ContextRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(ContextRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Context_variable_reference", ContextRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
         ),
       ),
-      "kind",
     ),
-    on(RecordBindingFit, "kind"),
-  ),
-  check("BindingFit", BindingDeclaration, (r) =>
-    r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
-  ),
-  key(on(BoundVariable, "document", "identifier")),
-  contained(
-    on(
-      select(BindingDeclaration, (r) =>
-        r.and(
-          r.eq(r.attribute, "response-identifier"),
-          r.in(r.kind, cardinalityKinds),
-          r.eq(r.cardinality, "single"),
+    contained(
+      on(SectionContextRef, "node", "attribute", "kind", "document", "identifier"),
+      on(SectionContextName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(SectionContextRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(SectionContextRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "assembly",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Context_variable_reference", SectionContextRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
         ),
       ),
-      "node",
     ),
-    on(
-      select(CountBound, (b) => b.eq(b.mostValue, 1n)),
-      "node",
+  ],
+  "E1 derived": [
+    key(on(read, "node", "name")),
+    contained(
+      on(read, "node", "name", "kind", "document", "lexical"),
+      on(InteractionAttribute, "node", "name", "kind", "document", "lexical"),
     ),
-  ),
-  contained(
-    on(
-      select(BindingDeclaration, (r) =>
-        r.and(
-          r.eq(r.attribute, "response-identifier"),
-          r.eq(r.kind, extendedTextKind),
-          r.in(r.cardinality, ["multiple", "ordered"]),
+    contained(on(InteractionAttribute, "node", "name"), on(read, "node", "name")),
+    contained(on(InteractionAttribute, "document", "rootKind"), on(Document, "node", "rootKind")),
+    check("E1_derived", InteractionAttribute, collapsed),
+    contained(
+      on(Interaction, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    check("E1_derived", Interaction, (i) => i.in(i.kind, interactionKinds)),
+    contained(
+      on(Binding, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(Binding, "node"), on(Interaction, "node")),
+    contained(
+      on(readOf(["response-identifier"], interactionKinds), "node", "rootKind", "value"),
+      on(Binding, "node", "rootKind", "identifier"),
+    ),
+    check("E1_derived", Binding, (b) => b.in(b.kind, interactionKinds)),
+    contained(
+      on(
+        itemReadOf(bindingAttributes, interactionKinds),
+        "node",
+        "name",
+        "kind",
+        "document",
+        "value",
+      ),
+      on(BoundVariable, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(on(BoundVariable, "node", "kind"), on(Binding, "node", "kind")),
+    contained(on(BindingDeclaration, "node", "attribute"), on(BoundVariable, "node", "attribute")),
+    contained(on(BoundVariable, "document", "adaptive"), on(ItemMode, "document", "adaptive")),
+    contained(
+      on(readOf(bindingAttributes, interactionKinds), "node", "name", "kind", "document", "value"),
+      on(BindingName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(on(BindingName, "node", "kind"), on(Binding, "node", "kind")),
+    bindingNameFamily,
+    placedBindingFamily,
+    contained(
+      on(PlacedBinding, "instance", "document", "assembly"),
+      on(itemInstances, "id", "document", "assembly"),
+    ),
+    contained(
+      on(PlacedBinding, "node", "attribute", "document", "kind", "identifier"),
+      on(BindingName, "node", "attribute", "document", "kind", "identifier"),
+    ),
+    contained(
+      on(PlacedBindingDeclaration, "instance", "node", "attribute"),
+      on(PlacedBinding, "instance", "node", "attribute"),
+    ),
+    contained(on(PlacedBinding, "assembly", "adaptive"), on(ItemMode, "document", "adaptive")),
+    key(on(adaptiveTrue, "document")),
+    contained(
+      on(
+        select(ItemMode, (m) => m.eq(m.adaptive, true)),
+        "document",
+      ),
+      on(adaptiveTrue, "document"),
+    ),
+    contained(
+      on(adaptiveTrue, "document"),
+      on(
+        select(ItemMode, (m) => m.eq(m.adaptive, true)),
+        "document",
+      ),
+    ),
+    contained(
+      on(readOf(["identifier"], choiceKinds), "node", "value"),
+      on(Choice, "node", "identifier"),
+    ),
+    check("E1_derived", Choice, (c) => c.in(c.kind, choiceKinds)),
+    contained(
+      on(Hottext, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(readOf(["identifier"], [hottextKind]), "node", "value"),
+      on(Hottext, "node", "identifier"),
+    ),
+    check("E1_derived", Hottext, (h) =>
+      h.and(
+        h.eq(h.kind, hottextKind),
+        h.or(
+          h.and(h.eq(h.nearest, h.document), h.eq(h.nearestKind, "document")),
+          h.and(h.ne(h.nearest, h.document), h.in(h.nearestKind, interactionKinds)),
         ),
       ),
-      "node",
-      "kind",
     ),
-    on(
-      select(CountBound, (b) => b.eq(b.maxWritten, true)),
-      "node",
-      "kind",
+    documentChoiceFamily,
+    documentHottextFamily,
+    placedChoiceFamily,
+    placedHottextFamily,
+    contained(
+      on(PlacedChoice, "instance", "document", "assembly"),
+      on(Instance, "id", "document", "assembly"),
     ),
-  ),
-  contained(on(BoundVariable, "document", "adaptive"), on(ItemMode, "document", "adaptive")),
-  contained(
-    on(
-      select(BoundVariable, (r) =>
-        r.and(r.eq(r.attribute, "response-identifier"), r.eq(r.adaptive, false)),
+    contained(
+      on(PlacedChoice, "node", "document", "kind", "identifier"),
+      on(Choice, "node", "document", "kind", "identifier"),
+    ),
+    contained(
+      on(PlacedHottext, "instance", "document", "assembly"),
+      on(Instance, "id", "document", "assembly"),
+    ),
+    contained(
+      on(PlacedHottext, "node", "document", "identifier"),
+      on(Hottext, "node", "document", "identifier"),
+    ),
+    contained(on(ChoiceVariableName, "document", "rootKind"), on(Document, "node", "rootKind")),
+    choiceNameFamily,
+    hottextNameFamily,
+    declarationNameFamily,
+    placedChoiceNameFamily,
+    placedHottextNameFamily,
+    check("E1_derived", ChoiceVariableName, (n) =>
+      n.or(
+        n.gt(n.choices, 0n),
+        n.gt(n.hottexts, 0n),
+        n.gt(n.declarations, 0n),
+        n.gt(n.placedChoices, 0n),
+        n.gt(n.placedHottexts, 0n),
       ),
-      "node",
     ),
-    on(outsideFeedback, "id"),
-  ),
-
-  contained(
-    on(readOf(bindingAttributes, interactionKinds), "node", "name", "kind", "document", "value"),
-    on(BindingName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(on(BindingName, "node", "kind"), on(Binding, "node", "kind")),
-  bindingNameFamily,
-  placedBindingFamily,
-  contained(
-    on(PlacedBinding, "instance", "document", "assembly"),
-    on(itemInstances, "id", "document", "assembly"),
-  ),
-  contained(
-    on(PlacedBinding, "node", "attribute", "document", "kind", "identifier"),
-    on(BindingName, "node", "attribute", "document", "kind", "identifier"),
-  ),
-  contained(
-    on(
-      PlacedBinding,
-      "instance",
-      "node",
-      "attribute",
-      "assembly",
-      "document",
-      "kind",
-      "identifier",
+    contained(
+      on(Hotspot, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
     ),
-    on(
-      PlacedBindingDeclaration,
-      "instance",
-      "node",
-      "attribute",
-      "assembly",
-      "document",
-      "kind",
-      "identifier",
+    contained(on(readOf(["shape"], hotspotKinds), "node", "value"), on(Hotspot, "node", "area")),
+    contained(on(Hotspot, "parent", "parentKind"), on(Interaction, "node", "kind")),
+    contained(on(Hotspot, "node", "elements", "elementChildren"), nodeCounts),
+    contained(on(Hotspot, "parent", "parentElements", "parentElementChildren"), nodeCounts),
+    check("E1_derived", Hotspot, (h) => h.in(h.kind, hotspotKinds)),
+    contained(
+      on(CountBound, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
     ),
-  ),
-  contained(
-    on(PlacedBindingDeclaration, "instance", "node", "attribute"),
-    on(PlacedBinding, "instance", "node", "attribute"),
-  ),
-  contained(
-    on(
-      PlacedBindingDeclaration,
-      "declaration",
-      "assembly",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
+    contained(
+      on(
+        select(Interaction, (i) => i.in(i.kind, boundKinds)),
+        "node",
+      ),
+      on(CountBound, "node"),
     ),
-    declarationRef,
-  ),
-  check("Binding_declared", PlacedBindingDeclaration, (r) =>
-    r.eq(r.declarationKind, "qti-response-declaration"),
-  ),
-  contained(
-    on(
-      select(PlacedBindingDeclaration, (r) =>
-        r.and(
-          r.eq(r.attribute, "response-identifier"),
-          r.ne(r.cardinality, "record"),
-          r.not(r.in(r.kind, anyTypeKinds)),
+    contained(
+      on(
+        select(Choice, (c) => c.in(c.kind, boundKinds)),
+        "node",
+      ),
+      on(CountBound, "node"),
+    ),
+    contained(
+      on(readOf(minNames, boundKinds), "node", "name", "value"),
+      on(
+        select(CountBound, (b) => b.eq(b.minWritten, true)),
+        "node",
+        "minName",
+        "least",
+      ),
+    ),
+    contained(
+      on(
+        select(CountBound, (b) => b.eq(b.minWritten, true)),
+        "node",
+        "minName",
+        "least",
+      ),
+      on(InteractionAttribute, "node", "name", "value"),
+    ),
+    contained(
+      on(readOf(maxNames, boundKinds), "node", "name", "value"),
+      on(
+        select(CountBound, (b) => b.eq(b.maxWritten, true)),
+        "node",
+        "maxName",
+        "most",
+      ),
+    ),
+    contained(
+      on(
+        select(CountBound, (b) => b.eq(b.maxWritten, true)),
+        "node",
+        "maxName",
+        "most",
+      ),
+      on(InteractionAttribute, "node", "name", "value"),
+    ),
+    contained(
+      on(
+        select(CountBound, (b) => b.in(b.kind, interactionKinds)),
+        "node",
+        "choices",
+      ),
+      on(Interaction, "node", "choices"),
+    ),
+    check("E1_derived", CountBound, (b) =>
+      b.and(
+        b.eq(b.minName, ChoiceBound.at("min", b.kind)),
+        b.eq(b.maxName, ChoiceBound.at("max", b.kind)),
+        Compute.matches(b.least, bigintForm),
+        b.eq(
+          b.leastValue,
+          Compute.when(
+            Compute.matches(b.least, bigintForm),
+            (least) => Compute.cast(least, pg.bigint),
+            0n,
+          ),
+        ),
+        Compute.matches(b.most, bigintForm),
+        b.eq(
+          b.mostValue,
+          Compute.when(
+            Compute.matches(b.most, bigintForm),
+            (most) => Compute.cast(most, pg.bigint),
+            0n,
+          ),
+        ),
+        readsDefault(b, "min"),
+        readsDefault(b, "max"),
+        b.or(b.in(b.kind, interactionKinds), b.eq(b.choices, 0n)),
+      ),
+    ),
+    contained(
+      on(readOf(["lower-bound"], [sliderKind]), "node", "value"),
+      on(Slider, "node", "lower"),
+    ),
+    contained(
+      on(readOf(["upper-bound"], [sliderKind]), "node", "value"),
+      on(Slider, "node", "upper"),
+    ),
+    contained(
+      on(Slider, "node", "lower"),
+      on(
+        select(InteractionAttribute, (v) => v.eq(v.name, "lower-bound")),
+        "node",
+        "value",
+      ),
+    ),
+    contained(
+      on(
+        select(InteractionAttribute, (v) => v.in(v.name, ariaNames)),
+        "node",
+        "name",
+        "value",
+      ),
+      on(AriaValue, "node", "name", "value"),
+    ),
+    contained(
+      on(AriaValue, "node", "name", "value"),
+      on(InteractionAttribute, "node", "name", "value"),
+    ),
+    ariaValueFamily,
+    check("E1_derived", AriaElement, (e) => e.gt(e.values, 0n)),
+    contained(
+      on(
+        select(AriaElement, (e) => e.eq(e.values, 2n)),
+        "node",
+      ),
+      on(AriaRange, "node"),
+    ),
+    contained(
+      on(AriaRange, "node", "min"),
+      on(
+        select(AriaValue, (a) => a.eq(a.name, "aria-valuemin")),
+        "node",
+        "value",
+      ),
+    ),
+    contained(
+      on(AriaRange, "node", "max"),
+      on(
+        select(AriaValue, (a) => a.eq(a.name, "aria-valuemax")),
+        "node",
+        "value",
+      ),
+    ),
+    contained(
+      on(referenceSources.feedback, "node", "name", "kind", "document", "value"),
+      on(FeedbackRef, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(referenceSources.template, "node", "name", "kind", "document", "value"),
+      on(TemplateRef, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(referenceSources.printed, "node", "name", "kind", "document", "value"),
+      on(PrintedVariableRef, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(referenceSources.context, "node", "name", "kind", "document", "value"),
+      on(ContextRef, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(sectionFeedbackSource, "node", "name", "kind", "document", "value"),
+      on(SectionFeedbackName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(sectionPrintedSource, "node", "name", "kind", "document", "value"),
+      on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(fragmentSources.template, "node", "name", "kind", "document", "value"),
+      on(SectionTemplateName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(fragmentSources.context, "node", "name", "kind", "document", "value"),
+      on(SectionContextName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    sectionFeedbackNameFamily,
+    sectionPrintedNameFamily,
+    sectionTemplateNameFamily,
+    sectionContextNameFamily,
+    contained(
+      on(sectionPlacements, "id", "document", "assembly"),
+      on(SectionScope, "instance", "document", "assembly"),
+    ),
+    contained(
+      on(SectionScope, "instance", "document", "assembly"),
+      on(Instance, "id", "document", "assembly"),
+    ),
+    contained(
+      on(SectionScope, "document", "feedbacks", "prints", "templates", "contexts"),
+      on(ReferringDocument, "document", "feedbacks", "prints", "templates", "contexts"),
+    ),
+    sectionFeedbackFamily,
+    sectionPrintedFamily,
+    sectionTemplateFamily,
+    sectionContextFamily,
+    contained(
+      on(SectionFeedbackRef, "instance", "document", "assembly"),
+      on(SectionScope, "instance", "document", "assembly"),
+    ),
+    contained(
+      on(SectionPrintedRef, "instance", "document", "assembly"),
+      on(SectionScope, "instance", "document", "assembly"),
+    ),
+    contained(
+      on(SectionTemplateRef, "instance", "document", "assembly"),
+      on(SectionScope, "instance", "document", "assembly"),
+    ),
+    contained(
+      on(SectionContextRef, "instance", "document", "assembly"),
+      on(SectionScope, "instance", "document", "assembly"),
+    ),
+  ],
+  "Feedback outcome type": [
+    check("Feedback_outcome_type", FeedbackRef, (r) =>
+      r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+    ),
+    check("Feedback_outcome_type", SectionFeedbackRef, (r) =>
+      r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+    ),
+  ],
+  "Feedback reference": [
+    contained(
+      on(FeedbackRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(FeedbackRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Feedback_reference", FeedbackRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
         ),
       ),
-      "baseType",
-      "cardinality",
-      "kind",
     ),
-    on(BindingFit, "baseType", "cardinality", "kind"),
-  ),
-  contained(
-    on(
-      select(PlacedBindingDeclaration, (r) =>
-        r.and(
-          r.eq(r.attribute, "response-identifier"),
-          r.eq(r.cardinality, "record"),
-          r.not(r.in(r.kind, anyTypeKinds)),
+    contained(
+      on(SectionFeedbackRef, "node", "attribute", "kind", "document", "identifier"),
+      on(SectionFeedbackName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(SectionFeedbackRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(SectionFeedbackRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "assembly",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Feedback_reference", SectionFeedbackRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
         ),
       ),
-      "kind",
     ),
-    on(RecordBindingFit, "kind"),
-  ),
-  check("BindingFit", PlacedBindingDeclaration, (r) =>
-    r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
-  ),
-  key(on(PlacedBinding, "assembly", "identifier")),
-  contained(
-    on(
-      select(PlacedBindingDeclaration, (r) =>
-        r.and(
-          r.eq(r.attribute, "response-identifier"),
-          r.in(r.kind, cardinalityKinds),
-          r.eq(r.cardinality, "single"),
-        ),
-      ),
-      "node",
-    ),
-    on(
-      select(CountBound, (b) => b.eq(b.mostValue, 1n)),
-      "node",
-    ),
-  ),
-  contained(
-    on(
-      select(PlacedBindingDeclaration, (r) =>
-        r.and(
-          r.eq(r.attribute, "response-identifier"),
-          r.eq(r.kind, extendedTextKind),
-          r.in(r.cardinality, ["multiple", "ordered"]),
-        ),
-      ),
-      "node",
-      "kind",
-    ),
-    on(
-      select(CountBound, (b) => b.eq(b.maxWritten, true)),
-      "node",
-      "kind",
-    ),
-  ),
-  contained(on(PlacedBinding, "assembly", "adaptive"), on(ItemMode, "document", "adaptive")),
-  contained(
-    on(
-      select(PlacedBinding, (r) =>
-        r.and(r.eq(r.attribute, "response-identifier"), r.eq(r.adaptive, false)),
-      ),
-      "node",
-    ),
-    on(outsideFeedback, "id"),
-  ),
-
-  key(on(adaptiveTrue, "document")),
-  contained(
-    on(
-      select(ItemMode, (m) => m.eq(m.adaptive, true)),
-      "document",
-    ),
-    on(adaptiveTrue, "document"),
-  ),
-  contained(
-    on(adaptiveTrue, "document"),
-    on(
-      select(ItemMode, (m) => m.eq(m.adaptive, true)),
-      "document",
-    ),
-  ),
-
-  contained(
-    on(Choice, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(readOf(["identifier"], choiceKinds), "node", "value"),
-    on(Choice, "node", "identifier"),
-  ),
-  check("E1_derived", Choice, (c) => c.in(c.kind, choiceKinds)),
-  contained(on(Choice, "node"), on(ChoiceInteraction, "node")),
-  contained(on(ChoiceInteraction, "node", "interaction"), on(Choice, "node", "nearest")),
-  choiceFamily,
-  key(on(Choice, "document", "kind", "identifier")),
-
-  contained(
-    on(Hottext, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(readOf(["identifier"], [hottextKind]), "node", "value"),
-    on(Hottext, "node", "identifier"),
-  ),
-  contained(
-    on(
-      select(Hottext, (h) => h.in(h.nearestKind, interactionKinds)),
-      "nearest",
-      "nearestKind",
-    ),
-    on(Interaction, "node", "kind"),
-  ),
-  check("E1_derived", Hottext, (h) =>
-    h.and(
-      h.eq(h.kind, hottextKind),
+  ],
+  "Graphic gap match default hotspot": [
+    check("Graphic_gap_match_default_hotspot", Hotspot, (h) =>
       h.or(
-        h.and(h.eq(h.nearest, h.document), h.eq(h.nearestKind, "document")),
-        h.and(h.ne(h.nearest, h.document), h.in(h.nearestKind, interactionKinds)),
+        h.ne(h.kind, "qti-associable-hotspot"),
+        h.ne(h.parentKind, graphicGapMatch),
+        h.ne(h.area, defaultArea),
       ),
     ),
-  ),
-  key(on(Hottext, "document", "identifier")),
+  ],
+  "Max strings required": [
+    contained(
+      on(
+        select(BindingDeclaration, (r) =>
+          r.and(
+            r.eq(r.attribute, "response-identifier"),
+            r.eq(r.kind, extendedTextKind),
+            r.in(r.cardinality, ["multiple", "ordered"]),
+          ),
+        ),
+        "node",
+        "kind",
+      ),
+      on(
+        select(CountBound, (b) => b.eq(b.maxWritten, true)),
+        "node",
+        "kind",
+      ),
+    ),
+    contained(
+      on(
+        select(PlacedBindingDeclaration, (r) =>
+          r.and(
+            r.eq(r.attribute, "response-identifier"),
+            r.eq(r.kind, extendedTextKind),
+            r.in(r.cardinality, ["multiple", "ordered"]),
+          ),
+        ),
+        "node",
+        "kind",
+      ),
+      on(
+        select(CountBound, (b) => b.eq(b.maxWritten, true)),
+        "node",
+        "kind",
+      ),
+    ),
+  ],
+  "N8 nearest": [
+    contained(
+      on(Choice, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(Choice, "node"), on(ChoiceInteraction, "node")),
+    contained(on(ChoiceInteraction, "node", "interaction"), on(Choice, "node", "nearest")),
+    choiceFamily,
+    contained(
+      on(
+        select(Hottext, (h) => h.in(h.nearestKind, interactionKinds)),
+        "nearest",
+        "nearestKind",
+      ),
+      on(Interaction, "node", "kind"),
+    ),
+  ],
+  "Printed variable reference": [
+    contained(
+      on(PrintedVariableRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(PrintedVariableRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Printed_variable_reference", PrintedVariableRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
+        ),
+      ),
+    ),
+    contained(
+      on(VarRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(VarRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Printed_variable_reference", VarRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
+        ),
+      ),
+    ),
+    contained(
+      on(SectionPrintedRef, "node", "attribute", "kind", "document", "identifier"),
+      on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(SectionPrintedRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(SectionPrintedRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "assembly",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Printed_variable_reference", SectionPrintedRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
+        ),
+      ),
+    ),
+  ],
+  RecordBindingFit: [
+    contained(
+      on(
+        select(BindingDeclaration, (r) =>
+          r.and(
+            r.eq(r.attribute, "response-identifier"),
+            r.eq(r.cardinality, "record"),
+            r.not(r.in(r.kind, anyTypeKinds)),
+          ),
+        ),
+        "kind",
+      ),
+      on(RecordBindingFit, "kind"),
+    ),
+    contained(
+      on(
+        select(PlacedBindingDeclaration, (r) =>
+          r.and(
+            r.eq(r.attribute, "response-identifier"),
+            r.eq(r.cardinality, "record"),
+            r.not(r.in(r.kind, anyTypeKinds)),
+          ),
+        ),
+        "kind",
+      ),
+      on(RecordBindingFit, "kind"),
+    ),
+  ],
+  "Slider bounds": [
+    check("Slider_bounds", Slider, (s) =>
+      s.or(
+        s.eq(s.lower, "NaN"),
+        s.eq(s.upper, "NaN"),
+        s.le(
+          Compute.when(
+            Compute.matches(s.lower, doubleForm),
+            (lower) => Compute.cast(lower, pg["double precision"]),
+            Number.NEGATIVE_INFINITY,
+          ),
+          Compute.when(
+            Compute.matches(s.upper, doubleForm),
+            (upper) => Compute.cast(upper, pg["double precision"]),
+            Number.POSITIVE_INFINITY,
+          ),
+        ),
+      ),
+    ),
+  ],
+  "Template reference": [
+    contained(
+      on(TemplateRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(TemplateRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Template_reference", TemplateRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
+        ),
+      ),
+    ),
+    contained(
+      on(SectionTemplateRef, "node", "attribute", "kind", "document", "identifier"),
+      on(SectionTemplateName, "node", "attribute", "kind", "document", "identifier"),
+    ),
+    contained(
+      on(SectionTemplateRef, "kind", "attribute", "declarationKind"),
+      on(ContentReference, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(SectionTemplateRef, (r) => r.not(r.in(r.identifier, builtInNames))),
+        "declaration",
+        "assembly",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    check("Template_reference", SectionTemplateRef, (r) =>
+      r.or(
+        r.not(r.in(r.identifier, builtInNames)),
+        ...builtIns.map((builtIn) =>
+          r.and(
+            r.eq(r.identifier, builtIn.variable),
+            r.eq(r.declaration, nilUuid),
+            r.eq(r.declarationKind, builtIn.declaration),
+            r.eq(r.baseType, builtIn.baseType),
+            r.eq(r.cardinality, builtIn.cardinality),
+          ),
+        ),
+      ),
+    ),
+  ],
+  "Variable reference copy": [
+    contained(
+      on(referenceSources.variable, "node", "name", "kind", "document", "value"),
+      on(VarRef, "node", "attribute", "kind", "document", "identifier"),
+    ),
+  ],
+  "default hotspot last slot": [check("default_hotspot_last_slot", Hotspot, lastWhere)],
+} as const;
 
-  documentChoiceFamily,
-  documentHottextFamily,
-  placedChoiceFamily,
-  placedHottextFamily,
-  contained(
-    on(PlacedChoice, "instance", "document", "assembly"),
-    on(Instance, "id", "document", "assembly"),
-  ),
-  contained(
-    on(PlacedChoice, "node", "document", "kind", "identifier"),
-    on(Choice, "node", "document", "kind", "identifier"),
-  ),
-  key(on(PlacedChoice, "assembly", "kind", "identifier")),
-  contained(
-    on(PlacedHottext, "instance", "document", "assembly"),
-    on(Instance, "id", "document", "assembly"),
-  ),
-  contained(
-    on(PlacedHottext, "node", "document", "identifier"),
-    on(Hottext, "node", "document", "identifier"),
-  ),
-  key(on(PlacedHottext, "assembly", "identifier")),
-
-  contained(on(ChoiceVariableName, "document", "rootKind"), on(Document, "node", "rootKind")),
-  choiceNameFamily,
-  hottextNameFamily,
-  declarationNameFamily,
-  placedChoiceNameFamily,
-  placedHottextNameFamily,
-  check("E1_derived", ChoiceVariableName, (n) =>
-    n.or(
-      n.gt(n.choices, 0n),
-      n.gt(n.hottexts, 0n),
-      n.gt(n.declarations, 0n),
-      n.gt(n.placedChoices, 0n),
-      n.gt(n.placedHottexts, 0n),
-    ),
-  ),
-  check("Choice_not_variable", ChoiceVariableName, choiceNotVariable),
-
-  contained(
-    on(Hotspot, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(readOf(["shape"], hotspotKinds), "node", "value"), on(Hotspot, "node", "area")),
-  contained(on(Hotspot, "parent", "parentKind"), on(Interaction, "node", "kind")),
-  contained(on(Hotspot, "node", "elements", "elementChildren"), nodeCounts),
-  contained(on(Hotspot, "parent", "parentElements", "parentElementChildren"), nodeCounts),
-  check("E1_derived", Hotspot, (h) => h.in(h.kind, hotspotKinds)),
-  check("default_hotspot_last_slot", Hotspot, lastWhere),
-  check("Graphic_gap_match_default_hotspot", Hotspot, (h) =>
-    h.or(
-      h.ne(h.kind, "qti-associable-hotspot"),
-      h.ne(h.parentKind, graphicGapMatch),
-      h.ne(h.area, defaultArea),
-    ),
-  ),
-
-  contained(
-    on(CountBound, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(
-      select(Interaction, (i) => i.in(i.kind, boundKinds)),
-      "node",
-    ),
-    on(CountBound, "node"),
-  ),
-  contained(
-    on(
-      select(Choice, (c) => c.in(c.kind, boundKinds)),
-      "node",
-    ),
-    on(CountBound, "node"),
-  ),
-  contained(
-    on(readOf(minNames, boundKinds), "node", "name", "value"),
-    on(
-      select(CountBound, (b) => b.eq(b.minWritten, true)),
-      "node",
-      "minName",
-      "least",
-    ),
-  ),
-  contained(
-    on(
-      select(CountBound, (b) => b.eq(b.minWritten, true)),
-      "node",
-      "minName",
-      "least",
-    ),
-    on(InteractionAttribute, "node", "name", "value"),
-  ),
-  contained(
-    on(readOf(maxNames, boundKinds), "node", "name", "value"),
-    on(
-      select(CountBound, (b) => b.eq(b.maxWritten, true)),
-      "node",
-      "maxName",
-      "most",
-    ),
-  ),
-  contained(
-    on(
-      select(CountBound, (b) => b.eq(b.maxWritten, true)),
-      "node",
-      "maxName",
-      "most",
-    ),
-    on(InteractionAttribute, "node", "name", "value"),
-  ),
-  contained(
-    on(
-      select(CountBound, (b) => b.in(b.kind, interactionKinds)),
-      "node",
-      "choices",
-    ),
-    on(Interaction, "node", "choices"),
-  ),
-  check("E1_derived", CountBound, (b) =>
-    b.and(
-      b.eq(b.minName, ChoiceBound.at("min", b.kind)),
-      b.eq(b.maxName, ChoiceBound.at("max", b.kind)),
-      Compute.matches(b.least, bigintForm),
-      b.eq(
-        b.leastValue,
-        Compute.when(
-          Compute.matches(b.least, bigintForm),
-          (least) => Compute.cast(least, pg.bigint),
-          0n,
-        ),
-      ),
-      Compute.matches(b.most, bigintForm),
-      b.eq(
-        b.mostValue,
-        Compute.when(
-          Compute.matches(b.most, bigintForm),
-          (most) => Compute.cast(most, pg.bigint),
-          0n,
-        ),
-      ),
-      readsDefault(b, "min"),
-      readsDefault(b, "max"),
-      b.or(b.in(b.kind, interactionKinds), b.eq(b.choices, 0n)),
-    ),
-  ),
-  check("Choice_bounds", CountBound, choiceBounds),
-
-  contained(
-    on(readOf(["lower-bound"], [sliderKind]), "node", "value"),
-    on(Slider, "node", "lower"),
-  ),
-  contained(
-    on(readOf(["upper-bound"], [sliderKind]), "node", "value"),
-    on(Slider, "node", "upper"),
-  ),
-  contained(
-    on(Slider, "node", "lower"),
-    on(
-      select(InteractionAttribute, (v) => v.eq(v.name, "lower-bound")),
-      "node",
-      "value",
-    ),
-  ),
-  check("Slider_bounds", Slider, (s) =>
-    s.or(
-      s.eq(s.lower, "NaN"),
-      s.eq(s.upper, "NaN"),
-      s.le(
-        Compute.when(
-          Compute.matches(s.lower, doubleForm),
-          (lower) => Compute.cast(lower, pg["double precision"]),
-          Number.NEGATIVE_INFINITY,
-        ),
-        Compute.when(
-          Compute.matches(s.upper, doubleForm),
-          (upper) => Compute.cast(upper, pg["double precision"]),
-          Number.POSITIVE_INFINITY,
-        ),
-      ),
-    ),
-  ),
-
-  contained(
-    on(
-      select(InteractionAttribute, (v) => v.in(v.name, ariaNames)),
-      "node",
-      "name",
-      "value",
-    ),
-    on(AriaValue, "node", "name", "value"),
-  ),
-  contained(
-    on(AriaValue, "node", "name", "value"),
-    on(InteractionAttribute, "node", "name", "value"),
-  ),
-  ariaValueFamily,
-  check("E1_derived", AriaElement, (e) => e.gt(e.values, 0n)),
-  contained(
-    on(
-      select(AriaElement, (e) => e.eq(e.values, 2n)),
-      "node",
-    ),
-    on(AriaRange, "node"),
-  ),
-  contained(
-    on(AriaRange, "node", "min"),
-    on(
-      select(AriaValue, (a) => a.eq(a.name, "aria-valuemin")),
-      "node",
-      "value",
-    ),
-  ),
-  contained(
-    on(AriaRange, "node", "max"),
-    on(
-      select(AriaValue, (a) => a.eq(a.name, "aria-valuemax")),
-      "node",
-      "value",
-    ),
-  ),
-  check("Aria_value_range", AriaRange, (r) =>
-    r.le(
-      Compute.when(
-        Compute.matches(r.min, decimalForm),
-        (min) => Compute.cast(min, AriaDecimal),
-        Decimal.negativeInfinity,
-      ),
-      Compute.when(
-        Compute.matches(r.max, decimalForm),
-        (max) => Compute.cast(max, AriaDecimal),
-        Decimal.infinity,
-      ),
-    ),
-  ),
-
-  contained(
-    on(referenceSources.feedback, "node", "name", "kind", "document", "value"),
-    on(FeedbackRef, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(FeedbackRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(FeedbackRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Feedback_reference", FeedbackRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-  check("Feedback_outcome_type", FeedbackRef, (r) =>
-    r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
-  ),
-
-  contained(
-    on(referenceSources.template, "node", "name", "kind", "document", "value"),
-    on(TemplateRef, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(TemplateRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(TemplateRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Template_reference", TemplateRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-
-  contained(
-    on(referenceSources.printed, "node", "name", "kind", "document", "value"),
-    on(PrintedVariableRef, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(PrintedVariableRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(PrintedVariableRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Printed_variable_reference", PrintedVariableRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-
-  contained(
-    on(referenceSources.variable, "node", "name", "kind", "document", "value"),
-    on(VarRef, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(VarRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(VarRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Printed_variable_reference", VarRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-
-  contained(
-    on(referenceSources.context, "node", "name", "kind", "document", "value"),
-    on(ContextRef, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(ContextRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(ContextRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Context_variable_reference", ContextRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-
-  contained(
-    on(sectionFeedbackSource, "node", "name", "kind", "document", "value"),
-    on(SectionFeedbackName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(sectionPrintedSource, "node", "name", "kind", "document", "value"),
-    on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(fragmentSources.template, "node", "name", "kind", "document", "value"),
-    on(SectionTemplateName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(fragmentSources.context, "node", "name", "kind", "document", "value"),
-    on(SectionContextName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  sectionFeedbackNameFamily,
-  sectionPrintedNameFamily,
-  sectionTemplateNameFamily,
-  sectionContextNameFamily,
-  contained(
-    on(sectionPlacements, "id", "document", "assembly"),
-    on(SectionScope, "instance", "document", "assembly"),
-  ),
-  contained(
-    on(SectionScope, "instance", "document", "assembly"),
-    on(Instance, "id", "document", "assembly"),
-  ),
-  contained(
-    on(SectionScope, "document", "feedbacks", "prints", "templates", "contexts"),
-    on(ReferringDocument, "document", "feedbacks", "prints", "templates", "contexts"),
-  ),
-  sectionFeedbackFamily,
-  sectionPrintedFamily,
-  sectionTemplateFamily,
-  sectionContextFamily,
-  contained(
-    on(SectionFeedbackRef, "instance", "document", "assembly"),
-    on(SectionScope, "instance", "document", "assembly"),
-  ),
-  contained(
-    on(SectionFeedbackRef, "node", "attribute", "kind", "document", "identifier"),
-    on(SectionFeedbackName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(SectionFeedbackRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(SectionFeedbackRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "assembly",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Feedback_reference", SectionFeedbackRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-  check("Feedback_outcome_type", SectionFeedbackRef, (r) =>
-    r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
-  ),
-  contained(
-    on(SectionPrintedRef, "instance", "document", "assembly"),
-    on(SectionScope, "instance", "document", "assembly"),
-  ),
-  contained(
-    on(SectionPrintedRef, "node", "attribute", "kind", "document", "identifier"),
-    on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(SectionPrintedRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(SectionPrintedRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "assembly",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Printed_variable_reference", SectionPrintedRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-  contained(
-    on(SectionTemplateRef, "instance", "document", "assembly"),
-    on(SectionScope, "instance", "document", "assembly"),
-  ),
-  contained(
-    on(SectionTemplateRef, "node", "attribute", "kind", "document", "identifier"),
-    on(SectionTemplateName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(SectionTemplateRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(SectionTemplateRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "assembly",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Template_reference", SectionTemplateRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-  contained(
-    on(SectionContextRef, "instance", "document", "assembly"),
-    on(SectionScope, "instance", "document", "assembly"),
-  ),
-  contained(
-    on(SectionContextRef, "node", "attribute", "kind", "document", "identifier"),
-    on(SectionContextName, "node", "attribute", "kind", "document", "identifier"),
-  ),
-  contained(
-    on(SectionContextRef, "kind", "attribute", "declarationKind"),
-    on(ContentReference, "kind", "attribute", "declaration"),
-  ),
-  contained(
-    on(
-      select(SectionContextRef, (r) => r.not(r.in(r.identifier, builtInNames))),
-      "declaration",
-      "assembly",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Context_variable_reference", SectionContextRef, (r) =>
-    r.or(
-      r.not(r.in(r.identifier, builtInNames)),
-      ...builtIns.map((builtIn) =>
-        r.and(
-          r.eq(r.identifier, builtIn.variable),
-          r.eq(r.declaration, nilUuid),
-          r.eq(r.declarationKind, builtIn.declaration),
-          r.eq(r.baseType, builtIn.baseType),
-          r.eq(r.cardinality, builtIn.cardinality),
-        ),
-      ),
-    ),
-  ),
-] as const;
+/**
+ * {@link interactionLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const interactionLaws = Object.values(interactionLawsByName).flat();

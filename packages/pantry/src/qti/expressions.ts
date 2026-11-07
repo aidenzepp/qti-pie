@@ -1561,1211 +1561,1284 @@ export const readingFamily = counted(
  *   time-dependent item's (`Item_duration`), a literal's stand-in typed (`Reference_type`, P24),
  *   and a `section-identifier` a section's (`Section_identifier_target`).
  */
-const referenceLaws = [
-  // VariableLookup: every declaration forced in, each found one justified, the absent null objects.
-  contained(
-    on(Declaration, "document", "identifier", "node", "declarationKind", "baseType", "cardinality"),
-    on(
-      VariableLookup,
-      "document",
-      "name",
-      "declaration",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-  ),
-  contained(
-    on(
-      declaredNames,
-      "declaration",
-      "document",
-      "name",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  key(on(absentNames, "document", "name")),
-  check("E1_derived", VariableLookup, (l) =>
-    l.or(
-      l.and(l.eq(l.declared, true), l.ne(l.declaration, l.document)),
-      l.and(
-        l.eq(l.declared, false),
-        l.eq(l.declaration, l.document),
-        l.eq(l.declarationKind, "qti-outcome-declaration"),
-        l.eq(l.baseType, "none"),
-        l.eq(l.cardinality, "single"),
+export const referenceLawsByName = {
+  "DocumentId key": [
+    // TemplateDefault: its template-identifier, its item, its template declaration and its type.
+    key(on(templateIdentifiers, "node")),
+    // SectionIdentifier: its copy, its document, and the name it spells. The copy is the forward
+    // containment: each attribute's row holds its name, kind and lexical form. The reverse only
+    // needs the attribute to exist, by the selection's key: both sides are keyed by `node`, so the
+    // forward containment's row for that attribute is this row. Its UNIQUE is that key's, and
+    // `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
+    key(on(sectionIdentifierAttributes, "node")),
+  ],
+  "E1 derived": [
+    // VariableLookup: every declaration forced in, each found one justified, the absent null objects.
+    contained(
+      on(
+        Declaration,
+        "document",
+        "identifier",
+        "node",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      on(
+        VariableLookup,
+        "document",
+        "name",
+        "declaration",
+        "declarationKind",
+        "baseType",
+        "cardinality",
       ),
     ),
-  ),
-
-  // NameLookup: every written element of an assembly forced in, each found one justified.
-  contained(
-    on(AssembledName, "assembly", "identifier", "node", "placements"),
-    on(NameLookup, "assembly", "name", "node", "placements"),
-  ),
-  contained(
-    on(foundNames, "assembly", "name", "node", "placements"),
-    on(AssembledName, "assembly", "identifier", "node", "placements"),
-  ),
-  contained(on(foundNames, "node", "kind"), on(Named, "node", "kind")),
-  contained(
-    on(foundNames, "instance", "node", "assembly", "replaced"),
-    on(InstanceName, "instance", "node", "assembly", "replaced"),
-  ),
-  contained(on(foundItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
-  contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
-  check("E1_derived", NameLookup, (n) =>
-    n.or(
-      n.and(
-        n.eq(n.found, true),
-        n.gt(n.placements, 0n),
-        n.or(
-          n.and(n.eq(n.kind, itemRefKind), n.eq(n.resourceType, itemResourceType)),
-          n.and(
-            n.eq(n.kind, itemRefKind),
-            n.ne(n.resourceType, itemResourceType),
-            n.eq(n.itemDocument, n.assembly),
-          ),
-          n.and(
-            n.ne(n.kind, itemRefKind),
-            n.eq(n.resourceType, "none"),
-            n.eq(n.itemDocument, n.assembly),
-          ),
-        ),
+    contained(
+      on(
+        declaredNames,
+        "declaration",
+        "document",
+        "name",
+        "declarationKind",
+        "baseType",
+        "cardinality",
       ),
-      n.and(
-        n.eq(n.found, false),
-        n.eq(n.placements, 0n),
-        n.eq(n.node, n.assembly),
-        n.eq(n.kind, "document"),
-        n.eq(n.instance, n.assembly),
-        n.eq(n.replaced, false),
-        n.eq(n.itemDocument, n.assembly),
-        n.eq(n.resourceType, "none"),
-      ),
+      declarationRef,
     ),
-  ),
-
-  // TemplateDefault: its template-identifier, its item, its template declaration and its type.
-  key(on(templateIdentifiers, "node")),
-  contained(on(templateIdentifiers, "node", "lexical"), on(TemplateDefault, "node", "lexical")),
-  contained(
-    on(
-      select(Node, (n) => n.eq(n.kind, "qti-template-default")),
-      "id",
-    ),
-    on(TemplateDefault, "node"),
-  ),
-  contained(on(TemplateDefault, "node", "itemRef"), on(Node, "id", "parent")),
-  contained(
-    on(TemplateDefault, "itemRef", "itemDocument"),
-    on(ItemRefDocument, "node", "document"),
-  ),
-  check("E1_derived", TemplateDefault, (t) =>
-    t.and(
-      t.eq(t.lexical, Compute.concat(Compute.concat(t.lead, t.template), t.trail)),
-      Compute.matches(t.template, namePattern),
-    ),
-  ),
-  contained(
-    on(
-      TemplateDefault,
-      "declaration",
-      "itemDocument",
-      "template",
-      "declarationKind",
-      "declBaseType",
-      "declCardinality",
-    ),
-    declarationRef,
-  ),
-  check("Template_default_target", TemplateDefault, (t) =>
-    t.eq(t.declarationKind, "qti-template-declaration"),
-  ),
-  contained(
-    on(
-      select(Expression, (e) => e.eq(e.parentKind, "qti-template-default")),
-      "parent",
-      "baseType",
-      "cardinality",
-    ),
-    on(TemplateDefault, "node", "heldBase", "heldCardinality"),
-  ),
-  check("Template_default_type", TemplateDefault, (t) =>
-    t.and(
-      t.or(
-        t.eq(t.heldBase, ValueBaseOf.at("value", t.declBaseType)),
-        t.in(t.heldBase, silentBases),
-        t.eq(ValueBaseOf.at("value", t.declBaseType), "unknown"),
-      ),
-      t.or(
-        t.eq(t.heldCardinality, ValueCardinalityOf.at("value", t.declCardinality)),
-        t.eq(t.heldCardinality, "unknown"),
-      ),
-    ),
-  ),
-
-  // MappingSource and MappingLookup: each mapping's item, its source and its target (A34, A35).
-  contained(on(VariableMapping, "node"), on(MappingSource, "node")),
-  contained(
-    on(MappingSource, "node", "itemRef", "source"),
-    on(VariableMapping, "node", "parent", "source"),
-  ),
-  contained(on(MappingSource, "node", "target"), on(VariableMapping, "node", "target")),
-  key(on(MappingSource, "itemRef", "target")),
-  contained(on(MappingSource, "itemRef", "itemDocument"), on(ItemRefDocument, "node", "document")),
-  contained(
-    on(
-      MappingSource,
-      "declaration",
-      "itemDocument",
-      "source",
-      "declarationKind",
-      "declBaseType",
-      "declCardinality",
-    ),
-    declarationRef,
-  ),
-  check("Variable_mapping_source", MappingSource, (m) =>
-    m.eq(m.declarationKind, "qti-outcome-declaration"),
-  ),
-  contained(
-    on(MappingSource, "itemDocument", "target", "targetDeclared"),
-    on(VariableLookup, "document", "name", "declared"),
-  ),
-  check("Variable_mapping_target", MappingSource, (m) =>
-    m.or(m.eq(m.targetDeclared, false), m.eq(m.target, m.source)),
-  ),
-  contained(
-    on(
-      MappingSource,
-      "itemRef",
-      "target",
-      "node",
-      "declaration",
-      "declarationKind",
-      "declBaseType",
-      "declCardinality",
-    ),
-    on(
-      MappingLookup,
-      "itemRef",
-      "name",
-      "mapping",
-      "declaration",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-  ),
-  contained(
-    on(
-      mappedNames,
-      "mapping",
-      "itemRef",
-      "name",
-      "declaration",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    on(
-      MappingSource,
-      "node",
-      "itemRef",
-      "target",
-      "declaration",
-      "declarationKind",
-      "declBaseType",
-      "declCardinality",
-    ),
-  ),
-  check("E1_derived", MappingLookup, (m) =>
-    m.or(
-      m.and(m.eq(m.mapped, true), m.ne(m.mapping, m.itemRef)),
-      m.and(
-        m.eq(m.mapped, false),
-        m.eq(m.mapping, m.itemRef),
-        m.eq(m.declaration, m.itemRef),
-        m.eq(m.declarationKind, "qti-outcome-declaration"),
-        m.eq(m.baseType, "none"),
-        m.eq(m.cardinality, "single"),
-      ),
-    ),
-  ),
-
-  // SectionIdentifier: its copy, its document, and the name it spells. The copy is the forward
-  // containment: each attribute's row holds its name, kind and lexical form. The reverse only
-  // needs the attribute to exist, by the selection's key: both sides are keyed by `node`, so the
-  // forward containment's row for that attribute is this row. Its UNIQUE is that key's, and
-  // `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
-  key(on(sectionIdentifierAttributes, "node")),
-  contained(
-    on(sectionIdentifierAttributes, "node", "name", "kind", "lexical"),
-    on(SectionIdentifier, "node", "attribute", "kind", "lexical"),
-  ),
-  contained(on(SectionIdentifier, "node"), on(sectionIdentifierAttributes, "node")),
-  contained(on(SectionIdentifier, "node", "document"), on(Node, "id", "document")),
-  contained(on(SectionIdentifier, "document", "rootKind"), on(Document, "node", "rootKind")),
-  check("E1_derived", SectionIdentifier, (s) =>
-    s.and(
-      s.eq(s.lexical, Compute.concat(Compute.concat(s.before, s.identifier), s.after)),
-      Compute.matches(s.identifier, namePattern),
-    ),
-  ),
-
-  // TestReference: every reference of a test or a section document, and each document's count.
-  contained(on(testVariableRefs, "node", "attribute"), on(TestReference, "node", "attribute")),
-  contained(
-    on(
-      select(TestReference, (t) => t.eq(t.role, "variable")),
-      "node",
-      "attribute",
-      "document",
-      "identifier",
-      "kind",
-      "rootKind",
-    ),
-    on(VariableRef, "node", "attribute", "document", "identifier", "kind", "rootKind"),
-  ),
-  contained(
-    on(testSectionIdentifiers, "node", "attribute"),
-    on(TestReference, "node", "attribute"),
-  ),
-  contained(
-    on(
-      select(TestReference, (t) => t.eq(t.role, "section")),
-      "node",
-      "attribute",
-      "document",
-      "identifier",
-      "kind",
-      "rootKind",
-    ),
-    on(SectionIdentifier, "node", "attribute", "document", "identifier", "kind", "rootKind"),
-  ),
-  check("E1_derived", TestReference, (t) =>
-    t.and(
-      t.in(t.rootKind, testRoots),
-      t.or(
-        t.and(t.eq(t.role, "section"), t.eq(t.attribute, "section-identifier")),
-        t.and(t.eq(t.role, "variable"), t.ne(t.attribute, "section-identifier")),
-      ),
-    ),
-  ),
-  testReferenceFamily,
-  mirrors(on(ReferenceDocument, "document"), on(testRootDocuments, "node")),
-
-  // PlacedDocument and PlacedReference: every reference once per instance of a test's assembly.
-  contained(
-    on(placingInstances, "id", "assembly", "assemblyKind", "document"),
-    on(PlacedDocument, "instance", "assembly", "assemblyKind", "document"),
-  ),
-  contained(
-    on(PlacedDocument, "instance", "assembly", "assemblyKind", "document"),
-    on(Instance, "id", "assembly", "assemblyKind", "document"),
-  ),
-  check("E1_derived", PlacedDocument, (p) => p.eq(p.assemblyKind, testKind)),
-  contained(
-    on(PlacedDocument, "document", "references"),
-    on(ReferenceDocument, "document", "references"),
-  ),
-  placedReferenceFamily,
-  contained(
-    on(PlacedReference, "instance", "assembly", "document"),
-    on(PlacedDocument, "instance", "assembly", "document"),
-  ),
-  contained(
-    on(PlacedReference, "document", "node", "attribute"),
-    on(TestReference, "document", "node", "attribute"),
-  ),
-  placementFamily,
-
-  // AssembledReference: each reference once per test, its name's pieces and its readings' count.
-  contained(
-    on(
-      AssembledReference,
-      "node",
-      "attribute",
-      "document",
-      "identifier",
-      "kind",
-      "role",
-      "rootKind",
-    ),
-    on(TestReference, "node", "attribute", "document", "identifier", "kind", "role", "rootKind"),
-  ),
-  segmentFamily,
-  fold(
-    segmentFamily,
-    Monoid.concat,
-    on(ReferenceSegment, "assembly", "node", "attribute", "token", "before", "after"),
-    on(AssembledReference, "assembly", "node", "attribute", "joined"),
-  ),
-  fold(
-    segmentFamily,
-    Monoid.count,
-    on(digitSegments, "assembly", "node", "attribute"),
-    on(AssembledReference, "assembly", "node", "attribute", "digits"),
-  ),
-  contained(
-    on(AssembledReference, "assembly", "node", "attribute", pred("segments"), "lastDigit"),
-    on(ReferenceSegment, "assembly", "node", "attribute", "at", "digit"),
-  ),
-  check("E1_derived", ReferenceSegment, (s) =>
-    s.and(
-      Compute.matches(s.piece, piecePattern),
-      s.eq(s.token, Compute.concat(s.separator, s.piece)),
-      s.or(
-        s.and(s.eq(s.at, 0n), s.eq(s.separator, ""), s.eq(s.digit, false)),
-        s.and(
-          s.gt(s.at, 0n),
-          s.eq(s.separator, "."),
-          s.or(
-            s.and(s.eq(s.digit, true), Compute.matches(s.piece, digitsPattern)),
-            s.and(s.eq(s.digit, false), s.not(Compute.matches(s.piece, digitsPattern))),
-          ),
+    key(on(absentNames, "document", "name")),
+    check("E1_derived", VariableLookup, (l) =>
+      l.or(
+        l.and(l.eq(l.declared, true), l.ne(l.declaration, l.document)),
+        l.and(
+          l.eq(l.declared, false),
+          l.eq(l.declaration, l.document),
+          l.eq(l.declarationKind, "qti-outcome-declaration"),
+          l.eq(l.baseType, "none"),
+          l.eq(l.cardinality, "single"),
         ),
       ),
     ),
-  ),
-  readingFamily,
-  check("E1_derived", AssembledReference, (a) =>
-    a.and(
-      a.gt(a.placements, 0n),
-      a.or(
-        a.and(
-          a.eq(a.role, "section"),
-          a.eq(a.segments, 0n),
-          a.eq(a.readings, 1n),
-          a.eq(a.lastDigit, false),
-        ),
-        a.and(
-          a.eq(a.role, "variable"),
-          a.eq(a.joined, a.identifier),
-          a.or(
-            a.and(
-              a.eq(a.lastDigit, true),
-              a.eq(
-                Compute.add(Compute.base(a.readings), 1n),
-                Compute.add(Compute.base(a.segments), Compute.base(a.digits)),
-              ),
+    // NameLookup: every written element of an assembly forced in, each found one justified.
+    contained(
+      on(AssembledName, "assembly", "identifier", "node", "placements"),
+      on(NameLookup, "assembly", "name", "node", "placements"),
+    ),
+    contained(
+      on(foundNames, "assembly", "name", "node", "placements"),
+      on(AssembledName, "assembly", "identifier", "node", "placements"),
+    ),
+    contained(on(foundNames, "node", "kind"), on(Named, "node", "kind")),
+    contained(
+      on(foundNames, "instance", "node", "assembly", "replaced"),
+      on(InstanceName, "instance", "node", "assembly", "replaced"),
+    ),
+    contained(on(foundItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
+    contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
+    check("E1_derived", NameLookup, (n) =>
+      n.or(
+        n.and(
+          n.eq(n.found, true),
+          n.gt(n.placements, 0n),
+          n.or(
+            n.and(n.eq(n.kind, itemRefKind), n.eq(n.resourceType, itemResourceType)),
+            n.and(
+              n.eq(n.kind, itemRefKind),
+              n.ne(n.resourceType, itemResourceType),
+              n.eq(n.itemDocument, n.assembly),
             ),
-            a.and(
-              a.eq(a.lastDigit, false),
-              a.eq(
-                Compute.base(a.readings),
-                Compute.add(Compute.base(a.segments), Compute.base(a.digits)),
+            n.and(
+              n.ne(n.kind, itemRefKind),
+              n.eq(n.resourceType, "none"),
+              n.eq(n.itemDocument, n.assembly),
+            ),
+          ),
+        ),
+        n.and(
+          n.eq(n.found, false),
+          n.eq(n.placements, 0n),
+          n.eq(n.node, n.assembly),
+          n.eq(n.kind, "document"),
+          n.eq(n.instance, n.assembly),
+          n.eq(n.replaced, false),
+          n.eq(n.itemDocument, n.assembly),
+          n.eq(n.resourceType, "none"),
+        ),
+      ),
+    ),
+    contained(on(templateIdentifiers, "node", "lexical"), on(TemplateDefault, "node", "lexical")),
+    contained(
+      on(
+        select(Node, (n) => n.eq(n.kind, "qti-template-default")),
+        "id",
+      ),
+      on(TemplateDefault, "node"),
+    ),
+    contained(on(TemplateDefault, "node", "itemRef"), on(Node, "id", "parent")),
+    check("E1_derived", TemplateDefault, (t) =>
+      t.and(
+        t.eq(t.lexical, Compute.concat(Compute.concat(t.lead, t.template), t.trail)),
+        Compute.matches(t.template, namePattern),
+      ),
+    ),
+    contained(
+      on(
+        select(Expression, (e) => e.eq(e.parentKind, "qti-template-default")),
+        "parent",
+        "baseType",
+        "cardinality",
+      ),
+      on(TemplateDefault, "node", "heldBase", "heldCardinality"),
+    ),
+    // MappingSource and MappingLookup: each mapping's item, its source and its target (A34, A35).
+    contained(on(VariableMapping, "node"), on(MappingSource, "node")),
+    contained(
+      on(MappingSource, "node", "itemRef", "source"),
+      on(VariableMapping, "node", "parent", "source"),
+    ),
+    contained(on(MappingSource, "node", "target"), on(VariableMapping, "node", "target")),
+    key(on(MappingSource, "itemRef", "target")),
+    contained(
+      on(MappingSource, "itemDocument", "target", "targetDeclared"),
+      on(VariableLookup, "document", "name", "declared"),
+    ),
+    contained(
+      on(
+        MappingSource,
+        "itemRef",
+        "target",
+        "node",
+        "declaration",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
+      on(
+        MappingLookup,
+        "itemRef",
+        "name",
+        "mapping",
+        "declaration",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+    ),
+    contained(
+      on(
+        mappedNames,
+        "mapping",
+        "itemRef",
+        "name",
+        "declaration",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      on(
+        MappingSource,
+        "node",
+        "itemRef",
+        "target",
+        "declaration",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
+    ),
+    check("E1_derived", MappingLookup, (m) =>
+      m.or(
+        m.and(m.eq(m.mapped, true), m.ne(m.mapping, m.itemRef)),
+        m.and(
+          m.eq(m.mapped, false),
+          m.eq(m.mapping, m.itemRef),
+          m.eq(m.declaration, m.itemRef),
+          m.eq(m.declarationKind, "qti-outcome-declaration"),
+          m.eq(m.baseType, "none"),
+          m.eq(m.cardinality, "single"),
+        ),
+      ),
+    ),
+    contained(
+      on(sectionIdentifierAttributes, "node", "name", "kind", "lexical"),
+      on(SectionIdentifier, "node", "attribute", "kind", "lexical"),
+    ),
+    contained(on(SectionIdentifier, "node"), on(sectionIdentifierAttributes, "node")),
+    contained(on(SectionIdentifier, "node", "document"), on(Node, "id", "document")),
+    contained(on(SectionIdentifier, "document", "rootKind"), on(Document, "node", "rootKind")),
+    check("E1_derived", SectionIdentifier, (s) =>
+      s.and(
+        s.eq(s.lexical, Compute.concat(Compute.concat(s.before, s.identifier), s.after)),
+        Compute.matches(s.identifier, namePattern),
+      ),
+    ),
+    // TestReference: every reference of a test or a section document, and each document's count.
+    contained(on(testVariableRefs, "node", "attribute"), on(TestReference, "node", "attribute")),
+    contained(
+      on(
+        select(TestReference, (t) => t.eq(t.role, "variable")),
+        "node",
+        "attribute",
+        "document",
+        "identifier",
+        "kind",
+        "rootKind",
+      ),
+      on(VariableRef, "node", "attribute", "document", "identifier", "kind", "rootKind"),
+    ),
+    contained(
+      on(testSectionIdentifiers, "node", "attribute"),
+      on(TestReference, "node", "attribute"),
+    ),
+    contained(
+      on(
+        select(TestReference, (t) => t.eq(t.role, "section")),
+        "node",
+        "attribute",
+        "document",
+        "identifier",
+        "kind",
+        "rootKind",
+      ),
+      on(SectionIdentifier, "node", "attribute", "document", "identifier", "kind", "rootKind"),
+    ),
+    check("E1_derived", TestReference, (t) =>
+      t.and(
+        t.in(t.rootKind, testRoots),
+        t.or(
+          t.and(t.eq(t.role, "section"), t.eq(t.attribute, "section-identifier")),
+          t.and(t.eq(t.role, "variable"), t.ne(t.attribute, "section-identifier")),
+        ),
+      ),
+    ),
+    testReferenceFamily,
+    mirrors(on(ReferenceDocument, "document"), on(testRootDocuments, "node")),
+    // PlacedDocument and PlacedReference: every reference once per instance of a test's assembly.
+    contained(
+      on(placingInstances, "id", "assembly", "assemblyKind", "document"),
+      on(PlacedDocument, "instance", "assembly", "assemblyKind", "document"),
+    ),
+    contained(
+      on(PlacedDocument, "instance", "assembly", "assemblyKind", "document"),
+      on(Instance, "id", "assembly", "assemblyKind", "document"),
+    ),
+    check("E1_derived", PlacedDocument, (p) => p.eq(p.assemblyKind, testKind)),
+    contained(
+      on(PlacedDocument, "document", "references"),
+      on(ReferenceDocument, "document", "references"),
+    ),
+    placedReferenceFamily,
+    contained(
+      on(PlacedReference, "instance", "assembly", "document"),
+      on(PlacedDocument, "instance", "assembly", "document"),
+    ),
+    contained(
+      on(PlacedReference, "document", "node", "attribute"),
+      on(TestReference, "document", "node", "attribute"),
+    ),
+    placementFamily,
+    // AssembledReference: each reference once per test, its name's pieces and its readings' count.
+    contained(
+      on(
+        AssembledReference,
+        "node",
+        "attribute",
+        "document",
+        "identifier",
+        "kind",
+        "role",
+        "rootKind",
+      ),
+      on(TestReference, "node", "attribute", "document", "identifier", "kind", "role", "rootKind"),
+    ),
+    segmentFamily,
+    fold(
+      segmentFamily,
+      Monoid.concat,
+      on(ReferenceSegment, "assembly", "node", "attribute", "token", "before", "after"),
+      on(AssembledReference, "assembly", "node", "attribute", "joined"),
+    ),
+    fold(
+      segmentFamily,
+      Monoid.count,
+      on(digitSegments, "assembly", "node", "attribute"),
+      on(AssembledReference, "assembly", "node", "attribute", "digits"),
+    ),
+    contained(
+      on(AssembledReference, "assembly", "node", "attribute", pred("segments"), "lastDigit"),
+      on(ReferenceSegment, "assembly", "node", "attribute", "at", "digit"),
+    ),
+    check("E1_derived", ReferenceSegment, (s) =>
+      s.and(
+        Compute.matches(s.piece, piecePattern),
+        s.eq(s.token, Compute.concat(s.separator, s.piece)),
+        s.or(
+          s.and(s.eq(s.at, 0n), s.eq(s.separator, ""), s.eq(s.digit, false)),
+          s.and(
+            s.gt(s.at, 0n),
+            s.eq(s.separator, "."),
+            s.or(
+              s.and(s.eq(s.digit, true), Compute.matches(s.piece, digitsPattern)),
+              s.and(s.eq(s.digit, false), s.not(Compute.matches(s.piece, digitsPattern))),
+            ),
+          ),
+        ),
+      ),
+    ),
+    readingFamily,
+    check("E1_derived", AssembledReference, (a) =>
+      a.and(
+        a.gt(a.placements, 0n),
+        a.or(
+          a.and(
+            a.eq(a.role, "section"),
+            a.eq(a.segments, 0n),
+            a.eq(a.readings, 1n),
+            a.eq(a.lastDigit, false),
+          ),
+          a.and(
+            a.eq(a.role, "variable"),
+            a.eq(a.joined, a.identifier),
+            a.or(
+              a.and(
+                a.eq(a.lastDigit, true),
+                a.eq(
+                  Compute.add(Compute.base(a.readings), 1n),
+                  Compute.add(Compute.base(a.segments), Compute.base(a.digits)),
+                ),
+              ),
+              a.and(
+                a.eq(a.lastDigit, false),
+                a.eq(
+                  Compute.base(a.readings),
+                  Compute.add(Compute.base(a.segments), Compute.base(a.digits)),
+                ),
               ),
             ),
           ),
         ),
       ),
     ),
-  ),
-
-  // Reading: its copy, its pieces, its probes, its source and its laws.
-  contained(
-    on(Reading, "assembly", "node", "attribute", "identifier", "kind", "role"),
-    on(AssembledReference, "assembly", "node", "attribute", "identifier", "kind", "role"),
-  ),
-  contained(
-    on(segmentReadings, "assembly", "node", "attribute", "split", "scope"),
-    on(ReferenceSegment, "assembly", "node", "attribute", "at", "before"),
-  ),
-  contained(
-    on(numberedReadings, "assembly", "node", "attribute", "split", "number"),
-    on(ReferenceSegment, "assembly", "node", "attribute", "at", "piece"),
-  ),
-  contained(
-    on(
-      scopedReadings,
-      "assembly",
-      "scope",
-      "found",
-      "named",
-      "namedKind",
-      "placements",
-      "replaced",
-      "resourceType",
-      "lookupDocument",
+    // Reading: its copy, its pieces, its probes, its source and its laws.
+    contained(
+      on(Reading, "assembly", "node", "attribute", "identifier", "kind", "role"),
+      on(AssembledReference, "assembly", "node", "attribute", "identifier", "kind", "role"),
     ),
-    on(
-      NameLookup,
-      "assembly",
-      "name",
-      "found",
-      "node",
-      "kind",
-      "placements",
-      "replaced",
-      "resourceType",
-      "itemDocument",
+    contained(
+      on(segmentReadings, "assembly", "node", "attribute", "split", "scope"),
+      on(ReferenceSegment, "assembly", "node", "attribute", "at", "before"),
     ),
-  ),
-  contained(
-    on(declarationReaders, "lookupDocument", "variable", "declared"),
-    on(VariableLookup, "document", "name", "declared"),
-  ),
-  contained(
-    on(mappingReaders, "named", "variable", "mapped"),
-    on(MappingLookup, "itemRef", "name", "mapped"),
-  ),
-  contained(
-    on(
-      declaredReadings,
-      "lookupDocument",
-      "variable",
-      "declaration",
-      "declarationKind",
-      "declBaseType",
-      "declCardinality",
+    contained(
+      on(numberedReadings, "assembly", "node", "attribute", "split", "number"),
+      on(ReferenceSegment, "assembly", "node", "attribute", "at", "piece"),
     ),
-    on(
-      VariableLookup,
-      "document",
-      "name",
-      "declaration",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-  ),
-  contained(
-    on(
-      mappedReadings,
-      "named",
-      "variable",
-      "declaration",
-      "declarationKind",
-      "declBaseType",
-      "declCardinality",
-    ),
-    on(
-      MappingLookup,
-      "itemRef",
-      "name",
-      "declaration",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-  ),
-  contained(
-    on(timedReadings, "lookupDocument", "timeDependent"),
-    on(ItemTiming, "document", "timeDependent"),
-  ),
-  check("E1_derived", Reading, (r) =>
-    r.and(
-      r.or(
-        r.and(
-          r.eq(r.form, "unsplit"),
-          r.eq(r.role, "variable"),
-          r.eq(r.split, 0n),
-          r.eq(r.scope, ""),
-          r.eq(r.number, ""),
-          r.eq(r.variable, r.identifier),
-          r.eq(r.found, true),
-          r.eq(r.named, r.assembly),
-          r.eq(r.namedKind, testKind),
-          r.eq(r.placements, 1n),
-          r.eq(r.replaced, false),
-          r.eq(r.resourceType, "none"),
-          r.eq(r.lookupDocument, r.assembly),
-        ),
-        r.and(
-          r.eq(r.form, "name"),
-          r.eq(r.role, "section"),
-          r.eq(r.split, 0n),
-          r.eq(r.scope, r.identifier),
-          r.eq(r.number, ""),
-          r.eq(r.variable, ""),
-        ),
-        r.and(
-          r.eq(r.form, "split"),
-          r.eq(r.role, "variable"),
-          r.gt(r.split, 0n),
-          r.eq(r.number, ""),
-          r.eq(r.identifier, Compute.concat(Compute.concat(r.scope, "."), r.variable)),
-        ),
-        r.and(
-          r.eq(r.form, "numbered"),
-          r.eq(r.role, "variable"),
-          r.gt(r.split, 0n),
-          Compute.matches(r.number, digitsPattern),
-          r.eq(
-            r.identifier,
-            Compute.concat(
-              Compute.concat(Compute.concat(Compute.concat(r.scope, "."), r.number), "."),
-              r.variable,
-            ),
-          ),
-        ),
+    contained(
+      on(
+        scopedReadings,
+        "assembly",
+        "scope",
+        "found",
+        "named",
+        "namedKind",
+        "placements",
+        "replaced",
+        "resourceType",
+        "lookupDocument",
       ),
-      r.or(readsDeclarations(r), r.eq(r.declared, false)),
-      r.or(itemScoped(r), r.eq(r.mapped, false)),
-      r.or(
-        r.and(r.eq(r.declared, true), r.eq(r.source, "declared")),
-        r.and(r.eq(r.declared, false), r.eq(r.mapped, true), r.eq(r.source, "mapped")),
-        r.and(
-          r.eq(r.declared, false),
-          r.eq(r.mapped, false),
-          builtInOfScope(r),
-          r.eq(r.source, "builtIn"),
-        ),
-        r.and(
-          r.eq(r.declared, false),
-          r.eq(r.mapped, false),
-          r.not(builtInOfScope(r)),
-          r.eq(r.source, "none"),
-        ),
+      on(
+        NameLookup,
+        "assembly",
+        "name",
+        "found",
+        "node",
+        "kind",
+        "placements",
+        "replaced",
+        "resourceType",
+        "itemDocument",
       ),
-      r.or(
-        r.in(r.source, ["declared", "mapped"]),
-        r.and(
-          r.eq(r.declaration, r.lookupDocument),
-          r.eq(r.declBaseType, "none"),
-          r.eq(r.declCardinality, "single"),
-          r.or(
-            r.and(r.eq(r.source, "none"), r.eq(r.declarationKind, "qti-outcome-declaration")),
-            r.and(r.eq(r.source, "builtIn"), builtInKindOfScope(r)),
-          ),
-        ),
+    ),
+    contained(
+      on(declarationReaders, "lookupDocument", "variable", "declared"),
+      on(VariableLookup, "document", "name", "declared"),
+    ),
+    contained(
+      on(mappingReaders, "named", "variable", "mapped"),
+      on(MappingLookup, "itemRef", "name", "mapped"),
+    ),
+    contained(
+      on(
+        declaredReadings,
+        "lookupDocument",
+        "variable",
+        "declaration",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
       ),
-      r.or(readsItemDuration(r), r.eq(r.timeDependent, false)),
-    ),
-  ),
-  key(on(resolvingReadings, "assembly", "node", "attribute")),
-  contained(
-    on(
-      select(AssembledReference, (a) =>
-        a.and(a.eq(a.role, "variable"), a.not(a.in(a.kind, setterKinds))),
+      on(
+        VariableLookup,
+        "document",
+        "name",
+        "declaration",
+        "declarationKind",
+        "baseType",
+        "cardinality",
       ),
-      "assembly",
-      "node",
-      "attribute",
     ),
-    on(resolvingReadings, "assembly", "node", "attribute"),
-  ),
-  contained(
-    on(
-      select(AssembledReference, (a) => a.and(a.eq(a.role, "variable"), a.in(a.kind, setterKinds))),
-      "assembly",
-      "node",
-      "attribute",
-      "kind",
+    contained(
+      on(
+        mappedReadings,
+        "named",
+        "variable",
+        "declaration",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
+      on(
+        MappingLookup,
+        "itemRef",
+        "name",
+        "declaration",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
     ),
-    on(resolvingReadings, "assembly", "node", "attribute", "kind"),
-  ),
-  check("Prefixed_reference", Reading, (r) => r.or(r.not(resolves(r)), r.eq(r.placements, 1n))),
-  contained(
-    on(namedReadings, "kind", "attribute", "declarationKind"),
-    on(ReferenceDeclaration, "kind", "attribute", "declaration"),
-  ),
-  check("Variable_declared", Reading, (r) =>
-    r.or(
-      r.ne(r.form, "unsplit"),
-      Compute.matches(r.identifier, prefixedName),
-      r.ne(r.source, "none"),
+    contained(
+      on(timedReadings, "lookupDocument", "timeDependent"),
+      on(ItemTiming, "document", "timeDependent"),
     ),
-  ),
-  check("Item_duration", Reading, (r) =>
-    r.or(r.not(readsItemDuration(r)), r.eq(r.timeDependent, true)),
-  ),
-  check("Reference_type", Reading, (r) =>
-    r.or(
-      r.eq(r.attribute, "identifier"),
-      r.not(resolves(r)),
+    check("E1_derived", Reading, (r) =>
       r.and(
-        r.in(r.source, ["declared", "mapped"]),
-        r.in(r.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
         r.or(
-          r.eq(
-            ValueBaseOf.at("value", r.declBaseType),
-            ReferenceBase.at("base", r.kind, r.attribute),
+          r.and(
+            r.eq(r.form, "unsplit"),
+            r.eq(r.role, "variable"),
+            r.eq(r.split, 0n),
+            r.eq(r.scope, ""),
+            r.eq(r.number, ""),
+            r.eq(r.variable, r.identifier),
+            r.eq(r.found, true),
+            r.eq(r.named, r.assembly),
+            r.eq(r.namedKind, testKind),
+            r.eq(r.placements, 1n),
+            r.eq(r.replaced, false),
+            r.eq(r.resourceType, "none"),
+            r.eq(r.lookupDocument, r.assembly),
           ),
-          r.eq(ValueBaseOf.at("value", r.declBaseType), "unknown"),
+          r.and(
+            r.eq(r.form, "name"),
+            r.eq(r.role, "section"),
+            r.eq(r.split, 0n),
+            r.eq(r.scope, r.identifier),
+            r.eq(r.number, ""),
+            r.eq(r.variable, ""),
+          ),
+          r.and(
+            r.eq(r.form, "split"),
+            r.eq(r.role, "variable"),
+            r.gt(r.split, 0n),
+            r.eq(r.number, ""),
+            r.eq(r.identifier, Compute.concat(Compute.concat(r.scope, "."), r.variable)),
+          ),
+          r.and(
+            r.eq(r.form, "numbered"),
+            r.eq(r.role, "variable"),
+            r.gt(r.split, 0n),
+            Compute.matches(r.number, digitsPattern),
+            r.eq(
+              r.identifier,
+              Compute.concat(
+                Compute.concat(Compute.concat(Compute.concat(r.scope, "."), r.number), "."),
+                r.variable,
+              ),
+            ),
+          ),
         ),
-        r.in(ValueCardinalityOf.at("value", r.declCardinality), ["single", "unknown"]),
+        r.or(readsDeclarations(r), r.eq(r.declared, false)),
+        r.or(itemScoped(r), r.eq(r.mapped, false)),
+        r.or(
+          r.and(r.eq(r.declared, true), r.eq(r.source, "declared")),
+          r.and(r.eq(r.declared, false), r.eq(r.mapped, true), r.eq(r.source, "mapped")),
+          r.and(
+            r.eq(r.declared, false),
+            r.eq(r.mapped, false),
+            builtInOfScope(r),
+            r.eq(r.source, "builtIn"),
+          ),
+          r.and(
+            r.eq(r.declared, false),
+            r.eq(r.mapped, false),
+            r.not(builtInOfScope(r)),
+            r.eq(r.source, "none"),
+          ),
+        ),
+        r.or(
+          r.in(r.source, ["declared", "mapped"]),
+          r.and(
+            r.eq(r.declaration, r.lookupDocument),
+            r.eq(r.declBaseType, "none"),
+            r.eq(r.declCardinality, "single"),
+            r.or(
+              r.and(r.eq(r.source, "none"), r.eq(r.declarationKind, "qti-outcome-declaration")),
+              r.and(r.eq(r.source, "builtIn"), builtInKindOfScope(r)),
+            ),
+          ),
+        ),
+        r.or(readsItemDuration(r), r.eq(r.timeDependent, false)),
       ),
     ),
-  ),
-  check("Section_identifier_target", Reading, (r) =>
-    r.or(
-      r.ne(r.form, "name"),
-      r.and(
-        r.eq(r.found, true),
-        r.in(r.namedKind, [sectionKind, sectionRefKind]),
-        r.eq(r.placements, 1n),
+  ],
+  "Item duration": [
+    check("Item_duration", Reading, (r) =>
+      r.or(r.not(readsItemDuration(r)), r.eq(r.timeDependent, true)),
+    ),
+  ],
+  "Prefixed reference": [
+    key(on(resolvingReadings, "assembly", "node", "attribute")),
+    contained(
+      on(
+        select(AssembledReference, (a) =>
+          a.and(a.eq(a.role, "variable"), a.not(a.in(a.kind, setterKinds))),
+        ),
+        "assembly",
+        "node",
+        "attribute",
+      ),
+      on(resolvingReadings, "assembly", "node", "attribute"),
+    ),
+    check("Prefixed_reference", Reading, (r) => r.or(r.not(resolves(r)), r.eq(r.placements, 1n))),
+  ],
+  "Reference type": [
+    check("Reference_type", Reading, (r) =>
+      r.or(
+        r.eq(r.attribute, "identifier"),
+        r.not(resolves(r)),
+        r.and(
+          r.in(r.source, ["declared", "mapped"]),
+          r.in(r.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
+          r.or(
+            r.eq(
+              ValueBaseOf.at("value", r.declBaseType),
+              ReferenceBase.at("base", r.kind, r.attribute),
+            ),
+            r.eq(ValueBaseOf.at("value", r.declBaseType), "unknown"),
+          ),
+          r.in(ValueCardinalityOf.at("value", r.declCardinality), ["single", "unknown"]),
+        ),
       ),
     ),
-  ),
-] as const;
+  ],
+  "Section identifier target": [
+    check("Section_identifier_target", Reading, (r) =>
+      r.or(
+        r.ne(r.form, "name"),
+        r.and(
+          r.eq(r.found, true),
+          r.in(r.namedKind, [sectionKind, sectionRefKind]),
+          r.eq(r.placements, 1n),
+        ),
+      ),
+    ),
+  ],
+  "Template default target": [
+    contained(
+      on(TemplateDefault, "itemRef", "itemDocument"),
+      on(ItemRefDocument, "node", "document"),
+    ),
+    contained(
+      on(
+        TemplateDefault,
+        "declaration",
+        "itemDocument",
+        "template",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
+      declarationRef,
+    ),
+    check("Template_default_target", TemplateDefault, (t) =>
+      t.eq(t.declarationKind, "qti-template-declaration"),
+    ),
+  ],
+  "Template default type": [
+    check("Template_default_type", TemplateDefault, (t) =>
+      t.and(
+        t.or(
+          t.eq(t.heldBase, ValueBaseOf.at("value", t.declBaseType)),
+          t.in(t.heldBase, silentBases),
+          t.eq(ValueBaseOf.at("value", t.declBaseType), "unknown"),
+        ),
+        t.or(
+          t.eq(t.heldCardinality, ValueCardinalityOf.at("value", t.declCardinality)),
+          t.eq(t.heldCardinality, "unknown"),
+        ),
+      ),
+    ),
+  ],
+  "Variable declared": [
+    check("Variable_declared", Reading, (r) =>
+      r.or(
+        r.ne(r.form, "unsplit"),
+        Compute.matches(r.identifier, prefixedName),
+        r.ne(r.source, "none"),
+      ),
+    ),
+  ],
+  "Variable kind": [
+    contained(
+      on(
+        select(AssembledReference, (a) =>
+          a.and(a.eq(a.role, "variable"), a.in(a.kind, setterKinds)),
+        ),
+        "assembly",
+        "node",
+        "attribute",
+        "kind",
+      ),
+      on(resolvingReadings, "assembly", "node", "attribute", "kind"),
+    ),
+    contained(
+      on(namedReadings, "kind", "attribute", "declarationKind"),
+      on(ReferenceDeclaration, "kind", "attribute", "declaration"),
+    ),
+  ],
+  "Variable mapping source": [
+    contained(
+      on(MappingSource, "itemRef", "itemDocument"),
+      on(ItemRefDocument, "node", "document"),
+    ),
+    contained(
+      on(
+        MappingSource,
+        "declaration",
+        "itemDocument",
+        "source",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
+      declarationRef,
+    ),
+    check("Variable_mapping_source", MappingSource, (m) =>
+      m.eq(m.declarationKind, "qti-outcome-declaration"),
+    ),
+  ],
+  "Variable mapping target": [
+    check("Variable_mapping_target", MappingSource, (m) =>
+      m.or(m.eq(m.targetDeclared, false), m.eq(m.target, m.source)),
+    ),
+  ],
+} as const;
+
+/**
+ * {@link referenceLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const referenceLaws = Object.values(referenceLawsByName).flat();
 
 /**
  * Every statement over the expression and processing overlays, each `check` named by its oracle
  * law: the operand family and its five folds; each overlay's copies and existence; the language
  * chain; the references' resolution; and the P-rules, as the module's header lists them.
  */
-export const expressionLaws = [
-  operandFamily,
-  fold(
+export const expressionLawsByName = {
+  Arity: [
     operandFamily,
-    Monoid.or,
-    on(Operand, "operator", "baseTypeBit"),
-    on(Expression, "node", "operandBaseTypes"),
-  ),
-  fold(
-    operandFamily,
-    Monoid.or,
-    on(Operand, "operator", "cardinalityBit"),
-    on(Expression, "node", "operandCardinalities"),
-  ),
-  fold(
-    operandFamily,
-    Monoid.or,
-    on(
-      select(Operand, (o) => o.eq(o.rank, 1n)),
-      "operator",
-      "cardinalityBit",
+    check("Arity", Expression, (e) =>
+      e.between(e.operands, OperatorArity.at("min", e.kind), OperatorArity.at("max", e.kind)),
     ),
-    on(Expression, "node", "leadCardinalities"),
-  ),
-  fold(
-    operandFamily,
-    Monoid.or,
-    on(
-      select(Operand, (o) => o.gt(o.rank, 1n)),
-      "operator",
-      "baseTypeBit",
-    ),
-    on(Expression, "node", "tailBaseTypes"),
-  ),
-  fold(
-    operandFamily,
-    Monoid.or,
-    on(
-      select(Operand, (o) => o.gt(o.rank, 1n)),
-      "operator",
-      "cardinalityBit",
-    ),
-    on(Expression, "node", "tailCardinalities"),
-  ),
-
-  // Expression: its tuple, its existence, its parent's kind and its language.
-  contained(
-    on(Expression, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(
-      select(Node, (n) => n.in(n.kind, expressionKinds)),
-      "id",
-    ),
-    on(Expression, "node"),
-  ),
-  contained(on(Expression, "parent", "parentKind"), on(Node, "id", "kind")),
-  contained(
-    on(
-      select(Expression, (e) => e.in(e.parentKind, ruleKindHandles)),
-      "parent",
-      "language",
-    ),
-    on(Processing, "node", "language"),
-  ),
-  contained(
-    on(
-      select(Expression, (e) => e.in(e.parentKind, expressionKinds)),
-      "parent",
-      "language",
-    ),
-    on(Expression, "node", "language"),
-  ),
-  contained(on(Expression, "kind", "baseType"), on(ResultBase, "kind", "base")),
-  contained(on(Expression, "kind", "cardinality"), on(ResultCardinality, "kind", "cardinality")),
-  check("E1_derived", Expression, (e) =>
-    e.and(
+  ],
+  "Condition type": [
+    check("Condition_type", Expression, (e) =>
       e.or(
-        e.in(e.parentKind, ruleKindHandles),
-        e.in(e.parentKind, expressionKinds),
-        e.eq(e.language, "none"),
-      ),
-      resultDerived(e),
-    ),
-  ),
-  check("Arity", Expression, (e) =>
-    e.between(e.operands, OperatorArity.at("min", e.kind), OperatorArity.at("max", e.kind)),
-  ),
-  check("Operand_fit", Expression, (e) =>
-    e.and(
-      e.eq(Compute.subset(e.operandBaseTypes, OperandBase.row(e.kind)), true),
-      e.eq(Compute.subset(e.leadCardinalities, LeadCardinality.row(e.kind)), true),
-      e.eq(Compute.subset(e.tailCardinalities, TailCardinality.row(e.kind)), true),
-    ),
-  ),
-  check("One_base", Expression, (e) =>
-    e.and(
-      e.or(
-        e.not(e.in(e.kind, oneBaseKinds)),
-        e.le(
-          Compute.cardinality(Compute.difference(e.operandBaseTypes, ValueBaseBit.row("unknown"))),
-          1n,
+        e.not(e.in(e.parentKind, conditionKindHandles)),
+        e.and(
+          e.in(e.baseType, ["boolean", ...silentBases]),
+          e.in(e.cardinality, ["single", "unknown"]),
         ),
       ),
-      e.or(
-        e.not(e.in(e.kind, oneCardinalityKinds)),
-        e.le(Compute.cardinality(e.operandCardinalities), 1n),
-      ),
     ),
-  ),
-  check("Condition_type", Expression, (e) =>
-    e.or(
-      e.not(e.in(e.parentKind, conditionKindHandles)),
+  ],
+  "DocumentId key": [
+    key(on(itemTimes, "node")),
+    // ProcessingTemplate: the published template a response processing's URI names.
+    key(on(templateAttributes, "node")),
+  ],
+  "E1 derived": [
+    fold(
+      operandFamily,
+      Monoid.or,
+      on(Operand, "operator", "baseTypeBit"),
+      on(Expression, "node", "operandBaseTypes"),
+    ),
+    fold(
+      operandFamily,
+      Monoid.or,
+      on(Operand, "operator", "cardinalityBit"),
+      on(Expression, "node", "operandCardinalities"),
+    ),
+    fold(
+      operandFamily,
+      Monoid.or,
+      on(
+        select(Operand, (o) => o.eq(o.rank, 1n)),
+        "operator",
+        "cardinalityBit",
+      ),
+      on(Expression, "node", "leadCardinalities"),
+    ),
+    fold(
+      operandFamily,
+      Monoid.or,
+      on(
+        select(Operand, (o) => o.gt(o.rank, 1n)),
+        "operator",
+        "baseTypeBit",
+      ),
+      on(Expression, "node", "tailBaseTypes"),
+    ),
+    fold(
+      operandFamily,
+      Monoid.or,
+      on(
+        select(Operand, (o) => o.gt(o.rank, 1n)),
+        "operator",
+        "cardinalityBit",
+      ),
+      on(Expression, "node", "tailCardinalities"),
+    ),
+    // Expression: its tuple, its existence, its parent's kind and its language.
+    contained(
+      on(Expression, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(
+        select(Node, (n) => n.in(n.kind, expressionKinds)),
+        "id",
+      ),
+      on(Expression, "node"),
+    ),
+    contained(on(Expression, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(
+      on(
+        select(Expression, (e) => e.in(e.parentKind, ruleKindHandles)),
+        "parent",
+        "language",
+      ),
+      on(Processing, "node", "language"),
+    ),
+    contained(
+      on(
+        select(Expression, (e) => e.in(e.parentKind, expressionKinds)),
+        "parent",
+        "language",
+      ),
+      on(Expression, "node", "language"),
+    ),
+    contained(on(Expression, "kind", "baseType"), on(ResultBase, "kind", "base")),
+    contained(on(Expression, "kind", "cardinality"), on(ResultCardinality, "kind", "cardinality")),
+    check("E1_derived", Expression, (e) =>
       e.and(
-        e.in(e.baseType, ["boolean", ...silentBases]),
-        e.in(e.cardinality, ["single", "unknown"]),
+        e.or(
+          e.in(e.parentKind, ruleKindHandles),
+          e.in(e.parentKind, expressionKinds),
+          e.eq(e.language, "none"),
+        ),
+        resultDerived(e),
       ),
     ),
-  ),
-  check("Outcome_only", Expression, (e) =>
-    e.or(e.not(e.in(e.kind, outcomeOnlyKinds)), e.eq(e.language, "outcome")),
-  ),
-
-  // Operand: its expression, its place, and one for every expression an expression holds.
-  contained(
-    on(Operand, "node", "operator", "kind", "language", "baseType", "cardinality"),
-    exprRef,
-  ),
-  contained(on(Operand, "node", "rank", "children"), nodeCounts),
-  contained(
-    on(
-      select(Expression, (e) => e.in(e.parentKind, expressionKinds)),
-      "node",
+    // Operand: its expression, its place, and one for every expression an expression holds.
+    contained(
+      on(Operand, "node", "operator", "kind", "language", "baseType", "cardinality"),
+      exprRef,
     ),
-    on(Operand, "node"),
-  ),
-
-  // Processing: its tuple, its existence, its parent's kind and its language.
-  contained(
-    on(Processing, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(
-      select(Node, (n) => n.in(n.kind, ruleKindHandles)),
-      "id",
+    contained(on(Operand, "node", "rank", "children"), nodeCounts),
+    contained(
+      on(
+        select(Expression, (e) => e.in(e.parentKind, expressionKinds)),
+        "node",
+      ),
+      on(Operand, "node"),
     ),
-    on(Processing, "node"),
-  ),
-  contained(on(Processing, "parent", "parentKind"), on(Node, "id", "kind")),
-  contained(
-    on(
-      select(Processing, (p) =>
+    // Processing: its tuple, its existence, its parent's kind and its language.
+    contained(
+      on(Processing, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(
+        select(Node, (n) => n.in(n.kind, ruleKindHandles)),
+        "id",
+      ),
+      on(Processing, "node"),
+    ),
+    contained(on(Processing, "parent", "parentKind"), on(Node, "id", "kind")),
+    contained(
+      on(
+        select(Processing, (p) =>
+          p.and(p.not(p.in(p.kind, rootKinds)), p.in(p.parentKind, ruleKindHandles)),
+        ),
+        "parent",
+        "language",
+      ),
+      on(Processing, "node", "language"),
+    ),
+    check("E1_derived", Processing, (p) =>
+      p.or(
+        ...rootLanguages.map(([kind, language]) =>
+          p.and(p.eq(p.kind, kind), p.eq(p.language, language)),
+        ),
         p.and(p.not(p.in(p.kind, rootKinds)), p.in(p.parentKind, ruleKindHandles)),
-      ),
-      "parent",
-      "language",
-    ),
-    on(Processing, "node", "language"),
-  ),
-  check("E1_derived", Processing, (p) =>
-    p.or(
-      ...rootLanguages.map(([kind, language]) =>
-        p.and(p.eq(p.kind, kind), p.eq(p.language, language)),
-      ),
-      p.and(p.not(p.in(p.kind, rootKinds)), p.in(p.parentKind, ruleKindHandles)),
-      p.and(
-        p.not(p.in(p.kind, rootKinds)),
-        p.not(p.in(p.parentKind, ruleKindHandles)),
-        p.eq(p.language, "none"),
+        p.and(
+          p.not(p.in(p.kind, rootKinds)),
+          p.not(p.in(p.parentKind, ruleKindHandles)),
+          p.eq(p.language, "none"),
+        ),
       ),
     ),
-  ),
-
-  // VariableRef: its copy, its element, its document, its declaration and its laws.
-  key(on(references, "node", "name")),
-  contained(
-    on(references, "node", "name", "kind", "lexical"),
-    on(VariableRef, "node", "attribute", "kind", "lexical"),
-  ),
-  contained(
-    on(
-      select(VariableRef, (v) => v.in(v.kind, expressionKinds)),
-      "node",
-      "parent",
-      "kind",
-      "language",
-      "elementBase",
-      "elementCardinality",
+    // VariableRef: its copy, its element, its document, its declaration and its laws.
+    key(on(references, "node", "name")),
+    contained(
+      on(references, "node", "name", "kind", "lexical"),
+      on(VariableRef, "node", "attribute", "kind", "lexical"),
     ),
-    exprRef,
-  ),
-  contained(
-    on(
-      select(VariableRef, (v) => v.in(v.kind, ruleKindHandles)),
-      "node",
-      "language",
+    contained(
+      on(
+        select(VariableRef, (v) => v.in(v.kind, expressionKinds)),
+        "node",
+        "parent",
+        "kind",
+        "language",
+        "elementBase",
+        "elementCardinality",
+      ),
+      exprRef,
     ),
-    on(Processing, "node", "language"),
-  ),
-  contained(on(VariableRef, "document", "rootKind"), on(Document, "node", "rootKind")),
-  contained(
-    on(
-      select(VariableRef, (v) => v.eq(v.resolution, "declared")),
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "declBaseType",
-      "declCardinality",
+    contained(
+      on(
+        select(VariableRef, (v) => v.in(v.kind, ruleKindHandles)),
+        "node",
+        "language",
+      ),
+      on(Processing, "node", "language"),
     ),
-    declarationRef,
-  ),
-  key(on(heldReferences, "node")),
-  contained(
-    on(
-      select(Expression, (e) => e.in(e.parentKind, heldKinds)),
-      "parent",
-      "baseType",
-      "cardinality",
+    contained(on(VariableRef, "document", "rootKind"), on(Document, "node", "rootKind")),
+    key(on(heldReferences, "node")),
+    contained(
+      on(
+        select(Expression, (e) => e.in(e.parentKind, heldKinds)),
+        "parent",
+        "baseType",
+        "cardinality",
+      ),
+      on(heldReferences, "node", "heldBase", "heldCardinality"),
     ),
-    on(heldReferences, "node", "heldBase", "heldCardinality"),
-  ),
-  contained(
-    on(
-      select(VariableRef, (v) => v.ne(v.resolution, "declared")),
-      "document",
-      "identifier",
+    contained(
+      on(
+        select(VariableRef, (v) => v.ne(v.resolution, "declared")),
+        "document",
+        "identifier",
+      ),
+      on(absentNames, "document", "name"),
     ),
-    on(absentNames, "document", "name"),
-  ),
-  contained(
-    on(namedVariables, "kind", "attribute", "declarationKind"),
-    on(ReferenceDeclaration, "kind", "attribute", "declaration"),
-  ),
-
-  // DeclarationTable: each declaration's tables, both ways, and each table a reference reads.
-  key(on(Mapping, "declaration")),
-  key(on(AreaMapping, "declaration")),
-  key(on(MatchTable, "declaration")),
-  key(on(InterpolationTable, "declaration")),
-  key(on(mappedDeclarations, "declaration")),
-  key(on(areaMappedDeclarations, "declaration")),
-  key(on(matchedDeclarations, "declaration")),
-  key(on(interpolatedDeclarations, "declaration")),
-  contained(on(Mapping, "declaration"), on(mappedDeclarations, "declaration")),
-  contained(on(mappedDeclarations, "declaration"), on(Mapping, "declaration")),
-  contained(on(AreaMapping, "declaration"), on(areaMappedDeclarations, "declaration")),
-  contained(on(areaMappedDeclarations, "declaration"), on(AreaMapping, "declaration")),
-  contained(on(MatchTable, "declaration"), on(matchedDeclarations, "declaration")),
-  contained(on(matchedDeclarations, "declaration"), on(MatchTable, "declaration")),
-  contained(on(InterpolationTable, "declaration"), on(interpolatedDeclarations, "declaration")),
-  contained(on(interpolatedDeclarations, "declaration"), on(InterpolationTable, "declaration")),
-  check("E1_derived", DeclarationTable, (d) =>
-    d.and(
-      d.in(d.mapping, ["none", "qti-mapping"]),
-      d.in(d.areaMapping, ["none", "qti-area-mapping"]),
-      d.in(d.lookup, ["none", "qti-match-table", "qti-interpolation-table"]),
+    // DeclarationTable: each declaration's tables, both ways, and each table a reference reads.
+    key(on(Mapping, "declaration")),
+    key(on(AreaMapping, "declaration")),
+    key(on(MatchTable, "declaration")),
+    key(on(InterpolationTable, "declaration")),
+    key(on(mappedDeclarations, "declaration")),
+    key(on(areaMappedDeclarations, "declaration")),
+    key(on(matchedDeclarations, "declaration")),
+    key(on(interpolatedDeclarations, "declaration")),
+    contained(on(Mapping, "declaration"), on(mappedDeclarations, "declaration")),
+    contained(on(mappedDeclarations, "declaration"), on(Mapping, "declaration")),
+    contained(on(AreaMapping, "declaration"), on(areaMappedDeclarations, "declaration")),
+    contained(on(areaMappedDeclarations, "declaration"), on(AreaMapping, "declaration")),
+    contained(on(MatchTable, "declaration"), on(matchedDeclarations, "declaration")),
+    contained(on(matchedDeclarations, "declaration"), on(MatchTable, "declaration")),
+    contained(on(InterpolationTable, "declaration"), on(interpolatedDeclarations, "declaration")),
+    contained(on(interpolatedDeclarations, "declaration"), on(InterpolationTable, "declaration")),
+    check("E1_derived", DeclarationTable, (d) =>
+      d.and(
+        d.in(d.mapping, ["none", "qti-mapping"]),
+        d.in(d.areaMapping, ["none", "qti-area-mapping"]),
+        d.in(d.lookup, ["none", "qti-match-table", "qti-interpolation-table"]),
+      ),
     ),
-  ),
-  contained(
-    on(tableReaders("qti-map-response"), "declaration", "table"),
-    on(DeclarationTable, "declaration", "mapping"),
-  ),
-  contained(
-    on(tableReaders("qti-map-response-point"), "declaration", "table"),
-    on(DeclarationTable, "declaration", "areaMapping"),
-  ),
-  contained(
-    on(tableReaders(lookupKindHandle), "declaration", "table"),
-    on(DeclarationTable, "declaration", "lookup"),
-  ),
-  check("E1_derived", VariableRef, (v) =>
-    v.and(
-      spells(v),
-      resolvedType(v),
-      tableClaimed(v),
+    contained(
+      on(tableReaders("qti-map-response"), "declaration", "table"),
+      on(DeclarationTable, "declaration", "mapping"),
+    ),
+    contained(
+      on(tableReaders("qti-map-response-point"), "declaration", "table"),
+      on(DeclarationTable, "declaration", "areaMapping"),
+    ),
+    contained(
+      on(tableReaders(lookupKindHandle), "declaration", "table"),
+      on(DeclarationTable, "declaration", "lookup"),
+    ),
+    check("E1_derived", VariableRef, (v) =>
+      v.and(
+        spells(v),
+        resolvedType(v),
+        tableClaimed(v),
+        v.or(
+          v.ne(v.attribute, "identifier"),
+          v.not(v.in(v.kind, declaredKinds)),
+          v.and(v.eq(v.elementBase, v.baseType), v.eq(v.elementCardinality, v.cardinality)),
+        ),
+      ),
+    ),
+    // PlacedVariableRef (spec reading 117): each item instance's references, its document's,
+    // resolved among the item's declarations, under "Variable declared" over the assembly.
+    documentVariableFamily,
+    placedVariableFamily,
+    contained(
+      on(PlacedVariableRef, "instance", "document", "assembly"),
+      on(Instance, "id", "document", "assembly"),
+    ),
+    contained(
+      on(PlacedVariableRef, "node", "attribute", "document", "identifier", "kind"),
+      on(VariableRef, "node", "attribute", "document", "identifier", "kind"),
+    ),
+    contained(on(PlacedVariableRef, "assembly", "rootKind"), on(Document, "node", "rootKind")),
+    contained(
+      on(
+        select(PlacedVariableRef, (v) => v.ne(v.resolution, "declared")),
+        "assembly",
+        "identifier",
+      ),
+      on(absentNames, "document", "name"),
+    ),
+    check("E1_derived", PlacedVariableRef, (v) =>
       v.or(
-        v.ne(v.attribute, "identifier"),
-        v.not(v.in(v.kind, declaredKinds)),
-        v.and(v.eq(v.elementBase, v.baseType), v.eq(v.elementCardinality, v.cardinality)),
-      ),
-    ),
-  ),
-  check("Variable_declared", VariableRef, (v) =>
-    v.or(
-      v.not(v.in(v.rootKind, ["qti-assessment-item", "qti-assessment-test"])),
-      v.ne(v.resolution, "unresolved"),
-      v.and(v.eq(v.rootKind, "qti-assessment-test"), Compute.matches(v.identifier, prefixedName)),
-    ),
-  ),
-
-  // PlacedVariableRef (spec reading 117): each item instance's references, its document's,
-  // resolved among the item's declarations, under "Variable declared" over the assembly.
-  documentVariableFamily,
-  placedVariableFamily,
-  contained(
-    on(PlacedVariableRef, "instance", "document", "assembly"),
-    on(Instance, "id", "document", "assembly"),
-  ),
-  contained(
-    on(PlacedVariableRef, "node", "attribute", "document", "identifier", "kind"),
-    on(VariableRef, "node", "attribute", "document", "identifier", "kind"),
-  ),
-  contained(on(PlacedVariableRef, "assembly", "rootKind"), on(Document, "node", "rootKind")),
-  contained(
-    on(
-      select(PlacedVariableRef, (v) => v.eq(v.resolution, "declared")),
-      "declaration",
-      "assembly",
-      "identifier",
-      "declarationKind",
-      "declBaseType",
-      "declCardinality",
-    ),
-    declarationRef,
-  ),
-  contained(
-    on(
-      select(PlacedVariableRef, (v) => v.ne(v.resolution, "declared")),
-      "assembly",
-      "identifier",
-    ),
-    on(absentNames, "document", "name"),
-  ),
-  contained(
-    on(
-      select(PlacedVariableRef, (v) =>
-        v.and(v.eq(v.attribute, "identifier"), v.ne(v.resolution, "unresolved")),
-      ),
-      "kind",
-      "attribute",
-      "declarationKind",
-    ),
-    on(ReferenceDeclaration, "kind", "attribute", "declaration"),
-  ),
-  check("E1_derived", PlacedVariableRef, (v) =>
-    v.or(
-      v.eq(v.resolution, "declared"),
-      v.and(
-        v.eq(v.resolution, "builtIn"),
-        v.or(
-          ...builtIns.map(({ declaration, root, variable }) =>
-            v.and(
-              v.eq(v.rootKind, root),
-              v.eq(v.identifier, variable),
-              v.eq(v.declarationKind, declaration),
-            ),
-          ),
-        ),
-      ),
-      v.and(
-        v.eq(v.resolution, "unresolved"),
-        ...builtInRoots.map(([root, names]) =>
-          v.or(v.ne(v.rootKind, root), v.not(v.in(v.identifier, names))),
-        ),
-      ),
-    ),
-  ),
-  check("Variable_declared", PlacedVariableRef, (v) =>
-    v.or(v.ne(v.rootKind, "qti-assessment-item"), v.ne(v.resolution, "unresolved")),
-  ),
-  key(on(itemTimes, "node")),
-  contained(
-    on(itemTimes, "node", "document", "lexical"),
-    on(ItemTiming, "node", "document", "lexical"),
-  ),
-  key(on(ItemTiming, "document")),
-  check("E1_derived", ItemTiming, (t) =>
-    t.or(
-      t.and(Compute.matches(t.lexical, timeDependentForm), t.eq(t.timeDependent, true)),
-      t.and(t.not(Compute.matches(t.lexical, timeDependentForm)), t.eq(t.timeDependent, false)),
-    ),
-  ),
-  contained(
-    on(
-      select(VariableRef, (v) => v.eq(v.rootKind, "qti-assessment-item")),
-      "document",
-      "timeDependent",
-    ),
-    on(ItemTiming, "document", "timeDependent"),
-  ),
-  check("Item_duration", VariableRef, (v) =>
-    v.or(
-      v.ne(v.rootKind, "qti-assessment-item"),
-      v.ne(v.resolution, "builtIn"),
-      v.ne(v.identifier, "duration"),
-      v.eq(v.timeDependent, true),
-    ),
-  ),
-  check("Set_type", VariableRef, (v) =>
-    v.or(
-      v.ne(v.attribute, "identifier"),
-      v.not(v.in(v.kind, setKindHandles)),
-      v.and(
-        v.or(
-          v.eq(v.heldBase, v.baseType),
-          v.in(v.heldBase, silentBases),
-          v.in(v.baseType, silentBases),
-        ),
-        v.or(
-          v.eq(v.heldCardinality, v.cardinality),
-          v.eq(v.heldCardinality, "unknown"),
-          v.eq(v.cardinality, "unknown"),
-        ),
-      ),
-    ),
-  ),
-  check("Lookup_type", VariableRef, (v) =>
-    v.or(
-      v.ne(v.attribute, "identifier"),
-      v.ne(v.kind, lookupKindHandle),
-      v.and(
-        v.in(v.heldCardinality, ["single", "unknown"]),
-        v.in(v.heldBase, ["duration", "float", "integer", ...silentBases]),
-        v.or(
-          v.ne(v.resolution, "declared"),
-          v.in(v.table, ["qti-match-table", "qti-interpolation-table"]),
-        ),
-        v.or(v.ne(v.table, "qti-match-table"), v.in(v.heldBase, ["integer", ...silentBases])),
-      ),
-    ),
-  ),
-  check("Reference_type", VariableRef, (v) =>
-    v.or(
-      v.eq(v.attribute, "identifier"),
-      v.eq(v.resolution, "unresolved"),
-      v.and(
         v.eq(v.resolution, "declared"),
-        v.in(v.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
-        v.or(
-          v.eq(v.baseType, ReferenceBase.at("base", v.kind, v.attribute)),
-          v.in(v.baseType, silentBases),
-        ),
-        v.in(v.cardinality, ["single", "unknown"]),
-      ),
-    ),
-  ),
-  check("Template_reads", VariableRef, (v) =>
-    v.or(
-      v.ne(v.language, "template"),
-      v.not(v.in(v.kind, expressionKinds)),
-      v.and(
-        v.or(
-          v.ne(v.resolution, "declared"),
-          v.not(v.in(v.declarationKind, ["qti-outcome-declaration", "qti-response-declaration"])),
-        ),
-        v.or(v.ne(v.resolution, "builtIn"), v.eq(v.identifier, "QTI_CONTEXT")),
-      ),
-    ),
-  ),
-  check("Mapped_response", VariableRef, (v) =>
-    v.or(
-      v.ne(v.attribute, "identifier"),
-      v.not(v.in(v.kind, ["qti-map-response", "qti-map-response-point"])),
-      v.ne(v.resolution, "declared"),
-      v.and(
-        v.eq(v.declarationKind, "qti-response-declaration"),
-        v.or(
-          v.and(v.eq(v.kind, "qti-map-response"), v.eq(v.table, "qti-mapping")),
-          v.and(
-            v.eq(v.kind, "qti-map-response-point"),
-            v.eq(v.table, "qti-area-mapping"),
-            v.in(v.baseType, ["point", ...silentBases]),
-          ),
-        ),
-      ),
-    ),
-  ),
-
-  // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
-  key(on(typingAttributes, "node", "name")),
-  contained(
-    on(typingAttributes, "node", "name", "kind", "lexical"),
-    on(ExpressionAttribute, "node", "attribute", "kind", "lexical"),
-  ),
-  contained(
-    on(ExpressionAttribute, "node", "parent", "kind", "language", "baseType", "cardinality"),
-    exprRef,
-  ),
-  // A written row's attribute exists, by the selection's key `(node, name)`. Its kind and lexical
-  // form are the forward containment's: both sides are keyed by node and name, so that
-  // containment's row for the attribute is this row. Its UNIQUE is that key's, and
-  // `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
-  contained(on(writtenAttributes, "node", "attribute"), on(typingAttributes, "node", "name")),
-  key(on(typeAttributes, "node")),
-  contained(
-    on(
-      select(Expression, (e) => e.in(e.kind, attributeTypedKinds)),
-      "node",
-    ),
-    on(typeAttributes, "node"),
-  ),
-  check("E1_derived", ExpressionAttribute, (x) =>
-    x.or(
-      x.and(
-        x.eq(x.written, true),
-        x.or(
-          x.and(
-            x.eq(x.attribute, "base-type"),
-            Compute.matches(x.lexical, ValueBaseForm.at("pattern", x.baseType)),
-          ),
-          x.and(
-            x.eq(x.attribute, "name"),
-            x.or(
-              x.and(Compute.matches(x.lexical, integerMathOperators), x.eq(x.baseType, "integer")),
-              x.and(
-                x.not(Compute.matches(x.lexical, integerMathOperators)),
-                x.eq(x.baseType, "float"),
+        v.and(
+          v.eq(v.resolution, "builtIn"),
+          v.or(
+            ...builtIns.map(({ declaration, root, variable }) =>
+              v.and(
+                v.eq(v.rootKind, root),
+                v.eq(v.identifier, variable),
+                v.eq(v.declarationKind, declaration),
               ),
             ),
           ),
-          x.eq(x.attribute, "weight-identifier"),
+        ),
+        v.and(
+          v.eq(v.resolution, "unresolved"),
+          ...builtInRoots.map(([root, names]) =>
+            v.or(v.ne(v.rootKind, root), v.not(v.in(v.identifier, names))),
+          ),
         ),
       ),
-      x.and(
-        x.eq(x.written, false),
-        x.eq(x.attribute, "base-type"),
-        x.eq(x.kind, "qti-test-variables"),
-        x.eq(x.lexical, ""),
-        x.eq(x.baseType, "unknown"),
+    ),
+    contained(
+      on(itemTimes, "node", "document", "lexical"),
+      on(ItemTiming, "node", "document", "lexical"),
+    ),
+    key(on(ItemTiming, "document")),
+    check("E1_derived", ItemTiming, (t) =>
+      t.or(
+        t.and(Compute.matches(t.lexical, timeDependentForm), t.eq(t.timeDependent, true)),
+        t.and(t.not(Compute.matches(t.lexical, timeDependentForm)), t.eq(t.timeDependent, false)),
       ),
     ),
-  ),
-  check("Weighted_base", ExpressionAttribute, (x) =>
-    x.or(x.ne(x.attribute, "weight-identifier"), x.in(x.baseType, ["float", "unknown"])),
-  ),
-  contained(
-    on(
-      select(Node, (n) => n.eq(n.kind, "qti-base-value")),
-      "id",
-      "stringValue",
+    contained(
+      on(
+        select(VariableRef, (v) => v.eq(v.rootKind, "qti-assessment-item")),
+        "document",
+        "timeDependent",
+      ),
+      on(ItemTiming, "document", "timeDependent"),
     ),
-    on(Literal, "node", "text"),
-  ),
-  contained(on(Literal, "node", "parent", "kind", "language", "baseType", "cardinality"), exprRef),
-  check("E1_derived", Literal, (l) => l.eq(ValueBaseOf.at("value", l.typeCode), l.baseType)),
-  check("Literal_lexical", Literal, (l) =>
-    Compute.matches(l.text, BaseTypePattern.at("pattern", l.typeCode)),
-  ),
+    // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
+    key(on(typingAttributes, "node", "name")),
+    contained(
+      on(typingAttributes, "node", "name", "kind", "lexical"),
+      on(ExpressionAttribute, "node", "attribute", "kind", "lexical"),
+    ),
+    contained(
+      on(ExpressionAttribute, "node", "parent", "kind", "language", "baseType", "cardinality"),
+      exprRef,
+    ),
+    // A written row's attribute exists, by the selection's key `(node, name)`. Its kind and lexical
+    // form are the forward containment's: both sides are keyed by node and name, so that
+    // containment's row for the attribute is this row. Its UNIQUE is that key's, and
+    // `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
+    contained(on(writtenAttributes, "node", "attribute"), on(typingAttributes, "node", "name")),
+    key(on(typeAttributes, "node")),
+    contained(
+      on(
+        select(Expression, (e) => e.in(e.kind, attributeTypedKinds)),
+        "node",
+      ),
+      on(typeAttributes, "node"),
+    ),
+    check("E1_derived", ExpressionAttribute, (x) =>
+      x.or(
+        x.and(
+          x.eq(x.written, true),
+          x.or(
+            x.and(
+              x.eq(x.attribute, "base-type"),
+              Compute.matches(x.lexical, ValueBaseForm.at("pattern", x.baseType)),
+            ),
+            x.and(
+              x.eq(x.attribute, "name"),
+              x.or(
+                x.and(
+                  Compute.matches(x.lexical, integerMathOperators),
+                  x.eq(x.baseType, "integer"),
+                ),
+                x.and(
+                  x.not(Compute.matches(x.lexical, integerMathOperators)),
+                  x.eq(x.baseType, "float"),
+                ),
+              ),
+            ),
+            x.eq(x.attribute, "weight-identifier"),
+          ),
+        ),
+        x.and(
+          x.eq(x.written, false),
+          x.eq(x.attribute, "base-type"),
+          x.eq(x.kind, "qti-test-variables"),
+          x.eq(x.lexical, ""),
+          x.eq(x.baseType, "unknown"),
+        ),
+      ),
+    ),
+    contained(
+      on(
+        select(Node, (n) => n.eq(n.kind, "qti-base-value")),
+        "id",
+        "stringValue",
+      ),
+      on(Literal, "node", "text"),
+    ),
+    contained(
+      on(Literal, "node", "parent", "kind", "language", "baseType", "cardinality"),
+      exprRef,
+    ),
+    check("E1_derived", Literal, (l) => l.eq(ValueBaseOf.at("value", l.typeCode), l.baseType)),
+    contained(on(templateAttributes, "node", "lexical"), on(ProcessingTemplate, "node", "uri")),
+    check("E1_derived", ProcessingTemplate, (t) =>
+      t.or(
+        ...publishedTemplates.map(([template, pattern]) =>
+          t.and(t.eq(t.template, template), Compute.matches(t.uri, pattern)),
+        ),
+        t.and(
+          t.eq(t.template, "none"),
+          ...publishedTemplates.map(([, pattern]) => t.not(Compute.matches(t.uri, pattern))),
+        ),
+      ),
+    ),
+  ],
+  "Item duration": [
+    check("Item_duration", VariableRef, (v) =>
+      v.or(
+        v.ne(v.rootKind, "qti-assessment-item"),
+        v.ne(v.resolution, "builtIn"),
+        v.ne(v.identifier, "duration"),
+        v.eq(v.timeDependent, true),
+      ),
+    ),
+  ],
+  "Literal lexical": [
+    check("Literal_lexical", Literal, (l) =>
+      Compute.matches(l.text, BaseTypePattern.at("pattern", l.typeCode)),
+    ),
+  ],
+  "Lookup type": [
+    check("Lookup_type", VariableRef, (v) =>
+      v.or(
+        v.ne(v.attribute, "identifier"),
+        v.ne(v.kind, lookupKindHandle),
+        v.and(
+          v.in(v.heldCardinality, ["single", "unknown"]),
+          v.in(v.heldBase, ["duration", "float", "integer", ...silentBases]),
+          v.or(
+            v.ne(v.resolution, "declared"),
+            v.in(v.table, ["qti-match-table", "qti-interpolation-table"]),
+          ),
+          v.or(v.ne(v.table, "qti-match-table"), v.in(v.heldBase, ["integer", ...silentBases])),
+        ),
+      ),
+    ),
+  ],
+  "Mapped response": [
+    check("Mapped_response", VariableRef, (v) =>
+      v.or(
+        v.ne(v.attribute, "identifier"),
+        v.not(v.in(v.kind, ["qti-map-response", "qti-map-response-point"])),
+        v.ne(v.resolution, "declared"),
+        v.and(
+          v.eq(v.declarationKind, "qti-response-declaration"),
+          v.or(
+            v.and(v.eq(v.kind, "qti-map-response"), v.eq(v.table, "qti-mapping")),
+            v.and(
+              v.eq(v.kind, "qti-map-response-point"),
+              v.eq(v.table, "qti-area-mapping"),
+              v.in(v.baseType, ["point", ...silentBases]),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ],
+  "One base": [
+    check("One_base", Expression, (e) =>
+      e.and(
+        e.or(
+          e.not(e.in(e.kind, oneBaseKinds)),
+          e.le(
+            Compute.cardinality(
+              Compute.difference(e.operandBaseTypes, ValueBaseBit.row("unknown")),
+            ),
+            1n,
+          ),
+        ),
+        e.or(
+          e.not(e.in(e.kind, oneCardinalityKinds)),
+          e.le(Compute.cardinality(e.operandCardinalities), 1n),
+        ),
+      ),
+    ),
+  ],
+  "Operand fit": [
+    check("Operand_fit", Expression, (e) =>
+      e.and(
+        e.eq(Compute.subset(e.operandBaseTypes, OperandBase.row(e.kind)), true),
+        e.eq(Compute.subset(e.leadCardinalities, LeadCardinality.row(e.kind)), true),
+        e.eq(Compute.subset(e.tailCardinalities, TailCardinality.row(e.kind)), true),
+      ),
+    ),
+  ],
+  "Outcome only": [
+    check("Outcome_only", Expression, (e) =>
+      e.or(e.not(e.in(e.kind, outcomeOnlyKinds)), e.eq(e.language, "outcome")),
+    ),
+  ],
+  "Reference type": [
+    check("Reference_type", VariableRef, (v) =>
+      v.or(
+        v.eq(v.attribute, "identifier"),
+        v.eq(v.resolution, "unresolved"),
+        v.and(
+          v.eq(v.resolution, "declared"),
+          v.in(v.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
+          v.or(
+            v.eq(v.baseType, ReferenceBase.at("base", v.kind, v.attribute)),
+            v.in(v.baseType, silentBases),
+          ),
+          v.in(v.cardinality, ["single", "unknown"]),
+        ),
+      ),
+    ),
+  ],
+  "Set type": [
+    check("Set_type", VariableRef, (v) =>
+      v.or(
+        v.ne(v.attribute, "identifier"),
+        v.not(v.in(v.kind, setKindHandles)),
+        v.and(
+          v.or(
+            v.eq(v.heldBase, v.baseType),
+            v.in(v.heldBase, silentBases),
+            v.in(v.baseType, silentBases),
+          ),
+          v.or(
+            v.eq(v.heldCardinality, v.cardinality),
+            v.eq(v.heldCardinality, "unknown"),
+            v.eq(v.cardinality, "unknown"),
+          ),
+        ),
+      ),
+    ),
+  ],
+  "Template reads": [
+    check("Template_reads", VariableRef, (v) =>
+      v.or(
+        v.ne(v.language, "template"),
+        v.not(v.in(v.kind, expressionKinds)),
+        v.and(
+          v.or(
+            v.ne(v.resolution, "declared"),
+            v.not(v.in(v.declarationKind, ["qti-outcome-declaration", "qti-response-declaration"])),
+          ),
+          v.or(v.ne(v.resolution, "builtIn"), v.eq(v.identifier, "QTI_CONTEXT")),
+        ),
+      ),
+    ),
+  ],
+  "Variable declared": [
+    contained(
+      on(
+        select(VariableRef, (v) => v.eq(v.resolution, "declared")),
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
+      declarationRef,
+    ),
+    check("Variable_declared", VariableRef, (v) =>
+      v.or(
+        v.not(v.in(v.rootKind, ["qti-assessment-item", "qti-assessment-test"])),
+        v.ne(v.resolution, "unresolved"),
+        v.and(v.eq(v.rootKind, "qti-assessment-test"), Compute.matches(v.identifier, prefixedName)),
+      ),
+    ),
+    contained(
+      on(
+        select(PlacedVariableRef, (v) => v.eq(v.resolution, "declared")),
+        "declaration",
+        "assembly",
+        "identifier",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
+      declarationRef,
+    ),
+    check("Variable_declared", PlacedVariableRef, (v) =>
+      v.or(v.ne(v.rootKind, "qti-assessment-item"), v.ne(v.resolution, "unresolved")),
+    ),
+  ],
+  "Variable kind": [
+    contained(
+      on(namedVariables, "kind", "attribute", "declarationKind"),
+      on(ReferenceDeclaration, "kind", "attribute", "declaration"),
+    ),
+    contained(
+      on(
+        select(PlacedVariableRef, (v) =>
+          v.and(v.eq(v.attribute, "identifier"), v.ne(v.resolution, "unresolved")),
+        ),
+        "kind",
+        "attribute",
+        "declarationKind",
+      ),
+      on(ReferenceDeclaration, "kind", "attribute", "declaration"),
+    ),
+  ],
+  "Weighted base": [
+    check("Weighted_base", ExpressionAttribute, (x) =>
+      x.or(x.ne(x.attribute, "weight-identifier"), x.in(x.baseType, ["float", "unknown"])),
+    ),
+  ],
+} as const;
 
-  // ProcessingTemplate: the published template a response processing's URI names.
-  key(on(templateAttributes, "node")),
-  contained(on(templateAttributes, "node", "lexical"), on(ProcessingTemplate, "node", "uri")),
-  check("E1_derived", ProcessingTemplate, (t) =>
-    t.or(
-      ...publishedTemplates.map(([template, pattern]) =>
-        t.and(t.eq(t.template, template), Compute.matches(t.uri, pattern)),
-      ),
-      t.and(
-        t.eq(t.template, "none"),
-        ...publishedTemplates.map(([, pattern]) => t.not(Compute.matches(t.uri, pattern))),
-      ),
-    ),
-  ),
-
-  ...referenceLaws,
-] as const;
+/**
+ * {@link expressionLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const expressionLaws = [...Object.values(expressionLawsByName).flat(), ...referenceLaws];

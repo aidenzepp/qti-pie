@@ -47,7 +47,8 @@ import {
   DeclarationTable,
   Expression,
   ExpressionAttribute,
-  expressionLaws,
+  expressionLawsByName,
+  referenceLawsByName,
   ItemTiming,
   Literal,
   MappingLookup,
@@ -103,7 +104,7 @@ import {
   Hottext,
   Interaction,
   InteractionAttribute,
-  interactionLaws,
+  interactionLawsByName,
   ItemMode,
   PlacedBinding,
   PlacedBindingDeclaration,
@@ -133,7 +134,7 @@ import {
   MapKeyDirectedPair,
   MapKeyPair,
   MapKeyPoint,
-  mappingLaws,
+  mappingLawsByName,
   Negative,
   pairKeyPattern,
   pointKeyPattern,
@@ -155,7 +156,7 @@ import {
   LomStringLanguage,
   LomTitle,
   LomTitleString,
-  metadataLaws,
+  metadataLawsByName,
   ObjectLang,
   ResourceLomGeneral,
   StatisticDate,
@@ -173,7 +174,7 @@ import {
   Reference,
   ReferencePath,
 } from "#pantry/qti/package.ts";
-import { quotationLaws } from "#pantry/qti/quotation.ts";
+import { quotationLawsByName } from "#pantry/qti/quotation.ts";
 import {
   branchLaws,
   inclusionLaws,
@@ -1582,7 +1583,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ...(["Declaration", "ValueSet", "Value", "RecordField", "OutcomeRange"] as const).map(
     (overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const,
   ),
-  [familyOf("counted", sideOf("Operand", "operator"), "Expression", "operands"), "Arity"],
   // An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of
   // a set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds
   // no row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads
@@ -1590,10 +1590,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   // determines is E1 derived.
   [generatedOf(Operand, "baseTypeBit"), "E1 derived"],
   [generatedOf(Operand, "cardinalityBit"), "E1 derived"],
-  [
-    containedIn(sideOf("Mapping", "baseType"), sideOf("MappableBaseType", "baseType")),
-    "MappableBaseType",
-  ],
   ...(
     [
       "Mapping",
@@ -1605,70 +1601,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       "InterpolationTable",
     ] as const
   ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
-  ...(
-    [
-      ["Mapping", "declaration"],
-      ["MapKey", "mapping"],
-      ["AreaMapping", "declaration"],
-      ["MatchTable", "declaration"],
-      ["InterpolationTable", "declaration"],
-    ] as const
-  ).flatMap(([overlay, parent]) => [
-    [
-      containedIn(
-        sideOf(overlay, "node", "document", "kind", "start", "nearest", "version", parent),
-        sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
-      ),
-      "Mapping overlay",
-    ] as const,
-    [containedIn(sideOf(overlay, "node"), sideOf("Node", "id")), "Mapping overlay"] as const,
-  ]),
-  ...(["AreaMapping", "MatchTable", "InterpolationTable"] as const).map(
-    (overlay) =>
-      [containedIn(sideOf("Node", "id"), sideOf(overlay, "node")), "Mapping overlay"] as const,
-  ),
-  ...(["Mapping", "AreaMapping", "MatchTable", "InterpolationTable"] as const).map(
-    (overlay) =>
-      [
-        containedIn(
-          sideOf(
-            overlay,
-            "declaration",
-            "document",
-            "identifier",
-            "declarationKind",
-            "baseType",
-            "cardinality",
-          ),
-          sideOf(
-            "Declaration",
-            "node",
-            "document",
-            "identifier",
-            "declarationKind",
-            "baseType",
-            "cardinality",
-          ),
-        ),
-        "Mapping overlay",
-      ] as const,
-  ),
-  [
-    containedIn(sideOf("MapKey", "mapping", "baseType"), sideOf("Mapping", "node", "baseType")),
-    "Mapping overlay",
-  ],
-  [
-    containedIn(sideOf("Attribute", "node", "lexical"), sideOf("MapKey", "node", "key")),
-    "Mapping overlay",
-  ],
-  [keyOver(sideOf("MapKey", "mapping", "key")), "Map key"],
-  ...(["MapKeyInteger", "MapKeyFloat"] as const).flatMap((typed) => [
-    ...mirrored(
-      sideOf("MapKey", "node", "mapping", "key"),
-      sideOf(typed, "node", "mapping", "key"),
-    ).map((law) => [law, "Mapping overlay"] as const),
-    [keyOver(sideOf(typed, "mapping", "value")), "Map key"] as const,
-  ]),
   [keyOver(sideOf("Named", "document", "identifier")), "Structure identifier"],
   [keyOver(sideOf("VariableMapping", "parent", "target")), "Variable mapping target"],
   [keyOver(sideOf("StimulusRef", "document", "identifier")), "Stimulus ref key"],
@@ -1775,36 +1707,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   // the cast reads total: a form outside it is refused by that law as the statement casts it into
   // its column, before PostgreSQL computes `select`, so no row breaks this one.
   [generatedOf(SectionSelection, "select"), "E1 derived"],
-  [
-    containedIn(
-      sideOf("LomObjectIdentifier", "entry", "general", "record", "identifier"),
-      sideOf("LomEntry", "node", "holder", "holderParent", "token"),
-    ),
-    "LomObjectIdentifier",
-  ],
-  [
-    containedIn(sideOf("LomEntry", "holderParent"), sideOf("LomObjectIdentifier", "record")),
-    "LomObjectIdentifier",
-  ],
-  [
-    containedIn(
-      sideOf("LomObjectTitle", "string", "record", "title"),
-      sideOf("LomTitleString", "node", "record", "textValue"),
-    ),
-    "LomObjectTitle",
-  ],
-  [
-    containedIn(
-      sideOf("LomObjectTitle", "string", "stringLanguage"),
-      sideOf("LomTitleString", "node", "languageTag"),
-    ),
-    "LomObjectTitle",
-  ],
-  [containedIn(sideOf("LomTitle", "record"), sideOf("LomObjectTitle", "record")), "LomObjectTitle"],
-  [
-    containedIn(sideOf("LomResourceType", "node"), sideOf("LomResourceTypeSource", "node")),
-    "LOM learning resource type",
-  ],
   ...[
     AssessmentObject,
     LomEntry,
@@ -1841,256 +1743,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   // casts it into its column, before PostgreSQL computes `date`, so no row breaks this one. Its
   // value is the calendar day `lastUpdated` names, which the value domain states exists.
   [generatedOf(StatisticDate, "date"), "value domain"],
-  [
-    containedIn(
-      sideOf("BoundVariable", "node", "attribute", "kind", "document", "identifier"),
-      sideOf("BindingDeclaration", "node", "attribute", "kind", "document", "identifier"),
-    ),
-    "Binding declared",
-  ],
-  [
-    containedIn(
-      sideOf("BindingDeclaration", "node", "attribute"),
-      sideOf("BoundVariable", "node", "attribute"),
-    ),
-    "E1 derived",
-  ],
-  [
-    containedIn(
-      sideOf(
-        "BindingDeclaration",
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      sideOf(
-        "Declaration",
-        "node",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-    ),
-    "Binding declared",
-  ],
-  [
-    containedIn(
-      sideOf("BindingDeclaration", "baseType", "cardinality", "kind"),
-      sideOf("BindingFit", "baseType", "cardinality", "kind"),
-    ),
-    "BindingFit",
-  ],
-  [
-    containedIn(sideOf("BindingDeclaration", "kind"), sideOf("RecordBindingFit", "kind")),
-    "RecordBindingFit",
-  ],
-  [
-    containedIn(
-      sideOf(
-        "PlacedBinding",
-        "instance",
-        "node",
-        "attribute",
-        "assembly",
-        "document",
-        "kind",
-        "identifier",
-      ),
-      sideOf(
-        "PlacedBindingDeclaration",
-        "instance",
-        "node",
-        "attribute",
-        "assembly",
-        "document",
-        "kind",
-        "identifier",
-      ),
-    ),
-    "Binding declared",
-  ],
-  [
-    containedIn(
-      sideOf("PlacedBindingDeclaration", "instance", "node", "attribute"),
-      sideOf("PlacedBinding", "instance", "node", "attribute"),
-    ),
-    "E1 derived",
-  ],
-  [
-    containedIn(
-      sideOf(
-        "PlacedBindingDeclaration",
-        "declaration",
-        "assembly",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      sideOf(
-        "Declaration",
-        "node",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-    ),
-    "Binding declared",
-  ],
-  [
-    containedIn(
-      sideOf("PlacedBindingDeclaration", "baseType", "cardinality", "kind"),
-      sideOf("BindingFit", "baseType", "cardinality", "kind"),
-    ),
-    "BindingFit",
-  ],
-  [
-    containedIn(sideOf("PlacedBindingDeclaration", "kind"), sideOf("RecordBindingFit", "kind")),
-    "RecordBindingFit",
-  ],
-  [keyOver(sideOf("PlacedBinding", "assembly", "identifier")), "Binding unique"],
-  [
-    containedIn(sideOf("PlacedBindingDeclaration", "node"), sideOf("CountBound", "node")),
-    "Binding cardinality",
-  ],
-  [
-    containedIn(
-      sideOf("PlacedBindingDeclaration", "node", "kind"),
-      sideOf("CountBound", "node", "kind"),
-    ),
-    "Max strings required",
-  ],
-  [containedIn(sideOf("PlacedBinding", "node"), sideOf("Node", "id")), "Adaptive feedback"],
-  [keyOver(sideOf("BoundVariable", "document", "identifier")), "Binding unique"],
-  [
-    containedIn(sideOf("BindingDeclaration", "node"), sideOf("CountBound", "node")),
-    "Binding cardinality",
-  ],
-  [
-    containedIn(sideOf("BindingDeclaration", "node", "kind"), sideOf("CountBound", "node", "kind")),
-    "Max strings required",
-  ],
-  [containedIn(sideOf("BoundVariable", "node"), sideOf("Node", "id")), "Adaptive feedback"],
-  [
-    familyOf("counted", sideOf("ChoiceInteraction", "interaction"), "Interaction", "choices"),
-    "N8 nearest",
-  ],
-  [containedIn(sideOf("Choice", "node"), sideOf("ChoiceInteraction", "node")), "N8 nearest"],
-  [
-    containedIn(
-      sideOf("ChoiceInteraction", "node", "interaction"),
-      sideOf("Choice", "node", "nearest"),
-    ),
-    "N8 nearest",
-  ],
-  [
-    containedIn(
-      sideOf("Choice", "node", "document", "kind", "start", "nearest", "version", "parent"),
-      sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
-    ),
-    "N8 nearest",
-  ],
-  [
-    containedIn(sideOf("Hottext", "nearest", "nearestKind"), sideOf("Interaction", "node", "kind")),
-    "N8 nearest",
-  ],
-  [keyOver(sideOf("Choice", "document", "kind", "identifier")), "Choice identifier key"],
-  [keyOver(sideOf("Hottext", "document", "identifier")), "Choice identifier key"],
-  [keyOver(sideOf("PlacedChoice", "assembly", "kind", "identifier")), "Choice identifier key"],
-  [keyOver(sideOf("PlacedHottext", "assembly", "identifier")), "Choice identifier key"],
-  ...(
-    [
-      ["FeedbackRef", "Feedback reference"],
-      ["TemplateRef", "Template reference"],
-      ["PrintedVariableRef", "Printed variable reference"],
-      ["VarRef", "Printed variable reference"],
-      ["ContextRef", "Context variable reference"],
-    ] as const
-  ).flatMap(([reference, name]) => [
-    [
-      containedIn(
-        sideOf(
-          reference,
-          "declaration",
-          "document",
-          "identifier",
-          "declarationKind",
-          "baseType",
-          "cardinality",
-        ),
-        sideOf(
-          "Declaration",
-          "node",
-          "document",
-          "identifier",
-          "declarationKind",
-          "baseType",
-          "cardinality",
-        ),
-      ),
-      name,
-    ] as const,
-    [
-      containedIn(
-        sideOf(reference, "kind", "attribute", "declarationKind"),
-        sideOf("ContentReference", "kind", "attribute", "declaration"),
-      ),
-      name,
-    ] as const,
-  ]),
-  [
-    containedIn(
-      sideOf("InteractionAttribute", "node", "name", "kind", "document", "value"),
-      sideOf("VarRef", "node", "attribute", "kind", "document", "identifier"),
-    ),
-    "Variable reference copy",
-  ],
-  ...(
-    [
-      ["SectionFeedbackRef", "SectionFeedbackName", "Feedback reference"],
-      ["SectionPrintedRef", "SectionPrintedName", "Printed variable reference"],
-      ["SectionTemplateRef", "SectionTemplateName", "Template reference"],
-      ["SectionContextRef", "SectionContextName", "Context variable reference"],
-    ] as const
-  ).flatMap(([reference, names, name]) =>
-    [
-      containedIn(
-        sideOf(
-          reference,
-          "declaration",
-          "assembly",
-          "identifier",
-          "declarationKind",
-          "baseType",
-          "cardinality",
-        ),
-        sideOf(
-          "Declaration",
-          "node",
-          "document",
-          "identifier",
-          "declarationKind",
-          "baseType",
-          "cardinality",
-        ),
-      ),
-      containedIn(
-        sideOf(reference, "kind", "attribute", "declarationKind"),
-        sideOf("ContentReference", "kind", "attribute", "declaration"),
-      ),
-      containedIn(
-        sideOf(reference, "node", "attribute", "kind", "document", "identifier"),
-        sideOf(names, "node", "attribute", "kind", "document", "identifier"),
-      ),
-    ].map((law) => [law, name] as const),
-  ),
   ...[
     AriaElement,
     AriaRange,
@@ -2135,116 +1787,11 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
-  ...(["MapKeyPoint", "MapKeyPair", "MapKeyDirectedPair"] as const).map(
-    (typed) => [keyOver(sideOf(typed, "mapping", "value")), "Map key"] as const,
-  ),
   ...[MapKeyPoint, MapKeyPair, MapKeyDirectedPair, LookupValue].map(
     ({ name, primaryKey }) =>
       [
         { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
         "Mapping overlay",
-      ] as const,
-  ),
-  ...(
-    [
-      ["VariableRef", "document"],
-      ["PlacedVariableRef", "assembly"],
-    ] as const
-  ).map(
-    ([reference, scope]) =>
-      [
-        containedIn(
-          sideOf(
-            reference,
-            "declaration",
-            scope,
-            "identifier",
-            "declarationKind",
-            "declBaseType",
-            "declCardinality",
-          ),
-          sideOf(
-            "Declaration",
-            "node",
-            "document",
-            "identifier",
-            "declarationKind",
-            "baseType",
-            "cardinality",
-          ),
-        ),
-        "Variable declared",
-      ] as const,
-  ),
-  [keyOver(sideOf("Reading", "assembly", "node", "attribute")), "Prefixed reference"],
-  ...(["VariableRef", "PlacedVariableRef", "Reading"] as const).map(
-    (reference) =>
-      [
-        containedIn(
-          sideOf(reference, "kind", "attribute", "declarationKind"),
-          sideOf("ReferenceDeclaration", "kind", "attribute", "declaration"),
-        ),
-        "Variable kind",
-      ] as const,
-  ),
-  ...(
-    [
-      ["TemplateDefault", "Template default target"],
-      ["MappingSource", "Variable mapping source"],
-    ] as const
-  ).map(
-    ([claim, name]) =>
-      [
-        containedIn(
-          sideOf(claim, "itemRef", "itemDocument"),
-          sideOf("ItemRefDocument", "node", "document"),
-        ),
-        name,
-      ] as const,
-  ),
-  [
-    containedIn(
-      sideOf("AssembledReference", "assembly", "node", "attribute"),
-      sideOf("Reading", "assembly", "node", "attribute"),
-    ),
-    "Prefixed reference",
-  ],
-  [
-    containedIn(
-      sideOf("AssembledReference", "assembly", "node", "attribute", "kind"),
-      sideOf("Reading", "assembly", "node", "attribute", "kind"),
-    ),
-    "Variable kind",
-  ],
-  ...(
-    [
-      ["TemplateDefault", "template", "Template default target"],
-      ["MappingSource", "source", "Variable mapping source"],
-    ] as const
-  ).map(
-    ([claim, identifier, name]) =>
-      [
-        containedIn(
-          sideOf(
-            claim,
-            "declaration",
-            "itemDocument",
-            identifier,
-            "declarationKind",
-            "declBaseType",
-            "declCardinality",
-          ),
-          sideOf(
-            "Declaration",
-            "node",
-            "document",
-            "identifier",
-            "declarationKind",
-            "baseType",
-            "cardinality",
-          ),
-        ),
-        name,
       ] as const,
   ),
   ...[
@@ -2411,7 +1958,8 @@ export const lawsOfStatement = (statement: Statement): readonly Law[] =>
 
 /**
  * The law groups a module exports, each with the one name all of its laws but its checks are
- * stated under, so a law the group gains is named with it.
+ * stated under, so a law the group gains is named with it: the tests' groups, the one module whose
+ * laws are not yet named where they are stated ({@link namedLaws} holds the others).
  *
  * - **Tests** (`tests.ts`, Q5.13): every overlay's row, copies and families is "Test overlay"; the
  *   assembled test's instance tree is "Inclusion cycle", since no finite instance tree has one
@@ -2424,23 +1972,6 @@ export const lawsOfStatement = (statement: Statement): readonly Law[] =>
  *   key"), the item ref target's copy of its resolved path ("E1 derived"), an include's site into
  *   its document ("Include target") and its root's kind ("Include root"), the sites' count and
  *   context fold under their document and the assembled documents' copies ("E1 derived").
- * - **Metadata** (`metadata.ts`, Q5.12): every overlay's row, copy and family is a restatement, "E1
- *   derived"; a row of {@link writtenLaws} names the LOM identifier's and title's own containments
- *   ("LomObjectIdentifier", "LomObjectTitle").
- * - **Interactions** (`interactions.ts`, Q5.09): every copy and existence law is "E1 derived"; a row
- *   of {@link writtenLaws} names the binding laws, the choices' nearest interaction and keys, the
- *   content references and the variable references' copy.
- * - **Mapping** (`mapping.ts`, Q5.11): every overlay's row, copy and typed mirror is "Mapping
- *   overlay"; a row of {@link writtenLaws} names the map keys' keys ("Map key") and the mappable
- *   base type's containment.
- * - **Expressions** (`expressions.ts`, Q5.10): every copy, fold and family is "E1 derived"; a row of
- *   {@link writtenLaws} names a variable's declaration ("Variable declared"), a prefixed
- *   reference's one resolving reading ("Prefixed reference"), the kinds of declaration a reference
- *   may name ("Variable kind"), and the declaration and item a template default or a variable
- *   mapping's source claims ("Template default target", "Variable mapping source").
- * - **Quotation** (`quotation.ts`, reading 127): every copy, key and containment is a restatement of
- *   the `q`'s node, its slot and its neighbours' ends, "E1 derived"; its law is its check,
- *   "Quotation punctuation".
  */
 export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
   [testOverlayLaws, "Test overlay"],
@@ -2448,11 +1979,6 @@ export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = 
   [testNameLaws, "Test name key"],
   [branchLaws, "Branch target"],
   [itemRefLaws, "Item ref target"],
-  [metadataLaws, "E1 derived"],
-  [interactionLaws, "E1 derived"],
-  [mappingLaws, "Mapping overlay"],
-  [expressionLaws, "E1 derived"],
-  [quotationLaws, "E1 derived"],
 ];
 
 /**
@@ -2472,7 +1998,13 @@ export const namedLaws: readonly LawsByName[] = [
   packageLawsByName,
   identityLawsByName,
   declarationLawsByName,
+  mappingLawsByName,
+  interactionLawsByName,
+  expressionLawsByName,
+  referenceLawsByName,
+  metadataLawsByName,
   htmlLawsByName,
+  quotationLawsByName,
   operatorLawsByName,
 ];
 

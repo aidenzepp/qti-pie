@@ -554,231 +554,244 @@ const lookupAttributes = select(Attribute, (a) =>
  * - **lookup values:** each copies its node's tuple and its attribute, holds its table's base type,
  *   and `Typed_attribute_value` judges it.
  */
-export const mappingLaws = [
-  contained(
-    on(Mapping, "node", "document", "kind", "start", "nearest", "version", "declaration"),
-    nodeRef,
-  ),
-  contained(on(Mapping, "node"), on(nodesOf("qti-mapping"), "id")),
-  contained(
-    on(
-      Mapping,
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  contained(on(Mapping, "baseType"), on(MappableBaseType, "baseType")),
-
-  contained(
-    on(MapKey, "node", "document", "kind", "start", "nearest", "version", "mapping"),
-    nodeRef,
-  ),
-  contained(on(MapKey, "node"), on(nodesOf("qti-map-entry"), "id")),
-  contained(on(MapKey, "mapping", "baseType"), on(Mapping, "node", "baseType")),
-  key(on(mapKeyAttributes, "node")),
-  contained(on(mapKeyAttributes, "node", "lexical"), on(MapKey, "node", "key")),
-  key(on(MapKey, "mapping", "key")),
-
-  mirrors(on(integerKeys, "node", "mapping", "key"), on(MapKeyInteger, "node", "mapping", "key")),
-  check("E1_derived", MapKeyInteger, (m) =>
-    m.and(
-      m.eq(m.key, Compute.concat(Compute.concat(m.sign, m.zeros), m.digits)),
-      m.eq(m.value, Compute.concat(m.negative, m.digits)),
-      m.or(
-        m.and(m.eq(m.sign, "-"), m.ne(m.digits, "0"), m.eq(m.negative, "-")),
-        m.and(m.or(m.ne(m.sign, "-"), m.eq(m.digits, "0")), m.eq(m.negative, "")),
+export const mappingLawsByName = {
+  "AreaMapping base type": [
+    check("AreaMapping_base_type", AreaMapping, (a) => a.eq(a.baseType, "point")),
+  ],
+  "DocumentId key": [key(on(mapKeyAttributes, "node")), key(on(lookupAttributes, "node"))],
+  "E1 derived": [
+    check("E1_derived", MapKeyInteger, (m) =>
+      m.and(
+        m.eq(m.key, Compute.concat(Compute.concat(m.sign, m.zeros), m.digits)),
+        m.eq(m.value, Compute.concat(m.negative, m.digits)),
+        m.or(
+          m.and(m.eq(m.sign, "-"), m.ne(m.digits, "0"), m.eq(m.negative, "-")),
+          m.and(m.or(m.ne(m.sign, "-"), m.eq(m.digits, "0")), m.eq(m.negative, "")),
+        ),
       ),
     ),
-  ),
-  key(on(MapKeyInteger, "mapping", "value")),
-  mirrors(on(floatKeys, "node", "mapping", "key"), on(MapKeyFloat, "node", "mapping", "key")),
-  check("E1_derived", MapKeyFloat, (m) =>
-    m.eq(m.value, Compute.cast(m.key, pg["double precision"])),
-  ),
-  key(on(MapKeyFloat, "mapping", "value")),
-  mirrors(on(pointKeys, "node", "mapping", "key"), on(MapKeyPoint, "node", "mapping", "key")),
-  check("E1_derived", MapKeyPoint, (m) =>
-    m.and(
-      m.eq(
-        m.key,
-        Compute.concat(
+    check("E1_derived", MapKeyFloat, (m) =>
+      m.eq(m.value, Compute.cast(m.key, pg["double precision"])),
+    ),
+    check("E1_derived", MapKeyPoint, (m) =>
+      m.and(
+        m.eq(
+          m.key,
           Compute.concat(
             Compute.concat(
-              Compute.concat(Compute.concat(Compute.concat(m.xSign, m.xZeros), m.xDigits), m.gap),
-              m.ySign,
+              Compute.concat(
+                Compute.concat(Compute.concat(Compute.concat(m.xSign, m.xZeros), m.xDigits), m.gap),
+                m.ySign,
+              ),
+              m.yZeros,
             ),
-            m.yZeros,
+            m.yDigits,
           ),
-          m.yDigits,
         ),
-      ),
-      m.eq(
-        m.value,
-        Compute.concat(
-          Compute.concat(Compute.concat(Compute.concat(m.xNegative, m.xDigits), " "), m.yNegative),
-          m.yDigits,
+        m.eq(
+          m.value,
+          Compute.concat(
+            Compute.concat(
+              Compute.concat(Compute.concat(m.xNegative, m.xDigits), " "),
+              m.yNegative,
+            ),
+            m.yDigits,
+          ),
         ),
-      ),
-      m.or(
-        m.and(m.eq(m.xSign, "-"), m.ne(m.xDigits, "0"), m.eq(m.xNegative, "-")),
-        m.and(m.or(m.ne(m.xSign, "-"), m.eq(m.xDigits, "0")), m.eq(m.xNegative, "")),
-      ),
-      m.or(
-        m.and(m.eq(m.ySign, "-"), m.ne(m.yDigits, "0"), m.eq(m.yNegative, "-")),
-        m.and(m.or(m.ne(m.ySign, "-"), m.eq(m.yDigits, "0")), m.eq(m.yNegative, "")),
-      ),
-    ),
-  ),
-  key(on(MapKeyPoint, "mapping", "value")),
-  mirrors(on(pairKeys, "node", "mapping", "key"), on(MapKeyPair, "node", "mapping", "key")),
-  check("E1_derived", MapKeyPair, (m) =>
-    m.and(
-      m.eq(m.key, Compute.concat(Compute.concat(m.first, m.gap), m.second)),
-      m.or(
-        m.and(
-          m.le(m.first, m.second),
-          m.eq(m.value, Compute.concat(Compute.concat(m.first, " "), m.second)),
+        m.or(
+          m.and(m.eq(m.xSign, "-"), m.ne(m.xDigits, "0"), m.eq(m.xNegative, "-")),
+          m.and(m.or(m.ne(m.xSign, "-"), m.eq(m.xDigits, "0")), m.eq(m.xNegative, "")),
         ),
-        m.and(
-          m.gt(m.first, m.second),
-          m.eq(m.value, Compute.concat(Compute.concat(m.second, " "), m.first)),
+        m.or(
+          m.and(m.eq(m.ySign, "-"), m.ne(m.yDigits, "0"), m.eq(m.yNegative, "-")),
+          m.and(m.or(m.ne(m.ySign, "-"), m.eq(m.yDigits, "0")), m.eq(m.yNegative, "")),
         ),
       ),
     ),
-  ),
-  key(on(MapKeyPair, "mapping", "value")),
-  mirrors(
-    on(directedPairKeys, "node", "mapping", "key"),
-    on(MapKeyDirectedPair, "node", "mapping", "key"),
-  ),
-  check("E1_derived", MapKeyDirectedPair, (m) =>
-    m.and(
-      m.eq(m.key, Compute.concat(Compute.concat(m.source, m.gap), m.target)),
-      m.eq(m.value, Compute.concat(Compute.concat(m.source, " "), m.target)),
+    check("E1_derived", MapKeyPair, (m) =>
+      m.and(
+        m.eq(m.key, Compute.concat(Compute.concat(m.first, m.gap), m.second)),
+        m.or(
+          m.and(
+            m.le(m.first, m.second),
+            m.eq(m.value, Compute.concat(Compute.concat(m.first, " "), m.second)),
+          ),
+          m.and(
+            m.gt(m.first, m.second),
+            m.eq(m.value, Compute.concat(Compute.concat(m.second, " "), m.first)),
+          ),
+        ),
+      ),
     ),
-  ),
-  key(on(MapKeyDirectedPair, "mapping", "value")),
-  check("Typed_attribute_value", MapKey, (k) =>
-    k.and(
-      Compute.matches(k.key, BaseTypePattern.at("pattern", k.baseType)),
-      k.or(k.eq(k.baseType, "string"), Compute.matches(k.key, exactValuePattern)),
+    check("E1_derived", MapKeyDirectedPair, (m) =>
+      m.and(
+        m.eq(m.key, Compute.concat(Compute.concat(m.source, m.gap), m.target)),
+        m.eq(m.value, Compute.concat(Compute.concat(m.source, " "), m.target)),
+      ),
     ),
-  ),
+  ],
+  "Lookup table cardinality": [
+    check("Lookup_table_cardinality", MatchTable, (t) => t.eq(t.cardinality, "single")),
+    check("Lookup_table_cardinality", InterpolationTable, (t) => t.eq(t.cardinality, "single")),
+  ],
+  "Map key": [
+    key(on(MapKey, "mapping", "key")),
+    key(on(MapKeyInteger, "mapping", "value")),
+    key(on(MapKeyFloat, "mapping", "value")),
+    key(on(MapKeyPoint, "mapping", "value")),
+    key(on(MapKeyPair, "mapping", "value")),
+    key(on(MapKeyDirectedPair, "mapping", "value")),
+  ],
+  MappableBaseType: [contained(on(Mapping, "baseType"), on(MappableBaseType, "baseType"))],
+  "Mapping overlay": [
+    contained(
+      on(Mapping, "node", "document", "kind", "start", "nearest", "version", "declaration"),
+      nodeRef,
+    ),
+    contained(on(Mapping, "node"), on(nodesOf("qti-mapping"), "id")),
+    contained(
+      on(
+        Mapping,
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    contained(
+      on(MapKey, "node", "document", "kind", "start", "nearest", "version", "mapping"),
+      nodeRef,
+    ),
+    contained(on(MapKey, "node"), on(nodesOf("qti-map-entry"), "id")),
+    contained(on(MapKey, "mapping", "baseType"), on(Mapping, "node", "baseType")),
+    contained(on(mapKeyAttributes, "node", "lexical"), on(MapKey, "node", "key")),
+    mirrors(on(integerKeys, "node", "mapping", "key"), on(MapKeyInteger, "node", "mapping", "key")),
+    mirrors(on(floatKeys, "node", "mapping", "key"), on(MapKeyFloat, "node", "mapping", "key")),
+    mirrors(on(pointKeys, "node", "mapping", "key"), on(MapKeyPoint, "node", "mapping", "key")),
+    mirrors(on(pairKeys, "node", "mapping", "key"), on(MapKeyPair, "node", "mapping", "key")),
+    mirrors(
+      on(directedPairKeys, "node", "mapping", "key"),
+      on(MapKeyDirectedPair, "node", "mapping", "key"),
+    ),
+    contained(
+      on(AreaMapping, "node", "document", "kind", "start", "nearest", "version", "declaration"),
+      nodeRef,
+    ),
+    mirrors(on(AreaMapping, "node"), on(nodesOf("qti-area-mapping"), "id")),
+    contained(
+      on(
+        AreaMapping,
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    contained(
+      on(MatchTable, "node", "document", "kind", "start", "nearest", "version", "declaration"),
+      nodeRef,
+    ),
+    mirrors(on(MatchTable, "node"), on(nodesOf("qti-match-table"), "id")),
+    contained(
+      on(
+        MatchTable,
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    contained(
+      on(
+        InterpolationTable,
+        "node",
+        "document",
+        "kind",
+        "start",
+        "nearest",
+        "version",
+        "declaration",
+      ),
+      nodeRef,
+    ),
+    mirrors(on(InterpolationTable, "node"), on(nodesOf("qti-interpolation-table"), "id")),
+    contained(
+      on(
+        InterpolationTable,
+        "declaration",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    contained(
+      on(LookupValue, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(lookupAttributes, "node", "lexical"), on(LookupValue, "node", "value")),
+    contained(on(LookupValue, "node"), on(lookupAttributes, "node")),
+    contained(
+      on(
+        select(LookupValue, (v) => v.eq(v.kind, "qti-match-table-entry")),
+        "parent",
+        "baseType",
+      ),
+      on(MatchTable, "node", "baseType"),
+    ),
+    contained(
+      on(
+        select(LookupValue, (v) => v.eq(v.kind, "qti-match-table")),
+        "node",
+        "baseType",
+      ),
+      on(MatchTable, "node", "baseType"),
+    ),
+    contained(
+      on(
+        select(LookupValue, (v) => v.eq(v.kind, "qti-interpolation-table-entry")),
+        "parent",
+        "baseType",
+      ),
+      on(InterpolationTable, "node", "baseType"),
+    ),
+    contained(
+      on(
+        select(LookupValue, (v) => v.eq(v.kind, "qti-interpolation-table")),
+        "node",
+        "baseType",
+      ),
+      on(InterpolationTable, "node", "baseType"),
+    ),
+  ],
+  "Typed attribute value": [
+    check("Typed_attribute_value", MapKey, (k) =>
+      k.and(
+        Compute.matches(k.key, BaseTypePattern.at("pattern", k.baseType)),
+        k.or(k.eq(k.baseType, "string"), Compute.matches(k.key, exactValuePattern)),
+      ),
+    ),
+    check("Typed_attribute_value", LookupValue, (v) =>
+      v.and(
+        Compute.matches(v.value, BaseTypePattern.at("pattern", v.baseType)),
+        v.or(v.eq(v.baseType, "string"), Compute.matches(v.value, exactValuePattern)),
+      ),
+    ),
+  ],
+} as const;
 
-  contained(
-    on(AreaMapping, "node", "document", "kind", "start", "nearest", "version", "declaration"),
-    nodeRef,
-  ),
-  mirrors(on(AreaMapping, "node"), on(nodesOf("qti-area-mapping"), "id")),
-  contained(
-    on(
-      AreaMapping,
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("AreaMapping_base_type", AreaMapping, (a) => a.eq(a.baseType, "point")),
-
-  contained(
-    on(MatchTable, "node", "document", "kind", "start", "nearest", "version", "declaration"),
-    nodeRef,
-  ),
-  mirrors(on(MatchTable, "node"), on(nodesOf("qti-match-table"), "id")),
-  contained(
-    on(
-      MatchTable,
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Lookup_table_cardinality", MatchTable, (t) => t.eq(t.cardinality, "single")),
-
-  contained(
-    on(
-      InterpolationTable,
-      "node",
-      "document",
-      "kind",
-      "start",
-      "nearest",
-      "version",
-      "declaration",
-    ),
-    nodeRef,
-  ),
-  mirrors(on(InterpolationTable, "node"), on(nodesOf("qti-interpolation-table"), "id")),
-  contained(
-    on(
-      InterpolationTable,
-      "declaration",
-      "document",
-      "identifier",
-      "declarationKind",
-      "baseType",
-      "cardinality",
-    ),
-    declarationRef,
-  ),
-  check("Lookup_table_cardinality", InterpolationTable, (t) => t.eq(t.cardinality, "single")),
-
-  contained(
-    on(LookupValue, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  key(on(lookupAttributes, "node")),
-  contained(on(lookupAttributes, "node", "lexical"), on(LookupValue, "node", "value")),
-  contained(on(LookupValue, "node"), on(lookupAttributes, "node")),
-  contained(
-    on(
-      select(LookupValue, (v) => v.eq(v.kind, "qti-match-table-entry")),
-      "parent",
-      "baseType",
-    ),
-    on(MatchTable, "node", "baseType"),
-  ),
-  contained(
-    on(
-      select(LookupValue, (v) => v.eq(v.kind, "qti-match-table")),
-      "node",
-      "baseType",
-    ),
-    on(MatchTable, "node", "baseType"),
-  ),
-  contained(
-    on(
-      select(LookupValue, (v) => v.eq(v.kind, "qti-interpolation-table-entry")),
-      "parent",
-      "baseType",
-    ),
-    on(InterpolationTable, "node", "baseType"),
-  ),
-  contained(
-    on(
-      select(LookupValue, (v) => v.eq(v.kind, "qti-interpolation-table")),
-      "node",
-      "baseType",
-    ),
-    on(InterpolationTable, "node", "baseType"),
-  ),
-  check("Typed_attribute_value", LookupValue, (v) =>
-    v.and(
-      Compute.matches(v.value, BaseTypePattern.at("pattern", v.baseType)),
-      v.or(v.eq(v.baseType, "string"), Compute.matches(v.value, exactValuePattern)),
-    ),
-  ),
-] as const;
+/**
+ * {@link mappingLawsByName}'s statements in one list, the module's laws as the schema composes them.
+ */
+export const mappingLaws = Object.values(mappingLawsByName).flat();
