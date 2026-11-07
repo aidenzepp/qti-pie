@@ -447,7 +447,8 @@ export interface ResponseBinding {
 /**
  * The fields of an item the page may know, which {@link redactItem} copies by name.
  *
- * `responses` lists the response bindings in document order, and `notices` the features the body
+ * `responses` lists the response bindings in document order, every response but those only content
+ * the page does not see binds ({@link hiddenOnlyResponses}), and `notices` the features the body
  * shows as notices. Exported for the codec of {@link Redacted}'s JSON form, whose Schema's type it
  * is; `src/index.ts` does not export it.
  */
@@ -1142,10 +1143,16 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
 };
 
 /**
- * A redacted body and the features it shows as notices.
+ * A redacted body, the features it shows as notices, and the responses only content the page does
+ * not see binds.
  */
 interface RedactedBody {
   readonly body: readonly BodyNode[];
+  /**
+   * The responses some interaction binds that no interaction of `body` binds, in the order the
+   * walk first meets them: {@link hiddenOnlyResponses}' set.
+   */
+  readonly hiddenOnly: ReadonlySet<string>;
   readonly notices: readonly string[];
 }
 
@@ -1442,13 +1449,23 @@ const expandedParameter = (
  * in the item's order. A notice the walk puts in a part's place goes down where the walk stands. A
  * listed notice no node stands for is named after the rest, in the item's order.
  *
+ * The same walk tells which responses only content the page does not see binds. A rendered
+ * interaction binds its response on content the page sees or on content it does not; a template
+ * block or inline whose content the page does not see (hidden, withheld, or inside content it does
+ * not see) binds, on content it does not see, every response its source content binds, a notice's
+ * interaction included ({@link TemplateContent.responses}). A response bound on content the page
+ * does not see and by no interaction it sees is hidden-only. A notice's interaction on content the
+ * page sees binds nothing here, so a response only such notices bind, like one no interaction
+ * binds, is never hidden-only.
+ *
  * @param item The item.
  * @param printing The values the body is shown by, none to withhold every printed variable, every
  *   template block and inline, every choice with a template visibility and every `param-variable`
  *   parameter.
  * @returns The body, every printed variable its text or its notice, every template block and
  *   inline its content, nothing or its notice, and every `param-variable` parameter its value or
- *   its notice; and the features shown as notices.
+ *   its notice; the features shown as notices; and the responses only content the page does not
+ *   see binds.
  */
 const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
@@ -1468,6 +1485,14 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
   const unseen = new Set<string>();
   const steps: NoticeStep[] = [];
   let choiceWithheld = false;
+  // The responses an interaction the page sees binds, and those content it does not see binds.
+  const shownBound = new Set<string>();
+  const unseenBound = new Set<string>();
+  const bind = (responses: readonly string[], seen: boolean): void => {
+    for (const response of responses) {
+      (seen ? shownBound : unseenBound).add(response);
+    }
+  };
   const note = (feature: string, seen: boolean): void => {
     if (seen) {
       steps.push({ feature, kind: "made" });
@@ -1545,6 +1570,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
               const feature = templateNotice[node.kind];
               note(feature, seen);
               unseen.add(node.path);
+              bind(node.responses, false);
               nodesOf(node.content, false);
 
               return [{ feature, kind: "unsupported", path: node.path }];
@@ -1552,6 +1578,10 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
             onSome: (visible) => {
               if (!visible) {
                 unseen.add(node.path);
+              }
+
+              if (!(seen && visible)) {
+                bind(node.responses, false);
               }
 
               const content = nodesOf(node.content, seen && visible);
@@ -1562,6 +1592,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
         }
         case "choice": {
           reach(node.path, () => true, seen);
+          bind([node.response], seen);
 
           const prompt = node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen)));
           // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `choicesOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
@@ -1571,11 +1602,13 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
         }
         case "extended-text": {
           reach(node.path, () => true, seen);
+          bind([node.response], seen);
 
           return [{ ...node, prompt: node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen))) }];
         }
         case "inline-choice": {
           reach(node.path, () => true, seen);
+          bind([node.response], seen);
 
           const label = node.label.pipe(Option.map((lead) => nodesOf(lead, seen)));
           // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `choicesOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
@@ -1583,8 +1616,12 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
 
           return [{ ...node, choices, label }];
         }
-        case "text":
         case "text-entry": {
+          bind([node.response], seen);
+
+          return [node];
+        }
+        case "text": {
           return [node];
         }
         default: {
@@ -1644,7 +1681,9 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
     }
   }
 
-  return { body, notices };
+  const hiddenOnly = new Set([...unseenBound].filter((response) => !shownBound.has(response)));
+
+  return { body, hiddenOnly, notices };
 };
 
 /**
@@ -1652,14 +1691,14 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
  * {@link Redacted} from an item.
  *
  * It copies, each by name, the document location, the identifier, the title, `lang`, the body,
- * each response's binding and the features shown as notices. Each printed variable of the body is
- * copied as the text it prints: the value the record holds for the variable it names, its
- * template value else its outcome value, written by `formatPrinted` (`#plate/engine/format.ts`)
- * through its `format`, `base`, `index`, `power-form` and `delimiter`, a `base` or `index` written
- * as a name read from the record too. A NULL value prints nothing. A printed variable whose value,
- * or whose named `base`'s or `index`'s, the record does not hold stays its notice,
- * `qti-printed-variable`, which `notices` names in document order among the item's notice-shown
- * features.
+ * each response's binding but the ones {@link hiddenOnlyResponses} gives, and the features shown
+ * as notices. Each printed variable of the body is copied as the text it prints: the value the
+ * record holds for the variable it names, its template value else its outcome value, written by
+ * `formatPrinted` (`#plate/engine/format.ts`) through its `format`, `base`, `index`, `power-form`
+ * and `delimiter`, a `base` or `index` written as a name read from the record too. A NULL value
+ * prints nothing. A printed variable whose value, or whose named `base`'s or `index`'s, the record
+ * does not hold stays its notice, `qti-printed-variable`, which `notices` names in document order
+ * among the item's notice-shown features.
  *
  * Each template block and inline, and each choice with a `template-identifier`, is shown or hidden
  * by the template value the record holds ({@link templateShows}): a block or inline shown leaves
@@ -1671,7 +1710,10 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
  * `template-identifier` once for all such choices. Content the page does not see adds no notice:
  * a notice listed at or below the path of a block or inline hidden or withheld, or inside a choice
  * hidden or absent, is never named, whatever order the item lists it in, and every other is named
- * once, in the item's order.
+ * once, in the item's order. Nor does it list a response only such content binds: `responses`
+ * keeps, in document order, every response but those, so a response one interaction binds in a
+ * hidden block and another the page sees binds stays, and so does one only a notice on content the
+ * page sees binds, or no interaction binds.
  *
  * Each `param` whose `value` names a template variable declared `param-variable="true"` passes the
  * value the record holds for it in place of the name, converted as the information model's Param
@@ -1700,7 +1742,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
  * @returns The redacted item.
  */
 export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
-  const { body, notices } = printBody(item, printingOf(item, record));
+  const { body, hiddenOnly, notices } = printBody(item, printingOf(item, record));
 
   return brandRedacted({
     body,
@@ -1708,14 +1750,37 @@ export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
     identifier: item.identifier,
     lang: item.lang,
     notices,
-    responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
-      baseType,
-      cardinality,
-      identifier,
-    })),
+    responses: [...item.responses.values()].flatMap(
+      ({ baseType, cardinality, identifier }): readonly ResponseBinding[] =>
+        hiddenOnly.has(identifier) ? [] : [{ baseType, cardinality, identifier }],
+    ),
     title: item.title,
   });
 };
+
+/**
+ * Give the responses only content the page does not see binds: those some interaction binds, a
+ * rendered interaction anywhere in the body or any interaction, rendered or a notice, inside a
+ * template block or inline the record hides or withholds (or one inside content the page does not
+ * see), and that no interaction of `redactItem(item, record).body` binds. {@link redactItem} lists
+ * none of them in `responses`.
+ *
+ * A response bound only to a notice on content the page sees, or bound by no interaction, is not
+ * among them, so a caller that passes such a response through keeps doing so (D8-3). The set comes
+ * from the same walk `redactItem` makes, so the two never disagree.
+ *
+ * @example
+ *   // A block shown when T holds A binds SHOWN; a block shown when T holds B binds HIDDEN.
+ *   hiddenOnlyResponses(item, { outcomes: {}, templates: { T: identifierA } });
+ *   // Set { "HIDDEN" }
+ *
+ * @param item The item.
+ * @param record The template values and outcome values of the attempt shown, as `redactItem` takes
+ *   them; none to read the item as it reads with no record.
+ * @returns The responses, in the order the walk first meets them.
+ */
+export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): ReadonlySet<string> =>
+  printBody(item, printingOf(item, record)).hiddenOnly;
 
 /**
  * How one response travels through a host's form: its identifier, its binding, and the options

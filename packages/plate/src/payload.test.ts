@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
-import type { SourceDocument } from "#plate/document/source.ts";
+import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
@@ -14,12 +14,14 @@ import type {
   InlineChoiceInteraction,
   Item,
   PrintedVariable,
+  ResponseDeclaration,
   SimpleChoice,
   TemplateContent,
   TemplateDeclaration,
   TemplateVisibility,
   TextEntryInteraction,
   Unsupported,
+  UnsupportedFeature,
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
@@ -27,6 +29,7 @@ import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import {
   choiceOrder,
+  hiddenOnlyResponses,
   identifyMessages,
   payload,
   postings,
@@ -1906,6 +1909,198 @@ describe("redactItem on template blocks, inlines and choices", () => {
       { feature: "qti-template-block", kind: "notice" },
       { feature: "qti-template-inline", kind: "notice" },
     ]);
+  });
+});
+
+/**
+ * Build a template block of `T`, shown when `T` holds its identifier, whose content holds a Text
+ * Entry bound to the response given.
+ *
+ * @param identifier The block's identifier.
+ * @param response The response its Text Entry binds.
+ * @returns The block's source element.
+ */
+const answeringBlock = (identifier: string, response: string): SourceElement =>
+  el(
+    "qti-template-block",
+    [attr("identifier", identifier), attr("show-hide", "show"), attr("template-identifier", "T")],
+    [
+      el(
+        "qti-content-body",
+        [],
+        [el("p", [], [el("qti-text-entry-interaction", [attr("response-identifier", response)])])],
+      ),
+    ],
+  );
+
+/**
+ * An item whose body holds two template blocks of `T`: `A`, whose Text Entry binds the string
+ * response `SHOWN_ANSWER`, and `B`, whose Text Entry binds the float response `HIDDEN_ANSWER`.
+ */
+const blockAnswers: SourceDocument = doc(
+  "item.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "answers"), attr("time-dependent", "false"), attr("title", "Answers")],
+    [
+      el("qti-response-declaration", [
+        attr("base-type", "string"),
+        attr("cardinality", "single"),
+        attr("identifier", "SHOWN_ANSWER"),
+      ]),
+      el("qti-response-declaration", [
+        attr("base-type", "float"),
+        attr("cardinality", "single"),
+        attr("identifier", "HIDDEN_ANSWER"),
+      ]),
+      el("qti-template-declaration", [
+        attr("base-type", "identifier"),
+        attr("cardinality", "single"),
+        attr("identifier", "T"),
+      ]),
+      el(
+        "qti-item-body",
+        [],
+        [answeringBlock("A", "SHOWN_ANSWER"), answeringBlock("B", "HIDDEN_ANSWER")],
+      ),
+    ],
+  ),
+);
+
+/**
+ * Construct the declaration of a single string response with no correct response, mapping or
+ * default.
+ *
+ * @param identifier The response's identifier.
+ * @returns The declaration.
+ */
+const declaredString = (identifier: string): ResponseDeclaration => ({
+  areaMapping: Option.none(),
+  baseType: "string",
+  cardinality: "single",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier,
+  mapping: Option.none(),
+});
+
+/**
+ * Build an item whose template processing runs, with `VISIBLE` its template variable, the body
+ * given, a single string response declared for each identifier given, in that order, and each
+ * notice given listed among its notice-shown features.
+ *
+ * @param body The body.
+ * @param responses The identifiers of the responses it declares.
+ * @param notices The notice nodes its body holds.
+ * @returns The item.
+ */
+const bindingOf = (
+  body: readonly BodyNode[],
+  responses: readonly string[],
+  notices: readonly Unsupported[] = [],
+): Item => ({
+  ...visibility,
+  body,
+  responses: new Map(responses.map((identifier) => [identifier, declaredString(identifier)])),
+  unsupported: notices.map(({ feature, path }): UnsupportedFeature => ({
+    feature,
+    path,
+    shown: "notice",
+  })),
+});
+
+/**
+ * Give the identifiers of a redacted item's responses.
+ *
+ * @param redaction The redacted item.
+ * @returns The identifiers, in the order of its `responses`.
+ */
+const respondedTo = (redaction: Redacted): readonly string[] =>
+  redaction.responses.map((binding) => binding.identifier);
+
+describe("redactItem on responses only hidden content binds", () => {
+  it("[I-5] lists no response only a template block the record hides binds, in the redacted item or its JSON, and names that response as hidden-only", () => {
+    const accepted = Option.getOrThrow(acceptedItem(check(blockAnswers, tables)));
+    const showingA = holding({ T: identifierValue("A") });
+    const shown = redact(accepted, showingA);
+
+    assert.deepStrictEqual(shown.responses, [
+      { baseType: "string", cardinality: "single", identifier: "SHOWN_ANSWER" },
+    ]);
+    assert.deepStrictEqual(
+      Result.getOrThrow(encodeRedacted(shown)).responses.map((binding) => binding.identifier),
+      ["SHOWN_ANSWER"],
+    );
+    assert.deepStrictEqual([...hiddenOnlyResponses(accepted.item, showingA)], ["HIDDEN_ANSWER"]);
+    assert.deepStrictEqual(
+      postings(shown, instance).map((posting) => posting.identifier),
+      ["SHOWN_ANSWER"],
+    );
+
+    const showingB = holding({ T: identifierValue("B") });
+
+    assert.deepStrictEqual(respondedTo(redact(accepted, showingB)), ["HIDDEN_ANSWER"]);
+    assert.deepStrictEqual([...hiddenOnlyResponses(accepted.item, showingB)], ["SHOWN_ANSWER"]);
+  });
+
+  it("[I-5] counts a notice's response as hidden-only inside a template block the record hides, and passes it through inside one it shows", () => {
+    const order = noticeOf(
+      "qti-order-interaction",
+      `${blockPath}/qti-content-body/qti-order-interaction`,
+    );
+    const holdingOrder = bindingOf(
+      [templatePart("template-block", byVisible("show"), [order], ["R2"])],
+      ["R2"],
+      [order],
+    );
+    const hiding = holding({ VISIBLE: multipleOf("W") });
+    const showing = holding({ VISIBLE: multipleOf("X") });
+
+    assert.deepStrictEqual([...hiddenOnlyResponses(holdingOrder, hiding)], ["R2"]);
+    assert.deepStrictEqual(respondedTo(redactItem(holdingOrder, hiding)), []);
+    assert.deepStrictEqual([...hiddenOnlyResponses(holdingOrder, showing)], []);
+    assert.deepStrictEqual(respondedTo(redactItem(holdingOrder, showing)), ["R2"]);
+  });
+
+  it("[I-5] passes through the response of a notice outside any template block, with a record and without one", () => {
+    const order = noticeOf("qti-order-interaction", `${bodyPath}/qti-order-interaction`);
+    const loose = bindingOf([order], ["R2"], [order]);
+
+    for (const record of [holding({ VISIBLE: multipleOf("W") }), undefined]) {
+      assert.deepStrictEqual([...hiddenOnlyResponses(loose, record)], []);
+      assert.deepStrictEqual(respondedTo(redactItem(loose, record)), ["R2"]);
+    }
+  });
+
+  it("[I-5] keeps a response a Choice in a hidden template block binds when a Text Entry the page sees binds it too", () => {
+    const twice = bindingOf(
+      [
+        templatePart("template-block", byVisible("show"), [{ ...choice, response: "R1" }], ["R1"]),
+        textEntry("R1"),
+      ],
+      ["R1"],
+    );
+
+    for (const record of [holding({ VISIBLE: multipleOf("W") }), undefined]) {
+      assert.deepStrictEqual([...hiddenOnlyResponses(twice, record)], []);
+      assert.deepStrictEqual(respondedTo(redactItem(twice, record)), ["R1"]);
+    }
+  });
+
+  it("[I-5] with no record, names as hidden-only each response of an item whose template processing runs that only a template block or inline binds, and keeps one no interaction binds (H3)", () => {
+    const inside = bindingOf(
+      [
+        templatePart("template-block", byVisible("show"), [textEntry("R1")], ["R1"]),
+        inlineParagraph(
+          templatePart("template-inline", byVisible("hide"), [textEntry("R3")], ["R3"]),
+        ),
+        textEntry("R2"),
+      ],
+      ["R1", "R2", "R3", "R4"],
+    );
+
+    assert.deepStrictEqual([...hiddenOnlyResponses(inside)], ["R1", "R3"]);
+    assert.deepStrictEqual(respondedTo(redactItem(inside)), ["R2", "R4"]);
   });
 });
 
