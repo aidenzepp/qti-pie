@@ -32,8 +32,8 @@
  * - **a second item** whose response processing is a published template, which the test places three
  *   times, and which holds a catalog `cat2` that the included fragment's `data-catalog-idref`
  *   names, a reference the schema resolves in each placement;
- * - **a third item** whose response processing includes a rule fragment, and whose custom interaction
- *   holds a text a bounded `xsi:type` types;
+ * - **a third item** whose response processing includes a rule fragment, and whose portable custom
+ *   interaction's markup holds a text a bounded `xsi:type` types;
  * - **the stimulus** has a doctype, a processing instruction, a comment, an `xml:base` and an
  *   unexpanded entity reference in an attribute, and no reference the base would govern;
  * - **the test** has a linear part, a branch rule, a variable mapping, a template default, a
@@ -399,9 +399,11 @@ const fragment = [
 /**
  * The third item: a score and response processing that includes a response rule fragment (spec
  * reading 117), whose references name the item's `SCORE` and its built-in `numAttempts`; and a
- * custom interaction holding a foreign element whose text an `xsi:type` gives
- * `NonNegativeDoubleDType`, a bounded double (spec reading 144). It is here, not in the first
- * item's custom interaction, whose one foreign element the oracle's mutations draw.
+ * portable custom interaction whose markup's template holds a foreign element whose text an
+ * `xsi:type` gives `NonNegativeDoubleDType`, a bounded double (spec reading 144). A portable one,
+ * since a 3.0.0 item holds no custom interaction ("Custom interaction version"). It is here, not in
+ * the first item's portable custom interaction, whose one foreign element the oracle's mutations
+ * draw.
  */
 const ruledItem = [
   declaration,
@@ -410,9 +412,9 @@ const ruledItem = [
   '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
   "  <qti-item-body>",
   "    <p>Scored by its included rule.</p>",
-  '    <qti-custom-interaction response-identifier="SIZE">',
-  '      <w:size xmlns:w="urn:example:widget" xsi:type="qti:NonNegativeDoubleDType">2.5</w:size>',
-  "    </qti-custom-interaction>",
+  '    <qti-portable-custom-interaction response-identifier="SIZE" custom-interaction-type-identifier="urn:example:portable" module="portable">',
+  '      <qti-interaction-markup><template><w:size xmlns:w="urn:example:widget" xsi:type="qti:NonNegativeDoubleDType">2.5</w:size></template></qti-interaction-markup>',
+  "    </qti-portable-custom-interaction>",
   "  </qti-item-body>",
   '  <qti-response-processing><xi:include href="rules.xml"/></qti-response-processing>',
   "</qti-assessment-item>",
