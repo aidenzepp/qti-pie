@@ -47,6 +47,7 @@
  * @see {@link https://www.imsglobal.org/content/packaging/ | IMS Content Packaging 1.2}
  */
 import {
+  bytes,
   check,
   closed,
   closedId,
@@ -86,18 +87,6 @@ import { Node, nodeRef } from "#pantry/qti/node.ts";
 export const manifestPath = "imsmanifest.xml";
 
 /**
- * An entry's bytes as standard base64 with padding, the canonical `xs:base64Binary` form (RFC 4648,
- * §4), since grizzle has no bytes type (A11): one spelling per byte string.
- *
- * Exported for `src/import/refusal.ts`, which names its pattern law.
- *
- * @see {@link https://www.rfc-editor.org/rfc/rfc4648#section-4 | RFC 4648, §4}
- */
-export const EntryContent = str.regex(
-  "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
-);
-
-/**
  * A package: its id, its name, and its count of entries, which the family draws. Its name is the
  * last segment of the directory or zip file it was read from, as the importer writes it
  * (`#pantry/import/record.ts` `packageNameOf`), any text: no law and no export reads it, and no key
@@ -113,12 +102,14 @@ export const Package = relation(
  * One entry of a package, the record (plan §1.6, fin.md P7): its path and its bytes, at its slot in
  * the listing, which the family draws from its place in the nesting.
  *
- * Whether it is the manifest is a function of `path`, and its byte length one of `content`, so
- * neither is stored (review R19).
+ * `content` is the entry's bytes as read, a grizzle `bytes` field: PostgreSQL's bytea, written in
+ * binary and read back whole, at most grizzle's `bytesMaxLength` bytes, which its column's CHECK
+ * holds. No law reads it. Whether it is the manifest is a function of `path`, and its byte length
+ * one of `content`, so neither is stored (review R19).
  */
 export const Entry = relation(
   "Entry",
-  { at: drawn(natural), content: EntryContent, package: uuid, path: EntryPath },
+  { at: drawn(natural), content: bytes, package: uuid, path: EntryPath },
   ["package", "at"],
 );
 

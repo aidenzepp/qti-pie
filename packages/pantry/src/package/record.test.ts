@@ -1,10 +1,11 @@
 /**
- * The package record, checked as a property: `recordOf` against RFC 4648's base64.
+ * The package record, checked as a property: `recordOf` against the listing it is given, the bytes
+ * of each entry read wherever they lie.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
 import { required } from "@grizzle/testing/features";
-import { array, bytes, map } from "@grizzle/testing/gen";
+import { array, bytes, element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
@@ -14,41 +15,67 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { recordOf } from "#pantry/package/record.ts";
 
 /**
- * The canonical form RFC 4648 section 4 gives base64: the 64-letter alphabet in groups of four,
- * the last group padded with `=` to four, and nothing else, so one byte string has one spelling.
+ * Where an entry's bytes lie: in an `ArrayBuffer` of their own, as a view at an offset into a
+ * longer one, as a pooled `Buffer`'s are, or in a `SharedArrayBuffer`.
  */
-const canonicalBase64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
+const placements = ["own", "offset", "shared"] as const;
 
 /**
- * A listing as `readPackage` gives one: up to five files at distinct paths, in both letter cases,
- * each byte length drawn across the three remainders modulo 3 that decide base64's padding.
+ * Where an entry's bytes lie.
  */
-const listingOf: Gen<readonly PackageFile[]> = map(
-  array(bytes({ max: 40, min: 0 }), { max: 5, min: 0 }),
-  (contents) =>
-    contents.map((content, index) => ({
-      bytes: content,
-      kind: index === 0 ? "manifest" : "file",
-      path: index === 0 ? "imsmanifest.xml" : `F/${index}.Bin`,
-    })),
-);
+type Placement = (typeof placements)[number];
 
 /**
- * Which padding each row's content ends with, the situation base64 encoders get wrong.
+ * Lay `content` out as `placement` says, its bytes the same.
+ *
+ * @param content - The bytes.
+ * @param placement - Where they lie.
+ * @param lead - The bytes before them in the longer buffer an `offset` placement views.
+ * @returns A `Uint8Array` of `content`'s bytes, over the buffer `placement` names.
  */
-const paddingOf = (length: number): "none" | "one" | "two" => {
-  const remainder = length % 3;
-
-  if (remainder === 0) {
-    return "none";
+const placed = (content: Uint8Array, placement: Placement, lead: number): Uint8Array => {
+  if (placement === "own") {
+    return Uint8Array.from(content);
   }
 
-  return remainder === 2 ? "one" : "two";
+  const buffer =
+    placement === "shared"
+      ? new SharedArrayBuffer(lead + content.length + 1)
+      : new ArrayBuffer(lead + content.length + 1);
+  const view = new Uint8Array(buffer, lead, content.length);
+  view.set(content);
+
+  return view;
 };
+
+/**
+ * One drawn file: its bytes, where they lie, and how far into their buffer.
+ */
+const fileOf: Gen<{
+  readonly content: Uint8Array;
+  readonly lead: number;
+  readonly placement: Placement;
+}> = (source) => ({
+  content: source.draw(bytes({ max: 40, min: 0 })),
+  lead: source.draw(int(0, 7)),
+  placement: source.draw(element(placements)),
+});
+
+/**
+ * A listing as `readPackage` gives one: up to five files at distinct paths, each one's bytes in
+ * each placement.
+ */
+const listingOf: Gen<readonly (PackageFile & { readonly placement: Placement })[]> = (source) =>
+  source.draw(array(fileOf, { max: 5, min: 0 })).map(({ content, lead, placement }, index) => ({
+    bytes: placed(content, placement, lead),
+    kind: index === 0 ? "manifest" : "file",
+    path: index === 0 ? "imsmanifest.xml" : `F/${index}.Bin`,
+    placement,
+  }));
 
 describe("package/record.ts", () => {
   it.effect(
-    "recordOf keeps the listing's order and paths, each content the canonical base64 of its bytes",
+    "recordOf keeps the listing's order and paths, each content the entry's bytes over an ArrayBuffer, wherever they lay",
     (ctx) =>
       searched(
         ctx,
@@ -56,7 +83,7 @@ describe("package/record.ts", () => {
           {
             caseHang: Duration.seconds(10),
             concurrency: 1,
-            coverage: required<"none" | "one" | "two" | "empty">(["none", "one", "two", "empty"], {
+            coverage: required<Placement | "empty">([...placements, "empty"], {
               cases: 200,
               sense: notesOnly,
             }),
@@ -65,7 +92,7 @@ describe("package/record.ts", () => {
             literal: Formatter.format,
             oracle: {
               kind: "second-implementation",
-              name: "Node's Buffer, a second base64 encoder (RFC 4648 §4), and Uint8Array.fromBase64's round trip",
+              name: "the listing itself, its bytes copied out element by element",
             },
             runs: 300,
             shrink: completeShrink,
@@ -76,7 +103,7 @@ describe("package/record.ts", () => {
             Effect.sync(() => {
               const rows = recordOf(files);
 
-              c.noteAll(files.map((file) => paddingOf(file.bytes.length)));
+              c.noteAll(files.map((file) => file.placement));
               if (files.length === 0) {
                 c.note("empty");
               }
@@ -85,18 +112,11 @@ describe("package/record.ts", () => {
                 rows.map((row) => row.path),
                 files.map((file) => file.path),
               );
-
-              for (const [at, row] of rows.entries()) {
-                const original = files[at]?.bytes ?? new Uint8Array();
-
-                // Two oracles: Node's Buffer, a second base64 encoder, and the decode round trip.
-                assert.match(row.content, canonicalBase64);
-                assert.strictEqual(row.content, Buffer.from(original).toString("base64"));
-                assert.deepStrictEqual(
-                  Uint8Array.fromBase64(row.content),
-                  Uint8Array.from(original),
-                );
-              }
+              assert.deepStrictEqual(
+                rows.map((row) => [...row.content]),
+                files.map((file) => [...file.bytes]),
+              );
+              assert.isTrue(rows.every((row) => row.content.buffer instanceof ArrayBuffer));
             }),
         ),
       ),

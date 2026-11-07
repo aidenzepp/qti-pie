@@ -191,13 +191,7 @@ import { declarationLawsByName } from "#pantry/qti/declarations.ts";
 import { HeaderToken, htmlLawsByName } from "#pantry/qti/html.ts";
 import { identityLawsByName, TextIdref } from "#pantry/qti/identity.ts";
 import { operatorLawsByName, ToleranceToken } from "#pantry/qti/operators.ts";
-import {
-  EntryContent,
-  HrefParams,
-  packageLawsByName,
-  Reference,
-  ReferencePath,
-} from "#pantry/qti/package.ts";
+import { HrefParams, packageLawsByName, Reference, ReferencePath } from "#pantry/qti/package.ts";
 import { quotationLawsByName } from "#pantry/qti/quotation.ts";
 import { SectionSelection, SelectForm, testLawsByName, testRelations } from "#pantry/qti/tests.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -494,8 +488,7 @@ const testKeyNames = {
  *     the bound is the one cause of it a package reaches;
  *   - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
  *     which crust does not check, so the domain is the law;
- *   - The whitespace around an IDREF token and an entry's base64 bytes are the host's own split and
- *     encoding, "E1 derived".
+ *   - The whitespace around an IDREF token is the host's own split, "E1 derived".
  * - **Each relation's primary key**, under the law its module's rows belong to.
  * - **The generated fields**: each one's law, its term's NULL, beside its relation's rows, under the
  *   law that states its value exists. No term of Qti's reads `C.at`, the one read that can miss, so
@@ -533,7 +526,6 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     [Affix, "E1 derived"],
     [Separator, "E1 derived"],
     [HrefParams, "E1 derived"],
-    [EntryContent, "E1 derived"],
     [EndCharacter, "E1 derived"],
   ]),
   [primaryKeyOf("Node", "id"), "Node key"],

@@ -38,8 +38,7 @@ export const packageNameOf = (source: string): string =>
  * @param input.id - The package's id, the one its overlays name it by.
  * @param input.name - Its name, {@link packageNameOf} of where it was read from.
  * @param input.files - Its entries with their bytes, in listing order.
- * @returns The `Package` insert, its entries in the listing's order, each content the canonical
- *   base64 of its bytes.
+ * @returns The `Package` insert, its entries in the listing's order, each content its bytes.
  */
 export const packageRecordOf = (input: {
   readonly files: readonly PackageFile[];

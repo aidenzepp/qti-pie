@@ -53,7 +53,7 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
  * @param record - A package's record.
  * @returns Its entries by path; a repeated path fails the caller's assertion on its size.
  */
-const entriesByPath = (record: PackageRecord): ReadonlyMap<string, string> =>
+const entriesByPath = (record: PackageRecord): ReadonlyMap<string, Uint8Array> =>
   new Map(record.entries.map(({ content, path: at }) => [at, content]));
 
 /**
@@ -76,7 +76,7 @@ const listedPaths = [
 
 /**
  * A listing as a reader gives one, in any order: up to six files at distinct paths, each of up to
- * 40 drawn bytes, so every remainder modulo 3 base64's padding turns on is drawn.
+ * 40 drawn bytes.
  */
 const listings: Gen<readonly PackageFile[]> = (source) => {
   const paths = source.draw(shuffled(listedPaths, { max: listedPaths.length, min: 0 }));
@@ -352,56 +352,49 @@ describe("qti/package.ts", () => {
     testTimeoutMs,
   );
 
-  it.effect(
-    "keeps the listing's order and paths in the record, each content the canonical base64 of its bytes",
-    (ctx) =>
-      // Oracle: the listing itself, since the nesting is the listing (grizzle draws each `at` from
-      // its place); and Node's Buffer, a second base64 encoder, with the decode round trip.
-      // Bound: listings of up to 6 distinct paths in every order the generator draws, 300 runs.
-      searched(
-        ctx,
-        explore(
-          {
-            caseHang: Duration.seconds(10),
-            concurrency: 1,
-            coverage: required<"empty" | "one" | "several">(["empty", "one", "several"], {
-              cases: 200,
-              sense: notesOnly,
-            }),
-            draw: drawn(listings),
-            kept: [],
-            literal: Formatter.format,
-            oracle: {
-              kind: "second-implementation",
-              name: "the listing itself and Node's Buffer base64",
-            },
-            runs: 300,
-            shrink: completeShrink,
-            steerEvery: 16,
-            suite: "pantry/qti/package-record",
+  it.effect("keeps the listing's order and paths in the record, each content its bytes", (ctx) =>
+    // Oracle: the listing itself, since the nesting is the listing (grizzle draws each `at` from
+    // its place), and each entry's bytes, which `Entry.content` holds as they are.
+    // Bound: listings of up to 6 distinct paths in every order the generator draws, 300 runs.
+    searched(
+      ctx,
+      explore(
+        {
+          caseHang: Duration.seconds(10),
+          concurrency: 1,
+          coverage: required<"empty" | "one" | "several">(["empty", "one", "several"], {
+            cases: 200,
+            sense: notesOnly,
+          }),
+          draw: drawn(listings),
+          kept: [],
+          literal: Formatter.format,
+          oracle: {
+            kind: "second-implementation",
+            name: "the listing itself",
           },
-          (files, c) =>
-            Effect.sync(() => {
-              const record = packageRecordOf({ files, id: packageId, name: "pkg" });
+          runs: 300,
+          shrink: completeShrink,
+          steerEvery: 16,
+          suite: "pantry/qti/package-record",
+        },
+        (files, c) =>
+          Effect.sync(() => {
+            const record = packageRecordOf({ files, id: packageId, name: "pkg" });
 
-              c.note(sizeOf(files));
-              assert.deepStrictEqual(
-                record.entries.map(({ path: at }) => at),
-                files.map(({ path: at }) => at),
-              );
-              assert.strictEqual(entriesByPath(record).size, files.length);
-              for (const [at, entry] of record.entries.entries()) {
-                const original = files[at]?.bytes ?? new Uint8Array();
-
-                assert.strictEqual(entry.content, Buffer.from(original).toString("base64"));
-                assert.deepStrictEqual(
-                  Uint8Array.fromBase64(entry.content),
-                  Uint8Array.from(original),
-                );
-              }
-            }),
-        ),
+            c.note(sizeOf(files));
+            assert.deepStrictEqual(
+              record.entries.map(({ path: at }) => at),
+              files.map(({ path: at }) => at),
+            );
+            assert.strictEqual(entriesByPath(record).size, files.length);
+            assert.deepStrictEqual(
+              record.entries.map(({ content }) => Uint8Array.from(content)),
+              files.map(({ bytes: original }) => Uint8Array.from(original)),
+            );
+          }),
       ),
+    ),
   );
 
   it.effect("names a package by the last segment of the path it was read from", (ctx) =>

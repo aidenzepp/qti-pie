@@ -20,7 +20,7 @@
  * entries pass one statement accepted) need the importer's ChangeSet (Q5.15), and are stated in
  * Q5.06's report for the network seat's probe.
  */
-import { ChangeSet, Db } from "@bjornpagen/grizzle";
+import { bytesMaxLength, ChangeSet, Db, messageMaxBytes } from "@bjornpagen/grizzle";
 import type { Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
@@ -69,9 +69,20 @@ const stray = "00000000-0000-4000-8000-0000000006f0";
 const strayOther = "00000000-0000-4000-8000-0000000006f1";
 
 /**
- * The base64 of two bytes, a manifest's stand-in content.
+ * Two bytes, a manifest's stand-in content.
  */
-const someContent = "AAE=";
+const someContent = Uint8Array.of(0x00, 0x01);
+
+/**
+ * The bytes of each large entry: 64 MiB, a value within grizzle's `bytesMaxLength`.
+ */
+const largeEntryBytes = 64 * 1024 * 1024;
+
+/**
+ * The large entries: the fewest whose bytes alone are past one Bind message, grizzle's
+ * `messageMaxBytes`, since a `bytes` value is written in binary.
+ */
+const largeEntries = Math.floor(messageMaxBytes.value / largeEntryBytes) + 1;
 
 /**
  * Whether an outcome is `invariant-rejected` with a law among its `laws` that the predicate picks.
@@ -212,25 +223,31 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "judges a package whose entries pass one statement's array literal in one transaction, by the same law as a small one",
+        "judges a package whose entries pass one statement's Bind message in one transaction, by the same law as a small one",
         () =>
           // Oracle: a metamorphic relation over grizzle's transport (fin.md §4.5a): a family past
-          // one statement's array literal (536,870,888 UTF-16 code units, V8's longest string, the
-          // README's Limits) is cut into consecutive statements of one transaction, so its verdict
-          // is the law's, here file-listed over its unlisted entries, as for a small package, and
-          // never `InputTooLarge`. The accepted form needs a whole manifest, which the importer's
+          // one statement's Bind message (1,073,741,822 bytes, grizzle's `messageMaxBytes`) is cut
+          // into consecutive statements of one transaction, so its verdict is the law's, here
+          // file-listed over its unlisted entries, as for a small package, and never
+          // `InputTooLarge`. The accepted form needs a whole manifest, which the importer's
           // ChangeSet writes (Q5.15).
-          // Bound: eight entries of 64 Mi base64 characters each, 24 code units past the literal's
-          // bound, sharing one string, so the host holds 64 MiB of content and grizzle's chunks.
+          // Bound: the fewest entries of 64 MiB past the Bind bound, 16, sharing one buffer, so the
+          // host holds 64 MiB of content beside grizzle's admitted copies and its chunks.
           Effect.gen(function* pastOneStatement() {
+            assert.isAtMost(
+              largeEntryBytes,
+              bytesMaxLength.value,
+              "a large entry is one bytes value",
+            );
+
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            const large = "A".repeat(64 * 1024 * 1024);
+            const large = new Uint8Array(largeEntryBytes);
             const outcome = yield* db.apply(
               ChangeSet.empty(Author).insert(Package, [
                 {
                   entries: [
                     { content: someContent, path: manifestPath },
-                    ...Array.from({ length: 8 }, (_, at) => ({
+                    ...Array.from({ length: largeEntries }, (_, at) => ({
                       content: large,
                       path: `large/${String(at)}.bin`,
                     })),
