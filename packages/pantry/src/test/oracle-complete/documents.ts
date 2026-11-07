@@ -332,7 +332,8 @@ export const documentMutations = {
     over: "package",
   },
   // Value cardinality (§8.16, §7.46): a single variable's default or correct response given a
-  // second value or a record field, or the SUMMARY record's value given a value that is no field.
+  // second value, a record field or a base-type alone, or the SUMMARY record's value given a value
+  // that is no field or a field with no base-type.
   "Value cardinality": {
     mutate: oneOf([
       drawnIn(item, (text) => replaceDrawn(text, singleValue, (match) => `${match[0]}${match[0]}`)),
@@ -340,6 +341,20 @@ export const documentMutations = {
         replaceDrawn(text, singleValue, (match) =>
           match[0].replace("<qti-value>", '<qti-value field-identifier="f" base-type="integer">'),
         ),
+      ),
+      drawnIn(item, (text) =>
+        replaceDrawn(text, singleValue, (match) =>
+          match[0].replace("<qti-value>", '<qti-value base-type="identifier">'),
+        ),
+      ),
+      drawnIn(
+        item,
+        (text) => () =>
+          replaceOnce(
+            text,
+            '<qti-value field-identifier="attempts" base-type="integer">',
+            '<qti-value field-identifier="attempts">',
+          ),
       ),
       drawnIn(
         item,

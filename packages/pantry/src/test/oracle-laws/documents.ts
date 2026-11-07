@@ -234,11 +234,15 @@ const valueSetLawsOf = (
 ): readonly Breach[] => {
   const values = elementsOf(rows, set.id);
   const fields = values.filter(({ id }) => Option.isSome(valueOf(rows, id, "field-identifier")));
+  const baseTyped = values.filter(({ id }) => Option.isSome(valueOf(rows, id, "base-type")));
+  // A record's value is a field, with its field-identifier and its base-type both, and any other
+  // variable's value carries neither (§7.46.1, §7.46.2: each is "only used for" a record's field).
+  const whole = fields.filter(({ id }) => Option.isSome(valueOf(rows, id, "base-type")));
   const counted =
     (cardinality !== "single" || set.elementChildren === 1n) &&
     (cardinality === "record"
-      ? BigInt(fields.length) === set.elementChildren
-      : fields.length === 0);
+      ? BigInt(whole.length) === set.elementChildren
+      : fields.length === 0 && baseTyped.length === 0);
   const named = Map.groupBy(fields, ({ id }) =>
     Option.getOrElse(collapsedOf(rows, id, "field-identifier"), () => ""),
   );
@@ -250,6 +254,7 @@ const valueSetLawsOf = (
           breachAt(rows, set, "Value cardinality", {
             cardinality,
             fields: String(fields.length),
+            typed: String(baseTyped.length),
             values: String(set.elementChildren),
           }),
         ]),

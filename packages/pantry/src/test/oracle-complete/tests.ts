@@ -34,6 +34,11 @@ const test = "test.xml";
 const section = "section.xml";
 
 /**
+ * The every-relation manifest.
+ */
+const manifest = "imsmanifest.xml";
+
+/**
  * A branch rule whose condition always holds, naming a target.
  *
  * @param target - The target.
@@ -183,11 +188,12 @@ export const testMutations = {
     over: "package",
   },
   // Item ref target (B2, B3): an item ref whose href names the stimulus, the section document,
-  // the usage data, a fragment, or a file no resource's href names. ref1 is spared: its mapping,
-  // template default and `ref1.SCORE` read its item, and would break their laws first.
+  // the usage data, a fragment, or a file no resource's href names; or an item resource's href
+  // whose file the package does not hold, which names no item document (§5.6.5). ref1 is spared:
+  // its mapping, template default and `ref1.SCORE` read its item, and would break their laws first.
   "Item ref target": {
-    mutate: oneOf(
-      (
+    mutate: oneOf([
+      ...(
         [
           { identifier: "ref2", path: test },
           { identifier: "ref3", path: test },
@@ -212,7 +218,26 @@ export const testMutations = {
           );
         }),
       ),
-    ),
+      (entries: PackageEntries): Gen<PackageEntries> =>
+        (source) => {
+          const identifier = source.draw(element(["ref2", "ref3"] as const));
+          const listed = editText(entries, manifest, (text) =>
+            replaceOnce(
+              text,
+              "  <resources>",
+              '  <resources>\n    <resource identifier="ghost-res" type="imsqti_item_xmlv3p0" href="items/ghost.xml"><file href="items/ghost.xml"/></resource>',
+            ),
+          );
+
+          return editText(listed, test, (text) =>
+            replaceOnce(
+              text,
+              `identifier="${identifier}" href="items/item2.xml"`,
+              `identifier="${identifier}" href="items/ghost.xml"`,
+            ),
+          );
+        },
+    ]),
     over: "package",
   },
   // Prefixed reference (M3, readings 48 and 88): `ref1.SCORE` read as a variable its item does not
