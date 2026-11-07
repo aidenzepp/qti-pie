@@ -339,6 +339,7 @@ const feedbackDeclarationOf = (fields: Partial<Fact<typeof FeedbackRefDeclaratio
  */
 const templateOf = (fields: Partial<Fact<typeof TemplateRef>> = {}) =>
   ({
+    assemblyKind: "qti-assessment-item",
     attribute: "template-identifier",
     document: stray,
     identifier: "T",
@@ -1038,7 +1039,14 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               ChangeSet.empty(Author)
                 .insert(ReferringDocument, [{ document }])
                 .insert(SectionTemplateName, [{ attribute, document, identifier, kind, node }])
-                .insert(SectionScope, [{ assembly: stray, document, instance: strayNode(1) }])
+                .insert(SectionScope, [
+                  {
+                    assembly: stray,
+                    assemblyKind: "qti-assessment-item",
+                    document,
+                    instance: strayNode(1),
+                  },
+                ])
                 .insert(SectionTemplateRef, [{ ...templateOf(), ...placement }])
                 .insert(SectionTemplateRefDeclaration, [
                   { ...templateDeclarationOf({ baseType: "integer" }), ...placement },
