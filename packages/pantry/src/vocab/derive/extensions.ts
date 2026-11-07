@@ -28,17 +28,17 @@
  *   `qti-template-inline` twice) is one row, sourced to its first rule.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer, Option, Result } from "effect";
+import { Array as Arr, Console, Effect, Layer, Option, Result } from "effect";
 import { Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { refuse } from "#pantry/vocab/derive/derive.ts";
+import { groupedBy, refuse } from "#pantry/vocab/derive/derive.ts";
 import type { XsdReadingError } from "#pantry/vocab/derive/derive.ts";
 import { readPlaced } from "#pantry/vocab/derive/sources.ts";
 import type { Placed, SourcePath } from "#pantry/vocab/derive/sources.ts";
-import { vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
+import { noNamespace, vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
 
 /**
  * The Schematron namespace (ISO/IEC 19757-3), which the ASI XSDs bind to `sch`.
@@ -64,20 +64,49 @@ export const extensionSources: Readonly<Record<SchemaVersion, SourcePath>> = {
 };
 
 /**
- * One element a version's extension rules cover: its namespace and local name, and the line of the
- * first rule that names it in that version's ASI XSD.
+ * One element a version's extension rules cover: its namespace and local name, the vocabulary the
+ * namespace is, and the line of the first rule that names it in that version's ASI XSD.
  */
 export interface CoveredRule {
   readonly line: number;
   readonly local: string;
   readonly namespace: string;
   readonly version: SchemaVersion;
+  readonly vocabulary: string;
 }
 
 /**
- * The context every extension rule writes: the descendant step `//`, a prefix and a local name.
+ * The prefix or the local name of an extension rule's context: a name that starts with a letter or
+ * `_`, then letters, digits, `_`, `.` and `-`.
  */
-const contextForm = /^\/\/(?<prefix>[A-Za-z_][\w.-]*):(?<local>[A-Za-z_][\w.-]*)$/u;
+const contextName = /^[A-Za-z_][\w.-]*$/u;
+
+/**
+ * The descendant step every extension rule's context opens with.
+ */
+const descendantStep = "//";
+
+/**
+ * Read an extension rule's context, `//<prefix>:<local>`.
+ *
+ * @param context - The context as written.
+ * @returns Its prefix and local name, or `None` for a context of any other form.
+ */
+const contextOf = (
+  context: string,
+): Option.Option<{ readonly local: string; readonly prefix: string }> => {
+  const name = context.slice(descendantStep.length);
+  const colon = name.indexOf(":");
+  const prefix = name.slice(0, colon);
+  const local = name.slice(colon + 1);
+
+  return context.startsWith(descendantStep) &&
+    colon !== -1 &&
+    contextName.test(prefix) &&
+    contextName.test(local)
+    ? Option.some({ local, prefix })
+    : Option.none();
+};
 
 /**
  * Name the vocabulary whose namespace a namespace name is.
@@ -94,16 +123,37 @@ const vocabularyOf = (namespace: string): Option.Option<string> =>
   );
 
 /**
- * List an element and every element below it, in document order, the order {@link Placed}'s lines
- * are in.
+ * An element of a document, with its parent element, `None` for the root.
+ */
+interface Placement {
+  readonly node: Element;
+  readonly parent: Option.Option<Element>;
+}
+
+/**
+ * List an element and every element below it, each with its parent, in document order, the order
+ * {@link Placed}'s lines are in.
  *
  * @param node - The element.
+ * @param parent - Its parent, `None` for the root.
  * @returns It, then its descendants depth first.
  */
-const inDocumentOrder = (node: Element): readonly Element[] => [
-  node,
-  ...node.children.flatMap((child) => (child.kind === "element" ? inDocumentOrder(child) : [])),
+const inDocumentOrder = (node: Element, parent: Option.Option<Element>): readonly Placement[] => [
+  { node, parent },
+  ...node.children.flatMap((child) =>
+    child.kind === "element" ? inDocumentOrder(child, Option.some(node)) : [],
+  ),
 ];
+
+/**
+ * Whether an element is the Schematron construct named `local`.
+ *
+ * @param node - The element.
+ * @param local - The construct's local name, such as `rule`.
+ * @returns Whether the element is `sch:<local>`.
+ */
+const isSchematron = (node: Element, local: string): boolean =>
+  node.namespace === schematronNamespace && node.local === local;
 
 /**
  * Read an attribute in no namespace.
@@ -115,7 +165,9 @@ const inDocumentOrder = (node: Element): readonly Element[] => [
 const attributeOf = (node: Element, local: string): Option.Option<string> =>
   Option.map(
     Option.fromNullishOr(
-      node.attributes.find((attribute) => attribute.namespace === "" && attribute.local === local),
+      node.attributes.find(
+        (attribute) => attribute.namespace === noNamespace && attribute.local === local,
+      ),
     ),
     ({ value }) => value,
   );
@@ -135,48 +187,50 @@ export const coveredIn = (
   placed: Placed,
 ): Result.Result<readonly CoveredRule[], XsdReadingError> =>
   Result.gen(function* coveredInBody() {
-    const elements = inDocumentOrder(placed.document.root);
+    const elements = inDocumentOrder(placed.document.root, Option.none());
     if (elements.length !== placed.lines.length) {
       return yield* refuse(
         `${placed.file} holds ${elements.length} elements in its tree but ${placed.lines.length} start tags`,
       );
     }
 
-    const schematron = elements.flatMap((node, at) =>
-      node.namespace === schematronNamespace ? [{ at, node }] : [],
-    );
+    const lined = Arr.zip(elements, placed.lines);
     const prefixes = new Map(
-      schematron.flatMap(({ node }) =>
-        node.local === "ns"
+      elements.flatMap(({ node }) =>
+        isSchematron(node, "ns")
           ? Option.toArray(Option.all([attributeOf(node, "prefix"), attributeOf(node, "uri")]))
           : [],
       ),
     );
     const patterns = new Set<string>(extensionPatterns);
-    const rules = schematron.flatMap(({ node }) =>
-      node.local === "pattern" && Option.exists(attributeOf(node, "id"), (id) => patterns.has(id))
-        ? node.children.flatMap((child) =>
-            child.kind === "element" &&
-            child.namespace === schematronNamespace &&
-            child.local === "rule"
-              ? [child]
-              : [],
-          )
-        : [],
+    // A data-extension rule is an `sch:rule` child of an `sch:pattern` whose id names a rule set.
+    const rules = lined.filter(
+      ([{ node, parent }]) =>
+        isSchematron(node, "rule") &&
+        Option.exists(
+          parent,
+          (pattern) =>
+            isSchematron(pattern, "pattern") &&
+            Option.exists(attributeOf(pattern, "id"), (id) => patterns.has(id)),
+        ),
     );
-    const lineOf = new Map(elements.map((node, at) => [node, placed.lines[at] ?? 0] as const));
     const covered = new Map<string, CoveredRule>();
-    for (const rule of rules) {
-      const context = Option.getOrElse(attributeOf(rule, "context"), () => "");
-      const groups = contextForm.exec(context)?.groups;
-      const prefix = groups?.["prefix"];
-      const local = groups?.["local"];
-      if (prefix === undefined || local === undefined) {
+    for (const [{ node: rule }, line] of rules) {
+      const context = attributeOf(rule, "context");
+      if (Option.isNone(context)) {
         return yield* refuse(
-          `a data-extension rule of ${placed.file} has the context "${context}", which is not //<prefix>:<local>`,
+          `a data-extension rule of ${placed.file} at line ${line} has no context`,
         );
       }
 
+      const named = contextOf(context.value);
+      if (Option.isNone(named)) {
+        return yield* refuse(
+          `a data-extension rule of ${placed.file} has the context "${context.value}", which is not //<prefix>:<local>`,
+        );
+      }
+
+      const { local, prefix } = named.value;
       const namespace = prefixes.get(prefix);
       if (namespace === undefined) {
         return yield* refuse(
@@ -184,7 +238,8 @@ export const coveredIn = (
         );
       }
 
-      if (Option.isNone(vocabularyOf(namespace))) {
+      const vocabulary = vocabularyOf(namespace);
+      if (Option.isNone(vocabulary)) {
         return yield* refuse(
           `a data-extension rule of ${placed.file} names an element in ${namespace}, the namespace of no vocabulary`,
         );
@@ -192,7 +247,7 @@ export const coveredIn = (
 
       const key = `{${namespace}}${local}`;
       if (!covered.has(key)) {
-        covered.set(key, { line: lineOf.get(rule) ?? 0, local, namespace, version });
+        covered.set(key, { line, local, namespace, version, vocabulary: vocabulary.value });
       }
     }
 
@@ -242,11 +297,10 @@ const numeralOf = (line: number): string =>
 /**
  * Name the leaf's constant for a namespace: its vocabulary's name and `Namespace`.
  *
- * @param namespace - The namespace name, which {@link coveredIn} has checked is a vocabulary's.
+ * @param vocabulary - The vocabulary whose namespace it is, as {@link coveredIn} found it.
  * @returns The constant's name.
  */
-const constantOf = (namespace: string): string =>
-  `${Option.getOrElse(vocabularyOf(namespace), () => "unknown")}Namespace`;
+const constantOf = (vocabulary: string): string => `${vocabulary}Namespace`;
 
 /**
  * Name the leaf's constant for a version's ASI XSD.
@@ -266,11 +320,13 @@ const fileConstant = (version: SchemaVersion): string =>
  * @returns The leaf's text, unformatted.
  */
 export const renderExtensions = (covered: readonly CoveredRule[]): string => {
-  const rows = Map.groupBy(covered, ({ local, namespace }) => `{${namespace}}${local}`);
+  const rows = groupedBy(covered, ({ local, namespace }) => `{${namespace}}${local}`);
   const counts = schemaVersions.map(
     (version) => `${String(covered.filter((row) => row.version === version).length)} in ${version}`,
   );
-  const namespaces = [...new Set(covered.map(({ namespace }) => namespace))];
+  const namespaces = [...groupedBy(covered, ({ namespace }) => namespace)].map(
+    ([namespace, held]) => ({ namespace, vocabulary: Arr.headNonEmpty(held).vocabulary }),
+  );
 
   return [
     ...commentOf([
@@ -314,25 +370,21 @@ export const renderExtensions = (covered: readonly CoveredRule[]): string => {
       `const ${fileConstant(version)}: SourcePath = ${JSON.stringify(extensionSources[version])};`,
       "",
     ]),
-    ...namespaces.flatMap((namespace) => [
-      ...commentOf([
-        [
-          `The namespace of the \`${Option.getOrElse(vocabularyOf(namespace), () => "")}\` vocabulary.`,
-        ],
-      ]),
-      `const ${constantOf(namespace)} = ${JSON.stringify(namespace)};`,
+    ...namespaces.flatMap(({ namespace, vocabulary }) => [
+      ...commentOf([[`The namespace of the \`${vocabulary}\` vocabulary.`]]),
+      `const ${constantOf(vocabulary)} = ${JSON.stringify(namespace)};`,
       "",
     ]),
     ...commentOf([["Every covered element, in the order the rules first name it."]]),
     "export const coveredElements: readonly CoveredElement[] = [",
     ...[...rows.values()].map((held) => {
-      const [first] = held;
+      const { local, vocabulary } = Arr.headNonEmpty(held);
       const versions = held.map(({ version }) => JSON.stringify(version)).join(", ");
       const sources = held
         .map(({ line, version }) => `xsd(${fileConstant(version)}, ${numeralOf(line)})`)
         .join(", ");
 
-      return `  { element: { local: ${JSON.stringify(first?.local ?? "")}, namespace: ${constantOf(first?.namespace ?? "")} }, sources: [${sources}], versions: [${versions}] },`;
+      return `  { element: { local: ${JSON.stringify(local)}, namespace: ${constantOf(vocabulary)} }, sources: [${sources}], versions: [${versions}] },`;
     }),
     "];",
     "",
