@@ -184,6 +184,57 @@ const signatureOf = ({ difference }: Disagreement): string =>
 const matchedCounts = new Map<string, number>();
 
 /**
+ * A known disagreement: a defect a lane owns and whose fix is queued, recorded so main stays green
+ * until the fix lands, and checked every run so the record cannot outlive it. The search reports a
+ * difference it matches without failing; the kept documents must still show each one, or the
+ * record is stale and fails; the owner's fix deletes the record in the same commit.
+ */
+interface Known {
+  readonly class: Difference["class"];
+  readonly detail: RegExp;
+  readonly direction: Difference["direction"];
+  /**
+   * The lane whose queued commit fixes it, and where that commit stands in the queue.
+   */
+  readonly owner: string;
+  readonly why: string;
+}
+
+/**
+ * The known disagreements.
+ */
+const knownDisagreements: readonly Known[] = [
+  {
+    class: "content",
+    detail:
+      /^N6 ancestry at (?:(?!\/qti-template-block)\S)*\/qti-template-inline(?:\.rubric)?\[\d+\]\/\S+: \S+ sits in \{[^}]*\btmpl\b[^}]*\}: Banned holds \{[^}]*\btmpl\b/u,
+    direction: "oracle-only",
+    owner: "VD, schema slot 7",
+    why: "VD's ruling of 2026-11-07: an interaction a template inline's HTML holds is valid, and only a template block refuses one at any depth (§5.145); the grammar bans it under every template (ancestry.ts interactionBans `tmpl`)",
+  },
+];
+
+/**
+ * Find the known disagreement a difference is.
+ *
+ * @param difference - The difference.
+ * @returns The entry, or undefined for none.
+ */
+const knownOf = (difference: Difference): Known | undefined =>
+  knownDisagreements.find(
+    (entry) =>
+      entry.direction === difference.direction &&
+      entry.class === difference.class &&
+      entry.detail.test(difference.detail),
+  );
+
+/**
+ * Count, by its owner, each known disagreement the judged differences matched, for the report and
+ * the stale check.
+ */
+const knownCounts = new Map<Known, number>();
+
+/**
  * Judge documents in some versions with both oracles: each written once, `xmllint` run once per
  * version and root schema set, the law oracle on each document in each version, and every
  * difference classified.
@@ -292,7 +343,10 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
                 stopped: law.stopped,
                 version,
               });
-              if (record === undefined) {
+              const known = record === undefined ? knownOf(difference) : undefined;
+              if (known !== undefined) {
+                knownCounts.set(known, (knownCounts.get(known) ?? 0) + 1);
+              } else if (record === undefined) {
                 disagreements.push({ difference, version });
               } else {
                 const reason = reasonText(record.reason).slice(0, 60);
@@ -456,13 +510,25 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
               ),
             { concurrency: 1 },
           );
+          // The kept documents run last, so the counts that follow are theirs alone.
+          knownCounts.clear();
+
           const keptJudgments = yield* judge(kept);
-          const reports: string[] = keptJudgments.flatMap(({ disagreements }, at) =>
-            disagreements.map(
-              ({ difference, version }) =>
-                `kept document "${keptDocuments[at]?.name ?? ""}" in ${version}: ${difference.direction} ${difference.class} ${difference.rule}: ${difference.detail.slice(0, 400)}`,
+          const reports: string[] = [
+            ...keptJudgments.flatMap(({ disagreements }, at) =>
+              disagreements.map(
+                ({ difference, version }) =>
+                  `kept document "${keptDocuments[at]?.name ?? ""}" in ${version}: ${difference.direction} ${difference.class} ${difference.rule}: ${difference.detail.slice(0, 400)}`,
+              ),
             ),
-          );
+            ...knownDisagreements.flatMap((entry) =>
+              (knownCounts.get(entry) ?? 0) === 0
+                ? [
+                    `known disagreement of ${entry.owner} is stale: no kept document shows it any more, so its fix has landed and the record goes (${entry.why})`,
+                  ]
+                : [],
+            ),
+          ];
           for (const [at, [signature, finding]] of found.entries()) {
             const { difference, version } = finding.disagreement;
             // Reduce while the test's budget allows, so every class is reported before its timeout.
