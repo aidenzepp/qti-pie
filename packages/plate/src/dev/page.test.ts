@@ -2020,12 +2020,15 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
             test: fixtureTest.title,
           }),
         );
-        assert.strictEqual(results.response.status, 200);
         assert.strictEqual(
-          results.response.headers.get("content-type"),
-          "application/xml; charset=utf-8",
+          results.response.status,
+          404,
+          "an open session's results are not served",
         );
-        assert.include(results.html, location.slice("/sessions/".length));
+        for (const [name, value] of Object.entries(pageHeaders)) {
+          assert.strictEqual(results.response.headers.get(name), value, name);
+        }
+        assert.notInclude(results.html, "assessmentResult");
         assert.strictEqual(review.response.status, 404, "an open item is not reviewed");
         assert.strictEqual(startGet.response.status, 405, "a Start is a POST");
         assert.strictEqual(startGet.response.headers.get("allow"), "POST");
