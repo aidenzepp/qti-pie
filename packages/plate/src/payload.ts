@@ -7,11 +7,12 @@
  * every field it names one by one and never spreads a model object, so a field the model gains
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
  * a response default, a processing rule, a template rule or feedback content, nor any outcome or
- * template value but the ones the body's printed variables print, as text; and neither holds a
- * seed: the view's seed only orders a shuffled Choice's or Inline Choice's choices. What the page
- * cannot be given, it cannot leak. A `solution` render shows correct
- * responses only when the author passes them as the view's values; nothing here reads them from the
- * item.
+ * template value but the ones the body's printed variables print, as text, nor a template
+ * visibility: a template block, inline or choice is settled as shown, hidden or withheld before the
+ * page sees it. Neither holds a seed: the view's seed only orders a shuffled Choice's or Inline
+ * Choice's choices. What the page cannot be given, it cannot leak. A `solution` render shows
+ * correct responses only when the author passes them as the view's values; nothing here reads them
+ * from the item.
  *
  * @module
  * @see {@link Item} for the model it reads.
@@ -41,6 +42,8 @@ import type {
   Item,
   PrintedVariable,
   SimpleChoice,
+  TemplateContent,
+  TemplateVisibility,
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
@@ -554,6 +557,10 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
       case "inline-choice": {
         return authoredIdsIn(Option.getOrElse(node.label, () => []));
       }
+      case "template-block":
+      case "template-inline": {
+        return authoredIdsIn(node.content);
+      }
       case "printed-variable":
       case "text-entry":
       case "text":
@@ -1061,14 +1068,33 @@ const unnamedPositions = (
 const printedNotice = "qti-printed-variable";
 
 /**
+ * The feature a template block's or inline's notice names: its element's name, as for a printed
+ * variable.
+ */
+const templateNotice: Readonly<Record<TemplateContent["kind"], string>> = {
+  "template-block": "qti-template-block",
+  "template-inline": "qti-template-inline",
+};
+
+/**
+ * The feature the notices name, once, when a choice is withheld: the attribute that gives a choice
+ * its template visibility, as `string-identifier` names a text interaction's mark. A withheld
+ * choice has no place of its own to show a notice in.
+ */
+const choiceNotice = "template-identifier";
+
+/**
  * Copy one body node into its payload node.
  *
  * A printed variable becomes its notice. {@link redactItem} leaves none in a redacted body, so the
  * case is reached only by a body built by hand, which is given the notice the variable stands for.
+ * A template block or inline becomes its notice too ({@link templateNotice}): `redactItem` leaves
+ * none either, and the payload holds no template value to show a hand-built one's content by.
  *
  * @param node The body node.
  * @param build The build.
- * @returns The payload node: an unsupported part, or a printed variable, becomes its notice.
+ * @returns The payload node: an unsupported part, a printed variable, or a template block or
+ *   inline becomes its notice.
  */
 const copyNode = (node: BodyNode, build: Build): PayloadNode => {
   switch (node.kind) {
@@ -1088,6 +1114,10 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
     }
     case "printed-variable": {
       return { feature: printedNotice, kind: "notice" };
+    }
+    case "template-block":
+    case "template-inline": {
+      return { feature: templateNotice[node.kind], kind: "notice" };
     }
     case "choice": {
       return choicePayload(node, build);
@@ -1239,41 +1269,113 @@ const printingOf = (item: Item, record?: RedactRecord): Option.Option<RedactReco
 };
 
 /**
- * Print each printed variable of an item's body from the values given, and withhold the rest
- * behind its notice, `qti-printed-variable` at the variable's path; then list the features the
- * body shows as notices: the item's notice-shown features in their order, with each withheld
- * printed variable's notice where the item would list it were the notice one of its unsupported
- * features.
+ * Decide whether a template value shows a choice, a template block or a template inline: `show`
+ * shows it when the template variable matches, or contains, its identifier, and `hide` shows it
+ * unless the variable does (the information model's TemplateBlock, `info.txt:44963`, and
+ * SimpleChoice's `template-identifier`, `info.txt:42441-42494`). A NULL value, a value of another
+ * base type, and a variable the values do not hold, match nothing.
+ *
+ * It is the one visibility function: `redactItem` shows the body by it, and a host's report of the
+ * choices shown reads the same answer.
+ *
+ * @example
+ *   // A choice with template-identifier="SHOWN" and show-hide="show", identifier A:
+ *   templateShows({ showHide: "show", templateIdentifier: "SHOWN" }, "A", record.templates);
+ *   // true when SHOWN holds A, or is a multiple value with A among its members
+ *
+ * @param visibility The part's `template-identifier` and `show-hide`.
+ * @param identifier The part's `identifier`.
+ * @param templates The template values, such as a record's `templates`.
+ * @returns Whether the part is shown.
+ */
+export const templateShows = (
+  visibility: TemplateVisibility,
+  identifier: string,
+  templates: RedactRecord["templates"],
+): boolean => {
+  const matches = Option.exists(own(templates, visibility.templateIdentifier), (value) =>
+    value.values.some((single) => single.baseType === "identifier" && single.value === identifier),
+  );
+
+  return visibility.showHide === "show" ? matches : !matches;
+};
+
+/**
+ * Decide what the page sees of a part with a template visibility: whether the values show it, or
+ * none when they cannot say, because there are no values or they hold no value of its template
+ * variable, so the part is withheld.
+ *
+ * @param printing The values the redaction reads, none when it has none.
+ * @param visibility The part's `template-identifier` and `show-hide`.
+ * @param identifier The part's `identifier`.
+ * @returns Some whether the part is shown, or none when it is withheld.
+ */
+const shownBy = (
+  printing: Option.Option<RedactRecord>,
+  visibility: TemplateVisibility,
+  identifier: string,
+): Option.Option<boolean> =>
+  printing.pipe(
+    Option.flatMap((record) =>
+      Option.map(own(record.templates, visibility.templateIdentifier), () =>
+        templateShows(visibility, identifier, record.templates),
+      ),
+    ),
+  );
+
+/**
+ * Show an item's body from the values given, and list the features it shows as notices: the
+ * item's notice-shown features in their order, with each notice the walk puts in a withheld part's
+ * place where the item would list it were the notice one of its unsupported features.
  *
  * A printed variable whose value, and whose `base`'s and `index`'s where they name variables, the
  * values hold becomes a text node of what it prints, or nothing when that is empty (a NULL value).
- * One the values do not cover, and every one when there are no values, is withheld.
+ * One the values do not cover, and every one when there are no values, is withheld behind its
+ * notice, `qti-printed-variable` at the variable's path.
+ *
+ * A template block or inline the values show ({@link templateShows}) leaves its content in its
+ * place, and one they hide leaves nothing. One whose template variable the values do not hold, and
+ * every one when there are no values, is withheld behind its notice, `qti-template-block` or
+ * `qti-template-inline` at its path. A choice the values show keeps its identifier, its content
+ * and `fixed`, and no template visibility; one they hide is absent from its interaction. One whose
+ * template variable they do not hold, and every choice with a template visibility when there are
+ * no values, is absent too, and the notices name `template-identifier` once for them all, where the
+ * walk meets the first.
  *
  * The item lists its notices in the order of the elements they sit at: in document order once
  * `check` has accepted it, and in the order the model read the body when the item was built by
  * hand. The walk goes through the body in document order and passes each listed notice when it
- * reaches the node the notice stands for, so a printed variable's notice goes down where the walk
- * stands. Entering an element or an interaction passes first the notices listed at its own path
- * that no node it holds stands for, as `check` lists them: the notices of URLs dropped from it, and
- * an Extended Text's notice in place of its Controls. A listed notice no node stands for keeps its
- * place after the rest.
+ * reaches the node the notice stands for, so a notice the walk puts in a part's place goes down
+ * where the walk stands. Entering an element or an interaction passes first the notices listed at
+ * its own path that no node it holds stands for, as `check` lists them: the notices of URLs dropped
+ * from it, and an Extended Text's notice in place of its Controls. Content the page does not see, a
+ * hidden or withheld template block's, inline's or choice's, is walked too, and its notices are
+ * passed without being named, since the page shows none of them. A listed notice no node stands
+ * for keeps its place after the rest.
  *
  * @param item The item.
- * @param printing The values its printed variables print, none to withhold every one.
- * @returns The body, every printed variable its text or its notice, and the features shown as
- *   notices.
+ * @param printing The values the body is shown by, none to withhold every printed variable, every
+ *   template block and inline, and every choice with a template visibility.
+ * @returns The body, every printed variable its text or its notice and every template block and
+ *   inline its content, nothing or its notice, and the features shown as notices.
  */
 const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
   const notices: string[] = [];
   let next = 0;
-  const pass = (passes: (entry: UnsupportedFeature) => boolean): void => {
+  let choiceWithheld = false;
+  const note = (feature: string, seen: boolean): void => {
+    if (seen) {
+      notices.push(feature);
+    }
+  };
+  const pass = (passes: (entry: UnsupportedFeature) => boolean, seen: boolean): void => {
     for (let entry = listed[next]; entry !== undefined && passes(entry); entry = listed[next]) {
-      notices.push(entry.feature);
+      note(entry.feature, seen);
       next += 1;
     }
   };
-  const nodesOf = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
+  const nodesOf = (nodes: readonly BodyNode[], seen: boolean): readonly BodyNode[] =>
     nodes.flatMap((node): readonly BodyNode[] => {
       switch (node.kind) {
         case "element": {
@@ -1282,12 +1384,12 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
               child.kind === "unsupported" && child.path === node.path ? [child.feature] : [],
             ),
           );
-          pass((entry) => entry.path === node.path && !held.has(entry.feature));
+          pass((entry) => entry.path === node.path && !held.has(entry.feature), seen);
 
-          return [{ ...node, children: nodesOf(node.children) }];
+          return [{ ...node, children: nodesOf(node.children, seen) }];
         }
         case "unsupported": {
-          pass((entry) => entry.feature === node.feature && entry.path === node.path);
+          pass((entry) => entry.feature === node.feature && entry.path === node.path, seen);
 
           return [node];
         }
@@ -1296,7 +1398,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
             printing.pipe(Option.flatMap((record) => printedText(node, record))),
             {
               onNone: (): readonly BodyNode[] => {
-                notices.push(printedNotice);
+                note(printedNotice, seen);
 
                 return [{ feature: printedNotice, kind: "unsupported", path: node.path }];
               },
@@ -1304,30 +1406,43 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
             },
           );
         }
-        case "choice": {
-          pass((entry) => entry.path === node.path);
+        case "template-block":
+        case "template-inline": {
+          return Option.match(shownBy(printing, node.templateVisibility, node.identifier), {
+            onNone: (): readonly BodyNode[] => {
+              const feature = templateNotice[node.kind];
+              note(feature, seen);
+              nodesOf(node.content, false);
 
-          const prompt = node.prompt.pipe(Option.map(nodesOf));
-          const choices = node.choices.map((choice) => ({
-            ...choice,
-            content: nodesOf(choice.content),
-          }));
+              return [{ feature, kind: "unsupported", path: node.path }];
+            },
+            onSome: (visible) => {
+              const content = nodesOf(node.content, seen && visible);
+
+              return visible ? content : [];
+            },
+          });
+        }
+        case "choice": {
+          pass((entry) => entry.path === node.path, seen);
+
+          const prompt = node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen)));
+          // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `choicesOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
+          const choices = choicesOf(node.choices, seen);
 
           return [{ ...node, choices, prompt }];
         }
         case "extended-text": {
-          pass((entry) => entry.path === node.path);
+          pass((entry) => entry.path === node.path, seen);
 
-          return [{ ...node, prompt: node.prompt.pipe(Option.map(nodesOf)) }];
+          return [{ ...node, prompt: node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen))) }];
         }
         case "inline-choice": {
-          pass((entry) => entry.path === node.path);
+          pass((entry) => entry.path === node.path, seen);
 
-          const label = node.label.pipe(Option.map(nodesOf));
-          const choices = node.choices.map((choice) => ({
-            ...choice,
-            content: nodesOf(choice.content),
-          }));
+          const label = node.label.pipe(Option.map((lead) => nodesOf(lead, seen)));
+          // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `choicesOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
+          const choices = choicesOf(node.choices, seen);
 
           return [{ ...node, choices, label }];
         }
@@ -1340,7 +1455,32 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
         }
       }
     });
-  const body = nodesOf(item.body);
+  const choicesOf = (choices: readonly SimpleChoice[], seen: boolean): readonly SimpleChoice[] =>
+    choices.flatMap((choice): readonly SimpleChoice[] => {
+      const decided = Option.match(choice.templateVisibility, {
+        onNone: () => Option.some(true),
+        onSome: (visibility) => shownBy(printing, visibility, choice.identifier),
+      });
+      if (Option.isNone(decided) && seen && !choiceWithheld) {
+        choiceWithheld = true;
+        notices.push(choiceNotice);
+      }
+
+      const visible = Option.getOrElse(decided, () => false);
+      const content = nodesOf(choice.content, seen && visible);
+
+      return visible
+        ? [
+            {
+              content,
+              fixed: choice.fixed,
+              identifier: choice.identifier,
+              templateVisibility: Option.none(),
+            },
+          ]
+        : [];
+    });
+  const body = nodesOf(item.body, true);
 
   return { body, notices: [...notices, ...listed.slice(next).map((entry) => entry.feature)] };
 };
@@ -1359,20 +1499,31 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
  * `qti-printed-variable`, which `notices` names in document order among the item's notice-shown
  * features.
  *
+ * Each template block and inline, and each choice with a `template-identifier`, is shown or hidden
+ * by the template value the record holds ({@link templateShows}): a block or inline shown leaves
+ * its content in its place, a hidden one nothing; a choice shown keeps its identifier, content and
+ * `fixed`, a hidden one is absent from its interaction, so a shuffled interaction presents the
+ * choices that remain under the same key, and its postings name none of it. One whose template
+ * variable the record does not hold is withheld: a block or inline stays its notice,
+ * `qti-template-block` or `qti-template-inline`, and a choice is absent, `notices` naming
+ * `template-identifier` once for all such choices. Content the page does not see adds no notice.
+ *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with: each template variable at its declared default, else NULL (none where the
  * item has a `qti-template-processing` the engine does not run, since nothing computed them), and
  * each outcome at its starting value. An item whose template processing runs has no values
- * without its record, so each of its printed variables stays its notice (H3).
+ * without its record, so each of its printed variables, template blocks and inlines stays its
+ * notice and each of its choices with a template visibility is absent (H3).
  *
  * It never copies an outcome declaration, a correct response, a mapping, a response default, a
- * processing rule, a template rule, a template value or an outcome value it does not print, the
- * seed or an override template processing set (the record's part it reads holds neither), or a
- * field it does not name.
+ * processing rule, a template rule, a template value or an outcome value it does not print, a
+ * block's, inline's or choice's template visibility, the seed or an override template processing
+ * set (the record's part it reads holds neither), or a field it does not name.
  *
  * @param item The item.
  * @param record The template values and outcome values of the attempt shown, which its printed
- *   variables print; none to show the item as it reads with no record.
+ *   variables print and which show or hide its template blocks, inlines and choices; none to show
+ *   the item as it reads with no record.
  * @returns The redacted item.
  */
 export const redactItem = (item: Item, record?: RedactRecord): Redacted => {

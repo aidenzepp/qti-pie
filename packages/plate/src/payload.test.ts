@@ -5,6 +5,7 @@ import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
+import { encodeRedacted } from "#plate/codec/redacted.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -12,15 +13,25 @@ import type {
   InlineChoiceInteraction,
   Item,
   PrintedVariable,
+  SimpleChoice,
+  TemplateContent,
   TemplateDeclaration,
+  TemplateVisibility,
   TextEntryInteraction,
   Unsupported,
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
+import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-import { choiceOrder, identifyMessages, payload, postings, redactItem } from "#plate/payload.ts";
+import {
+  choiceOrder,
+  identifyMessages,
+  payload,
+  postings,
+  redactItem,
+  templateShows,
+} from "#plate/payload.ts";
 import type {
   ChoicePayload,
   ExtendedTextPayload,
@@ -714,6 +725,8 @@ const referencingNode = (node: BodyNode, ids: string): BodyNode => {
     }
     case "inline-choice":
     case "printed-variable":
+    case "template-block":
+    case "template-inline":
     case "text":
     case "text-entry":
     case "unsupported": {
@@ -1314,6 +1327,469 @@ describe("redactItem with a record", () => {
     assert.deepStrictEqual(redactItem(templated).notices, [
       ...Array.from({ length: 5 }, () => "qti-printed-variable"),
       ...drawn.notices,
+    ]);
+  });
+});
+
+/**
+ * Construct a single identifier value.
+ *
+ * @param value The identifier.
+ * @returns The value.
+ */
+const identifierValue = (value: string): Value => one({ baseType: "identifier", value });
+
+/**
+ * Construct a multiple identifier value.
+ *
+ * @param values The identifiers, in order.
+ * @returns The value.
+ */
+const multipleOf = (...values: readonly string[]): Value => ({
+  baseType: "identifier",
+  cardinality: "multiple",
+  values: values.map((value) => ({ baseType: "identifier", value })),
+});
+
+/**
+ * Construct the template visibility of a part `VISIBLE` controls.
+ *
+ * @param showHide Its `show-hide`.
+ * @returns The visibility.
+ */
+const byVisible = (showHide: TemplateVisibility["showHide"]): TemplateVisibility => ({
+  showHide,
+  templateIdentifier: "VISIBLE",
+});
+
+/**
+ * The path of the template block every template case holds, at the top of the body.
+ */
+const blockPath = `${bodyPath}/qti-template-block`;
+
+/**
+ * The path of the template inline every template case holds, inside a paragraph.
+ */
+const inlinePath = `${bodyPath}/p/qti-template-inline`;
+
+/**
+ * Construct a template block or inline.
+ *
+ * @param kind Which of the two it is.
+ * @param visibility Its template visibility.
+ * @param content Its content.
+ * @returns The body node, with the identifier `X`, at {@link blockPath} or {@link inlinePath}.
+ */
+const templatePart = (
+  kind: TemplateContent["kind"],
+  visibility: TemplateVisibility,
+  content: readonly BodyNode[],
+): TemplateContent => ({
+  content,
+  identifier: "X",
+  kind,
+  path: kind === "template-block" ? blockPath : inlinePath,
+  templateVisibility: visibility,
+});
+
+/**
+ * Construct the paragraph that holds the template inline, between two texts.
+ *
+ * @param inline What stands in the inline's place.
+ * @returns The paragraph.
+ */
+const inlineParagraph = (...inline: readonly BodyNode[]): BodyNode => ({
+  attributes: [],
+  children: [text("before "), ...inline, text(" after")],
+  kind: "element",
+  path: `${bodyPath}/p`,
+  tag: "p",
+});
+
+/**
+ * Construct a choice of {@link visibleChoice}'s Choice.
+ *
+ * @param identifier Its identifier.
+ * @param visibility Its template visibility, none for a choice always shown.
+ * @returns The choice.
+ */
+const choiceShownBy = (
+  identifier: string,
+  visibility: Option.Option<TemplateVisibility>,
+): SimpleChoice => ({
+  content: [text(identifier)],
+  fixed: false,
+  identifier,
+  templateVisibility: visibility,
+});
+
+/**
+ * A Choice bound to `CAPITAL` whose choice `X` shows by `VISIBLE` (`show`), whose `Y` has no
+ * template visibility, and whose `Z` hides by it (`hide`, so shown unless `VISIBLE` holds `Z`).
+ */
+const visibleChoice: ChoiceInteraction = {
+  ...choice,
+  choices: [
+    choiceShownBy("X", Option.some(byVisible("show"))),
+    choiceShownBy("Y", Option.none()),
+    choiceShownBy("Z", Option.some(byVisible("hide"))),
+  ],
+};
+
+/**
+ * The template declaration of `VISIBLE`, a multiple identifier whose declared default holds `X`.
+ */
+const visibleDeclaration = templateOf("VISIBLE", multipleOf("X"));
+
+/**
+ * An item whose template processing runs, whose body holds a template block shown by `VISIBLE`
+ * (`show`), a paragraph with a template inline hidden by it (`hide`), {@link visibleChoice}, and a
+ * feedback block's notice.
+ */
+const visibility: Item = {
+  ...item,
+  body: [
+    templatePart("template-block", byVisible("show"), [text("block")]),
+    inlineParagraph(templatePart("template-inline", byVisible("hide"), [text("inline")])),
+    visibleChoice,
+    noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
+  ],
+  templateProcessing: Option.some([]),
+  templates: new Map([["VISIBLE", visibleDeclaration]]),
+  unsupported: [
+    { feature: "qti-feedback-block", path: `${bodyPath}/qti-feedback-block`, shown: "notice" },
+  ],
+};
+
+/**
+ * Give the identifiers of the Choice of a redacted item, the first interaction its body holds.
+ *
+ * @param redaction The redacted item.
+ * @returns The identifiers of its choices, in document order.
+ */
+const choicesShown = (redaction: Redacted): readonly string[] => {
+  const found = redaction.body.find((node) => node.kind === "choice");
+
+  return found?.kind === "choice"
+    ? found.choices.map((entry) => entry.identifier)
+    : assert.fail("The body holds no Choice.");
+};
+
+/**
+ * The template values a record holds, with no outcome.
+ *
+ * @param templates The template values by identifier.
+ * @returns The record's part `redact` reads.
+ */
+const holding = (templates: Readonly<Record<string, Value>>): RedactRecord => ({
+  outcomes: {},
+  templates,
+});
+
+/**
+ * Give a choice of {@link planets} the template visibility `hide` by `VISIBLE` when it is `P1`.
+ *
+ * @param entry The choice.
+ * @returns The choice, `P1` hidden whenever `VISIBLE` holds `P1`.
+ */
+const hidingP1 = (entry: SimpleChoice): SimpleChoice =>
+  entry.identifier === "P1"
+    ? { ...entry, templateVisibility: Option.some(byVisible("hide")) }
+    : entry;
+
+/**
+ * A case of the visibility rule: the `show-hide`, the value `VISIBLE` holds and how a title says
+ * it, and whether the part with the identifier `X` is shown.
+ */
+interface VisibilityCase {
+  readonly holds: string;
+  readonly shown: boolean;
+  readonly showHide: TemplateVisibility["showHide"];
+  readonly value: Value;
+}
+
+/**
+ * The visibility rule over a single and a multiple variable, under `show` and `hide`, NULL
+ * included.
+ */
+const visibilityCases: readonly VisibilityCase[] = [
+  { holds: "the single X", showHide: "show", shown: true, value: identifierValue("X") },
+  { holds: "the single Y", showHide: "show", shown: false, value: identifierValue("Y") },
+  { holds: "the single X", showHide: "hide", shown: false, value: identifierValue("X") },
+  { holds: "the single Y", showHide: "hide", shown: true, value: identifierValue("Y") },
+  { holds: "W and X", showHide: "show", shown: true, value: multipleOf("W", "X") },
+  { holds: "only W", showHide: "show", shown: false, value: multipleOf("W") },
+  { holds: "W and X", showHide: "hide", shown: false, value: multipleOf("W", "X") },
+  { holds: "only W", showHide: "hide", shown: true, value: multipleOf("W") },
+  { holds: "NULL", showHide: "show", shown: false, value: nullOf("identifier", "single") },
+  { holds: "NULL", showHide: "hide", shown: true, value: nullOf("identifier", "multiple") },
+];
+
+describe("redactItem on template blocks, inlines and choices", () => {
+  it.effect(
+    "[I-5] copies a choice its template value shows with no template visibility, and the JSON of the redacted item holds no template-identifier, show-hide or template value (R5)",
+    () =>
+      Effect.gen(function* copiesShownChoice() {
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(
+            check(
+              doc(
+                "item.xml",
+                el(
+                  "qti-assessment-item",
+                  [
+                    attr("identifier", "visibility"),
+                    attr("time-dependent", "false"),
+                    attr("title", "Visibility"),
+                  ],
+                  [
+                    el("qti-response-declaration", [
+                      attr("base-type", "identifier"),
+                      attr("cardinality", "single"),
+                      attr("identifier", "RESPONSE"),
+                    ]),
+                    el("qti-template-declaration", [
+                      attr("base-type", "identifier"),
+                      attr("cardinality", "multiple"),
+                      attr("identifier", "VISIBLE"),
+                    ]),
+                    el(
+                      "qti-item-body",
+                      [],
+                      [
+                        el(
+                          "qti-choice-interaction",
+                          [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                          [
+                            el(
+                              "qti-simple-choice",
+                              [
+                                attr("identifier", "A"),
+                                attr("show-hide", "show"),
+                                attr("template-identifier", "VISIBLE"),
+                              ],
+                              [sourceText("Ant")],
+                            ),
+                            el("qti-simple-choice", [attr("identifier", "B")], [sourceText("Bee")]),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              tables,
+            ),
+          ),
+        );
+        const shown = redact(accepted, holding({ VISIBLE: multipleOf("A", "MarkerTemplate") }));
+        const [interaction] = shown.body;
+        const written = JSON.stringify(Result.getOrThrow(encodeRedacted(shown)));
+
+        assert.deepStrictEqual(interaction?.kind === "choice" ? interaction.choices : [], [
+          {
+            content: [text("Ant")],
+            fixed: false,
+            identifier: "A",
+            templateVisibility: Option.none(),
+          },
+          {
+            content: [text("Bee")],
+            fixed: false,
+            identifier: "B",
+            templateVisibility: Option.none(),
+          },
+        ]);
+        for (const hidden of [
+          "templateVisibility",
+          "templateIdentifier",
+          "template-identifier",
+          "showHide",
+          "show-hide",
+          "VISIBLE",
+          "MarkerTemplate",
+        ]) {
+          assert.notInclude(written, hidden);
+        }
+      }),
+  );
+
+  for (const { holds, shown, showHide, value } of visibilityCases) {
+    it(`[I-5] under ${showHide}, with VISIBLE ${holds}, ${shown ? "shows" : "hides"} a template block's and a template inline's content: its content in its place, or nothing`, () => {
+      const parts: Item = {
+        ...visibility,
+        body: [
+          templatePart("template-block", byVisible(showHide), [text("block")]),
+          inlineParagraph(templatePart("template-inline", byVisible(showHide), [text("inline")])),
+        ],
+        unsupported: [],
+      };
+      const record = holding({ VISIBLE: value });
+      const redaction = redactItem(parts, record);
+
+      assert.strictEqual(templateShows(byVisible(showHide), "X", record.templates), shown);
+      assert.deepStrictEqual(
+        redaction.body,
+        shown ? [text("block"), inlineParagraph(text("inline"))] : [inlineParagraph()],
+      );
+      assert.deepStrictEqual(redaction.notices, []);
+    });
+  }
+
+  it("[I-5] shows a choice by its template value, keeps one with no template visibility, and leaves out one its value hides", () => {
+    assert.deepStrictEqual(
+      choicesShown(redactItem(visibility, holding({ VISIBLE: multipleOf("X") }))),
+      ["X", "Y", "Z"],
+    );
+    assert.deepStrictEqual(
+      choicesShown(redactItem(visibility, holding({ VISIBLE: multipleOf("X", "Z") }))),
+      ["X", "Y"],
+    );
+    assert.deepStrictEqual(
+      choicesShown(redactItem(visibility, holding({ VISIBLE: multipleOf("Z") }))),
+      ["Y"],
+    );
+    assert.deepStrictEqual(
+      choicesShown(redactItem(visibility, holding({ VISIBLE: multipleOf("W") }))),
+      ["Y", "Z"],
+    );
+  });
+
+  it("[I-5] presents a shuffled Choice with a template-hidden choice in choiceOrder's order over the choices shown, under the same key (R6)", () => {
+    const shuffled: Item = {
+      ...visibility,
+      body: [{ ...planets, choices: planets.choices.map(hidingP1) }],
+      unsupported: [],
+    };
+    const redaction = redactItem(shuffled, holding({ VISIBLE: identifierValue("P1") }));
+    const remaining = planets.choices.filter((entry) => entry.identifier !== "P1");
+
+    for (const seed of [Option.some(7), Option.none<number>()]) {
+      const view: View = Option.match(seed, {
+        onNone: () => answering,
+        onSome: (given) => ({ ...answering, seed: given }),
+      });
+      const presented = choiceFor(payload(redaction, view), "PLANET").choices.map(
+        (entry) => entry.identifier,
+      );
+
+      assert.deepStrictEqual(
+        presented,
+        choiceOrder({ ...planets, choices: remaining }, seed, instance),
+      );
+      assert.sameMembers([...presented], ["P0", "P2", "P3", "P4"]);
+    }
+  });
+
+  it("[I-5] with no record, withholds a templated item's template block and inline behind their notices and leaves out each choice with a template visibility, naming template-identifier once; the redacted item still encodes (H3)", () => {
+    const withheld = redactItem(visibility);
+
+    assert.deepStrictEqual(withheld.body, [
+      noticeOf("qti-template-block", blockPath),
+      inlineParagraph(noticeOf("qti-template-inline", inlinePath)),
+      { ...visibleChoice, choices: [choiceShownBy("Y", Option.none())] },
+      noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
+    ]);
+    assert.deepStrictEqual(withheld.notices, [
+      "qti-template-block",
+      "qti-template-inline",
+      "template-identifier",
+      "qti-feedback-block",
+    ]);
+    assert.isTrue(Result.isSuccess(encodeRedacted(withheld)));
+  });
+
+  it("[I-5] withholds a template block, inline or choice whose template variable the record holds no value of, as with no record (0.13 decision 15)", () => {
+    assert.deepStrictEqual(redactItem(visibility, holding({})), redactItem(visibility));
+    assert.deepStrictEqual(
+      redactItem(visibility, holding({ OTHER: multipleOf("X") })),
+      redactItem(visibility),
+    );
+  });
+
+  it("[I-5] with no record, shows an item without template processing by its declared defaults, the values its first record holds (H3)", () => {
+    const untemplatedParts: Item = { ...visibility, templateProcessing: Option.none() };
+    const started = redactItem(untemplatedParts);
+
+    assert.deepStrictEqual(
+      started,
+      redactItem(untemplatedParts, holding({ VISIBLE: multipleOf("X") })),
+    );
+    assert.deepStrictEqual(started.body, [
+      text("block"),
+      inlineParagraph(),
+      {
+        ...visibleChoice,
+        choices: [
+          choiceShownBy("X", Option.none()),
+          choiceShownBy("Y", Option.none()),
+          choiceShownBy("Z", Option.none()),
+        ],
+      },
+      noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
+    ]);
+    assert.deepStrictEqual(started.notices, ["qti-feedback-block"]);
+  });
+
+  it("[I-5] names the notices of a template block's content only where its template value shows it", () => {
+    const hotspot = `${blockPath}/qti-content-body/qti-hotspot-interaction`;
+    const holdingNotice: Item = {
+      ...visibility,
+      body: [
+        templatePart("template-block", byVisible("show"), [
+          noticeOf("qti-hotspot-interaction", hotspot),
+        ]),
+        noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
+      ],
+      unsupported: [
+        { feature: "qti-hotspot-interaction", path: hotspot, shown: "notice" },
+        ...visibility.unsupported,
+      ],
+    };
+    const shown = redactItem(holdingNotice, holding({ VISIBLE: multipleOf("X") }));
+    const hidden = redactItem(holdingNotice, holding({ VISIBLE: multipleOf("W") }));
+
+    assert.deepStrictEqual(shown.notices, ["qti-hotspot-interaction", "qti-feedback-block"]);
+    assert.deepStrictEqual(shown.body, [
+      noticeOf("qti-hotspot-interaction", hotspot),
+      noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
+    ]);
+    assert.deepStrictEqual(hidden.notices, ["qti-feedback-block"]);
+    assert.deepStrictEqual(hidden.body, [
+      noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
+    ]);
+  });
+
+  it("[I-5] gives no posting for the response of an interaction a hidden template block holds", () => {
+    const holdingEntry: Item = {
+      ...visibility,
+      body: [templatePart("template-block", byVisible("show"), [textEntry("FIRST")])],
+      unsupported: [],
+    };
+    const postedOf = (value: Value): readonly string[] =>
+      postings(redactItem(holdingEntry, holding({ VISIBLE: value })), instance).map(
+        (posting) => posting.identifier,
+      );
+
+    assert.deepStrictEqual(postedOf(multipleOf("X")), ["FIRST"]);
+    assert.deepStrictEqual(postedOf(multipleOf("W")), []);
+  });
+
+  it("[I-5] copies a template block or inline that reaches the payload by hand as its notice", () => {
+    const handBuilt = payload(
+      {
+        ...redacted,
+        body: [
+          templatePart("template-block", byVisible("show"), [text("block")]),
+          templatePart("template-inline", byVisible("hide"), [text("inline")]),
+        ],
+      },
+      answering,
+    );
+
+    assert.deepStrictEqual(handBuilt.body, [
+      { feature: "qti-template-block", kind: "notice" },
+      { feature: "qti-template-inline", kind: "notice" },
     ]);
   });
 });

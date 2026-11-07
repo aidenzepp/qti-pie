@@ -106,9 +106,15 @@ const rootOf = (html: string): Option.Option<Element> => {
 };
 
 /**
- * The feature of a printed variable's notice.
+ * The features of the notices `redact` puts in a body part's place when it has no value to show it
+ * by: a printed variable's, a template block's and a template inline's. The model holds each as a
+ * body node, so the verdict names none of them.
  */
-const printedNotice = "qti-printed-variable";
+const withheldNotices: ReadonlySet<string> = new Set([
+  "qti-printed-variable",
+  "qti-template-block",
+  "qti-template-inline",
+]);
 
 /**
  * One accepted member's render: its three states, or the error `render` gave.
@@ -121,10 +127,10 @@ interface Rendering {
   readonly locale: Configuration["locale"];
   readonly location: string;
   /**
-   * The notice of each printed variable `redact` shows as a notice: the model holds a printed
-   * variable as a body node, so the verdict names none of them.
+   * The notice of each printed variable, template block and template inline `redact` shows as a
+   * notice ({@link withheldNotices}), which the verdict names none of.
    */
-  readonly printed: readonly string[];
+  readonly withheld: readonly string[];
   readonly states: ReturnType<typeof threeStates>;
 }
 
@@ -147,8 +153,8 @@ const renderingsOf = (
           accepted,
           locale: configuration.locale,
           location: member.location,
-          printed: redact(accepted).notices.filter((feature) => feature === printedNotice),
           states: threeStates(accepted, configuration),
+          withheld: redact(accepted).notices.filter((feature) => withheldNotices.has(feature)),
         },
       ],
     }),
@@ -185,8 +191,9 @@ const statesProblems = (
 
 /**
  * Check one state against the round trip and R1: its HTML round-trips, shows a notice for exactly
- * the verdict's notice-shown features and the printed variables `redact` shows as notices, and
- * shows none for the features the verdict marks, which render nowhere.
+ * the verdict's notice-shown features and the printed variables, template blocks and template
+ * inlines `redact` shows as notices, and shows none for the features the verdict marks, which
+ * render nowhere.
  *
  * @param rendering The render, with its accepted document.
  * @param where The member and state, which every problem names.
@@ -196,7 +203,7 @@ const statesProblems = (
 const r1Problems = (rendering: Rendering, where: string, root: Element): readonly string[] => {
   const { unsupported } = rendering.accepted;
   const featureOf = new Map(
-    [...unsupported.map((entry) => entry.feature), ...rendering.printed].map(
+    [...unsupported.map((entry) => entry.feature), ...rendering.withheld].map(
       (feature) => [message(rendering.locale, "notice", { feature }), feature] as const,
     ),
   );
@@ -210,7 +217,7 @@ const r1Problems = (rendering: Rendering, where: string, root: Element): readonl
     .toSorted();
   const noticed = [
     ...unsupported.filter((entry) => entry.shown === "notice").map((entry) => entry.feature),
-    ...rendering.printed,
+    ...rendering.withheld,
   ].toSorted();
   const marked = unsupported
     .filter((entry) => entry.shown === "mark")
@@ -254,7 +261,8 @@ const treeProblems = (_rendering: Rendering, where: string, root: Element): read
 
 /**
  * Collect the Inline Choices an item's body renders, in document order: those in its body and its
- * body elements. An interaction inside a Prompt or a choice's content is not counted.
+ * body elements. An interaction inside a Prompt or a choice's content is not counted, nor one
+ * inside a template block or inline, which renders only where a template value shows it.
  *
  * @param nodes The body nodes.
  * @returns The Inline Choices.
@@ -271,6 +279,8 @@ const inlineChoicesOf = (nodes: readonly BodyNode[]): readonly InlineChoiceInter
       case "choice":
       case "extended-text":
       case "printed-variable":
+      case "template-block":
+      case "template-inline":
       case "text":
       case "text-entry":
       case "unsupported": {

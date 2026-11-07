@@ -663,6 +663,13 @@ const placeNode = (
       };
     }
 
+    case "template-block":
+    case "template-inline": {
+      const inner = placeNodes(node.content, drops, placed, inMedia);
+
+      return { lifted: inner.lifted, nodes: [{ ...node, content: inner.nodes }] };
+    }
+
     case "printed-variable":
     case "text":
     case "text-entry":

@@ -220,6 +220,8 @@ describe("the closed value sets", () => {
           "qti-inline-choice",
           "qti-label",
           "qti-printed-variable",
+          "qti-template-block",
+          "qti-template-inline",
           ...renders.engine,
           "qti-template-declaration",
           "qti-template-processing",

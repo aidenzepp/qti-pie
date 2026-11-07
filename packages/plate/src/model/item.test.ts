@@ -36,6 +36,7 @@ import type {
   Item,
   Rule,
   TemplateDeclaration,
+  TemplateVisibility,
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
@@ -831,6 +832,15 @@ const inlineChoiceXml = (interaction: string): string =>
     `<qti-item-body><p>The sky is ${interaction}.</p></qti-item-body>`,
     "</qti-assessment-item>",
   ].join("");
+
+/**
+ * Give each choice's identifier beside its template visibility.
+ *
+ * @param choices A Choice's or an Inline Choice's choices.
+ * @returns The pairs, in document order.
+ */
+const visibilities = (choices: ChoiceInteraction["choices"]) =>
+  choices.map((each) => [each.identifier, each.templateVisibility] as const);
 
 /**
  * The path of the Inline Choice {@link inlineChoiceXml} writes.
@@ -2357,6 +2367,173 @@ describe("buildItem", () => {
             powerForm: false,
           },
         ]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-5] holds a qti-template-block and a qti-template-inline as body nodes with their identifier, template visibility and content, a block's content its qti-content-body's and its qti-stylesheet a mark",
+    () =>
+      Effect.gen(function* holdsTemplateContent() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "p",
+                [],
+                [
+                  text("Go by "),
+                  el(
+                    "qti-template-inline",
+                    [attr("identifier", " plane "), attr("template-identifier", " TRANSPORT ")],
+                    [el("em", [], [text("air")])],
+                  ),
+                ],
+              ),
+              el(
+                "qti-template-block",
+                [
+                  attr("identifier", "SOLUTION"),
+                  attr("show-hide", "hide"),
+                  attr("template-identifier", "SHOWN"),
+                ],
+                [
+                  el("qti-stylesheet", [attr("href", "block.css"), attr("type", "text/css")]),
+                  el("qti-content-body", [], [el("p", [], [text("Worked solution")])]),
+                ],
+              ),
+            ],
+            declarations: [],
+          }),
+        );
+        const block = `${body}/qti-template-block`;
+
+        assert.deepStrictEqual(built.body, [
+          {
+            attributes: [],
+            children: [
+              { kind: "text", text: "Go by " },
+              {
+                content: [
+                  {
+                    attributes: [],
+                    children: [{ kind: "text", text: "air" }],
+                    kind: "element",
+                    path: `${body}/p/qti-template-inline/em`,
+                    tag: "em",
+                  },
+                ],
+                identifier: "plane",
+                kind: "template-inline",
+                path: `${body}/p/qti-template-inline`,
+                templateVisibility: { showHide: "show", templateIdentifier: "TRANSPORT" },
+              },
+            ],
+            kind: "element",
+            path: `${body}/p`,
+            tag: "p",
+          },
+          {
+            content: [
+              {
+                attributes: [],
+                children: [{ kind: "text", text: "Worked solution" }],
+                kind: "element",
+                path: `${block}/qti-content-body/p`,
+                tag: "p",
+              },
+            ],
+            identifier: "SOLUTION",
+            kind: "template-block",
+            path: block,
+            templateVisibility: { showHide: "hide", templateIdentifier: "SHOWN" },
+          },
+        ]);
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "qti-stylesheet", path: `${block}/qti-stylesheet`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] reads a qti-simple-choice's and a qti-inline-choice's template-identifier and show-hide into its template visibility, show when absent, and gives none to a choice with no template-identifier whatever its show-hide",
+    () =>
+      Effect.gen(function* readsChoiceVisibility() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [
+                  el(
+                    "qti-simple-choice",
+                    [attr("identifier", "A"), attr("template-identifier", " SHOWN ")],
+                    [text("Ant")],
+                  ),
+                  el(
+                    "qti-simple-choice",
+                    [
+                      attr("identifier", "B"),
+                      attr("show-hide", "hide"),
+                      attr("template-identifier", "HIDDEN"),
+                    ],
+                    [text("Bee")],
+                  ),
+                  el(
+                    "qti-simple-choice",
+                    [attr("identifier", "C"), attr("show-hide", "hide")],
+                    [text("Cat")],
+                  ),
+                ],
+              ),
+              el(
+                "p",
+                [],
+                [
+                  el(
+                    "qti-inline-choice-interaction",
+                    [attr("response-identifier", "COLOUR")],
+                    [
+                      el(
+                        "qti-inline-choice",
+                        [
+                          attr("identifier", "R"),
+                          attr("show-hide", "hide"),
+                          attr("template-identifier", "SHOWN"),
+                        ],
+                        [text("red")],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              declaration("qti-response-declaration", "COLOUR", "identifier", "single"),
+            ],
+          }),
+        );
+        assert.deepStrictEqual(visibilities(choiceIn(built.body).choices), [
+          ["A", Option.some<TemplateVisibility>({ showHide: "show", templateIdentifier: "SHOWN" })],
+          [
+            "B",
+            Option.some<TemplateVisibility>({ showHide: "hide", templateIdentifier: "HIDDEN" }),
+          ],
+          ["C", Option.none()],
+        ]);
+
+        const [inline] = childrenOf(built.body[1]);
+        assert.deepStrictEqual(
+          inline?.kind === "inline-choice" ? visibilities(inline.choices) : [],
+          [
+            [
+              "R",
+              Option.some<TemplateVisibility>({ showHide: "hide", templateIdentifier: "SHOWN" }),
+            ],
+          ],
+        );
         assert.deepStrictEqual(built.unsupported, []);
       }),
   );

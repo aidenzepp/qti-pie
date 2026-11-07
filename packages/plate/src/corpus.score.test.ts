@@ -139,7 +139,8 @@ const builtInOf = (source: SourceDocument): Option.Option<BuiltIn> => {
 
 /**
  * Collect the interactions an item renders, in document order: those in its body and its body
- * elements. An interaction inside a Prompt or a choice's content is not counted.
+ * elements. An interaction inside a Prompt or a choice's content is not counted, nor one inside a
+ * template block or inline, which renders only where a template value shows it.
  *
  * @param nodes The body nodes.
  * @returns The interactions.
@@ -157,6 +158,8 @@ const interactionsOf = (nodes: readonly BodyNode[]): readonly Bound[] =>
         return [node];
       }
       case "printed-variable":
+      case "template-block":
+      case "template-inline":
       case "text":
       case "unsupported": {
         return [];
