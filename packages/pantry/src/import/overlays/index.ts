@@ -520,6 +520,18 @@ const mergedOf = (
       "MatchTable",
       parts.map(({ MatchTable: rows }) => rows),
     ),
+    MathApply: unionOf(
+      "MathApply",
+      parts.map(({ MathApply: rows }) => rows),
+    ),
+    MathArgument: unionOf(
+      "MathArgument",
+      parts.map(({ MathArgument: rows }) => rows),
+    ),
+    MathQualifier: unionOf(
+      "MathQualifier",
+      parts.map(({ MathQualifier: rows }) => rows),
+    ),
     NameLookup: unionOf(
       "NameLookup",
       parts.map(({ NameLookup: rows }) => rows),
