@@ -354,4 +354,24 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
       [],
     );
   });
+
+  it("builds the rows of one element with 50 000 children in linear time", () => {
+    // Nodes: 0 document, 1 math, 2 apply, 3 and on its 50 000 ci children, then one cn.
+    const children = 50_000;
+    const doc = documentOf(
+      elementOf("m:math", [
+        elementOf(
+          "m:apply",
+          Array.from({ length: children }, () => elementOf("m:ci")),
+        ),
+        elementOf("m:cn", [text("1")]),
+      ]),
+    );
+    const start = performance.now();
+    const rows = rowsOf(doc, ids);
+    const elapsed = performance.now() - start;
+
+    assert.deepStrictEqual(keysOf(rows.MathCn), [idOf(children + 3)]);
+    assert.isBelow(elapsed, 1000);
+  });
 });

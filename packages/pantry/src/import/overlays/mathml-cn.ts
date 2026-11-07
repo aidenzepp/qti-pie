@@ -189,10 +189,22 @@ const judgementOf = (values: ReadonlyMap<string, string> | undefined): Judgement
  */
 export const rowsOf = (tree: XdmDocument<Composed>, ids: Pick<NodeIds, "idOf">): MathmlCnRows => {
   const flat = flatten(tree, ids.idOf);
+  const cnIds = new Set<NodeId>();
+  for (const node of flat.nodes) {
+    if (node.kind === "m:cn") {
+      cnIds.add(node.id);
+    }
+  }
+
   const childrenOf = new Map<NodeId, NodeRow<Composed>[]>();
   for (const node of flat.nodes) {
-    if (node.parent !== node.id) {
-      childrenOf.set(node.parent, [...(childrenOf.get(node.parent) ?? []), node]);
+    if (node.parent !== node.id && cnIds.has(node.parent)) {
+      const siblings = childrenOf.get(node.parent);
+      if (siblings === undefined) {
+        childrenOf.set(node.parent, [node]);
+      } else {
+        siblings.push(node);
+      }
     }
   }
 
