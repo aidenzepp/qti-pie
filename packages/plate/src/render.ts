@@ -8,7 +8,7 @@
  * arguments is the instance a render draws when the author passes none. `render` prints everything
  * or nothing: it writes at most the configuration's `outputBudget` characters of HTML, and an item
  * with a printed variable or a parameter whose text passed its bound, or whose printed text passed
- * the budget `redact` was given, prints nothing; either way it returns {@link OutputTooLarge} and
+ * the budget `redact` ran under, prints nothing; either way it returns {@link OutputTooLarge} and
  * none of the page, never a part of it. This is a browser module: it value-imports from `effect`
  * only `Option`, `Array`, `pipe`, `Data` and `Result`.
  *
@@ -168,7 +168,7 @@ export class OutputTooLarge extends Data.TaggedError("OutputTooLarge")<{
       onSome: ({ bound, identifier, limit }) =>
         limit === "text"
           ? `Item ${JSON.stringify(this.item)} would print more than ${String(bound)} characters for the variable ${JSON.stringify(identifier)}, so render wrote none of it. Shorten that variable's value, or the width or precision in its printed variable's format, so its text fits.`
-          : `Item ${JSON.stringify(this.item)} prints more than ${String(bound)} characters of variables, the outputBudget redact was given, by the variable ${JSON.stringify(identifier)}, so redact stopped printing there and render wrote none of it. Raise outputBudget, up to 536,870,888, in the configuration you pass to both redact and render, if the host can hold that much text.`,
+          : `Item ${JSON.stringify(this.item)} prints more than ${String(bound)} characters of variables, the output budget redact ran under, by the variable ${JSON.stringify(identifier)}, so redact stopped printing there and render wrote none of it. Raise outputBudget, up to 536,870,888, in the configuration you pass to both redact and render, if the host can hold that much text.`,
     });
   }
 }
@@ -216,8 +216,11 @@ const checkedInstance = (
  * and the limit `"budget"`, so `render` fails {@link OutputTooLarge} naming the variable. So
  * `redact` never builds more printed text than the budget, however much the item would print. Pass
  * the configuration you pass to `render`; with none, the configuration's default, 16,777,216,
- * applies. The number is used as given, so pass one `configure` decoded, which holds it between 1
- * and 536,870,888.
+ * applies. `redact` holds the budget to 1 to 536,870,888, as `configure` does, but clamps rather
+ * than refuses: `NaN` runs under the default, 16,777,216, a fraction under its floor, anything
+ * above 536,870,888 (`Infinity` included) under 536,870,888, and anything below 1 (0 and
+ * `-Infinity` included) under 1. When the budget runs out, `unprinted`'s bound is the budget it ran
+ * under.
  *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with (its declared template defaults and its outcomes' starting values), and an
@@ -237,8 +240,9 @@ const checkedInstance = (
  * @param document The document `check` accepted.
  * @param record The attempt's template values and outcome values, such as its record, whose type
  *   is `Restored["record"]`; none to show the item as it reads with no record.
- * @param limits The output budget its printed text is held to: the configuration passed to
- *   `render`, or `{ outputBudget }`; none for the configuration's default, 16,777,216.
+ * @param limits The output budget its printed text is held to, clamped to 1 to 536,870,888: the
+ *   configuration passed to `render`, or `{ outputBudget }`; none for the configuration's default,
+ *   16,777,216.
  * @returns The redacted item, the one input {@link render} takes.
  */
 export const redact = (
@@ -338,7 +342,7 @@ const interactionRenderer =
  * gives the same HTML, and it returns the instance it used.
  *
  * It prints everything or nothing. First, an item whose `unprinted` names a printed variable or a
- * parameter whose text passed its bound, 1,000,000 or the budget `redact` was given, fails
+ * parameter whose text passed its bound, 1,000,000 or the budget `redact` ran under, fails
  * {@link OutputTooLarge} naming the bound, which limit it is and the variable, before anything is
  * built. Then it counts
  * the characters of HTML as it writes them, as a string's `length` counts them, and stops at the

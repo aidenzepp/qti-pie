@@ -1,10 +1,12 @@
 /**
- * The output budget's default and its largest value, in a module of their own.
+ * The output budget's default and its largest value, and the clamp that holds a budget between 1
+ * and that value, in a module of their own.
  *
- * `configuration.ts`'s Schema reads both, and `redactItem` reads the default, the budget a
- * redaction runs under when its caller passes none. They live apart from `configuration.ts`, which
- * value-imports Schema, so that `redact` and `render`, browser modules, read the default without
- * loading the Schema side.
+ * `configuration.ts`'s Schema reads both values, and `redactItem` reads the default, the budget a
+ * redaction runs under when its caller passes none, and the clamp, which holds the budget it is
+ * passed. They live apart from `configuration.ts`, which value-imports Schema, so that `redact` and
+ * `render`, browser modules, read them without loading the Schema side. This module imports
+ * nothing.
  *
  * @module
  */
@@ -21,3 +23,20 @@ export const defaultOutputBudget = 16_777_216;
  * the smallest of the engines' limits, so no budget asks an engine for a string it cannot build.
  */
 export const maximumOutputBudget = 536_870_888;
+
+/**
+ * Hold an output budget to the range a configuration admits, 1 to {@link maximumOutputBudget}, so
+ * the bound holds whatever number a host passes, not only one `configure` decoded.
+ *
+ * `NaN` becomes {@link defaultOutputBudget}, as no budget does. A finite fraction becomes its floor
+ * first. Anything above the maximum, `Infinity` included, becomes the maximum, and anything below
+ * 1, `-Infinity`, 0 and a fraction below 1 included, becomes 1. A whole budget in the range is held
+ * as given.
+ *
+ * @param budget The output budget a host passed.
+ * @returns A whole number of characters from 1 to {@link maximumOutputBudget}.
+ */
+export const clampOutputBudget = (budget: number): number =>
+  Number.isNaN(budget)
+    ? defaultOutputBudget
+    : Math.min(maximumOutputBudget, Math.max(1, Math.floor(budget)));

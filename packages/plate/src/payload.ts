@@ -54,7 +54,7 @@ import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts
 import type { RedactRecord } from "#plate/model/record.ts";
 import { format, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
-import { defaultOutputBudget } from "#plate/output-budget.ts";
+import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
 
 /**
  * A message response validation gives one response, in the locale's text or the author's.
@@ -1952,14 +1952,18 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  * text fits.
  *
  * The printed text is held to an output budget: `limits.outputBudget`, else the configuration's
- * default, 16,777,216 characters, counted as a string's `length` counts them. It counts the text
- * each printed variable and `param-variable` parameter on content the page sees writes, in document
- * order, and stops printing at the first whose text would pass what remains: that one and every one
- * after it print nothing, and `unprinted` names it with the budget as its bound and the limit
- * `"budget"`, so `render` fails `OutputTooLarge` rather than show the page with its slots blank. So
- * a redaction never builds more printed text than the budget, and one member more, however much the
- * item would print. Pass the configuration `render` takes, which `configure` holds between 1 and
- * 536,870,888; the number is used as given.
+ * default, 16,777,216 characters, counted as a string's `length` counts them, and held to 1 to
+ * 536,870,888 by `clampOutputBudget`, so the bound holds whatever number a host passes. It counts
+ * the text each printed variable and `param-variable` parameter on content the page sees writes, in
+ * document order, and stops printing at the first whose text would pass what remains: that one and
+ * every one after it print nothing, and `unprinted` names it with the budget as its bound and the
+ * limit `"budget"`, so `render` fails `OutputTooLarge` rather than show the page with its slots
+ * blank. So a redaction never builds more printed text than the budget, and one member more,
+ * however much the item would print. Pass the configuration `render` takes, which `configure` holds
+ * between 1 and 536,870,888. A budget outside that range is clamped, not refused: `NaN` runs under
+ * the default, a fraction under its floor, anything above 536,870,888 (`Infinity` included) under
+ * 536,870,888, and anything below 1 (0 and `-Infinity` included) under 1, which is the bound
+ * `unprinted` then names.
  *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with: each template variable at its declared default, else NULL (none where the
@@ -1978,8 +1982,8 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  * @param record The template values and outcome values of the attempt shown, which its printed
  *   variables print, its `param-variable` parameters pass, and which show or hide its template
  *   blocks, inlines and choices; none to show the item as it reads with no record.
- * @param limits The output budget its printed text is held to, such as the configuration `render`
- *   takes; none for the configuration's default, 16,777,216.
+ * @param limits The output budget its printed text is held to, clamped to 1 to 536,870,888, such
+ *   as the configuration `render` takes; none for the configuration's default, 16,777,216.
  * @returns The redacted item.
  */
 export const redactItem = (
@@ -1988,7 +1992,7 @@ export const redactItem = (
   limits?: Pick<Configuration, "outputBudget">,
 ): Redacted => {
   const { body, hiddenOnly, notices, unprinted } = printBody(item, printingOf(item, record), {
-    budget: limits?.outputBudget ?? defaultOutputBudget,
+    budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget),
     kind: "text",
   });
 
