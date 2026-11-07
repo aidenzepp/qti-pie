@@ -106,6 +106,8 @@ const mutations: Readonly<Partial<Record<LawName, Mutation>>> = {
  * ahead of it too. The list only shrinks.
  */
 const owed: Readonly<Partial<Record<LawName, string>>> = {
+  "Double value":
+    "the import writes a bounded value's typed row exactly where its domain is bounded and its form is in the lexical space (write.ts doubleOf), so no document breaks Double value alone; double-bound.oracle.test.ts holds the writer to the law under the host judge",
   "Manifest id space":
     "every resource identifier and the manifest's are xs:ID values of one document, so a resource named as its manifest breaks DocumentId key, which ranks first, and the database names document-key: the law is shadowed (lane OL's finding)",
   "N2 mirrors":

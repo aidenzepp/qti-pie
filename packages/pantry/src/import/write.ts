@@ -27,18 +27,21 @@
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
 import type { Addition, AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Order } from "effect";
+import { patternFlags } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
   AttributeSlot,
+  boundedDomains,
   Flag,
   KindNamespace,
   openElementClasses,
   Position,
+  ValueDomainOf,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { contextAt, contextsOf } from "#pantry/import/context.ts";
-import { foldOf, governorOf, ownContext } from "#pantry/import/fold.ts";
+import { foldOf, governorOf, ownContext, textDomainOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
@@ -59,8 +62,10 @@ import type {
 import type {
   Attribute,
   AttributeEntity,
+  DoubleValue,
   Idref,
   OpenAttributeName,
+  TextDoubleValue,
 } from "#pantry/qti/attributes.ts";
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
@@ -265,10 +270,21 @@ export type IdrefInsert = Omit<Addition<typeof Idref>, "attribute" | "node">;
 export type OpenNameInsert = Omit<Addition<typeof OpenAttributeName>, "attribute" | "node">;
 
 /**
+ * A bounded attribute's typed value, as its attribute's family nests it.
+ */
+export type DoubleValueInsert = Omit<Addition<typeof DoubleValue>, "attribute" | "node">;
+
+/**
+ * A bounded text's typed value, as its element's family nests it.
+ */
+export type TextDoubleValueInsert = Omit<Addition<typeof TextDoubleValue>, "node">;
+
+/**
  * An attribute as its element's family nests it: its written fields but the `node` the nesting
- * supplies, and its three families at their count fields.
+ * supplies, and its four families at their count fields.
  */
 export type AttributeInsert = Omit<Addition<typeof Attribute>, "node"> & {
+  readonly doubleValue: readonly DoubleValueInsert[];
   readonly entities: readonly EntityInsert[];
   readonly idrefs: readonly IdrefInsert[];
   readonly openName: readonly OpenNameInsert[];
@@ -292,6 +308,7 @@ export type NodeFields = Omit<Addition<typeof Node>, "document" | "parent">;
 export type NodeMember = NodeFields & {
   readonly attributes: readonly AttributeInsert[];
   readonly children: readonly NodeMember[];
+  readonly doubleValue: readonly TextDoubleValueInsert[];
   readonly namespaces: readonly NamespaceInsert[];
 };
 
@@ -398,6 +415,50 @@ const positionHandle = (state: number): PositionHandle => {
 };
 
 /**
+ * /**
+ * The domains a bound judges ({@link boundedDomains}), each with its lexical space as the host
+ * reads it: its pattern, read with {@link patternFlags} as AL1 reads it.
+ */
+const boundedPatterns: ReadonlyMap<string, RegExp> = new Map(
+  ValueDomainOf.rows
+    .filter(({ domain }) => boundedDomains.some((bounded) => bounded === domain))
+    .map(({ domain, pattern }) => [domain, new RegExp(pattern, patternFlags)] as const),
+);
+
+/**
+ * The whitespace `xs:double`'s `collapse` reads around a value: XML's `S`.
+ */
+const doubleSpace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
+
+/**
+ * The values of `xs:double`'s three special literals in XML Schema 1.0, the edition QTI 3.0's XSDs
+ * are written in (spec reading 71): `INF`, `-INF` and `NaN`. `+INF` is XML Schema 1.1's, outside
+ * 1.0's lexical space, so the domain's pattern refuses it and no value of it is read.
+ */
+const specialDoubles: ReadonlyMap<string, number> = new Map([
+  ["INF", Number.POSITIVE_INFINITY],
+  ["-INF", Number.NEGATIVE_INFINITY],
+  ["NaN", Number.NaN],
+]);
+
+/**
+ * Read an `xs:double` literal's value, the reader of an attribute's or a text's double
+ * (`#pantry/import/overlays/mapping.ts`'s `floatValueOf` reads a map key, which is never
+ * collapsed): its whitespace collapsed, then a special literal's value, else the IEEE double
+ * nearest the decimal it writes,
+ * which JavaScript's `Number` rounds to as XML Schema 1.1 Part 2 §3.3.5.2 does, a magnitude below
+ * 2^-1075 rounding to a zero of its sign.
+ *
+ * @param lexical - The literal, in `xs:double`'s lexical space after collapsing.
+ * @returns Its value.
+ */
+export const doubleOf = (lexical: string): number => {
+  const text = lexical.replaceAll(doubleSpace, "");
+
+  return specialDoubles.get(text) ?? Number(text);
+};
+
+/**
  * The whitespace an IDREFS value separates its tokens by, XML's `S`.
  */
 const idrefSpace = /[\t\n\r ]+/gu;
@@ -492,7 +553,8 @@ const groupedBy = <R>(rows: readonly R[], owner: (row: R) => string): ReadonlyMa
  * @param rows.openNames - Each open-class attribute's exact name.
  * @returns The attribute: its slot under its element's governor (empty for a name the governor
  *   does not admit, which AL1 refuses), its IDREF pieces where its domain is an `xs:IDREF` or
- *   `xs:IDREFS`, its entity references and its open name.
+ *   `xs:IDREFS`, its typed value where its domain is bounded and its lexical form is in the
+ *   domain's lexical space, its entity references and its open name.
  */
 const attributeOf = (
   attribute: AttributeRow<Composed>,
@@ -518,8 +580,13 @@ const attributeOf = (
     ),
   );
   const identity = admitted === undefined ? undefined : identityAt.get(admitted.domain);
+  const lexicalSpace = admitted === undefined ? undefined : boundedPatterns.get(admitted.domain);
 
   return {
+    doubleValue:
+      lexicalSpace?.test(attribute.lexical) === true
+        ? [{ value: doubleOf(attribute.lexical) }]
+        : [],
     entities: (rows.entities.get(attribute.id) ?? []).map(({ name, offset }) => ({ name, offset })),
     id: attribute.id,
     idrefs: identity === "IDREF" || identity === "IDREFS" ? idrefPiecesOf(attribute.lexical) : [],
@@ -561,6 +628,8 @@ interface WrittenMember {
  * @param own.indexed.openNames - The open names.
  * @param own.namespace - Its namespace name, empty for a node that is no element.
  * @param own.namespaces - Its namespace declarations, in slot order.
+ * @param own.text - Its children's characters, its string value where its text is checked, which
+ *   a bounded text's typed value is read from.
  * @param own.version - The document's version.
  * @returns The member, with the list its children are nested in.
  */
@@ -574,12 +643,16 @@ const memberOf = (
     readonly indexed: Parameters<typeof attributeOf>[2];
     readonly namespace: string;
     readonly namespaces: readonly FlatRows<Composed>["namespaces"][number][];
+    readonly text: string;
     readonly version: Composed["version"];
   },
 ): WrittenMember => {
   const { kind, version } = node;
   const ends = endsOf(own.chars);
   const children: NodeMember[] = [];
+  const textSpace = Option.flatMap(textDomainOf(version, kind, node.governs), (domain) =>
+    Option.fromNullishOr(boundedPatterns.get(domain)),
+  );
 
   return {
     children,
@@ -595,6 +668,9 @@ const memberOf = (
       chars: own.chars,
       children,
       documentType: own.documentType,
+      doubleValue: Option.exists(textSpace, (space) => space.test(own.text))
+        ? [{ value: doubleOf(own.text) }]
+        : [],
       first: ends.first,
       governs: node.governs,
       id: node.id,
@@ -659,6 +735,11 @@ export const rootInsertOf = (
   const self = rows.document.node;
   const context = ids.context ?? ownContext(self);
   const folds = foldOf(rows.nodes, context);
+  const texts = new Map<NodeId, string>();
+  for (const node of rows.nodes.slice(1)) {
+    texts.set(node.parent, `${texts.get(node.parent) ?? ""}${chars.get(node.id) ?? ""}`);
+  }
+
   const root: NodeRoot = {
     ancestry: Bits.of(Flag, [...context.ancestry]),
     attributes: [],
@@ -666,6 +747,7 @@ export const rootInsertOf = (
     children: [],
     document: self,
     documentType,
+    doubleValue: [],
     first: "",
     governs: "none",
     id: self,
@@ -703,6 +785,7 @@ export const rootInsertOf = (
         ? (foreignNamespace.get(node.id) ?? "")
         : (namespaceAt.get(node.kind) ?? ""),
       namespaces: namespaces.get(node.id) ?? [],
+      text: texts.get(node.id) ?? "",
       version,
     });
     siblings.push(written.member);

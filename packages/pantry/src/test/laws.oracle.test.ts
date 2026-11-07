@@ -20,7 +20,7 @@ import {
   contentLawOf,
   documentBreaches,
   explain,
-  facetsBroken,
+  boundBroken,
   judge,
   lawNames,
   lawsOf,
@@ -1070,14 +1070,14 @@ describe("the content references", () => {
 });
 
 /**
- * A double domain bounded by one residual facet at 1.0, every form matching its pattern.
+ * A double domain bounded below at 1.0 by one facet, every form matching its pattern.
  *
  * @param facet - The facet.
  * @returns The domain.
  */
-const bounded = (facet: "maxExclusive" | "maxInclusive" | "minExclusive" | "minInclusive") => ({
+const bounded = (facet: "minExclusive" | "minInclusive") => ({
+  bound: Option.some({ facet, value: 1 }),
   enumeration: [],
-  facets: [{ facet, value: "1.0" }],
   handle: facet,
   identity: Option.none(),
   pattern: "^.*$",
@@ -1086,7 +1086,7 @@ const bounded = (facet: "maxExclusive" | "maxInclusive" | "minExclusive" | "minI
 });
 
 /**
- * Decide whether some breach is a value-domain breach whose explanation names a facet.
+ * Decide whether some breach is a bound breach whose explanation names a facet.
  *
  * @param breaches - The breaches.
  * @param name - The facet's name.
@@ -1095,7 +1095,7 @@ const bounded = (facet: "maxExclusive" | "maxInclusive" | "minExclusive" | "minI
 const facet = (breaches: readonly Breach[], name: string): boolean =>
   breaches.some(
     ({ keys, law }) =>
-      law === "value domain" &&
+      law === "Double bound" &&
       ruleOf(law) === "attribute-lexical" &&
       explain(law, keys, grammar).includes(name),
   );
@@ -1107,33 +1107,29 @@ const facet = (breaches: readonly Breach[], name: string): boolean =>
  * @param form - The lexical form.
  * @returns Whether the form's value lies outside it.
  */
-const boundBroken = (
-  bound: "maxExclusive" | "maxInclusive" | "minExclusive" | "minInclusive",
-  form: string,
-): boolean => facetsBroken(bounded(bound), form).length > 0;
+const breaks = (bound: "minExclusive" | "minInclusive", form: string): boolean =>
+  Option.isSome(boundBroken(bounded(bound), form));
 
 describe("the residual facets of a value domain", () => {
-  it("each bound kind refuses the values outside it, and NaN fails every bound", () => {
+  it("each lower bound refuses the values outside it, and NaN fails every bound", () => {
     assert.deepStrictEqual(
       ["0", "1", "1E0", " 2 ", "INF", "-INF", "NaN"].map((form) => [
-        boundBroken("minInclusive", form),
-        boundBroken("minExclusive", form),
-        boundBroken("maxInclusive", form),
-        boundBroken("maxExclusive", form),
+        breaks("minInclusive", form),
+        breaks("minExclusive", form),
       ]),
       [
-        [true, true, false, false],
-        [false, true, false, true],
-        [false, true, false, true],
-        [false, false, true, true],
-        [false, false, true, true],
-        [true, true, false, false],
-        [true, true, true, true],
+        [true, true],
+        [false, true],
+        [false, true],
+        [false, false],
+        [false, false],
+        [true, true],
+        [true, true],
       ],
     );
   });
 
-  it.effect("a double below its minInclusive or at its minExclusive breaks its value domain", () =>
+  it.effect("a double below its minInclusive or at its minExclusive breaks its bound", () =>
     Effect.gen(function* doubles() {
       const minInclusive = breachesOf(
         yield* judged(

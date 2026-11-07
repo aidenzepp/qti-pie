@@ -157,14 +157,19 @@ const enumerationOf = (domain: Domain): readonly string[] =>
   domain.facets.flatMap(({ facet, value }) => (facet === "enumeration" ? [value] : []));
 
 describe("The departures from the XSD", () => {
-  it("are gone: a slider's step is NonNegativeDoubleDType, 0, INF and NaN its lexical forms and zero its bound", () => {
+  it("are gone: a slider's step is NonNegativeDoubleDType, 0 and INF its lexical forms, NaN none, and zero its bound", () => {
     for (const version of schemaVersions) {
       const step = Option.getOrThrow(domainAt(version, "qti-slider-interaction", "step"));
-      for (const value of ["0", "0.0", "INF", "NaN", " 2.5 ", "1e3"]) {
+      for (const value of ["0", "0.0", "INF", " 2.5 ", "1e3"]) {
         assert.isTrue(matches(step, value), value);
       }
 
-      assert.deepStrictEqual(step.facets, [{ facet: "minInclusive", value: "0.0" }]);
+      assert.isFalse(
+        matches(step, "NaN"),
+        "NaN meets no bound, so it is outside the bounded lexical space",
+      );
+
+      assert.deepStrictEqual(step.bound, Option.some({ facet: "minInclusive", value: 0 }));
     }
   });
 
@@ -845,8 +850,8 @@ describe("The spec readings", () => {
   it("read 16: normal-maximum is greater than zero", () => {
     for (const version of schemaVersions) {
       assert.deepStrictEqual(
-        Option.getOrThrow(domainAt(version, "qti-outcome-declaration", "normal-maximum")).facets,
-        [{ facet: "minExclusive", value: "0" }],
+        Option.getOrThrow(domainAt(version, "qti-outcome-declaration", "normal-maximum")).bound,
+        Option.some({ facet: "minExclusive", value: 0 }),
       );
     }
   });

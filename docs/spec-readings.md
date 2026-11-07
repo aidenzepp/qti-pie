@@ -2512,3 +2512,28 @@ against it. A reading that is not an information-model-over-XSD case says which 
      interaction inside a template inline's span. This is a case of documents in conflict: the information model's prose
      against its tables and the XSD, for the template block. (Decided 2026-11-07 by the coordinator, under the
      operator's standing ruling of 2026-11-05, from seat FIX-TMPL, on lane VD's ruling.)
+
+144. **A bounded `xs:double` is judged on its IEEE value: a `NonNegativeDoubleDType` value is not below 0, and a
+     `normal-maximum` is above 0, each as XML Schema's value bound states it, held by a typed value beside the lexical
+     form.** Both QTI 3.0 XSDs derive `NonNegativeDoubleDType` from `xs:double` by `<xs:minInclusive value="0.0" />`
+     (`imsqti_asiv3p0_v1p0.xsd` lines 24034 to 24038, `imsqti_asiv3p0p1_v1p0.xsd` lines 24120 to 24124). They type with
+     it `qti-time-limits`' `min-time` and `max-time`, the slider interaction's `lower-bound`, `upper-bound` and `step`,
+     and the outcome declaration's `normal-maximum` (v3p0 lines 34627, 34628, 31838 to 31840 and 29988; v3p0p1 lines
+     34861, 34862, 31988 to 31990 and 30136), and an `xsi:type` may give the type to a foreign element's text. The
+     information model types each as NonNegativeDouble, "the data-type for numbers that are of the data-type 'double'
+     but must not be negative i.e. the minimum value is 0.0" (sections 7.26, 7.40.1 and 5.134.3). Of `normal-maximum`
+     it says further "it must be a positive value" (section 4.5.7), the stricter source, which reading 16 follows over
+     the XSD's `minInclusive`. A bound judges the value, and a literal's value is its IEEE double, rounded to nearest
+     (XML Schema 1.1 Part 2 §3.3.5.2, doubleLexicalMap), a magnitude below 2^-1075 rounding to a zero of its sign; -0
+     equals 0. So `-0` and `-1e-400` meet `minInclusive 0.0`, `1e-400` and `-0` fail reading 16's `minExclusive 0`,
+     `4.9e-324` meets both, and `-1`, `-INF` and `NaN` (which meets no bound) are refused under `attribute-lexical`.
+     Whether a literal clears a bound turns on that rounding, which no regular language decides, so the domain's
+     pattern states the lexical space alone, XML Schema 1.0's (reading 71's edition, in which `+INF` is outside it)
+     less `NaN`, since a datatype's lexical space is "the prescribed set of strings which the lexical mapping for that
+     datatype maps to values of that datatype" (XML Schema 1.1 Part 2 §2.3) and NaN meets no bound, so it is no value
+     of the bounded type; the value is a row of its own: the import reads the double once from the lexical form or the
+     text (`DoubleValue`, `TextDoubleValue`), where the form is in the lexical space, and the bound is a check on that
+     value (`Double bound`), read from the domain's `DoubleBound`. grizzle stores a `float8` with one zero, `-0` as 0,
+     which no bound tells apart. G1-2 found the database accepting `min-time="-1"`, `step="-1"` and
+     `normal-maximum="0"` while the law oracle refused them: the bound had been an unread `facets` column. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-G12.)

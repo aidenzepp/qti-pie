@@ -72,7 +72,6 @@ const unjudged = {
     "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
   "Expression: a between term": unreadTerm("between"),
   "Idref: a base term": unreadTerm("base"),
-  "MapKeyFloat.value": "a float, which no datum of the host's evaluator is",
   "MapKeyFloat: a cast term": unreadTerm("cast"),
   "Node.elements":
     "a tree root's running value of the element fold, the start value grizzle keeps in the field's builder",

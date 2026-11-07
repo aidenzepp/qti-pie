@@ -45,6 +45,7 @@ import type {
 } from "#pantry/grammar/closed.ts";
 import {
   compile,
+  boundFacets,
   domainPrimitives,
   identities,
   isEmptyDefinition,
@@ -54,6 +55,7 @@ import type {
   CompileError,
   CompiledDomain,
   DomainPrimitive,
+  DoubleBound,
   Identity,
   Reading,
 } from "#pantry/grammar/domains.ts";
@@ -1175,14 +1177,21 @@ export type AttributePayload = readonly [
 ];
 
 /**
- * The payload of `ValueDomain`: the primitive a typed value is derived in, the pattern its lexical
- * forms match as written, and its residual facets, spelled `facet=value` space-separated (empty for
- * none).
+ * The payload of `ValueDomain`: the primitive a typed value is derived in, and the pattern its
+ * lexical forms match as written.
  */
 export type DomainPayload = readonly [
   IdField<"primitive", DomainPrimitive>,
   ValueField<"pattern", string>,
-  ValueField<"facets", string>,
+];
+
+/**
+ * The payload of `DoubleBound`: a bounded double's or float's lower bound, its facet and its value
+ * (`DoubleBound` of `#pantry/grammar/domains.ts`).
+ */
+export type BoundPayload = readonly [
+  IdField<"facet", DoubleBound["facet"]>,
+  ValueField<"value", number>,
 ];
 
 /**
@@ -1253,7 +1262,12 @@ export interface AttributeGrammar {
     readonly [IdField<"domain", string>]
   >;
   /**
-   * `ValueDomain`: each domain's primitive, pattern and residual facets.
+   * `DoubleBound`: the lower bound of each domain whose typed value carries one, a double's or a
+   * float's, which no pattern states.
+   */
+  readonly doubleBound: Closed<readonly [IdField<"domain", string>], BoundPayload>;
+  /**
+   * `ValueDomain`: each domain's primitive and pattern.
    */
   readonly valueDomain: Closed<readonly [IdField<"domain", string>], DomainPayload>;
 }
@@ -1302,17 +1316,20 @@ export interface AttributeGrammarInput {
 }
 
 /**
- * Spell a domain's residual facets as `ValueDomain`'s `facets` payload.
+ * Spell a domain's bound for its definition's key.
  *
  * @param domain - The compiled domain.
- * @returns `facet=value` for each, space-separated; empty for none.
+ * @returns `facet=value`, empty for none.
  */
-const facetsText = (domain: CompiledDomain): string =>
-  domain.facets.map(({ facet, value }) => `${facet}=${value}`).join(" ");
+const boundText = (domain: CompiledDomain): string =>
+  Option.match(domain.bound, {
+    onNone: () => "",
+    onSome: ({ facet, value }) => `${facet}=${String(value)}`,
+  });
 
 /**
  * Key a compiled domain by its definition: two domains are one when their primitive, pattern,
- * residual facets and identity agree.
+ * bound and identity agree.
  *
  * @param domain - The compiled domain.
  * @returns The key.
@@ -1321,7 +1338,7 @@ const definitionKey = (domain: CompiledDomain): string =>
   [
     domain.primitive,
     domain.pattern,
-    facetsText(domain),
+    boundText(domain),
     Option.getOrElse(domain.identity, () => ""),
   ].join("\u0000");
 
@@ -1788,14 +1805,27 @@ export const generate = (
           "pattern",
           domains.ordered.map(({ pattern }) => pattern),
         ),
-        valueField("facets", domains.ordered.map(facetsText)),
       ],
       rows: domains.ordered.map((held) => ({
         domain: held.handle,
-        facets: facetsText(held),
         pattern: held.pattern,
         primitive: held.primitive,
       })),
+    });
+    const bounded = domains.ordered.flatMap((held) =>
+      Option.toArray(held.bound).map(({ facet, value }) => ({ domain: held.handle, facet, value })),
+    );
+    const doubleBound = yield* closed({
+      key: [domain],
+      name: "DoubleBound",
+      payload: [
+        idField("facet", yield* roster("BoundFacet", boundFacets)),
+        valueField(
+          "value",
+          bounded.map(({ value }) => value),
+        ),
+      ],
+      rows: bounded,
     });
     const identity = yield* closed({
       key: [domain],
@@ -1853,6 +1883,7 @@ export const generate = (
     return {
       admission,
       domains: domains.ordered,
+      doubleBound,
       emptyDomains: [...domains.empty.values()],
       governed: governedRelation,
       governor,

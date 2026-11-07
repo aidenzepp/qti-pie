@@ -134,6 +134,13 @@ export const packageMutations = {
     '<span id="lead">',
     '<span id="row-head">',
   ]),
+  // Double bound (reading 144): a slider's step below zero, plainly or by the least subnormal,
+  // each in xs:double's lexical space but outside NonNegativeDoubleDType's bound, judged on its IEEE
+  // value.
+  "Double bound": passageAt(item, 'upper-bound="10" step="1"', [
+    'upper-bound="10" step="-1"',
+    'upper-bound="10" step="-4.9e-324"',
+  ]),
   // Equal tolerance (reading 121): an absolute or relative equality written with no tolerance,
   // or with a tolerance that is not above 0.
   "Equal tolerance": passageAt(

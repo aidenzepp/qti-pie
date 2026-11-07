@@ -598,6 +598,8 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("OpenAttributeName", "node", "attribute", "at"), "AL4 open names"],
   [primaryKeyOf("Idref", "node", "attribute", "at"), "E1 derived"],
   [primaryKeyOf("AttributeEntity", "node", "attribute", "at"), "AttributeEntity owner"],
+  [primaryKeyOf("DoubleValue", "node", "attribute", "at"), "Double value"],
+  [primaryKeyOf("TextDoubleValue", "node", "at"), "Double value"],
   [primaryKeyOf("Package", "id"), "Package key"],
   [primaryKeyOf("Entry", "package", "at"), "Entry family"],
   ...(["ManifestId", "Resource", "File", "Dependency"] as const).map(

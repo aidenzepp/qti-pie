@@ -115,6 +115,8 @@ describe("qti/attributes.ts, declared", () => {
       "AL3 required",
       "AL4 open names",
       "Attribute prefix",
+      "Double bound",
+      "Double value",
       "E1 derived",
       "Foreign attribute class",
       "TextDomain",

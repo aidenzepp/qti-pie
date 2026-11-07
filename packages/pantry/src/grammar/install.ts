@@ -31,7 +31,7 @@
  * - An element's attributes and text are read under its governor ({@link GoverningOf}): its kind, or
  *   the type an `xsi:type` makes govern it (spec readings 60 and 84).
  */
-import { closed, closedId, fin, natural, slot, str } from "@bjornpagen/grizzle";
+import { closed, closedId, fin, natural, pg, slot, str } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Result } from "effect";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
 import { openDomain } from "#pantry/grammar/attributes.ts";
@@ -308,6 +308,15 @@ export const Use = closed(
 export const DomainPrimitive = closed(
   "DomainPrimitive",
   nonEmpty("DomainPrimitive", grammar.attributes.valueDomain.payload[0].roster.handles),
+);
+
+/**
+ * The `BoundFacet` roster: the facets a double's or a float's lower bound is, `minExclusive` and
+ * `minInclusive` ({@link DoubleBound}).
+ */
+export const BoundFacet = closed(
+  "BoundFacet",
+  nonEmpty("BoundFacet", grammar.attributes.doubleBound.payload[0].roster.handles),
 );
 
 /**
@@ -1073,26 +1082,37 @@ export const AttributeNameSelf = closed.relation(
 );
 
 /**
- * `ValueDomainOf`: domain → (primitive, pattern, facets), each value domain's primitive, the
- * pattern its lexical forms match as written, and its residual facets, `facet=value`
- * space-separated. AL1 and the text law read `pattern` through `Compute.matches`, whose pattern
- * term must meet its subject's type, so `pattern` is plain text, no contract.
+ * `ValueDomainOf`: domain → (primitive, pattern), each value domain's primitive and the pattern its
+ * lexical forms match as written, its lexical space. AL1 and the text law read `pattern` through
+ * `Compute.matches`, whose pattern term must meet its subject's type, so `pattern` is plain text,
+ * no contract.
  */
 export const ValueDomainOf = closed.relation(
   "ValueDomainOf",
   {
     domain: closedId(ValueDomain),
-    facets: anyText,
     pattern: anyText,
     primitive: closedId(DomainPrimitive),
   },
   ["domain"],
-  grammar.attributes.valueDomain.rows.map(({ domain, facets, pattern, primitive }) => ({
+  grammar.attributes.valueDomain.rows.map(({ domain, pattern, primitive }) => ({
     domain,
-    facets,
     pattern,
     primitive,
   })),
+);
+
+/**
+ * `DoubleBound`: domain → (facet, value), the lower bound of each domain whose typed value carries
+ * one, a double's or a float's (`DoubleBound` of `#pantry/grammar/domains.ts`). No pattern states
+ * it, since whether a literal clears it turns on IEEE rounding; `DoubleValue`'s bound law reads it
+ * (`#pantry/qti/attributes.ts`).
+ */
+export const DoubleBound = closed.relation(
+  "DoubleBound",
+  { domain: closedId(ValueDomain), facet: closedId(BoundFacet), value: pg.float8 },
+  ["domain"],
+  grammar.attributes.doubleBound.rows.map(({ domain, facet, value }) => ({ domain, facet, value })),
 );
 
 /**
@@ -1104,6 +1124,13 @@ export const ValueDomainOf = closed.relation(
  */
 export const emptyDomains: readonly (typeof ValueDomain.handles)[number][] =
   grammar.attributes.emptyDomains.map((domain) => asValueDomain(domain));
+
+/**
+ * The domains whose typed value a bound judges: each with a {@link DoubleBound} row, whose
+ * attributes carry a `DoubleValue`.
+ */
+export const boundedDomains: readonly (typeof ValueDomain.handles)[number][] =
+  grammar.attributes.doubleBound.rows.map(({ domain }) => asValueDomain(domain));
 
 /**
  * The identity of each domain that has one.

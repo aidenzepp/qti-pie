@@ -150,7 +150,8 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  *   points of its `chars`, empty where `chars` is) and `stringPiece` (its `chars` where its
  *   parent's text is checked or copied, empty elsewhere: the string value fold's step);
  * - **the tree's group:** `parent`, which the nesting supplies and the root holds as its own id;
- * - **drawn:** `at`, `children`, `start`, `end`, and the attribute and namespace family counts;
+ * - **drawn:** `at`, `children`, `start`, `end`, and the attribute, namespace and typed text
+ *   (`doubleValue`, `TextDoubleValue` of `#pantry/qti/attributes.ts`) family counts;
  * - **accumulated** by grizzle along the tree's axes: the parent copies (`parentParentKind` the
  *   parent's own `parentKind`, so a member's string value can be selected by its grandparent, as
  *   {@link copiedTitleText} is), `was` and `lastState`, and each fold's values: `elementsWas`,
@@ -175,6 +176,7 @@ export const Node = relation(
     countedChildren: accumulated(natural, 0n),
     document: uuid,
     documentType: closedId(ResourceType),
+    doubleValue: drawn(natural),
     elementChildren: accumulated(natural, 0n),
     elements: accumulated(natural, 0n),
     elementsWas: accumulated(natural, 0n),
@@ -265,15 +267,15 @@ const positioned = (n: NodeRow) => n.or(element(n), n.ne(positionOf(n), "0"));
 
 /**
  * The value domains that check nothing: those whose pattern is `xs:anySimpleType`'s, every string
- * of XML characters, and that state no facet (`xs:anySimpleType` and `xs:normalizedString` at the
- * pinned grammar). A text under one of them can fail no TextDomain check, so it is never folded.
+ * of XML characters (`xs:anySimpleType` and `xs:normalizedString` at the pinned grammar). No such
+ * domain bounds a typed value, since a bound is a double's or a float's (`DoubleBound`), whose
+ * pattern is its lexical space. A text under one of them can fail no TextDomain check, so it is
+ * never folded.
  */
 export const universalDomains: readonly (typeof ValueDomain.handles)[number][] = (() => {
   const any = ValueDomainOf.rows.find(({ domain }) => domain === openDomain.handle)?.pattern;
 
-  return ValueDomainOf.rows
-    .filter(({ facets, pattern }) => pattern === any && facets === "")
-    .map(({ domain }) => domain);
+  return ValueDomainOf.rows.filter(({ pattern }) => pattern === any).map(({ domain }) => domain);
 })();
 
 /**
