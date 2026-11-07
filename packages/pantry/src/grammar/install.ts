@@ -1429,6 +1429,9 @@ export const CnForm = closed.relation(
 /**
  * `CnPattern`: (form, base) → pattern, the lexical space of a part of the form, its digits read in
  * the base from 2 to 36 ({@link cnPatternOf}); a double's and a hexdouble's pattern reads no base.
+ * {@link cnPatternOf} returns an XML Schema pattern, which anchors itself; PostgreSQL's `~`
+ * searches, and grizzle requires a pattern anchored by `^` and `$`, so each row's payload is the
+ * pattern wrapped as `^(?:…)$` and the database judges a part's whole text.
  */
 export const CnPattern = closed.relation(
   "CnPattern",
@@ -1439,7 +1442,7 @@ export const CnPattern = closed.relation(
       Option.toArray(cnPatternOf(form, base)).map((pattern) => ({
         base: String(base),
         form,
-        pattern,
+        pattern: `^(?:${pattern})$`,
       })),
     ),
   ),
