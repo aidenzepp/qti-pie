@@ -103,8 +103,8 @@ export const precedence = [
   "include-root",
   "inclusion-cycle",
   // P1 to P4, packaging.
-  "root-type-reverse",
   "entry-kind",
+  "root-type-reverse",
   "file-listed",
   "file-exists",
   "href-listed",

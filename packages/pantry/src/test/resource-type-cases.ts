@@ -64,7 +64,10 @@ export interface ResourceTypeCase {
 }
 
 /**
- * The six cases.
+ * The seven cases: the box's six, and one path under two types with the stimulus listed first. In
+ * that order the document is typed by its stimulus listing, so RootOfType breaks beside Document
+ * entry, and the catalog's precedence names the refusal, entry-kind ahead of root-type-reverse
+ * (reading 93; package.ts's P3).
  */
 export const resourceTypeCases: readonly ResourceTypeCase[] = [
   {
@@ -98,6 +101,25 @@ export const resourceTypeCases: readonly ResourceTypeCase[] = [
     named: [
       ["choice.xml", itemType],
       ["choice.xml", stimulusType],
+    ],
+    resources: 2,
+    typed: 2,
+    verdict: { rule: "entry-kind", verdict: "refused" },
+  },
+  {
+    broken: ["Document entry", "RootOfType"],
+    edits: [
+      {
+        _tag: "ReplaceText",
+        file: "imsmanifest.xml",
+        replacement: `<resources><resource identifier="stim" type="${stimulusType}" href="choice.xml"><file href="choice.xml"/></resource>`,
+        search: "<resources>",
+      },
+    ],
+    label: "two types, one path, the stimulus listed first",
+    named: [
+      ["choice.xml", stimulusType],
+      ["choice.xml", itemType],
     ],
     resources: 2,
     typed: 2,

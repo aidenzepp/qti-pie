@@ -2,21 +2,26 @@
  * A resource's type as an optional part (the boundary class, option B): the host writes a
  * `ResourceTyped`, and a `TypedHref` for its href, exactly where the type spells a handle, and
  * `NamedHref`'s (path, type) pairs are exactly the typed hrefs'; the law oracle's verdict and the
- * laws it finds broken over each case of reading 93's box are the stated ones, and a type that
- * spells nothing breaks AL1 alone.
+ * laws it finds broken over each case of reading 93's box are the stated ones, the import's rows,
+ * judged on the host, are refused under the same rule, and a type that spells nothing breaks AL1
+ * alone.
  *
  * Oracle: the specification as a checker, spec readings 67 (a resource's `type` is its version's
  * enumeration, an `xs:string` restriction whose whitespace is preserved, XSD 1.1 Part 2 §4.3.6) and
  * 93 (a document has one type, so one path under two document types is refused), and the law
  * oracle's verdict on each case.
  */
+import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Formatter, Result } from "effect";
+import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
+import { ruleOfLaws } from "#pantry/import/refusal.ts";
+import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materializeSpec, specOf } from "#pantry/test/fixtures.ts";
+import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
 
@@ -51,13 +56,27 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               name: `resource-types-${label.replaceAll(/[^\da-z]+/giu, "-")}`,
             });
             const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
-            const { inputs } = yield* readProgram(dir);
+            const minted = new Set<string>();
+            const { inputs } = yield* readProgram(dir, (): NodeId => {
+              const id: NodeId = randomUUID();
+              minted.add(id);
+
+              return id;
+            });
+            const host = hostVerdictOf(inputs, minted);
 
             assert.deepStrictEqual(verdictOf(judgment), verdict, Formatter.format(judgment));
             assert.sameMembers(
               judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : [],
               [...broken],
               "the laws broken",
+            );
+            assert.strictEqual(
+              Arr.isReadonlyArrayNonEmpty(host.brokenLaws)
+                ? Option.getOrUndefined(ruleOfLaws(host.brokenLaws))
+                : undefined,
+              verdict.verdict === "accepted" ? undefined : verdict.rule,
+              "the import's rows, judged on the host, refused under the same rule",
             );
 
             assert.strictEqual(inputs.Resource.size, resources, "a Resource a resource");
