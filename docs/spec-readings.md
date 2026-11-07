@@ -2492,6 +2492,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      a namespace no reader knows (XML 1.0 section 4.4.3); crust does not judge its grammar, and pantry refuses it under
      `namespace-entity`. libxml2 2.9.13's `xmllint` reports `namespace error : xmlns:p: '…' is not a valid URI` for
      `&#x20;`, `&#x20;urn:x`, `a b`, `%zz`, `urn:a#b#c`, `&quot;`, `urn:é`, `&#9;` and `http://[bad` alike, as this
-     reading refuses them. This binds pantry and plate alike, which read through crust. This is not a case of documents
-     in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from
-     RV seat CRUST (`daed3e96`), on GEN-B/codec's finding N2.)
+     reading refuses them; with `--noout` it reports nothing for `&#38;f;http://x`, whose first segment holds a colon
+     (RFC 3986 section 4.2), which this reading refuses, and only `--c14n` refuses it. This binds pantry and plate
+     alike, which read through crust. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from RV seat CRUST (`daed3e96`), on GEN-B/codec's
+     finding N2.)
