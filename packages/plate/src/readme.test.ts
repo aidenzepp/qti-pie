@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result, Schema } from "effect";
 import { storedVersion } from "#plate/codec/record.ts";
+import { expressionKinds } from "#plate/model/expression.ts";
+import { landedKinds } from "#plate/model/expressions/read.ts";
 import {
   acceptedItem,
   configure,
@@ -50,7 +52,8 @@ const opening = [
 const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
- * The README's sections: the eleven it had before M2, the four M2 adds and the one M3.b-2 adds.
+ * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds and
+ * the one M3.b-3 adds.
  */
 const headings = [
   "## Install",
@@ -62,6 +65,7 @@ const headings = [
   "## Interactions",
   "## Scoring",
   "## Template processing",
+  "## Outcome processing",
   "## Server and browser",
   "## Hosts",
   "## Styling",
@@ -98,6 +102,20 @@ const recipes = [
  * The records a host stores, each documented as versioned JSON.
  */
 const records = ["StoredRecord", "StoredTestSession"] as const;
+
+/**
+ * The eight expressions only a test's outcome processing may hold, each as the README names it.
+ */
+const outcomeOnly = [
+  "qti-number-correct",
+  "qti-number-incorrect",
+  "qti-number-presented",
+  "qti-number-responded",
+  "qti-number-selected",
+  "qti-outcome-minimum",
+  "qti-outcome-maximum",
+  "qti-test-variables",
+] as const;
 
 /**
  * The package's name, which a host imports plate's surface through.
@@ -272,6 +290,18 @@ const sectionOf = (heading: string): string => {
 
   return (end === -1 ? rest : rest.slice(0, end)).map(({ line }) => line).join("\n");
 };
+
+/**
+ * Give the paragraphs of one section, each on one line: its blocks between blank lines, with each
+ * line break read as a space, so a phrase the README wraps still matches.
+ *
+ * @param heading The section's heading line, such as `## Records`.
+ * @returns The section's paragraphs, list items and table rows among them as their blocks are.
+ */
+const paragraphsOf = (heading: string): readonly string[] =>
+  sectionOf(heading)
+    .split(/\n{2,}/u)
+    .map((paragraph) => paragraph.replaceAll("\n", " "));
 
 /**
  * Give the fenced code blocks of a Markdown text.
@@ -680,6 +710,132 @@ describe("README.md", () => {
           paragraph.includes("any base type"),
       ),
       "a paragraph of Scoring says a test's SCORE and MAXSCORE may have any base type",
+    );
+  });
+
+  it("[T-9] says, of outcome processing in the README, that each run starts from the declared defaults after an individual part's item, after a simultaneous part and at the test's close", () => {
+    const section = sectionOf("## Outcome processing");
+    const runs = section
+      .split("\n")
+      .filter((line) => line.startsWith("- after") || line.startsWith("- once"));
+
+    assert.include(section.replaceAll("\n", " "), "each time from the declared defaults");
+    assert.lengthOf(runs, 3, "Outcome processing lists the three times a run happens");
+    assert.isTrue(
+      runs.some((line) => line.includes("individual part")),
+      "a run follows the submission of an individual part's item",
+    );
+    assert.isTrue(
+      runs.some((line) => line.includes("simultaneous part")),
+      "a run follows a simultaneous part's submission",
+    );
+    assert.isTrue(
+      runs.some((line) => line.includes("test closes")),
+      "a run happens when the test closes",
+    );
+  });
+
+  it("[T-9] says what results write of a test's own outcomes with no outcome processing and with a marked one", () => {
+    assert.isTrue(
+      paragraphsOf("## Outcome processing").some(
+        (paragraph) =>
+          paragraph.includes("`results` writes the test's outcomes as the session holds them") &&
+          paragraph.includes("no outcome processing writes its outcomes' defaults") &&
+          paragraph.includes("the verdict marks writes none of its own"),
+      ),
+      "a paragraph of Outcome processing says what results write for each state",
+    );
+  });
+
+  it("[T-9] names in Outcome processing each of the eight expressions only a test may hold", () => {
+    const section = sectionOf("## Outcome processing");
+
+    for (const kind of outcomeOnly) {
+      assert.include(section, `\`${kind}\``);
+    }
+  });
+
+  it("[T-9] gives in Scoring the number of expressions plate runs and names qti-field-value as the one left", () => {
+    const unlanded = expressionKinds.filter((kind) => !landedKinds.includes(kind));
+
+    assert.deepStrictEqual(unlanded, ["field-value"]);
+    assert.isTrue(
+      paragraphsOf("## Scoring").some(
+        (paragraph) =>
+          paragraph.includes(
+            `Of the ${String(expressionKinds.length)} expressions QTI 3.0 defines, plate runs ${String(landedKinds.length)}.`,
+          ) && paragraph.includes("`qti-field-value`"),
+      ),
+      "a paragraph of Scoring gives the count of expressions plate runs and names qti-field-value",
+    );
+  });
+
+  it("[T-9] says in Scoring that a duration is held in seconds and that open refuses an ISO 8601 one with value-type", () => {
+    assert.isTrue(
+      paragraphsOf("## Scoring").some(
+        (paragraph) =>
+          paragraph.includes("A duration is a number of seconds") &&
+          paragraph.includes("`PT1M30.5S`") &&
+          paragraph.includes("`value-type`") &&
+          paragraph.includes("`qti-duration-lt`") &&
+          paragraph.includes("`qti-duration-gte`"),
+      ),
+      "a paragraph of Scoring says how a duration is held, written and compared",
+    );
+  });
+
+  it("[T-9] says in Template processing when a test session evaluates an item ref's template defaults, and that one that does not fit is EngineFailure", () => {
+    const section = sectionOf("## Template processing").replaceAll("\n", " ");
+
+    for (const sentence of [
+      "an item ref's `qti-template-default` gives a template variable the value its template processing starts from",
+      "A linear part evaluates an item's defaults when it first shows the item",
+      "A nonlinear part evaluates the defaults of all its items when it starts",
+      "`startTest` fails with `EngineFailure` when a default of its first part",
+      "`advance` fails with it",
+    ]) {
+      assert.include(section, sentence);
+    }
+  });
+
+  it("[T-9] names EngineFailure in the Functions table's startTest row", () => {
+    const row =
+      sectionOf("## Functions")
+        .split("\n")
+        .find((line) => line.startsWith("| `startTest` |")) ??
+      assert.fail("the Functions table has no startTest row");
+
+    assert.include(row, "`EngineFailure`");
+  });
+
+  it("[T-9] lists in Records what decodeSession refuses of a session that does not fit the test it is given", () => {
+    const section = sectionOf("## Records");
+    const listed = section.split("\n").filter((line) => line.startsWith("- "));
+
+    assert.include(
+      section.replaceAll("\n", " "),
+      "It refuses with `InvalidSession` a session that does not fit",
+    );
+    for (const field of ["items", "parts", "record", "dates", "position", "outcomes"]) {
+      assert.isTrue(
+        listed.some((line) => line.includes(field)),
+        `Records lists what decodeSession checks of a session's ${field}`,
+      );
+    }
+    assert.notInclude(section, "does not check the session's items");
+  });
+
+  it("[T-9] names OutputTooLarge's limit field and redact's range for a budget in Scoring's time-limit paragraph", () => {
+    assert.isTrue(
+      paragraphsOf("## Scoring").some(
+        (paragraph) =>
+          paragraph.includes("time limit") &&
+          paragraph.includes("`limit`") &&
+          paragraph.includes('`"text"`') &&
+          paragraph.includes('`"budget"`') &&
+          paragraph.includes("outside 1 to 536,870,888"),
+      ),
+      "the paragraph of Scoring that advises a time limit names limit and redact's range",
     );
   });
 
