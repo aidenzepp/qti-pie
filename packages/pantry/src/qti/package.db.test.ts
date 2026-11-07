@@ -36,6 +36,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
+import { LomResource } from "#pantry/qti/metadata.ts";
 import {
   Dependency,
   File,
@@ -587,6 +588,16 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
             } as const;
             const named = { package: stray, path: "a.xml", type: "webcontent" } as const;
             const resourceHref = { ...named, href: "a.xml", node: stray, scope: "entry" } as const;
+            // The resource each href is the one `href` of, the owner of `LomResource.hrefs`, which a
+            // change inserts beside its member: lawful on its own CHECK (`E1_derived`: an item's or
+            // a test's names its own type, any other type names none).
+            const resourceOf = (type: Fact<typeof LomResource>["type"]) =>
+              ({
+                named:
+                  type === "imsqti_item_xmlv3p0" || type === "imsqti_test_xmlv3p0" ? type : "none",
+                node: stray,
+                type,
+              }) as const;
             const fileOf = (path: string, scope: "entry" | "unresolved") =>
               ChangeSet.empty(Author)
                 .insert(FileHref, [{ package: stray, path, scope }])
@@ -596,123 +607,154 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 ]);
             const cases = [
               {
-                changes: ChangeSet.empty(Author)
-                  .insert(NamedHref, [{ ...named, path: "b/../a.xml" }])
-                  .insert(ResourceHref, [
-                    { ...resourceHref, href: "b/../a.xml", path: "b/../a.xml" },
-                  ]),
                 law: checkNamed("ResourceHref", "E1_derived"),
                 name: "resource href resolved to a path with a dot segment",
+                outcome: db.apply(
+                  ChangeSet.empty(Author)
+                    .insert(LomResource, [resourceOf("webcontent")])
+                    .insert(NamedHref, [{ ...named, path: "b/../a.xml" }])
+                    .insert(ResourceHref, [
+                      { ...resourceHref, href: "b/../a.xml", path: "b/../a.xml" },
+                    ]),
+                  {},
+                ),
               },
               {
-                changes: ChangeSet.empty(Author)
-                  .insert(NamedHref, [{ ...named, path: "a%zz.xml" }])
-                  .insert(ResourceHref, [
-                    { ...resourceHref, href: "a%zz.xml", path: "a%zz.xml", scope: "unresolved" },
-                  ]),
                 law: checkNamed("ResourceHref", "Href_form"),
                 name: "resource href the importer reads no name from",
+                outcome: db.apply(
+                  ChangeSet.empty(Author)
+                    .insert(LomResource, [resourceOf("webcontent")])
+                    .insert(NamedHref, [{ ...named, path: "a%zz.xml" }])
+                    .insert(ResourceHref, [
+                      { ...resourceHref, href: "a%zz.xml", path: "a%zz.xml", scope: "unresolved" },
+                    ]),
+                  {},
+                ),
               },
               {
-                changes: ChangeSet.empty(Author)
-                  .insert(NamedHref, [
-                    { ...named, path: "http://x.org/a.xml", type: "imsqti_item_xmlv3p0" },
-                  ])
-                  .insert(ResourceHref, [
-                    {
-                      ...resourceHref,
-                      href: "http://x.org/a.xml",
-                      path: "http://x.org/a.xml",
-                      scope: "external",
-                      type: "imsqti_item_xmlv3p0",
-                    },
-                  ]),
                 law: checkNamed("ResourceHref", "Document_entry"),
                 name: "document-typed resource href outside the package",
+                outcome: db.apply(
+                  ChangeSet.empty(Author)
+                    .insert(LomResource, [resourceOf("imsqti_item_xmlv3p0")])
+                    .insert(NamedHref, [
+                      { ...named, path: "http://x.org/a.xml", type: "imsqti_item_xmlv3p0" },
+                    ])
+                    .insert(ResourceHref, [
+                      {
+                        ...resourceHref,
+                        href: "http://x.org/a.xml",
+                        path: "http://x.org/a.xml",
+                        scope: "external",
+                        type: "imsqti_item_xmlv3p0",
+                      },
+                    ]),
+                  {},
+                ),
               },
               {
-                changes: fileOf("a%zz.xml", "unresolved"),
                 law: checkNamed("File", "Href_form"),
                 name: "file href the importer reads no name from",
+                outcome: db.apply(fileOf("a%zz.xml", "unresolved"), {}),
               },
               {
-                changes: fileOf("./a.xml", "entry"),
                 law: checkNamed("File", "E1_derived"),
                 name: "file path resolved with a dot segment",
+                outcome: db.apply(fileOf("./a.xml", "entry"), {}),
               },
               {
-                changes: ChangeSet.empty(Author).insert(Dependency, [
-                  {
-                    ...tuple,
-                    kind: "cp:dependency",
-                    ref: "r1",
-                    resource: stray,
-                    resourceIdentifier: "r1",
-                  },
-                ]),
                 law: checkNamed("Dependency", "Self_dependency"),
                 name: "dependency on its own resource",
-              },
-              {
-                changes: ChangeSet.empty(Author).insert(Reference, [
-                  { ...reference, lead: "", lexical: " a.png", scope: "external" },
-                ]),
-                law: checkNamed("Reference", "E1_derived"),
-                name: "reference not lead ‖ target ‖ params ‖ trail",
-              },
-              {
-                changes: ChangeSet.empty(Author).insert(Reference, [
-                  { ...reference, lexical: "http://x.org/a.png", target: "http://x.org/a.png" },
-                ]),
-                law: checkNamed("Reference", "E1_derived"),
-                name: "reference with a scheme not external",
-              },
-              {
-                changes: ChangeSet.empty(Author).insert(Reference, [
-                  { ...reference, scope: "document" },
-                ]),
-                law: checkNamed("Reference", "E1_derived"),
-                name: "reference with a target naming its own document",
-              },
-              {
-                changes: ChangeSet.empty(Author).insert(Reference, [
-                  { ...reference, lexical: "a%zz.png", scope: "unresolved", target: "a%zz.png" },
-                ]),
-                law: checkNamed("Reference", "Href_form"),
-                name: "reference the importer reads no name from",
-              },
-              {
-                changes: ChangeSet.empty(Author).insert(Reference, [
-                  {
-                    ...reference,
-                    lexical: "http://x.org/a.png,http://x.org/b.png",
-                    name: "srcset",
-                    scope: "external",
-                    target: "http://x.org/a.png,http://x.org/b.png",
-                  },
-                ]),
-                law: checkNamed("Reference", "Href_form"),
-                name: "srcset of two external candidates",
-              },
-              {
-                changes: ChangeSet.empty(Author)
-                  .insert(Reference, [{ ...reference, node: strayOther }])
-                  .insert(ReferencePath, [
+                outcome: db.apply(
+                  ChangeSet.empty(Author).insert(Dependency, [
                     {
-                      document: stray,
-                      kind: "img",
-                      name: "src",
-                      node: strayOther,
-                      package: stray,
-                      path: "items/../a.png",
+                      ...tuple,
+                      kind: "cp:dependency",
+                      ref: "r1",
+                      resource: stray,
+                      resourceIdentifier: "r1",
                     },
                   ]),
+                  {},
+                ),
+              },
+              {
+                law: checkNamed("Reference", "E1_derived"),
+                name: "reference not lead ‖ target ‖ params ‖ trail",
+                outcome: db.apply(
+                  ChangeSet.empty(Author).insert(Reference, [
+                    { ...reference, lead: "", lexical: " a.png", scope: "external" },
+                  ]),
+                  {},
+                ),
+              },
+              {
+                law: checkNamed("Reference", "E1_derived"),
+                name: "reference with a scheme not external",
+                outcome: db.apply(
+                  ChangeSet.empty(Author).insert(Reference, [
+                    { ...reference, lexical: "http://x.org/a.png", target: "http://x.org/a.png" },
+                  ]),
+                  {},
+                ),
+              },
+              {
+                law: checkNamed("Reference", "E1_derived"),
+                name: "reference with a target naming its own document",
+                outcome: db.apply(
+                  ChangeSet.empty(Author).insert(Reference, [{ ...reference, scope: "document" }]),
+                  {},
+                ),
+              },
+              {
+                law: checkNamed("Reference", "Href_form"),
+                name: "reference the importer reads no name from",
+                outcome: db.apply(
+                  ChangeSet.empty(Author).insert(Reference, [
+                    { ...reference, lexical: "a%zz.png", scope: "unresolved", target: "a%zz.png" },
+                  ]),
+                  {},
+                ),
+              },
+              {
+                law: checkNamed("Reference", "Href_form"),
+                name: "srcset of two external candidates",
+                outcome: db.apply(
+                  ChangeSet.empty(Author).insert(Reference, [
+                    {
+                      ...reference,
+                      lexical: "http://x.org/a.png,http://x.org/b.png",
+                      name: "srcset",
+                      scope: "external",
+                      target: "http://x.org/a.png,http://x.org/b.png",
+                    },
+                  ]),
+                  {},
+                ),
+              },
+              {
                 law: checkNamed("ReferencePath", "E1_derived"),
                 name: "resolved reference with a dot segment",
+                outcome: db.apply(
+                  ChangeSet.empty(Author)
+                    .insert(Reference, [{ ...reference, node: strayOther }])
+                    .insert(ReferencePath, [
+                      {
+                        document: stray,
+                        kind: "img",
+                        name: "src",
+                        node: strayOther,
+                        package: stray,
+                        path: "items/../a.png",
+                      },
+                    ]),
+                  {},
+                ),
               },
             ] as const;
-            for (const { changes, law, name } of cases) {
-              const outcome = yield* db.apply(changes, {});
+            for (const { law, name, outcome: applying } of cases) {
+              const outcome = yield* applying;
 
               assert.isTrue(rejectedBy(outcome, law), `${name}: ${outcome.kind}`);
             }

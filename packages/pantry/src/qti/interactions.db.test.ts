@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/text-encoding-identifier-case -- The stray document spells its XML encoding labels (`UTF-8`) as crust's reader reports them and `Document` stores them. */
 /**
  * The O3 overlays' laws on the lease, PostgreSQL itself the judge (testing doctrine, rule 3): each
  * refused state is one the law's model refuses, named by the law it breaks, and each accepted edge
@@ -45,8 +46,10 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { Declaration } from "#pantry/qti/declarations.ts";
+import { Document } from "#pantry/qti/chardata.ts";
 import {
   AriaRange,
+  Binding,
   BoundVariable,
   Choice,
   ChoiceVariableName,
@@ -61,6 +64,7 @@ import {
   Slider,
 } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
+import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
@@ -275,6 +279,61 @@ const nameOf = (identifier: string) =>
     identifier,
     rootKind: "qti-assessment-item",
   }) satisfies Addition<typeof ChoiceVariableName>;
+
+/**
+ * The stray document as the owner of its choices' and hottexts' families (`Document.choices`,
+ * `Document.hottexts`), which a change inserts beside its members, since an immutable owner's
+ * family takes an append only beside an insert of its owner: the manifest's row, lawful on its own
+ * CHECKs (`RootOfType` admits its `none` resource type at `imsmanifest.xml`, it writes no
+ * declaration, and its context is its own node). Its counts are the families' to draw.
+ */
+const strayDocument = {
+  assembled: false,
+  charset: "UTF-8",
+  contextNearest: stray,
+  contextNearestKind: "document",
+  encoding: "",
+  exportCharset: "UTF-8",
+  node: stray,
+  nodeChildren: 1n,
+  nodeDocument: stray,
+  nodeGoverns: "none",
+  nodeKind: "document",
+  nodeParentKind: "document",
+  nodeStart: 0n,
+  package: stray,
+  path: manifestPath,
+  resourceType: "none",
+  rootKind: "qti-assessment-item",
+  standalone: "none",
+  version: "3.0.1",
+  xmlVersion: "none",
+} as const satisfies Addition<typeof Document>;
+
+/**
+ * The bindings of the interactions some stray choices name, each the owner of its choices'
+ * family (`Binding.choices`), which a change inserts beside its members: a choice interaction of
+ * the stray document, lawful on its own CHECK (`E1_derived`: an interaction's kind), each bound to
+ * its own response. Its count is the family's to draw.
+ *
+ * @param choices - The choices.
+ * @returns One binding per interaction they name.
+ */
+const bindingsOf = (choices: readonly Fact<typeof Choice>[]) =>
+  [...new Set(choices.map(({ interaction }) => interaction))].map(
+    (interaction, at) =>
+      ({
+        document: stray,
+        identifier: `RESPONSE_${String(at)}`,
+        kind: "qti-choice-interaction",
+        nearest: stray,
+        node: interaction,
+        parent: stray,
+        rootKind: "qti-assessment-item",
+        start: 1n,
+        version: "3.0.1",
+      }) satisfies Addition<typeof Binding>,
+  );
 
 /**
  * A stray hottext of a hottext interaction.
@@ -1042,10 +1101,13 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               choiceOf(1, "A"),
               { ...choiceOf(1, "A"), interaction: strayNode(98) },
             ]) {
+              const pair = [choiceOf(0, "A"), second];
               const choices = yield* db.apply(
                 ChangeSet.empty(Author)
+                  .insert(Document, [strayDocument])
+                  .insert(Binding, bindingsOf(pair))
                   .insert(ChoiceVariableName, [nameOf("A")])
-                  .insert(Choice, [choiceOf(0, "A"), second]),
+                  .insert(Choice, pair),
                 {},
               );
               assert.isTrue(
@@ -1056,6 +1118,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
             const hottexts = yield* db.apply(
               ChangeSet.empty(Author)
+                .insert(Document, [strayDocument])
                 .insert(ChoiceVariableName, [nameOf("H")])
                 .insert(Hottext, [
                   hottextOf(0),
@@ -1065,10 +1128,13 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             );
             assert.isTrue(rejectedBy(hottexts, keyOver("Hottext", ["document", "identifier"])));
 
+            const gaps = [choiceOf(0, "A", "qti-gap"), choiceOf(1, "A", "qti-gap-text")];
             const classes = yield* db.apply(
               ChangeSet.empty(Author)
+                .insert(Document, [strayDocument])
+                .insert(Binding, bindingsOf(gaps))
                 .insert(ChoiceVariableName, [nameOf("A")])
-                .insert(Choice, [choiceOf(0, "A", "qti-gap"), choiceOf(1, "A", "qti-gap-text")]),
+                .insert(Choice, gaps),
               {},
             );
             assert.isFalse(
@@ -1108,6 +1174,8 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
             const choice = yield* db.apply(
               ChangeSet.empty(Author)
+                .insert(Document, [strayDocument])
+                .insert(Binding, bindingsOf([choiceOf(0, "A")]))
                 .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Choice, [choiceOf(0, "A")])
                 .insert(Declaration, [declared]),
@@ -1120,6 +1188,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
             const hottext = yield* db.apply(
               ChangeSet.empty(Author)
+                .insert(Document, [strayDocument])
                 .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Hottext, [hottextOf(0, { identifier: "A" })])
                 .insert(Declaration, [declared]),
@@ -1132,6 +1201,8 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
             const builtIn = yield* db.apply(
               ChangeSet.empty(Author)
+                .insert(Document, [strayDocument])
+                .insert(Binding, bindingsOf([choiceOf(0, "numAttempts")]))
                 .insert(ChoiceVariableName, [nameOf("numAttempts")])
                 .insert(Choice, [choiceOf(0, "numAttempts")]),
               {},
@@ -1214,6 +1285,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const hottext = yield* db.apply(
               ChangeSet.empty(Author)
+                .insert(Document, [strayDocument])
                 .insert(ChoiceVariableName, [nameOf("H")])
                 .insert(Hottext, [hottextOf(0, { nearest: stray })]),
               {},
