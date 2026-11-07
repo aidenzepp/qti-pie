@@ -141,6 +141,22 @@ const isQti = (element: SourceElement, test: (local: string) => boolean): boolea
   element.namespace === qtiNamespace && test(element.local);
 
 /**
+ * Look a QTI element up in a table keyed by local name.
+ *
+ * @param table The table.
+ * @param element The element.
+ * @returns The element's entry, none for an element outside QTI's namespace and for one the table
+ *   has no entry for.
+ */
+const qtiEntry = <Entry>(
+  table: ReadonlyMap<string, Entry>,
+  element: SourceElement,
+): Option.Option<Entry> =>
+  element.namespace === qtiNamespace
+    ? Option.fromUndefinedOr(table.get(element.local))
+    : Option.none();
+
+/**
  * Report whether an element is one of the item's variable declarations, a `qti-*-declaration`.
  *
  * @param element The element.
@@ -678,10 +694,9 @@ const processingOf = (context: Context, element: SourceElement): Option.Option<P
     ancestor !== undefined;
     ancestor = context.parents.get(ancestor)
   ) {
-    const processing =
-      ancestor.namespace === qtiNamespace ? processings.get(ancestor.local) : undefined;
-    if (processing !== undefined) {
-      return Option.some(processing);
+    const processing = qtiEntry(processings, ancestor);
+    if (Option.isSome(processing)) {
+      return processing;
     }
   }
 
@@ -701,14 +716,16 @@ const inProcessing = (context: Context, element: SourceElement): boolean =>
   Option.isSome(processingOf(context, element));
 
 /**
- * Report whether an element lies anywhere under a `qti-template-processing`.
+ * Report whether an element lies anywhere under the element that holds one processing: a
+ * `qti-response-processing` or a `qti-template-processing`.
  *
  * @param context The parents the walk has met.
  * @param element The element.
- * @returns Whether its nearest processing is the item's template processing.
+ * @param processing The processing.
+ * @returns Whether its nearest processing is that one.
  */
-const underTemplateProcessing = (context: Context, element: SourceElement): boolean =>
-  Option.exists(processingOf(context, element), (processing) => processing === "template");
+const liesIn = (context: Context, element: SourceElement, processing: Processing): boolean =>
+  Option.exists(processingOf(context, element), (nearest) => nearest === processing);
 
 /**
  * What each inline mapping expression needs of the response it names.
@@ -759,7 +776,7 @@ const mapResponseRequirements = (
   if (
     Option.isNone(expression) ||
     Option.isNone(attribute) ||
-    !Option.exists(processingOf(context, visit.element), (processing) => processing === "response")
+    !liesIn(context, visit.element, "response")
   ) {
     return [];
   }
@@ -1339,7 +1356,7 @@ const undeclaredVariable = (
 
   const { expected, identifier } = reference.value;
   if (
-    underTemplateProcessing(context, visit.element) &&
+    liesIn(context, visit.element, "template") &&
     Option.isSome(forbiddenRead(identifier, context.variables))
   ) {
     return [];
@@ -1400,7 +1417,7 @@ const templateReads = (
   context: Context,
 ): readonly Refusal[] => {
   const reference = referenceOf(visit.element);
-  if (Option.isNone(reference) || !underTemplateProcessing(context, visit.element)) {
+  if (Option.isNone(reference) || !liesIn(context, visit.element, "template")) {
     return [];
   }
 
@@ -1617,31 +1634,28 @@ interface TemplateTarget {
 const templateTargetOf = (
   element: SourceElement,
   context: Context,
-): Option.Option<TemplateTarget> => {
-  const kinds = element.namespace === qtiNamespace ? templateSetters.get(element.local) : undefined;
-  if (kinds === undefined) {
-    return Option.none();
-  }
+): Option.Option<TemplateTarget> =>
+  Option.map(
+    Option.all([qtiEntry(templateSetters, element), attributeOf(element, "identifier")]),
+    ([kinds, written]) => {
+      const identifier = identifierOf(written);
+      const declaration = context.variables.get(identifier);
 
-  return Option.map(attributeOf(element, "identifier"), (written) => {
-    const identifier = identifierOf(written);
-    const declaration = context.variables.get(identifier);
-
-    return {
-      identifier,
-      kinds,
-      set:
-        declaration === undefined
-          ? Option.none()
-          : Option.map(
-              Arr.findFirst(kinds, (kind) =>
-                isQti(declaration, (local) => local === targetDeclarations[kind]),
+      return {
+        identifier,
+        kinds,
+        set:
+          declaration === undefined
+            ? Option.none()
+            : Option.map(
+                Arr.findFirst(kinds, (kind) =>
+                  isQti(declaration, (local) => local === targetDeclarations[kind]),
+                ),
+                (kind) => ({ declaration, kind }),
               ),
-              (kind) => ({ declaration, kind }),
-            ),
-    };
-  });
-};
+      };
+    },
+  );
 
 /**
  * Apply `undeclared-variable` to a template rule whose `identifier` names no variable of a kind the
@@ -1670,7 +1684,7 @@ const templateTarget = (
   if (
     Option.isNone(target) ||
     Option.isSome(target.value.set) ||
-    !underTemplateProcessing(context, visit.element)
+    !liesIn(context, visit.element, "template")
   ) {
     return [];
   }
@@ -2599,10 +2613,7 @@ const templateIdentifierReference = (
   visit: Visit,
   context: Context,
 ): readonly Refusal[] => {
-  const line =
-    visit.element.namespace === qtiNamespace
-      ? Option.fromUndefinedOr(templateIdentifierSources.get(visit.element.local))
-      : Option.none();
+  const line = qtiEntry(templateIdentifierSources, visit.element);
   const written = Option.filter(attributeOf(visit.element, "template-identifier"), (attribute) =>
     isNcName(identifierOf(attribute)),
   );
