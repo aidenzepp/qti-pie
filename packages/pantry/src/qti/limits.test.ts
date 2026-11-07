@@ -286,7 +286,7 @@ describe("qti/limits.ts", () => {
       "OpenElementName(node, namespace)",
       "OpenAttributeName(node, uri, local)",
       "Namespace(node, prefix)",
-      "Resource(package, identifier)",
+      "ResourceId(package, identifier)",
     ]) {
       assert.isTrue(measured.has(key), `measured ${key}`);
     }
