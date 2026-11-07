@@ -957,21 +957,26 @@ const sessionItemReport = (
 
 /**
  * Write a test's own outcome variables, by the state of its outcome processing: each at its
- * starting value when it has none, and none when it has outcome processing the engine cannot run
- * (`marked`) or, until the outcome runs are written, outcome processing it runs (`runs`), so no
- * default reads as a score.
+ * starting value when it has none; each as the session holds it, which is as the last run left it,
+ * or at its starting value before the first, when the engine runs it (`runs`); and none when the
+ * engine cannot run it (`marked`), so no default reads as a score. Nothing here runs the
+ * processing: the session's transitions do.
  *
  * @param test The test.
- * @returns The `outcomeVariable` elements.
+ * @param session The session, whose outcomes `decodeSession` checked against the test's
+ *   declarations.
+ * @returns The `outcomeVariable` elements, one per declared outcome in declaration order, or none.
  */
-const testOutcomes = (test: AcceptedTest["test"]): readonly Element[] => {
+const testOutcomes = (test: AcceptedTest["test"], session: TestSession): readonly Element[] => {
   switch (test.outcomeProcessing.kind) {
     case "absent": {
       return outcomeVariables(test.outcomes, {});
     }
-    case "marked":
-    case "runs": {
+    case "marked": {
       return [];
+    }
+    case "runs": {
+      return outcomeVariables(test.outcomes, session.outcomes);
     }
     default: {
       return test.outcomeProcessing satisfies never;
@@ -983,11 +988,13 @@ const testOutcomes = (test: AcceptedTest["test"]): readonly Element[] => {
  * Write the result of a test session.
  *
  * The test result holds the built-in `duration`, from the session's start to its last change in
- * seconds, of base type duration (reading 29). The test's own outcomes are written at their
- * starting values only when it has no outcome processing ({@link testOutcomes}), so no default
- * reads as a score. Then one item result per session item, in sequence order. Every item ref's
- * session control is resolved in one walk of the test (`sessionControls`), since resolving each
- * item's alone walks the test up to its ref again, which grows with the square of the item count.
+ * seconds, of base type duration (reading 29). The test's own outcomes follow ({@link
+ * testOutcomes}): as the last run of its outcome processing left them when the engine runs it, at
+ * their starting values when it has none, and not at all when the engine cannot run it, so no
+ * default reads as a score. Then one item result per session item, in sequence order. Every item
+ * ref's session control is resolved in one walk of the test (`sessionControls`), since resolving
+ * each item's alone walks the test up to its ref again, which grows with the square of the item
+ * count.
  *
  * @param input The test, its items, the stored session and the context.
  * @returns The document's text, or the failure of its context, its session or an item.
@@ -1010,7 +1017,7 @@ const testResults = (
     }
 
     const { test } = input.test;
-    const outcomes = testOutcomes(test);
+    const outcomes = testOutcomes(test, session);
 
     return documentOf([
       context,

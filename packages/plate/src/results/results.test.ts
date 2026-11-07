@@ -23,7 +23,15 @@ import { redact, render } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
 import type { ResultContext, ResultsInput } from "#plate/results/results.ts";
 import { score } from "#plate/score.ts";
-import type { Responses, SessionItem, SessionPart } from "#plate/session/session.ts";
+import { advance } from "#plate/session/advance.ts";
+import type {
+  Responses,
+  SessionItem,
+  SessionPart,
+  Step,
+  TestSession,
+} from "#plate/session/session.ts";
+import { startTest } from "#plate/session/start.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { validateAgainst } from "#plate/test/xsd.ts";
 import { open } from "#plate/validate/open.ts";
@@ -114,14 +122,16 @@ const acceptItem = Effect.fnUntraced(function* acceptItem(location: string, byte
  * Open one of the M2 fixture package's items.
  *
  * @param name The item's file name under `items/`.
- * @returns The accepted item, located at `items/<name>`.
+ * @param location Where to locate it, `items/<name>` by default; `startTest` delivers it for an
+ *   item ref only at the document the ref names from its test.
+ * @returns The accepted item, located at `location`.
  */
-const fixtureItem = Effect.fnUntraced(function* fixtureItem(name: string) {
+const fixtureItem = Effect.fnUntraced(function* fixtureItem(name: string, location?: string) {
   const bytes = yield* Effect.tryPromise(() =>
     readFile(path.join(fixtureDirectory, "items", name)),
   );
 
-  return yield* acceptItem(`items/${name}`, bytes);
+  return yield* acceptItem(location ?? `items/${name}`, bytes);
 });
 
 /**
@@ -244,7 +254,8 @@ const totalDeclaration = [
 ].join("");
 
 /**
- * Outcome processing that sets `TOTAL`, which M2 marks and does not run.
+ * Outcome processing that sets `TOTAL` to 3, which the engine runs: a result writes `TOTAL` as the
+ * stored session holds it, never as running this would set it.
  */
 const totalProcessing = [
   '<qti-outcome-processing><qti-set-outcome-value identifier="TOTAL">',
@@ -270,6 +281,27 @@ const attemptsProcessing = [
   '<qti-gte><qti-variable identifier="numAttempts"/><qti-base-value base-type="integer">1</qti-base-value></qti-gte>',
   '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>',
   "</qti-outcome-if></qti-outcome-condition></qti-outcome-processing>",
+].join("");
+
+/**
+ * A test's integer `CORRECT`, declared after {@link scoreDeclaration}, which
+ * {@link summingProcessing} sets.
+ */
+const correctDeclaration =
+  '<qti-outcome-declaration identifier="CORRECT" cardinality="single" base-type="integer"/>';
+
+/**
+ * Outcome processing in the corpus's pattern: `SCORE` the sum of every item's `SCORE`, through a
+ * `qti-sum` over `qti-test-variables`, and `CORRECT` the count of items answered correctly. It
+ * sets `CORRECT` first, so a result that wrote the outcomes in the order the rules set them would
+ * not follow the declarations.
+ */
+const summingProcessing = [
+  "<qti-outcome-processing>",
+  '<qti-set-outcome-value identifier="CORRECT"><qti-number-correct/></qti-set-outcome-value>',
+  '<qti-set-outcome-value identifier="SCORE">',
+  '<qti-sum><qti-test-variables variable-identifier="SCORE"/></qti-sum>',
+  "</qti-set-outcome-value></qti-outcome-processing>",
 ].join("");
 
 /**
@@ -1399,9 +1431,100 @@ describe("results", () => {
   );
 
   it.effect(
-    "writes no test outcome for a test with outcome processing",
+    "[T-9] writes each test outcome once, in declaration order, as the last run left them: SCORE the sum of the items' SCORE after the session closes",
     () =>
-      Effect.gen(function* processedTest() {
+      Effect.gen(function* lastRunLeft() {
+        const single = yield* fixtureItem(
+          "p1-single-choice.xml",
+          "tests/items/p1-single-choice.xml",
+        );
+        const test = yield* acceptTest("summed", [
+          scoreDeclaration,
+          correctDeclaration,
+          part("P1", individual, [
+            ref("one", "p1-single-choice.xml"),
+            ref("two", "p1-single-choice.xml"),
+          ]),
+          summingProcessing,
+        ]);
+        const items = new Map([
+          ["one", single],
+          ["two", single],
+        ]);
+        const configuration = yield* configure({});
+        const step = (session: TestSession, taken: Step, now: string) =>
+          Effect.fromResult(
+            advance(test, items, session, taken, configuration, { now: new Date(now) }),
+          );
+        const answer: Step = {
+          intent: { kind: "submit-item" },
+          responses: { RESPONSE: identifiers("B") },
+        };
+
+        const begun = yield* Effect.fromResult(
+          startTest(test, items, configuration, {
+            instance,
+            now: new Date(started),
+            seed: processingSeed,
+          }),
+        );
+        const first = yield* step(begun, answer, "2026-11-05T10:00:30.000Z");
+        const moved = yield* step(
+          first,
+          { intent: { kind: "go", sequenceIndex: 2 } },
+          "2026-11-05T10:01:00.000Z",
+        );
+        const second = yield* step(moved, answer, "2026-11-05T10:01:30.000Z");
+        const closed = yield* step(second, { intent: { kind: "end-part" } }, updated);
+        assert.strictEqual(test.test.outcomeProcessing.kind, "runs");
+        assert.strictEqual(closed.status, "closed");
+        assert.deepStrictEqual(closed.outcomes, {
+          CORRECT: {
+            baseType: "integer",
+            cardinality: "single",
+            values: [{ baseType: "integer", value: 2n }],
+          },
+          SCORE: {
+            baseType: "float",
+            cardinality: "single",
+            values: [{ baseType: "float", value: 2 }],
+          },
+        });
+
+        const { report, xml } = yield* reported({
+          context,
+          items,
+          kind: "test",
+          session: yield* Effect.fromResult(encodeSession(closed)),
+          test,
+        });
+
+        yield* assertValid(xml);
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(written.order, [
+          ["responseVariable", "duration"],
+          ["outcomeVariable", "SCORE"],
+          ["outcomeVariable", "CORRECT"],
+        ]);
+        assert.deepStrictEqual(written.outcomes, {
+          CORRECT: {
+            attributes: { baseType: "integer", cardinality: "single", identifier: "CORRECT" },
+            values: ["2"],
+          },
+          SCORE: {
+            attributes: { baseType: "float", cardinality: "single", identifier: "SCORE" },
+            values: ["2"],
+          },
+        });
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[T-9] writes a test outcome as the stored session holds it and never runs the outcome processing itself: TOTAL at its default before any run",
+    () =>
+      Effect.gen(function* storedOutcomes() {
         const single = yield* fixtureItem("p1-single-choice.xml");
         const test = yield* acceptTest("processed", [
           totalDeclaration,
@@ -1417,9 +1540,15 @@ describe("results", () => {
         });
 
         yield* assertValid(xml);
+        assert.strictEqual(test.test.outcomeProcessing.kind, "runs");
 
         const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
-        assert.deepStrictEqual(Object.keys(written.outcomes), []);
+        assert.deepStrictEqual(written.outcomes, {
+          TOTAL: {
+            attributes: { baseType: "float", cardinality: "single", identifier: "TOTAL" },
+            values: ["0.5"],
+          },
+        });
         assert.deepStrictEqual(Object.keys(written.responses), ["duration"]);
       }),
     { tags: ["qti-xsd"] },
