@@ -24,6 +24,7 @@ import { Duration, Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { figuresOf, rowsOf, tolerancePiecesOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows, ToleranceRow } from "#pantry/import/overlays/operators.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -246,7 +247,7 @@ const fourRounders = [
 
 describe("import/overlays/operators.ts, rowsOf", () => {
   it.effect(
-    "gives every rounding row its node's tuple, the document's nearest, or its context's where one is given",
+    "gives every rounding row its node's tuple, and its context's nearest, the document's own under its own context",
     () =>
       // Oracle: the tree's own rows, `flatten`'s node of each operator, and N8: response processing
       // stands in no interaction, so each node's nearest is the document node's, its context's
@@ -261,10 +262,10 @@ describe("import/overlays/operators.ts, rowsOf", () => {
         };
 
         for (const [given, nearest] of [
-          [undefined, nodes.document.node],
+          [ownContext(nodes.document.node), nodes.document.node],
           [context, idOf(9999)],
         ] as const) {
-          const rows = rowsOf(tree, given === undefined ? { idOf } : { context: given, idOf });
+          const rows = rowsOf(tree, { context: given, idOf });
           const rounders = nodes.nodes.filter(
             ({ kind }) => kind === "qti-equal-rounded" || kind === "qti-round-to",
           );
@@ -290,7 +291,7 @@ describe("import/overlays/operators.ts, rowsOf", () => {
         yield* itemOf(
           `<qti-set-outcome-value identifier="SCORE"><qti-variable identifier="SCORE"/></qti-set-outcome-value>`,
         ),
-        { idOf },
+        { context: ownContext(idOf(0)), idOf },
       );
 
       assert.strictEqual(rows.Rounding.size + rows.Tolerance.size, 0);
@@ -606,7 +607,10 @@ describe(
               Effect.gen(function* checks() {
                 c.note(drawnCase.form);
 
-                const rows = rowsOf(yield* itemOf(ruleOfOperator(drawnCase)), { idOf });
+                const rows = rowsOf(yield* itemOf(ruleOfOperator(drawnCase)), {
+                  context: ownContext(idOf(0)),
+                  idOf,
+                });
 
                 if (drawnCase.kind === "qti-equal") {
                   assertEquality(drawnCase, rows);

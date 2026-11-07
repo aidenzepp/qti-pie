@@ -75,6 +75,22 @@ export const roundingKinds = ["qti-equal-rounded", "qti-round-to"] as const;
 export const roundingModes = ["decimalPlaces", "significantFigures"] as const;
 
 /**
+ * The `rounding-mode` in force on a `qti-equal-rounded` that writes none: the XSD's default
+ * (`EqualRoundedDType`'s `rounding-mode`, `default="significantFigures"`; info §5.47.1). A
+ * `qti-round-to` has none, since `RoundToDType` requires the attribute (§5.119.1).
+ */
+export const equalRoundedMode = "significantFigures" satisfies (typeof roundingModes)[number];
+
+/**
+ * The null objects of a {@link Rounding} row whose element leaves an attribute unwritten, which AL3
+ * refuses alone: `figuresLexical` and `figures` where it writes no `figures`, `mode` where a
+ * `qti-round-to` writes no `rounding-mode`, and `figuresValue` where `figures` is no integer.
+ * `mode`'s is grizzle-forced (FB-EXPR's report to main of 2026-11-07): `Rounding_figures` reads the
+ * mode and the integer in one row, which no outer join builds from two optional rows.
+ */
+export const roundingUnwritten = { figures: "", figuresValue: 0n, mode: "" } as const;
+
+/**
  * The tolerance modes under which a `qti-equal` compares within a range, and so carries a
  * `tolerance` (info §5.46.2).
  */
@@ -320,13 +336,13 @@ export const operatorLawsByName = {
           Compute.when(
             Compute.matches(r.figures, integerForm),
             (figures) => Compute.cast(figures, pg.bigint),
-            0n,
+            roundingUnwritten.figuresValue,
           ),
         ),
         r.or(
           r.eq(r.modeWritten, true),
-          r.and(r.eq(r.kind, "qti-equal-rounded"), r.eq(r.mode, "significantFigures")),
-          r.and(r.eq(r.kind, "qti-round-to"), r.eq(r.mode, "")),
+          r.and(r.eq(r.kind, "qti-equal-rounded"), r.eq(r.mode, equalRoundedMode)),
+          r.and(r.eq(r.kind, "qti-round-to"), r.eq(r.mode, roundingUnwritten.mode)),
         ),
       ),
     ),

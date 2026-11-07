@@ -14,6 +14,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { rowsOf } from "#pantry/import/overlays/quotation.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
@@ -169,7 +170,7 @@ const readOf = (xml: string) =>
 const judgedOf = (body: string) =>
   Effect.gen(function* judged() {
     const { rows, tree } = yield* readOf(itemOf(body));
-    const quotations = [...rowsOf(tree, { idOf }).Quotation.values()];
+    const quotations = [...rowsOf(tree, { context: ownContext(idOf(0)), idOf }).Quotation.values()];
     const [row] = quotations;
     assert.lengthOf(quotations, 1, body);
     if (row === undefined) {
@@ -286,7 +287,7 @@ describe("qti/quotation.ts, a q beside and around its marks", { timeout: searchT
         }
 
         const { rows, tree } = yield* readOf(itemOf(`<p>a <q><q>x</q></q> b</p>`));
-        const nested = [...rowsOf(tree, { idOf }).Quotation.values()];
+        const nested = [...rowsOf(tree, { context: ownContext(idOf(0)), idOf }).Quotation.values()];
 
         assert.lengthOf(nested, 2);
         assert.deepStrictEqual(
