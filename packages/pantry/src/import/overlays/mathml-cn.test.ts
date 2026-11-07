@@ -306,10 +306,10 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
     assert.strictEqual(rows.CnPartText.get(partKey(2, 1))?.form, "integer");
   });
 
-  it("writes the parts a cn holds beyond its type's, up to the places CnPart names, for the database to refuse", () => {
+  it("writes a cn's surplus part at the place no type lists, for the database to refuse", () => {
     // A real with a sep holds two parts where its type lists one: the second is written under the
-    // form `real`, which CnForm does not list at its place. A rational with a third part has it
-    // beyond the places CnPart names, so no row is written for it.
+    // form `real`, which CnForm does not list at its place. A rational holds two parts, so a third
+    // is written at the place no type lists (place 2), under `real`, and a fourth has no place.
     const rows = rowsOf(
       documentOf(
         elementOf("m:math", [
@@ -319,20 +319,42 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
             [text("1"), elementOf("m:sep"), text("2"), elementOf("m:sep"), text("3")],
             [attributeOf("type", "rational")],
           ),
+          elementOf(
+            "m:cn",
+            [
+              text("1"),
+              elementOf("m:sep"),
+              text("2"),
+              elementOf("m:sep"),
+              text("3"),
+              elementOf("m:sep"),
+              text("4"),
+            ],
+            [attributeOf("type", "rational")],
+          ),
         ]),
       ),
       ids,
     );
 
-    // Nodes: 2 cn, 3 text, 4 sep, 5 text; 6 cn, 7 text, 8 sep, 9 text, 10 sep, 11 text.
+    // Nodes: 2 cn, 3 text, 4 sep, 5 text; 6 cn, 7 text, 8 sep, 9 text, 10 sep, 11 text;
+    // 12 cn, 13 text, 14 sep, 15 text, 16 sep, 17 text, 18 sep, 19 text.
     assert.deepStrictEqual(keysOf(rows.CnPartText), [
       partKey(2, 0),
       partKey(2, 1),
       partKey(6, 0),
       partKey(6, 1),
+      partKey(6, 2),
+      partKey(12, 0),
+      partKey(12, 1),
+      partKey(12, 2),
     ]);
     assert.strictEqual(rows.CnPartText.get(partKey(2, 1))?.form, "real");
     assert.strictEqual(rows.CnPartText.get(partKey(2, 1))?.type, "real");
+    assert.strictEqual(rows.CnPartText.get(partKey(6, 2))?.form, "real");
+    assert.strictEqual(rows.CnPartText.get(partKey(6, 2))?.type, "rational");
+    assert.strictEqual(rows.CnPartText.get(partKey(6, 2))?.text, "3");
+    assert.strictEqual(rows.CnPartText.get(partKey(12, 2))?.text, "3");
   });
 
   it("finds a cn anywhere in the formula, and gives a document with none no rows", () => {
