@@ -15,6 +15,7 @@
  * by `.row(kind)`.
  */
 import { closed, closedId, str } from "@bjornpagen/grizzle";
+import { Array as Arr, Option } from "effect";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import type { Kind, Name } from "#pantry/grammar/compose.ts";
 import {
@@ -225,14 +226,44 @@ export const ValueCardinalityBit = closed.relation(
 );
 
 /**
- * The `ValueBase` handle a `BaseType` handle reads as: itself where `ValueBase` spells it, and
- * `unknown` otherwise, which a record's `none` is.
+ * Read a declaration code as the expression-typing code spelled the same. Every declaration code
+ * the two rosters share is spelled alike, so a code the expression roster does not spell is a
+ * defect of the rosters, thrown when the relations below are built.
+ *
+ * @param roster - The expression-typing roster.
+ * @param code - The declaration code.
+ * @param named - The roster's name, for the defect.
+ * @returns The handle of `roster` spelled `code`.
+ */
+const spelledIn = <Handle extends string>(
+  roster: readonly Handle[],
+  code: string,
+  named: string,
+): Handle =>
+  Option.getOrThrowWith(
+    Arr.findFirst(roster, (handle) => handle === code),
+    () => new Error(`The ${named} roster spells no handle ${code}, which its mapping reads.`),
+  );
+
+/**
+ * The `ValueBase` handle a `BaseType` handle reads as: itself, which `ValueBase` spells, and
+ * `unknown` for `none`, a record's, which has no base type.
  *
  * @param baseType - The declaration code.
  * @returns The expression-typing code.
  */
-const valueBaseOf = (baseType: string): (typeof valueBases)[number] =>
-  valueBases.find((base) => base === baseType) ?? "unknown";
+export const valueBaseOf = (baseType: string): (typeof valueBases)[number] =>
+  baseType === "none" ? "unknown" : spelledIn(valueBases, baseType, "ValueBase");
+
+/**
+ * The `ValueCardinality` handle a `Cardinality` handle reads as: itself, which `ValueCardinality`
+ * spells for every declaration cardinality, `record` included.
+ *
+ * @param cardinality - The declaration code.
+ * @returns The expression-typing code.
+ */
+export const valueCardinalityOf = (cardinality: string): (typeof valueCardinalities)[number] =>
+  spelledIn(valueCardinalities, cardinality, "ValueCardinality");
 
 /**
  * `ValueBaseOf`: base type → value, each declaration base type as the expression-typing base type
@@ -255,7 +286,7 @@ export const ValueCardinalityOf = closed.relation(
   ["cardinality"],
   Cardinality.handles.map((cardinality) => ({
     cardinality,
-    value: valueCardinalities.find((value) => value === cardinality) ?? "unknown",
+    value: valueCardinalityOf(cardinality),
   })),
 );
 

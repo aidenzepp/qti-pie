@@ -688,11 +688,8 @@ const pushChildren = <V extends XdmVocabulary>(
   children: readonly (XdmChild<V> | XdmDocumentChild<V>)[],
   parent: NodeId,
 ): void => {
-  for (let at = children.length - 1; at >= 0; at -= 1) {
-    const node = children[at];
-    if (node !== undefined) {
-      stack.push({ _tag: "open", at, node, parent });
-    }
+  for (const [at, node] of children.entries().toArray().toReversed()) {
+    stack.push({ _tag: "open", at, node, parent });
   }
 };
 
