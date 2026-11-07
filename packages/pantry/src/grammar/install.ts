@@ -1291,6 +1291,11 @@ export const OperatorArity = closed.relation(
 export const CnType = closed("CnType", nonEmpty("CnType", [...cnForms.keys()]));
 
 /**
+ * A generated value as a `CnType` handle ({@link handleLookup}).
+ */
+const asCnType = handleLookup("CnType", CnType.handles);
+
+/**
  * The `CnPartForm` roster: the forms a part of a `cn`'s content takes ({@link cnForms}), in the
  * order a type first states them.
  */
@@ -1298,6 +1303,11 @@ export const CnPartForm = closed(
   "CnPartForm",
   nonEmpty("CnPartForm", [...new Set([...cnForms.values()].flat())]),
 );
+
+/**
+ * A generated value as a `CnPartForm` handle ({@link handleLookup}).
+ */
+const asCnPartForm = handleLookup("CnPartForm", CnPartForm.handles);
 
 /**
  * The `CnPart` roster: a part's place among the parts of a `cn`'s content, the numerals 0 to the
@@ -1366,7 +1376,7 @@ export const CnParts = closed.relation(
   ["type"],
   [...cnForms].map(([type, forms]) => ({
     parts: BigInt(forms.length),
-    type: handleIn("CnType", CnType.handles, type),
+    type: asCnType(type),
   })),
 );
 
@@ -1384,9 +1394,9 @@ export const CnForm = closed.relation(
   ["type", "part"],
   [...cnForms].flatMap(([type, forms]) =>
     forms.map((form, part) => ({
-      form: handleIn("CnPartForm", CnPartForm.handles, form),
+      form: asCnPartForm(form),
       part: String(part),
-      type: handleIn("CnType", CnType.handles, type),
+      type: asCnType(type),
     })),
   ),
 );
