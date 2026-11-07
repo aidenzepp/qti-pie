@@ -1558,10 +1558,10 @@ const expressionType = (refusal: Refusal): string => {
  *
  * - `reserved-identifier` (pantry's `DeclarationNotReserved`): a declaration whose `identifier` is a
  *   built-in variable's, `completionStatus`, `numAttempts` or `duration`.
- * - `reserved-outcome-type` (pantry's `ReservedOutcomeTypes`): an outcome declaration named `SCORE`
- *   or `MAXSCORE` whose `base-type` is not `float`, or named `PASSED` whose `base-type` is not
- *   `boolean`; the detail names the outcome, `identifier`, and the base type it must have,
- *   `baseType`.
+ * - `reserved-outcome-type` (pantry's `ReservedOutcomeTypes`): an outcome declaration in an item
+ *   named `SCORE` or `MAXSCORE` whose `base-type` is not `float`, or one in an item or a test named
+ *   `PASSED` whose `base-type` is not `boolean`; the detail names the outcome, `identifier`, and
+ *   the base type it must have, `baseType`.
  * - `tolerance-token` (pantry's P6): a `qti-equal`'s `tolerance` holding a token that is neither an
  *   `xs:double` nor an NCName.
  * - None: a value outside the attribute's type, or outside what a reading or the information model

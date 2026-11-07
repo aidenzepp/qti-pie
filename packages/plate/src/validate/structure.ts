@@ -336,8 +336,8 @@ type Narrowing =
  * A reading, or a sentence of the information model, that narrows an attribute: on the named
  * elements, or on every element whose table declares it, a value the XSD's own type admits must
  * also satisfy `holds`, which reads the value under `whiteSpace` and, where the narrowing depends
- * on another attribute, the element, or it is `attribute-type` with `expected` as the values the
- * row admits and the facts of `settled`.
+ * on another attribute or on the document the element sits in, the element and its path, or it is
+ * `attribute-type` with `expected` as the values the row admits and the facts of `settled`.
  *
  * `whiteSpace` is how `holds` reads the value: `collapse`d, or with each tab and line break
  * `replace`d by a space and nothing trimmed, as XSD reads an `xs:normalizedString`. A row that
@@ -348,7 +348,7 @@ interface NarrowedAttribute {
   readonly attribute: string;
   readonly elements: "declaring" | readonly string[];
   readonly expected: string;
-  readonly holds: (lexical: string, element: SourceElement) => boolean;
+  readonly holds: (lexical: string, element: SourceElement, path: string) => boolean;
   readonly kind: "narrowed-attribute";
   readonly settled: Narrowing;
   readonly whiteSpace: "collapse" | "replace";
@@ -553,17 +553,30 @@ const reservingDeclarations = [
 ] as const;
 
 /**
- * The outcomes whose base type the information model fixes, each with that base type and its line:
- * "SCORE MUST be a float", "MAXSCORE MUST be a float" and "PASSED MUST be a boolean"
- * (info.txt:8478, :8480, :8482). The qti package refuses an outcome declaration of another base
- * type as `ReservedOutcomeTypes` (`packages/pantry/src/schema/declaration.ts:295`), in an item or a
- * test.
+ * The outcomes whose base type the information model fixes, each with that base type, its line and
+ * whether the type holds in a test too. "SCORE MUST be a float" and "MAXSCORE MUST be a float" are
+ * said of items ("Items that declare a numeric outcome variable", "Items that declare a maximum
+ * score", info.txt:8478, :8480), so they are typed in an item and any base type in a test; "PASSED
+ * MUST be a boolean" is said of "Items or tests" (info.txt:8482), so it is typed in both. The qti
+ * package's `ReservedOutcomeTypes` (`packages/pantry/src/schema/declaration.ts:295`) refuses a
+ * test's SCORE and MAXSCORE of another base type too, so plate accepts such a test where pantry
+ * refuses it, until pantry follows.
  */
 const typedOutcomes = [
-  ["SCORE", "float", "info.txt:8478"],
-  ["MAXSCORE", "float", "info.txt:8480"],
-  ["PASSED", "boolean", "info.txt:8482"],
+  ["SCORE", "float", "info.txt:8478", false],
+  ["MAXSCORE", "float", "info.txt:8480", false],
+  ["PASSED", "boolean", "info.txt:8482", true],
 ] as const;
+
+/**
+ * Report whether an element sits in a test: its document's root is a QTI `qti-assessment-test`,
+ * whose path step {@link walk} writes as the bare local name, so every descendant's path starts
+ * with it and a `/`.
+ *
+ * @param path The element's path.
+ * @returns Whether the element is below a test's root.
+ */
+const inTest = (path: string): boolean => path.startsWith("qti-assessment-test/");
 
 /**
  * Report whether an outcome declaration's `base-type` is the one its identifier needs, as the qti
@@ -578,13 +591,17 @@ const typedOutcomes = [
  * The identifier is compared exactly after collapse, as {@link reservedIdentifiers} compares it, so
  * `Score` is another name; one that holds an unexpanded entity reference is unknown and holds.
  *
+ * A row typed in an item only holds for any base type on a declaration in a test ({@link inTest});
+ * in every other document, an item and a lone declaration included, it keeps the item's type.
+ *
  * @param identifier The outcome the row types.
  * @param baseType The base type that outcome must have.
- * @returns Whether a collapsed `base-type` meets the row on its declaration.
+ * @param inTests Whether that base type holds in a test too.
+ * @returns Whether a collapsed `base-type` meets the row on its declaration at its path.
  */
 const typedAs =
-  (identifier: string, baseType: string) =>
-  (lexical: string, element: SourceElement): boolean => {
+  (identifier: string, baseType: string, inTests: boolean) =>
+  (lexical: string, element: SourceElement, path: string): boolean => {
     const written = (local: string) =>
       element.attributes.find(
         (attribute) => attribute.namespace === "" && attribute.local === local,
@@ -593,6 +610,7 @@ const typedAs =
 
     return (
       lexical === baseType ||
+      (!inTests && inTest(path)) ||
       written("cardinality")?.value === "record" ||
       named === undefined ||
       named.references.length > 0 ||
@@ -883,15 +901,17 @@ const readingRows: readonly ReadingRow[] = [
     settled: { check: "reserved-identifier", pantry: "DeclarationNotReserved", source },
     whiteSpace: "collapse",
   })),
-  // The information model fixes the base types of three outcomes: SCORE and MAXSCORE are floats,
-  // PASSED a boolean (info.txt:8478, :8480, :8482), as pantry's `ReservedOutcomeTypes` refuses an
-  // outcome declaration of another base type, in an item or a test. A response or template
-  // declaration of those names is not an outcome, and a `record` one has no base type to fix.
-  ...typedOutcomes.map(([identifier, baseType, source]): NarrowedAttribute => ({
+  // The information model fixes the base types of three outcomes: an item's SCORE and MAXSCORE are
+  // floats, and an item's or a test's PASSED a boolean (info.txt:8478, :8480, :8482); a test's
+  // SCORE and MAXSCORE may be of any base type. Pantry's `ReservedOutcomeTypes` refuses an outcome
+  // declaration of another base type in an item or a test, so it refuses a test's too, which plate
+  // accepts until pantry follows. A response or template declaration of those names is not an
+  // outcome, and a `record` one has no base type to fix.
+  ...typedOutcomes.map(([identifier, baseType, source, inTests]): NarrowedAttribute => ({
     attribute: "base-type",
     elements: ["qti-outcome-declaration"],
     expected: `${baseType}, the base type of an outcome named ${identifier}`,
-    holds: typedAs(identifier, baseType),
+    holds: typedAs(identifier, baseType, inTests),
     kind: "narrowed-attribute",
     settled: {
       baseType,
@@ -1733,7 +1753,7 @@ const checkValue = (
         local &&
         row.attribute === attribute.local &&
         (row.elements === "declaring" || row.elements.includes(element.local)) &&
-        !row.holds(row.whiteSpace === "collapse" ? lexical : replaced, element),
+        !row.holds(row.whiteSpace === "collapse" ? lexical : replaced, element, path),
     )
     .map((row) =>
       refuse(source, "attribute-type", at, { ...detail, expected: row.expected, ...row.settled }),

@@ -1222,6 +1222,46 @@ const featuresOf = (
   features: readonly { readonly feature: string; readonly path: string }[],
 ): readonly string[] => features.map(({ feature, path }) => `${feature}@${path}`);
 
+/**
+ * Construct a single outcome declaration with no default.
+ *
+ * @param identifier Its `identifier`.
+ * @param baseType Its `base-type`.
+ * @returns The declaration.
+ */
+const outcome = (identifier: string, baseType: string): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("base-type", baseType),
+    attr("cardinality", "single"),
+    attr("identifier", identifier),
+  ]);
+
+describe("check, the base types of a test's SCORE, MAXSCORE and PASSED", () => {
+  it("[I-9a] accepts a test whose outcome SCORE is an integer and MAXSCORE a string, which the information model types in an item only (info.txt:8478, :8480)", () => {
+    const verdict = verdictOf(
+      assessmentTest([itemRef("q1")], [outcome("SCORE", "integer"), outcome("MAXSCORE", "string")]),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted");
+    assert.strictEqual(verdict.kind, "test");
+  });
+
+  it("[I-9a] refuses a test whose outcome PASSED is an integer, as attribute-type at its base-type (pantry ReservedOutcomeTypes; info.txt:8482)", () => {
+    assert.deepStrictEqual(
+      refusalsOf(verdictOf(assessmentTest([itemRef("q1")], [outcome("PASSED", "integer")]))),
+      [
+        {
+          location: {
+            kind: "path",
+            path: "qti-assessment-test/qti-outcome-declaration/@base-type",
+          },
+          rule: "attribute-type",
+        },
+      ],
+    );
+  });
+});
+
 describe("check, every QTI 3 root", () => {
   it.effect(
     "[T-4] [S-0] accepts BGtest.xml as a test it delivers in full",

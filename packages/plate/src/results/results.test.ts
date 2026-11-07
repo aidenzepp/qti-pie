@@ -1348,6 +1348,52 @@ describe("results", () => {
     { tags: ["qti-xsd"] },
   );
 
+  it.effect(
+    "[I-9a] writes a test's SCORE and MAXSCORE of the base types they declare, a string and an integer, which the information model types in an item only, at their defaults",
+    () =>
+      Effect.gen(function* untypedTestScores() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("untyped", [
+          '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="string">',
+          "<qti-default-value><qti-value>high</qti-value></qti-default-value>",
+          "</qti-outcome-declaration>",
+          '<qti-outcome-declaration identifier="MAXSCORE" cardinality="single" base-type="integer">',
+          "<qti-default-value><qti-value>7</qti-value></qti-default-value>",
+          "</qti-outcome-declaration>",
+          '<qti-outcome-declaration identifier="LEVEL" cardinality="single" base-type="identifier">',
+          "<qti-default-value><qti-value>gold</qti-value></qti-default-value>",
+          "</qti-outcome-declaration>",
+          part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["one", single]]),
+          kind: "test",
+          session: storedSession(test, [sessionItem(single, "one", 1)]),
+          test,
+        });
+
+        yield* assertValid(xml);
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(written.outcomes, {
+          LEVEL: {
+            attributes: { baseType: "identifier", cardinality: "single", identifier: "LEVEL" },
+            values: ["gold"],
+          },
+          MAXSCORE: {
+            attributes: { baseType: "integer", cardinality: "single", identifier: "MAXSCORE" },
+            values: ["7"],
+          },
+          SCORE: {
+            attributes: { baseType: "string", cardinality: "single", identifier: "SCORE" },
+            values: ["high"],
+          },
+        });
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
   it.effect("counts the attempts started, and gives each sessionStatus and completionStatus", () =>
     Effect.gen(function* attempts() {
       const accepted = yield* fixtureItem("p2-choice.xml");
