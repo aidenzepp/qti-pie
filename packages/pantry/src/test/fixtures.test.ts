@@ -2481,12 +2481,12 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
   );
 
   it.effect(
-    "the PCI negative names are the spec's 28, with a verdict row each, apart from every other list and from phase 5's 62",
+    "the PCI negative names are the spec's 28, with a verdict row each, apart from every other list and from phase 5's 60",
     () =>
       Effect.sync(() => {
         assert.strictEqual(pciNegativeNames.length, 28);
         assert.strictEqual(new Set(pciNegativeNames).size, 28);
-        assert.strictEqual(negativeNames.length, 62);
+        assert.strictEqual(negativeNames.length, 60);
         assert.deepStrictEqual(
           pciVerdicts.map(([name]) => name),
           [...pciNegativeNames],

@@ -1,5 +1,5 @@
 /**
- * What the law oracle predicts for each of phase 5's 62 test-layer negatives ({@link
+ * What the law oracle predicts for each of phase 5's 60 test-layer negatives ({@link
  * negativeNames}), pinned, so the leased import of them (`import/tests.negatives.db.test.ts`) has a
  * rule to expect where the oracle finds one.
  *
@@ -200,8 +200,8 @@ const verdictOf = Effect.fn("negatives.oracle.verdictOf")(function* verdictOf(na
 });
 
 describe("test/negatives.oracle.test.ts", () => {
-  plain("states each of the 62 negatives once", () => {
-    assert.strictEqual(negativeNames.length, 62);
+  plain("states each of the 60 negatives once", () => {
+    assert.strictEqual(negativeNames.length, 60);
     assert.deepStrictEqual(Object.keys(expectations).toSorted(), [...negativeNames].toSorted());
   });
 });
