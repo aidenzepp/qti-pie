@@ -68,6 +68,26 @@ const sequence = (
   );
 
 /**
+ * Read the one expression a setting rule or a `qti-template-constraint` holds.
+ *
+ * @param reading The item's reading context.
+ * @param element The rule element.
+ * @returns The expression; none when the element does not hold exactly one child element, the
+ *   element then marked by its name, or when its expression holds an element the engine does not
+ *   run; or a refusal.
+ */
+const soleExpression = (
+  reading: ExpressionReading,
+  element: SourceElement,
+): Effect.Effect<Option.Option<Expression>, Refusal> => {
+  const [operand, ...extra] = elementsOf(element);
+
+  return operand === undefined || extra.length > 0
+    ? reading.unread(element)
+    : readExpression(reading, operand);
+};
+
+/**
  * Read a rule that names its target variable and holds one expression: a
  * `qti-set-template-value`, a `qti-set-correct-response` or a `qti-set-default-value`.
  *
@@ -80,12 +100,7 @@ const setting =
   (reading, element) =>
     Effect.gen(function* readSetting() {
       const identifier = yield* identifierAttribute(reading.walk, element, "identifier");
-      const [operand, ...extra] = elementsOf(element);
-      if (operand === undefined || extra.length > 0) {
-        return yield* reading.unread(element);
-      }
-
-      const read = yield* readExpression(reading, operand);
+      const read = yield* soleExpression(reading, element);
 
       return read.pipe(
         Option.map((expression): TemplateRule => ({ expression, identifier, kind })),
@@ -102,12 +117,7 @@ const setting =
  */
 const constraint: RuleReader = (reading, element) =>
   Effect.gen(function* readConstraint() {
-    const [operand, ...extra] = elementsOf(element);
-    if (operand === undefined || extra.length > 0) {
-      return yield* reading.unread(element);
-    }
-
-    const read = yield* readExpression(reading, operand);
+    const read = yield* soleExpression(reading, element);
 
     return read.pipe(
       Option.map((expression): TemplateRule => ({ expression, kind: "template-constraint" })),

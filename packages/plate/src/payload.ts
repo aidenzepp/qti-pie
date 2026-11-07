@@ -1480,7 +1480,8 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
   }
 
   // Whether the page sees where each reached listed notice sits, by its index; the paths of the
-  // content it does not see; and the walk's steps, in order.
+  // content it does not see; the walk's steps, in order; and whether the one notice for withheld
+  // choices is down.
   const seenAt = new Map<number, boolean>();
   const unseen = new Set<string>();
   const steps: NoticeStep[] = [];
@@ -1488,16 +1489,40 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
   // The responses an interaction the page sees binds, and those content it does not see binds.
   const shownBound = new Set<string>();
   const unseenBound = new Set<string>();
+
+  /**
+   * Record responses as bound on content the page sees, or on content it does not.
+   *
+   * @param responses The responses.
+   * @param seen Whether the page sees the content that binds them.
+   */
   const bind = (responses: readonly string[], seen: boolean): void => {
     for (const response of responses) {
       (seen ? shownBound : unseenBound).add(response);
     }
   };
+
+  /**
+   * Put down a notice the walk makes in a withheld part's place, where the walk stands, when the
+   * page sees that place.
+   *
+   * @param feature The notice's feature.
+   * @param seen Whether the page sees the withheld part's place.
+   */
   const note = (feature: string, seen: boolean): void => {
     if (seen) {
       steps.push({ feature, kind: "made" });
     }
   };
+
+  /**
+   * Reach each listed notice at a node's path that the node stands for and the walk has not yet
+   * reached, recording whether the page sees where it sits.
+   *
+   * @param path The node's path.
+   * @param standsFor Whether the node stands for a listed notice at its path.
+   * @param seen Whether the page sees the node.
+   */
   const reach = (
     path: string,
     standsFor: (entry: UnsupportedFeature) => boolean,
@@ -1511,6 +1536,15 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
       }
     }
   };
+
+  /**
+   * Show body nodes from the values, walking content the page does not see as well, so its notices
+   * are reached and its responses bound.
+   *
+   * @param nodes The body nodes.
+   * @param seen Whether the page sees them.
+   * @returns The nodes the page is given in their place.
+   */
   const nodesOf = (nodes: readonly BodyNode[], seen: boolean): readonly BodyNode[] =>
     nodes.flatMap((node): readonly BodyNode[] => {
       switch (node.kind) {
@@ -1629,6 +1663,16 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
         }
       }
     });
+
+  /**
+   * Show a Choice's or an Inline Choice's choices from the values: each one they show, with no
+   * template visibility, and none they hide or withhold. The first choice withheld where the page
+   * sees its interaction puts down the one `template-identifier` notice.
+   *
+   * @param choices The choices.
+   * @param seen Whether the page sees their interaction.
+   * @returns The choices the page is given.
+   */
   const choicesOf = (choices: readonly SimpleChoice[], seen: boolean): readonly SimpleChoice[] =>
     choices.flatMap((choice): readonly SimpleChoice[] => {
       const decided = Option.match(choice.templateVisibility, {
@@ -1655,6 +1699,15 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
         : [];
     });
   const body = nodesOf(item.body, true);
+
+  /**
+   * Decide whether a listed notice is named: it was not reached where the page does not see it,
+   * and it does not sit at or below content the page does not see ({@link beneath}).
+   *
+   * @param index The notice's index among the listed notices.
+   * @param entry The notice.
+   * @returns Whether `notices` names it.
+   */
   const named = (index: number, entry: UnsupportedFeature): boolean =>
     seenAt.get(index) !== false && !beneath(entry.path, unseen);
   const notices: string[] = [];

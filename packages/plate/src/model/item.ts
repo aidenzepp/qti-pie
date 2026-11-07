@@ -1872,7 +1872,13 @@ const printedVariable = (
 
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const powerForm = yield* xsBoolean(build, element, "power-form", false);
-    const written = (name: string): Option.Option<string> =>
+    /**
+     * Read one of the printed variable's `xs:normalizedString` attributes.
+     *
+     * @param name The attribute's name.
+     * @returns Its value as XSD reads it ({@link normalizedString}), none when it is absent.
+     */
+    const normalized = (name: string): Option.Option<string> =>
       Option.map(valueOf(element, name), normalizedString);
 
     return {
@@ -1880,13 +1886,13 @@ const printedVariable = (
         onNone: (): IntegerOrRef => ({ _tag: "literal", value: 10n }),
         onSome: integerOrRefOf,
       }),
-      delimiter: Option.getOrElse(written("delimiter"), () => ";"),
-      field: written("field"),
-      format: written("format"),
+      delimiter: Option.getOrElse(normalized("delimiter"), () => ";"),
+      field: normalized("field"),
+      format: normalized("format"),
       identifier,
       index: Option.map(valueOf(element, "index"), integerOrRefOf),
       kind: "printed-variable",
-      mappingIndicator: Option.getOrElse(written("mapping-indicator"), () => "="),
+      mappingIndicator: Option.getOrElse(normalized("mapping-indicator"), () => "="),
       path: pathOf(build, element),
       powerForm,
     };
@@ -3259,31 +3265,32 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
 /**
  * Build the item model of a valid `qti-assessment-item`.
  *
- * The body keeps text and HTML elements as written. Choice, Text Entry and Extended Text become
- * their models when their binding is one `renders` lists and they carry no notice feature, and a
- * `qti-printed-variable` becomes its model; any other `qti-*` element in the body becomes a notice,
- * its subtree dropped. Each `renders` mark adds
- * an unsupported feature, and so does each `qti-*` element outside the body that the model does not
- * read. Response processing is a rule tree: a built-in template resolves to the tree its text
- * gives, and inline rules become their tree when every element is in the engine. The tree is kept
- * only when the engine holds every identifier it names, the item provides every declaration a
- * built-in template's tree needs, every outcome a lookup sets is single, and it maps no point
- * through an area mapping with a `%` coordinate; each identifier it does not hold is the mark
- * `variable:<identifier>` at the processing element's path, each such need unmet its mark there
- * (`mapping:<identifier>`, `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a
- * point mapping the mark `area-coords-percent` there, and the processing is then none. Template
- * declarations of modelled types are read into `templates`, and a `qti-template-processing` into
- * `templateProcessing` through `templateRules` in `#plate/model/template.ts`, which marks what the
- * engine does not run as response processing's reader does. Its rules are kept only when the
- * engine holds every name they read and set while they run: each name {@link unheldIdentifiers}
- * finds, such as `QTI_CONTEXT`, a context variable, or a template variable, response or outcome the
- * model does not hold, is the mark `variable:<identifier>` at the `qti-template-processing`
- * element's path, and the template processing is then none. Nothing is refused: such an item is
- * accepted with that mark. A template variable the model holds is one the engine holds, unless the
- * item's `qti-template-processing` does not run: then no template variable is held, so a tree that
- * reads one is marked `variable:<identifier>`, and the item has no processing, whatever the tree,
- * since that template processing may set a template variable, a default value or a correct
- * response, so a score computed without it could be wrong.
+ * The body keeps text and HTML elements as written. Choice, Inline Choice, Text Entry and Extended
+ * Text become their models when their binding is one `renders` lists and they carry no notice
+ * feature; a `qti-printed-variable` becomes its model, and a `qti-template-block` or
+ * `qti-template-inline` its model with its content; any other `qti-*` element in the body becomes a
+ * notice, its subtree dropped. Each `renders` mark adds an unsupported feature, and so does each
+ * `qti-*` element outside the body that the model does not read. Response processing is a rule
+ * tree: a built-in template resolves to the tree its text gives, and inline rules become their tree
+ * when every element is in the engine. The tree is kept only when the engine holds every identifier
+ * it names, the item provides every declaration a built-in template's tree needs, every outcome a
+ * lookup sets is single, and it maps no point through an area mapping with a `%` coordinate; each
+ * identifier it does not hold is the mark `variable:<identifier>` at the processing element's path,
+ * each such need unmet its mark there (`mapping:<identifier>`, `area-mapping:<identifier>` or
+ * `outcome-type:<identifier>`), such a point mapping the mark `area-coords-percent` there, and the
+ * processing is then none. Template declarations of modelled types are read into `templates`, and a
+ * `qti-template-processing` into `templateProcessing` through `templateRules` in
+ * `#plate/model/template.ts`, which marks what the engine does not run as response processing's
+ * reader does. Its rules are kept only when the engine holds every name they read and set while
+ * they run: each name {@link unheldIdentifiers} finds, such as `QTI_CONTEXT`, a context variable,
+ * or a template variable, response or outcome the model does not hold, is the mark
+ * `variable:<identifier>` at the `qti-template-processing` element's path, and the template
+ * processing is then none. Nothing is refused: such an item is accepted with that mark. A template
+ * variable the model holds is one the engine holds, unless the item's `qti-template-processing`
+ * does not run: then no template variable is held, so a tree that reads one is marked
+ * `variable:<identifier>`, and the item has no processing, whatever the tree, since that template
+ * processing may set a template variable, a default value or a correct response, so a score
+ * computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -3373,10 +3380,11 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       }
     }
 
-    // The names template processing reads or sets that the engine does not hold while it runs. It
-    // passes no response or outcome value, but P26 refuses every read of one, and every built-in
-    // but `QTI_CONTEXT`, so on a checked item these are `QTI_CONTEXT`, a context variable, and a
-    // template variable, response or outcome the model does not hold.
+    // The names template processing reads or sets that the engine does not hold while it runs. The
+    // engine gives it no response or outcome value (`#plate/engine/template.ts`), but P26 refuses
+    // every read of one, and of every built-in but `QTI_CONTEXT`, so on a checked item these are
+    // `QTI_CONTEXT`, a context variable, and a template variable, response or outcome the model
+    // does not hold.
     const templateMarks = Option.match(templateRead, {
       onNone: () => [],
       onSome: (read) =>

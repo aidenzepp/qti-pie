@@ -67,7 +67,7 @@ const correctTargets = (rules: readonly TemplateRule[]): readonly string[] =>
  * @returns The identifiers a `qti-set-correct-response` targets, none when template processing does
  *   not run.
  */
-const templateSet = (item: Item): ReadonlySet<string> =>
+const templateCorrectTargets = (item: Item): ReadonlySet<string> =>
   new Set(Option.match(item.templateProcessing, { onNone: () => [], onSome: correctTargets }));
 
 /**
@@ -105,7 +105,7 @@ const recorded = (record: SolutionRecord | undefined, identifier: string): Optio
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_CorrectResponse
  */
 export const solution = (document: Accepted, record?: SolutionRecord): Responses => {
-  const withheld = record === undefined ? templateSet(document.item) : new Set<string>();
+  const withheld = record === undefined ? templateCorrectTargets(document.item) : new Set<string>();
 
   return Object.fromEntries(
     [...document.item.responses].map(([identifier, declaration]) => [
