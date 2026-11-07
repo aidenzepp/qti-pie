@@ -47,6 +47,13 @@ import { documentBreaches, lawNames, lawsOf, oracleRules, ruleOf } from "#pantry
 import type { LawName } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 86.7 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 420_000;
+
+/**
  * The composed grammar `install.ts` declares its relations from, read once when it loads.
  */
 const { grammar } = install;
@@ -190,24 +197,28 @@ const written = {
 } as const;
 
 describe("Node's declarations", () => {
-  it("build into a schema of the closed relations they read, with stand-ins for the attribute and namespace families, and a role and login over it", () => {
-    // Oracle: grizzle's own admission, which refuses a malformed description, a side over a field
-    // the relation lacks and a statement over a relation the schema does not hold when the schema
-    // is built. The plan's refusals (two sequences, an axis's naming, a leaving copy) are the
-    // compiler's: the scratch `grizzle generate` in the slice report drafts the same schema.
-    const built = scratchSchema();
-    const author = role(
-      built,
-      "author",
-      { Node, StandInAttribute, StandInNamespace },
-      {
-        write: ["Node", "StandInAttribute", "StandInNamespace"],
-      },
-    );
+  it(
+    "build into a schema of the closed relations they read, with stand-ins for the attribute and namespace families, and a role and login over it",
+    () => {
+      // Oracle: grizzle's own admission, which refuses a malformed description, a side over a field
+      // the relation lacks and a statement over a relation the schema does not hold when the schema
+      // is built. The plan's refusals (two sequences, an axis's naming, a leaving copy) are the
+      // compiler's: the scratch `grizzle generate` in the slice report drafts the same schema.
+      const built = scratchSchema();
+      const author = role(
+        built,
+        "author",
+        { Node, StandInAttribute, StandInNamespace },
+        {
+          write: ["Node", "StandInAttribute", "StandInNamespace"],
+        },
+      );
 
-    assert.strictEqual(built.name, "NodeScratch");
-    assert.strictEqual(login(built, "scratch_app", [author]).name, "scratch_app");
-  }, 60_000);
+      assert.strictEqual(built.name, "NodeScratch");
+      assert.strictEqual(login(built, "scratch_app", [author]).name, "scratch_app");
+    },
+    testTimeoutMs,
+  );
 
   it("names every check by an oracle law, each mapped to a rule, and states each law once", () => {
     // Oracle: the specification as a checker, the oracle's law list and its rule map
@@ -539,7 +550,7 @@ describe("N5, content order", { timeout: searchTimeout }, () => {
             }),
         ),
       ),
-    420_000,
+    testTimeoutMs,
   );
 
   it.effect(

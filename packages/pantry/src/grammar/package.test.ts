@@ -28,6 +28,13 @@ import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 0.9 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * Whether every pinned XSD is in the cache; without them the XSD read is skipped.
  */
 const cached = await Effect.runPromise(
@@ -180,7 +187,7 @@ describe.skipIf(!cached)("cp:resource's type against the content-packaging XSDs"
           }
         }
       }).pipe(Effect.provide(XsdOracleLayer)),
-    120_000,
+    testTimeoutMs,
   );
 });
 
@@ -339,6 +346,6 @@ describe.skipIf(!cached)("cp:resource's type against xmllint", () => {
         assert.isFalse(admits("3.0.1", "imsqti_responseprocessing_xmlv3p0"));
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
-    120_000,
+    testTimeoutMs,
   );
 });

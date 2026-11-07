@@ -18,6 +18,13 @@ import { materializeProcessing, processingFixtureNames } from "#pantry/test/proc
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 50.2 s at a load average of 75,
+ * under V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 240_000;
+
+/**
  * The composed grammar every package is judged by.
  */
 const grammar = Result.getOrThrow(composed());
@@ -92,7 +99,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             }
           }
         }),
-      240_000,
+      testTimeoutMs,
     );
   },
 );

@@ -21,6 +21,13 @@ import {
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 25.6 s at a load average of 75,
+ * under V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * Every stored relation of `Qti`, by name, read from the schema.
  */
 const storedRelations = Object.entries(Qti.relations).flatMap(([name, member]) =>
@@ -100,6 +107,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/every-relatio
             }).pipe(Effect.scoped),
         ),
       ),
-    { timeout: 300_000 },
+    { timeout: testTimeoutMs },
   );
 });

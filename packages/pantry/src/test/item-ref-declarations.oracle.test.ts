@@ -65,6 +65,13 @@ import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 35.7 s at a load average of 87 to
+ * 98, its slowest test.
+ */
+const testTimeoutMs = 1_200_000;
+
+/**
  * The oracle's tables over the installed grammar, built once.
  */
 const laws = lawsOf(grammar);
@@ -800,7 +807,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             judged,
           ),
         ),
-      { timeout: 1_200_000 },
+      { timeout: testTimeoutMs },
     );
 
     it.effect(
@@ -830,7 +837,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             ({ input }, c) => judged(input, c),
           ),
         ),
-      { timeout: 1_200_000 },
+      { timeout: testTimeoutMs },
     );
   },
 );

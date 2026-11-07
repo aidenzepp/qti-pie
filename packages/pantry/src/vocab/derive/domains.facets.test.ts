@@ -49,6 +49,13 @@ import type { LengthRule } from "#pantry/vocab/derive/domains.ts";
 import type { Domain, Facet, FacetName } from "#pantry/vocab/inventory/types.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 84.9 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 180_000;
+
+/**
  * The facets of XML Schema Part 2, 4.3, every one a restriction step may state.
  */
 const facetNames = [
@@ -641,7 +648,7 @@ describe("vocab/derive/domains.ts, restriction by facets", () => {
             }),
         ),
       ),
-    180_000,
+    testTimeoutMs,
   );
 });
 
@@ -1270,7 +1277,7 @@ describe("vocab/derive/domains.ts, length facets", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });
 

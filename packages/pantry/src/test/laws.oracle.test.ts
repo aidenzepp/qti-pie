@@ -33,6 +33,13 @@ import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 79.8 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * The fixtures the global setup materializes; `simple` is one the importer accepts today.
  */
 const fixtures = inject("fixtures");
@@ -2516,7 +2523,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2578,7 +2585,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2635,7 +2642,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2689,7 +2696,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2804,7 +2811,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             }),
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -2887,7 +2894,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -3034,7 +3041,7 @@ describe("the package hrefs reading 102 and IMS Content Packaging 1.2 state, ove
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });
 
@@ -3158,7 +3165,7 @@ describe("the references reading 103's census names, over generated packages", (
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });
 
@@ -3222,7 +3229,7 @@ describe("the stimulus refs the UP audit's B5 resolves, over generated packages"
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });
 
@@ -3375,7 +3382,7 @@ describe("reading 117: an included fragment judged in place", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -3526,6 +3533,6 @@ describe("reading 117: an included fragment judged in place", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });

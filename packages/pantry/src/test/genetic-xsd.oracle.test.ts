@@ -86,6 +86,13 @@ import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 0.2 s at a load average of 68 to 97,
+ * its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * Whether the XSD cache holds every pin, so `xmllint` can read them.
  */
 const cached = await Effect.runPromise(
@@ -804,7 +811,7 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts, libxml2's padded xsi:type"
             "libxml2 resolves a padded xsi:type's QName uncollapsed, and so assesses the element by no type",
           );
         }),
-      { timeout: 120_000 },
+      { timeout: testTimeoutMs },
     );
   });
 });
@@ -838,7 +845,7 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts, libxml2's widened ##other"
             "libxml2 admits the no-namespace attribute only where a derived type shares the group",
           );
         }),
-      { timeout: 120_000 },
+      { timeout: testTimeoutMs },
     );
   });
 });

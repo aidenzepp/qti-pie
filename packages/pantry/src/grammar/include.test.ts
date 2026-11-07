@@ -19,6 +19,13 @@ import {
 } from "#pantry/grammar/install.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 1.2 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * How long one search here may take: it walks 155 families of rows the module holds, so a minute
  * only bounds a hang.
  */
@@ -197,7 +204,7 @@ describe("IncludeRoot", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it("holds no family where only a wildcard admits an include, and the information model's classes where a particle does", () => {

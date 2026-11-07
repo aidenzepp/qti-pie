@@ -44,6 +44,13 @@ import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { asiNamespace, xsiNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 11.1 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * The composed grammar and its laws.
  */
 const grammar = Result.getOrThrow(composed());
@@ -221,6 +228,6 @@ describe("a simple xsi:type on foreign content", () => {
           "every built-in but xs:NOTATION, whose value space no pinned XSD fills (§3.2.19), has a domain and a valid text",
         );
       }),
-    { timeout: 300_000 },
+    { timeout: testTimeoutMs },
   );
 });

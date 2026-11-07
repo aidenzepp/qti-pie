@@ -33,6 +33,14 @@ import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import type { Child } from "@qti-pie/crust/tree.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 22.4 s at a load average of 63 to
+ * 73, its slowest test. Two trees of 100,000 nodes through four walks take about 10 s on an idle
+ * laptop: the timeout leaves room for a busy one.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * A vocabulary of literal handles, over which the tree's types state their contracts: they are
  * generic in the vocabulary, so one with literal handles shows each.
  */
@@ -445,8 +453,6 @@ describe("the model's walks", { timeout: searchTimeout }, () => {
           assert.strictEqual(chainLength(tree.root), layout === "deep" ? extent + 2 : 4, layout);
         }
       }),
-    // Two trees of 100,000 nodes through four walks take about 10 s on an idle laptop: the timeout
-    // leaves room for a busy one.
-    120_000,
+    testTimeoutMs,
   );
 });

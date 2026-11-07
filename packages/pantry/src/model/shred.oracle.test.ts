@@ -59,6 +59,13 @@ import { OracleLayer, xmllintC14n, xmllintValidate } from "#pantry/xml/oracle.ts
 import type { XsdVerdict } from "#pantry/xml/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 112.4 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 240_000;
+
+/**
  * The composed grammar every property draws its trees over, and reads and writes them through.
  */
 const grammar = Result.getOrThrow(composed());
@@ -1274,7 +1281,7 @@ describe("a foreign element's governing type (spec readings 60 and 83)", () => {
         assert.strictEqual(compared, 2 * laxArms.length);
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
-    150_000,
+    testTimeoutMs,
   );
 });
 
@@ -1839,7 +1846,7 @@ describe("a strict wildcard's undeclared element (spec reading 81)", () => {
         assert.strictEqual(compared, 28);
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
-    120_000,
+    testTimeoutMs,
   );
 });
 
@@ -2006,7 +2013,7 @@ describe("a reading 6 root under a strict wildcard (C13)", () => {
         assert.strictEqual(accepted, 2);
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
-    120_000,
+    testTimeoutMs,
   );
 });
 

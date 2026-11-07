@@ -58,6 +58,13 @@ import { relaxNgModels, semanticsContexp } from "#pantry/test/gen/relaxng.ts";
 import type { MathClasses } from "#pantry/test/gen/relaxng.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 0.7 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 60_000;
+
+/**
  * The composed grammar of production, failing the test that reads it when a generator refuses.
  */
 const grammar = Effect.fromResult(composed());
@@ -1963,7 +1970,7 @@ describe("the installed automata", () => {
         assert.isAbove(families.size, 0);
         assert.deepStrictEqual([...new Set(dead)].slice(0, 20), []);
       }),
-    60_000,
+    testTimeoutMs,
   );
 });
 

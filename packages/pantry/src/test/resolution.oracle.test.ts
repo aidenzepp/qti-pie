@@ -26,6 +26,13 @@ import type { HrefResolution, WhiteSpace } from "#pantry/import/overlays/package
 import { oracleValueOf, resolve } from "#pantry/test/resolution.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 4 s at a load average of 75, under
+ * V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * One href as the importer resolves it: its document's path, the `xml:base` values in scope,
  * outermost first, as written, its lexical form and its type's whitespace class.
  */
@@ -533,7 +540,7 @@ describe("import/overlays/package.ts resolveIn against test/resolution.ts", () =
             }),
         ),
       ),
-    300_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -573,7 +580,7 @@ describe("import/overlays/package.ts resolveIn against test/resolution.ts", () =
             }),
         ),
       ),
-    300_000,
+    testTimeoutMs,
   );
 
   it("resolves the readings' own examples as reading 102 states them", () => {

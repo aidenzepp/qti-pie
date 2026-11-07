@@ -25,6 +25,13 @@ import type { Attribute, XmlDocument } from "#crust/tree.ts";
 import { writeXml } from "#crust/write.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 18.1 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * Read a document's text as UTF-8.
  *
  * @param text - The document.
@@ -407,6 +414,6 @@ describe("every short attribute default", () => {
           }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 });

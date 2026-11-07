@@ -52,6 +52,13 @@ import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 4.4 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * The oracle's tables over the installed grammar, which the importer reads.
  */
 const laws = lawsOf(grammar);
@@ -170,7 +177,7 @@ describe("choices and their interactions (lane NIL's audit, B5 and B6)", () => {
           },
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -200,6 +207,6 @@ describe("choices and their interactions (lane NIL's audit, B5 and B6)", () => {
           holds,
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 });

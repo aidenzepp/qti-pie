@@ -54,6 +54,13 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 134.8 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * The corpus this test reads: the 28 packages `materializeCorpus` lists from the pinned examples
  * tarball, which hold 380 entries whose names end `.xml`. Both are pinned so that a run over a
  * missing or different corpus fails rather than passing over fewer entries.
@@ -765,7 +772,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             [],
           );
         }).pipe(Effect.scoped),
-      { timeout: 600_000 },
+      { timeout: testTimeoutMs },
     );
   },
 );

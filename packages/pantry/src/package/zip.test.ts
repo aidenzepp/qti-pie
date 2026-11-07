@@ -35,6 +35,13 @@ import { materializeCorpus, materializeZip, zipMembers } from "#pantry/test/fixt
 import type { ZipName } from "#pantry/test/fixtures.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 31.2 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 300_000;
+
+/**
  * The file system the readers need, and the process spawner and path service the fixture
  * materializers need.
  */
@@ -986,7 +993,7 @@ describe("package/zip.ts readZip, and package/read.ts over a .zip", () => {
           );
         }).pipe(Effect.scoped, Effect.provide(TestLayer)),
       ),
-    { timeout: 300_000 },
+    { timeout: testTimeoutMs },
   );
 });
 
@@ -1126,7 +1133,7 @@ describe("package/zip.ts readZip under a drawn budget", () => {
           );
         }).pipe(Effect.scoped, Effect.provide(TestLayer)),
       ),
-    { timeout: 300_000 },
+    { timeout: testTimeoutMs },
   );
 });
 
@@ -1252,7 +1259,7 @@ describe("package/zip.ts writeZip", () => {
           );
         }).pipe(Effect.scoped, Effect.provide(TestLayer)),
       ),
-    { timeout: 300_000 },
+    { timeout: testTimeoutMs },
   );
 });
 
@@ -1325,6 +1332,6 @@ describe("package/read.ts over the corpus", () => {
         // input: 546, one of them a `.DS_Store`. A zip the corpus lost, or one it gained, moves it.
         assert.strictEqual(files, 546);
       }).pipe(Effect.provide(TestLayer)),
-    { timeout: 300_000 },
+    { timeout: testTimeoutMs },
   );
 });

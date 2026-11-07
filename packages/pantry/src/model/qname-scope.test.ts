@@ -34,6 +34,13 @@ import { shred } from "#pantry/model/shred.ts";
 import { xsiNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 23.5 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 120_000;
+
+/**
  * The composed grammar.
  */
 const grammar = Result.getOrThrow(composed());
@@ -404,6 +411,6 @@ describe("the codec's QName values", () => {
           "the codec refuses exactly the values §3.2.18 gives none",
         );
       }),
-    { timeout: 120_000 },
+    { timeout: testTimeoutMs },
   );
 });

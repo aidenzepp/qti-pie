@@ -10,6 +10,13 @@ import { anyUriPattern, patternFlags, translatePattern } from "#pantry/grammar/d
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 3.2 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 60_000;
+
+/**
  * The anyURI pattern as the schema reads it: {@link anyUriPattern} through the one translation of
  * XSD's regular expressions, so the vectors and the interpreter judge what the runtime matches.
  */
@@ -565,7 +572,7 @@ describe("vocab/derive/domains.ts, xs:anyURI", () => {
             }),
         ),
       ),
-    60_000,
+    testTimeoutMs,
   );
 
   it("is the lexical pattern of the anyURI built-in's domain, which collapses its value", () => {

@@ -20,6 +20,13 @@ import { packagingFixtures } from "#pantry/test/locate.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 137.3 s at a load average of 75,
+ * under V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * The composed grammar every package is judged by.
  */
 const grammar = Result.getOrThrow(composed());
@@ -86,7 +93,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             "keys no fixture let the box read",
           );
         }),
-      600_000,
+      testTimeoutMs,
     );
   },
 );

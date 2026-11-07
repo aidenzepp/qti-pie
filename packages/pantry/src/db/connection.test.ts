@@ -26,6 +26,13 @@ import pg from "pg";
 import { ClusterConfigError, loginConnection, migrationConnection } from "#pantry/db/connection.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 7.9 s at a load average of 75, under
+ * V8 coverage, its slowest test.
+ */
+const testTimeoutMs = 60_000;
+
+/**
  * The folder each run's scratch `HOME` and state folders are made in, the package's git-ignored
  * `work/`.
  */
@@ -421,7 +428,7 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
           ),
         );
       }),
-    60_000,
+    testTimeoutMs,
   );
 
   it.effect(

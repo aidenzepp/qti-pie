@@ -22,6 +22,13 @@ import { automatonOf } from "#pantry/vocab/sequencing.ts";
 import type { Automaton } from "#pantry/vocab/sequencing.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 99.7 s at a load average of 70 to
+ * 74, its slowest test.
+ */
+const testTimeoutMs = 240_000;
+
+/**
  * The longest a case may run before the search stops it: every case here is pure and reads one
  * model, so a minute is far past any of them.
  */
@@ -411,7 +418,7 @@ describe("vocab/sequencing.ts", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -459,7 +466,7 @@ describe("vocab/sequencing.ts", () => {
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it("is deterministic on every model, as Unique Particle Attribution requires", () => {
@@ -508,7 +515,7 @@ describe("vocab/sequencing.ts", () => {
             }),
         ),
       ),
-    240_000,
+    testTimeoutMs,
   );
 
   it("numbers every element particle and wildcard once, densely, in tree order", () => {

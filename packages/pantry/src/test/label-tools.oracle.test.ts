@@ -29,6 +29,13 @@ import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 24 s at a load average of 63 to 73,
+ * its slowest test.
+ */
+const testTimeoutMs = 480_000;
+
+/**
  * The composed grammar every case judges by.
  */
 const grammar = Result.getOrThrow(composed());
@@ -371,7 +378,7 @@ describe("test/oracle.ts and import/overlays/identity.ts, Label tools by label c
             }),
         ),
       ),
-    120_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -415,7 +422,7 @@ describe("test/oracle.ts and import/overlays/identity.ts, Label tools by label c
             }).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-    240_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -470,6 +477,6 @@ describe("test/oracle.ts and import/overlays/identity.ts, Label tools by label c
             }).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
-    480_000,
+    testTimeoutMs,
   );
 });

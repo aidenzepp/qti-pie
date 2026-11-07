@@ -36,6 +36,13 @@ import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 18.4 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * The composed grammar every case judges by, composed once for the file.
  */
 const grammar = Result.getOrThrow(composed());
@@ -117,7 +124,7 @@ describe("the law oracle's branch laws against reading 87's model", () => {
             }),
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -144,6 +151,6 @@ describe("the law oracle's branch laws against reading 87's model", () => {
           ({ assembly }) => Effect.asVoid(agrees(assembly)),
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 });

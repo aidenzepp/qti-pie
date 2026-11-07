@@ -39,6 +39,13 @@ import type { CopyCase } from "#pantry/test/placed-id-copy-cases.ts";
 import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 21.9 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * The oracle's tables over the installed grammar, which the importer reads.
  */
 const laws = lawsOf(grammar);
@@ -137,6 +144,6 @@ describe("a placed ID's copy (lane NIL's audit, C1)", () => {
           },
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 });

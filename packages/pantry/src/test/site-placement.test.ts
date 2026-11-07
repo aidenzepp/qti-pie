@@ -40,6 +40,13 @@ import type { Datum } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
 /**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 64.8 s at a load average of 68 to
+ * 108, its slowest test.
+ */
+const testTimeoutMs = 600_000;
+
+/**
  * A row as the host judges it: its fields' values, each a datum of `#pantry/test/key-copies.ts`.
  */
 type Row = Readonly<Record<string, Datum>>;
@@ -344,7 +351,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
             ),
         ),
       ),
-    600_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -389,6 +396,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
           );
         }),
       ),
-    600_000,
+    testTimeoutMs,
   );
 });
