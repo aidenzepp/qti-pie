@@ -4,8 +4,9 @@
  * `qti-duration-lt` and `qti-duration-gte`, which M3.b-3 lands.
  *
  * Integers are exact and floats are doubles. An integer and a float compare exactly, never through
- * a lossy conversion ({@link orderOf}); only the range of `qti-equal`'s tolerance modes is
- * computed in floats, from its first operand through `toFloat`.
+ * a lossy conversion ({@link orderOf}). `qti-equal`'s tolerance modes compare their two operands
+ * in one domain: exactly when both are integers, and otherwise as two floats, an integer through
+ * `toFloat` ({@link withinTolerance}).
  *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
  * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
@@ -216,14 +217,15 @@ const evaluateLte: Evaluator<"lte"> = comparing((order) => order <= 0);
 
 /**
  * Give the number one `tolerance` token stands for: its literal, or the value of the float or
- * integer variable it names (9.11), an integer through `toFloat`.
+ * integer template or outcome variable it names (9.11), an integer through `toFloat`.
  *
  * The token is resolved through `referenceValue` with `qti-equal`'s unchecked facet, which never
- * fails: a token that names no variable the attempt holds gives NULL.
+ * fails and reads only the outcomes the attempt holds: a token that names a response, a built-in
+ * or no variable the attempt holds gives NULL.
  *
  * @param scope The item and the variables of the attempt.
  * @param token The token.
- * @returns The float, or none when the token names no variable, a NULL, or a value that is not a
+ * @returns The float, or none when the token names no outcome, a NULL, or a value that is not a
  *   single number.
  */
 const toleranceTokenOf = (
@@ -265,8 +267,8 @@ const toleranceOf = (
   );
 
 /**
- * Give the bounds of a `qti-equal`'s range in a tolerance mode, as {@link withinTolerance} reads
- * them.
+ * Give the bounds of a `qti-equal`'s range in a tolerance mode, in floats, as {@link floatsWithin}
+ * reads them.
  *
  * @param mode The tolerance mode, `absolute` or `relative` (`exact` reads no range).
  * @param x The first operand, as a float.
@@ -290,8 +292,25 @@ const rangeOf = (
 };
 
 /**
- * Report whether a `qti-equal` in a tolerance mode holds: whether its second operand, `y`, lies in
- * the range its first, `x`, defines with `t0` and `t1`, each bound closed when its flag is true.
+ * Report whether the second operand of a `qti-equal` in a tolerance mode lies in its range, from
+ * its order against each bound, each bound closed when its flag is true.
+ *
+ * @param equal The `qti-equal`, whose flags close or open each bound.
+ * @param lower The second operand's order against the lower bound, none when they have no order.
+ * @param upper Its order against the upper bound, none when they have no order.
+ * @returns Whether it lies in the range; never when an order is none.
+ */
+const inRange = (
+  equal: Extract<Expression, { readonly kind: "equal" }>,
+  lower: Option.Option<Order>,
+  upper: Option.Option<Order>,
+): boolean =>
+  Option.exists(lower, (order) => (equal.includeLowerBound ? order >= 0 : order > 0)) &&
+  Option.exists(upper, (order) => (equal.includeUpperBound ? order <= 0 : order < 0));
+
+/**
+ * Report whether a `qti-equal` in a tolerance mode holds for two floats: whether `y` lies in the
+ * range `x` defines with `t0` and `t1` ({@link inRange}).
  *
  * The range is `[x − t0, x + t1]` in `absolute` mode. In `relative` mode, `t0` and `t1` are
  * percentages, `t0` below `x` and `t1` above it, and the range is computed by the sign of `x`
@@ -299,9 +318,122 @@ const rangeOf = (
  * information model's `[x·(1 − t0/100), x·(1 + t1/100)]` exactly, so `x = INF` holds `INF` alone
  * for a tolerance below 100 and `x = 0` holds `0` alone; for `x < 0` it is the same band mirrored,
  * `[x·(1 + t0/100), x·(1 − t1/100)]`, where the range as written would put its lower bound above
- * its upper and hold no value. The bounds are computed in floats from `x` through `toFloat`; `y` is
- * compared with each exactly ({@link orderOf}), and a NaN bound, such as `INF·0` for an infinite
- * `x` and a tolerance of 100, holds nothing.
+ * its upper and hold no value. The bounds and `y` are floats, so a bound's rounding moves it as it
+ * moves `y`, and a NaN bound, such as `INF·0` for an infinite `x` and a tolerance of 100, holds
+ * nothing.
+ *
+ * @param equal The `qti-equal`, in its `absolute` or `relative` mode.
+ * @param x The first operand.
+ * @param y The second operand.
+ * @param tolerance `t0`, the tolerance below `x`, then `t1`, the tolerance above it.
+ * @returns Whether `y` lies in the range.
+ */
+const floatsWithin = (
+  equal: Extract<Expression, { readonly kind: "equal" }>,
+  x: number,
+  y: number,
+  [t0, t1]: readonly [number, number],
+): boolean => {
+  const [lower, upper] = rangeOf(equal.toleranceMode, x, t0, t1);
+
+  return inRange(equal, orderWithin(y, lower), orderWithin(y, upper));
+};
+
+/**
+ * Give a finite float as an exact fraction, `numerator / 2^shift`.
+ *
+ * Every finite double is an integer times a power of two. One that is not integral is below 2^52
+ * in magnitude, so doubling it is exact, and at most 1,074 doublings, a subnormal's, make it
+ * integral; an integral double converts to a `bigint` exactly.
+ *
+ * @param float The float, finite.
+ * @returns Its numerator, then the power of two that divides it.
+ */
+const fractionOf = (float: number): readonly [bigint, bigint] => {
+  let numerator = float;
+  let shift = 0n;
+  while (!Number.isInteger(numerator)) {
+    numerator *= 2;
+    shift += 1n;
+  }
+
+  return [BigInt(numerator), shift];
+};
+
+/**
+ * Give the order of an integer against the product of an integer and a float, exactly.
+ *
+ * An exact zero factor makes the product zero whatever the float but NaN, an infinity among them,
+ * as "`t0` percent of 0" is 0. Otherwise an infinite float makes the product an infinity of the
+ * sign of the two, which lies beyond every integer, and a finite one is compared through its exact
+ * fraction ({@link fractionOf}), so no step rounds.
+ *
+ * @param integer The integer.
+ * @param factor The integer factor of the product.
+ * @param float The float factor of the product.
+ * @returns The integer's order against the product, or none when the float is NaN.
+ */
+const againstProduct = (integer: bigint, factor: bigint, float: number): Option.Option<Order> => {
+  if (Number.isNaN(float)) {
+    return Option.none();
+  }
+
+  if (factor === 0n) {
+    return orderWithin(integer, 0n);
+  }
+
+  if (!Number.isFinite(float)) {
+    return Option.some(float > 0 === factor > 0n ? -1 : 1);
+  }
+
+  const [numerator, shift] = fractionOf(float);
+
+  return orderWithin(integer * 2n ** shift, factor * numerator);
+};
+
+/**
+ * Report whether a `qti-equal` in a tolerance mode holds for two integers, exactly: whether `y`
+ * lies in the range `x` defines with `t0` and `t1`, as {@link floatsWithin} defines it, with no step
+ * rounded.
+ *
+ * With `d = y − x`, `y ≥ x − t0` is `d ≥ −t0` and `y ≤ x + t1` is `d ≤ t1` in `absolute` mode. In
+ * `relative` mode, for either sign of `x`, the band reaches `t0` percent of `|x|` below `x` and
+ * `t1` percent above it, so the bounds are `100·d ≥ −|x|·t0` and `100·d ≤ |x|·t1`; `x = 0` holds
+ * `0` alone. Each side is compared exactly ({@link againstProduct}), so `equal(v, v)` holds for
+ * every integer `v` with tolerances of 0 or more, past 2^53 and past the largest float alike, and a
+ * NaN tolerance holds nothing.
+ *
+ * @param equal The `qti-equal`, in its `absolute` or `relative` mode.
+ * @param x The first operand.
+ * @param y The second operand.
+ * @param tolerance `t0`, the tolerance below `x`, then `t1`, the tolerance above it.
+ * @returns Whether `y` lies in the range.
+ */
+const integersWithin = (
+  equal: Extract<Expression, { readonly kind: "equal" }>,
+  x: bigint,
+  y: bigint,
+  [t0, t1]: readonly [number, number],
+): boolean => {
+  const relative = equal.toleranceMode === "relative";
+  const difference = relative ? 100n * (y - x) : y - x;
+  const magnitude = x < 0n ? -x : x;
+  const weight = relative ? magnitude : 1n;
+
+  return inRange(
+    equal,
+    againstProduct(difference, weight, -t0),
+    againstProduct(difference, weight, t1),
+  );
+};
+
+/**
+ * Report whether a `qti-equal` in a tolerance mode holds: whether its second operand, `y`, lies in
+ * the range its first, `x`, defines with `t0` and `t1`.
+ *
+ * The two operands are compared in one domain, so the range's arithmetic treats `x` as it treats
+ * `y`: two integers exactly ({@link integersWithin}), and otherwise two floats, an integer operand
+ * through `toFloat` ({@link floatsWithin}).
  *
  * @param equal The `qti-equal`, in its `absolute` or `relative` mode.
  * @param x The first operand.
@@ -314,19 +446,11 @@ const withinTolerance = (
   equal: Extract<Expression, { readonly kind: "equal" }>,
   x: NumberSingle,
   y: NumberSingle,
-  [t0, t1]: readonly [number, number],
-): boolean => {
-  const first = floatOf(x);
-  const [lower, upper] = rangeOf(equal.toleranceMode, first, t0, t1);
-  const aboveLower = Option.exists(orderOf(y, { baseType: "float", value: lower }), (order) =>
-    equal.includeLowerBound ? order >= 0 : order > 0,
-  );
-  const belowUpper = Option.exists(orderOf(y, { baseType: "float", value: upper }), (order) =>
-    equal.includeUpperBound ? order <= 0 : order < 0,
-  );
-
-  return aboveLower && belowUpper;
-};
+  tolerance: readonly [number, number],
+): boolean =>
+  x.baseType === "integer" && y.baseType === "integer"
+    ? integersWithin(equal, x.value, y.value, tolerance)
+    : floatsWithin(equal, floatOf(x), floatOf(y), tolerance);
 
 /**
  * Give the value of a `qti-equal`: a single boolean; NULL when either operand is NULL, or, in a

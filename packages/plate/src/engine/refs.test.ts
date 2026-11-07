@@ -238,6 +238,27 @@ describe("referenceValue", () => {
     );
   });
 
+  it("[I-9a] gives NULL of the site's base type at an unchecked site for a response or a built-in, as only a template or outcome variable may be named there (9.11)", () => {
+    const held: Variables = {
+      ...referenced,
+      numAttempts: 5n,
+      responses: { ...referenced.responses, RATE: score },
+    };
+
+    assert.deepStrictEqual(
+      ["RATE", "numAttempts", "SCORE"].map((identifier) =>
+        Result.getOrThrow(
+          referenceValue(held, {
+            baseType: "float",
+            checked: false,
+            reference: { _tag: "ref", identifier },
+          }),
+        ),
+      ),
+      [nullOf("float", "single"), nullOf("float", "single"), score],
+    );
+  });
+
   it("gives NULL of the site's base type for a name the variables hold no value of at an unchecked site", () => {
     assert.deepStrictEqual(
       Result.getOrThrow(

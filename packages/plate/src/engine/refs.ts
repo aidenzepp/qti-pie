@@ -2,7 +2,7 @@
  * The engine's references to variables: the value a `qti-variable` reads ({@link variableValue}),
  * from the responses and outcomes the record holds ({@link own}) or from a built-in variable
  * ({@link builtInValue}), the type of each built-in the engine holds ({@link builtInType}), and the
- * run-time resolver of an attribute that holds a literal or names a variable
+ * run-time resolver of an attribute that holds a literal or names a template or outcome variable
  * ({@link referenceValue}, and {@link referenceInteger} for an integer one).
  *
  * It value-imports only `effect`'s `Option` and `Result`, `#plate/engine/failures.ts`,
@@ -123,7 +123,8 @@ export const variableValue = (
  * The base type ties the attribute's type to its literal's: an `IntegerOrRef` or an
  * `IntOrIdentifier` is an integer, a `FloatOrRef` a float and a `StringOrRef` a string. Every
  * reference facet is checked but `qti-equal`'s `tolerance`, whose reference the validator does
- * not judge (9.11).
+ * not judge (9.11), so {@link referenceValue} itself keeps an unchecked site to the variables such
+ * an attribute may name.
  */
 export type ReferenceSite =
   | { readonly baseType: "float"; readonly checked: boolean; readonly reference: FloatOrRef }
@@ -151,15 +152,24 @@ const singleOf = (single: Single): Value => ({
  * expression is evaluated.
  *
  * A literal gives itself as a single value of its base type: a `StringOrRef` literal its text as
- * written, braces included. A reference gives the named variable's value as {@link variableValue}
- * reads it, and its type is not checked: a NULL or a value of another type is the caller's to turn
- * into the NULL its kind gives. The reader split a `StringOrRef` against the item's declarations
- * (ruling R1), so the resolver never meets a braced name that names nothing.
+ * written, braces included. A reference gives the named variable's value, and its type is not
+ * checked: a NULL or a value of another type is the caller's to turn into the NULL its kind gives.
+ * The reader split a `StringOrRef` against the item's declarations (ruling R1), so the resolver
+ * never meets a braced name that names nothing.
  *
- * A name the variables hold no value of fails at a checked site, as `qti-variable` does, which a
- * checked item never reaches: the validator refuses a reference to no declaration (P8), and the
- * item model marks one to a variable the engine does not hold. At an unchecked site, `qti-equal`'s
- * `tolerance`, it gives NULL of the site's base type instead (9.11's default).
+ * Such an attribute may name only "a template or outcome variable" (`info.txt:9102-9106`). At a
+ * checked site the validator holds a reference to that (P24 refuses a response, a context variable
+ * and a built-in; P8 a name nothing declares), and the item model marks one to a template or to an
+ * outcome the engine does not hold, so the site reads the variable as {@link variableValue} does,
+ * and a name the variables hold no value of fails, as `qti-variable` does, which a checked item
+ * never reaches.
+ *
+ * At an unchecked site, `qti-equal`'s `tolerance`, the validator judges nothing, so the resolver
+ * keeps to that rule itself: it reads only the outcomes the record holds, and gives NULL of the
+ * site's base type for any other name, a response, the built-in `numAttempts` or a name nothing
+ * declares (9.11's default). A template variable never reaches it: the engine holds none, and the
+ * item model marks a tolerance that names one. The built-in `completionStatus`, which the record
+ * holds among its outcomes, is a single identifier, so the caller's type check gives its NULL.
  *
  * @param variables The variables of the attempt.
  * @param site The attribute's value and its reference facet.
@@ -172,11 +182,15 @@ export const referenceValue = (
   site: ReferenceSite,
 ): Result.Result<Value, UnknownIdentifierError> => {
   if (site.reference._tag === "ref") {
-    const held = variableValue(variables, site.reference.identifier);
+    const { identifier } = site.reference;
 
     return site.checked
-      ? held
-      : Result.succeed(Result.getOrElse(held, () => nullOf(site.baseType, "single")));
+      ? variableValue(variables, identifier)
+      : Result.succeed(
+          Option.getOrElse(own(variables.outcomes, identifier), () =>
+            nullOf(site.baseType, "single"),
+          ),
+        );
   }
 
   switch (site.baseType) {

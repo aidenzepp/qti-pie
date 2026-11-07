@@ -315,28 +315,86 @@ describe("the comparison family's evaluators", () => {
     );
   });
 
-  it("[I-9a] qti-equal in a tolerance mode takes integer operands, x through toFloat and y compared exactly with each bound", () => {
+  it("[I-9a] qti-equal in a tolerance mode compares an integer and a float operand as two floats, the integer through toFloat, whichever operand it is", () => {
     const one = [literal(1)];
 
     assert.deepStrictEqual(
       [
-        tolerated("absolute", [integer(10n), integer(11n)], one),
-        tolerated("absolute", [integer(10n), integer(12n)], one),
         tolerated("absolute", [float(10), integer(9n)], one),
+        tolerated("absolute", [integer(10n), float(11)], one),
+        tolerated("absolute", [float(10), integer(12n)], one),
       ],
-      [true, false, true].map((held) => truth(held)),
+      [true, true, false].map((held) => truth(held)),
     );
-    for (const [width, expected] of [
-      [2, true],
-      [1, false],
-      [0, false],
-    ] as const) {
+    for (const width of [2, 1, 0]) {
       assert.deepStrictEqual(
-        tolerated("absolute", [float(2 ** 53), integer(twoTo53 + 1n)], [literal(width)]),
-        truth(expected),
-        `2^53+1 against 2^53 ± ${width}`,
+        [
+          tolerated("absolute", [float(2 ** 53), integer(twoTo53 + 1n)], [literal(width)]),
+          tolerated("absolute", [integer(twoTo53 + 1n), float(2 ** 53)], [literal(width)]),
+        ],
+        [truth(true), truth(true)],
+        `2^53+1 and 2^53, whose floats are equal, ± ${width}`,
       );
     }
+    assert.deepStrictEqual(
+      [
+        tolerated("absolute", [float(Number.MAX_VALUE), integer(10n ** 400n)], [literal(0)]),
+        tolerated("absolute", [integer(10n ** 400n), float(Number.MAX_VALUE)], [literal(0)]),
+      ],
+      [truth(true), truth(true)],
+    );
+  });
+
+  it("[I-9a] qti-equal in a tolerance mode compares two integer operands exactly, so equal(v, v) holds past 2^53 and past the largest float (audit F3)", () => {
+    for (const v of [twoTo53 + 1n, 10n ** 400n, -(10n ** 400n)]) {
+      for (const toleranceMode of ["absolute", "relative"] as const) {
+        for (const width of [0, 1]) {
+          assert.deepStrictEqual(
+            tolerated(toleranceMode, [integer(v), integer(v)], [literal(width)]),
+            truth(true),
+            `${v} against itself, ${toleranceMode} ${width}`,
+          );
+        }
+      }
+    }
+    assert.deepStrictEqual(
+      [
+        tolerated("relative", [integer(10n ** 400n), integer(10n ** 500n)], [literal(10)]),
+        tolerated("relative", [integer(10n ** 400n), integer(11n * 10n ** 399n)], [literal(10)]),
+        tolerated(
+          "relative",
+          [integer(10n ** 400n), integer(11n * 10n ** 399n + 1n)],
+          [literal(10)],
+        ),
+        tolerated("relative", [integer(10n ** 400n), integer(9n * 10n ** 399n)], [literal(10)], {
+          includeLowerBound: false,
+        }),
+        tolerated(
+          "relative",
+          [integer(-(10n ** 400n)), integer(-11n * 10n ** 399n)],
+          [literal(10)],
+        ),
+        tolerated("absolute", [integer(twoTo53 + 1n), integer(twoTo53 + 2n)], [literal(1)]),
+        tolerated("absolute", [integer(twoTo53 + 1n), integer(twoTo53 + 2n)], [literal(0.5)]),
+        tolerated("absolute", [integer(twoTo53 + 1n), integer(twoTo53)], [literal(0), literal(1)]),
+      ],
+      [false, true, false, false, true, true, false, false].map((held) => truth(held)),
+    );
+  });
+
+  it("[I-9a] qti-equal of two integer operands in a tolerance mode takes an infinite tolerance as an unbounded band, holds 0 alone around x = 0 whatever its tolerance, and holds nothing for a NaN tolerance", () => {
+    const infinite = [literal(Number.POSITIVE_INFINITY)];
+
+    assert.deepStrictEqual(
+      [
+        tolerated("absolute", [integer(10n), integer(10n ** 400n)], infinite),
+        tolerated("relative", [integer(10n), integer(-(10n ** 400n))], infinite),
+        tolerated("relative", [integer(0n), integer(0n)], infinite),
+        tolerated("relative", [integer(0n), integer(1n)], infinite),
+        tolerated("absolute", [integer(10n), integer(10n)], [literal(Number.NaN)]),
+      ],
+      [true, true, true, false, false].map((held) => truth(held)),
+    );
   });
 
   it("[I-9a] qti-equal reads a tolerance token that names a float variable, and one that names an integer variable through toFloat (9.11)", () => {
@@ -382,6 +440,29 @@ describe("the comparison family's evaluators", () => {
             equalOf(float(10), float(10), { tolerance: [literal(1), ref(token)], toleranceMode }),
             variables,
           ),
+          unknown,
+          `${token} in ${toleranceMode} mode`,
+        );
+      }
+    }
+  });
+
+  it("[I-9a] qti-equal in a tolerance mode gives NULL for a tolerance token that names a response or a built-in, as only a template or outcome variable may be named (9.11, audit C1)", () => {
+    const variables: Variables = {
+      numAttempts: 5n,
+      outcomes: { FIVE: integer(5n) },
+      responses: { RESPONSE: integer(5n) },
+    };
+
+    assert.deepStrictEqual(
+      tolerated("absolute", [integer(10n), integer(14n)], [ref("FIVE")], {}, variables),
+      truth(true),
+      "an outcome holding 5",
+    );
+    for (const token of ["RESPONSE", "numAttempts"]) {
+      for (const toleranceMode of ["absolute", "relative"] as const) {
+        assert.deepStrictEqual(
+          tolerated(toleranceMode, [integer(10n), integer(14n)], [ref(token)], {}, variables),
           unknown,
           `${token} in ${toleranceMode} mode`,
         );
