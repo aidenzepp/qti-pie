@@ -15,9 +15,10 @@
  *
  * - **AL1, admission** (`AL1_admission`, rule `attribute-admission`): the name is one its element's
  *   governor admits, `{name} ⊆ AttributeSlotOf.row(model)`, with `{name}` the name's
- *   `Compute.singleton`. It is a named check, not a generated column's NOT NULL: PostgreSQL reports
- *   a NULL in a NOT NULL column as 23502, which names no law of the installation, so grizzle would
- *   answer an unadmitted name with `ExecutionFailure` rather than `invariant-rejected`.
+ *   `Compute.singleton`. It is a named check, not a generated column's NOT NULL: the governor it
+ *   reads is `version`, `kind` and `governs`, accumulated copies, and a generated field's term
+ *   reads only the fields its caller writes (grizzle's README, "How a field is written"). An
+ *   unadmitted name is refused `invariant-rejected` on the check's own law.
  * - **AL1, the lexical half** (`value_domain`, rule `attribute-lexical`): the lexical form as written
  *   matches its domain's compiled pattern, `ValueDomainOf.at("pattern", domain)`, through grizzle's
  *   `Compute.matches`. A universal domain, whose pattern admits every value (`universalDomains` of

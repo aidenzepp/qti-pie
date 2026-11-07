@@ -756,12 +756,10 @@ export const AssembledName = relation(
  * Its target is a row of its own, {@link BranchTarget}, which a rule whose target names nothing
  * lacks: the existence law `BranchResolution ⊆ BranchTarget` is "Branch target".
  *
- * The instance's `end` is not copied. {@link instanceTree} draws it on leaving the instance, after
- * the instance's members, so grizzle's write filler refuses an owner-axis copy of it, and with it
- * every ChangeSet of the schema (`docs/grizzle-findings.md`, R87). The law needs only the start:
- * a pre-order interval `[start, end)` holds an instance exactly when it holds the instance's
- * `start`, so `Branch_target` places the rule's instance inside the target's instance and inside
- * `via` by `instanceStart` alone.
+ * The instance's `end` is not copied, because the law needs only the start: a pre-order interval
+ * `[start, end)` holds an instance exactly when it holds the instance's `start`, so
+ * `Branch_target` places the rule's instance inside the target's instance and inside `via` by
+ * `instanceStart` alone.
  */
 export const BranchResolution = relation(
   "BranchResolution",

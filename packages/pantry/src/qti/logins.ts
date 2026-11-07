@@ -40,8 +40,10 @@ const noInputs = Result.getOrThrowWith(
 /**
  * The import's write program: `changeSetOf`'s ChangeSet with no rows. grizzle compiles a ChangeSet
  * from its Description, which names each insert and none of its rows, so this is the program every
- * package's import compiles, and its compilation runs grizzle's write filler over every family of
- * the schema. It is declared to be compiled, never run.
+ * package's import compiles. It is declared to be compiled, never run: the schema's own compile
+ * already refuses a column or a relation no write fills, so compiling it guards the refusals of the
+ * write program itself, an insert outside the author role (`OutsideRole`) and a stratum no order of
+ * its statements keeps every key at (`UnorderableStratum`).
  */
 export const importWork = workload(Author, { importWrite: changeSetOf(Author, noInputs) });
 
