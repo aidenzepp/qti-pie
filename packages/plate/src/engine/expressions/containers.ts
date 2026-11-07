@@ -1,7 +1,7 @@
 /**
  * The containers family of the engine: the evaluators of `qti-is-null`, `qti-multiple`,
- * `qti-ordered`, `qti-repeat`, `qti-container-size`, `qti-index`, `qti-member`, `qti-delete` and
- * `qti-contains`, and the stub markers of `qti-random` and `qti-field-value`.
+ * `qti-ordered`, `qti-repeat`, `qti-container-size`, `qti-index`, `qti-random`, `qti-member`,
+ * `qti-delete` and `qti-contains`, and the stub marker of `qti-field-value`.
  *
  * A container's values are compared one single at a time as `qti-match` compares two single
  * values (`match` in `#plate/model/values.ts`): of one base type, a `pair` in either order. A
@@ -11,14 +11,17 @@
  * A container `qti-multiple`, `qti-ordered` or `qti-repeat` builds over an untyped operand, one the
  * item model types with no base type because a `qti-custom-operator` gives it ({@link untyped}),
  * is NULL: the model types such a container unknown, as the qti package does, so a rule that takes
- * it may need any type, and NULL is the one value of every type. `qti-index` and `qti-delete` of
- * such a container, or of the operator itself, get a NULL and give one.
+ * it may need any type, and NULL is the one value of every type. `qti-index`, `qti-random` and
+ * `qti-delete` of such a container, or of the operator itself, get a NULL and give one.
  *
  * A container `qti-multiple`, `qti-ordered` or `qti-repeat` builds is held to `containerSizeBound`
  * (`#plate/engine/numbers.ts`, the principle of the operator's ruling `afb7e648`): one of more than
  * 1,000,000 values is the NULL of its base type and cardinality, found before it is built, so a
  * `number-repeats` of 2147483647 cannot hang scoring. The other kinds build no container larger
  * than an operand, and no container as written or stored is held to the bound.
+ *
+ * `qti-random` draws from the scope's stream (`drawBelow`, `#plate/engine/random.ts`), once its
+ * operand is evaluated and found not NULL, so a NULL operand draws nothing.
  *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
  * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
@@ -30,6 +33,7 @@ import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { booleanOf, integerValue, withinContainerBound } from "#plate/engine/numbers.ts";
+import { drawBelow } from "#plate/engine/random.ts";
 import { referenceInteger } from "#plate/engine/refs.ts";
 import type { Expression, ExpressionKind } from "#plate/model/expression.ts";
 import { isNull, match, nullOf } from "#plate/model/values.ts";
@@ -67,7 +71,8 @@ const valuesOf = (
 
 /**
  * The kinds whose rule gives no base type when one of its operands has none, each operand counted
- * but `qti-delete`'s first: the three constructors, `qti-index` and the numerical aggregates.
+ * but `qti-delete`'s first: the three constructors, `qti-index`, `qti-random` and the numerical
+ * aggregates.
  */
 const passesUnknownUp: ReadonlySet<ExpressionKind> = new Set([
   "index",
@@ -76,6 +81,7 @@ const passesUnknownUp: ReadonlySet<ExpressionKind> = new Set([
   "multiple",
   "ordered",
   "product",
+  "random",
   "repeat",
   "subtract",
   "sum",
@@ -104,17 +110,17 @@ const typeSourcesOf = (expression: Expression): readonly Expression[] => {
  * `packages/pantry/src/processing/types.ts`). On a checked item whose processing runs, that is a
  * `qti-custom-operator`, whose value plate never knows (9.21), and the kinds whose rule passes an
  * unknown operand's base type up: `qti-multiple`, `qti-ordered` and `qti-repeat` (`sharedBase`),
- * `qti-index` (its operand's), `qti-delete` (its second operand's) and the numerical aggregates
- * `qti-sum`, `qti-product`, `qti-subtract`, `qti-min` and `qti-max` (`numericalAggregate` in
- * `#plate/model/expressions/arithmetic.ts`). A variable of a `record` declaration is typed unknown
- * too, but no kind this reads takes a record operand (P23 refuses one), and a kind that names a
- * variable the engine does not hold, or a kind its family has not landed, is marked, so its
- * processing never runs.
+ * `qti-index` and `qti-random` (their operand's), `qti-delete` (its second operand's) and the
+ * numerical aggregates `qti-sum`, `qti-product`, `qti-subtract`, `qti-min` and `qti-max`
+ * (`numericalAggregate` in `#plate/model/expressions/arithmetic.ts`). A variable of a `record`
+ * declaration is typed unknown too, but no kind this reads takes a record operand (P23 refuses
+ * one), and a kind that names a variable the engine does not hold, or a kind its family has not
+ * landed, is marked, so its processing never runs.
  *
- * Every such expression gives NULL: the operator always does, an aggregate does when an operand
- * is NULL, the three constructors do by this rule, and `qti-index` and `qti-delete` do when their
- * container is NULL. So an untyped operand never holds a value, and its NULL's base type says
- * nothing. The containers family's tests hold this list to the kind rules.
+ * Every such expression gives NULL: the operator always does, an aggregate does when an operand is
+ * NULL, the three constructors do by this rule, and `qti-index`, `qti-random` and `qti-delete` do
+ * when their container is NULL. So an untyped operand never holds a value, and its NULL's base type
+ * says nothing. The containers family's tests hold this list to the kind rules.
  *
  * @param expression The expression.
  * @returns Whether the model types it unknown.
@@ -264,12 +270,12 @@ const evaluateOrdered: Evaluator<"ordered"> = (expression, scope, evaluate) =>
  *
  * Evaluating once is exact only while no operand kind is random: an operand's value depends only on
  * the scope, which a pass does not change, so every pass would give the first pass's values.
- * `qti-random`, `qti-random-integer` and `qti-random-float` are unlanded, so the reader marks any
- * processing that holds one. M3.b-2 (P7T-01), which lands them, must evaluate the operands once per
- * pass again, under a budget on the passes, for the information model fills the container pass by
- * pass. Until then one evaluation is what keeps a costly operand, such as a product of two
- * 500,000-bit integers, from being computed a million times, though the container stays within
- * the bound.
+ * `qti-random`, `qti-random-integer` and `qti-random-float` have landed, so an operand that holds
+ * one draws once here, not once per pass. M3.b-2 (P7T-01), which lands them, must evaluate the
+ * operands once per pass again, under a budget on the passes, for the information model fills the
+ * container pass by pass. Until then one evaluation is what keeps a costly operand, such as a
+ * product of two 500,000-bit integers, from being computed a million times, though the container
+ * stays within the bound.
  *
  * The bound is checked before any value is added: the pass's size times `number-repeats` past the
  * bound gives NULL, and a pass that gives no value gives NULL at once, however many passes
@@ -363,6 +369,40 @@ const evaluateIndex: Evaluator<"index"> = (expression, scope, evaluate) =>
       }),
     });
   });
+
+/**
+ * Give the value of a `qti-random`: a single value of its operand's base type, the member of the
+ * container at the position `drawBelow` draws from the scope's stream among the container's size,
+ * counting from 0, so each member, a repeated one counted each time, is equally likely; NULL when
+ * the operand is NULL.
+ *
+ * The operand is evaluated first; its failure is the result. A NULL operand gives NULL before any
+ * draw, so it leaves the stream where it was for every later draw, and a container of one member
+ * gives it with no draw (`drawBelow` of 1).
+ *
+ * @param expression The `qti-random`.
+ * @param scope The item, the variables of the attempt and the stream it draws from.
+ * @param evaluate The evaluator, which gives the operand's value.
+ * @returns The single value, or the operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpRandom
+ */
+const evaluateRandom: Evaluator<"random"> = (expression, scope, evaluate) => {
+  const [operand] = expression.operands;
+
+  return Result.map(evaluate(operand, scope), (container): Value => {
+    if (isNull(container)) {
+      return nullOf(container.baseType, "single");
+    }
+
+    const picked = container.values[Number(drawBelow(scope.draw, BigInt(container.values.length)))];
+
+    return {
+      baseType: container.baseType,
+      cardinality: "single",
+      values: picked === undefined ? [] : [picked],
+    };
+  });
+};
 
 /**
  * Evaluate the two operands of a kind that relates them, left to right; the first failure is the
@@ -496,8 +536,8 @@ const evaluateContains: Evaluator<"contains"> = (expression, scope, evaluate) =>
   });
 
 /**
- * The containers family's evaluators by kind, and the stub marker for `random` and `field-value`
- * (ruling R2), which the dispatcher in `#plate/engine/evaluate.ts` never reaches on a checked item.
+ * The containers family's evaluators by kind, and the stub marker for `field-value` (ruling R2),
+ * which the dispatcher in `#plate/engine/evaluate.ts` never reaches on a checked item.
  */
 export const containersEvaluators: FamilyTable<
   | "container-size"
@@ -521,6 +561,6 @@ export const containersEvaluators: FamilyTable<
   member: evaluateMember,
   multiple: evaluateMultiple,
   ordered: evaluateOrdered,
-  random: "unlanded",
+  random: evaluateRandom,
   repeat: evaluateRepeat,
 };

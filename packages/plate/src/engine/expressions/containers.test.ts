@@ -2,6 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Option, Result } from "effect";
 import type { Evaluate, Variables } from "#plate/engine/evaluate.ts";
 import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
+import { drawBelow, drawStream } from "#plate/engine/random.ts";
+import type { Draw } from "#plate/engine/random.ts";
 import { isUnlanded } from "#plate/model/expression.ts";
 import type {
   Expression,
@@ -116,10 +118,11 @@ const holding = (outcomes: Variables["outcomes"]): Variables => ({ outcomes, res
  *
  * @param expression The expression, each operand a `qti-base-value`.
  * @param variables The variables of the attempt.
+ * @param draw The stream its random kinds draw from; `scopeOf`'s when none is given.
  * @returns Its value.
  */
-const evaluated = (expression: Expression, variables: Variables = none): Value => {
-  const result = evaluateIn(expression, scopeOf(bg007Item, variables));
+const evaluated = (expression: Expression, variables: Variables = none, draw?: Draw): Value => {
+  const result = evaluateIn(expression, scopeOf(bg007Item, variables, draw));
   assert.isTrue(Result.isSuccess(result), `qti-${expression.kind} failed`);
 
   const value = Result.getOrThrow(result);
@@ -200,6 +203,50 @@ const indexOf = (n: IntOrIdentifier, value: Value): Expression => ({
   n,
   operands: [operandOf(value)],
 });
+
+/**
+ * Construct a `qti-random` of a value.
+ *
+ * @param value Its operand's value.
+ * @returns The expression.
+ */
+const randomOf = (value: Value): Expression => ({
+  kind: "random",
+  operands: [operandOf(value)],
+});
+
+/**
+ * A stream that counts its draws: the stream of a key, and how many draws have been taken from it.
+ */
+interface Counted {
+  readonly count: () => number;
+  readonly draw: Draw;
+}
+
+/**
+ * Wrap the stream of a key so its draws are counted.
+ *
+ * @param key The stream's key.
+ * @returns The counted stream.
+ */
+const counted = (key: string): Counted => {
+  const stream = drawStream(key);
+  let taken = 0;
+
+  return {
+    count: () => taken,
+    draw: () => {
+      taken += 1;
+
+      return stream();
+    },
+  };
+};
+
+/**
+ * The number of keys each draw test draws under.
+ */
+const keys = 1000;
 
 /**
  * Construct an expression of a kind that takes two operands.
@@ -376,6 +423,53 @@ describe("the containers family's evaluators", () => {
     assert.deepStrictEqual(evaluated(pairOf("contains", bag(), bag("A"))), unknown);
     assert.deepStrictEqual(evaluated(pairOf("contains", list("A"), list())), unknown);
   });
+
+  it("[I-9a] give qti-random's member at drawBelow of the container's size, each member over 1,000 keys, of a multiple and an ordered container", () => {
+    for (const container of [bag("A", "B", "C"), list("C", "A", "B", "A")]) {
+      const seen = new Set<string>();
+      for (let index = 0; index < keys; index += 1) {
+        const key = `k${String(index)}`;
+        const at = Number(drawBelow(drawStream(key), BigInt(container.values.length)));
+        const member = container.values[at];
+        assert.isDefined(member, `${key} drew past the container`);
+
+        const picked = evaluated(randomOf(container), none, drawStream(key));
+        assert.deepStrictEqual(
+          picked,
+          {
+            baseType: "identifier",
+            cardinality: "single",
+            values: member === undefined ? [] : [member],
+          },
+          `${container.cardinality} under ${key}`,
+        );
+        seen.add(String(member?.value));
+      }
+
+      assert.deepStrictEqual(
+        [...seen].toSorted(),
+        ["A", "B", "C"],
+        `every member of the ${container.cardinality} container occurs`,
+      );
+    }
+  });
+
+  it("[I-9a] give qti-random's NULL for a NULL operand and draw nothing, and a container's one member with no draw", () => {
+    for (const unset of [bag(), list()]) {
+      const stream = counted("null");
+
+      assert.deepStrictEqual(
+        evaluated(randomOf(unset), none, stream.draw),
+        identifiers("single"),
+        unset.cardinality,
+      );
+      assert.strictEqual(stream.count(), 0, `a NULL ${unset.cardinality} operand draws nothing`);
+    }
+
+    const stream = counted("one");
+    assert.deepStrictEqual(evaluated(randomOf(list("B")), none, stream.draw), one("B"));
+    assert.strictEqual(stream.count(), 0, "a container of one member draws nothing");
+  });
 });
 
 /**
@@ -419,12 +513,13 @@ describe("the containers family's evaluators over an untyped operand", () => {
     );
   });
 
-  it("[I-9a] give NULL for a container whose operand takes its unknown type from a qti-custom-operator: a container, qti-index, qti-delete's second operand, and each numerical aggregate", () => {
+  it("[I-9a] give NULL for a container whose operand takes its unknown type from a qti-custom-operator: a container, qti-index, qti-delete's second operand, qti-random and each numerical aggregate", () => {
     const aggregates = ["max", "min", "product", "subtract", "sum"] as const;
     const routes: readonly (readonly [string, Expression, Value])[] = [
       ["qti-ordered", { kind: "ordered", operands: [custom] }, one("A")],
       ["qti-index", { kind: "index", n: literal(1n), operands: [custom] }, one("A")],
       ["qti-delete", { kind: "delete", operands: [operandOf(one("A")), custom] }, one("A")],
+      ["qti-random", { kind: "random", operands: [custom] }, one("A")],
       ...aggregates.map((kind): readonly [string, Expression, Value] => [
         `qti-${kind}`,
         { kind, operands: [custom, operandOf(integer(1n))] },
@@ -514,6 +609,7 @@ describe("the containers family's evaluators over an untyped operand", () => {
       multiple: "1 2",
       ordered: "1 2",
       product: "1 2",
+      random: "1",
       repeat: "1 2",
       subtract: "1 2",
       sum: "1 2",

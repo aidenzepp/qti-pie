@@ -148,6 +148,7 @@ const runDeclarations: readonly SourceElement[] = [
   outcomeDeclaration("REPEATED", "identifier", "ordered"),
   outcomeDeclaration("SIZE", "integer"),
   outcomeDeclaration("PICKED", "identifier"),
+  outcomeDeclaration("CHOSEN", "identifier"),
   outcomeDeclaration("HELD", "boolean"),
   outcomeDeclaration("LEFT", "identifier", "multiple"),
   outcomeDeclaration("PART", "boolean"),
@@ -184,6 +185,7 @@ const runItem = processingItem(runDeclarations, [
       [expressionElement("ordered", [], [identifierElement("C"), identifierElement("D")])],
     ),
   ),
+  setOutcomeElement("CHOSEN", expressionElement("random", [], [variableElement("RESPONSE")])),
   setOutcomeElement(
     "HELD",
     expressionElement("member", [], [identifierElement("B"), variableElement("RESPONSE")]),
@@ -215,7 +217,7 @@ const runItem = processingItem(runDeclarations, [
 
 describe("the containers family's reader specs and kind rules", () => {
   it.effect(
-    "[I-9a] build an item whose inline processing holds qti-repeat and qti-index, their references and literals read, with processing some",
+    "[I-9a] build an item whose inline processing holds qti-repeat, qti-index and qti-random, their operands, references and literals read, with processing some",
     () =>
       Effect.gen(function* buildsContainers() {
         const built = yield* buildItem(
@@ -223,6 +225,7 @@ describe("the containers family's reader specs and kind rules", () => {
             [
               outcomeDeclaration("REPEATED", "identifier", "ordered"),
               outcomeDeclaration("PICKED", "identifier"),
+              outcomeDeclaration("CHOSEN", "identifier"),
               integerOutcome("n", "2"),
             ],
             [
@@ -240,6 +243,14 @@ describe("the containers family's reader specs and kind rules", () => {
                   "index",
                   [attr("n", " 2 ")],
                   [expressionElement("multiple", [], [identifierElement("B")])],
+                ),
+              ),
+              setOutcomeElement(
+                "CHOSEN",
+                expressionElement(
+                  "random",
+                  [],
+                  [expressionElement("ordered", [], [identifierElement("C")])],
                 ),
               ),
             ],
@@ -265,6 +276,14 @@ describe("the containers family's reader specs and kind rules", () => {
                 operands: [{ kind: "multiple", operands: [identifierExpression("B")] }],
               },
               identifier: "PICKED",
+              kind: "set-outcome",
+            },
+            {
+              expression: {
+                kind: "random",
+                operands: [{ kind: "ordered", operands: [identifierExpression("C")] }],
+              },
+              identifier: "CHOSEN",
               kind: "set-outcome",
             },
           ]),
@@ -306,6 +325,12 @@ describe("the containers family's reader specs and kind rules", () => {
         assertKindType(outcome("SIZE"), "container-size", [response]);
         assert.deepStrictEqual(outcome("PICKED"), identifiers("single", "D"));
         assertKindType(outcome("PICKED"), "index", [ordered]);
+        assert.deepInclude(
+          [identifiers("single", "B"), identifiers("single", "C")],
+          outcome("CHOSEN"),
+          "qti-random picks a member of RESPONSE",
+        );
+        assertKindType(outcome("CHOSEN"), "random", [response]);
         assert.deepStrictEqual(outcome("HELD"), truth(true));
         assertKindType(outcome("HELD"), "member", [single, response]);
         assert.deepStrictEqual(outcome("LEFT"), identifiers("multiple", "C"));
@@ -317,7 +342,7 @@ describe("the containers family's reader specs and kind rules", () => {
   );
 
   it.effect(
-    "[I-9a] run the containers kinds over a NULL response: container-size 0, member and contains NULL, delete NULL",
+    "[I-9a] run the containers kinds over a NULL response: container-size 0, member and contains NULL, delete and random NULL",
     () =>
       Effect.gen(function* runsOverNull() {
         const after = yield* processed(runItem, { RESPONSE: identifiers("multiple") });
@@ -338,6 +363,7 @@ describe("the containers family's reader specs and kind rules", () => {
           values: [],
         });
         assert.deepStrictEqual(outcome("LEFT"), identifiers("multiple"));
+        assert.deepStrictEqual(outcome("CHOSEN"), identifiers("single"));
         assert.deepStrictEqual(outcome("PART"), {
           baseType: "boolean",
           cardinality: "single",
@@ -488,6 +514,12 @@ describe("the containers family's reader specs and kind rules", () => {
         [["1", "identifier", "single", "any", "multiple ordered"]],
       ],
       [
+        "identifier",
+        "single",
+        expressionElement("random", [], [identifierElement("A")]),
+        [["1", "identifier", "single", "any", "multiple ordered"]],
+      ],
+      [
         "boolean",
         "single",
         expressionElement("member", [], [variableElement("BAG"), variableElement("LIST")]),
@@ -573,6 +605,8 @@ describe("the containers family's reader specs and kind rules", () => {
         "single",
         expressionElement("index", [attr("n", "1")], [variableElement("BAG")]),
       ],
+      ["identifier", "single", expressionElement("random", [], [variableElement("BAG")])],
+      ["identifier", "single", expressionElement("random", [], [variableElement("LIST")])],
       [
         "boolean",
         "single",
@@ -663,33 +697,23 @@ describe("the containers family's reader specs and kind rules", () => {
   });
 
   it.effect(
-    "qti-random and qti-field-value stay stubs: each is marked at its path and the processing runs none",
+    "qti-field-value stays a stub: it is marked at its path and the processing runs none",
     () =>
-      Effect.gen(function* marksStubs() {
-        const random = expressionElement(
-          "random",
-          [],
-          [expressionElement("multiple", [], [identifierElement("A")])],
-        );
+      Effect.gen(function* marksStub() {
         const field = expressionElement(
           "field-value",
           [attr("field-identifier", "f")],
           [variableElement("RESPONSE")],
         );
+        const built = yield* buildItem(
+          outItem("identifier", "single", field, [responseDeclaration("RESPONSE", "identifier")]),
+        );
 
-        for (const [expression, declarations] of [
-          [random, []],
-          [field, [responseDeclaration("RESPONSE", "identifier")]],
-        ] as const) {
-          const built = yield* buildItem(outItem("identifier", "single", expression, declarations));
-
-          assert.deepStrictEqual(built.processing, Option.none(), expression.local);
-          assert.deepStrictEqual(
-            built.unsupported.map((mark) => mark.feature),
-            [expression.local],
-            expression.local,
-          );
-        }
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(
+          built.unsupported.map((mark) => mark.feature),
+          [field.local],
+        );
       }),
   );
 });

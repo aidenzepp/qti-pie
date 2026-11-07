@@ -194,14 +194,14 @@ const byAttribute = (entries: readonly ReferenceEntry[]): readonly ReferenceEntr
   entries.toSorted((left, right) => left.attribute.localeCompare(right.attribute));
 
 /**
- * The kinds a later stage of this plan owns, by the unit that lands each: `qti-random`, the random
- * kind M3.b-2's P7T-01 has yet to land with template processing (`qti-random-integer` and
- * `qti-random-float` have landed), the two duration comparisons M3.b-3's P7O-02
- * lands with duration values, the eight outcome-only kinds M3.b-3's P7O-04 lands for a test's
- * outcome processing (reading 23 refuses them in an item's processing, as `expression-placement`),
- * and `field-value`, which M3.b-4's P7R-03 lands with record values. Each stays unlanded in all
- * three tables, so an item that holds one is marked and its processing runs none. The ledger's
- * claim on I-9a names this roster, and a unit that lands a kind removes it here.
+ * The kinds a later stage of this plan owns, by the unit that lands each (M3.b-2's P7T-01 has
+ * landed its three random kinds with template processing): the two duration comparisons M3.b-3's
+ * P7O-02 lands with duration values, the eight outcome-only kinds M3.b-3's P7O-04 lands for a
+ * test's outcome processing (reading 23 refuses them in an item's processing, as
+ * `expression-placement`), and `field-value`, which M3.b-4's P7R-03 lands with record values. Each
+ * stays unlanded in all three tables, so an item that holds one is marked and its processing runs
+ * none. The ledger's claim on I-9a names this roster, and a unit that lands a kind removes it
+ * here.
  */
 const laterKinds = {
   "P7O-02": ["duration-gte", "duration-lt"],
@@ -216,7 +216,6 @@ const laterKinds = {
     "test-variables",
   ],
   "P7R-03": ["field-value"],
-  "P7T-01": ["random"],
 } as const satisfies Readonly<Record<string, readonly ExpressionKind[]>>;
 
 /**
