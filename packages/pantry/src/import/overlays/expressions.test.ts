@@ -76,7 +76,6 @@ import {
   ValueBaseOf,
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
-import { nilUuid } from "#pantry/qti/tests.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 
 /**
@@ -2176,6 +2175,11 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
     assert.strictEqual(rows.together.ItemRefDocument.size, 0);
     assert.strictEqual(rows.together.MappingSourceDeclaration.size, 0);
     assert.strictEqual(rows.together.TemplateDefaultTarget.size, 0);
+    // The mapping's item ref names the link, which leaves it unchecked (reading 110).
+    assert.deepStrictEqual(
+      [...rows.together.MappingItemRef.values()].map(({ type }) => type),
+      ["imslti_xmlv1p1"],
+    );
     assert.deepStrictEqual(
       [...rows.together.TemplateDefault.values()].map(({ template }) => template),
       ["T"],

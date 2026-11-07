@@ -32,8 +32,8 @@
  *   ({@link NameLookup}), the declarations ({@link VariableLookup}) and the item ref's mappings
  *   ({@link MappingLookup}); exactly one reading resolves (M3). Beside them, a template default's
  *   and a variable mapping's declarations in the item their item ref names
- *   ({@link TemplateDefaultTarget}, {@link MappingSourceDeclaration}), and a `section-identifier`'s
- *   name ({@link SectionIdentifier}).
+ *   ({@link TemplateDefaultTarget}, {@link MappingSourceDeclaration}), what a mapping's item ref
+ *   names ({@link MappingItemRef}), and a `section-identifier`'s name ({@link SectionIdentifier}).
  *
  * The laws, each named by its oracle law with spaces written as underscores, and the rule each
  * keeps: `Arity` (P2); `Operand_fit` and `One_base` (P23); `Condition_type` (P21); `Set_type`
@@ -156,7 +156,6 @@ import {
   itemResourceType,
   linkResourceTypes,
   Named,
-  nilUuid,
   partKind,
   sectionKind,
   sectionRefKind,
@@ -171,12 +170,6 @@ import {
  * `src/import/refusal.ts`, which names its pattern law.
  */
 export const Affix = str.regex("^(?:[\\t\\n\\r ]*|\\{|\\})$");
-
-/**
- * The document the host writes for what no item holds: an LTI link's item, and a missing
- * document, which no `Document` row holds.
- */
-const nilDocument = nilUuid;
 
 /**
  * XML whitespace `S`, possibly none, as a pattern.
@@ -597,6 +590,19 @@ export const MappingSourceDeclaration = relation(
 );
 
 /**
+ * What a variable mapping's item ref names, keyed by the mapping's node (spec reading 110): its
+ * item ref (`itemRef`, `VariableMapping`'s `parent`) and `type`, its `ItemRefTarget`'s. Every
+ * mapping has one. A mapping whose item ref names an LTI link has no item, so no source
+ * declaration, and is accepted unchecked; every other must have its
+ * {@link MappingSourceDeclaration} ("Variable mapping source").
+ */
+export const MappingItemRef = relation(
+  "MappingItemRef",
+  { itemRef: uuid, node: uuid, type: closedId(ResourceType) },
+  ["node"],
+);
+
+/**
  * Whether an item ref maps a name, keyed by the item ref and the name (M2): each variable mapping
  * is forced in by its target, `mapped`, and every other row is a probe of a name the item ref maps
  * nothing to. The verdict is the row's one datum: a mapped name's variable, its source's
@@ -844,6 +850,7 @@ export const Reading = relation(
 export const referenceRelations = {
   AssembledReference,
   DeclarationTable,
+  MappingItemRef,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -1429,12 +1436,12 @@ const readsItemDuration = (r: ReadingRow) =>
   r.and(itemHeld(r), r.eq(r.source, "builtIn"), r.eq(r.variable, "duration"));
 
 /**
- * The variable mappings under an item ref that holds an item: a mapping under an LTI item ref has
- * no item, the host writes it the nil document, and is accepted unchecked (spec reading 110), so
- * neither its item nor its source's declaration is judged. A mapping under an item ref that names
- * a missing document stays refused by `ItemRefDocument`'s own laws.
+ * The variable mappings whose item ref names no LTI link: a mapping under an LTI item ref has no
+ * item, so no source declaration, and is accepted unchecked (spec reading 110). A mapping under an
+ * item ref that names an item, a missing document or nothing the package lists must have its
+ * source's declaration.
  */
-const heldMappings = select(MappingSource, (m) => m.ne(m.itemDocument, nilDocument));
+const heldMappings = select(MappingItemRef, (m) => m.not(m.in(m.type, linkResourceTypes)));
 
 /**
  * The readings that resolve: a key over them by their reference is "at most one", and the
@@ -1469,9 +1476,11 @@ const mappingReaders = select(Reading, itemScoped);
 const declaredReadings = select(Reading, (r) => r.eq(r.source, "declared"));
 
 /**
- * The readings whose variable is mapped, with the source declaration's codes.
+ * The readings whose variable is mapped, with the source declaration's codes, but for a reading
+ * through an LTI item ref, whose mapping has no source declaration and is accepted unchecked
+ * ({@link linkHeld}, spec reading 110).
  */
-const mappedReadings = select(Reading, (r) => r.eq(r.source, "mapped"));
+const mappedReadings = select(Reading, (r) => r.and(r.eq(r.source, "mapped"), r.not(linkHeld(r))));
 
 /**
  * The readings of an item's `duration`, with its item's timing.
@@ -1761,6 +1770,10 @@ export const referenceLawsByName = {
       on(VariableLookup, "document", "name", "declared"),
     ),
     key(on(mappedNames, "itemRef", "name")),
+    // MappingItemRef: each mapping's item ref and what that names (reading 110).
+    contained(on(VariableMapping, "node", "parent"), on(MappingItemRef, "node", "itemRef")),
+    contained(on(MappingItemRef, "node", "itemRef"), on(VariableMapping, "node", "parent")),
+    contained(on(MappingItemRef, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
     contained(on(VariableMapping, "parent", "target"), on(mappedNames, "itemRef", "name")),
     contained(on(mappedNames, "itemRef", "name"), on(VariableMapping, "parent", "target")),
     contained(
@@ -2201,7 +2214,8 @@ export const referenceLawsByName = {
     ),
   ],
   "Variable mapping source": [
-    contained(on(VariableMapping, "node"), on(MappingSourceDeclaration, "node")),
+    // Every mapping has its source's declaration, but one under an LTI item ref (reading 110).
+    contained(on(heldMappings, "node"), on(MappingSourceDeclaration, "node")),
     contained(
       on(MappingSourceDeclaration, "itemRef", "itemDocument"),
       on(ItemRefDocument, "node", "document"),
@@ -2222,7 +2236,8 @@ export const referenceLawsByName = {
       m.eq(m.declarationKind, "qti-outcome-declaration"),
     ),
     // A mapped reading's declaration is its mapping's source's, so a reading through a mapping
-    // whose source its item declares nothing under is refused under the mapping's law.
+    // whose source its item declares nothing under is refused under the mapping's law; one through
+    // an LTI item ref is accepted unchecked (reading 110).
     contained(
       on(
         mappedReadings,

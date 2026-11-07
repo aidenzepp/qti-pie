@@ -78,7 +78,7 @@ import {
 import { AreaMapping, InterpolationTable, Mapping, MatchTable } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-import { itemRefKind, linkResourceTypes, nilUuid } from "#pantry/qti/tests.ts";
+import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
 
 /**
  * The rule each of this module's check names keeps, the oracle laws `#pantry/test/oracle.ts` names
@@ -707,59 +707,70 @@ describe("qti/expressions.ts, an LTI item ref", () => {
 
   it("judges a variable mapping's source in an item, not in an LTI link's none", () => {
     // Oracle: reading 110: a variable mapping under an LTI item ref names no declaration of an
-    // item (the host writes the nil document), and is accepted unchecked; a mapping under an item
-    // ref still has its item and its source's declaration.
-    const [document, ...moreDocuments] = containmentsOf(
-      ["MappingSource", "itemRef", "itemDocument"],
-      ["ItemRefDocument", "node", "document"],
-    );
-    assert.isDefined(document, "the mapping's item");
-    assert.deepStrictEqual(moreDocuments, []);
+    // item (its MappingItemRef names the link, and it has no MappingSourceDeclaration), and is
+    // accepted unchecked, as is a reading through it; a mapping under an item ref that names an
+    // item, a missing document or nothing the package lists must still have its source's
+    // declaration.
+    assert.isDefined(lti, "an LTI resource type");
 
-    const [source, ...moreSources] = containmentsOf(
+    const [held, ...moreHeld] = containmentsOf(
+      ["MappingItemRef", "node"],
+      ["MappingSourceDeclaration", "node"],
+    );
+    assert.isDefined(held, "the mapping's source declaration");
+    assert.deepStrictEqual(moreHeld, []);
+    if (held !== undefined) {
+      assert.isFalse(selects(held.left, { type: lti ?? "none" }), "an LTI link's mapping");
+      assert.isTrue(selects(held.left, { type: "imsqti_item_xmlv3p0" }), "an item's mapping");
+      assert.isTrue(selects(held.left, { type: "none" }), "a mapping under an unlisted path");
+    }
+
+    const [mappedReading, ...moreReadings] = containmentsOf(
       [
-        "MappingSource",
+        "Reading",
+        "named",
+        "variable",
         "declaration",
-        "itemDocument",
-        "source",
         "declarationKind",
         "declBaseType",
         "declCardinality",
       ],
       [
-        "Declaration",
-        "node",
-        "document",
-        "identifier",
+        "MappingSourceDeclaration",
+        "itemRef",
+        "target",
+        "declaration",
         "declarationKind",
-        "baseType",
-        "cardinality",
+        "declBaseType",
+        "declCardinality",
       ],
     );
-    assert.isDefined(source, "the mapping's source declaration");
-    assert.deepStrictEqual(moreSources, []);
-    for (const side of [document?.left, source?.left]) {
-      assert.isDefined(side);
-      if (side !== undefined) {
-        assert.isFalse(selects(side, { itemDocument: nilUuid }), "an LTI link's mapping");
-        assert.isTrue(
-          selects(side, { itemDocument: "11111111-1111-4111-8111-111111111111" }),
-          "an item's mapping",
-        );
-      }
+    assert.isDefined(mappedReading, "a mapped reading's source declaration");
+    assert.deepStrictEqual(moreReadings, []);
+    if (mappedReading !== undefined) {
+      const mapped = { ...reading, source: "mapped" };
+      assert.isFalse(
+        selects(mappedReading.left, mapped),
+        "a reading through an LTI link's mapping",
+      );
+      assert.isTrue(
+        selects(mappedReading.left, { ...mapped, resourceType: "imsqti_item_xmlv3p0" }),
+        "a reading through an item's mapping",
+      );
     }
   });
 
   it("still judges a template default under an LTI item ref, which has no template variables", () => {
-    // Oracle: reading 110 keeps a template default under an LTI item ref refused (p15-37's brief).
+    // Oracle: reading 110 keeps a template default under an LTI item ref refused (p15-37's brief):
+    // every template default must have its target, which only an item's declaration gives.
     const [held, ...more] = containmentsOf(
-      ["TemplateDefault", "itemRef", "itemDocument"],
-      ["ItemRefDocument", "node", "document"],
+      ["TemplateDefault", "node"],
+      ["TemplateDefaultTarget", "node"],
     );
-    assert.isDefined(held, "the template default's item");
+    assert.isDefined(held, "the template default's target");
     assert.deepStrictEqual(more, []);
     if (held !== undefined) {
-      assert.isTrue(selects(held.left, { itemDocument: nilUuid }));
+      assert.isTrue(selects(held.left, { itemRef: "11111111-1111-4111-8111-111111111111" }));
     }
   });
 });

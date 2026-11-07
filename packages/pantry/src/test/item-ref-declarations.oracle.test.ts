@@ -9,11 +9,12 @@
  *   mapping target` breaches, each by the name its element writes.
  * - **The schema's laws, restated on the host** over the import's rows (`readProgram`): the existence
  *   of each template default's `TemplateDefaultTarget` and each mapping's
- *   `MappingSourceDeclaration`, their containments into `ItemRefDocument` and `Declaration`, their
- *   CHECKs, a mapped reading's declaration (its mapping's source's), `MappingLookup`'s forced and
- *   justified rows, and `VariableMapping`'s key and session check. Each law carries the name
- *   `src/import/refusal.ts` gives the schema's statement of it ({@link hostLaws}, held to
- *   `lawRules` by the first test).
+ *   `MappingSourceDeclaration`, but a mapping's under an LTI item ref, which with a reading through
+ *   it is accepted unchecked (reading 110, its `MappingItemRef`), their containments into
+ *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
+ *   mapping's source's), `MappingLookup`'s forced and justified rows, and `VariableMapping`'s key
+ *   and session check. Each law carries the name `src/import/refusal.ts` gives the schema's
+ *   statement of it ({@link hostLaws}, held to `lawRules` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -37,6 +38,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import { lawRules } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
+import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
 import type { Declaration } from "#pantry/qti/declarations.ts";
 import type {
@@ -90,6 +92,12 @@ const sessionVariables: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The resource types of an LTI link, under whose item ref a mapping, and a reading through it, is
+ * accepted unchecked (spec reading 110).
+ */
+const linkTypes: ReadonlySet<string> = new Set(linkResourceTypes);
+
+/**
  * The silent expression bases `Template_default_type` lets through.
  */
 const silentBases: ReadonlySet<string> = new Set(["any", "unknown"]);
@@ -126,7 +134,10 @@ const hostLaws: readonly (readonly [string, LawName | "E1 derived"])[] = [
     "contained TemplateDefaultTarget(node, itemRef, template) in TemplateDefault(node, itemRef, template)",
     "E1 derived",
   ],
-  ["contained VariableMapping(node) in MappingSourceDeclaration(node)", "Variable mapping source"],
+  ["contained MappingItemRef(node) in MappingSourceDeclaration(node)", "Variable mapping source"],
+  ["contained VariableMapping(node, parent) in MappingItemRef(node, itemRef)", "E1 derived"],
+  ["contained MappingItemRef(node, itemRef) in VariableMapping(node, parent)", "E1 derived"],
+  ["contained MappingItemRef(itemRef, type) in ItemRefTarget(node, type)", "E1 derived"],
   [
     "contained MappingSourceDeclaration(itemRef, itemDocument) in ItemRefDocument(node, document)",
     "Variable mapping source",
@@ -351,7 +362,16 @@ const keyBreaches = (rows: HostRows): readonly HostBreach[] =>
  */
 const readingBreaches = (rows: HostRows): readonly HostBreach[] =>
   [...rows.inputs.Reading.values()]
-    .filter(({ source }) => source === "mapped")
+    .filter(
+      ({ form, found, namedKind, resourceType, source }) =>
+        source === "mapped" &&
+        !(
+          (form === "split" || form === "numbered") &&
+          found &&
+          namedKind === itemRefKind &&
+          linkTypes.has(resourceType)
+        ),
+    )
     .flatMap((reading) => {
       // A containment holds where any row of its target matches, so two mappings of one target,
       // which the key over (itemRef, target) refuses on its own, leave the reading's copy to either.
@@ -433,9 +453,20 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
       ),
     ),
     ...[...inputs.TemplateDefaultTarget.values()].flatMap((target) => targetBreaches(rows, target)),
+    ...rows.mappings.flatMap((mapping) => {
+      const itemRef = inputs.MappingItemRef.get(mapping.node);
+      const target = inputs.ItemRefTarget.get(mapping.parent);
+
+      return unless(
+        itemRef?.itemRef === mapping.parent && target !== undefined && itemRef.type === target.type,
+        "E1 derived",
+        mapping.source,
+      );
+    }),
     ...rows.mappings.flatMap((mapping) => [
       ...unless(
-        inputs.MappingSourceDeclaration.has(mapping.node),
+        linkTypes.has(inputs.MappingItemRef.get(mapping.node)?.type ?? "none") ||
+          inputs.MappingSourceDeclaration.has(mapping.node),
         "Variable mapping source",
         mapping.source,
       ),

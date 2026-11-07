@@ -62,6 +62,7 @@ import type {
   ExpressionAttribute,
   ItemTiming,
   Literal,
+  MappingItemRef,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -1369,6 +1370,7 @@ export interface AssembledExpressionRows {
   readonly AssembledReference: ReadonlyMap<string, AssembledReferenceRow>;
   readonly ItemRefDocument: ReadonlyMap<string, Addition<typeof ItemRefDocument>>;
   readonly ItemRefTarget: ReadonlyMap<string, Addition<typeof ItemRefTarget>>;
+  readonly MappingItemRef: ReadonlyMap<string, Addition<typeof MappingItemRef>>;
   readonly MappingLookup: ReadonlyMap<string, Addition<typeof MappingLookup>>;
   readonly MappingSourceDeclaration: ReadonlyMap<string, Addition<typeof MappingSourceDeclaration>>;
   readonly NameLookup: ReadonlyMap<string, Addition<typeof NameLookup>>;
@@ -2042,6 +2044,31 @@ const mappingSourcesOf = (
 };
 
 /**
+ * Write what each variable mapping's item ref names, its `ItemRefTarget`'s type, which leaves a
+ * mapping under an LTI link unchecked (spec reading 110). A mapping whose item ref has no target
+ * has none, and "E1 derived" refuses it.
+ *
+ * @param documents - Every document of the package.
+ * @param lookups - The lookups, which hold each item ref's target.
+ * @returns The mappings' item refs, by the mapping's node.
+ */
+const mappingItemRefsOf = (
+  documents: readonly AssembledExpressionInput[],
+  lookups: Lookups,
+): ReadonlyMap<string, Addition<typeof MappingItemRef>> =>
+  new Map(
+    documents.flatMap((input) =>
+      [...input.tests.VariableMapping.values()].flatMap((mapping) => {
+        const type = lookups.targets.get(mapping.parent);
+
+        return type === undefined
+          ? []
+          : [[mapping.node, { itemRef: mapping.parent, node: mapping.node, type }] as const];
+      }),
+    ),
+  );
+
+/**
  * Force every written element of every test's assembly into the name lookups: its node, kind and
  * placements, one instance that places it and whether a replacement can repeat it there, and,
  * for an item ref, what it names.
@@ -2196,6 +2223,7 @@ export const assembledExpressionRowsOf = (
     ...placed,
     ItemRefDocument: items.itemRefDocuments,
     ItemRefTarget: items.itemRefTargets,
+    MappingItemRef: mappingItemRefsOf(documents, lookups),
     MappingLookup: lookups.mappings,
     MappingSourceDeclaration: sources,
     NameLookup: lookups.names,

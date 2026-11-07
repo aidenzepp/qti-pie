@@ -591,7 +591,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     110,
     {
       owner:
-        "PE's `MappingSource` and `TemplateDefault` (`src/qti/expressions.ts`), through `ItemRefDocument` (`src/qti/tests.ts`): a variable mapping under an LTI item ref is accepted unchecked, a recorded limit (`heldMappings` leaves out the nil document; a name read through the link is `linkHeld`), and a template default under it is refused by `Template_default_target`; the oracle's Template default target and, over an item an item ref names, its Variable mapping source (`itemRefLaws`, `src/test/oracle-laws/tests.ts`)",
+        "PE's `MappingItemRef`, `MappingSourceDeclaration` and `TemplateDefaultTarget` (`src/qti/expressions.ts`), through `ItemRefDocument` (`src/qti/tests.ts`): a variable mapping under an LTI item ref is accepted unchecked, a recorded limit (`heldMappings` leaves out a mapping whose `MappingItemRef` names an LTI link; a name read through the link is `linkHeld`), and a template default under it, which has no `TemplateDefaultTarget`, is refused by Template default target; the oracle's Template default target and, over an item an item ref names, its Variable mapping source (`itemRefLaws`, `src/test/oracle-laws/tests.ts`)",
       status: "G",
     },
   ],
