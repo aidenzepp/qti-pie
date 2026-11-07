@@ -3,9 +3,10 @@
  * author calls before showing or scoring responses.
  *
  * Each interaction module validates its own response, so this module only finds the interactions
- * and hands each its input. This is a browser module: it value-imports from `effect` only `Option`,
- * `Array`, `pipe`, `Data` and `Result`, and takes the configuration as a type, so a host that
- * imports `checkResponses` alone bundles no Schema and no Effect runtime.
+ * the page showed, through the redaction the page is built from, and hands each its input. This is
+ * a browser module: it value-imports from `effect` only `Option`, `Array`, `pipe`, `Data` and
+ * `Result`, and takes the configuration as a type, so a host that imports `checkResponses` alone
+ * bundles no Schema and no Effect runtime.
  *
  * @module
  */
@@ -18,8 +19,10 @@ import { validateInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { validateTextEntry } from "#plate/interactions/text-entry.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Interaction, Item } from "#plate/model/item.ts";
+import type { ResponsesRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
+import { redactItem } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
@@ -95,30 +98,69 @@ const validate = (
 };
 
 /**
+ * Give the interactions the page showed, in document order: those of the item redacted under the
+ * record (`redactItem`), the walk `render` shows the item by, so a choice its template hides is not
+ * among its interaction's choices and an interaction a hidden template block, inline or choice
+ * holds is not there at all. With no record the redaction reads the item as it does with none
+ * (H3), so an item whose template processing runs shows no template block, inline or choice with
+ * a template visibility.
+ *
+ * @param item The item.
+ * @param record The template values of the attempt shown, if any.
+ * @returns The interactions shown.
+ */
+const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Interaction[] =>
+  interactionsIn(
+    (record === undefined
+      ? redactItem(item)
+      : redactItem(item, { outcomes: {}, templates: record.templates })
+    ).body,
+  );
+
+/**
  * Validate responses as the item's interactions do, without scoring them.
  *
- * Each interaction of the item, in document order, validates its response: a host that posts a
- * native form passes what `decode` gave for each response, a {@link Malformed} included, and a
- * form-library host passes values. A response left out is NULL. Tier (a) limits apply always and
- * tier (b) ones only under `configuration.validateResponses`. An Extended Text that renders the
- * cap's notice in place of its Controls (Q23) is not judged against its `min-strings`, so a post
- * with no entry for it never holds its item back.
+ * It judges only what the page showed: the interactions of the item as `redact` shows it under the
+ * record's template values ({@link shownInteractions}). Each interaction shown, in document order,
+ * validates its response: a host that posts a native form passes what `decode` gave for each
+ * response, a {@link Malformed} included, and a form-library host passes values. A response left
+ * out is NULL. Tier (a) limits apply always and tier (b) ones only under
+ * `configuration.validateResponses`. An Extended Text that renders the cap's notice in place of
+ * its Controls (Q23) is not judged against its `min-strings`, so a post with no entry for it never
+ * holds its item back.
+ *
+ * A choice its template hides, or withholds because the record holds no value of its template
+ * variable, is not among the choices presented, so posting it to its interaction gives
+ * `unknownChoice`. An interaction a hidden or withheld template block, inline or choice holds is
+ * absent, and a response bound to no interaction shown is ignored, whatever it holds: no limit on
+ * it holds a post back, so the stored value a host passes for it, such as a session's declared or
+ * template-set default, gives no message.
+ *
+ * With no record, an item whose template processing does not run reads as the record its first
+ * attempt starts with (each template variable at its declared default); for an item whose template
+ * processing runs, every template block and inline is withheld and every choice with a template
+ * visibility is absent (H3).
  *
  * @example
- *   checkResponses(accepted, { RESPONSE: decoded }, configuration);
- *   // [] when RESPONSE is accepted, else its messages, ready for render's messages option
+ *   checkResponses(accepted, { RESPONSE: decoded }, configuration, record);
+ *   // [] when RESPONSE is accepted, else its messages, ready for render's messages option; record
+ *   // is the one the item was rendered under, as redact took it
  *
  * @param document The document `check` accepted.
  * @param responses The responses by identifier, each a value or the `Malformed` `decode` gave.
  * @param configuration The configuration, which gives the locale and `validateResponses`.
- * @returns Every message, in document order of the interactions; none when all are accepted.
+ * @param record The template values of the attempt the page showed, the record `redact` took; none
+ *   to judge the item as it reads with no record.
+ * @returns Every message of the interactions shown, in their document order; none when all are
+ *   accepted.
  */
 export const checkResponses = (
   document: Accepted,
   responses: Readonly<Record<string, Value | Malformed>>,
   configuration: Configuration,
+  record?: ResponsesRecord,
 ): readonly ValidationMessage[] =>
-  interactionsIn(document.item.body).flatMap((interaction) => {
+  shownInteractions(document.item, record).flatMap((interaction) => {
     const given = Object.hasOwn(responses, interaction.response)
       ? responses[interaction.response]
       : undefined;

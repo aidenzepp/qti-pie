@@ -9,9 +9,16 @@ import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed, entryName } from "#plate/form/encoding.ts";
 import { renderInlineChoice, validateInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { message } from "#plate/messages.ts";
-import type { BodyNode, InlineChoiceInteraction } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  InlineChoiceInteraction,
+  Item,
+  TemplateVisibility,
+} from "#plate/model/item.ts";
+import type { ResponsesRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
+import { payload, postings, redactItem } from "#plate/payload.ts";
 import type {
   EmitState,
   InlineChoicePayload,
@@ -19,6 +26,8 @@ import type {
   PayloadNode,
   RenderMode,
 } from "#plate/payload.ts";
+import { checkResponses } from "#plate/responses.ts";
+import { acceptForTest } from "#plate/validate/verdict.ts";
 import { checkTree, nameOf } from "#plate/test/accessibility.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 
@@ -795,6 +804,213 @@ describe("renderInlineChoice", () => {
         assert.strictEqual(onlyPart(rooted, "root").attrs["class"], "fruit");
         assert.deepStrictEqual(checkTree(rooted, { baseLevel: 2 }), []);
         assert.isTrue(roundTrips(spanned));
+      }),
+  );
+});
+
+/**
+ * Construct a template visibility by the template variable `VISIBLE`.
+ *
+ * @param showHide Its `show-hide`.
+ * @returns The visibility.
+ */
+const byVisible = (showHide: TemplateVisibility["showHide"]): TemplateVisibility => ({
+  showHide,
+  templateIdentifier: "VISIBLE",
+});
+
+/**
+ * Construct the record part `checkResponses` reads, with `VISIBLE` holding one identifier.
+ *
+ * @param identifier What `VISIBLE` holds.
+ * @returns The record part.
+ */
+const visibleAs = (identifier: string): ResponsesRecord => ({
+  templates: { VISIBLE: chosen(identifier) },
+});
+
+/**
+ * The fruits with `B` shown by `VISIBLE` (`show`) and `C` hidden by it (`hide`, so shown unless
+ * `VISIBLE` holds `C`); `A` has no template visibility.
+ */
+const templatedFruits: InlineChoiceInteraction = {
+  ...fruits,
+  choices: fruits.choices.map((choice) =>
+    choice.identifier === "A"
+      ? choice
+      : {
+          ...choice,
+          templateVisibility: Option.some(byVisible(choice.identifier === "B" ? "show" : "hide")),
+        },
+  ),
+};
+
+/**
+ * Construct an item whose template processing runs and declares `VISIBLE`, a single identifier
+ * with no default, whose body is a paragraph around the given nodes, binding {@link response} as a
+ * single identifier.
+ *
+ * @param nodes What the paragraph holds.
+ * @returns The item.
+ */
+const templatedOf = (...nodes: readonly BodyNode[]): Item => ({
+  body: [
+    {
+      attributes: [],
+      children: nodes,
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  document: "items/fruits.xml",
+  identifier: "fruits",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map([
+    [
+      response,
+      {
+        areaMapping: Option.none(),
+        baseType: "identifier",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier: response,
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+  templateProcessing: Option.some([]),
+  templates: new Map([
+    [
+      "VISIBLE",
+      {
+        baseType: "identifier",
+        cardinality: "single",
+        defaultValue: Option.none(),
+        identifier: "VISIBLE",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+  title: "Fruits",
+  unsupported: [],
+});
+
+/**
+ * Give the Inline Choice a payload's first paragraph holds.
+ *
+ * @param built The payload.
+ * @returns The Inline Choice.
+ */
+const inlineIn = (built: Payload): InlineChoicePayload => {
+  const [first] = built.body;
+  const found =
+    first?.kind === "element"
+      ? first.children.find((child): child is InlineChoicePayload => child.kind === "inline-choice")
+      : undefined;
+
+  return found ?? assert.fail("The first paragraph holds no Inline Choice.");
+};
+
+describe("checkResponses", () => {
+  it.effect(
+    "[I-5] judges an inline choice its template hides as absent from the payload and checkResponses, so posting it gives unknownChoice, and a shown one as today",
+    () =>
+      Effect.gen(function* hiddenChoice() {
+        const configuration = yield* configure({});
+        const accepted = acceptForTest(templatedOf(templatedFruits));
+        const hiding = visibleAs("C");
+        const redacted = redactItem(accepted.item, { outcomes: {}, ...hiding });
+        const shown = payload(redacted, {
+          finished: false,
+          instance,
+          locale: "en",
+          messages: [],
+          mode: "answering",
+          names: new Map(),
+          posted: Option.none(),
+          values: new Map(),
+        });
+
+        assert.deepStrictEqual(
+          inlineIn(shown).choices.map(({ identifier }) => identifier),
+          ["A"],
+        );
+        assert.deepStrictEqual(
+          postings(redacted, instance).map(({ identifier }) => identifier),
+          [response],
+        );
+        for (const hidden of ["B", "C"]) {
+          assert.deepStrictEqual(
+            checkResponses(accepted, { [response]: chosen(hidden) }, configuration, hiding),
+            [unknown],
+            hidden,
+          );
+        }
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: chosen("A") }, configuration, hiding),
+          [],
+        );
+        for (const identifier of ["A", "B", "C"]) {
+          assert.deepStrictEqual(
+            checkResponses(
+              accepted,
+              { [response]: chosen(identifier) },
+              configuration,
+              visibleAs("B"),
+            ),
+            [],
+            identifier,
+          );
+        }
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: chosen("B") }, configuration),
+          [unknown],
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] ignores a response bound only to a hidden or withheld template inline's Inline Choice, whatever it holds, and judges the inline shown",
+    () =>
+      Effect.gen(function* ignoredInline() {
+        const strict = yield* configure({ validateResponses: true });
+        const accepted = acceptForTest(
+          templatedOf({
+            content: [
+              {
+                ...required,
+                path: "qti-assessment-item/qti-item-body/p/qti-template-inline/qti-inline-choice-interaction",
+              },
+            ],
+            identifier: "X",
+            kind: "template-inline",
+            path: "qti-assessment-item/qti-item-body/p/qti-template-inline",
+            templateVisibility: byVisible("show"),
+          }),
+        );
+
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: chosen("Z") }, strict, visibleAs("W")),
+          [],
+        );
+        assert.deepStrictEqual(checkResponses(accepted, { [response]: chosen("Z") }, strict), []);
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: nothing }, strict, visibleAs("W")),
+          [],
+        );
+        assert.deepStrictEqual(checkResponses(accepted, {}, strict, visibleAs("W")), []);
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: chosen("Z") }, strict, visibleAs("X")),
+          [unknown],
+        );
+        assert.deepStrictEqual(checkResponses(accepted, {}, strict, visibleAs("X")), [
+          atLeast("1"),
+        ]);
       }),
   );
 });
