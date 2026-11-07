@@ -131,13 +131,15 @@ type Question =
     };
 
 /**
- * One judged question: the version, the kind, the question, and the validator's errors for its
- * probe.
+ * One judged question: the version, the kind, the question, and what the validator's errors for
+ * its probe say, read once for the probe that every question of it shares: the names they require
+ * and the names they refuse.
  */
 interface Judged {
-  readonly errors: readonly ValidityError[];
   readonly kind: string;
   readonly question: Question;
+  readonly refused: ReadonlySet<string>;
+  readonly required: readonly string[];
   readonly version: SchemaVersion;
 }
 
@@ -301,9 +303,13 @@ const judgeVersion = Effect.fn("test.judgeAttributes")(function* judgeVersion(
     posed.map(({ probe }) => probe),
   );
 
-  return posed.flatMap(({ kind, questions }, at) =>
-    questions.map((question): Judged => ({ errors: errors[at] ?? [], kind, question, version })),
-  );
+  return posed.flatMap(({ kind, questions }, at) => {
+    const probed = errors[at] ?? [];
+    const refused = refusedNamesOf(probed);
+    const required = requiredNamesOf(probed);
+
+    return questions.map((question): Judged => ({ kind, question, refused, required, version }));
+  });
 });
 
 /**
@@ -363,26 +369,23 @@ const isOracleDeparture = (
 ): boolean => admitted && !question.admitted && question.underOtherLax;
 
 /**
- * Judge one question against its errors.
+ * Judge one question against what its probe's errors say.
  *
  * @param judged - The question.
  * @returns A description of the disagreement, or `None` when the leaf and the XSDs agree.
  */
 const disagreementOf = (judged: Judged): Option.Option<string> => {
-  const { errors, question } = judged;
+  const { question, refused, required } = judged;
 
   switch (question._tag) {
     case "required": {
-      const found = requiredNamesOf(errors);
-
-      return found.join(" ") === question.names.join(" ")
+      return required.join(" ") === question.names.join(" ")
         ? Option.none()
         : Option.some(
-            `the leaf requires [${question.names.join(" ")}], xmllint [${found.join(" ")}]`,
+            `the leaf requires [${question.names.join(" ")}], xmllint [${required.join(" ")}]`,
           );
     }
     case "declared": {
-      const refused = refusedNamesOf(errors);
       const wrong = question.names.filter((name) => refused.has(name));
 
       return wrong.length === 0
@@ -390,7 +393,7 @@ const disagreementOf = (judged: Judged): Option.Option<string> => {
         : Option.some(`xmllint refuses the declared ${wrong.join(" ")}`);
     }
     case "undeclared": {
-      const admitted = !refusedNamesOf(errors).has(question.name);
+      const admitted = !refused.has(question.name);
 
       return admitted === question.admitted || isOracleDeparture(question, admitted)
         ? Option.none()
