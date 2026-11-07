@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { begin } from "#plate/begin.ts";
+import { decodeRecord } from "#plate/codec/record.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
@@ -418,6 +420,81 @@ const instancesOf = (session: TestSession): readonly string[] =>
  */
 const scoreOf = (record: ItemRecord): Value | undefined => record.outcomes["SCORE"];
 
+/**
+ * Write the text of a hand-built Choice bound to a single identifier response, of `max-choices` 1.
+ *
+ * @param response The response it binds.
+ * @param choices The markup of its choices.
+ * @param minChoices Its `min-choices`, when it sets one.
+ * @returns The interaction's text.
+ */
+const choiceXml = (response: string, choices: string, minChoices?: number): string =>
+  `<qti-choice-interaction response-identifier="${response}" shuffle="false" max-choices="1"${minChoices === undefined ? "" : ` min-choices="${minChoices}"`}>${choices}</qti-choice-interaction>`;
+
+/**
+ * Write the text of a simple choice, shown by the template variable `T` when it holds the choice's
+ * identifier.
+ *
+ * @param identifier The choice's identifier.
+ * @returns The choice's text.
+ */
+const shownByT = (identifier: string): string =>
+  `<qti-simple-choice identifier="${identifier}" template-identifier="T" show-hide="show">Choice ${identifier}</qti-simple-choice>`;
+
+/**
+ * Write the text of a simple choice with no template visibility.
+ *
+ * @param identifier The choice's identifier.
+ * @returns The choice's text.
+ */
+const plainChoice = (identifier: string): string =>
+  `<qti-simple-choice identifier="${identifier}">Choice ${identifier}</qti-simple-choice>`;
+
+/**
+ * Write the text of a template block shown by the template variable `T` when it holds the block's
+ * identifier.
+ *
+ * @param identifier The block's identifier.
+ * @param content The block's content.
+ * @returns The block's text.
+ */
+const blockShownByT = (identifier: string, content: string): string =>
+  `<qti-template-block identifier="${identifier}" template-identifier="T" show-hide="show"><qti-content-body>${content}</qti-content-body></qti-template-block>`;
+
+/**
+ * Write the text of a hand-built templated item: `RESPONSE`, a single identifier whose correct
+ * response is `A`, scored by `match_correct` into `SCORE`, and template processing that sets the
+ * single identifier template variable `T` to a value it writes, so no draw decides what the page
+ * shows.
+ *
+ * @param identifier The item's identifier.
+ * @param value The identifier template processing sets `T` to.
+ * @param parts What the item holds besides.
+ * @param parts.body The item body's content.
+ * @param parts.declarations The response declarations it adds after `RESPONSE`'s, when it adds any.
+ * @returns The item's text.
+ */
+const templatedItemXml = (
+  identifier: string,
+  value: string,
+  parts: { readonly body: string; readonly declarations?: string },
+): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    "<qti-correct-response><qti-value>A</qti-value></qti-correct-response>",
+    "</qti-response-declaration>",
+    parts.declarations ?? "",
+    '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+    '<qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/>',
+    "<qti-template-processing>",
+    `<qti-set-template-value identifier="T"><qti-base-value base-type="identifier">${value}</qti-base-value></qti-set-template-value>`,
+    "</qti-template-processing>",
+    `<qti-item-body>${parts.body}</qti-item-body>`,
+    '<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>',
+    "</qti-assessment-item>",
+  ].join("");
+
 describe("submitItem", () => {
   it.effect(
     "[T-4] on CASE's part of max-attempts 2, accepts the second submit and closes the item, then refuses a third: attempts-exhausted",
@@ -772,6 +849,195 @@ describe("submitItem", () => {
         "wrong-submission-mode",
       );
     }),
+  );
+
+  it.effect(
+    "[I-5] under validate-responses true judges a template block the item's record shows: its Choice of min-choices 1 refuses an empty post (responses-invalid) and accepts a choice",
+    () =>
+      Effect.gen(function* shownBlock() {
+        const delivery = yield* builtDelivery(
+          "block",
+          [partOf("part", ["block"], { control: 'validate-responses="true"' })],
+          [
+            [
+              "block",
+              templatedItemXml("block", "X", {
+                body: blockShownByT(
+                  "X",
+                  choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join(""), 1),
+                ),
+              }),
+            ],
+          ],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+
+        assert.deepStrictEqual(itemAt(begun, 1).record.templates["T"], chosen("X"));
+
+        const failure = refusal(
+          submitItem(delivery.test, delivery.items, begun, stepOf("submit-item"), configuration, {
+            now: after(5),
+          }),
+        );
+
+        assert.strictEqual(failure.rule, "responses-invalid");
+        assert.deepStrictEqual(
+          failure.messages.map((message) => message.response),
+          ["RESPONSE"],
+        );
+
+        const answered = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            begun,
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            configuration,
+            { now: after(6) },
+          ),
+        );
+
+        assert.strictEqual(itemAt(answered, 1).record.numAttempts, 1);
+        assert.deepStrictEqual(scoreOf(itemAt(answered, 1).record), scored(1));
+      }),
+  );
+
+  it.effect(
+    "[I-5] under validate-responses true refuses a choice the item's record hides (responses-invalid), and a choice it shows passes the session's own check",
+    () =>
+      Effect.gen(function* shownChoice() {
+        const delivery = yield* builtDelivery(
+          "visible",
+          [partOf("part", ["visible"], { control: 'validate-responses="true"' })],
+          [
+            [
+              "visible",
+              templatedItemXml("visible", "B", {
+                body: choiceXml(
+                  "RESPONSE",
+                  [plainChoice("A"), shownByT("B"), shownByT("C")].join(""),
+                ),
+              }),
+            ],
+          ],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+        const post = (choice: string, seconds: number) =>
+          submitItem(
+            delivery.test,
+            delivery.items,
+            begun,
+            stepOf("submit-item", { RESPONSE: chosen(choice) }),
+            configuration,
+            { now: after(seconds) },
+          );
+
+        assert.deepStrictEqual(itemAt(begun, 1).record.templates["T"], chosen("B"));
+
+        const hidden = refusal(post("C", 5));
+
+        assert.strictEqual(hidden.rule, "responses-invalid");
+        assert.deepStrictEqual(
+          hidden.messages.map((message) => message.response),
+          ["RESPONSE"],
+        );
+        // `score`'s own tier (a) check judges a templated choice under the record from p8-07d on;
+        // the session's check, which this slice pins, refuses only what the page hid.
+        assert.isFalse(
+          Option.exists(
+            Result.getFailure(post("B", 6)),
+            (failure) => failure instanceof SubmissionRefused,
+          ),
+          "the session refuses a choice the item's record shows",
+        );
+        assert.deepStrictEqual(scoreOf(itemAt(accepted(post("A", 7)), 1).record), scored(1));
+      }),
+  );
+
+  it.effect(
+    "[I-5] scores an item whose RESPONSE declares a default, posted without it, through a session as score does with no record and over begin's record (D4-11)",
+    () =>
+      Effect.gen(function* sessionDefault() {
+        const delivery = yield* builtDelivery(
+          "defaulted",
+          [partOf("part", ["defaulted"])],
+          [["defaulted", choiceItemXml("defaulted", { defaultValue: "A" })]],
+        );
+        const configuration = yield* configure({});
+        const submitted = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            started(delivery, configuration),
+            stepOf("submit-item"),
+            configuration,
+            { now: after(5) },
+          ),
+        );
+        const item = delivery.items.get("defaulted") ?? assert.fail("defaulted is not delivered");
+        const alone = yield* Effect.fromResult(
+          Result.flatMap(scoreResponses(item, {}), decodeRecord),
+        );
+        const over = yield* Effect.fromResult(
+          Result.flatMap(
+            Result.flatMap(begin(item, { instance: `${instance}.1`, seed: "7" }), (record) =>
+              scoreResponses(item, {}, record),
+            ),
+            decodeRecord,
+          ),
+        );
+
+        assert.deepStrictEqual(itemAt(submitted, 1).record.responses["RESPONSE"], chosen("A"));
+        assert.deepStrictEqual([itemAt(submitted, 1).record, alone, over].map(scoreOf), [
+          scored(1),
+          scored(1),
+          scored(1),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] under validate-responses true submits a templated item whose hidden template block's interaction holds a non-NULL declared default, with no refusal",
+    () =>
+      Effect.gen(function* hiddenDefault() {
+        const delivery = yield* builtDelivery(
+          "hidden",
+          [partOf("part", ["hidden"], { control: 'validate-responses="true"' })],
+          [
+            [
+              "hidden",
+              templatedItemXml("hidden", "X", {
+                body: [
+                  choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join("")),
+                  blockShownByT("Y", choiceXml("HIDDEN", ["A", "B"].map(plainChoice).join(""))),
+                ].join(""),
+                declarations:
+                  '<qti-response-declaration identifier="HIDDEN" cardinality="single" base-type="identifier"><qti-default-value><qti-value>B</qti-value></qti-default-value></qti-response-declaration>',
+              }),
+            ],
+          ],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+
+        assert.deepStrictEqual(itemAt(begun, 1).record.responses["HIDDEN"], chosen("B"));
+
+        const answered = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            begun,
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            configuration,
+            { now: after(5) },
+          ),
+        );
+
+        assert.strictEqual(itemAt(answered, 1).record.numAttempts, 1);
+        assert.deepStrictEqual(scoreOf(itemAt(answered, 1).record), scored(1));
+      }),
   );
 });
 
