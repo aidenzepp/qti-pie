@@ -132,6 +132,7 @@ import {
   ancestorsOf,
   field,
   collapsed,
+  contentLawOf,
   contentOf,
   integerOf,
   isOpenClass,
@@ -2656,39 +2657,7 @@ const referenced: Readonly<Record<Spelling, (form: string) => Option.Option<stri
   braced: (form) => Option.fromNullishOr(braced.exec(form)?.groups?.["identifier"]),
 };
 
-/**
- * The law a content reference breaks, by the attribute that makes it: a feedback element's
- * outcome (`feedback-ref`), a template element's or choice's template variable (`template-ref`),
- * and what a printed variable prints or indexes by (`printed-variable-ref`).
- */
-export const contentLaws: ReadonlyMap<string, LawName> = new Map([
-  ["base", "Printed variable reference"],
-  ["identifier", "Printed variable reference"],
-  ["index", "Printed variable reference"],
-  ["outcome-identifier", "Feedback reference"],
-  ["template-identifier", "Template reference"],
-]);
-
-/**
- * The law a content reference breaks where its kind decides it rather than its attribute: a
- * portable custom interaction's context variable (`context-variable-ref`), whose `identifier` is
- * also a printed variable's attribute.
- */
-const contentKindLaws: ReadonlyMap<string, LawName> = new Map([
-  ["qti-context-variable", "Context variable reference"],
-]);
-
-/**
- * Name the law a content reference breaks: its kind's, else its attribute's.
- *
- * @param kind - The kind of the element that makes the reference.
- * @param attribute - The attribute it makes it by.
- * @returns The law, none for a reference no law reads.
- */
-export const contentLawOf = (kind: string, attribute: string): Option.Option<LawName> =>
-  Option.orElse(Option.fromNullishOr(contentKindLaws.get(kind)), () =>
-    Option.fromNullishOr(contentLaws.get(attribute)),
-  );
+export { contentLawOf } from "#pantry/test/oracle-view.ts";
 
 /**
  * Read an integer attribute as its type reads it: its form inside its value domain
@@ -4421,6 +4390,29 @@ const splicedTarget = (grammar: ComposedGrammar, site: SiteOf): Option.Option<Li
     : Option.none();
 
 /**
+ * Map each listed document to the documents its includes splice in place (reading 117,
+ * {@link splicedTarget}), the package-level producers' reading of the merged document: a test's
+ * references read every fragment the test or a section document it places splices.
+ *
+ * @param documents - The documents the manifest lists, read.
+ * @param grammar - The composed grammar.
+ * @returns Each splicing document's path, with its spliced documents' paths in site order.
+ */
+const splicedPathsOf = (
+  documents: readonly Listed[],
+  grammar: ComposedGrammar,
+): ReadonlyMap<string, readonly string[]> => {
+  const spliced = new Map<string, readonly string[]>();
+  for (const site of sitesOf(documents, grammar)) {
+    for (const target of Option.toArray(splicedTarget(grammar, site))) {
+      spliced.set(site.document.path, [...(spliced.get(site.document.path) ?? []), target.path]);
+    }
+  }
+
+  return spliced;
+};
+
+/**
  * Write a breach at a site, in its including document.
  *
  * @param site - The site.
@@ -5661,6 +5653,7 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
             ),
             entries: files.map(({ path }) => path),
             manifest: { path: view.path, rows: view.rows },
+            spliced: splicedPathsOf(documents, grammar),
           },
           grammar,
           typed,

@@ -1951,11 +1951,13 @@ against it. A reading that is not an information-model-over-XSD case says which 
      outside every interaction, are refused under "Fragment context", a limit of the representation, not a law of the
      specification; no corpus document places a fragment inside an interaction. Until each is stated in place, these
      laws read a fragment's content in its own document alone, each a known under-refusal and never an over-refusal: the
-     content references and `xml:lang` forms of a fragment a section document or a test places, resolved in the test's
-     declarations and listed by its records; and a rule fragment's types and language, the type laws over its references
+     `xml:lang` forms of a fragment a section document or a test places, listed by the test's records; and a rule
+     fragment's types and language, the type laws over its references
      and expressions (P20 to P29) and the processing language its rules are written in (O4), which read its variables
      untyped and its language as none. This binds pantry and plate alike. This is not a case of documents in conflict.
-     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ASM: the content
+     references of a fragment a section document or a test places resolve in the test, reading 145.)
 
 118. **An include holds at most one fallback, and its `accept` and `accept-language` hold header characters alone,
      though `XInclude.xsd` admits more.** XInclude says "The children property of the xi:include element may include a
@@ -2550,3 +2552,26 @@ against it. A reading that is not an information-model-over-XSD case says which 
      which no bound tells apart. G1-2 found the database accepting `min-time="-1"`, `step="-1"` and
      `normal-maximum="0"` while the law oracle refused them: the bound had been an unread `facets` column. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-G12.)
+145. **A fragment a test or a section document splices is judged in the test that places it, once per placement: its
+     content references name the test's variables, and a rule fragment's variable references are the test's own.**
+     Reading 117 reads an included fragment as XInclude's result holds it, "in the context of the item in which it is
+     being included" (information model section 2.12), and a section document's references resolve once for each test
+     that places it (reading 5). A fragment that a test's or a section document's include splices is read in that
+     test's context the same way:
+     - its feedback, template, printed-variable and context-variable references each name a variable the test declares,
+       or one of its built-in variables, of a kind its element may name ("Feedback reference", "Feedback outcome type",
+       "Template reference", "Printed variable reference" and "Context variable reference"), once per placement, as
+       the section document's own content references do;
+     - a rule fragment spliced into the test's outcome processing makes the test's variable references, each read as
+       readings 48 and 88 read a test-level reference ("Prefixed reference"), an unprefixed one that resolves nowhere
+       naming nothing ("Variable declared").
+
+     A content reference names its variable whole, in a test as in an item, and never through a prefix: a printed
+     variable's "outcome variable or template variable must have been defined" (section 7.30.6), a feedback element's
+     outcome is "an outcome variable" (reading 77), and prefixing is the Variable expression's, by which "During
+     outcomes processing, values taken from an individual item session can be looked up" (section 2.11.1.2). An item's references resolve in its
+     own declarations, and no test places an item. This lifts reading 117's known under-refusal of the content
+     references of a fragment a section document or a test places; that fragment's `xml:lang` forms, and a rule
+     fragment's types and language, stay the under-refusals reading 117 lists. This binds pantry and plate alike. This
+     is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing
+     ruling of 2026-11-05, from seat FIX-ASM.)

@@ -846,6 +846,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    145,
+    {
+      owner:
+        "`SectionScope`'s placements over every instance of an item's or a test's assembly whose document is neither (`sectionPlacements`, `src/qti/interactions.ts`; `resolvesUnder`, `src/import/overlays/interactions.ts`), and `TestReference`, `ReferenceDocument` and `PlacedDocument` over every document that is no item (`src/qti/expressions.ts`); the oracle's test references read through what each placed document splices (`readDocumentsOf`, `contentBreachesOf`, `src/test/oracle-laws/tests.ts`), held by `src/test/test-fragment-references.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

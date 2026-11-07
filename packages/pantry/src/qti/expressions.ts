@@ -24,9 +24,10 @@
  * - **{@link ExpressionAttribute}** carries the attributes an expression's type follows from
  *   (`base-type`, `name`, `weight-identifier`), an unwritten one included, {@link Literal} a base
  *   value's text, and {@link ProcessingTemplate} a response processing's published template.
- * - **A test's references** (spec readings 4, 5, 48 and 88; `representation-gaps.md` §4): every
- *   reference of a test or a section document ({@link TestReference}) is placed once per instance
- *   of every test that places its document ({@link PlacedReference}) and read once per test
+ * - **A test's references** (spec readings 4, 5, 48, 88 and 117; `representation-gaps.md` §4): every
+ *   reference of a document that is no item, a test, a section document or a fragment a test or a
+ *   section document splices ({@link TestReference}), is placed once per instance of every test
+ *   that places its document ({@link PlacedReference}) and read once per test
  *   ({@link AssembledReference}), its name split at every dot ({@link ReferenceSegment}) and read
  *   in every reading ({@link Reading}), each reading's scope and variable looked up in the assembly
  *   ({@link NameLookup}), the declarations ({@link VariableLookup}) and the item ref's mappings
@@ -92,7 +93,6 @@ import {
   SchemaVersion,
   VariableReference,
 } from "#pantry/grammar/install.ts";
-import { testRoots } from "#pantry/grammar/references.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { Declaration, declarationRef } from "#pantry/qti/declarations.ts";
@@ -158,7 +158,6 @@ import {
   partKind,
   sectionKind,
   sectionRefKind,
-  TestDocument,
   testKind,
   VariableMapping,
 } from "#pantry/qti/tests.ts";
@@ -668,11 +667,15 @@ export const SectionIdentifier = relation(
 );
 
 /**
- * A reference a test or a section document makes, keyed by its element and the attribute it makes
- * it by: every `VariableRef` of such a document (role `variable`) and every `section-identifier`
- * there (role `section`), with its document, root kind, element kind and the name it spells. These
+ * A reference a document that is no item makes, keyed by its element and the attribute it makes it
+ * by: every `VariableRef` of such a document (role `variable`) and every `section-identifier` there
+ * (role `section`), with its document, root kind, element kind and the name it spells. These
  * resolve against each test that places the document, not against the document alone (spec
- * reading 5), each once per test ({@link AssembledReference}).
+ * reading 5), each once per test ({@link AssembledReference}): a test's own, a section document's,
+ * and a fragment's that a test or a section document splices, as the merged test holds it (spec
+ * reading 117). An item's resolve in its own declarations (`VariableRef`), and no test places an
+ * item: an item ref names one, never a site, and an include that names one is refused under
+ * "Include root".
  */
 export const TestReference = relation(
   "TestReference",
@@ -689,8 +692,10 @@ export const TestReference = relation(
 );
 
 /**
- * A test or a section document, keyed by its node: the owner of its {@link TestReference} rows,
- * `references` their count.
+ * A document that is no item, keyed by its node: the owner of its {@link TestReference} rows,
+ * `references` their count, 0 for a document that makes none. Every such document has its row, as
+ * every document whose references resolve in another's has its `ReferringDocument`, so any of them
+ * a test places counts its references there.
  */
 export const ReferenceDocument = relation(
   "ReferenceDocument",
@@ -699,9 +704,9 @@ export const ReferenceDocument = relation(
 );
 
 /**
- * One instance of a test's assembly (`Instance`, RG3), keyed by the instance: its assembly, its
- * assembly's root kind and the document it places, and `references`, its {@link PlacedReference}
- * rows' count, which equals its document's (`ReferenceDocument`).
+ * One instance of a test's assembly whose document is no item (`Instance`, RG3), keyed by the
+ * instance: its assembly, its assembly's root kind and the document it places, and `references`,
+ * its {@link PlacedReference} rows' count, which equals its document's (`ReferenceDocument`).
  */
 export const PlacedDocument = relation(
   "PlacedDocument",
@@ -1226,11 +1231,10 @@ const interpolationTables = select(LookupTable, (t) => t.eq(t.kind, "qti-interpo
 const writtenAttributes = select(ExpressionAttribute, (x) => x.eq(x.written, true));
 
 /**
- * The assembled documents whose root is a test or a section, each a {@link ReferenceDocument}: an
- * item an include places into, and the fragments its includes place, are assembled documents too
- * (spec reading 117), and own no test references.
+ * The documents whose references a test may read, each a {@link ReferenceDocument}: every document
+ * whose root is no item.
  */
-const testRootDocuments = select(TestDocument, (d) => d.in(d.rootKind, testRoots));
+const referenceDocuments = select(Document, (d) => d.ne(d.rootKind, itemKind));
 
 /**
  * The attribute that types each attribute-typed kind, written or not: a base value's and a test
@@ -1553,24 +1557,24 @@ const templateIdentifiers = select(Attribute, (a) =>
 );
 
 /**
- * The instances of a test's assembly whose documents are a test's or a section's, each of which
- * reads its document's references: a fragment those documents splice has no references a test
- * resolves (spec reading 117, a stated under-refusal), so it places none.
+ * The instances of a test's assembly whose documents are no item, each of which places its
+ * document's references: the test's own, a section document's, and a fragment's that the test or a
+ * section document splices, whose references resolve in the test as its merged document holds them
+ * (spec reading 117).
  */
 const placingInstances = select(Instance, (i) =>
-  i.and(i.eq(i.assemblyKind, testKind), i.in(i.rootKind, testRoots)),
+  i.and(i.eq(i.assemblyKind, testKind), i.ne(i.rootKind, itemKind)),
 );
 
 /**
- * The variable references of the documents a test places: every `VariableRef` of a test or a
- * section document.
+ * The variable references a test may read: every `VariableRef` of a document that is no item.
  */
-const testVariableRefs = select(VariableRef, (v) => v.in(v.rootKind, testRoots));
+const testVariableRefs = select(VariableRef, (v) => v.ne(v.rootKind, itemKind));
 
 /**
- * The `section-identifier`s of the documents a test places.
+ * The `section-identifier`s a test may read: every one of a document that is no item.
  */
-const testSectionIdentifiers = select(SectionIdentifier, (s) => s.in(s.rootKind, testRoots));
+const testSectionIdentifiers = select(SectionIdentifier, (s) => s.ne(s.rootKind, itemKind));
 
 /**
  * Each test or section document's references, counted by `ReferenceDocument.references`.
@@ -1789,7 +1793,7 @@ export const referenceLawsByName = {
         Compute.matches(s.identifier, namePattern),
       ),
     ),
-    // TestReference: every reference of a test or a section document, and each document's count.
+    // TestReference: every reference of a document that is no item, and each document's count.
     contained(on(testVariableRefs, "node", "attribute"), on(TestReference, "node", "attribute")),
     contained(
       on(
@@ -1821,7 +1825,7 @@ export const referenceLawsByName = {
     ),
     check("E1_derived", TestReference, (t) =>
       t.and(
-        t.in(t.rootKind, testRoots),
+        t.ne(t.rootKind, itemKind),
         t.or(
           t.and(t.eq(t.role, "section"), t.eq(t.attribute, "section-identifier")),
           t.and(t.eq(t.role, "variable"), t.ne(t.attribute, "section-identifier")),
@@ -1829,7 +1833,7 @@ export const referenceLawsByName = {
       ),
     ),
     testReferenceFamily,
-    mirrors(on(ReferenceDocument, "document"), on(testRootDocuments, "node")),
+    mirrors(on(ReferenceDocument, "document"), on(referenceDocuments, "node")),
     // PlacedDocument and PlacedReference: every reference once per instance of a test's assembly.
     contained(
       on(placingInstances, "id", "assembly", "assemblyKind", "document"),

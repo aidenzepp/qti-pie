@@ -62,6 +62,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "measurement owed: its 28-case exhaust ran 41.3 s at a load average of 33 to 46 in FIX-NS5's run of 2026-11-07, and 48.7 s in a concurrent one, whose load was not recorded; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],
   [
+    "pantry/src/test/test-fragment-references.oracle.test.ts",
+    "measurement owed: its 32-case exhaust ran 61.2 s at a load average of 31 to 46 in FIX-ASM's run of 2026-11-07, beside two other suites, and 135.9 s in lane ASM's run under the swarm, whose load was not recorded; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/test/census.migration.test.ts",
     "LANES.md: no lane touches census.migration.test.ts, so its timeout is named when its owner edits it",
   ],
