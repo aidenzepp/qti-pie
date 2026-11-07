@@ -326,7 +326,8 @@ export const DeclarationIdentifier = relation(
  * the declaration has both a name and a cardinality: its {@link DeclarationIdentifier}'s
  * `identifier`, document, declaration kind and count of base types, and its
  * {@link DeclarationCardinality}'s `cardinality`, the fields every reference copies through
- * {@link declarationNameRef}, and the type a reference reads.
+ * {@link declarationNameRef}, and the type a reference reads; and `parentKind`, its
+ * {@link Declaration}'s, which `Reserved type` reads where it reads the cardinality (reading 159).
  *
  * A named declaration whose cardinality is unwritten or spells nothing has no row: its name types
  * nothing, so no reference resolves to it and no law reads a type it does not have, and AL3 or its
@@ -343,6 +344,7 @@ export const DeclarationName = relation(
     document: uuid,
     identifier: keyText,
     node: uuid,
+    parentKind: closedId(NodeKind),
   },
   ["node"],
 );
@@ -1170,7 +1172,6 @@ export const declarationLawsByName = {
       on(spelledBaseTypes, "node", "lexical"),
       on(DeclarationBaseType, "node", "baseTypeLexical"),
     ),
-    contained(on(DeclarationName, "node", "parentKind"), on(Declaration, "node", "parentKind")),
     contained(on(DeclarationBaseType, "node"), on(baseTypes, "node")),
     declarationBaseTypeFamily,
     contained(
@@ -1190,6 +1191,10 @@ export const declarationLawsByName = {
       declarationRef,
     ),
     contained(
+      on(DeclarationIdentifier, "node", "parentKind"),
+      on(Declaration, "node", "parentKind"),
+    ),
+    contained(
       on(
         select(DeclarationIdentifier, (d) => d.eq(d.cardinalities, 1n)),
         "node",
@@ -1204,6 +1209,7 @@ export const declarationLawsByName = {
       on(DeclarationName, "node", "cardinality"),
       on(DeclarationCardinality, "node", "cardinality"),
     ),
+    contained(on(DeclarationName, "node", "parentKind"), on(Declaration, "node", "parentKind")),
     contained(
       on(ValueSet, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,

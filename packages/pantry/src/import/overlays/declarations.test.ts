@@ -273,6 +273,7 @@ const walkDeclaration = (
         document: tuple.document,
         identifier: name,
         node: tuple.node,
+        parentKind,
       });
     }
   }

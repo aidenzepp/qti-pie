@@ -636,6 +636,7 @@ const addDeclaration = (
         document: reading.document,
         identifier: pieces.name,
         node: node.id,
+        parentKind,
       });
     }
   }
