@@ -50,6 +50,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
+import { booleanTrue } from "#pantry/grammar/domains.ts";
 import {
   AttributeGrammar,
   AttributeModelOf,
@@ -63,12 +64,6 @@ import { Attribute } from "#pantry/qti/attributes.ts";
 import { DocumentId } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { nodeRef } from "#pantry/qti/node.ts";
-
-/**
- * The values of an entry's `default` that designate it, once collapsed: the two lexical forms of
- * `xs:boolean`'s true.
- */
-export const designatingValues = ["true", "1"] as const;
 
 /**
  * A `qti-card`'s `support`, keyed by the card's node: its {@link nodeRef} tuple, with `catalog` its
@@ -153,8 +148,8 @@ const designatingDefaults = select(Attribute, (a) =>
     a.eq(a.kind, "qti-card-entry"),
     a.eq(a.name, "default"),
     a.or(
-      a.eq(Compute.collapse(a.lexical), designatingValues[0]),
-      a.eq(Compute.collapse(a.lexical), designatingValues[1]),
+      a.eq(Compute.collapse(a.lexical), booleanTrue[0]),
+      a.eq(Compute.collapse(a.lexical), booleanTrue[1]),
     ),
   ),
 );
@@ -252,7 +247,7 @@ export const catalogLawsByName = {
     check("E1_derived", DefaultEntry, (e) =>
       e.and(
         e.eq(e.value, Compute.collapse(e.lexical)),
-        e.or(e.eq(e.value, designatingValues[0]), e.eq(e.value, designatingValues[1])),
+        e.or(e.eq(e.value, booleanTrue[0]), e.eq(e.value, booleanTrue[1])),
       ),
     ),
     contained(

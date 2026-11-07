@@ -9,6 +9,7 @@
  * (`catalogLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
+import { booleanTrue } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
   GoverningOf,
@@ -20,7 +21,6 @@ import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { designatingValues } from "#pantry/qti/catalog.ts";
 import type { CardSupport, CatalogId, CatalogRef, DefaultEntry } from "#pantry/qti/catalog.ts";
 
 /**
@@ -110,7 +110,7 @@ const holdsReference = (element: NodeRow<Composed>, lexical: string): boolean =>
 /**
  * The values that designate an entry, collapsed.
  */
-const designating: ReadonlySet<string> = new Set(designatingValues);
+const designating: ReadonlySet<string> = new Set(booleanTrue);
 
 /**
  * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is

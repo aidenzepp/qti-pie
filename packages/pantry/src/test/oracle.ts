@@ -4167,8 +4167,7 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
     view.members.filter(
       (node) =>
         node.kind === "qti-card-entry" &&
-        (Option.contains(collapsedOf(overlay, node, "default"), "true") ||
-          Option.contains(collapsedOf(overlay, node, "default"), "1")),
+        Option.contains(Option.flatMap(collapsedOf(overlay, node, "default"), booleanOf), true),
     ),
     ({ parent }) => parent,
   );
