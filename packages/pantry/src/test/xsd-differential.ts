@@ -820,6 +820,35 @@ const bcp47Tag = [
 ].join("|");
 
 /**
+ * The two messages of xmllint's that reading 2 records on MathML content, each as one `line N
+ * {MathML}name: ...` segment: an element whose XSD content type is empty holding text, and a
+ * `semantics` where the XSD's content expression, `apply` through `piecewise` and perhaps more
+ * members, does not name it. A document's message joins its segments with " | ", and only a
+ * document every segment of which matches is covered.
+ */
+const mathmlSegment = (() => {
+  const name = String.raw`\{http://www\.w3\.org/1998/Math/MathML\}`;
+  const members = [
+    "apply",
+    "bind",
+    "ci",
+    "cn",
+    "csymbol",
+    "cbytes",
+    "cerror",
+    "cs",
+    "share",
+    "piecewise",
+  ]
+    .map((member) => `${name}${member}`)
+    .join(", ");
+
+  return String.raw`line \d+ ${name}(?:\S+: Character content is not allowed, because the content type is empty|semantics: This element is not expected\. Expected is one of \( ${members}(?:, ${name}[\w.-]+)* \))\.`;
+})();
+
+const coveredMessages = new RegExp(String.raw`^${mathmlSegment}(?: \| ${mathmlSegment})*$`, "u");
+
+/**
  * The differences generated documents show that no corpus document does, classified as
  * {@link recorded} classifies the corpus's. A generated run draws its own documents, so a record
  * here may match nothing in a run, and none goes stale.
@@ -1105,6 +1134,21 @@ export const generatedRecorded: readonly Recorded[] = [
       reading: 2,
       says: "RELAX NG matches a whitespace-only text against `empty`",
       why: "a MathML element whose RelaxNG content is empty admits whitespace-only text, as RELAX NG matches it against empty; the normative MathML 3 RelaxNG is followed over QTI's bundled XSD, whose empty types refuse it (xmllint's XSD validator)",
+    },
+  },
+  {
+    class: "content",
+    // Every message is one a reading records: the XSD's empty types refusing whitespace text (the
+    // record above), or its content expression refusing a `semantics` the RelaxNG's `ContExp`
+    // admits, where xmllint expects the members the XSD's group names, `apply` first. Any other
+    // message of the document stands unrecorded and fails it.
+    detail: coveredMessages,
+    direction: "xsd-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "a `semantics` stands wherever a content expression does",
+      why: 'a semantics stands wherever a MathML 3 content expression does, as the RelaxNG\'s ContExp names semantics-contexp; the XSD drops it ("Ambiguous content model altered (ContExp)", mathml3-strict-content.xsd line 8), so xmllint refuses it there',
     },
   },
   {
