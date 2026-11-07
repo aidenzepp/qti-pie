@@ -20,7 +20,8 @@
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option, Result } from "effect";
-import { documentTypes, grammar, interactionKinds, ResourceType } from "#pantry/grammar/install.ts";
+import { documentTypes, grammar, ResourceType } from "#pantry/grammar/install.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -103,11 +104,6 @@ const spelledTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
  * The resource types a resource names a document of, `RootOfType`'s key set.
  */
 const documentTyped: ReadonlySet<string> = new Set(documentTypes);
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
  * Read the code of a resource's `type` from its lexical form.
@@ -632,34 +628,6 @@ const comparedPathOf = (resolution: HrefResolution, lexical: string): string =>
 const headingKey = (values: readonly string[]): string => JSON.stringify(values);
 
 /**
- * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
- * itself; a child of an interaction's is that interaction; every other node's is its parent's.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @returns Each node's nearest interaction, by its id.
- */
-const nearestOf = (nodes: readonly NodeRow<Composed>[]): ReadonlyMap<NodeId, NodeId> => {
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, node.id);
-      continue;
-    }
-
-    const parentKind = kinds.get(node.parent) ?? "";
-    nearest.set(
-      node.id,
-      interactions.has(parentKind) ? node.parent : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
-
-  return nearest;
-};
-
-/**
  * Index a document's attribute rows by their element and name.
  *
  * @param rows - The document's flat rows.
@@ -700,12 +668,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
   const rows = flatten(doc, ids.idOf);
   const attributes = attributesOf(rows);
   const resolve = hrefResolverOf(rows, manifestPath);
-  const nearest = nearestOf(rows.nodes);
+  const folds = foldOf(rows.nodes, ownContext(rows.document.node));
   const document = rows.document.node;
   const tupleOf = (node: NodeRow<Composed>) => ({
     document,
     kind: node.kind,
-    nearest: nearest.get(node.id) ?? document,
+    nearest: folds.get(node.id)?.nearest ?? document,
     node: node.id,
     start: node.start,
     version: node.version,

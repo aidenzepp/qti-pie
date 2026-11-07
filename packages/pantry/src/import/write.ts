@@ -37,8 +37,8 @@ import {
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
-import { contextAt, contextsOf, ownContext } from "#pantry/import/context.ts";
-import { foldOf, governorOf } from "#pantry/import/fold.ts";
+import { contextAt, contextsOf } from "#pantry/import/context.ts";
+import { foldOf, governorOf, ownContext } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";

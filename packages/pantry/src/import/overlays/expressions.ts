@@ -27,7 +27,7 @@ import type {
   ValueBase,
   ValueCardinality,
 } from "#pantry/grammar/expression.ts";
-import { BuiltInVariable, interactionKinds, nonElementKinds } from "#pantry/grammar/install.ts";
+import { BuiltInVariable, nonElementKinds } from "#pantry/grammar/install.ts";
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
 import { baseTypeOf, cardinalityOf, piecesOf } from "#pantry/import/overlays/declarations.ts";
@@ -39,6 +39,8 @@ import type {
   TestIds,
   TestRows,
 } from "#pantry/import/overlays/tests.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import type { Folded } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -181,11 +183,6 @@ const tableKinds: ReadonlySet<string> = new Set([
  * The kinds that are no element.
  */
 const notElements: ReadonlySet<string> = new Set(nonElementKinds);
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
  * The expression kinds, and their typings by kind.
@@ -525,16 +522,17 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
 
 /**
  * One document as the builder reads it: its flat rows indexed by node, each node's attributes,
- * children, nearest interaction and processing language, its root's kind and its declarations.
+ * children, fold (`#pantry/import/fold.ts`, its nearest interaction among the rest) and processing
+ * language, its root's kind and its declarations.
  */
 interface Document {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>>;
   readonly byId: ReadonlyMap<NodeId, NodeRow<Composed>>;
   readonly childrenOf: ReadonlyMap<NodeId, readonly NodeRow<Composed>[]>;
   readonly declarations: ReadonlyMap<string, DeclarationEntry>;
+  readonly folds: ReadonlyMap<NodeId, Folded>;
   readonly id: NodeId;
   readonly language: ReadonlyMap<NodeId, Language>;
-  readonly nearest: ReadonlyMap<NodeId, NodeId>;
   readonly rootKind: NodeRow<Composed>["kind"];
   readonly rows: FlatRows<Composed>;
   readonly timeDependent: boolean;
@@ -572,42 +570,28 @@ const parentKindOf = (doc: Document, node: NodeRow<Composed>): NodeRow<Composed>
   doc.byId.get(node.parent)?.kind ?? "document";
 
 /**
- * Walk a document's nodes in document order: each node's nearest interaction (N8) and processing
- * language, a root's its own, a rule's or an expression's under a rule or an expression its
- * parent's, and every other node's `none`.
+ * Read each node's processing language in document order: a root's its own, a rule's or an
+ * expression's under a rule or an expression its parent's, and every other node's `none`.
  *
  * @param rows - The document's flat rows, in document order.
  * @param byId - The nodes by id.
- * @param rootNearest - The document node's nearest interaction, its context's (spec reading 117);
- *   itself where none is given.
- * @returns Each node's nearest interaction and language.
+ * @returns Each node's language.
  */
-const walk = (
+const languagesOf = (
   rows: FlatRows<Composed>,
   byId: ReadonlyMap<NodeId, NodeRow<Composed>>,
-  rootNearest: NodeId | undefined,
-): Pick<Document, "language" | "nearest"> => {
-  const nearest = new Map<NodeId, NodeId>();
+): ReadonlyMap<NodeId, Language> => {
   const language = new Map<NodeId, Language>();
   for (const node of rows.nodes) {
     const parentKind = byId.get(node.parent)?.kind ?? "document";
     const carried = rules.has(parentKind) || expressions.has(parentKind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-    } else {
-      nearest.set(
-        node.id,
-        interactions.has(parentKind) ? node.parent : (nearest.get(node.parent) ?? node.id),
-      );
-    }
-
     language.set(
       node.id,
       rootLanguage.get(node.kind) ?? (carried ? (language.get(node.parent) ?? "none") : "none"),
     );
   }
 
-  return { language, nearest };
+  return language;
 };
 
 /**
@@ -668,7 +652,9 @@ const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document =
     byId,
     childrenOf,
     declarations: declarationsOf(rows, attributes, childrenOf),
+    folds: foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node)),
     id: rows.document.node,
+    language: languagesOf(rows, byId),
     rootKind: tree.root.kind,
     rows,
     timeDependent: trueForm.test(
@@ -676,7 +662,6 @@ const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document =
         ({ name, node }) => name === "time-dependent" && byId.get(node)?.kind === itemKind,
       )?.lexical ?? "",
     ),
-    ...walk(rows, byId, ids.context?.nearest),
   };
 };
 
@@ -847,7 +832,7 @@ const typesOf = (
 const tupleOf = (doc: Document, node: NodeRow<Composed>) => ({
   document: doc.id,
   kind: node.kind,
-  nearest: doc.nearest.get(node.id) ?? doc.id,
+  nearest: doc.folds.get(node.id)?.nearest ?? doc.id,
   node: node.id,
   parent: node.parent,
   start: node.start,

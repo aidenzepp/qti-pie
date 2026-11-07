@@ -27,8 +27,8 @@ import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import { Flag } from "#pantry/grammar/install.ts";
-import { isSiteKind, ownContext } from "#pantry/import/context.ts";
-import { foldOf } from "#pantry/import/fold.ts";
+import { isSiteKind } from "#pantry/import/context.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import {

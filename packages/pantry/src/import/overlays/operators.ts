@@ -10,9 +10,9 @@
  * and `Tolerance` alone, so it has no rows of its own.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { interactionKinds } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { collapse } from "#pantry/import/overlays/metadata.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -65,11 +65,6 @@ const integerLexical = /^[+-]?[0-9]+$/u;
  * The least and the greatest signed 64-bit integers, the range of `pg.bigint`.
  */
 const bigintRange = { max: 2n ** 63n - 1n, min: -(2n ** 63n) } as const;
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
  * The rounding operator kinds, each of which has its `Rounding` row.
@@ -133,39 +128,6 @@ export const figuresOf = (lexical: string): FiguresFields => {
 };
 
 /**
- * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
- * its context's; a child of an interaction's is that interaction; every other node's is its
- * parent's.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param rootNearest - The document node's own, its context's; itself where none is given.
- * @returns Each node's nearest interaction, by its id.
- */
-const nearestOf = (
-  nodes: readonly NodeRow<Composed>[],
-  rootNearest: NodeId | undefined,
-): ReadonlyMap<NodeId, NodeId> => {
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-      continue;
-    }
-
-    nearest.set(
-      node.id,
-      interactions.has(kinds.get(node.parent) ?? "")
-        ? node.parent
-        : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
-
-  return nearest;
-};
-
-/**
  * Build a document's operator rows.
  *
  * Each rounding operator has its `Rounding` row: its `figures` as written, else empty, which the
@@ -192,7 +154,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: OperatorIds): OperatorRo
   const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
   const valueOf = (node: NodeRow<Composed>, name: string): string | undefined =>
     lexicals.get(`${node.id} ${name}`);
-  const nearest = nearestOf(rows.nodes, ids.context?.nearest);
+  const folds = foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node));
 
   for (const node of operators) {
     if (node.kind === "qti-equal") {
@@ -213,7 +175,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: OperatorIds): OperatorRo
       kind: node.kind,
       mode: mode ?? (node.kind === "qti-equal-rounded" ? "significantFigures" : ""),
       modeWritten: mode !== undefined,
-      nearest: nearest.get(node.id) ?? document,
+      nearest: folds.get(node.id)?.nearest ?? document,
       node: node.id,
       parent: node.parent,
       start: node.start,

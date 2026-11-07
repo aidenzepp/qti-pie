@@ -12,15 +12,11 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import {
-  ChoiceBound,
-  ContentReference,
-  interactionKinds,
-  nonElementKinds,
-} from "#pantry/grammar/install.ts";
+import { ChoiceBound, ContentReference, interactionKinds } from "#pantry/grammar/install.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
-import { ownContext } from "#pantry/import/context.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import type { Folded } from "#pantry/import/fold.ts";
 import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -163,11 +159,6 @@ type CountName = (typeof ChoiceBound.rows)[number]["min"];
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
- * The kinds that are no element, which the elements fold steps over.
- */
-const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
-
-/**
  * XML whitespace at the start of a text.
  */
 const leading = /^[\t\n\r ]*/u;
@@ -243,19 +234,16 @@ const keyOf = (values: readonly string[]): string => JSON.stringify(values);
 type KindOfNode = NodeRow<Composed>["kind"];
 
 /**
- * What the tree's rows say of each node beside its own row: its nearest interaction (N8), its
- * element rank among its siblings and its element children (the elements fold), and each node's
- * kind by id.
+ * What the tree's rows say of each node beside its own row: its fold (`#pantry/import/fold.ts`),
+ * which holds its nearest interaction (N8) and its element counts, and each node's kind by id.
  */
 interface TreeFacts {
-  readonly elementChildren: ReadonlyMap<NodeId, bigint>;
-  readonly elements: ReadonlyMap<NodeId, bigint>;
+  readonly folds: ReadonlyMap<NodeId, Folded>;
   readonly kindOf: (id: NodeId) => KindOfNode;
-  readonly nearest: ReadonlyMap<NodeId, NodeId>;
 }
 
 /**
- * Compute each node's {@link TreeFacts} as the tree's rows hold them.
+ * Compute a document's {@link TreeFacts}.
  *
  * @param nodes - A document's node rows, in document order, so each parent precedes its children.
  * @param context - The document's context, whose nearest the document node's is (spec reading
@@ -263,37 +251,11 @@ interface TreeFacts {
  * @returns The facts.
  */
 const treeFactsOf = (nodes: readonly NodeRow<Composed>[], context: DocumentContext): TreeFacts => {
-  const kinds = new Map<NodeId, KindOfNode>();
-  const nearest = new Map<NodeId, NodeId>();
-  const elements = new Map<NodeId, bigint>();
-  const elementChildren = new Map<NodeId, bigint>();
-
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    elementChildren.set(node.id, 0n);
-    if (node.parent === node.id) {
-      nearest.set(node.id, context.nearest);
-      elements.set(node.id, 0n);
-      continue;
-    }
-
-    const parentKind: string = kinds.get(node.parent) ?? "document";
-    nearest.set(
-      node.id,
-      interactions.has(parentKind) ? node.parent : (nearest.get(node.parent) ?? node.parent),
-    );
-
-    const before = elementChildren.get(node.parent) ?? 0n;
-    const after = nonElements.has(node.kind) ? before : before + 1n;
-    elementChildren.set(node.parent, after);
-    elements.set(node.id, after);
-  }
+  const kinds = new Map(nodes.map((node) => [node.id, node.kind] as const));
 
   return {
-    elementChildren,
-    elements,
+    folds: foldOf(nodes, context),
     kindOf: (id) => kinds.get(id) ?? (id === context.nearest ? context.nearestKind : "document"),
-    nearest,
   };
 };
 
@@ -350,7 +312,7 @@ const valueOf = (
 const tupleOf = (context: Context, node: NodeRow<Composed>) => ({
   document: context.document,
   kind: node.kind,
-  nearest: context.facts.nearest.get(node.id) ?? context.document,
+  nearest: context.facts.folds.get(node.id)?.nearest ?? context.document,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -733,10 +695,10 @@ const hotspotsOf = (context: Context) =>
               {
                 ...tupleOf(context, node),
                 area,
-                elementChildren: context.facts.elementChildren.get(node.id) ?? 0n,
-                elements: context.facts.elements.get(node.id) ?? 0n,
-                parentElementChildren: context.facts.elementChildren.get(node.parent) ?? 0n,
-                parentElements: context.facts.elements.get(node.parent) ?? 0n,
+                elementChildren: context.facts.folds.get(node.id)?.elementChildren ?? 0n,
+                elements: context.facts.folds.get(node.id)?.elements ?? 0n,
+                parentElementChildren: context.facts.folds.get(node.parent)?.elementChildren ?? 0n,
+                parentElements: context.facts.folds.get(node.parent)?.elements ?? 0n,
                 parentKind: context.facts.kindOf(node.parent),
               } satisfies Addition<typeof Hotspot>,
             ] as const,

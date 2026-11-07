@@ -13,8 +13,9 @@
  * it is, and its field's pattern refuses it under the schema's limit law.
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
-import { BaseType, interactionKinds, ResourceType } from "#pantry/grammar/install.ts";
+import { BaseType, ResourceType } from "#pantry/grammar/install.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -126,11 +127,6 @@ const objects: ReadonlySet<string> = new Set(objectKinds);
 const statistics: ReadonlySet<string> = new Set(statisticKinds);
 
 /**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
-
-/**
  * The owner whose records name a resource.
  */
 const resourceMetadata = "cp:metadata.resource";
@@ -222,35 +218,6 @@ export const lowerAscii = (text: string): string =>
 const typeOf = (lexical: string): ResourceTypeHandle => spelledTypes.get(lexical) ?? "none";
 
 /**
- * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
- * itself; a child of an interaction's is that interaction; every other node's is its parent's.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @returns Each node's nearest interaction, by its id.
- */
-const nearestOf = (nodes: readonly NodeRow<Composed>[]): ReadonlyMap<NodeId, NodeId> => {
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, node.id);
-      continue;
-    }
-
-    nearest.set(
-      node.id,
-      interactions.has(kinds.get(node.parent) ?? "")
-        ? node.parent
-        : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
-
-  return nearest;
-};
-
-/**
  * Compute each element's string value as `Node.stringValue` folds it for the kinds an overlay
  * copies: its children's characters in order, a text's and whitespace's as they are, an entity
  * reference's as `&name;`, a comment's and an instruction's none.
@@ -325,7 +292,7 @@ interface Tree {
 const treeOf = (doc: XdmDocument<Composed>, ids: MetadataIds): Tree => {
   const rows = flatten(doc, ids.idOf);
   const attributes = attributesOf(rows);
-  const nearest = nearestOf(rows.nodes);
+  const folds = foldOf(rows.nodes, ownContext(rows.document.node));
   const values = stringValuesOf(rows);
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const document = rows.document.node;
@@ -337,7 +304,7 @@ const treeOf = (doc: XdmDocument<Composed>, ids: MetadataIds): Tree => {
     tupleOf: (node) => ({
       document,
       kind: node.kind,
-      nearest: nearest.get(node.id) ?? document,
+      nearest: folds.get(node.id)?.nearest ?? document,
       node: node.id,
       parent: node.parent,
       start: node.start,
