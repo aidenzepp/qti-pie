@@ -1,4 +1,4 @@
-import { Cause, Console, Effect, Option, Predicate, Schema } from "effect";
+import { Array as Arr, Cause, Console, Effect, Option, Predicate, Schema } from "effect";
 import type { Types } from "effect";
 import { CliError, CliOutput } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
@@ -99,6 +99,17 @@ export interface Presentation {
 export const valuedGlobalFlags: readonly string[] = ["--log-level", "--output", "--timeout"];
 
 /**
+ * Test whether the argument at `index` is the value of a valued global flag: the word before it is
+ * one of {@link valuedGlobalFlags}. The first argument follows no word.
+ *
+ * @param args - The command line after the program name.
+ * @param index - The argument's index.
+ * @returns Whether a valued global flag takes it.
+ */
+export const followsValuedFlag = (args: readonly string[], index: number): boolean =>
+  Option.exists(Arr.get(args, index - 1), (previous) => valuedGlobalFlags.includes(previous));
+
+/**
  * The subcommand the arguments name: the first word that is neither a flag nor a flag's value,
  * when it is one of `names`, else `fallback`.
  *
@@ -115,7 +126,7 @@ export const commandOfArguments = (
   const end = args.indexOf("--");
   const before = end === -1 ? args : args.slice(0, end);
   const word = before.find(
-    (arg, index) => !arg.startsWith("-") && !valuedGlobalFlags.includes(before[index - 1] ?? ""),
+    (arg, index) => !arg.startsWith("-") && !followsValuedFlag(before, index),
   );
 
   return word !== undefined && names.includes(word) ? word : fallback;

@@ -45,19 +45,43 @@ const DatabaseName = Schema.String.check(
 );
 
 /**
+ * A folder setting whose default is a path under the home folder: the variable's value, else
+ * `HOME` with `below` appended.
+ *
+ * @param name - The variable.
+ * @param below - The default's path under the home folder.
+ * @returns The folder.
+ */
+const underHome = (name: string, below: string): Config.Config<string> =>
+  Config.all({ home: Config.String("HOME"), set: Config.option(Config.String(name)) }).pipe(
+    Config.map(({ home, set }) => Option.getOrElse(set, () => `${home}/${below}`)),
+  );
+
+/**
+ * The database a connection names, as `GR8DES_PG_DATABASE` gives it, `gr8des_qti` by default.
+ */
+const database = Config.schema(DatabaseName, "GR8DES_PG_DATABASE").pipe(
+  Config.withDefault("gr8des_qti"),
+);
+
+/**
  * The local cluster's settings, read from the same variables with the same defaults as the block at
  * the top of scripts/db.sh; change one, change both. An empty variable takes its default, as the
  * script's `:=` does.
+ *
+ * - `grizzleState` is the cluster's state folder, `~/.local/var/grizzle/pg19rc1` by default, where
+ *   grizzle's `pnpm pg:init` makes it.
+ * - `secrets` is the folder of the logins' password files, `~/.local/var/gr8des/<database>` by
+ *   default, where `scripts/db.sh migrate` writes them.
  */
 const localCluster = Config.all({
-  database: Config.schema(DatabaseName, "GR8DES_PG_DATABASE").pipe(
-    Config.withDefault("gr8des_qti"),
-  ),
-  grizzleState: Config.option(Config.String("GRIZZLE_PG_STATE")),
-  home: Config.String("HOME"),
+  database,
+  grizzleState: underHome("GRIZZLE_PG_STATE", ".local/var/grizzle/pg19rc1"),
   host: Config.String("GR8DES_PG_HOST").pipe(Config.withDefault("localhost")),
   port: Config.Port("GR8DES_PG_PORT").pipe(Config.withDefault(5433)),
-  secrets: Config.option(Config.String("GR8DES_PG_SECRETS")),
+  secrets: database.pipe(
+    Config.flatMap((name) => underHome("GR8DES_PG_SECRETS", `.local/var/gr8des/${name}`)),
+  ),
 });
 
 /**
@@ -103,11 +127,7 @@ interface ClusterConnection {
 const clusterConnection = Effect.gen(function* clusterConnection() {
   const fs = yield* FileSystem.FileSystem;
   const cluster = yield* localCluster;
-  const grizzleState = Option.getOrElse(
-    cluster.grizzleState,
-    () => `${cluster.home}/.local/var/grizzle/pg19rc1`,
-  );
-  const caPath = `${grizzleState}/tls/ca.crt`;
+  const caPath = `${cluster.grizzleState}/tls/ca.crt`;
   const ca = yield* fs
     .readFileString(caPath)
     .pipe(
@@ -123,10 +143,7 @@ const clusterConnection = Effect.gen(function* clusterConnection() {
   };
   const result: ClusterConnection = {
     connection: { connectTimeoutMs, database: cluster.database, driver: pg, transport },
-    secrets: Option.getOrElse(
-      cluster.secrets,
-      () => `${cluster.home}/.local/var/gr8des/${cluster.database}`,
-    ),
+    secrets: cluster.secrets,
   };
 
   return result;

@@ -2,7 +2,7 @@
  * What a command prints when it succeeds: the output mode the person chose, the envelope that
  * carries a command's data in `json` and `jsonl`, and the one emitter every command calls.
  */
-import { Config, Console, Effect, Option, Schema } from "effect";
+import { Array as Arr, Config, Console, Effect, Option, Schema } from "effect";
 import { CliError, Flag, GlobalFlag } from "effect/cli";
 import { RefusedLaw, WitnessKind } from "#pantry/package/refusal-origin.ts";
 
@@ -18,6 +18,18 @@ export const outputModes = ["text", "json", "jsonl"] as const;
 export type OutputMode = (typeof outputModes)[number];
 
 /**
+ * The mode a run prints in when neither the line nor `QTI_OUTPUT`, `QTI_JSON` or `QTI_JSONL`
+ * names one, as the help of `--output` says.
+ */
+export const defaultOutputMode: OutputMode = "text";
+
+/**
+ * What `--json` and `--jsonl`, and `QTI_JSON` and `QTI_JSONL`, are when nothing sets them: off, as
+ * their help says.
+ */
+const shorthandDefault = false;
+
+/**
  * The `--output` setting. It is absent unless the line or `QTI_OUTPUT` gives it, so
  * {@link outputMode} can tell a mode that was asked for from the default.
  */
@@ -26,7 +38,7 @@ export const outputSetting = GlobalFlag.Setting("output")({
     Flag.withFallbackConfig(Config.schema(Schema.Literals(outputModes), "QTI_OUTPUT")),
     Flag.optional,
     Flag.withDescription(
-      "How a command prints its result: text, json (one envelope) or jsonl (one line per entry, then the envelope) [env: QTI_OUTPUT] [default: text]",
+      `How a command prints its result: text, json (one envelope) or jsonl (one line per entry, then the envelope) [env: QTI_OUTPUT] [default: ${defaultOutputMode}]`,
     ),
   ),
 });
@@ -37,8 +49,10 @@ export const outputSetting = GlobalFlag.Setting("output")({
 export const jsonSetting = GlobalFlag.Setting("json")({
   flag: Flag.Boolean("json").pipe(
     Flag.withFallbackConfig(Config.Boolean("QTI_JSON")),
-    Flag.withDefault(false),
-    Flag.withDescription("Shorthand for --output json [env: QTI_JSON] [default: false]"),
+    Flag.withDefault(shorthandDefault),
+    Flag.withDescription(
+      `Shorthand for --output json [env: QTI_JSON] [default: ${String(shorthandDefault)}]`,
+    ),
   ),
 });
 
@@ -48,8 +62,10 @@ export const jsonSetting = GlobalFlag.Setting("json")({
 export const jsonlSetting = GlobalFlag.Setting("jsonl")({
   flag: Flag.Boolean("jsonl").pipe(
     Flag.withFallbackConfig(Config.Boolean("QTI_JSONL")),
-    Flag.withDefault(false),
-    Flag.withDescription("Shorthand for --output jsonl [env: QTI_JSONL] [default: false]"),
+    Flag.withDefault(shorthandDefault),
+    Flag.withDescription(
+      `Shorthand for --output jsonl [env: QTI_JSONL] [default: ${String(shorthandDefault)}]`,
+    ),
   ),
 });
 
@@ -74,7 +90,7 @@ export const outputMode = Effect.gen(function* resolveOutputMode() {
   const [first, ...rest] = named;
 
   if (first === undefined) {
-    return "text";
+    return defaultOutputMode;
   }
 
   if (rest.some((mode) => mode !== first)) {
@@ -90,8 +106,8 @@ export const outputMode = Effect.gen(function* resolveOutputMode() {
 /**
  * The mode of several that were named: the first that is not `text`, else `text`, else none.
  */
-const pickMode = (named: readonly OutputMode[]): OutputMode | undefined =>
-  named.find((mode) => mode !== "text") ?? named[0];
+const pickMode = (named: readonly OutputMode[]): Option.Option<OutputMode> =>
+  Arr.findFirst(named, (mode) => mode !== "text").pipe(Option.orElse(() => Arr.head(named)));
 
 /**
  * The value `--output` gives in `arg`: the next word for `--output`, the rest for `--output=…`.
@@ -113,9 +129,9 @@ const outputValue = (arg: string, next: string | undefined): string | undefined 
  * still gets JSON for the error that says its flags disagree.
  *
  * @param args - The command line after the program name.
- * @returns The mode, or `undefined` when the arguments name none.
+ * @returns The mode, or none when the arguments name none.
  */
-export const modeOfArguments = (args: readonly string[]): OutputMode | undefined => {
+export const modeOfArguments = (args: readonly string[]): Option.Option<OutputMode> => {
   const end = args.indexOf("--");
   const before = end === -1 ? args : args.slice(0, end);
   const named = before.flatMap((arg, index): readonly OutputMode[] => {
@@ -139,17 +155,15 @@ export const modeOfEnvironment = Effect.gen(function* resolveEnvironmentMode() {
   const output = yield* Config.schema(Schema.Literals(outputModes), "QTI_OUTPUT").pipe(
     Config.option,
   );
-  const json = yield* Config.Boolean("QTI_JSON").pipe(Config.withDefault(false));
-  const jsonl = yield* Config.Boolean("QTI_JSONL").pipe(Config.withDefault(false));
+  const json = yield* Config.Boolean("QTI_JSON").pipe(Config.withDefault(shorthandDefault));
+  const jsonl = yield* Config.Boolean("QTI_JSONL").pipe(Config.withDefault(shorthandDefault));
 
-  return Option.fromNullishOr(
-    pickMode([
-      ...Option.toArray(output),
-      ...(json ? (["json"] as const) : []),
-      ...(jsonl ? (["jsonl"] as const) : []),
-    ]),
-  );
-}).pipe(Effect.orElseSucceed(() => Option.none<OutputMode>()));
+  return pickMode([
+    ...Option.toArray(output),
+    ...(json ? (["json"] as const) : []),
+    ...(jsonl ? (["jsonl"] as const) : []),
+  ]);
+}).pipe(Effect.catchTag("ConfigError", () => Effect.succeedNone));
 
 /**
  * One law the database refused an import under, as the error object names it: the refusal's own

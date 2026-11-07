@@ -7,9 +7,13 @@ import { cliKind, kindExitCode, NotADirectory } from "#pantry/cli/errors.ts";
 import type { Kind } from "#pantry/cli/errors.ts";
 
 /**
- * Refuse a path that is neither a directory nor a `.zip` file, before anything opens the database.
+ * Refuse a path that is not there, or is neither a directory nor a `.zip` file, before anything
+ * opens the database.
  *
  * @param source - The path the person named.
+ * @returns Nothing; fails with {@link NotADirectory} for a path that is not there or is of another
+ *   type, and with the `PlatformError` of any other failure to read it, such as one the person may
+ *   not read.
  */
 export const requirePackage = Effect.fn("cli.requirePackage")(function* requirePackage(
   source: string,
@@ -17,23 +21,29 @@ export const requirePackage = Effect.fn("cli.requirePackage")(function* requireP
   const fs = yield* FileSystem.FileSystem;
 
   yield* fs.stat(source).pipe(
+    Effect.catchReason("PlatformError", "NotFound", () => new NotADirectory({ path: source })),
     Effect.filterOrFail(
       (info) => info.type === "Directory" || (info.type === "File" && source.endsWith(".zip")),
       () => new NotADirectory({ path: source }),
     ),
-    Effect.mapError(() => new NotADirectory({ path: source })),
     Effect.asVoid,
   );
 });
+
+/**
+ * What `--zip`, `--yes` and `--dry-run`, and their variables, are when nothing sets them: off, as
+ * each one's help says.
+ */
+const switchDefault = false;
 
 /**
  * The flag that makes an export a zip file instead of a directory.
  */
 export const zipFlag = Flag.Boolean("zip").pipe(
   Flag.withFallbackConfig(Config.Boolean("QTI_ZIP")),
-  Flag.withDefault(false),
+  Flag.withDefault(switchDefault),
   Flag.withDescription(
-    "Write the export as a .zip file, adding .zip to the path when it lacks it [env: QTI_ZIP] [default: false]",
+    `Write the export as a .zip file, adding .zip to the path when it lacks it [env: QTI_ZIP] [default: ${String(switchDefault)}]`,
   ),
 );
 
@@ -42,9 +52,9 @@ export const zipFlag = Flag.Boolean("zip").pipe(
  */
 export const yesFlag = Flag.Boolean("yes").pipe(
   Flag.withFallbackConfig(Config.Boolean("QTI_YES")),
-  Flag.withDefault(false),
+  Flag.withDefault(switchDefault),
   Flag.withDescription(
-    "Replace a target that already has something in it [env: QTI_YES] [default: false]",
+    `Replace a target that already has something in it [env: QTI_YES] [default: ${String(switchDefault)}]`,
   ),
 );
 
@@ -53,9 +63,9 @@ export const yesFlag = Flag.Boolean("yes").pipe(
  */
 export const dryRunFlag = Flag.Boolean("dry-run").pipe(
   Flag.withFallbackConfig(Config.Boolean("QTI_DRY_RUN")),
-  Flag.withDefault(false),
+  Flag.withDefault(switchDefault),
   Flag.withDescription(
-    "Show what the command would write, and write nothing [env: QTI_DRY_RUN] [default: false]",
+    `Show what the command would write, and write nothing [env: QTI_DRY_RUN] [default: ${String(switchDefault)}]`,
   ),
 );
 
@@ -203,23 +213,26 @@ const resolvedTarget = Effect.fn("cli.resolvedTarget")(function* resolvedTarget(
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const absolute = path.resolve(target);
-  const parent = yield* fs
-    .realPath(path.dirname(absolute))
-    .pipe(Effect.orElseSucceed(() => path.dirname(absolute)));
+  const parent = yield* fs.realPath(path.dirname(absolute));
 
   return path.join(parent, path.basename(absolute));
 });
 
 /**
- * Whether no replacement may take `target`: it is the current folder, one of its parents, the home
- * folder, or the filesystem root.
+ * Whether no replacement may take `target`, which exists: it is the current folder, one of its
+ * parents, the home folder, or the filesystem root. A home folder that is not there is judged as
+ * `HOME` names it.
  */
 const isProtected = Effect.fn("cli.isProtected")(function* isProtected(target: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const here = yield* fs.realPath(process.cwd()).pipe(Effect.orElseSucceed(() => process.cwd()));
+  const here = yield* fs.realPath(process.cwd());
   const home = yield* Config.String("HOME").pipe(Config.withDefault(os.homedir()));
-  const homeReal = yield* fs.realPath(home).pipe(Effect.orElseSucceed(() => path.resolve(home)));
+  const homeReal = yield* fs
+    .realPath(home)
+    .pipe(
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(path.resolve(home))),
+    );
   const place = yield* resolvedTarget(target);
 
   return (
@@ -338,6 +351,12 @@ export const replaceWith = Effect.fn("cli.replaceWith")(function* replaceWith<A,
 
         return result;
       }),
-    (staging) => fs.remove(staging, { force: true, recursive: true }).pipe(Effect.ignore),
+    (staging) =>
+      fs.remove(staging, { force: true, recursive: true }).pipe(
+        Effect.ignore({
+          log: "Warn",
+          message: `The staging folder ${staging} could not be removed, so it is left beside the target. Remove it by hand.`,
+        }),
+      ),
   );
 });
