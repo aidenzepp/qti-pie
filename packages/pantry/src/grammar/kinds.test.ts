@@ -7,6 +7,8 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { closed, idField, roster as rosterOf } from "#pantry/grammar/closed.ts";
+import type { Roster } from "#pantry/grammar/closed.ts";
 import {
   fixedKinds,
   generate,
@@ -14,7 +16,7 @@ import {
   openClasses,
   resolution,
 } from "#pantry/grammar/kinds.ts";
-import type { Vocabulary } from "#pantry/grammar/kinds.ts";
+import type { KindByNameUnder, KindOf, Vocabulary } from "#pantry/grammar/kinds.ts";
 
 /**
  * The search budget of every exploration here; each states its own coverage.
@@ -260,4 +262,52 @@ describe("the kinds generator against a naive model", () => {
         ),
       ),
   );
+});
+
+describe("KindByNameUnder's kind payload", () => {
+  it("ranges over the NodeKind roster, so a relation whose kind payload is any string is not one", () => {
+    const vocabularies = [
+      { attributes: [], kinds: [{ handle: "k1", local: "a" }], namespace: "urn:toy" },
+    ] as const;
+    const rosters = Result.getOrThrow(generate({ interactions: [], layer: [], vocabularies }));
+    const anyKind: Roster<string> = rosters.nodeKind;
+    const relationOver = <K extends string>(kinds: Roster<K>, kind: K) =>
+      Result.getOrThrow(
+        closed({
+          key: [
+            idField("namespace", Result.getOrThrow(rosterOf("Namespace", ["urn:toy"]))),
+            idField("local", Result.getOrThrow(rosterOf("LocalName", ["a"]))),
+            idField("parent", anyKind),
+          ],
+          name: "KindByNameUnder",
+          payload: [idField("kind", kinds)],
+          rows: [{ kind, local: "a", namespace: "urn:toy", parent: "document" }],
+        }),
+      );
+    const narrow: KindByNameUnder<KindOf<typeof vocabularies>> = relationOver(
+      rosters.nodeKind,
+      "k1",
+    );
+    // @ts-expect-error -- A kind payload over every string holds kinds outside NodeKind, which
+    // `resolve` would have to filter out; the type refuses the relation instead.
+    const widened: KindByNameUnder<KindOf<typeof vocabularies>> = relationOver(anyKind, "k1");
+
+    assert.deepStrictEqual(
+      [narrow, widened].map((relation) =>
+        Option.map(
+          relation.lookup({ local: "a", namespace: "urn:toy", parent: "document" }),
+          ({ kind }) => kind,
+        ),
+      ),
+      [Option.some("k1"), Option.some("k1")],
+    );
+    assert.deepStrictEqual(
+      Result.getOrThrow(resolution(rosters, [{ child: "k1", parent: "document" }])).resolve(
+        "urn:toy",
+        "a",
+        "document",
+      ),
+      Option.some("k1"),
+    );
+  });
 });

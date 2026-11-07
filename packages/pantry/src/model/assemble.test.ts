@@ -1,12 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
-import { drawn, explore } from "@grizzle/testing/explore";
-import { required } from "@grizzle/testing/features";
+import { drawn, exhaust, explore } from "@grizzle/testing/explore";
+import { required, requiredInSpace } from "@grizzle/testing/features";
 import { element, int, shuffled } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Effect, Formatter, Result } from "effect";
+import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { assemble } from "#pantry/model/assemble.ts";
@@ -15,8 +15,16 @@ import { foldGrammarOf, namesOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { toXmlDocument } from "#pantry/model/unshred.ts";
-import { flatten } from "#pantry/model/xdm.ts";
-import type { FlatRows } from "#pantry/model/xdm.ts";
+import { flatten, none } from "#pantry/model/xdm.ts";
+import type {
+  DocumentRow,
+  FlatRows,
+  NodeId,
+  NodeRow,
+  XdmChild,
+  XdmClosedElement,
+  XdmDocument,
+} from "#pantry/model/xdm.ts";
 import {
   caseHang,
   searchTimeout,
@@ -34,8 +42,6 @@ import {
 import type {
   GeneratedXdm,
   InvalidVariant,
-  Placed,
-  RowCorruption,
   VariantField,
   VariantTarget,
   XdmFamily,
@@ -96,26 +102,6 @@ const keyedLists = [
 ] as const satisfies readonly RowList[];
 
 /**
- * The refusal a repeated row of each list meets: a node row takes its own start twice, the
- * document node's too; an attribute or a namespace declaration its own slot twice; and any other
- * row is taken once, so its second is left over.
- */
-const repeatedRefusal = {
-  attributeEntities: "RowUnreached",
-  attributes: "SlotTaken",
-  comments: "RowUnreached",
-  doctypes: "RowUnreached",
-  entityRefs: "RowUnreached",
-  namespaces: "SlotTaken",
-  nodes: "StartTaken",
-  openElementNames: "RowUnreached",
-  openNames: "RowUnreached",
-  pis: "RowUnreached",
-  texts: "RowUnreached",
-  whitespace: "RowUnreached",
-} as const satisfies Readonly<Record<RowList, AssembleError["_tag"]>>;
-
-/**
  * Shuffle every list of a document's rows, as a scan in any order returns them.
  *
  * @param rows - The rows.
@@ -162,143 +148,314 @@ const foldedOf = (generated: GeneratedXdm) =>
 const refusalOf = (rows: FlatRows<Composed>) => Effect.flip(Effect.fromResult(assemble(rows)));
 
 /**
- * The nodes a refusal names: the row that failed its check, and for two rows at one start the
- * row that held it first.
+ * Read a refusal as the list it names and how its row leaves the image, or its tag when it is not
+ * a row outside the image.
  *
  * @param refusal - The refusal.
- * @returns The ids it names.
+ * @returns The list and the departure's tag, or the refusal's tag.
  */
-const namedBy = (refusal: AssembleError): ReadonlySet<string> => {
-  switch (refusal._tag) {
-    case "StartTaken": {
-      return new Set([refusal.node, refusal.other]);
+const departureOf = (refusal: AssembleError): readonly [string, string] =>
+  refusal._tag === "RowsOutsideImage"
+    ? [refusal.rows, refusal.departure._tag]
+    : [refusal._tag, refusal.message];
+
+/**
+ * The versions, prefixes and governing types the small box's trees draw from, every value a single
+ * edit of a node row's field gives it.
+ */
+const smallVersions = ["3.0.0", "3.0.1"] as const satisfies readonly Composed["version"][];
+
+/**
+ * The prefixes an element of the small box is written with.
+ */
+const smallPrefixes = ["", "q"] as const;
+
+/**
+ * The governing types an element of the small box has, {@link none} among them.
+ */
+const smallGoverns = ["g", "h", none] as const;
+
+/**
+ * Every element of the small box over its children: of kind `p`, under each prefix and governing
+ * type.
+ *
+ * @param children - Its children.
+ * @returns The elements.
+ */
+const elementsOver = (
+  children: readonly XdmChild<Composed>[],
+): readonly XdmClosedElement<Composed>[] =>
+  smallPrefixes.flatMap((prefix) =>
+    smallGoverns.map((governs): XdmClosedElement<Composed> => ({
+      _tag: "element",
+      attributes: [],
+      children,
+      governs,
+      kind: "p",
+      namespaces: [],
+      prefix,
+    })),
+  );
+
+/**
+ * Every forest of the small box of exactly `size` nodes: each first subtree, then each forest of
+ * the rest. A subtree of one node is a text, a comment or an empty element, and one of more is an
+ * element over a forest of the rest.
+ *
+ * @param size - The nodes the forest holds.
+ * @returns The forests.
+ */
+const forestsOf = (size: number): readonly (readonly XdmChild<Composed>[])[] =>
+  size === 0
+    ? [[]]
+    : Array.from({ length: size }, (_, at) => at + 1).flatMap((first) =>
+        [
+          ...(first === 1
+            ? ([
+                { _tag: "text", value: "t" },
+                { _tag: "comment", value: "c" },
+              ] as const)
+            : []),
+          ...forestsOf(first - 1).flatMap(elementsOver),
+        ].flatMap((tree) => forestsOf(size - first).map((rest) => [tree, ...rest])),
+      );
+
+/**
+ * The nodes the small box's documents hold below the document node, at most.
+ */
+const SMALL_NODES = 3;
+
+/**
+ * Every document of the small box: at most {@link SMALL_NODES} nodes below the document node, the
+ * root element's subtree and a doctype and comments around it, in each version.
+ */
+const smallDocuments: readonly XdmDocument<Composed>[] = smallVersions.flatMap((version) =>
+  Array.from({ length: SMALL_NODES }, (_, below) => below).flatMap((below) =>
+    forestsOf(below)
+      .flatMap(elementsOver)
+      .flatMap((root) =>
+        Array.from({ length: SMALL_NODES - below }, (_, around) => around).flatMap((around) =>
+          [false, true]
+            .filter((doctype) => Number(doctype) <= around)
+            .flatMap((doctype) =>
+              Array.from({ length: around - Number(doctype) + 1 }, (_, prolog) => prolog).map(
+                (prolog): XdmDocument<Composed> => ({
+                  _tag: "document",
+                  charset: "utf-8",
+                  declaration: Option.none(),
+                  doctype: doctype ? Option.some("<!DOCTYPE p>") : Option.none(),
+                  epilog: Array.from({ length: around - Number(doctype) - prolog }, () => ({
+                    _tag: "comment",
+                    value: "e",
+                  })),
+                  exportCharset: "utf-8",
+                  prolog: Array.from({ length: prolog }, () => ({ _tag: "comment", value: "c" })),
+                  root,
+                  version,
+                }),
+              ),
+            ),
+        ),
+      ),
+  ),
+);
+
+/**
+ * A row's text: every field, by name, as a string.
+ *
+ * @param row - The row.
+ * @returns The text.
+ */
+const lineOf = (row: DocumentRow | FlatRows<Composed>[RowList][number]): string =>
+  Object.entries(row)
+    .toSorted(([left], [right]) => (left < right ? -1 : 1))
+    .map(([field, value]) => `${field}=${String(value)}`)
+    .join(";");
+
+/**
+ * The rows' canonical form, the oracle's key: each node renamed to {@link idOf} its start, every
+ * list's rows as sorted text. Rows `flatten` writes number their nodes by start, 0 to N − 1 once
+ * each, under ids held once, and every id they hold is a node's, so rows with no such renaming have
+ * none, and are no tree's.
+ *
+ * @param rows - The rows, with no attribute rows.
+ * @returns The canonical form, none when the rows have no renaming by start.
+ */
+const canonicalOf = (rows: FlatRows<Composed>): Option.Option<string> => {
+  const starts = rows.nodes
+    .map(({ start }) => Number(start))
+    .toSorted((left, right) => left - right);
+  const ids = new Map(rows.nodes.map(({ id, start }) => [id, idOf(Number(start))]));
+  if (!starts.every((start, at) => start === at) || ids.size !== rows.nodes.length) {
+    return Option.none();
+  }
+
+  const renamed = (id: NodeId): Option.Option<NodeId> => Option.fromNullishOr(ids.get(id));
+  const byNode = <Row extends { readonly node: NodeId }>(list: readonly Row[]) =>
+    Option.all(list.map((row) => Option.map(renamed(row.node), (node) => ({ ...row, node }))));
+
+  return Option.map(
+    Option.all({
+      comments: byNode(rows.comments),
+      doctypes: byNode(rows.doctypes),
+      document: Option.map(renamed(rows.document.node), (node) => [{ ...rows.document, node }]),
+      nodes: Option.all(
+        rows.nodes.map((row) =>
+          Option.map(Option.all([renamed(row.id), renamed(row.parent)]), ([id, parent]) => ({
+            ...row,
+            id,
+            parent,
+          })),
+        ),
+      ),
+      texts: byNode(rows.texts),
+    }),
+    (lists) =>
+      Object.entries(lists)
+        .toSorted(([left], [right]) => (left < right ? -1 : 1))
+        .map(([list, held]) => `${list}: ${held.map(lineOf).toSorted().join(" | ")}`)
+        .join("\n"),
+  );
+};
+
+/**
+ * Every document of the small box by its rows' canonical form: the image the oracle reads.
+ */
+const smallImage: ReadonlyMap<string, XdmDocument<Composed>> = new Map(
+  smallDocuments.map((document) => [
+    Option.getOrThrow(canonicalOf(flatten(document, idOf))),
+    document,
+  ]),
+);
+
+/**
+ * An edit of one field of one node row, to a value of the field's type.
+ */
+type NodeEdit =
+  | { readonly field: "at" | "end" | "start"; readonly value: bigint }
+  | { readonly field: "id" | "parent"; readonly value: NodeId }
+  | { readonly field: "kind"; readonly value: NodeRow<Composed>["kind"] }
+  | { readonly field: "governs" | "prefix"; readonly value: string }
+  | { readonly field: "version"; readonly value: Composed["version"] };
+
+/**
+ * Apply an edit to a node row.
+ *
+ * @param row - The row.
+ * @param edit - The edit.
+ * @returns The row with the edited field.
+ */
+const editedRow = (row: NodeRow<Composed>, edit: NodeEdit): NodeRow<Composed> => {
+  switch (edit.field) {
+    case "at":
+    case "end":
+    case "start":
+    case "id":
+    case "parent":
+    case "governs":
+    case "prefix": {
+      return { ...row, [edit.field]: edit.value };
     }
-    case "SlotBeyond":
-    case "SlotTaken": {
-      return new Set([refusal.owner]);
+    case "kind": {
+      return { ...row, kind: edit.value };
     }
-    case "RowUnreached":
-    case "RowMissing": {
-      return new Set([refusal.key]);
-    }
-    case "DocumentInterval":
-    case "EndBeyondParent":
-    case "IdRepeated":
-    case "IntervalEmpty":
-    case "LeafOversized":
-    case "NodeMisplaced":
-    case "ParentNotOpen":
-    case "RootMissing":
-    case "SlotOutOfTurn":
-    case "StartBeyond": {
-      return new Set([refusal.node]);
+    case "version": {
+      return { ...row, version: edit.value };
     }
     default: {
-      return refusal satisfies never;
+      return edit satisfies never;
     }
   }
 };
 
 /**
- * The kinds of node that hold no children and keep their content in a row of their kind.
+ * Every edit of a node row's fields the small box makes: each slot and interval bound from 0 to 4,
+ * each id of the document's nodes and one no node holds as the row's id or parent, each kind of the
+ * box, and each prefix, governing type and version, all but the row's own value.
+ *
+ * @param row - The row.
+ * @param nodes - The document's node rows.
+ * @returns The edits.
  */
-const leafKinds: ReadonlySet<string> = new Set([
-  "comment",
-  "doctype",
-  "entityRef",
-  "pi",
-  "text",
-  "ws",
-]);
+const editsOf = (
+  row: NodeRow<Composed>,
+  nodes: readonly NodeRow<Composed>[],
+): readonly NodeEdit[] => {
+  const bounds = [0n, 1n, 2n, 3n, 4n];
+  const ids = [...nodes.map(({ id }) => id), idOf(99)];
+  const kinds = ["document", "p", "text", "comment", "doctype"] as const;
+  const edits: readonly NodeEdit[] = [
+    ...(["at", "end", "start"] as const).flatMap((field) =>
+      bounds.map((value): NodeEdit => ({ field, value })),
+    ),
+    ...(["id", "parent"] as const).flatMap((field) =>
+      ids.map((value): NodeEdit => ({ field, value })),
+    ),
+    ...kinds.map((value): NodeEdit => ({ field: "kind", value })),
+    ...smallPrefixes.map((value): NodeEdit => ({ field: "prefix", value })),
+    ...smallGoverns.map((value): NodeEdit => ({ field: "governs", value })),
+    ...smallVersions.map((value): NodeEdit => ({ field: "version", value })),
+  ];
+
+  return edits.filter((edit) => row[edit.field] !== edit.value);
+};
 
 /**
- * The refusal a row variant meets, as the refusal's tag and the model number of the node it names,
- * from the scan's checks in document order: the first row, by start, that a variant's edit makes
- * fail is the one refused.
- *
- * - A slot out of order fails the slot check at the node itself.
- * - A second row of an id over a start of its own is a repeated id, and a start taken from the node
- *   before collides where the rows are placed by start.
- * - A second root, a cycle or an orphan names a parent that is not open at the node's start.
- * - A doctype after the root element sits at a slot of the document node other than its first, where
- *   XML's `document` production places none.
- * - A wrong size moves every later start on, so the last node starts past the document's last start;
- *   when the node is itself the last, the document node's interval grows past `[0, N)`.
- * - A predecessor that overlaps its successor is an oversized leaf when it is one, and otherwise an
- *   element still open at the successor's start, which is not the successor's parent.
- * - A predecessor that ends early holds no node when it has no children, and otherwise its last child
- *   leaves its interval: past its end when that child starts inside it, and outside it altogether
- *   when the child is childless, so it starts at the end.
- * - A parent that ends inside its last child leaves that child's end beyond its own.
- *
- * @param model - The valid tree's model.
- * @param variant - The variant.
- * @returns The refusals it may meet, each a tag and a node's number.
+ * One case of the small box: a document's rows, unedited or with one node row's field edited.
  */
-const expectedFor = (
-  model: readonly Placed[],
-  variant: RowCorruption,
-): readonly (readonly [AssembleError["_tag"], number])[] => {
-  const numbered = model.map((placed, number) => ({ ...placed, number }));
-  const childrenOf = Map.groupBy(numbered.slice(1), ({ parent }) => parent);
-  const isChildless = (number: number) => !childrenOf.has(number);
-  const lastOf = (number: number) => childrenOf.get(number)?.at(-1)?.number ?? -1;
-  const before = (number: number) =>
-    (childrenOf.get(model[number]?.parent ?? -1) ?? []).find(
-      ({ at }) => at === (model[number]?.at ?? 0) - 1,
-    )?.number ?? -1;
-  switch (variant._tag) {
-    case "gap":
-    case "duplicateSlot": {
-      return [["SlotOutOfTurn", variant.node]];
-    }
-    case "secondParent": {
-      return [["IdRepeated", variant.node]];
-    }
-    case "startTaken": {
-      return [
-        ["StartTaken", variant.node],
-        ["StartTaken", variant.node - 1],
-      ];
-    }
-    case "secondRoot":
-    case "cycle":
-    case "orphan": {
-      return [["ParentNotOpen", variant.node]];
-    }
-    case "doctypeNotFirst": {
-      return [["NodeMisplaced", variant.node]];
-    }
-    case "wrongSize": {
-      return variant.node === model.length - 1
-        ? [["DocumentInterval", 0]]
-        : [["StartBeyond", model.length - 1]];
-    }
-    case "overlappingSiblings": {
-      const predecessor = before(variant.node);
+interface SmallCase {
+  readonly document: number;
+  readonly edit: Option.Option<{ readonly edit: NodeEdit; readonly node: number }>;
+}
 
-      return leafKinds.has(model[predecessor]?.kind ?? "")
-        ? [["LeafOversized", predecessor]]
-        : [["ParentNotOpen", variant.node]];
-    }
-    case "gapBetweenSiblings": {
-      const predecessor = before(variant.node);
-      if (isChildless(predecessor)) {
-        return [["IntervalEmpty", predecessor]];
-      }
+/**
+ * The documents the small box edits: each shape once, every element unprefixed and governed by
+ * `g`, in 3.0.1.
+ */
+const editedDocuments = smallDocuments.filter((document) =>
+  flatten(document, idOf).nodes.every(
+    ({ governs, kind, prefix, version }) =>
+      version === "3.0.1" && prefix === "" && (kind !== "p" || governs === "g"),
+  ),
+);
 
-      const last = lastOf(predecessor);
+/**
+ * Every case of the small box.
+ */
+const smallCases: readonly SmallCase[] = editedDocuments.flatMap((document, at) => {
+  const { nodes } = flatten(document, idOf);
 
-      return isChildless(last) ? [["ParentNotOpen", last]] : [["EndBeyondParent", last]];
-    }
-    case "childOutsideParent": {
-      return [["EndBeyondParent", lastOf(variant.node)]];
-    }
-    default: {
-      return variant satisfies never;
-    }
-  }
+  return [
+    { document: at, edit: Option.none() },
+    ...nodes.flatMap((row, node) =>
+      editsOf(row, nodes).map((edit) => ({ document: at, edit: Option.some({ edit, node }) })),
+    ),
+  ];
+});
+
+/**
+ * Write a small case's rows.
+ *
+ * @param drawnCase - The case.
+ * @returns The rows of its document, with its edit applied.
+ */
+const smallRowsOf = ({ document, edit }: SmallCase): FlatRows<Composed> => {
+  const rows = flatten(Arr.getUnsafe(editedDocuments, document), idOf);
+
+  return Option.match(edit, {
+    onNone: () => rows,
+    onSome: ({ edit: change, node }) => ({
+      ...rows,
+      nodes: rows.nodes.map((row, at) => (at === node ? editedRow(row, change) : row)),
+    }),
+  });
 };
+
+/**
+ * What the small box must reach: rows the image holds and rows it does not, and an edit of every
+ * field.
+ */
+type SmallFeature = "inside" | "outside" | NodeEdit["field"];
 
 describe("assemble", { timeout: searchTimeout }, () => {
   it.effect(
@@ -360,69 +517,64 @@ describe("assemble", { timeout: searchTimeout }, () => {
       ),
   );
 
-  it.effect(
-    "refuses each named row variant by the first check its edit fails in document order, naming its node",
-    (ctx) =>
-      // Oracle: the specification as a checker, trees.md §6: rows sorted by start rebuild the
-      // document with one stack, refusing a row whose start is taken or past the last, whose parent
-      // is not the open element, whose slot is not that element's next, or whose interval leaves
-      // its parent's, is empty, or holds more than a leaf; each variant's first failing row is
-      // read off the valid tree's model ({@link expectedFor}).
-      // Bound: the generator's drawn bounds, every row variant a tree admits.
-      searched(
-        ctx,
-        explore(
-          {
-            caseHang,
-            concurrency: 1,
-            coverage: required<InvalidVariant | VariantField | VariantTarget>(rowVariants, {
-              cases: 400,
-              sense: notesOnly,
-            }),
-            draw: drawn(documents),
-            kept: [],
-            literal: Formatter.format,
-            oracle: {
-              kind: "specification",
-              name: "trees.md §6's one-stack rebuild, each variant's first failing row read off the valid tree's model (expectedFor)",
-            },
-            runs: 400,
-            shrink: completeShrink,
-            steerEvery: 16,
-            suite: "model/assemble-row-variants",
+  it.effect("refuses each named row variant as a node row outside flatten's image", (ctx) =>
+    // Oracle: the specification as a checker, trees.md §6: every row variant edits a node's id,
+    // parent, slot or interval so that no tree's rows hold it, and the document row and every
+    // other list are as the tree wrote them, so the nodes list is the first to leave the image.
+    // Bound: the generator's drawn bounds, every row variant a tree admits.
+    searched(
+      ctx,
+      explore(
+        {
+          caseHang,
+          concurrency: 1,
+          coverage: required<InvalidVariant | VariantField | VariantTarget>(rowVariants, {
+            cases: 400,
+            sense: notesOnly,
+          }),
+          draw: drawn(documents),
+          kept: [],
+          literal: Formatter.format,
+          oracle: {
+            kind: "specification",
+            name: "trees.md §6: a row variant's node rows are no tree's, its other rows its tree's",
           },
-          (generated, c) =>
-            Effect.gen(function* rowVariant() {
-              const variant = c.draw(corruption(generated, rowVariants));
-              if (!isRowCorruption(variant)) {
-                assert.fail(`drew ${variant._tag}, which is no row variant`);
-              }
+          runs: 400,
+          shrink: completeShrink,
+          steerEvery: 16,
+          suite: "model/assemble-row-variants",
+        },
+        (generated, c) =>
+          Effect.gen(function* rowVariant() {
+            const variant = c.draw(corruption(generated, rowVariants));
+            if (!isRowCorruption(variant)) {
+              assert.fail(`drew ${variant._tag}, which is no row variant`);
+            }
 
-              c.noteAll(situationsOf(generated, variant));
+            c.noteAll(situationsOf(generated, variant));
 
-              const rows = yield* foldedOf(generated);
-              const refusal = yield* refusalOf(c.draw(shuffledRows(corrupt(rows, variant))));
-              const named = namedBy(refusal);
+            const rows = yield* foldedOf(generated);
+            const refusal = yield* refusalOf(c.draw(shuffledRows(corrupt(rows, variant))));
 
-              assert.isTrue(
-                expectedFor(generated.model, variant).some(
-                  ([tag, number]) => tag === refusal._tag && named.has(idOf(number)),
-                ),
-                `${variant._tag}: ${refusal._tag} naming ${[...named].join(", ")}`,
-              );
-            }),
-        ),
+            assert.deepStrictEqual(
+              [refusal._tag, refusal._tag === "RowsOutsideImage" ? refusal.rows : ""],
+              ["RowsOutsideImage", "nodes"],
+              `${variant._tag}: ${refusal.message}`,
+            );
+          }),
       ),
+    ),
   );
 
   /**
    * The ways a set of rows leaves flatten's image beside the row variants: a row another names is
-   * missing, a row is repeated, or a node is of a kind its parent cannot hold.
+   * missing, a row is repeated, a node is of a kind its parent cannot hold, or an attribute or
+   * namespace declaration stands past its family's last slot.
    */
-  type Outside = "missing" | "repeated" | "misplaced";
+  type Outside = "missing" | "repeated" | "misplaced" | "slot";
 
   it.effect(
-    "refuses rows outside flatten's image: a row another names missing, any row repeated, a node of a kind its parent cannot hold",
+    "refuses rows outside flatten's image: a row another names missing, any row repeated, a node of a kind its parent cannot hold, a family row past its last slot",
     (ctx) =>
       // Oracle: the specification as a checker, the rows flatten writes for some tree.
       // Bound: the generator's drawn bounds, one edit a case.
@@ -432,7 +584,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
           {
             caseHang,
             concurrency: 1,
-            coverage: required<Outside>(["missing", "repeated", "misplaced"], {
+            coverage: required<Outside>(["missing", "repeated", "misplaced", "slot"], {
               cases: 300,
               sense: notesOnly,
             }),
@@ -441,7 +593,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "the rows flatten writes for some tree: a row missing, repeated or misplaced leaves that image",
+              name: "the rows flatten writes for some tree: a row missing, repeated, misplaced or past its family's slots leaves that image",
             },
             runs: 300,
             shrink: completeShrink,
@@ -454,11 +606,15 @@ describe("assemble", { timeout: searchTimeout }, () => {
               const named = keyedLists.filter((list) => rows[list].length > 0);
               const listed = rowLists.filter((list) => rows[list].length > 0);
               const runs = [...rows.texts, ...rows.whitespace];
+              const slotted = (["attributes", "namespaces"] as const).filter(
+                (list) => rows[list].length > 0,
+              );
               const edit = c.draw(
                 element([
                   "repeated",
                   ...(Arr.isReadonlyArrayNonEmpty(named) ? (["missing"] as const) : []),
                   ...(Arr.isReadonlyArrayNonEmpty(runs) ? (["misplaced"] as const) : []),
+                  ...(Arr.isReadonlyArrayNonEmpty(slotted) ? (["slot"] as const) : []),
                 ] as const),
               );
               c.note(edit);
@@ -493,7 +649,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
                     [list]: [...rows[list], ...rows[list].slice(at, at + 1)],
                   });
 
-                  assert.strictEqual(refusal._tag, repeatedRefusal[list]);
+                  assert.deepStrictEqual(departureOf(refusal), [list, "repeated"]);
                   break;
                 }
                 case "misplaced": {
@@ -512,10 +668,44 @@ describe("assemble", { timeout: searchTimeout }, () => {
                     whitespace: rows.whitespace.filter((row) => row !== run),
                   });
 
+                  const parent =
+                    rows.nodes.find(({ id }) => id === run.node)?.parent ??
+                    assert.fail("drew a run whose node has no row");
+
                   assert.deepStrictEqual(
-                    [refusal._tag, [...namedBy(refusal)]],
-                    ["NodeMisplaced", [run.node]],
+                    refusal._tag === "RowsOutsideImage"
+                      ? { departure: refusal.departure, key: refusal.key, rows: refusal.rows }
+                      : refusal._tag,
+                    {
+                      departure: { _tag: "unplaced", kind: "doctype", under: parent },
+                      key: run.node,
+                      rows: "nodes",
+                    },
                   );
+                  break;
+                }
+                case "slot": {
+                  if (!Arr.isReadonlyArrayNonEmpty(slotted)) {
+                    assert.fail("drew a family row past its slots from rows with no family rows");
+                  }
+
+                  const list = c.draw(element(slotted));
+                  const held: readonly { readonly at: bigint; readonly node: NodeId }[] =
+                    rows[list];
+                  const moved = Arr.getUnsafe(held, c.draw(int(0, held.length - 1)));
+                  const past = BigInt(held.filter(({ node }) => node === moved.node).length);
+                  const bump = <Row extends { readonly at: bigint; readonly node: NodeId }>(
+                    row: Row,
+                  ): Row => (Object.is(row, moved) ? { ...row, at: past } : row);
+                  const refusal = yield* refusalOf(
+                    list === "attributes"
+                      ? { ...rows, attributes: rows.attributes.map(bump) }
+                      : { ...rows, namespaces: rows.namespaces.map(bump) },
+                  );
+                  const [rowsOf, departure] = departureOf(refusal);
+
+                  assert.strictEqual(rowsOf, list);
+                  assert.include(["differs", "lacked"], departure);
                   break;
                 }
                 default: {
@@ -523,6 +713,74 @@ describe("assemble", { timeout: searchTimeout }, () => {
                 }
               }
             }),
+        ),
+      ),
+  );
+
+  it.effect(
+    "assembles exactly the rows flatten writes for some tree, over every small document and every single-field edit of a node row",
+    (ctx) =>
+      // Oracle: the image, enumerated: every document of at most three nodes below the document
+      // node, its rows' canonical form, renamed by start, against the edited rows'. Rows the image
+      // holds assemble to their document; rows it does not are refused.
+      // Bound: every such document in each version, prefix and governing type, and every edit of
+      // one field of one node row to each value of the box.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: `every document of at most ${String(SMALL_NODES)} nodes below the document node, unedited and with each single-field edit of a node row: ${String(smallCases.length)} cases`,
+            caseHang,
+            coverage: requiredInSpace<SmallFeature>([
+              "inside",
+              "outside",
+              "at",
+              "end",
+              "start",
+              "id",
+              "parent",
+              "kind",
+              "prefix",
+              "governs",
+              "version",
+            ]),
+            generator: (source) =>
+              Arr.getUnsafe(smallCases, source.draw(int(0, smallCases.length - 1))),
+            limit: smallCases.length,
+            literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the image of every small document, enumerated, by canonical form",
+            },
+            suite: "model/assemble-small-image",
+          },
+          (drawnCase, c) =>
+            Effect.sync(() => {
+              const rows = smallRowsOf(drawnCase);
+              const inside = Option.flatMap(canonicalOf(rows), (key) =>
+                Option.fromNullishOr(smallImage.get(key)),
+              );
+              const got = assemble(rows);
+              c.note(Option.isSome(inside) ? "inside" : "outside");
+              if (Option.isSome(drawnCase.edit)) {
+                c.note(drawnCase.edit.value.edit.field);
+              }
+
+              Option.match(inside, {
+                onNone: () => {
+                  assert.isTrue(Result.isFailure(got), "rows outside the image assembled");
+                },
+                onSome: (document) => {
+                  assert.deepStrictEqual(Result.getOrThrow(got), document);
+                },
+              });
+            }),
+        ),
+      ).pipe(
+        Effect.tap((done) =>
+          Effect.sync(() => {
+            assert.strictEqual(done.cases, smallCases.length);
+          }),
         ),
       ),
   );

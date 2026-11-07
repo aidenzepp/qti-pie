@@ -21,19 +21,13 @@
  *   through the namespaces the `xs:schema` element declares. A name in the XSD namespace is a
  *   built-in; a name in the target namespace names a top-level component of the schema.
  * - A complex type's content is its own particles, after its base type's content when it is a
- *   `complexContent` extension of a type of this document. A `complexContent` restriction states
- *   its whole content itself.
- * - A content model is read to its element references, each with its own occurrence bounds multiplied
- *   by those of every enclosing compositor and group reference, unbounded as `None`. A `choice`
- *   whose references hold two or more distinct names is also recorded as a choice group, after the
- *   groups nested inside it. A reference to an abstract element or a substitution group head is
- *   every element the group admits, in document order, and a choice group of its own unless it is
- *   an alternative of a choice that occurs once. A local declaration in the target namespace
- *   (`elementFormDefault="qualified"` or `form`) is written with the target namespace's prefix. An
- *   element wildcard references nothing and is recorded as `wildcard`.
+ *   `complexContent` extension of a type of this document ({@link contentParticles}). A
+ *   `complexContent` restriction states its whole content itself. The content-model IR
+ *   (`models.ts`) reads those particles; this module reads no content model of its own.
  * - A complex type's attributes are its own declarations, then those of its attribute groups in
  *   reference order. A type derived by extension or restriction lists its base type's attributes,
- *   then those of the derivation step.
+ *   then those of the derivation step. A reference into the XML namespace carries no type here:
+ *   `xml.xsd` declares it, and `declarations.ts` reads it there.
  * - An attribute declared with no type has `xs:anySimpleType`. Its `whiteSpace` class is `collapse`
  *   for a list and for every built-in but `xs:string` and `xs:anySimpleType` (`preserve`) and
  *   `xs:normalizedString` (`replace`); a restriction takes its own `whiteSpace` facet or else its
@@ -44,13 +38,12 @@
  *   ({@link InlineType}): a restriction's base and facets in document order, a list's item type, a
  *   union's members, its `memberTypes` first. Its designator is `list`, `union`, or its
  *   restriction's base, read through nested anonymous restrictions.
- * - A type is mixed when it, or its `complexContent`, says so, or else when its base type is. Its
- *   content class ({@link Content}) is `text`, of the base its `simpleContent` extends, when it has
- *   simple content; else `mixed` when it is mixed; else `element` when its content references an
- *   element, `wildcard` when it may hold only a wildcard's, and `empty` otherwise.
+ * - A type is mixed when it, or its `complexContent`, says so, or else when its base type is
+ *   ({@link mixedOf}). A type with simple content holds text of the base its `simpleContent`
+ *   extends, through the simple content of a complex base ({@link textTypeOf}).
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, Console, Effect, Layer, Match, Option, Order, Result, Schema } from "effect";
+import { Array as Arr, Console, Effect, Layer, Match, Option, Result, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
@@ -127,8 +120,8 @@ export const isXs = (node: Element, local: string): boolean =>
 /**
  * Whether an element is a compositor: a `sequence`, a `choice` or an `all`.
  *
- * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
- * structure with it.
+ * Public, and stable while the vocabularies are derived: the content-model IR (`models.ts`) reads
+ * content models' structure with it.
  *
  * @param node - The element.
  * @returns Whether it groups particles.
@@ -915,62 +908,26 @@ export const valueTypeOf = (
   });
 
 /**
- * The ten attribute names every QTI element shares, which the inventory files as family `base`.
+ * What an `xs:attribute` states of its attribute whatever its type: its name, and the declared use
+ * and default.
  */
-const baseFamily: ReadonlySet<string> = new Set([
-  "class",
-  "data-catalog-idref",
-  "data-qti-suppress-tts",
-  "data-ssml",
-  "dir",
-  "id",
-  "label",
-  "lang",
-  "xml:base",
-  "xml:lang",
-]);
-
-/**
- * The built-in type of each `xml:` attribute a declaration may reference instead of declaring, by
- * local name in the XML namespace, as `xml.xsd` declares them: `xml:base` as `xs:anyURI` (line
- * 112), `xml:id` as `xs:ID` (line 134) and `xml:lang` as `xs:language`. The inventory writes the
- * type with the `xs:` prefix whatever prefix the referencing schema binds.
- */
-const xmlAttributeTypes: ReadonlyMap<string, string> = new Map([
-  ["base", "anyURI"],
-  ["id", "ID"],
-  ["lang", "language"],
-]);
-
-/**
- * One attribute an XSD type declares, as the inventory records it: its name, its simple type, and
- * the declared use and default.
- */
-export interface AttributeRow extends ValueType {
+export interface AttributeUse {
   /**
    * The `xs:attribute` that declares or references it, which its provenance cites.
    */
   readonly declaration: Element;
   readonly default: Option.Option<string>;
-  readonly family: "base" | "aria" | "own";
   readonly name: string;
   readonly use: "required" | "optional";
 }
 
 /**
- * The family an attribute name belongs to: `base` for the shared ten, `aria` for `role` and the
- * `aria-*` names, `own` for the rest.
- *
- * @param name - The attribute name as the XSD spells it.
- * @returns Its family.
+ * One attribute an XSD type declares or references, as the reading finds it: its use, and either
+ * the simple type its declaration states (`declared`) or, for a reference into the XML namespace
+ * (`xml`), no type here, since `xml.xsd` declares it and `declarations.ts` reads it there.
  */
-const familyOf = (name: string): AttributeRow["family"] => {
-  if (baseFamily.has(name)) {
-    return "base";
-  }
-
-  return name === "role" || name.startsWith("aria-") ? "aria" : "own";
-};
+export type AttributeRow = AttributeUse &
+  (({ readonly _tag: "declared" } & ValueType) | { readonly _tag: "xml" });
 
 /**
  * The simple type of a declaration that names its attribute.
@@ -1004,40 +961,12 @@ export const declaredType = (
 };
 
 /**
- * The simple type of a reference to an `xml:` attribute.
- *
- * @param schema - The schema the reference is in.
- * @param ref - The `ref` as written, which is also the row's name.
- * @returns The type, or an {@link XsdReadingError} for any reference but `xml:base`, `xml:id` and
- *   `xml:lang`.
- */
-const referencedType = (
-  schema: XsdSchema,
-  ref: string,
-): Result.Result<ValueType, XsdReadingError> =>
-  Result.gen(function* referencedTypeBody() {
-    const name = yield* resolve(schema, ref);
-    const builtin = yield* Option.match(
-      Option.filter(
-        Option.fromNullishOr(xmlAttributeTypes.get(name.local)),
-        () => name.namespace === XML,
-      ),
-      {
-        onNone: () => refuse(`the attribute reference ${ref} is not xml:base, xml:id or xml:lang`),
-        onSome: (local) => Result.succeed(local),
-      },
-    );
-
-    return { inline: Option.none(), type: `xs:${builtin}`, whiteSpace: builtinWhiteSpace(builtin) };
-  });
-
-/**
  * Read one attribute declaration or reference.
  *
  * @param schema - The schema the declaration is in.
  * @param declaration - The `xs:attribute` element.
- * @returns The row, or an {@link XsdReadingError} for a reference outside the XML namespace's
- *   `base`, `id` and `lang`, a `use` of `prohibited`, or a type the reading rules do not read.
+ * @returns The row, or an {@link XsdReadingError} for a reference outside the XML namespace, a
+ *   `use` of `prohibited`, or a type the reading rules do not read.
  */
 const attributeRow = (
   schema: XsdSchema,
@@ -1046,23 +975,23 @@ const attributeRow = (
   Result.gen(function* attributeRowBody() {
     const named = attributeOf(declaration, "name");
     const name = Option.isSome(named) ? named.value : yield* requireAttribute(declaration, "ref");
-    const typed = Option.isSome(named)
-      ? yield* declaredType(schema, declaration)
-      : yield* referencedType(schema, name);
     const use = Option.getOrElse(attributeOf(declaration, "use"), () => "optional");
 
     if (use !== "required" && use !== "optional") {
       return yield* refuse(`the attribute ${name} has use="${use}"`);
     }
 
-    return {
-      ...typed,
-      declaration,
-      default: attributeOf(declaration, "default"),
-      family: familyOf(name),
-      name,
-      use,
-    };
+    const held = { declaration, default: attributeOf(declaration, "default"), name, use } as const;
+
+    if (Option.isSome(named)) {
+      return { _tag: "declared", ...held, ...(yield* declaredType(schema, declaration)) };
+    }
+
+    if ((yield* resolve(schema, name)).namespace !== XML) {
+      return yield* refuse(`the attribute reference ${name} is not in the XML namespace`);
+    }
+
+    return { _tag: "xml", ...held };
   });
 
 /**
@@ -1160,6 +1089,23 @@ const attributesOf = (
 
     return found;
   });
+
+/**
+ * Read the attributes a complex type holds, its base type's included, in reading order (see the
+ * module comment).
+ *
+ * @param schema - The schema the type is in.
+ * @param complexType - The `xs:complexType` element.
+ * @returns Each declaration's or reference's row, or an {@link XsdReadingError} for one the
+ *   reading rules do not read.
+ */
+export const attributeRowsOf = (
+  schema: XsdSchema,
+  complexType: Element,
+): Result.Result<readonly AttributeRow[], XsdReadingError> =>
+  Result.flatMap(attributesOf(schema, complexType), (declarations) =>
+    Result.all(declarations.map((declaration) => attributeRow(schema, declaration))),
+  );
 
 /**
  * An attribute wildcard as the IR states it: its namespace constraint as the XSD writes it, and its
@@ -1383,22 +1329,6 @@ export const mixedOf = (
   });
 
 /**
- * What a kind's content admits beside the element children its entry lists: its content class.
- *
- * `text` is character data alone, of the type the arm carries: an element declared with a simple
- * type, or a complex type with `simpleContent`. `mixed` is character data between the children.
- * `element` is element children only, at least one named; `wildcard` is element children only,
- * every one a wildcard's; `empty` is nothing. A content model that names an element and also holds
- * a wildcard is `element`, or `mixed` when it is mixed.
- */
-export type Content =
-  | { readonly _tag: "element" }
-  | { readonly _tag: "empty" }
-  | { readonly _tag: "mixed" }
-  | ({ readonly _tag: "text" } & ValueType)
-  | { readonly _tag: "wildcard" };
-
-/**
  * Read the type of a complex type's simple content: the base its `xs:extension` extends, through
  * the simple content of a complex base.
  *
@@ -1407,7 +1337,7 @@ export type Content =
  * @returns The text's type, or an {@link XsdReadingError} for a `simpleContent` restriction, which
  *   the reading rules do not read, or a complex base with no simple content.
  */
-const textTypeOf = (
+export const textTypeOf = (
   schema: XsdSchema,
   simpleContent: Element,
 ): Result.Result<ValueType, XsdReadingError> =>
@@ -1430,40 +1360,6 @@ const textTypeOf = (
         refuse(`a simpleContent extends the complex type ${lexical}, which has no simple content`),
       onSome: (inherited) => textTypeOf(schema, inherited),
     });
-  });
-
-/**
- * Read a complex type's content class, by the rule of the module comment.
- *
- * Public, and stable while the vocabularies are derived: a vocabulary that reads a type's content
- * without {@link entryOfType} classes it with it.
- *
- * @param schema - The schema the type is in.
- * @param complexType - The `xs:complexType` element.
- * @param reading - Its content, as {@link contentOf} reads it.
- * @returns The class, or an {@link XsdReadingError} for a shape the reading rules do not cover.
- */
-export const contentClassOf = (
-  schema: XsdSchema,
-  complexType: Element,
-  reading: ContentReading,
-): Result.Result<Content, XsdReadingError> =>
-  Result.gen(function* contentClassOfBody() {
-    const simple = firstXs(complexType, "simpleContent");
-
-    if (Option.isSome(simple)) {
-      return { _tag: "text", ...(yield* textTypeOf(schema, simple.value)) };
-    }
-
-    if (yield* mixedOf(schema, complexType)) {
-      return { _tag: "mixed" };
-    }
-
-    if (reading.references.length > 0) {
-      return { _tag: "element" };
-    }
-
-    return reading.wildcard ? { _tag: "wildcard" } : { _tag: "empty" };
   });
 
 /**
@@ -1516,8 +1412,8 @@ const countOf = (particle: Element, value: string): Result.Result<number, XsdRea
 /**
  * The occurrence a particle's `minOccurs` and `maxOccurs` state, each 1 when absent.
  *
- * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
- * structure with it.
+ * Public, and stable while the vocabularies are derived: the content-model IR (`models.ts`) reads
+ * content models' structure with it.
  *
  * @param particle - An element, a compositor, a group reference or a wildcard.
  * @returns Its occurrence.
@@ -1532,32 +1428,6 @@ export const occursOf = (particle: Element): Result.Result<Occurs, XsdReadingErr
       min: Option.isSome(min) ? yield* countOf(particle, min.value) : 1,
     };
   });
-
-/**
- * One element a content model references, with the occurrence it is allowed.
- */
-export interface Reference {
-  readonly name: string;
-  readonly occurs: Occurs;
-}
-
-/**
- * A choice of two or more distinct element names, with the occurrence of the choice itself.
- */
-export interface ChoiceGroup {
-  readonly names: readonly string[];
-  readonly occurs: Occurs;
-}
-
-/**
- * A content model read to its element references and its choice groups, each in reading order,
- * and whether it holds an element wildcard (`xs:any`) that may occur.
- */
-export interface ContentReading {
-  readonly choices: readonly ChoiceGroup[];
-  readonly references: readonly Reference[];
-  readonly wildcard: boolean;
-}
 
 /**
  * Write a name declared in a schema's target namespace with the prefix the schema binds to it.
@@ -1582,85 +1452,10 @@ export const isAbstract = (declaration: Element): boolean =>
   Option.contains(attributeOf(declaration, "abstract"), "true");
 
 /**
- * The element names a reference to a top-level element admits: the element itself unless it is
- * abstract, then each member of its substitution group, read the same way, in document order.
- *
- * @param schema - The schema the element is declared in.
- * @param local - The element's local name.
- * @param seen - The heads being read around this one, so that a circular group, which XML Schema
- *   forbids, ends.
- * @returns The names, each written with the schema's target prefix.
- */
-const substitutesOf = (
-  schema: XsdSchema,
-  local: string,
-  seen: ReadonlySet<string>,
-): readonly string[] => {
-  const own = Option.exists(
-    Option.fromNullishOr(schema.elements.get(local)),
-    (declaration) => !isAbstract(declaration),
-  )
-    ? [qualify(schema, local)]
-    : [];
-  const members = (schema.substitutions.get(local) ?? []).filter((member) => !seen.has(member));
-
-  return [
-    ...own,
-    ...members.flatMap((member) => substitutesOf(schema, member, new Set([...seen, local]))),
-  ];
-};
-
-/**
- * The names an element particle references, as the content reading records them.
- *
- * A local declaration names one element, written with the target prefix when it is qualified
- * (its `form`, else the schema's `elementFormDefault`). A reference is written as the XSD writes
- * it, unless it names a top-level element of this schema that is abstract or heads a substitution
- * group: then it stands for every element {@link substitutesOf} admits for it.
- *
- * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
- * structure with it.
- *
- * @param schema - The schema the particle is in.
- * @param particle - The `xs:element` particle.
- * @returns The names, in order, or an {@link XsdReadingError} for a particle with neither a
- *   `name` nor a `ref`.
- */
-export const particleNames = (
-  schema: XsdSchema,
-  particle: Element,
-): Result.Result<readonly string[], XsdReadingError> =>
-  Result.gen(function* particleNamesBody() {
-    const declared = attributeOf(particle, "name");
-
-    if (Option.isSome(declared)) {
-      const form = Option.getOrElse(attributeOf(particle, "form"), () =>
-        schema.qualified ? "qualified" : "unqualified",
-      );
-
-      return [form === "qualified" ? qualify(schema, declared.value) : declared.value];
-    }
-
-    const ref = yield* Option.match(attributeOf(particle, "ref"), {
-      onNone: () => refuse("an xs:element has neither a name nor a ref"),
-      onSome: (value) => Result.succeed(value),
-    });
-    const target = yield* resolve(schema, ref);
-    const heads =
-      target.namespace === schema.targetNamespace &&
-      Option.exists(
-        Option.fromNullishOr(schema.elements.get(target.local)),
-        (declaration) => isAbstract(declaration) || schema.substitutions.has(target.local),
-      );
-
-    return heads ? substitutesOf(schema, target.local, new Set()) : [ref];
-  });
-
-/**
  * The particles a compositor or a group definition holds, in order.
  *
- * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
- * structure with it.
+ * Public, and stable while the vocabularies are derived: the content-model IR (`models.ts`) reads
+ * content models' structure with it.
  *
  * @param node - The parent construct.
  * @returns Its children other than annotations.
@@ -1669,85 +1464,11 @@ export const particlesOf = (node: Element): readonly Element[] =>
   elementsOf(node).filter((child) => !isXs(child, "annotation"));
 
 /**
- * Read consecutive particles to their element references and choice groups.
- *
- * An element is the references {@link particleNames} gives it. When they are two or more distinct
- * names they are a choice group of their own, unless the element is an alternative of a choice and
- * occurs exactly once, so that the choice's group already holds them with the same bounds. A group
- * reference reads its group's particles; a compositor reads its own, and a choice among two or more
- * names adds its group after the ones nested in it, whether or not it is itself an alternative; a
- * wildcard references nothing, and is recorded when it may occur.
- *
- * @param schema - The schema the particles are in.
- * @param particles - The particles, in order.
- * @param outer - The occurrence of everything enclosing them.
- * @param alternative - Whether the particles are the alternatives of a choice.
- * @returns Their readings, concatenated in order.
- */
-const readParticles = (
-  schema: XsdSchema,
-  particles: readonly Element[],
-  outer: Occurs,
-  alternative: boolean,
-): Result.Result<ContentReading, XsdReadingError> =>
-  Result.gen(function* readParticlesBody() {
-    const readings: ContentReading[] = [];
-
-    for (const particle of particles) {
-      const own = yield* occursOf(particle);
-      const occurs = times(outer, own);
-      const flattened = alternative && own.min === 1 && Option.contains(own.max, 1);
-
-      if (isXs(particle, "element")) {
-        const names = yield* particleNames(schema, particle);
-        const distinct = Arr.dedupe(names);
-
-        readings.push({
-          choices: distinct.length > 1 && !flattened ? [{ names: distinct, occurs }] : [],
-          references: names.map((name) => ({ name, occurs })),
-          wildcard: false,
-        });
-      } else if (isXs(particle, "any")) {
-        readings.push({ choices: [], references: [], wildcard: !Option.contains(occurs.max, 0) });
-      } else if (isXs(particle, "group")) {
-        const group = yield* requireComponent(
-          schema,
-          schema.groups,
-          "group",
-          yield* requireAttribute(particle, "ref"),
-        );
-
-        readings.push(yield* readParticles(schema, particlesOf(group), occurs, alternative));
-      } else if (isCompositor(particle)) {
-        const inner = yield* readParticles(
-          schema,
-          particlesOf(particle),
-          occurs,
-          isXs(particle, "choice"),
-        );
-        const names = Arr.dedupe(inner.references.map((reference) => reference.name));
-
-        readings.push(
-          isXs(particle, "choice") && names.length > 1
-            ? { ...inner, choices: [...inner.choices, { names, occurs }] }
-            : inner,
-        );
-      }
-    }
-
-    return {
-      choices: readings.flatMap((reading) => reading.choices),
-      references: readings.flatMap((reading) => reading.references),
-      wildcard: readings.some((reading) => reading.wildcard),
-    };
-  });
-
-/**
  * The particles a complex type's content states, with its base type's ahead of them for an
  * extension.
  *
- * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
- * structure with it.
+ * Public, and stable while the vocabularies are derived: the content-model IR (`models.ts`) reads
+ * content models' structure with it.
  *
  * @param schema - The schema the type is in.
  * @param complexType - The `xs:complexType` element.
@@ -1773,348 +1494,9 @@ export const contentParticles = (
   });
 
 /**
- * Read a complex type's content to its element references and choice groups.
- *
- * @param schema - The schema the type is in.
- * @param complexType - The `xs:complexType` element.
- * @returns The reading, its base type's content first for an extension.
- */
-export const contentOf = (
-  schema: XsdSchema,
-  complexType: Element,
-): Result.Result<ContentReading, XsdReadingError> =>
-  Result.flatMap(contentParticles(schema, complexType), (particles) =>
-    readParticles(schema, particles, once, false),
-  );
-
-/**
- * A kind of a vocabulary: its handle, the element it is, and the XSD type that element has here.
- *
- * Public: other vocabularies' derivations name their kinds with it when they call
- * {@link entryOf}.
- */
-export interface KindSpec {
-  readonly element: string;
-  readonly handle: string;
-  readonly type: string;
-}
-
-/**
- * A vocabulary's kinds as the deriver reads them: the handles that are an element of exactly one
- * declared type, and the dotted handles that name an element and one of its several types.
- */
-interface Vocabulary {
-  readonly plain: readonly string[];
-  readonly typed: Readonly<Record<string, Omit<KindSpec, "handle">>>;
-}
-
-/**
- * The vocabularies {@link entriesOf} reads from the ASI 3.0.1 XSD, by name.
- */
-export const leaves = ["asi", "html", "processing"] as const;
-
-/**
- * The name of a vocabulary {@link entriesOf} reads.
- */
-export type Leaf = (typeof leaves)[number];
-
-/**
- * The kinds of each vocabulary {@link entriesOf} reads from the ASI 3.0.1 XSD, by name: `asi` is
- * phase 1's M0 and M1 elements and the dotted kinds of the elements with several types; `html` is
- * the HTML elements; `processing` is the expressions and the response, outcome and template
- * processing rules.
- */
-export const vocabularies = {
-  asi: {
-    plain: [
-      "qti-area-map-entry",
-      "qti-area-mapping",
-      "qti-assessment-item",
-      "qti-associable-hotspot",
-      "qti-associate-interaction",
-      "qti-catalog-info",
-      "qti-choice-interaction",
-      "qti-companion-materials-info",
-      "qti-context-declaration",
-      "qti-correct-response",
-      "qti-default-value",
-      "qti-drawing-interaction",
-      "qti-end-attempt-interaction",
-      "qti-extended-text-interaction",
-      "qti-feedback-inline",
-      "qti-gap",
-      "qti-gap-img",
-      "qti-gap-match-interaction",
-      "qti-gap-text",
-      "qti-graphic-associate-interaction",
-      "qti-graphic-gap-match-interaction",
-      "qti-graphic-order-interaction",
-      "qti-hotspot-choice",
-      "qti-hotspot-interaction",
-      "qti-hottext",
-      "qti-hottext-interaction",
-      "qti-inline-choice",
-      "qti-inline-choice-interaction",
-      "qti-interpolation-table",
-      "qti-interpolation-table-entry",
-      "qti-item-body",
-      "qti-label",
-      "qti-map-entry",
-      "qti-mapping",
-      "qti-match-interaction",
-      "qti-match-table",
-      "qti-match-table-entry",
-      "qti-media-interaction",
-      "qti-modal-feedback",
-      "qti-order-interaction",
-      "qti-outcome-declaration",
-      "qti-position-object-interaction",
-      "qti-position-object-stage",
-      "qti-printed-variable",
-      "qti-prompt",
-      "qti-response-declaration",
-      "qti-response-processing",
-      "qti-select-point-interaction",
-      "qti-simple-associable-choice",
-      "qti-simple-choice",
-      "qti-simple-match-set",
-      "qti-slider-interaction",
-      "qti-stylesheet",
-      "qti-template-declaration",
-      "qti-text-entry-interaction",
-      "qti-upload-interaction",
-      "qti-value",
-    ],
-    typed: {
-      "qti-content-body.feedback": {
-        element: "qti-content-body",
-        type: "FeedbackContentBodyDType",
-      },
-      "qti-content-body.modal": {
-        element: "qti-content-body",
-        type: "FeedbackFlowContentBodyDType",
-      },
-      "qti-content-body.rubric": {
-        element: "qti-content-body",
-        type: "RubricBlockContentBodyDType",
-      },
-      "qti-content-body.rubricTemplate": {
-        element: "qti-content-body",
-        type: "RubricBlockTemplateBlockContentBodyDType",
-      },
-      "qti-content-body.template": {
-        element: "qti-content-body",
-        type: "TemplateBlockContentBodyDType",
-      },
-      "qti-feedback-block": { element: "qti-feedback-block", type: "FeedbackBlockDType" },
-      "qti-feedback-block.template": {
-        element: "qti-feedback-block",
-        type: "TemplateBlockFeedbackBlockDType",
-      },
-      "qti-rubric-block": { element: "qti-rubric-block", type: "RubricBlockDType" },
-      "qti-template-block": { element: "qti-template-block", type: "TemplateBlockDType" },
-      "qti-template-block.rubric": {
-        element: "qti-template-block",
-        type: "RubricBlockTemplateBlockDType",
-      },
-      "qti-template-inline": { element: "qti-template-inline", type: "TemplateInlineDType" },
-      "qti-template-inline.rubric": {
-        element: "qti-template-inline",
-        type: "RubricBlockTemplateInlineDType",
-      },
-    },
-  },
-  html: {
-    plain: [
-      "a",
-      "abbr",
-      "acronym",
-      "address",
-      "article",
-      "aside",
-      "audio",
-      "b",
-      "bdi",
-      "bdo",
-      "big",
-      "blockquote",
-      "br",
-      "caption",
-      "cite",
-      "code",
-      "col",
-      "colgroup",
-      "dd",
-      "details",
-      "dfn",
-      "div",
-      "dl",
-      "dt",
-      "em",
-      "figcaption",
-      "figure",
-      "footer",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "header",
-      "hr",
-      "i",
-      "img",
-      "kbd",
-      "label",
-      "li",
-      "nav",
-      "object",
-      "ol",
-      "p",
-      "param",
-      "picture",
-      "pre",
-      "q",
-      "rb",
-      "rp",
-      "rt",
-      "rtc",
-      "ruby",
-      "samp",
-      "section",
-      "small",
-      "source",
-      "span",
-      "strong",
-      "sub",
-      "summary",
-      "sup",
-      "table",
-      "tbody",
-      "td",
-      "template",
-      "tfoot",
-      "th",
-      "thead",
-      "tr",
-      "track",
-      "tt",
-      "ul",
-      "var",
-      "video",
-    ],
-    typed: {},
-  },
-  processing: {
-    plain: [
-      "qti-and",
-      "qti-any-n",
-      "qti-base-value",
-      "qti-container-size",
-      "qti-contains",
-      "qti-correct",
-      "qti-custom-operator",
-      "qti-default",
-      "qti-delete",
-      "qti-divide",
-      "qti-duration-gte",
-      "qti-duration-lt",
-      "qti-equal",
-      "qti-equal-rounded",
-      "qti-exit-response",
-      "qti-exit-template",
-      "qti-exit-test",
-      "qti-field-value",
-      "qti-gcd",
-      "qti-gt",
-      "qti-gte",
-      "qti-index",
-      "qti-inside",
-      "qti-integer-divide",
-      "qti-integer-modulus",
-      "qti-integer-to-float",
-      "qti-is-null",
-      "qti-lcm",
-      "qti-lookup-outcome-value",
-      "qti-lt",
-      "qti-lte",
-      "qti-map-response",
-      "qti-map-response-point",
-      "qti-match",
-      "qti-math-constant",
-      "qti-math-operator",
-      "qti-max",
-      "qti-member",
-      "qti-min",
-      "qti-multiple",
-      "qti-not",
-      "qti-null",
-      "qti-number-correct",
-      "qti-number-incorrect",
-      "qti-number-presented",
-      "qti-number-responded",
-      "qti-number-selected",
-      "qti-or",
-      "qti-ordered",
-      "qti-outcome-condition",
-      "qti-outcome-else",
-      "qti-outcome-else-if",
-      "qti-outcome-if",
-      "qti-outcome-maximum",
-      "qti-outcome-minimum",
-      "qti-outcome-processing",
-      "qti-outcome-processing-fragment",
-      "qti-pattern-match",
-      "qti-power",
-      "qti-product",
-      "qti-random",
-      "qti-random-float",
-      "qti-random-integer",
-      "qti-repeat",
-      "qti-response-condition",
-      "qti-response-else",
-      "qti-response-else-if",
-      "qti-response-if",
-      "qti-response-processing-fragment",
-      "qti-round",
-      "qti-round-to",
-      "qti-set-correct-response",
-      "qti-set-default-value",
-      "qti-set-outcome-value",
-      "qti-set-template-value",
-      "qti-stats-operator",
-      "qti-string-match",
-      "qti-substring",
-      "qti-subtract",
-      "qti-sum",
-      "qti-template-condition",
-      "qti-template-constraint",
-      "qti-template-else",
-      "qti-template-else-if",
-      "qti-template-if",
-      "qti-template-processing",
-      "qti-test-variables",
-      "qti-truncate",
-      "qti-variable",
-    ],
-    typed: {},
-  },
-} as const satisfies { readonly [Name in Leaf]: Vocabulary };
-
-/**
- * What the inventory records for one kind handle: its kind, its content as read and its content
- * class, and its attributes.
- */
-export interface Entry extends KindSpec, ContentReading {
-  readonly attributes: readonly AttributeRow[];
-  readonly content: Content;
-}
-
-/**
  * The one type an element is declared with.
  *
- * Public, and stable while the vocabularies are derived: a vocabulary's derivation reads its plain
- * handles' types with it before it calls {@link entryOf}.
+ * Public: the operator arity reading ({@link arityOf}) finds each expression kind's type with it.
  *
  * @param schema - The schema the element is declared in.
  * @param element - The element name.
@@ -2135,90 +1517,6 @@ export const soleTypeOf = (
     onSome: (type) => Result.succeed(type),
   });
 };
-
-/**
- * Read one kind's inventory entry from its complex type: the type's attributes, content and
- * content class, by the reading rules of the module comment.
- *
- * Public, and stable while the vocabularies are derived: a vocabulary whose kinds have anonymous
- * types reads its entries with it.
- *
- * @param schema - The schema the type is in.
- * @param kind - The kind's handle and element, and the name the entry records for its type.
- * @param complexType - The `xs:complexType` element, named or anonymous.
- * @returns The entry, or an {@link XsdReadingError} for a shape the reading rules do not cover.
- */
-export const entryOfType = (
-  schema: XsdSchema,
-  kind: KindSpec,
-  complexType: Element,
-): Result.Result<Entry, XsdReadingError> =>
-  Result.gen(function* entryOfTypeBody() {
-    const attributes: AttributeRow[] = [];
-
-    for (const declaration of yield* attributesOf(schema, complexType)) {
-      attributes.push(yield* attributeRow(schema, declaration));
-    }
-
-    const reading = yield* contentOf(schema, complexType);
-
-    return {
-      ...kind,
-      ...reading,
-      attributes,
-      content: yield* contentClassOf(schema, complexType, reading),
-    };
-  });
-
-/**
- * Read one kind's inventory entry: its type's attributes, content and content class, by the reading
- * rules of the module comment.
- *
- * Public, and stable while the vocabularies are derived: every vocabulary whose kinds have named
- * complex types reads its entries with it.
- *
- * @param schema - The schema the kind's type is in.
- * @param kind - The kind's handle, element and type; `type` names a top-level complex type of the
- *   schema.
- * @returns The entry, or an {@link XsdReadingError} when the type is not declared or has a shape
- *   the reading rules do not cover.
- */
-export const entryOf = (schema: XsdSchema, kind: KindSpec): Result.Result<Entry, XsdReadingError> =>
-  Result.flatMap(
-    requireComponent(schema, schema.complexTypes, "complexType", kind.type),
-    (complexType) => entryOfType(schema, kind, complexType),
-  );
-
-/**
- * Read a vocabulary's entries.
- *
- * @param schema - The ASI 3.0.1 schema.
- * @param leaf - The vocabulary.
- * @returns Its entries in handle order.
- */
-export const entriesOf = (
-  schema: XsdSchema,
-  leaf: Leaf,
-): Result.Result<readonly Entry[], XsdReadingError> =>
-  Result.gen(function* entriesOfBody() {
-    const { plain, typed } = vocabularies[leaf];
-    const entries: Entry[] = [];
-
-    for (const handle of plain) {
-      const type = yield* soleTypeOf(schema, handle);
-
-      entries.push(yield* entryOf(schema, { element: handle, handle, type }));
-    }
-
-    for (const [handle, { element, type }] of Object.entries(typed)) {
-      entries.push(yield* entryOf(schema, { element, handle, type }));
-    }
-
-    return Arr.sort(
-      entries,
-      Order.mapInput(Order.String, (entry: Entry) => entry.handle),
-    );
-  });
 
 /**
  * A schema read from a pinned XSD and the pinned XSDs it includes: every document, by its path in

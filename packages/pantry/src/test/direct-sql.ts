@@ -115,7 +115,7 @@ export interface Insert {
  * @param table - The table.
  * @returns The columns, in order, none for a table the schema does not hold.
  */
-const writtenColumnsOf = (client: Client, table: string) =>
+export const writtenColumnsOf = (client: Client, table: string) =>
   rowsOf<{ readonly comment: string | null; readonly name: string }>(
     client,
     `SELECT a.attname AS name, pg_catalog.col_description(a.attrelid, a.attnum) AS comment
@@ -305,25 +305,43 @@ export interface Read {
 }
 
 /**
- * Insert a case's rows, in order, as the author role, every deferrable foreign key deferred, then
- * set the given ones immediate, read what the case reads, and roll back: the server's verdict on
- * the rows by their own CHECKs, keys, domains and non-deferrable foreign keys, and by those foreign
- * keys, with the rows each read returns. Each run of one table's rows is one statement, whose
- * non-deferrable foreign keys PostgreSQL judges at its end, so the rows of a run may come in any
- * order among themselves (a tree's successor before its predecessor among them).
+ * A stored row a case removes before it writes, by its key's columns: the row a variant of it
+ * replaces.
+ */
+export interface Removal {
+  readonly key: Readonly<Record<string, string | number | boolean>>;
+  readonly table: string;
+}
+
+/**
+ * One case of a direct writer: the stored rows it removes, the rows it writes, the deferrable
+ * foreign keys it sets immediate once they are in, by name, and the statements it reads back. A
+ * case that removes, sets or reads nothing states none.
+ */
+export interface Case {
+  readonly immediate?: readonly string[];
+  readonly inserts: readonly Insert[];
+  readonly reads?: readonly Read[];
+  readonly removed?: readonly Removal[];
+}
+
+/**
+ * Judge a case as the author role, every deferrable foreign key deferred: remove its stored rows,
+ * insert its rows in order, set its foreign keys immediate, read what it reads, and roll back. The
+ * verdict is the server's on the rows by their own CHECKs, keys, domains and non-deferrable foreign
+ * keys, and by those foreign keys, with the rows each read returns. Each run of one table's rows is
+ * one statement, whose non-deferrable foreign keys PostgreSQL judges at its end, so the rows of a
+ * run may come in any order among themselves (a tree's successor before its predecessor among
+ * them).
  *
  * @param client - The session.
- * @param inserts - The rows, each with its table.
- * @param immediate - The deferrable foreign keys to check once the rows are in, by name.
- * @param reads - The statements the case reads, none for a case that reads nothing.
+ * @param of - The case.
  * @returns The server's error, or none when the rows' own laws and those keys accept them, and each
  *   read's rows, none where the server refused; fails with any other failure.
  */
-export const judgedReading = (
+export const judgedCase = (
   client: Client,
-  inserts: readonly Insert[],
-  immediate: readonly string[],
-  reads: readonly Read[],
+  { immediate = [], inserts, reads = [], removed = [] }: Case,
 ) =>
   Effect.gen(function* insertDeferred() {
     const runs = Arr.isReadonlyArrayNonEmpty(inserts)
@@ -335,6 +353,15 @@ export const judgedReading = (
     const outcome = yield* Effect.gen(function* statementsInOrder() {
       yield* rowsOf(client, `SET ROLE ${authorRole}`);
       yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
+      for (const { key, table } of removed) {
+        const columns = Object.keys(key);
+        yield* rowsOf(
+          client,
+          `DELETE FROM ${qtiSchema}.${table} WHERE ${columns.map((name, at) => `"${name}" = $${String(at + 1)}`).join(" AND ")}`,
+          Object.values(key),
+        );
+      }
+
       for (const { text, values } of statements) {
         yield* rowsOf(client, text, values);
       }
@@ -358,7 +385,7 @@ export const judgedReading = (
   });
 
 /**
- * The verdict of a case that reads nothing back ({@link judgedReading}).
+ * The verdict of a case that removes and reads nothing ({@link judgedCase}).
  *
  * @param client - The session.
  * @param inserts - The rows, each with its table.
@@ -370,7 +397,7 @@ export const judged = (
   client: Client,
   inserts: readonly Insert[],
   immediate: readonly string[] = [],
-) => judgedReading(client, inserts, immediate, []).pipe(Effect.map(({ refused }) => refused));
+) => judgedCase(client, { immediate, inserts }).pipe(Effect.map(({ refused }) => refused));
 
 /**
  * Assert a direct writer's verdict: refused with the SQLSTATE and the constraint named, or

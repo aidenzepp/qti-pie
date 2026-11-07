@@ -546,13 +546,14 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   enumerates, which the attribute's value domain states (`attribute-lexical`), and nothing here.
  * - **P2 `root-type-reverse` ("RootOfType"):** a document's (resource type, root kind) is a row of
  *   the set `RootOfType`, or it is the manifest, of type `none` (an included fragment's type holds
- *   every kind an include stands for, spec reading 114); every document-typed resource href's path
- *   is a document of that type; and every document but the manifest is one a resource names, of the
- *   type it names.
+ *   every kind an include stands for, spec reading 114); and every document but the manifest is one
+ *   a resource names, of the type it names.
  * - **P3 `file-listed` ("File listed"), `href-listed` ("Href listed") and `entry-kind` ("Document
  *   entry"):** every entry but the manifest is the resolved path of a file; a resource's href names
  *   the file one of its own files names, compared by resolved path in the package and as written
- *   outside it (reading 102); every document-typed href resolves in the package, to an entry.
+ *   outside it (reading 102); every document-typed href resolves in the package, to an entry, and
+ *   names the one document there, of the href's type (reading 93), so a path with no entry, or one
+ *   listed under two document types, is refused here and never under `root-type-reverse`.
  * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's.
  * - **C17 ("E1 derived"):** a resource's type code is the one its lexical form spells, or `none`; a
  *   path resolved in the package holds no dot segment ({@link resolvedPathPattern}); a reference is
@@ -590,6 +591,10 @@ export const packageLawsByName = {
       h.or(h.not(h.in(h.type, documentTypes)), h.eq(h.scope, "entry")),
     ),
     contained(on(documentHrefs, "package", "path"), on(Entry, "package", "path")),
+    contained(
+      on(documentHrefs, "package", "path", "type"),
+      on(Document, "package", "path", "resourceType"),
+    ),
     key(on(stimulusDocuments, "package", "path")),
   ],
   "DocumentId key": [
@@ -730,10 +735,6 @@ export const packageLawsByName = {
   RootOfType: [
     namedHrefFamily,
     check("RootOfType", NamedHref, (h) => h.gt(h.names, 0n)),
-    contained(
-      on(documentHrefs, "package", "path", "type"),
-      on(Document, "package", "path", "resourceType"),
-    ),
     contained(
       on(
         select(Document, (d) => d.ne(d.resourceType, "none")),

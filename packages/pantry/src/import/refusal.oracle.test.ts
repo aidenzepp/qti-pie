@@ -1014,7 +1014,362 @@ const carriedOf =
 const carriedText = ({ axis, laws }: Carried): string =>
   `${axis}: ${laws.map(lawIdentity).join(" & ")}`;
 
+/**
+ * Each adjacent pair of {@link precedence}, the rule a refusal names first and the one after it,
+ * with the reading or source that orders them: the spec's tiers (the precedence's own comment, the
+ * plan's §1.3 to §1.7) between tiers, and within one the dependency or the section order that puts
+ * the one before the other. A data mutant of the precedence, two rules swapped, breaks its pair
+ * here, where no differential can see it: no one cause breaks both rules of a pair such as
+ * `binding-declared` and `binding-fit`, since BindingFit reads the declaration Binding declared
+ * proves exists.
+ */
+const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
+  [
+    "document-key",
+    "idref-target",
+    "reading 101: an IDREF names an ID, and an ID two elements purport is the cause an unresolved reference follows from",
+  ],
+  [
+    "idref-target",
+    "table-headers",
+    "reading 126: a cell's headers are IDREFs held to a th of its own table, Idref target's narrower case",
+  ],
+  [
+    "table-headers",
+    "label-tool",
+    "O1 (plan §1.7): references before a label's tools (reading 128)",
+  ],
+  [
+    "label-tool",
+    "document-lang",
+    "O1 (plan §1.7): an element's own identity before its document's language (R26)",
+  ],
+  ["document-lang", "declaration-key", "the tiers: O1 before O2 (plan §1.7)"],
+  [
+    "declaration-key",
+    "declaration-reserved",
+    "O2 (plan §1.7): one declaration per identifier before what the identifier may be (reading 72)",
+  ],
+  [
+    "declaration-reserved",
+    "reserved-type",
+    "reading 72: a reserved name is refused before a reserved variable's type is judged",
+  ],
+  [
+    "reserved-type",
+    "declaration-type",
+    "O2: a built-in variable's fixed type before a declared variable's (§5.42)",
+  ],
+  [
+    "declaration-type",
+    "value-cardinality",
+    "O2: a declaration's type before its values' count (§5.42, §5.125)",
+  ],
+  ["value-cardinality", "typed-copy", "O2: a value set's count before each value's lexical form"],
+  [
+    "typed-copy",
+    "mastery-range",
+    "O2: each value's form before the range its number is read in (§5.107)",
+  ],
+  ["mastery-range", "binding-declared", "the tiers: O2 before O3 (plan §1.7)"],
+  [
+    "binding-declared",
+    "binding-fit",
+    "readings 75 and 92: BindingFit reads the declaration Binding declared proves exists, so the undeclared binding is the cause",
+  ],
+  [
+    "binding-fit",
+    "record-binding-fit",
+    "reading 92: a record response's fit is the record arm of the same binding, read after its base type and cardinality",
+  ],
+  [
+    "record-binding-fit",
+    "binding-unique",
+    "reading 92: a binding's fit before the variable's one binding",
+  ],
+  ["binding-unique", "choice-bounds", "O3 (plan §1.7): bindings before choice counts (reading 18)"],
+  [
+    "choice-bounds",
+    "choice-identifier-distinct",
+    "O3: a choice's count before its identifiers (reading 104)",
+  ],
+  [
+    "choice-identifier-distinct",
+    "hotspot-default",
+    "O3: the choices' identifiers before a default hotspot's place (reading 80)",
+  ],
+  [
+    "hotspot-default",
+    "feedback-ref",
+    "O3: an interaction's own content before the references it makes (§2.4)",
+  ],
+  [
+    "feedback-ref",
+    "template-ref",
+    "O3's references in the plan's order: feedback (§5.49), then template (§5.169)",
+  ],
+  [
+    "template-ref",
+    "printed-variable-ref",
+    "O3's references in the plan's order: template, then printed variable (§7.30)",
+  ],
+  [
+    "printed-variable-ref",
+    "context-variable-ref",
+    "O3's references in the plan's order: printed variable, then context variable (§5.39)",
+  ],
+  [
+    "context-variable-ref",
+    "slider-bounds",
+    "O3: references before an interaction's numeric bounds (§5.137)",
+  ],
+  [
+    "slider-bounds",
+    "max-strings-required",
+    "O3: a slider's bounds before an extended text's string count (reading 92's cardinality kinds)",
+  ],
+  ["max-strings-required", "aria-value-range", "O3: QTI's counts before ARIA's range (reading 91)"],
+  [
+    "aria-value-range",
+    "varref-copy",
+    "O3: an attribute's own range before a copied variable reference (reading 48)",
+  ],
+  [
+    "varref-copy",
+    "adaptive-feedback",
+    "O3: a reference's copy before the item's adaptive flag (Q5.09)",
+  ],
+  ["adaptive-feedback", "source-srcset", "the tiers: O3 before the HTML content (plan §1.7)"],
+  ["source-srcset", "source-src", "reading 124: a picture's source, then a media element's"],
+  ["source-src", "track-srclang", "readings 124, then 125"],
+  ["track-srclang", "q-punctuation", "readings 125, then 127"],
+  ["q-punctuation", "P2", "the tiers: the HTML content before O4 (plan §1.7)"],
+  ["P2", "P8", "O4: an operator's arity (P2, §2.11.3) before the variables it reads (P8)"],
+  ["P8", "P10", "O4: a variable's declaration before a rounding operator's figures (reading 119)"],
+  ["P10", "P36", "readings 119, then 121: the rounding figures before the tolerance"],
+  [
+    "P36",
+    "prefixed-ref",
+    "O4: an operator's own attributes before a test-level reference's reading (readings 48 and 88)",
+  ],
+  [
+    "prefixed-ref",
+    "variable-kind",
+    "readings 48 and 88: which variable a reference names before what kind it is",
+  ],
+  ["variable-kind", "P20", "O4: a reference's kind before the old checker's rules (Q5.10)"],
+  ["P20", "P21", "the old processing checker's numbering (Q5.10)"],
+  ["P21", "P22", "the old processing checker's numbering (Q5.10)"],
+  ["P22", "P23", "the old processing checker's numbering (Q5.10)"],
+  ["P23", "P24", "the old processing checker's numbering (Q5.10)"],
+  ["P24", "P25", "the old processing checker's numbering (Q5.10)"],
+  ["P25", "P26", "the old processing checker's numbering (Q5.10)"],
+  ["P26", "P27", "the old processing checker's numbering (Q5.10)"],
+  ["P27", "P29", "the old processing checker's numbering (Q5.10)"],
+  ["P29", "item-duration", "O4: the checker's rules before an item's duration (reading 29)"],
+  ["item-duration", "mapping-base-type", "the tiers: O4 before O5 (plan §1.7)"],
+  [
+    "mapping-base-type",
+    "lookup-cardinality",
+    "O5 (plan §1.7): a mapping's base type (§5.5) before a lookup table's cardinality",
+  ],
+  ["lookup-cardinality", "map-key-unique", "O5: a table's declaration before its keys"],
+  ["map-key-unique", "lom-identifier", "the tiers: O5 before O6 (plan §1.7)"],
+  ["lom-identifier", "lom-title", "reading 62: the record's identifier before its title"],
+  ["lom-title", "lom-learning-resource-type", "O6: readings 62, then 122"],
+  ["lom-learning-resource-type", "selection-bounds", "the tiers: O6 before O7 (plan §1.7)"],
+  [
+    "selection-bounds",
+    "selection-required",
+    "reading 79: a selection's bound before its required parts (§4.2.2)",
+  ],
+  [
+    "selection-required",
+    "structure-identifier",
+    "O7: a section's selection before its names (reading 86)",
+  ],
+  [
+    "structure-identifier",
+    "test-name-key",
+    "reading 86: one document's names before the assembly's",
+  ],
+  [
+    "test-name-key",
+    "section-identifier-target",
+    "O7: the assembly's names before what a section-identifier names (A61)",
+  ],
+  [
+    "section-identifier-target",
+    "branch-target",
+    "O7: a named section before a branch rule's target (reading 87)",
+  ],
+  [
+    "branch-target",
+    "branch-forward",
+    "reading 87: a branch rule names a target before the target must stand ahead of it",
+  ],
+  [
+    "branch-forward",
+    "stimulus-ref-key",
+    "O7: branch rules before an item ref's stimulus refs (§7.6.2)",
+  ],
+  [
+    "stimulus-ref-key",
+    "variable-mapping-target",
+    "O7: an item ref's stimulus refs before its variable mappings (reading 97)",
+  ],
+  [
+    "variable-mapping-target",
+    "variable-mapping-source",
+    "reading 97: a mapping's target before its source (A34)",
+  ],
+  [
+    "variable-mapping-source",
+    "template-default-target",
+    "O7: an item ref's mappings before its template defaults (A37)",
+  ],
+  [
+    "template-default-target",
+    "item-ref-target",
+    "O7: what an item ref sets before what it names (B2, B3)",
+  ],
+  [
+    "item-ref-target",
+    "stimulus-ref-target",
+    "O7: an item ref's target before a stimulus ref's (B5)",
+  ],
+  ["stimulus-ref-target", "include-target", "O7: refs before includes (reading 115)"],
+  [
+    "include-target",
+    "include-root",
+    "reading 115: an include names a document before its root is judged (reading 114)",
+  ],
+  [
+    "include-root",
+    "inclusion-cycle",
+    "readings 114, then 85: an include's target before the chain it closes",
+  ],
+  ["inclusion-cycle", "root-type-reverse", "the tiers: O7 before packaging's P1 to P4 (plan §1.6)"],
+  [
+    "root-type-reverse",
+    "entry-kind",
+    "P1 (plan §1.6): a resource's type (reading 93) before its document's entry",
+  ],
+  [
+    "entry-kind",
+    "file-listed",
+    "P2: a document's entry before the files a resource lists (reading 33)",
+  ],
+  ["file-listed", "file-exists", "P2: a listed file before the file it names exists"],
+  ["file-exists", "href-listed", "P3: a file's existence before a resource's href among its files"],
+  ["href-listed", "self-dependency", "P4: hrefs before dependencies (IMS Content Packaging 1.2)"],
+  ["self-dependency", "manifest-id-space", "P4: a dependency before the manifest's identifiers"],
+  ["manifest-id-space", "math-arity", "the tiers: packaging before the embedded languages"],
+  [
+    "math-arity",
+    "ssml-fragment",
+    "the embedded languages: reading 2 (MathML), then reading 3 (SSML)",
+  ],
+  [
+    "ssml-fragment",
+    "include-href",
+    "the embedded languages: SSML, then XInclude's href (reading 85)",
+  ],
+  ["include-href", "xsi-type", "the tiers: the embedded languages before XML Schema's assessment"],
+  [
+    "xsi-type",
+    "required-attribute",
+    "XML Schema's assessment: an element's governing type (reading 47) before the attributes it requires (AL3)",
+  ],
+  [
+    "required-attribute",
+    "attribute-count",
+    "AL3's required attributes before AL5's count (readings 41 and 43)",
+  ],
+  ["attribute-count", "attribute-lexical", "an attribute's count before its value's lexical form"],
+  ["attribute-lexical", "text-copy", "an attribute's form before an element's text (TextDomain)"],
+  [
+    "text-copy",
+    "attribute-admission",
+    "a governed value before whether its attribute is admitted at all (AL1), the assessment's most general",
+  ],
+  [
+    "attribute-admission",
+    "ancestry-ban",
+    "the tiers: XML Schema's assessment before the content model",
+  ],
+  [
+    "ancestry-ban",
+    "owner-copy",
+    "the content model: the ancestry bans (N6), then the nearest interaction (N8)",
+  ],
+  [
+    "owner-copy",
+    "ordering",
+    "the content model: the nearest interaction before the automaton's order (N5 Follow)",
+  ],
+  [
+    "ordering",
+    "child-set",
+    "a content-order law over a family law: the automaton's order before the counts it relaxes (N7)",
+  ],
+  [
+    "child-set",
+    "union-count",
+    "the content model: the counts the automaton relaxes, then a union's count",
+  ],
+  [
+    "union-count",
+    "admission",
+    "the content model: the family's end before admission, the most general (N5 admitted)",
+  ],
+  ["admission", "key-text-bound", "the tiers: the content model before the document layer"],
+  [
+    "key-text-bound",
+    "href-form",
+    "the document layer: its stated limits first, in limitRules' order, the key-text bound (reading 133) before the href form (reading 102)",
+  ],
+  [
+    "href-form",
+    "fragment-context",
+    "limitRules' order: the href form (reading 102), then the fragment's one context (reading 117)",
+  ],
+  [
+    "fragment-context",
+    "namespace-name",
+    "the document layer: its stated limits before its laws, the first a namespace name (reading 131)",
+  ],
+  [
+    "namespace-name",
+    "well-formedness",
+    "the document layer: foreign names before the reader's productions (XML 1.0)",
+  ],
+  [
+    "well-formedness",
+    "unmodeled-vocabulary",
+    "the document layer: a production's breach before a name no vocabulary models",
+  ],
+  ["unmodeled-vocabulary", "derived", "the document layer: names before the derived fields (E1)"],
+  [
+    "derived",
+    "reachability",
+    "the document layer: the derived fields before the tree itself (N2), the most general",
+  ],
+];
+
 describe("the precedence over the laws one native object carries", () => {
+  it("holds each adjacent pair of the precedence to the reading or source that orders it", () => {
+    // Oracle: the readings and the plan's tiers, pair by pair (precedencePairs). Bound: every
+    // adjacent pair of the 100 rules, so a swap of any two neighbours, or a rule moved or added,
+    // breaks a pair, and the message names it.
+    assert.deepStrictEqual(
+      precedencePairs.map(([earlier, later]) => `${earlier} before ${later}`),
+      precedence.slice(1).map((later, at) => `${precedence[at] ?? ""} before ${later}`),
+      "the precedence's order, pair by pair against the reading that orders each",
+    );
+    assert.isTrue(precedencePairs.every((pair) => pair[2].length > 0));
+  });
+
   it("resolves each planned axis whole to the rule the spec's order names", () => {
     for (const { label, laws, rule } of plannedAxes) {
       assert.isAbove(laws.length, 0, label);

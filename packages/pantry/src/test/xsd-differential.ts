@@ -780,7 +780,7 @@ export const generatedRecorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_TemplateBlock (§5.145, info.txt:44712 and info301.txt:65416: 'A qti-template-block must not contain any interactions, either directly or indirectly'); VD's ruling of 2026-11-07, its reading to come at schema slot 7",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateBlock (§5.145, info.txt:44712 and info301.txt:65416: 'A qti-template-block must not contain any interactions, either directly or indirectly'); VD's ruling of 2026-11-07, its reading to come at schema slot 7",
       why: "a template block holds no interaction at any depth; the XSD admits one its content's HTML holds",
     },
     rule: "ancestry-ban",
@@ -1092,7 +1092,7 @@ export const generatedRecorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ResponseIf (§2.5.1.2, ResponseIf and ResponseElseIf: 'An expression which must have an effective value of boolean'; §2.8.1.6, TemplateConstraint)",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_ResponseCondition_qti-response-if (§5.114.1, and §5.114.2 and §5.117 of the response branches, §5.99.1, §5.99.2 and §5.101 of the outcome branches, and §5.149.1, §5.149.2 and §5.154 of the template branches: each 'consists of an expression which must have an effective base-type of boolean and single cardinality'), and https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateConstraint (§5.150: 'A templateConstraint contains an expression which must have an effective base-type of boolean and single cardinality')",
       why: "a condition's expression is boolean and single; the XSD types no expression, so a dropped or swapped child leaves a condition of another type it accepts",
     },
     rule: "P21",
@@ -1103,8 +1103,8 @@ export const generatedRecorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 (§2.11.3, each operator's sub-expressions' base types and cardinalities)",
-      why: "each operator takes the operand types §2.11.3 states; the XSD admits any expression as any operand",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_ExpressionGroup (§6.9, ExpressionGroup: each operator's attribute states its sub-expressions' base types and cardinalities, as §6.9.33, qti-member, 'The first sub-expression must have single cardinality and the second must be a multiple or ordered container', and §6.9.21, qti-match, 'which must both have the same base-type and cardinality')",
+      why: "each operator takes the operand types §6.9 states; the XSD admits any expression as any operand",
     },
     rule: "P23",
   },

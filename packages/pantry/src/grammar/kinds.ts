@@ -312,6 +312,16 @@ export type KindRosters<Kind extends string, Name extends string> = Omit<
 >;
 
 /**
+ * `KindByNameUnder`: (namespace, local, parent) → kind, the relation {@link resolution} reads a
+ * name's kind from. Its kind payload is an id field over the `NodeKind` roster, so `closed` refuses
+ * a row whose kind is outside it, and a row's kind is a `Kind` by its type.
+ */
+export type KindByNameUnder<Kind extends string> = Closed<
+  readonly [IdField<"namespace", string>, IdField<"local", string>, IdField<"parent", string>],
+  readonly [IdField<"kind", Kind>]
+>;
+
+/**
  * Add name resolution to a composition's kinds: `KindByNameUnder`, (namespace, local, parent) →
  * kind, for every element kind each parent admits.
  *
@@ -333,20 +343,25 @@ export const resolution = <Kind extends string, Name extends string>(
 ): Result.Result<Kinds<Kind, Name>, ClosedRelationError> =>
   Result.gen(function* generateResolution() {
     const anyKind: Roster<string> = kinds.nodeKind;
+    // The child is read back from its `ElementName` row, whose key is a `NodeKind` handle, so each
+    // row's kind is a `Kind` by its type, as the payload below needs.
     const named = [
       ...new Map(
         admitted.flatMap(({ child, parent }) =>
           Option.toArray(kinds.elementName.lookup({ kind: child })).map(
-            ({ local, namespace }) =>
+            ({ kind, local, namespace }) =>
               [
-                `${namespace} ${local} ${parent} ${child}`,
-                { child, local, namespace, parent },
+                `${namespace} ${local} ${parent} ${kind}`,
+                { kind, local, namespace, parent },
               ] as const,
           ),
         ),
       ).values(),
     ];
-    const under = yield* closed({
+    // The payload ranges over the `NodeKind` roster itself, so a resolved kind is a `Kind` by
+    // construction and `resolve` needs no test of it. The annotation is the guard: a payload over
+    // a wider roster (`anyKind`) is no `KindByNameUnder<Kind>`, and `tsc` refuses it.
+    const under: KindByNameUnder<Kind> = yield* closed({
       key: [
         idField(
           "namespace",
@@ -356,21 +371,15 @@ export const resolution = <Kind extends string, Name extends string>(
         idField("parent", anyKind),
       ],
       name: "KindByNameUnder",
-      payload: [idField("kind", anyKind)],
-      rows: named.map(({ child, local, namespace, parent }) => ({
-        kind: child,
-        local,
-        namespace,
-        parent,
-      })),
+      payload: [idField("kind", kinds.nodeKind)],
+      rows: named,
     });
 
     return {
       ...kinds,
       resolve: (namespaceName: string, localName: string, parentKind: Kind) =>
-        under.lookup({ local: localName, namespace: namespaceName, parent: parentKind }).pipe(
-          Option.map((row) => row.kind),
-          Option.filter((held): held is Kind => kinds.nodeKind.has(held)),
-        ),
+        under
+          .lookup({ local: localName, namespace: namespaceName, parent: parentKind })
+          .pipe(Option.map(({ kind }) => kind)),
     };
   });

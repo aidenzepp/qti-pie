@@ -15,11 +15,13 @@
  * entry of the package through its `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`, spec
  * readings 102 and 103).
  *
- * **The assembled test** (RG3, reading 5). {@link Instance} is a tree: its root is a document of
- * a test or a section, and each instance has exactly one child per site of its document, the
- * instance of the section document that site names. A chain of section refs and includes that
- * returns to a document already on it would need infinitely many instances, so no finite tree
- * holds it, and the count law `children = sites` refuses it (reading 85). Under a test's root,
+ * **The assembled test** (RG3, reading 5). {@link Instance} is a tree: its root is a document that
+ * heads an assembly, every assembled document no include splices in place ({@link splicingParents},
+ * reading 117), and each instance has exactly one child per site of its document, the instance of
+ * the document that site names. A chain of section refs and includes that returns to a document
+ * already on it would need infinitely many instances, so no finite tree holds it: the count law
+ * `children = sites` refuses one a head reaches, and `TestDocument.instances` above 0 one no head
+ * reaches, whose documents no assembly places (reading 85). Under a test's root,
  * each instance carries one {@link InstanceName} per name of its document, and their projection
  * {@link AssembledName} holds each written element once per test, so a section document placed
  * twice names nothing twice, and the key on `(assembly, identifier)` is reading 86's one namespace.
@@ -157,10 +159,29 @@ export const stimulusRefKind = "qti-assessment-stimulus-ref" satisfies Kind;
 export const sessionVariables = ["completionStatus", "numAttempts", "duration"] as const;
 
 /**
- * The root kinds of the documents an assembly is rooted at: a test, and a section document, whose
- * own chain of inclusions reading 85 refuses as the oracle does, over every listed document.
+ * The root kinds whose documents are in an assembly whether or not they hold a site: a test, and a
+ * section document, whose own chain of inclusions reading 85 refuses as the oracle does, over every
+ * listed document. Each keeps its names, sections and branch rules (`TestDocument`); which
+ * documents head an assembly is {@link splicingParents}'s.
  */
 export const assembledRoots = [testKind, sectionKind] as const satisfies readonly Kind[];
+
+/**
+ * The include parents whose include splices its fragment in place, the one statement of which
+ * documents head an assembly: a document heads its own unless an include under one of these places
+ * it, since an included fragment is judged in place, as its merged document holds it, and not alone
+ * (spec reading 117). Every parent the information model gives an Include is one but a section,
+ * whose includes follow a section document's rule (reading 117: reading 86's rule that a section
+ * document a test places twice is written once "is the information model's for section documents in
+ * a test's assembly ... and includes in a section follow it"). A section's include stands for an
+ * item ref, a section or a section ref alone (`IncludeRoot`), and no other parent's include stands
+ * for any of them.
+ *
+ * The schema's heads ({@link inclusionLaws}), the import's (`#pantry/import/overlays/tests.ts`
+ * `assembledRowsOf`) and the law oracle's documents judged in place (`#pantry/test/oracle.ts`)
+ * read this list, and nothing else decides a head.
+ */
+export const splicingParents = includeParentKinds.filter((kind) => kind !== sectionKind);
 
 /**
  * The kinds whose identifiers are one namespace across an assembled test (reading 86).
@@ -249,11 +270,13 @@ export const collapsedPattern =
  *
  * - **the host's:** `node`, `package`, `path` and `rootKind` (its `Document` row's);
  * - **drawn:** `sites`, `names` and `rules`, the counts of {@link siteFamily}, {@link nameFamily} and
- *   {@link ruleFamily}.
+ *   {@link ruleFamily}; and `instances`, its placements in every assembly, the count of
+ *   {@link documentInstanceFamily}, which "Inclusion cycle" holds above 0.
  */
 export const TestDocument = relation(
   "TestDocument",
   {
+    instances: drawn(natural),
     names: drawn(natural),
     node: uuid,
     package: uuid,
@@ -895,6 +918,28 @@ export const contextFold = fold(
 );
 
 /**
+ * The sites that splice their target in place: each include under one of {@link splicingParents}.
+ */
+const splicingSites = select(SiteTarget, (s) =>
+  s.and(s.eq(s.kind, includeKind), s.in(s.parentKind, splicingParents)),
+);
+
+/**
+ * The includes that splice each document in place, counted into `Document.spliced`, 0 exactly where
+ * the document heads an assembly (spec reading 117, {@link splicingParents}). "No include splices
+ * it" is an anti-join, which no grizzle statement is: a statement is conditioned on no row being
+ * absent, and there are no outer joins (grizzle's README, Limits; the absence limit lane VD
+ * records). The count stands in for it as a fold over keyed `SiteTarget` rows, each a site that
+ * exists, so 0 is a count of none and no sentinel.
+ */
+export const splicedFold = fold(
+  siteTargetFamily,
+  Monoid.count,
+  on(splicingSites, "target"),
+  on(Document, "node", "spliced"),
+);
+
+/**
  * Each document's names, counted by `TestDocument.names`.
  */
 export const nameFamily = counted(on(Named, "document"), fin(TestDocument, "names"));
@@ -915,6 +960,14 @@ export const sectionFamily = counted(on(SectionMember, "section"), fin(Section, 
 export const instanceTree = tree(on(Instance, "parent", "at"), fin(Instance, "children"), {
   root: "assembly",
 });
+
+/**
+ * Each assembled document's placements in every assembly, counted by `TestDocument.instances`.
+ */
+export const documentInstanceFamily = counted(
+  on(Instance, "document"),
+  fin(TestDocument, "instances"),
+);
 
 /**
  * Each instance's names, counted by `Instance.names`.
@@ -947,6 +1000,15 @@ const includes = select(Node, (n) =>
  * instance (spec reading 117).
  */
 const assembledDocuments = select(Document, (d) => d.eq(d.assembled, true));
+
+/**
+ * The documents that head an assembly: each assembled document no include splices in place
+ * ({@link splicedFold}), so an included fragment is judged where it is included and not alone
+ * (spec reading 117), and every other assembled document, a test, a section, an item, a stimulus,
+ * a response processing template or a fragment no include splices, is judged as its own merged
+ * document.
+ */
+const headDocuments = select(Document, (d) => d.and(d.eq(d.assembled, true), d.eq(d.spliced, 0n)));
 
 /**
  * The instances of an item's assembly, each of which places its document's bindings (Q5.09's
@@ -1448,6 +1510,7 @@ export const testOverlayLaws = [
   contained(on(includes, "id"), on(Site, "node")),
   siteTargetFamily,
   contextFold,
+  splicedFold,
   check("Fragment_context", SiteTarget, (s) =>
     s.or(
       s.and(s.eq(s.nearestKind, "document"), s.eq(s.targetNearestKind, "document")),
@@ -1703,10 +1766,20 @@ const shuffled = (b: ResolutionRow) =>
 
 /**
  * The statements of reading 85's law, "Inclusion cycle": the instance tree, each instance's copy
- * of its parent's scope and of its site, one child per site and one root per document, and the
- * count that makes a chain returning to a document on it unrepresentable, the deferred foreign key
- * `Instance(document, rootKind, children) → TestDocument(node, rootKind, sites)`. Its `E1_derived`
- * pins the root's fields and derives a member's scope.
+ * of its parent's scope and of its site, one child per site, one root per head and none for any
+ * other document, and two counts that make a chain returning to a document on it unrepresentable.
+ *
+ * - **A chain a head reaches:** the deferred foreign key `Instance(document, rootKind, children) →
+ *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site under it.
+ * - **A chain no head reaches**, such as two fragments each of which includes the other, which no
+ *   head places, and any fragment only they place: `TestDocument.instances` above 0, since none of
+ *   them is placed in any assembly. Its converse, every `Instance` row's document an assembled
+ *   one's, is the foreign key above; the containment the other way, `TestDocument(node, rootKind,
+ *   sites) ⊆ Instance(document, rootKind, children)`, has no key of `Instance` in its target's
+ *   projection, which grizzle refuses, so the count states it.
+ *
+ * The heads are {@link splicingParents}'s, by `Document.spliced`, mirrored with the roots both
+ * ways. Its `E1_derived` pins the root's fields and derives a member's scope.
  */
 export const inclusionLaws = [
   instanceTree,
@@ -1742,7 +1815,9 @@ export const inclusionLaws = [
     on(TestDocument, "node", "rootKind", "sites"),
   ),
   key(on(instanceRoots, "document")),
-  contained(on(TestDocument, "node"), on(instanceRoots, "document")),
+  mirrors(on(headDocuments, "node"), on(instanceRoots, "document")),
+  documentInstanceFamily,
+  check("Inclusion_cycle", TestDocument, (d) => d.gt(d.instances, 0n)),
   mirrors(on(assembledDocuments, "node"), on(TestDocument, "node")),
   contained(
     on(Instance, "document", "ids", "idrefTargets", "choices", "hottexts"),

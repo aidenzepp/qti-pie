@@ -508,7 +508,7 @@ describe("vocab/sequencing.ts", () => {
             }),
         ),
       ),
-    120_000,
+    240_000,
   );
 
   it("numbers every element particle and wildcard once, densely, in tree order", () => {

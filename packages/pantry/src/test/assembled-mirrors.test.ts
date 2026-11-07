@@ -1,223 +1,235 @@
 /**
- * Both sides of every `mirrors` the schema states, held over the rows the import writes for every
- * shape of assembled document: a test, a section, an item an include places into, a fragment, and
- * a fragment of response rules (spec readings 5 and 117). Each side's rows are read from the
- * program's own keyed sets, its selection evaluated on the host from the predicate grizzle keeps
- * for it (`#pantry/test/key-copies.ts` `mirrorsOf`), and each side's projection must be the
- * other's, as the two foreign keys a `mirrors` installs require.
+ * Every law of the schema the host can judge, held over the rows the import writes for the
+ * every-relation package: each containment and each half of a `mirrors`, each key and each check,
+ * read from the statements grizzle keeps (`#pantry/test/key-copies.ts` `judgedLaws`), over the rows
+ * as the database holds them, every value grizzle fills that the statements give restored
+ * (`#pantry/test/host-judge.ts`). The law oracle accepts the package, so no law may break.
  *
- * Every assembled document has a `TestDocument` row, since its instances need one, but only a test
- * or a section owns test references, so `ReferenceDocument` mirrors the test-rooted ones alone. The
- * every-relation package holds each shape once, and the law oracle accepts it.
+ * Its assembled documents are a test, a section, two items with includes, a fragment of content
+ * and a fragment of response rules (spec readings 5 and 117). A fragment an item's include splices
+ * heads no assembly of its own (`#pantry/qti/tests.ts` `splicingParents`), so its IDREFs resolve
+ * among the item's IDs alone, and the heads are mirrored with the assemblies' roots both ways.
+ *
+ * A law the host cannot judge reads a value it does not restore, and {@link unjudged} names each
+ * such value with why. That list is exact: a value the host comes to hold fails the test until its
+ * entry is removed, and a law skipped for a value the list does not name fails it until the value
+ * is named.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Formatter, Option, Predicate, Schema } from "effect";
+import { Effect, Formatter, Predicate } from "effect";
+import { lawIdentity } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { mirrorsOf } from "#pantry/test/key-copies.ts";
-import type { Datum, MirrorSide } from "#pantry/test/key-copies.ts";
+import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
+import type { HostRow, HostRows } from "#pantry/test/host-judge.ts";
+import { judgedLaws } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
 /**
- * A row as the host judges it: its fields' values, each a datum of `#pantry/test/key-copies.ts`.
- */
-type Row = Readonly<Record<string, Datum>>;
-
-/**
- * Whether a value is a datum the host judges: a text, a natural, a truth value or a set of handles.
+ * A term of a selection or a check the host's evaluator does not read.
  *
- * @param value - The value.
- * @returns Whether it is a datum.
+ * @param term - The term's kind.
+ * @returns Why a law that holds one is not judged.
  */
-const isDatum = (value: unknown): value is Datum =>
-  Predicate.isString(value) ||
-  Predicate.isBigInt(value) ||
-  Predicate.isBoolean(value) ||
-  (value instanceof Set && [...value].every(Predicate.isString));
+const unreadTerm = (term: string): string =>
+  `its predicate holds a Compute.${term} term, which the host's evaluator does not read`;
 
 /**
- * A written row's fields, each read as a datum or not at all.
+ * Why a tree root's copy along the tree's axis is absent: grizzle writes its start value there,
+ * which it keeps in the field's builder and exports no reader of.
  */
-const WrittenRow = Schema.Record(Schema.String, Schema.Unknown);
+const rootCopy =
+  "a tree root's copy along its own axis is the field's start value, which grizzle keeps in the field's builder and exports no reader of";
 
 /**
- * A relation's written rows, keyed by the text of their key.
+ * Every value the host does not restore that a law over the every-relation package's rows reads,
+ * as `Relation.field` or `Relation: a <kind> term`, with why.
  */
-const WrittenMap = Schema.ReadonlyMap(Schema.String, WrittenRow);
+const unjudged = {
+  "AriaRange: a when term": unreadTerm("when"),
+  "AssembledReference: a base term": unreadTerm("base"),
+  "CountBound: a base term": unreadTerm("base"),
+  "CountBound: a when term": unreadTerm("when"),
+  "Expression.leadCardinalities":
+    "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
+  "Expression.operandBaseTypes":
+    "a Monoid.or fold over Operand.baseTypeBit, a field PostgreSQL generates",
+  "Expression.operandCardinalities":
+    "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
+  "Expression.tailBaseTypes":
+    "a Monoid.or fold over Operand.baseTypeBit, a field PostgreSQL generates",
+  "Expression.tailCardinalities":
+    "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
+  "Expression: a between term": unreadTerm("between"),
+  "Idref: a base term": unreadTerm("base"),
+  "MapKeyFloat.value": "a float, which no datum of the host's evaluator is",
+  "MapKeyFloat: a cast term": unreadTerm("cast"),
+  "Node.elements":
+    "a tree root's running value of the element fold, the start value grizzle keeps in the field's builder",
+  "Node.lastState": "a copy along a last axis, `pred(children)`, which the host does not restore",
+  "Node.parentAncestry": rootCopy,
+  "Node.parentGoverns": rootCopy,
+  "Node.parentKind": rootCopy,
+  "Node.parentNearest": rootCopy,
+  "Node.parentNearestKind": rootCopy,
+  "Node.parentParentKind": rootCopy,
+  "Node.was": "a copy along a predecessor axis, `pred(at)`, which the host does not restore",
+  "Node: a between term": unreadTerm("between"),
+  "OpenElementName: a literal term": "its predicate holds a literal of no datum's type",
+  "OutcomeRange: a when term": unreadTerm("when"),
+  "Quotation: a base term": unreadTerm("base"),
+  "Reference: a base term": unreadTerm("base"),
+  "Rounding: a when term": unreadTerm("when"),
+  "SectionSelection.select": "a field PostgreSQL generates, a cast of `selectForm`",
+  "SectionSelection: a base term": unreadTerm("base"),
+  "Slider: a when term": unreadTerm("when"),
+} satisfies Readonly<Record<string, string>>;
 
 /**
- * One written row as the boundary reads it.
+ * The laws the test must judge: both halves of the heads' mirror with the roots, the count that
+ * places every assembled document, and both halves of `ReferenceDocument`'s mirror.
  */
-type Written = typeof WrittenRow.Type;
-
-/**
- * Read a row's data fields, the rest left out.
- *
- * @param row - The row as the import writes it.
- * @param fields - The fields a side reads.
- * @returns The row's value at each field, none where a field is no datum there (a nested tree, a
- *   field grizzle draws).
- */
-const fieldsOf = (row: Written, fields: readonly string[]): Option.Option<Row> => {
-  const read: Record<string, Datum> = {};
-  for (const field of fields) {
-    const value = row[field];
-    if (!isDatum(value)) {
-      return Option.none();
-    }
-
-    read[field] = value;
-  }
-
-  return Option.some(read);
-};
-
-/**
- * One side's projection over a program's rows: each selected row's values at the side's fields, as
- * a tuple's text; none where a row holds no datum at a field the side reads or its selection
- * reads, so the host cannot judge the side.
- *
- * @param rows - The side's relation's rows.
- * @param side - The side.
- * @param read - The fields the selection reads beside the side's own.
- * @returns The projection's tuples.
- */
-const projectionOf = (
-  rows: readonly Written[],
-  side: MirrorSide,
-  read: readonly string[],
-): Option.Option<ReadonlySet<string>> => {
-  const tuples = new Set<string>();
-  for (const row of rows) {
-    const held = fieldsOf(row, [...new Set([...side.fields, ...read])]);
-    if (Option.isNone(held)) {
-      return Option.none();
-    }
-
-    if (side.selects(held.value)) {
-      tuples.add(Formatter.format(side.fields.map((field) => held.value[field])));
-    }
-  }
-
-  return Option.some(tuples);
-};
-
-/**
- * The fields of a row a side's selection may read: every field of the row's relation as the program
- * writes it.
- *
- * @param rows - The relation's rows.
- * @returns The fields of its first row.
- */
-const writtenFields = (rows: readonly Written[]): readonly string[] => {
-  const [first] = rows;
-
-  return first === undefined ? [] : Object.keys(first);
-};
-
-/**
- * The roots of the assembled documents the package must hold: a test, a section, an item, a
- * fragment of content and a fragment of response rules.
- */
-const rootKinds = [
-  "qti-assessment-test",
-  "qti-assessment-section",
-  "qti-assessment-item",
-  "div",
-  "qti-response-condition",
+const required = [
+  "contained Document(node) in Instance(document)",
+  "contained Instance(document) in Document(node)",
+  "check Inclusion_cycle",
+  "contained ReferenceDocument(document) in TestDocument(node)",
+  "contained TestDocument(node) in ReferenceDocument(document)",
 ] as const;
 
+/**
+ * The paths of the documents a package's rows name, by document node.
+ *
+ * @param rows - The rows.
+ * @returns Each document's path.
+ */
+const pathsOf = (rows: HostRows): ReadonlyMap<string, string> =>
+  new Map(
+    (rows.get("Document") ?? []).flatMap((row) => {
+      const { node, path } = row;
+
+      return Predicate.isString(node) && Predicate.isString(path) ? [[node, path] as const] : [];
+    }),
+  );
+
+/**
+ * A row with each document node it holds written as its document's path, so a breach names the
+ * documents it is in.
+ *
+ * @param paths - Each document's path, by its node.
+ * @param row - The row.
+ * @returns The row, its document nodes replaced.
+ */
+const namedIn = (paths: ReadonlyMap<string, string>, row: HostRow): HostRow =>
+  Object.fromEntries(
+    Object.entries(row).map(([field, value]) => [
+      field,
+      Predicate.isString(value) ? (paths.get(value) ?? value) : value,
+    ]),
+  );
+
+/**
+ * The rows with one more assembly's root: a writer that makes a document a head it is not.
+ *
+ * @param rows - The rows.
+ * @param document - The planted head's document node.
+ * @returns The rows, the root among them.
+ */
+const withRoot = (rows: HostRows, document: string): HostRows => {
+  const root: HostRow = { assembly: document, document, id: document, parent: document, start: 0n };
+
+  return new Map([...rows, ["Instance", [...(rows.get("Instance") ?? []), root]]]);
+};
+
 layer(NodeServices.layer, { excludeTestServices: true })(
-  "every mirrors over every assembled document",
+  "every law the host can judge over the every-relation package",
   (it) => {
     it.effect(
-      "holds both sides of every mirrors the host can judge over the every-relation package's rows, ReferenceDocument's among them, and refuses ReferenceDocument mirrored with every TestDocument",
+      "holds every law the host can judge over the every-relation package's rows, names each one it cannot by its absent value, and refuses a fragment made a head",
       () =>
-        // Oracle: the specification as a checker: the two foreign keys a mirrors installs, each a
-        // containment of one side's selected projection in the other's, over the rows the import
-        // writes, and the law oracle's verdict on the package.
-        // Bound: the every-relation package, whose assembled documents are a test, a section, two
-        // items with includes, a fragment and a rules fragment, and every mirrors of Qti.
+        // Oracle: the schema's own statements over the rows the import writes, each law as the
+        // database states it, and the law oracle's verdict on the package.
+        // Bound: the every-relation package, every relation of it written, and every containment,
+        // mirrors, key and check of Qti.
         Effect.scoped(
-          Effect.gen(function* mirrorsHold() {
+          Effect.gen(function* everyLawHolds() {
             const dir = yield* scopedPackage(
               everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 }),
             );
             const verdict = yield* oracleVerdict(yield* readPackage(dir));
             const program = yield* readProgram(dir);
-            const tables = new Map(
-              Object.entries(program.inputs).map(([relation, rows]) => [
-                relation,
-                [
-                  ...Option.getOrElse(
-                    Schema.decodeUnknownOption(WrittenMap)(rows),
-                    () => new Map<string, Written>(),
-                  ).values(),
-                ],
-              ]),
-            );
-            const rowsOf = (relation: string): readonly Written[] => tables.get(relation) ?? [];
-            const roots = new Set(rowsOf("TestDocument").map((row) => row["rootKind"]));
-            const judged: string[] = [];
+            const rows = hostRowsOf(program.inputs);
+            const laws = judgedLaws(Qti.statements);
+            const judgment = judge(rows, laws);
+            const paths = pathsOf(rows);
 
             assert.deepStrictEqual(verdict, { kind: "accepted" });
             assert.deepStrictEqual(
-              rootKinds.filter((kind) => !roots.has(kind)),
+              judgment.broken.map(
+                ({ law, rows: breaking }) =>
+                  `${lawIdentity(law)}: ${Formatter.format(breaking.map((row) => namedIn(paths, row)))}`,
+              ),
               [],
-              "an assembled document's root the package lacks",
+              "a law the import's rows break",
             );
-            for (const [left, right] of mirrorsOf(Qti.statements)) {
-              const leftRows = rowsOf(left.relation);
-              const rightRows = rowsOf(right.relation);
-              const leftTuples = left.pred
-                ? Option.none<ReadonlySet<string>>()
-                : projectionOf(leftRows, left, writtenFields(leftRows));
-              const rightTuples = right.pred
-                ? Option.none<ReadonlySet<string>>()
-                : projectionOf(rightRows, right, writtenFields(rightRows));
-              if (
-                Option.isNone(leftTuples) ||
-                Option.isNone(rightTuples) ||
-                leftRows.length + rightRows.length === 0
-              ) {
-                continue;
-              }
 
-              const held = leftTuples.value;
-              const mirrored = rightTuples.value;
-              const name = `${left.relation}(${left.fields.join(", ")}) and ${right.relation}(${right.fields.join(", ")})`;
-              judged.push(name);
-              assert.deepStrictEqual(
-                [...held].filter((tuple) => !mirrored.has(tuple)),
-                [],
-                `${name}: a ${left.relation} row ${right.relation} lacks`,
-              );
-              assert.deepStrictEqual(
-                [...mirrored].filter((tuple) => !held.has(tuple)),
-                [],
-                `${name}: a ${right.relation} row ${left.relation} lacks`,
-              );
+            const judged = new Set(judgment.judged.map(lawIdentity));
+            assert.deepStrictEqual(
+              required.filter((identity) => !judged.has(identity)),
+              [],
+              "a law the test must judge went unjudged",
+            );
+
+            const absent = new Map<string, string[]>();
+            for (const { absent: values, law } of judgment.skipped) {
+              for (const value of values) {
+                absent.set(value, [...(absent.get(value) ?? []), lawIdentity(law)]);
+              }
             }
 
-            assert.include(
-              judged,
-              "ReferenceDocument(document) and TestDocument(node)",
-              "ReferenceDocument's mirror went unjudged",
+            assert.deepStrictEqual(
+              [...absent].flatMap(([value, skipped]) =>
+                Object.hasOwn(unjudged, value) ? [] : [`${value}, read by ${skipped.join("; ")}`],
+              ),
+              [],
+              "a value no entry of the unjudged list names: restore it in host-judge.ts, or name it with why",
+            );
+            assert.deepStrictEqual(
+              Object.keys(unjudged).filter((value) => !absent.has(value)),
+              [],
+              "an entry of the unjudged list the host now judges: remove it",
             );
 
-            // The planted unrestricted reverse: every assembled document a ReferenceDocument, as
-            // the mirror stated before reading 117's assemblies, is refused by these rows.
-            const references = new Set(
-              rowsOf("ReferenceDocument").map((row) => Formatter.format([row["document"]])),
+            // The planted heads: every assembled document a head, as the import made them before
+            // reading 117's splice, gives the two fragments the items splice an assembly each, and
+            // the roots' mirror with the heads refuses exactly those.
+            const heads = (rows.get("TestDocument") ?? []).flatMap(({ node }) =>
+              Predicate.isString(node) ? [node] : [],
             );
-            assert.isNotEmpty(
-              rowsOf("TestDocument").filter(
-                (row) => !references.has(Formatter.format([row["node"]])),
+            const rooted = new Set(
+              (rows.get("Instance") ?? []).flatMap(({ document, start }) =>
+                start === 0n && Predicate.isString(document) ? [document] : [],
               ),
-              "every assembled document is a ReferenceDocument",
+            );
+            let planted: HostRows = rows;
+            for (const node of heads.filter((held) => !rooted.has(held))) {
+              planted = withRoot(planted, node);
+            }
+
+            const refused = judge(planted, laws).broken.find(
+              ({ law }) => lawIdentity(law) === "contained Instance(document) in Document(node)",
+            );
+            assert.deepStrictEqual(
+              (refused?.rows ?? [])
+                .map(
+                  ({ document }) => paths.get(Predicate.isString(document) ? document : "") ?? "",
+                )
+                .toSorted((left, right) => left.localeCompare(right)),
+              ["items/fragment.xml", "items/rules.xml"],
+              "the planted heads the roots' mirror refuses",
             );
           }),
         ),

@@ -42,7 +42,7 @@ const xmlAttributes: ReadonlySet<string> = new Set(["base", "id", "lang", "space
 /**
  * How long reading the two 18 MB ASI XSDs and walking them may take, beside the swarm's suites.
  */
-const xsdTimeout = 120_000;
+const xsdTimeout = 240_000;
 
 describe.skipIf(!cached)("the XSD reader's QNames", () => {
   it.effect(

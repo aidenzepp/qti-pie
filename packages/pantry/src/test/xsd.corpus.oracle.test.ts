@@ -327,9 +327,10 @@ describe.skipIf(!settings.corpusRequested || !cached)(
 /**
  * The timeout, in milliseconds, for the libxml2 control: one `xmllint` run over four small
  * documents, which compiles the 3.0.0 XSDs once. Measured on 2026-11-05 under the shared tree's
- * load: over 5 s, so the budget is 60 s. Raise it only on a new measurement recorded here.
+ * load: over 5 s, and on 2026-11-07 at a load average near 70, 31.9 to 35.6 s, so the hang guard
+ * is 90 s. Raise it only on a new measurement recorded here.
  */
-const controlTimeoutMs = 60_000;
+const controlTimeoutMs = 90_000;
 
 /**
  * The folder the libxml2 control writes to, `packages/pantry/work/xsd-control-*`, the run's own.

@@ -18,11 +18,12 @@ import {
   namedFailureOf,
   RoundtripDiffers,
 } from "#pantry/cli/errors.ts";
+import type { ExportDefectTag, ImportDefectTag } from "#pantry/cli/errors.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
 import { SnapshotLoadError } from "#pantry/db/snapshot.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
 import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
-import { RootMissing } from "#pantry/model/assemble.ts";
+import { RootMissing, RowMissing, RowsOutsideImage } from "#pantry/model/assemble.ts";
 import { EncodeError } from "@qti-pie/crust/errors.ts";
 
 /**
@@ -106,36 +107,64 @@ describe("describeFailure, a package id no package has", () => {
 });
 
 /**
- * One failure of each tag the export ends with when it cannot rebuild a package the database holds:
- * a refusal of `assemble`, the scan's two, grizzle's cursor refusal and crust's encoder refusal.
- * `errors.ts` checks the full tag set against the export's error union by type; these are the
- * values a run meets.
+ * One failure of every tag the export ends with when it cannot rebuild a package the database
+ * holds: `assemble`'s three refusals, the scan's two, grizzle's cursor refusal and crust's encoder
+ * refusal. It is keyed by the export's error union, so a tag the export gains or loses fails to
+ * compile here until its case is written or deleted.
  */
-const exportDefects = [
-  new RootMissing({ node: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40" }),
-  new DocumentRowCount({ document: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40", found: 2 }),
-  new XmlVersionUnread({ document: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40", xmlVersion: "2.0" }),
-  CursorError.make({ _tag: "cursorMalformed" }),
-  new EncodeError({ codePoint: 0x1_f6_00, threshold: 0xff, where: "comment" }),
-];
+const exportDefects = {
+  CursorError: CursorError.make({ _tag: "cursorMalformed" }),
+  DocumentRowCount: new DocumentRowCount({
+    document: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+    found: 2,
+  }),
+  EncodeError: new EncodeError({ codePoint: 0x1_f6_00, threshold: 0xff, where: "comment" }),
+  RootMissing: new RootMissing({ node: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40" }),
+  RowMissing: new RowMissing({ key: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40", rows: "texts" }),
+  RowsOutsideImage: new RowsOutsideImage({
+    departure: { _tag: "differs", field: "at", found: "2", written: "1" },
+    key: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+    rows: "nodes",
+  }),
+  XmlVersionUnread: new XmlVersionUnread({
+    document: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+    xmlVersion: "2.0",
+  }),
+} as const satisfies { readonly [K in ExportDefectTag]: { readonly _tag: K } };
 
 /**
- * One failure of each kind the import ends with on a defect of qti: grizzle's codec refusing a
- * built value, and the three the importer dies with. The three are matched by their tag alone,
- * which `errors.ts` checks against their classes by type, so they are written as their tags here:
- * the modules that define them load the composed grammar and the author login, which this file
- * does not need.
+ * One failure of every tag the import ends with on a defect of qti: grizzle's codec refusing a
+ * built value, and the three the importer dies with, keyed by the import's tags as
+ * {@link exportDefects} is by the export's. The three are matched by their tag alone, which
+ * `errors.ts` checks against their classes by type, so they are written as their tags here: the
+ * modules that define them load the composed grammar and the author login, which this file does
+ * not need.
  */
-const importDefects = [
-  new EncodingFailure({ place: { _tag: "Fact" }, reason: { _tag: "textNul" } }),
-  { _tag: "LocateDisagreement" },
-  { _tag: "OverlayConflict" },
-  { _tag: "UnownedLaws" },
-] as const;
+const importDefects = {
+  EncodingFailure: new EncodingFailure({ place: { _tag: "Fact" }, reason: { _tag: "textNul" } }),
+  LocateDisagreement: { _tag: "LocateDisagreement" },
+  OverlayConflict: { _tag: "OverlayConflict" },
+  UnownedLaws: { _tag: "UnownedLaws" },
+} as const satisfies { readonly [K in ImportDefectTag]: { readonly _tag: K } };
+
+/**
+ * Failures that carry no string tag, so nothing names them: nothing at all, a primitive, an object
+ * with no tag, and objects whose tag is a number or an object that spells a named tag when
+ * coerced, which a lookup by property key would read as that tag.
+ */
+const untagged: readonly unknown[] = [
+  null,
+  undefined,
+  "RootMissing",
+  70,
+  {},
+  { _tag: 70 },
+  { _tag: { toString: () => "RootMissing" } },
+];
 
 describe("describeFailure, the defects qti names", () => {
   it("each of the export's defects exits 70 as internal, named, with a help that keeps the target", () => {
-    for (const failure of exportDefects) {
+    for (const failure of Object.values(exportDefects)) {
       const { exitCode, help, kind } = describeFailure(failure);
 
       assert.deepStrictEqual({ exitCode, kind }, { exitCode: 70, kind: "internal" }, failure._tag);
@@ -146,13 +175,24 @@ describe("describeFailure, the defects qti names", () => {
   });
 
   it("each of the import's defects exits 70 as internal, named, with a help that says nothing was written", () => {
-    for (const failure of importDefects) {
+    for (const failure of Object.values(importDefects)) {
       const { exitCode, help, kind } = describeFailure(failure);
 
       assert.deepStrictEqual({ exitCode, kind }, { exitCode: 70, kind: "internal" }, failure._tag);
       assert.include(help, "nothing was written", failure._tag);
       assert.notInclude(help, "trace", failure._tag);
       assert.deepStrictEqual(namedFailureOf(failure), Option.some(failure._tag));
+    }
+  });
+
+  it("a failure with no string tag is named by nothing, and exits 70 as internal with that kind's help", () => {
+    for (const failure of untagged) {
+      assert.deepStrictEqual(
+        describeFailure(failure),
+        { exitCode: 70, help: kindHelp.internal, kind: "internal" },
+        String(failure),
+      );
+      assert.isTrue(Option.isNone(namedFailureOf(failure)), String(failure));
     }
   });
 });

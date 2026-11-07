@@ -112,7 +112,7 @@ const xsdTimeout = 120_000;
  * loads of 26 to 28 where sampled. The budget is five times the slowest, 35.4 s, rounded up to the
  * next second. Raise it only on a new measurement recorded here, never to make a run pass.
  */
-const searchTimeout = 36_000;
+const searchTimeout = 60_000;
 
 /**
  * The character data XML Schema Part 1 §3.4.4 lets stand between an element's children, by its

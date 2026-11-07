@@ -4,9 +4,12 @@
  *
  * `rtest01`'s three set items each include `rtest01-fragment.xml`, a `div` holding a hottext
  * interaction bound to `RESPONSE`. A case keeps the include in the first `includers` items and
- * drops it from the rest, and closes its cycle: none; the fragment including itself
- * before its interaction; or the fragment including `rtest01-loop.xml`, a text fragment listed as
- * its own `imsqti_fragment_xmlv3p0` resource, which includes the fragment back.
+ * drops it from the rest, none of them among the cases, so no head places the fragment and any
+ * cycle through it is one no assembly reaches (spec readings 85 and 117). It closes its cycle:
+ * none; the fragment including itself before its interaction; or the fragment including
+ * `rtest01-loop.xml`, a text fragment listed as its own `imsqti_fragment_xmlv3p0` resource, which
+ * includes the fragment back. And the fragment may include `rtest01-tail.xml` too, a text
+ * fragment no other document includes, which hangs off the fragment's cycle where there is one.
  */
 import { assert } from "@effect/vitest";
 import type { PackageFile } from "#pantry/package/read.ts";
@@ -20,14 +23,21 @@ export const cycles = ["none", "self", "pair"] as const;
 /**
  * How many of `rtest01`'s set items include the fragment.
  */
-export const includerCounts = [1, 2, 3] as const;
+export const includerCounts = [0, 1, 2, 3] as const;
 
 /**
- * One case: the cycle its inclusion graph closes and how many set items place the fragment.
+ * Whether the fragment includes the tail fragment, which only it includes.
+ */
+export const tails = [false, true] as const;
+
+/**
+ * One case: the cycle its inclusion graph closes, how many set items place the fragment, and
+ * whether the fragment includes the tail.
  */
 export interface CycleCase {
   readonly cycle: (typeof cycles)[number];
   readonly includers: (typeof includerCounts)[number];
+  readonly tail: boolean;
 }
 
 /**
@@ -51,6 +61,39 @@ const loopText =
  */
 const loopResource =
   '<resource identifier="r-rtest01-loop" type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-loop.xml"><file href="rtest01/rtest01-loop.xml"/></resource>';
+
+/**
+ * The tail fragment, which includes nothing.
+ */
+const tailText =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><p>Tail.</p></div>\n';
+
+/**
+ * The tail fragment's resource, listed after the others.
+ */
+const tailResource =
+  '<resource identifier="r-rtest01-tail" type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-tail.xml"><file href="rtest01/rtest01-tail.xml"/></resource>';
+
+/**
+ * The href of the include that closes each cycle: the fragment's own, or the loop's.
+ */
+const cycleHrefs: Readonly<Record<Exclude<CycleCase["cycle"], "none">, string>> = {
+  pair: "rtest01-loop.xml",
+  self: "rtest01-fragment.xml",
+};
+
+/**
+ * The files a case adds to `rtest01`'s, each with the cases that add it: the loop of a pair cycle,
+ * and the tail.
+ */
+const added: readonly {
+  readonly path: string;
+  readonly text: string;
+  readonly when: (drawn: CycleCase) => boolean;
+}[] = [
+  { path: "rtest01/rtest01-loop.xml", text: loopText, when: ({ cycle }) => cycle === "pair" },
+  { path: "rtest01/rtest01-tail.xml", text: tailText, when: ({ tail }) => tail },
+];
 
 /**
  * Replace the one occurrence of a text in an entry, or fail the case's construction.
@@ -92,31 +135,42 @@ export const cyclePackageOf = (
       return encode(replaceOnce(text, setInclude, ""));
     }
 
-    if (file.path.endsWith("rtest01-fragment.xml") && drawn.cycle !== "none") {
-      const href = drawn.cycle === "self" ? "rtest01-fragment.xml" : "rtest01-loop.xml";
+    if (file.path.endsWith("rtest01-fragment.xml") && (drawn.cycle !== "none" || drawn.tail)) {
+      const hrefs = [
+        ...(drawn.cycle === "none" ? [] : [cycleHrefs[drawn.cycle]]),
+        ...(drawn.tail ? ["rtest01-tail.xml"] : []),
+      ];
 
       return encode(
-        replaceOnce(text, interactionOpen, `<xi:include href="${href}"/>${interactionOpen}`),
+        replaceOnce(
+          text,
+          interactionOpen,
+          `${hrefs.map((href) => `<xi:include href="${href}"/>`).join("")}${interactionOpen}`,
+        ),
       );
     }
 
-    if (file.kind === "manifest" && drawn.cycle === "pair") {
-      return encode(replaceOnce(text, "</resources>", `${loopResource}</resources>`));
+    if (file.kind === "manifest" && (drawn.cycle === "pair" || drawn.tail)) {
+      return encode(
+        replaceOnce(
+          text,
+          "</resources>",
+          `${drawn.cycle === "pair" ? loopResource : ""}${drawn.tail ? tailResource : ""}</resources>`,
+        ),
+      );
     }
 
     return file;
   });
 
-  return (
-    drawn.cycle === "pair"
-      ? [
-          ...edited,
-          {
-            bytes: new TextEncoder().encode(loopText),
-            kind: "file" as const,
-            path: "rtest01/rtest01-loop.xml",
-          },
-        ]
-      : edited
-  ).toSorted((left, right) => (left.path < right.path ? -1 : 1));
+  return [
+    ...edited,
+    ...added
+      .filter(({ when }) => when(drawn))
+      .map(({ path, text }) => ({
+        bytes: new TextEncoder().encode(text),
+        kind: "file" as const,
+        path,
+      })),
+  ].toSorted((left, right) => (left.path < right.path ? -1 : 1));
 };

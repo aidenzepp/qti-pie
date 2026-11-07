@@ -233,7 +233,7 @@ const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
  * A side of a statement as grizzle keeps it: a selection with the predicate its desc holds, or a
  * whole relation, stored or closed, and its terms, a `pred` one as an object over its field.
  */
-const SideSchema = Schema.Struct({
+export const SideSchema = Schema.Struct({
   source: Schema.Union([
     Schema.Struct({
       desc: Schema.Struct({ predicate: StoredTermSchema }),
@@ -249,7 +249,7 @@ const SideSchema = Schema.Struct({
 /**
  * A side as {@link SideSchema} reads it.
  */
-type StoredSide = typeof SideSchema.Type;
+export type StoredSide = typeof SideSchema.Type;
 
 /**
  * The statements a copy comes from as grizzle keeps them: a containment or a mirrors, a fold, and a
@@ -636,37 +636,128 @@ const compared = (op: string, left: Datum, right: Datum): boolean | undefined =>
 };
 
 /**
- * Apply a `Compute` function a copy's predicate reads to two arguments' values: `subset` and
- * `union` of two sets, `matches`, `startsWith` and `endsWith` of two texts.
+ * A set as a predicate reads it, or none for any other datum.
  *
- * @param fn - The function.
- * @param left - Its first argument's value.
- * @param right - Its second argument's value.
- * @returns Its value, unknown for any other function or arguments of other types.
+ * @param datum - The datum.
+ * @returns The set.
  */
-const computed = (fn: string, left: Datum, right: Datum): Datum | undefined => {
-  if (left instanceof Set && right instanceof Set) {
-    if (fn === "subset") {
-      return [...left].every((member) => right.has(member));
-    }
+const setOf = (datum: Datum | undefined): ReadonlySet<string> | undefined =>
+  datum instanceof Set ? datum : undefined;
 
-    return fn === "union" ? new Set([...left, ...right]) : undefined;
-  }
+/**
+ * A text as a predicate reads it, or none for any other datum.
+ *
+ * @param datum - The datum.
+ * @returns The text.
+ */
+const textOf = (datum: Datum | undefined): string | undefined =>
+  Predicate.isString(datum) ? datum : undefined;
 
-  if (!Predicate.isString(left) || !Predicate.isString(right)) {
-    return undefined;
-  }
+/**
+ * Apply a set function to two sets.
+ *
+ * @param args - The arguments' values.
+ * @param apply - The function.
+ * @returns Its value, unknown unless both arguments are sets.
+ */
+const ofSets = (
+  args: readonly Datum[],
+  apply: (left: ReadonlySet<string>, right: ReadonlySet<string>) => Datum,
+): Datum | undefined => {
+  const [left, right] = [setOf(args[0]), setOf(args[1])];
 
-  if (fn === "matches") {
-    return matches(left, right);
-  }
-
-  if (fn === "startsWith") {
-    return left.startsWith(right);
-  }
-
-  return fn === "endsWith" ? left.endsWith(right) : undefined;
+  return left === undefined || right === undefined ? undefined : apply(left, right);
 };
+
+/**
+ * Apply a text function to texts.
+ *
+ * @param args - The arguments' values.
+ * @param count - How many texts the function takes.
+ * @param apply - The function.
+ * @returns Its value, unknown unless each argument is a text.
+ */
+const ofTexts = (
+  args: readonly Datum[],
+  count: number,
+  apply: (texts: readonly string[]) => Datum,
+): Datum | undefined => {
+  const texts = args.flatMap((arg) => Option.toArray(Option.fromUndefinedOr(textOf(arg))));
+
+  return args.length === count && texts.length === count ? apply(texts) : undefined;
+};
+
+/**
+ * Split a text into its code points, as PostgreSQL reads a text's characters.
+ *
+ * @param text - The text.
+ * @returns Its code points, in order.
+ */
+const codePointsOf = (text: string): readonly string[] => text.match(/./gsu) ?? [];
+
+/**
+ * PostgreSQL's `translate` by code points: each character of a text that `from` holds becomes the
+ * character of `to` at its position, or is removed where `to` is shorter.
+ *
+ * @param texts - The text, `from` and `to`.
+ * @returns The translated text.
+ */
+const translated = ([text = "", from = "", to = ""]: readonly string[]): string => {
+  const sources = codePointsOf(from);
+  const targets = codePointsOf(to);
+
+  return codePointsOf(text)
+    .map((char) => {
+      const at = sources.indexOf(char);
+
+      return at === -1 ? char : (targets[at] ?? "");
+    })
+    .join("");
+};
+
+/**
+ * The `Compute` functions a predicate reads, by name: grizzle's set algebra over sets of handles
+ * (`subset`, `disjoint`, `union`, `difference`, `cardinality`), its text terms (`matches`,
+ * `startsWith`, `endsWith`, `concat`, `translate`, `collapse`) and `add` of two naturals, each as
+ * grizzle's README states it in SQL. Any other function is unread: a selection or a check that
+ * holds one is not judged.
+ */
+const computers: ReadonlyMap<string, (args: readonly Datum[]) => Datum | undefined> = new Map<
+  string,
+  (args: readonly Datum[]) => Datum | undefined
+>([
+  ["subset", (args) => ofSets(args, (left, right) => [...left].every((at) => right.has(at)))],
+  ["disjoint", (args) => ofSets(args, (left, right) => [...left].every((at) => !right.has(at)))],
+  ["union", (args) => ofSets(args, (left, right) => new Set([...left, ...right]))],
+  [
+    "difference",
+    (args) => ofSets(args, (left, right) => new Set([...left].filter((at) => !right.has(at)))),
+  ],
+  [
+    "cardinality",
+    ([set]) =>
+      Option.getOrUndefined(
+        Option.map(Option.fromUndefinedOr(setOf(set)), (held) => BigInt(held.size)),
+      ),
+  ],
+  ["matches", (args) => ofTexts(args, 2, ([text = "", pattern = ""]) => matches(text, pattern))],
+  ["startsWith", (args) => ofTexts(args, 2, ([text = "", head = ""]) => text.startsWith(head))],
+  ["endsWith", (args) => ofTexts(args, 2, ([text = "", tail = ""]) => text.endsWith(tail))],
+  ["concat", (args) => ofTexts(args, 2, ([left = "", right = ""]) => left + right)],
+  ["translate", (args) => ofTexts(args, 3, translated)],
+  [
+    "collapse",
+    (args) =>
+      ofTexts(args, 1, ([text = ""]) =>
+        text.replaceAll(/[ \t\n\r]+/gu, " ").replaceAll(/^ | $/gu, ""),
+      ),
+  ],
+  [
+    "add",
+    ([left, right]) =>
+      Predicate.isBigInt(left) && Predicate.isBigInt(right) ? left + right : undefined,
+  ],
+]);
 
 /**
  * Evaluate the operands of a term, the whole unknown where any is.
@@ -729,7 +820,7 @@ const among = (
  *
  * @param term - The read or the call.
  * @param args - Its arguments' values, none when any is unknown.
- * @returns Its value, unknown where an argument is or the call has not two of them.
+ * @returns Its value, unknown where an argument is or the function is none of {@link computers}.
  */
 const applied = (
   term: Extract<Term, { readonly kind: "closed" | "compute" }>,
@@ -743,11 +834,7 @@ const applied = (
     return closedRead(term.relation, term.field, args);
   }
 
-  const [left, right] = args;
-
-  return args.length === 2 && left !== undefined && right !== undefined
-    ? computed(term.fn, left, right)
-    : undefined;
+  return computers.get(term.fn)?.(args);
 };
 
 /**
@@ -1268,45 +1355,182 @@ export const checkOf = (
   );
 
 /**
- * One side of a `mirrors` the schema states, as the host judges it: its relation, its fields in
- * pairing order, whether it holds a `pred` term, and its selection as a test of a row.
+ * One side of a statement as the host judges it: its relation and its terms as an outcome names
+ * them, the fields its selection reads and the terms of it the host cannot read, and its selection
+ * in SQL's three-valued logic: true, false, or unknown where a field it reads is absent and no
+ * operand decides it without that field.
  */
-export interface MirrorSide {
-  readonly fields: readonly string[];
-  readonly pred: boolean;
+export interface JudgedSide {
+  readonly law: LawSide;
+  readonly reads: readonly string[];
   readonly relation: string;
-  readonly selects: (row: Readonly<Record<string, Datum>>) => boolean;
+  readonly selection: (row: Readonly<Record<string, Datum>>) => boolean | undefined;
+  readonly unread: readonly string[];
 }
 
 /**
- * Read a stored side of a `mirrors` as the host judges it.
+ * Evaluate a predicate as a truth value in SQL's three-valued logic.
+ *
+ * @param term - The predicate, none for a whole relation, which holds every row.
+ * @returns Its value over a row: true, false, or unknown.
+ */
+const truthOf =
+  (term: Option.Option<Term>) =>
+  (row: Row): boolean | undefined =>
+    Option.match(term, {
+      onNone: () => true,
+      onSome: (held) => {
+        const value = evaluate(held, row, () => false);
+
+        return Predicate.isBoolean(value) ? value : undefined;
+      },
+    });
+
+/**
+ * The terms below a predicate the host cannot evaluate, each by its kind: an unread term, and a
+ * call of a function none of {@link computers} is.
+ *
+ * @param below - The predicate's terms.
+ * @returns Each such term's kind, once.
+ */
+const unreadIn = (below: readonly Term[]): readonly string[] => [
+  ...new Set(
+    below.flatMap((term) => {
+      if (term.kind === "unread") {
+        return [term.term];
+      }
+
+      return term.kind === "compute" && !computers.has(term.fn) ? [`${term.fn} function`] : [];
+    }),
+  ),
+];
+
+/**
+ * Read a stored side, of any statement grizzle keeps, a family's or a fold's among them, as the
+ * host judges it.
  *
  * @param side - The side.
- * @returns Its relation, fields, `pred` terms and selection.
+ * @returns Its relation, terms, selection, and the fields and unread terms the selection holds.
  */
-const mirrorSideOf = (side: StoredSide): MirrorSide => ({
-  fields: fieldsOf(side),
-  pred: side.terms.some((term) => !Predicate.isString(term)),
-  relation: sourceOf(side).name,
-  selects: selectedBy(sourceOf(side).predicate),
+export const judgedSideOf = (side: StoredSide): JudgedSide => {
+  const source = sourceOf(side);
+  const below = Option.match(source.predicate, { onNone: () => [], onSome: subtermsOf });
+
+  return {
+    law: lawSideOf(side),
+    reads: [...new Set(below.flatMap((term) => (term.kind === "field" ? [term.field] : [])))],
+    relation: source.name,
+    selection: truthOf(source.predicate),
+    unread: unreadIn(below),
+  };
+};
+
+/**
+ * A law the schema states that the host judges over rows: a containment, each half of a `mirrors`
+ * one, its source rows' projection among its target rows'; a key, its rows' projection one tuple
+ * each; and a check, every row's predicate not false, in SQL's three-valued logic as a CHECK reads
+ * it. Each is named as an outcome names it, and a check's predicate is read with the fields and
+ * unread terms it holds.
+ */
+export type JudgedLaw =
+  | {
+      readonly from: JudgedSide;
+      readonly kind: "contained";
+      readonly law: Law;
+      readonly to: JudgedSide;
+    }
+  | {
+      readonly kind: "check";
+      readonly law: Law;
+      readonly reads: readonly string[];
+      readonly relation: string;
+      readonly unread: readonly string[];
+      readonly value: (row: Readonly<Record<string, Datum>>) => boolean | undefined;
+    }
+  | { readonly kind: "key"; readonly law: Law; readonly side: JudgedSide };
+
+/**
+ * A key as grizzle keeps it: its side.
+ */
+const KeyStatementSchema = Schema.Struct({ kind: Schema.Literal("key"), side: SideSchema });
+
+/**
+ * Read a containment as the law the host judges it by.
+ *
+ * @param left - Its source side.
+ * @param right - Its target side.
+ * @returns The law.
+ */
+const containedOf = (left: StoredSide, right: StoredSide): JudgedLaw => ({
+  from: judgedSideOf(left),
+  kind: "contained",
+  law: { from: lawSideOf(left), kind: "contained", to: lawSideOf(right) },
+  to: judgedSideOf(right),
 });
 
 /**
- * Every `mirrors` the schema states, each its two sides: each side's selected rows, projected on
- * its fields, are the other's.
+ * Read one statement as the laws the host judges it by.
+ *
+ * @param statement - The statement as the schema states it.
+ * @returns Its laws: two for a `mirrors`, one for a containment, a check or a key, none for any
+ *   other statement.
+ */
+const judgedOf = (statement: (typeof Qti.statements)[number]): readonly JudgedLaw[] => {
+  const keyed = Option.map(
+    Schema.decodeUnknownOption(KeyStatementSchema)(statement),
+    ({ side }): readonly JudgedLaw[] => [
+      { kind: "key", law: { kind: "key", side: lawSideOf(side) }, side: judgedSideOf(side) },
+    ],
+  );
+  if (Option.isSome(keyed)) {
+    return keyed.value;
+  }
+
+  return Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+    onNone: () => [],
+    onSome: (read): readonly JudgedLaw[] => {
+      if (read.kind === "check") {
+        const term = termOf(read.desc.predicate);
+        const below = subtermsOf(term);
+
+        return [
+          {
+            kind: "check",
+            law: { kind: "check", name: read.desc.name, relation: read.relation.name },
+            reads: [...new Set(below.flatMap((at) => (at.kind === "field" ? [at.field] : [])))],
+            relation: read.relation.name,
+            unread: unreadIn(below),
+            value: truthOf(Option.some(term)),
+          },
+        ];
+      }
+
+      if (read.kind === "fold") {
+        return [];
+      }
+
+      return read.kind === "mirrors"
+        ? [containedOf(read.left, read.right), containedOf(read.right, read.left)]
+        : [containedOf(read.left, read.right)];
+    },
+  });
+};
+
+/**
+ * Every law the schema states that the host judges over rows ({@link JudgedLaw}), in statement
+ * order.
  *
  * @param statements - The schema's statements.
- * @returns The mirrors, in statement order.
+ * @returns The laws.
  */
-export const mirrorsOf = (
-  statements: typeof Qti.statements,
-): readonly (readonly [MirrorSide, MirrorSide])[] =>
-  statements.flatMap((statement) =>
-    Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
-      onNone: () => [],
-      onSome: (read) =>
-        read.kind === "mirrors"
-          ? [[mirrorSideOf(read.left), mirrorSideOf(read.right)] as const]
-          : [],
-    }),
-  );
+export const judgedLaws = (statements: typeof Qti.statements): readonly JudgedLaw[] =>
+  statements.flatMap(judgedOf);
+
+/**
+ * Read a closed relation's facts as rows, for a law over it.
+ *
+ * @param relation - The relation's name.
+ * @returns Its rows; none for a name that is no closed relation of the schema.
+ */
+export const closedRows = (relation: string): Option.Option<readonly Row[]> =>
+  Option.map(factsOf(relation), ({ rows }) => rows);

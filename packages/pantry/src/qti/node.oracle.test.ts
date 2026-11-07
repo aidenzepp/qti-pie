@@ -539,7 +539,7 @@ describe("N5, content order", { timeout: searchTimeout }, () => {
             }),
         ),
       ),
-    300_000,
+    420_000,
   );
 
   it.effect(

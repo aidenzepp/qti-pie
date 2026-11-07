@@ -58,7 +58,7 @@ import {
   authorRole,
   foreignKeysBetween,
   judged,
-  judgedReading,
+  judgedCase,
   loginSession,
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
@@ -337,17 +337,15 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
 
           for (const row of built.dates) {
             const refused = row.day === bad;
-            const { read, refused: refusal } = yield* judgedReading(
-              client,
-              statedInserts([{ fact: row, relation: StatisticDate }]),
-              [],
-              [
+            const { read, refused: refusal } = yield* judgedCase(client, {
+              inserts: statedInserts([{ fact: row, relation: StatisticDate }]),
+              reads: [
                 {
                   text: `SELECT date::text AS date FROM ${authorRole}.statistic_date WHERE node = $1`,
                   values: [row.node],
                 },
               ],
-            );
+            });
 
             assert.strictEqual(Option.isSome(refusal), refused, `${name} ${row.lexical}`);
             if (refused) {

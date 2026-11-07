@@ -125,6 +125,7 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
+import { splicingParents } from "#pantry/qti/tests.ts";
 import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
@@ -4763,16 +4764,15 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
 };
 
 /**
- * Decide whether an include under a parent is spliced in place: one a section holds is a site of
- * the test's assembly instead, which reading 86 reads as Q5.13's instances do, each written
- * element once, so its document is judged as written.
+ * Decide whether an include under a parent is spliced in place, by the schema's one statement of it
+ * (`#pantry/qti/tests.ts` `splicingParents`, spec reading 117): one a section holds is a site of
+ * the test's assembly instead, which reading 86 reads as Q5.13's instances do, each written element
+ * once, so its document is judged as written.
  *
- * @param grammar - The composed grammar.
  * @param parent - The include's parent's kind.
  * @returns Whether it is.
  */
-const splices = (grammar: ComposedGrammar, parent: string): boolean =>
-  parent !== "qti-assessment-section" && includeParentsOf(grammar).has(parent);
+const splices = (parent: string): boolean => splicingParents.some((kind) => kind === parent);
 
 /**
  * Decide whether a site splices its target in place: an include outside a section whose target is
@@ -4783,7 +4783,7 @@ const splices = (grammar: ComposedGrammar, parent: string): boolean =>
  * @returns The target, none for a site that splices nothing.
  */
 const splicedTarget = (grammar: ComposedGrammar, site: SiteOf): Option.Option<Listed> =>
-  site.node.kind === "xi:include" && splices(grammar, site.node.parentKind)
+  site.node.kind === "xi:include" && splices(site.node.parentKind)
     ? site.target.pipe(
         Option.filter((target) =>
           standsFor(grammar, site.node.version, site.node.parentKind, target.rootKind),
@@ -5005,7 +5005,7 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
         : child;
     }
 
-    if (child.kind === "xi:include" && splices(grammar, parent)) {
+    if (child.kind === "xi:include" && splices(parent)) {
       const href = closedValueOf(child, "href");
       const resolution = href.pipe(
         Option.map((value) =>
@@ -6066,7 +6066,7 @@ const ownLaws = {
       }),
     rule: "P2",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 (§2.11.3, Operators: each operator's sub-expression count, as §2.11.3.28 Match, https://www.imsglobal.org/spec/qti/v3p0/info#OpMatch, 'takes two sub-expressions') (expression.ts OperatorArity); reading 21",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_ExpressionGroup (§6.9, ExpressionGroup: each operator's attribute is of a container class whose logic attribute's multiplicity is its sub-expression count, §5.83.1 Logic0toMany '[0.. unbounded]', §5.84.1 Logic1toMany and §5.94.1 NumericLogic1toMany '[1.. unbounded]', §5.85.1 LogicPair '[2]' and §5.86.1 LogicSingle '[1]', or of its own class, whose logic attribute states its count, as §5.113.2 Repeat's '[1.. unbounded]' with §5.113's 'The repeat operator takes one or more sub-expressions', over §6.9.49's '0 or more'; a leaf class's children row reads 'There are no children.'; as §6.9.21, https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-match, 'The match operator takes two sub-expressions') (expression.ts OperatorArity); reading 21",
   },
   "Attribute prefix": {
     explain: (keys) =>
@@ -6093,14 +6093,14 @@ const ownLaws = {
       `response-identifier names ${field(keys, "identifier")}, which no qti-response-declaration declares`,
     rule: "binding-declared",
     source:
-      "reading 75: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4: each interaction 'must be bound to a response variable', as §2.4.1.1's 'The qti-choice-interaction must be bound to a response variable with a base-type of identifier and single or multiple cardinality'), https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'Response variables are declared by response declarations and bound to interactions in the itemBody') and https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables'); the text entry interaction's response-identifier is the XSD's IDREF (reading 14), every other interaction's, the extended text interaction's among them, an IdentifierDType this law resolves",
+      "reading 75: https://www.imsglobal.org/spec/qti/v3p0/info#Data_ResponseDeclaration (§5.115: 'Response variables are declared by response declarations and bound to interactions in the itemBody'), https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BasePromptInteraction.Attr_response-identifier (§5.15.7, and §5.18.6, §5.19.6, §5.45.1 and §5.162.1, each of multiplicity [1]: 'The response variable associated with the interaction') and each interaction class's binding sentence, as https://www.imsglobal.org/spec/qti/v3p0/info#Data_ChoiceInteraction (§5.30: 'The ChoiceInteraction must be bound to a response variable with a base-type of identifier and single or multiple cardinality'): an interaction's response-identifier names a response declaration of its item; the text entry interaction's response-identifier is the XSD's IDREF (reading 14), every other interaction's, the extended text interaction's among them, an IdentifierDType this law resolves",
   },
   "Binding unique": {
     explain: (keys) =>
       `${field(keys, "kind")} binds ${field(keys, "identifier")}, which ${field(keys, "first")} already binds; a response variable is bound to one interaction only`,
     rule: "binding-unique",
     source:
-      "reading 92: https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'Each response variable declared may be bound to one and only one interaction'): no two interactions of an item name one response variable",
+      "reading 92: https://www.imsglobal.org/spec/qti/v3p0/info#Data_ResponseDeclaration (§5.115: 'Each response variable declared may be bound to one and only one interaction'): no two interactions of an item name one response variable",
   },
   BindingFit: {
     explain: (keys, grammar) =>
@@ -6118,7 +6118,7 @@ const ownLaws = {
       `a branch rule of ${field(keys, "owner")} names ${field(keys, "target")}, which does not lie after it and no shuffle orders the two`,
     rule: "branch-forward",
     source:
-      "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'the test jumps forward to the item, section or part referred to by the target identifier', 'the target must refer to an item or section in the same test-part that has not yet been presented'; §2.8.3.2): a target lies after its source's end in the assembled test, unless the section that orders the two shuffles (§5.98, an invisible section not kept together mixing its children into its parent's order); fixed is not read, a recorded limit (tests.ts Branch_forward)",
+      "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'the test jumps forward to the item, section or part referred to by the target identifier', 'the target must refer to an item or section in the same test-part that has not yet been presented'): a target lies after its source's end in the assembled test, unless the section that orders the two shuffles (§5.98: the child elements of an invisible section not kept together 'are mixed into the parent's selection prior to shuffling'); fixed is not read, a recorded limit (tests.ts Branch_forward)",
   },
   "Branch target": {
     explain: (keys) =>
@@ -6141,27 +6141,27 @@ const ownLaws = {
       `${field(keys, "kind")}'s identifier ${field(keys, "identifier")} is the identifier of the ${field(keys, "kind")} at ${field(keys, "first")}; a choice's identifier names one choice of its class in its document`,
     rule: "choice-identifier-distinct",
     source:
-      'reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1: \'This identifier must not be used by any other choice or item variable\', each class naming its own noun) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_Identifier (§7.16: an identifier is \'a logical reference to another object in the item, such as an itemVariable or choice\'): no two choices of one kind in a document share an identifier, whichever interactions hold them, nor two hottexts of a document, compared collapsed (interactions.ts key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document", "identifier")))',
+      'reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1: \'This identifier must not be used by any other choice or item variable\', each class naming its own noun) and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Identifier (§7.16: an identifier is \'a logical reference to another object in the item, such as an itemVariable or choice\'): no two choices of one kind in a document share an identifier, whichever interactions hold them, nor two hottexts of a document, compared collapsed (interactions.ts key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document", "identifier")))',
   },
   "Choice not variable": {
     explain: (keys) =>
       `${field(keys, "kind")}'s identifier ${field(keys, "identifier")} names ${field(keys, "variable") === "built-in" ? "a built-in variable" : "a variable its document declares"}; a choice's identifier names no item variable`,
     rule: "choice-identifier-distinct",
     source:
-      "reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1 and the other choice classes' identifier: 'This identifier must not be used by any other choice or item variable') and https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: item variables are declared, 'except for the built-in session variables referred to below which are declared implicitly'; §2.2.2.1, QTI_CONTEXT): no choice or hottext bears the identifier of a declaration of its document, nor in an item that of a built-in variable, compared collapsed (interactions.ts ChoiceVariableName, Choice_not_variable)",
+      "reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1 and the other choice classes' identifier: 'This identifier must not be used by any other choice or item variable'), https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Variable (§7.47: a variable is one 'declared in a corresponding variable declaration or is one of the built-in variables'), https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ResponseDeclaration.Attr_identifier (§5.115.1, and §4.5.1 and §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'There is one built-in context variable named \"QTI_CONTEXT\" with record cardinality'): no choice or hottext bears the identifier of a declaration of its document, nor in an item that of a built-in variable, compared collapsed (interactions.ts ChoiceVariableName, Choice_not_variable)",
   },
   "Condition type": {
     explain: (keys) =>
       `the condition of ${field(keys, "parentKind")} is ${field(keys, "baseType")} ${field(keys, "cardinality")}, not boolean single`,
     rule: "P21",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ResponseIf (§2.5.1.2, ResponseIf and ResponseElseIf: 'An expression which must have an effective value of boolean' single), the outcome and template branches alike, and TemplateConstraint (§2.8.1.6) (expressions.ts Condition_type; the old checker's P21)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_ResponseCondition_qti-response-if (§5.114.1, and §5.114.2 and §5.117 of the response branches, §5.99.1, §5.99.2 and §5.101 of the outcome branches, and §5.149.1, §5.149.2 and §5.154 of the template branches: each 'consists of an expression which must have an effective base-type of boolean and single cardinality'), and https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateConstraint (§5.150: 'A templateConstraint contains an expression which must have an effective base-type of boolean and single cardinality') (expressions.ts Condition_type; the old checker's P21)",
   },
   "Context variable reference": {
     explain: (keys, grammar) => referenceExplained(keys, grammar),
     rule: "context-variable-ref",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Context (§2.2.2.1, Context Variable: the built-in QTI_CONTEXT and the context declarations) and the Schematron's rule 20Ba (reading 9): a PCI's qti-context-variable names QTI_CONTEXT or a declared context variable (references.ts ContentReference)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_PortableCustomInteraction_qti-context-variable (§5.106.6: 'This allows an item author to bind a context variable to the PCI instance'), https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'Context variables, variables declared by context declarations', and 'There is one built-in context variable named \"QTI_CONTEXT\" with record cardinality') and the Schematron's rule 20Ba (reading 9): a PCI's qti-context-variable names QTI_CONTEXT or a declared context variable (references.ts ContentReference)",
   },
   "Declaration base type": {
     explain: (keys) =>
@@ -6174,14 +6174,14 @@ const ownLaws = {
     explain: (keys) => `a second declaration of ${field(keys, "identifier")}`,
     rule: "declaration-key",
     source:
-      "reading 74: https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'The purpose of the declaration is to associate an identifier with the variable') and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, and §5.34.1, §5.115.1, §5.151.1: 'All item variables declared in an item share the same namespace'); a response's and a context's identifier is a UniqueIdentifier (§5.115.1, §5.34.1; §7.43: 'unique within the scope of the instance'), though the XSD types the context's an IdentifierDType, an xs:NCName, so DocumentId key counts it among the IDs",
+      "reading 74: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, and §5.34.1, §5.115.1, §5.151.1: 'All item variables declared in an item share the same namespace'); a response's and a context's identifier is a UniqueIdentifier (§5.115.1, §5.34.1; §7.43: 'unique within the scope of the instance'), though the 3.0.1 XSD types the context's an IdentifierDType, an xs:NCName, so DocumentId key counts it among the IDs",
   },
   "Declaration not reserved": {
     explain: (keys) =>
       `${field(keys, "identifier")} is a built-in session variable, which is declared implicitly and must not be declared`,
     rule: "declaration-reserved",
     source:
-      "reading 72: https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables referred to below which are declared implicitly and must not be declared'; §2.2.2.2: numAttempts and duration 'must not appear in a response declaration'; §2.2.2.3: completionStatus 'must not appear in an outcome declaration') and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, §5.115.1, §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration'), each spelled exactly, with no alias, the identifier compared collapsed (references.ts BuiltInVariable, its session variables); the context variable QTI_CONTEXT is Reserved type's",
+      "reading 72: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, §5.115.1, §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration'), each spelled exactly, with no alias, the identifier compared collapsed (references.ts BuiltInVariable, its session variables); the context variable QTI_CONTEXT is Reserved type's",
   },
   Document: {
     explain: (keys) =>
@@ -6207,7 +6207,7 @@ const ownLaws = {
       `a second element purports the id ${field(keys, "id")}, which ${field(keys, "first")} already holds`,
     rule: "document-key",
     source:
-      "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): no id's [binding] has more than one member, an attribute's binding its element, an ID-typed element text's its parent (§3.15.5; reading 101; identity.ts IdBinding); reading 14; reading 74: a context declaration's identifier, a UniqueIdentifier (https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ContextDeclaration.Attr_identifier, §5.34.1), is one of the document's IDs, though the XSD types it an IdentifierDType",
+      "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): no id's [binding] has more than one member, an attribute's binding its element, an ID-typed element text's its parent (§3.15.5; reading 101; identity.ts IdBinding); reading 14; reading 74: a context declaration's identifier, a UniqueIdentifier (https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ContextDeclaration.Attr_identifier, §5.34.1), is one of the document's IDs, though the 3.0.1 XSD types it an IdentifierDType",
   },
   "E1 derived": {
     explain: (keys) =>
@@ -6286,7 +6286,7 @@ const ownLaws = {
       `${field(keys, "path")} is placed inside ${field(keys, "first")} and inside ${field(keys, "second")}, and one written element is judged under one nearest interaction, a limit of the representation`,
     rule: "fragment-context",
     source:
-      "reading 117: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: 'the content of the fragment must satisfy the requirements of the specification in the context of the item in which it is being included'): an included fragment's content is one written element per node, judged under the union of the ancestries of the includes that place it and under one nearest interaction; a fragment two includes place inside different interactions, or one inside an interaction and one outside, would need two rows per node, so it is refused: a stated limit of the representation, not a law of the specification",
+      "reading 117: https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_FlowGroup_include (§6.15.8, and the include attribute of each class §9.4.1 lists: 'This provides the insertion of markup from external files. … When using XML this is achieved using the 'XInclude' approach') and https://www.w3.org/TR/xinclude-11/#creating-result (XInclude 1.1 §4.7: 'The result infoset is a copy of the source infoset, with each xi:include element processed as follows'): an included fragment's content is judged in place, as the including document's result infoset holds it; it is one written element per node, judged under the union of the ancestries of the includes that place it and under one nearest interaction; a fragment two includes place inside different interactions, or one inside an interaction and one outside, would need two rows per node, so it is refused: a stated limit of the representation, not a law of the specification",
   },
   "Graphic gap match default hotspot": {
     explain: () =>
@@ -6321,14 +6321,14 @@ const ownLaws = {
       `the include ${field(keys, "node")} names ${field(keys, "href")}, with a fragment identifier, which XInclude makes a fatal error`,
     rule: "include-href",
     source:
-      "reading 115: https://www.w3.org/TR/xinclude/#include_element (XInclude 1.0 Second Edition §3.1, href: 'Fragment identifiers must not be used; their appearance is a fatal error'): an xi:include's href carries no #, wherever it stands after the path",
+      "reading 115: https://www.w3.org/TR/xinclude-11/#include_element (XInclude 1.1 §3.1, href: 'Fragment identifiers must not be used; their appearance is a fatal error'): an xi:include's href carries no #, wherever it stands after the path",
   },
   "Include root": {
     explain: (keys) =>
       `the include ${field(keys, "node")} stands for ${field(keys, "root")}, the root of ${field(keys, "path")}, which ${field(keys, "parentKind")} does not admit where it admits the include`,
     rule: "include-root",
     source:
-      "reading 114: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: an include 'is treated as if it was actually an instance of the root element of the fragment referred to'; 'A fragment may appear anywhere in the model where one of the following abstract classes may appear') and Table 9.4.1 (Include's parent classes): an include under a parent whose model holds one stands for its fragment's root, which is one of its particle's choice-group alternatives, a kind whose position the parent's automaton follows and ends on as the include's",
+      "reading 114: https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1, Include's parent classes, and 'This denotes the use of the XInclude feature [XInclude, 16]'), https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_FlowGroup_include (§6.15.8 and its siblings: 'This provides the insertion of markup from external files') and https://www.w3.org/TR/xinclude-11/#docii (XInclude 1.1 §4.2.1: an included document's 'set of top-level included items is the children of the acquired infoset's document information item'): an include under a parent whose model holds one stands for its fragment's root, which is one of its particle's choice-group alternatives, a kind whose position the parent's automaton follows and ends on as the include's",
   },
   "Include target": {
     explain: (keys) =>
@@ -6337,14 +6337,14 @@ const ownLaws = {
         : `the include ${field(keys, "node")} names ${field(keys, "path")}, which is no document the manifest lists`,
     rule: "include-target",
     source:
-      "reading 115: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: 'Fragments are packaged as separate resources'); https://www.w3.org/TR/xinclude/#include_element (XInclude 1.0 §3.1: 'If the href attribute is absent when parse=\"xml\", the xpointer attribute must be present', and reading 85 refuses xpointer): an include the information model reads names, by an href this representation resolves, a document its package lists; an include whose href is external (reading 102) names a resource the package does not hold, and is admitted, stored as written and never fetched",
+      "reading 115: https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1: 'This denotes the use of the XInclude feature [XInclude, 16]'); https://www.w3.org/TR/xinclude-11/#include_element (XInclude 1.1 §3.1: 'If the href attribute is absent when XML processing is specified, the xpointer or fragid attribute must be present', and reading 85 refuses xpointer, and the pinned XInclude.xsd declares no fragid), https://www.w3.org/TR/xinclude-11/#xml-included-items (§4.2: 'Resources that are unavailable for any reason … result in a resource error') and https://www.w3.org/TR/xinclude-11/#fallback_element (§3.2: 'If the xi:fallback element is missing, a resource error results in a fatal error'): an include the information model reads names, by an href this representation resolves, a document its package lists; one that holds a fallback is refused alike, since the representation applies no fallback, a stated limit; an include whose href is external (reading 102) names a resource the package does not hold, and is admitted, stored as written and never fetched",
   },
   "Inclusion cycle": {
     explain: (keys) =>
       `the section refs and includes ${inBraces(membersOf(keys["chain"]))} lead from ${field(keys, "path")} back to it, so its merged document never ends`,
     rule: "inclusion-cycle",
     source:
-      "reading 85: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: an include 'is treated as if it was actually an instance of the root element of the fragment referred to'), §7.5 (a section ref 'functions as a facade for the qti-assessment-section to which it refers') and §2.8.3.2 ('unbounded repetition is not supported'); https://www.w3.org/TR/xinclude/#loops (XInclude 1.0 §4.2.7: an inclusion loop is 'a fatal error'): no chain of qti-assessment-section-ref and xi:include hrefs, over the documents the manifest lists, returns to a document already on it",
+      "reading 85: https://www.w3.org/TR/xinclude-11/#loops (XInclude 1.1 §4.2.7: 'it is a fatal error to process another xi:include element with an include location and xpointer attribute value that have already been processed in the inclusion chain'), the XInclude https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1) names, and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: the section ref 'functions as a facade for the qti-assessment-section to which it refers', the document that holds it, 'with the refered-to section merged in', behaving as 'a document that has all the same sections aggregated in one document', which a chain that returns to its own document has none of): no chain of qti-assessment-section-ref and xi:include hrefs, over the documents the manifest lists, returns to a document already on it",
   },
   "Item duration": {
     explain: (keys) =>
@@ -6386,7 +6386,7 @@ const ownLaws = {
       `a qti-base-value of base-type ${field(keys, "baseType")} holds ${JSON.stringify(field(keys, "text"))}, which is no lexical form of it`,
     rule: "attribute-lexical",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-base-value's text is a lexical form of its base-type, the same language as Typed value's (expression-types.ts BaseTypePattern; readings 7, 34, 45 and 71)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a qti-base-value's text is a lexical form of its base-type, the same language as Typed value's (expression-types.ts BaseTypePattern; readings 7, 34, 45 and 71)",
   },
   LomObjectIdentifier: {
     explain: (keys) =>
@@ -6407,14 +6407,14 @@ const ownLaws = {
       `a ${field(keys, "kind")} of an outcome of ${field(keys, "cardinality")} cardinality, where a lookup table sets a single outcome value`,
     rule: "lookup-cardinality",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_OutcomeDeclaration_lookupTable (§4.5.13: a lookup table maps 'a numeric source value to a single outcome value in the declared value set'): a qti-match-table's or qti-interpolation-table's outcome declaration is of single cardinality (mapping.ts Lookup_table_cardinality)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_OutcomeDeclaration_lookupTable (§4.5.13: a lookup table maps 'a numeric source value to a single outcome value in the declared value set'): a qti-match-table's or qti-interpolation-table's outcome declaration is of single cardinality (mapping.ts Lookup_table_cardinality)",
   },
   "Lookup type": {
     explain: (keys) =>
       `qti-lookup-outcome-value looks up a ${field(keys, "baseType")} ${field(keys, "cardinality")} in ${field(keys, "identifier")}'s ${field(keys, "table") || "missing table"}; it takes a single integer, float or duration, a match table's an integer`,
     rule: "P22",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_LookupOutcomeValue (§2.5.1.4: the expression 'must have single cardinality and an effective value type of integer, float or duration', looked up in the outcome's matchTable or interpolationTable; a match table's source values are integers) (expressions.ts Lookup_type; the old checker's P22)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_LookupOutcomeValue_expressionGroup (§5.87.2: 'An expression which must have single cardinality and an effective base-type of either integer, float or duration. Integer type is required when the associated table is a matchTable'), looked up in the outcome's table (§5.87: 'in the lookupTable associated with the outcome's declaration') (expressions.ts Lookup_type; the old checker's P22)",
   },
   "Manifest id space": {
     explain: (keys) => `${field(keys, "identifier")} is also the manifest's identifier`,
@@ -6436,14 +6436,14 @@ const ownLaws = {
       )}`,
     rule: "mapping-base-type",
     source:
-      "reading 78: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88, the Mapping class: 'A special class used to create a mapping from a source set of any base-type (except file and duration) to a single float') and https://www.imsglobal.org/spec/qti/v3p0/info#ExpMapResponse (§2.11.1.5: 'This expression cannot be applied to variables of record cardinality') (expression.ts MappableBaseType)",
+      "reading 78: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88, the Mapping class: \"A special class used to create a mapping from a source set of any base-type (except file and duration) to a single 'float'\") (expression.ts MappableBaseType)",
   },
   "Mapped response": {
     explain: (keys) =>
       `${field(keys, "kind")} names ${field(keys, "identifier")}, a ${field(keys, "declarationKind")} with no ${field(keys, "kind") === "qti-map-response-point" ? "qti-area-mapping of base-type point" : "qti-mapping"}`,
     rule: "P27",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#ExprMapResponse (§2.11.3.29, MapResponse: 'the response variable must have been declared with an associated mapping'; §2.11.3.30, MapResponsePoint: an areaMapping, of base-type point) (expressions.ts Mapped_response; the old checker's P27)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_MapResponse (§7.22, MapResponse: it 'transforms it using the associated mapping, which must have been declared'; §6.9.46, MapResponsePoint: it takes 'a response variable that must be of base-type point, and transforms it using the associated areaMapping', which §5.115.7 says 'may only be present in declarations of variables with base-type point') (expressions.ts Mapped_response; the old checker's P27)",
   },
   "Mastery range": {
     explain: (keys) =>
@@ -6756,7 +6756,7 @@ const ownLaws = {
       `the operands of ${field(keys, "kind")} are of base types ${field(keys, "bases")} or cardinalities ${field(keys, "cardinalities")}, which it takes of one`,
     rule: "P23",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 (§2.11.3: Multiple, Ordered and Repeat take sub-expressions 'of the same base-type'; Match, Member, Delete and Contains compare two values 'of the same base-type', and Match and Contains 'of the same cardinality'), a type no declaration says aside (reading 4) (expressions.ts One_base; the old checker's P23)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-multiple (§6.9.13, and §6.9.14 Ordered: 'Although the sub-expressions may be of any base-type they must all be of the same base-type'; §5.113, Repeat: 'all of which must have either single or ordered cardinality and the same base-type'; §6.9.21, Match: 'which must both have the same base-type and cardinality'; §6.9.33, Member, and §6.9.20, Delete: 'which must both have the same base-type'; §6.9.25, Contains: 'which must both have the same base-type and cardinality - either multiple or ordered'), a type no declaration says aside (reading 4) (expressions.ts One_base; the old checker's P23)",
   },
   OpenElementName: {
     explain: (keys) =>
@@ -6798,7 +6798,7 @@ const ownLaws = {
       `the test ${field(keys, "assembly")} reads the reference ${field(keys, "identifier")} in ${field(keys, "resolving")} ways, ${field(keys, "readings")}, where exactly one reading may name a scope of the test and a variable of it`,
     rule: "prefixed-ref",
     source:
-      "readings 48 and 88: https://www.imsglobal.org/spec/qti/v3p0/info#ExprVariable (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; under with-replacement 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), §2.2.2 ('The values of these durations can be refered to during outcome-processing by using the variable name duration prefixed with the identifier of the part or section followed by the period character', info.txt:9214), read over the assembled test (readings 4, 5 and 86): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give; a name read through an item ref that names an LTI link resolves unchecked, an LTI link having no declarations (reading 110, expressions.ts linkHeld); and a braced reference, a string attribute's, that resolves nowhere is a string value, refused only for two resolving readings (reading R15-k) (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
+      "readings 48 and 88: https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Variable (§7.47: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; for an item 'allowed to be replaced (i.e. that have the with-replacement attribute set to \"true\")', 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1: 'Identifiers containing the period character are reserved for use in prefixing') and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_TimeLimits (§7.40: 'For qti-assessment-sections, qti-test-parts and whole qti-assessment-tests the time limits relate to the durations of all the item sessions plus any other time spent navigating that part of the test'), a part's or section's duration read by its identifier's prefix as an item's variables are (reading 48), over the assembled test (readings 4, 5 and 86): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give; a name read through an item ref that names an LTI link resolves unchecked, an LTI link having no declarations (reading 110, expressions.ts linkHeld); and a braced reference, a string attribute's, that resolves nowhere is a string value, refused only for two resolving readings (reading R15-k) (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
   },
   "Printed variable reference": {
     explain: (keys, grammar) => referenceExplained(keys, grammar),
@@ -6817,28 +6817,28 @@ const ownLaws = {
     explain: (keys) => `a second field of one record value is named ${field(keys, "identifier")}`,
     rule: "value-cardinality",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Cardinality (§8.16, CardinalityEnum, record: 'a special container that contains a set of independent values each identified by its own identifier and having its own base-type'): no two fields of one record value share a field-identifier, compared collapsed",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_CardinalityEnum (§8.16, CardinalityEnum, record: 'a special container that contains a set of independent values each identified by its own identifier and having its own base-type'): no two fields of one record value share a field-identifier, compared collapsed",
   },
   RecordBindingFit: {
     explain: (keys) =>
       `${field(keys, "kind")} binds the record ${field(keys, "identifier")}, which RecordBindingFit does not admit`,
     rule: "record-binding-fit",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4.2.2: 'must be bound to a response variable with either single or record cardinality only'; §2.4.2.3 likewise) (expression.ts RecordBindingFit)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_TextEntryInteraction (§5.162: 'The textEntryInteraction must be bound to a response variable with single or record cardinality only') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_ExtendedTextInteraction (§5.48: 'The qti-extended-text-interaction must be bound to a response variable of single, multiple, ordered or record cardinality'); every other class's binding sentence names no record (§5.30 and BindingFit's others) (expression.ts RecordBindingFit)",
   },
   "Reference type": {
     explain: (keys) =>
       `${field(keys, "kind")}'s ${field(keys, "attribute")} names ${field(keys, "identifier")}, which is no ${field(keys, "base")} single template or outcome variable`,
     rule: "P24",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_IntegerOrVariableRef (§8.25, §8.24 and §8.42: an integerOrVariableRef, floatOrVariableRef or stringOrVariableRef names a template or outcome variable of that base type, single) (expression.ts ReferenceBase; the old checker's P24)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Union_IntegerOrVariableRef (§9.3.3, §9.3.1 and §9.3.4: an integerOrVariableRef, floatOrVariableRef or stringOrVariableRef names a template or outcome variable of that base type, single) (expression.ts ReferenceBase; the old checker's P24)",
   },
   "Reserved type": {
     explain: (keys) =>
       `${field(keys, "identifier")} is declared by ${field(keys, "kind")} of base type ${JSON.stringify(field(keys, "baseType"))} and cardinality ${JSON.stringify(field(keys, "cardinality"))}, where the specification types it otherwise`,
     rule: "reserved-type",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration, normative: 'SCORE needs to be a float', 'MAXSCORE needs to be a float', 'PASSED needs to be a boolean'; the non-normative overview, §2.2.2.3, says 'MUST'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_AssessmentItem_qti-context-declaration (§4.1.10, and §4.4.7 of a test, normative: 'An implementation MUST support the global variable 'QTI_CONTEXT' with record cardinality'), which the implementation guide declares explicitly (§3.7.11, 'an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 74)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration: 'SCORE needs to be a float.', 'MAXSCORE needs to be a float.', 'PASSED needs to be a boolean.'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_AssessmentItem_qti-context-declaration (§4.1.10, and §4.4.7 of a test: 'An implementation MUST support the global variable \"QTI_CONTEXT\" with record cardinality') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'There is one built-in context variable named \"QTI_CONTEXT\" with record cardinality'), which the implementation guide, a document with no normative mark, declares explicitly (its §3.7.11, 'an explicit (though unnecessary) <qti-context-declaration> of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 74)",
   },
   RootOfType: {
     explain: (keys, grammar) =>
@@ -6876,7 +6876,7 @@ const ownLaws = {
       `the section-identifier ${field(keys, "identifier")} names no single section or section ref of the test ${field(keys, "assembly")}`,
     rule: "section-identifier-target",
     source:
-      "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
+      "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
   },
   "Selection bound": {
     explain: (keys) =>
@@ -6918,14 +6918,14 @@ const ownLaws = {
       `two stimulus refs of one item share the identifier ${field(keys, "identifier")}`,
     rule: "stimulus-ref-key",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_AssessmentStimulusRef.Attr_identifier (§7.6.1: 'The unique identifier for the stimulus reference'; §7.6.2: 'each reference must have a unique identifier'), compared collapsed: no two stimulus refs of one item share an identifier (tests.ts StimulusRef)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_AssessmentStimulusRef.Attr_identifier (§7.6.1: 'The unique identifier for the stimulus reference'; §7.6.2: 'each reference must have a unique identifier'), compared collapsed: no two stimulus refs of one item share an identifier (tests.ts StimulusRef)",
   },
   "Stimulus ref target": {
     explain: (keys) =>
       `a stimulus ref names ${field(keys, "path")}, which is no stimulus document of the package`,
     rule: "stimulus-ref-target",
     source:
-      "info.txt:67012 and :67066 (https://www.imsglobal.org/spec/qti/v3p0/info#Root_AssessmentStimulusRef, §7.6: the stimulus ref 'enables reference to a 'qti-assessment-stimulus' instance', and its href is 'The uri used to refer to the stimulus file'): a stimulus ref's href that resolves in the package names a listed document whose root is a qti-assessment-stimulus; an external href is not resolved (reading 35's reading of an absolute URI) (package.ts ReferencePath, the UP audit's B5)",
+      "info.txt:67012 and :67066 (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentStimulusRef, §7.6: the stimulus ref 'enables reference to a 'qti-assessment-stimulus' instance', and its href is 'The uri used to refer to the stimulus file'): a stimulus ref's href that resolves in the package names a listed document whose root is a qti-assessment-stimulus; an external href is not resolved (reading 35's reading of an absolute URI) (package.ts ReferencePath, the UP audit's B5)",
   },
   "Strictly held": {
     explain: (keys) =>
@@ -7018,20 +7018,20 @@ const ownLaws = {
       `the template default of ${field(keys, "itemRef")} sets ${field(keys, "template")}, a ${field(keys, "declared")}, to a ${field(keys, "held")}`,
     rule: "P20",
     source:
-      "the UP audit's A38, the old checker's P20 for a setter: https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateDefault (§5.152: the template variable's default 'is obtained by evaluating an expression defined within the reference to the item'), so the expression's value is a value of the template variable, and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_SetOutcomeValue (§2.5.1.3: 'The expression must have an effective value type which is compatible with the variable's base-type and cardinality'): a template default's expression fits its template variable's type, a type no declaration says aside (reading 4) (expressions.ts Template_default_type)",
+      "the UP audit's A38, the old checker's P20 for a setter: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_TemplateDefault_expressionGroup (§5.152.2: 'An expression which must result in a value with base-type and cardinality matching the declaration of the associated variable's qti-template-declaration'): a template default's expression fits its template variable's type, a type no declaration says aside (reading 4) (expressions.ts Template_default_type)",
   },
   "Template reads": {
     explain: (keys) =>
       `template processing's ${field(keys, "kind")} reads ${field(keys, "identifier")}, a response or outcome variable or a built-in but QTI_CONTEXT`,
     rule: "P26",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#TemplateProcessing (§2.8: template processing sets template variables and default and correct values, and reads no response or outcome variable; QTI_CONTEXT is a context variable) (expressions.ts Template_reads; the old checker's P26)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_TemplateRuleGroup (§6.50: 'An expression used in a qti-template-rule must not refer to the value of a response variable or outcome variable. It may only refer to the values of the template variables'), with https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'Context variables may be referenced in template processing, in response processing, and in outcome processing'): template processing reads template and context variables, QTI_CONTEXT among them, and no response, outcome or built-in session variable (expressions.ts Template_reads; the old checker's P26)",
   },
   "Template reference": {
     explain: (keys, grammar) => referenceExplained(keys, grammar),
     rule: "template-ref",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, §5.155.1; §2.7.2: 'A references must match the identifier in a corresponding template declaration') (references.ts ContentReference)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, and §5.155.1, §5.122.1, §5.124.1 and each choice's, as §5.132.3: 'The identifier of a template variable'), a template variable being one a template declaration declares (https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateDeclaration, §5.151: 'Template declarations declare item variables that are to be used specifically for the purposes of cloning items') (references.ts ContentReference)",
   },
   "Template variable type": {
     explain: (keys) =>
@@ -7078,28 +7078,28 @@ const ownLaws = {
       `an attribute value of base type ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "value"))}, which is no lexical form of it written without whitespace around it`,
     rule: "attribute-lexical",
     source:
-      "readings 7 and 8, and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-map-entry's map-key is a value of its mapping's base type (§7.21.1, 'The source value'), and a lookup table entry's target-value and a table's default-value are values of its outcome's base type (§5.90.1, §5.78.1, §7.23.2, §7.18.3); each is written as its base type's lexical form with no whitespace around it unless the base type is string (mapping.ts Typed_attribute_value over expression-types.ts BaseTypePattern)",
+      "readings 7 and 8, and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a qti-map-entry's map-key is a value of its mapping's base type (§7.21.1, 'The source value'), and a lookup table entry's target-value and a table's default-value are values of its outcome's base type (§5.90.1, §5.78.1, §7.23.2, §7.18.3); each is written as its base type's lexical form with no whitespace around it unless the base type is string (mapping.ts Typed_attribute_value over expression-types.ts BaseTypePattern)",
   },
   "Typed value": {
     explain: (keys) =>
       `a value of base type ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "text"))}, which is no lexical form of it`,
     rule: "typed-copy",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Value (§7.46, Value: 'The base-type is defined by the 'base-type' attribute of the declaration except in the case of variables with record cardinality') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-value's text is a lexical form of its base type, outer whitespace formatting but for string (reading 7): boolean true or false (reading 34), integer xs:integer unbounded (reading 45), float and duration xs:double (§8.13: durations 'are represented using the 'xsd:double' datatype'), identifier IdentifierDType, uri xs:anyURI (reading 71), point two integers, pair and directedPair two identifiers; string and file any text",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Value (§7.46, Value: 'The base-type is defined by the 'base-type' attribute of the declaration except in the case of variables with record cardinality') and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a qti-value's text is a lexical form of its base type, outer whitespace formatting but for string (reading 7): boolean true or false (reading 34), integer xs:integer unbounded (reading 45), float xs:double (reading 56) and duration xs:double (§8.13: 'Durations are represented using the 'xsd:double' datatype'), identifier IdentifierDType, uri xs:anyURI (reading 71), point two integers, pair and directedPair two identifiers; string and file any text",
   },
   "Usage typed value": {
     explain: (keys) =>
       `a usage value of baseType ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "text"))}, which is no lexical form of it`,
     rule: "typed-copy",
     source:
-      "reading 105: https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html (QTI 3.0 Usage Data binding §2.6.5, Value: 'A class that can represent a single value of any baseType'; §2.7.1, BaseTypeEnum) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a ud:value that forms part of a record (it writes a fieldIdentifier) and writes baseType holds a lexical form of that base type, read as a qti-value's text is (readings 7, 34, 45 and 71), and any other ud:value, outside a record or writing no baseType, is xs:normalizedString text, accepted untyped (metadata.ts UsageValue over expression-types.ts BaseTypePattern)",
+      "reading 105: https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html (QTI 3.0 Usage Data binding §2.6.5, Value: 'A class that can represent a single value of any baseType'; §2.7.1, BaseTypeEnum) and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a ud:value that forms part of a record (it writes a fieldIdentifier) and writes baseType holds a lexical form of that base type, read as a qti-value's text is (readings 7, 34, 45 and 71), and any other ud:value, outside a record or writing no baseType, is xs:normalizedString text, accepted untyped (metadata.ts UsageValue over expression-types.ts BaseTypePattern)",
   },
   "Value cardinality": {
     explain: (keys) =>
       `a value set of ${JSON.stringify(field(keys, "cardinality"))} cardinality holds ${field(keys, "values")} values, ${field(keys, "fields")} of them with a field-identifier and ${field(keys, "typed")} with a base-type, where a record's values each carry both and any other's neither`,
     rule: "value-cardinality",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Cardinality (§8.16, CardinalityEnum: single 'a single value'; record 'a set of independent values each identified by its own identifier and having its own base-type') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_Value (§7.46.1, §7.46.2: field-identifier and base-type are 'only used for' a value that forms part of a record): a single variable's default or correct value holds one qti-value, and a value is a record's field, with its field-identifier and base-type, exactly when its variable is a record",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_CardinalityEnum (§8.16, CardinalityEnum: single 'a single value'; record 'a set of independent values each identified by its own identifier and having its own base-type') and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Value (§7.46.1, §7.46.2: field-identifier and base-type are 'only used for' a value that forms part of a record): a single variable's default or correct value holds one qti-value, and a value is a record's field, with its field-identifier and base-type, exactly when its variable is a record",
   },
   "Variable declared": {
     explain: (keys) =>
@@ -7120,21 +7120,21 @@ const ownLaws = {
       `the variable mapping of ${field(keys, "itemRef")} maps ${field(keys, "source")}, which its item declares as no outcome variable`,
     rule: "variable-mapping-source",
     source:
-      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71656): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSource, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it, and a mapping under it is accepted unchecked (reading 110, expressions.ts heldMappings leaves out the nil document)",
+      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSource, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it, and a mapping under it is accepted unchecked (reading 110, expressions.ts heldMappings leaves out the nil document)",
   },
   "Variable mapping target": {
     explain: (keys) =>
       `a variable mapping of ${field(keys, "itemRef")} names the target ${field(keys, "target")}, which another mapping of it or a built-in session variable already names`,
     rule: "variable-mapping-target",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 74: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 97), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSource, its declared half)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 74: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 97), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSource, its declared half)",
   },
   "Weighted base": {
     explain: (keys) =>
       `a qti-test-variables with a weight-identifier is of base-type ${field(keys, "baseType")}, not float`,
     rule: "P29",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#ExprTestVariables (§2.11.4.8, TestVariables: with a weight-identifier the result is a float, so a base-type, where written, is float) (expressions.ts Weighted_base; the old checker's P29)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_TestVariables.Attr_weight-identifier (§7.39.5, TestVariables: 'The behaviour of this characterisic is only defined if the base-type attribute is float or omitted . When a weighting is specified the result of the expression always has base-type float'): with a weight-identifier, a base-type, where written, is float (expressions.ts Weighted_base; the old checker's P29)",
   },
   "XsiType available": {
     explain: (keys) =>

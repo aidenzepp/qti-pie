@@ -9,8 +9,9 @@
  *   rules and the item each item ref names, each href resolved as its `ReferencePath` is
  *   (`#pantry/import/overlays/package.ts`).
  * - {@link assembledRowsOf} reads every document's rows of one package into the assemblies: one
- *   instance tree per document of a test or a section, and, under a test, its instances' names,
- *   their projection and the branch rules' resolutions.
+ *   instance tree per document that heads one, every assembled document no include splices in place
+ *   (`splicingParents`, spec reading 117), and, under a test, its instances' names, their
+ *   projection and the branch rules' resolutions.
  *
  * The rows restate what the documents say and nothing else, and the database proves every one of
  * them (`testLaws`), so a row a builder gets wrong is refused, never accepted. Where a document
@@ -49,6 +50,7 @@ import {
   partKind,
   sectionKind,
   sectionParts,
+  splicingParents,
   stimulusRefKind,
   testKind,
 } from "#pantry/qti/tests.ts";
@@ -1278,9 +1280,11 @@ const resolutionOf = (
 };
 
 /**
- * Build a package's assemblies from its documents' rows: one tree per document of a test or a
- * section, and, under a test, each instance's names, their projection and its branch rules'
- * resolutions.
+ * Build a package's assemblies from its documents' rows: one tree per document that heads one, and,
+ * under a test, each instance's names, their projection and its branch rules' resolutions. A
+ * document heads an assembly unless an include under one of `splicingParents` names it (spec
+ * reading 117): a fragment such an include splices is judged where it is included, in the
+ * assemblies of the documents that place it, and never alone.
  *
  * @param documents - Every document's rows ({@link rowsOf}) of one package.
  * @param newId - A fresh uuid for each instance but a root, whose id is its document's node.
@@ -1290,7 +1294,18 @@ export const assembledRowsOf = (
   documents: readonly TestRows[],
   newId: () => NodeId,
 ): AssembledRows => {
-  const heads = documents.flatMap((rows) => [...rows.TestDocument.values()]);
+  const spliced = new Set(
+    documents.flatMap((rows) =>
+      [...rows.SiteTarget.values()]
+        .filter(
+          ({ kind, parentKind }) => kind === includeKind && among(splicingParents, parentKind),
+        )
+        .map(({ target }) => target),
+    ),
+  );
+  const heads = documents
+    .flatMap((rows) => [...rows.TestDocument.values()])
+    .filter(({ node }) => !spliced.has(node));
   const byDocument = new Map(
     documents.flatMap((rows) =>
       [...rows.TestDocument.values()].map((row) => [row.node, rows] as const),

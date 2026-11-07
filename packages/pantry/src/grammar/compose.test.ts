@@ -7,7 +7,7 @@ import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed, layerAttributeNames, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
-import { fixedKinds, foreignKinds, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
+import { foreignKinds, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -155,47 +155,6 @@ describe("the composition", () => {
         );
       }),
   );
-
-  it.effect(
-    "gives every admitted child the content position 0 or a position its family's automaton reaches",
-    () =>
-      Effect.gen(function* positions() {
-        const { admission, content } = yield* grammar;
-        // The positions each model's automaton reaches, and each family's model.
-        const reached = new Set(content.follow.rows.map(({ model, to }) => `${model} ${to}`));
-        const modelOf = new Map(
-          content.contentModelOf.rows.map(({ model, parent, version }) => [
-            `${version} ${parent}`,
-            model,
-          ]),
-        );
-        const outside = admission.rows.filter(
-          ({ parent, position, version }) =>
-            position !== "0" &&
-            !reached.has(`${modelOf.get(`${version} ${parent}`) ?? ""} ${position}`),
-        );
-
-        assert.deepStrictEqual(outside.slice(0, 10), []);
-      }),
-    60_000,
-  );
-
-  it("builds a toy grammar through the production path", () => {
-    const result = toyGrammar([
-      toyVocabulary({
-        admission: [{ child: "e1", parent: "e0", version: "3.0.1" }],
-        attributes: ["id"],
-        data: ["ws"],
-        facets: toyFacets({}),
-        kinds: ["e0", "e1"],
-      }),
-    ]);
-
-    assert.deepStrictEqual(
-      Result.isSuccess(result) ? [...result.success.kinds.nodeKind.handles] : result.failure._tag,
-      [...fixedKinds, "ws", "e0", "e1"],
-    );
-  });
 
   it("resolves a child a vocabulary admits by a stated triple, beside the children its models admit", () => {
     // Oracle: the specification as a checker: a name resolves under a parent to the kind admitted

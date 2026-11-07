@@ -86,6 +86,7 @@ describe("qti/tests.ts, declared", () => {
       "Branch target",
       "E1 derived",
       "Fragment context",
+      "Inclusion cycle",
       "Item ref target",
       "Selection bound",
       "Selection required",

@@ -66,6 +66,8 @@ CREATE INDEX "__dependency_ix_resource_package_resource_identifier_rnvxztvfro" O
 
 CREATE INDEX "__document_ix_node_5_zotaizsb_2_qbvrbvdbck" ON "qti"."document" USING btree ("__node_5zotaizsb2");
 
+CREATE INDEX "__document_ix_node_ejjgk_3_z_2_mi_hqve44he6v" ON "qti"."document" USING btree ("__node_ejjgk3z2mi");
+
 CREATE INDEX "__document_ix_node_nv_676_cv_335_qde4grdoez" ON "qti"."document" USING btree ("__node_nv676cv335");
 
 CREATE INDEX "__document_ix_package_vkukekqhil_path_wawqt_33_xsc_rgf5fewhpu" ON "qti"."document" USING btree ("__package_vkukekqhil", "__path_wawqt33xsc", "__resource_type_jl3dzs2kez");
@@ -139,8 +141,6 @@ CREATE INDEX "__instance_ix_parent_document_rwupqx_3_wr_4_site_hdx_u33charzd5" O
 CREATE INDEX "__instance_ix_site_hdx_6_niaggk_document_iu_7_n_6_pecn4qx7js" ON "qti"."instance" USING btree ("__site_hdx6niaggk", "__document_iu7n6ahln3");
 
 CREATE INDEX "__instance_ix_document_ids_idref_targets_choices_yaskm27ja3" ON "qti"."instance" USING btree ("document", "ids", "idref_targets", "choices", "hottexts");
-
-CREATE INDEX "__instance_ix_document_root_kind_children_2m7u4fydr7" ON "qti"."instance" USING btree ("document", "root_kind", "children");
 
 CREATE INDEX "__instance_name_ix_document_node_identifier_6jlosqls2y" ON "qti"."instance_name" USING btree ("document", "node", "identifier");
 
