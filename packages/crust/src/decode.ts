@@ -185,8 +185,8 @@ const refuse = (rule: ReaderRefusal["rule"], detail: string): ReaderRefusal =>
  * @param name - The `TextDecoder` encoding name, lower-case.
  * @param label - The label as the document spelled it, for the refusal's detail.
  * @param body - The bytes to decode.
- * @returns The decoded text; a `decode` refusal when no decoder serves the name, the decoder serves
- *   another encoding, or the bytes are malformed.
+ * @returns The decoded text; an `unsupported-encoding` refusal when no decoder serves the name or
+ *   the decoder serves another encoding, and a `decode` refusal when the bytes are malformed.
  */
 const decodeStrictly = (
   name: string,
@@ -197,7 +197,7 @@ const decodeStrictly = (
     const decoder = yield* Effect.try({
       catch: () =>
         refuse(
-          "decode",
+          "unsupported-encoding",
           `No decoder here recognizes the encoding "${label}". Re-save the document as UTF-8, or declare an encoding this reader can decode.`,
         ),
       try: () => new TextDecoder(name, { fatal: true, ignoreBOM: true }),
@@ -205,7 +205,7 @@ const decodeStrictly = (
 
     if (decoder.encoding !== name) {
       return yield* refuse(
-        "decode",
+        "unsupported-encoding",
         `The encoding "${label}" is decoded as "${decoder.encoding}" by the decoder that serves that label, so some bytes would read as characters the author did not write. Re-save the document as UTF-8.`,
       );
     }
@@ -388,7 +388,8 @@ const mismatch = (row: Decodable, label: string, declared: boolean): ReaderRefus
  * @param row - The row the opening bytes put the document in.
  * @param body - The bytes after any byte order mark.
  * @returns The label and the text; an `encoding-mismatch` refusal for a label the row has no
- *   decoder for, or a `decode` refusal for a label no decoder serves or bytes not valid in it.
+ *   decoder for, an `unsupported-encoding` refusal for a label no decoder serves faithfully, or a
+ *   `decode` refusal for bytes not valid in the label.
  */
 const decodeRow = (row: Decodable, body: Uint8Array): Effect.Effect<Decoded, ReaderRefusal> => {
   const declared = declaredEncoding(row.units(body));
@@ -448,8 +449,9 @@ const requireXmlCharacters = (decoded: Decoded): Effect.Effect<Decoded, ReaderRe
  * @param bytes - The document as read from storage.
  * @returns The text, without its byte order mark, and the label it was read as, which becomes the
  *   tree's `charset`; a `ReaderRefusal` whose rule is `encoding-mismatch` for a label the opening
- *   bytes rule out, `decode` for UCS-4 or EBCDIC, for a label the reader cannot decode, or for
- *   bytes that are not valid in it, and `nul` for text that holds U+0000, which XML 1.0 forbids.
+ *   bytes rule out, `unsupported-encoding` for UCS-4, EBCDIC or a label the reader cannot decode
+ *   faithfully, `decode` for bytes that are not valid in the label, and `nul` for text that holds
+ *   U+0000, which XML 1.0 forbids.
  * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#charencoding | XML 1.0 (Fifth Edition), section 4.3.3}
  */
 export const decode = Effect.fn("xml.decode")(function* decode(
@@ -458,7 +460,7 @@ export const decode = Effect.fn("xml.decode")(function* decode(
   const row = rows.find(({ signature }) => startsWith(bytes, signature)) ?? asciiRow;
   if (row._tag === "Unsupported") {
     return yield* refuse(
-      "decode",
+      "unsupported-encoding",
       `The document begins with the bytes of ${row.family} (XML 1.0 Appendix F), an encoding this reader cannot decode. Re-save the document as UTF-8.`,
     );
   }

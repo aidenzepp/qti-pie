@@ -126,7 +126,7 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesRemappedLabel() {
       const refusal = yield* refusalOf(declared("ISO-8859-9", ascii("x")));
 
-      assert.strictEqual(refusal.rule, "decode");
+      assert.strictEqual(refusal.rule, "unsupported-encoding");
       assert.include(refusal.detail, "ISO-8859-9");
     }),
   );
@@ -135,7 +135,7 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesUnknownLabel() {
       const refusal = yield* refusalOf(declared("no-such-charset", ascii("x")));
 
-      assert.strictEqual(refusal.rule, "decode");
+      assert.strictEqual(refusal.rule, "unsupported-encoding");
       assert.include(refusal.detail, "no-such-charset");
     }),
   );
