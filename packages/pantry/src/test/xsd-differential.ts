@@ -820,6 +820,35 @@ const bcp47Tag = [
 ].join("|");
 
 /**
+ * The two messages of xmllint's that reading 2 records on MathML content, each as one `line N
+ * {MathML}name: ...` segment: an element whose XSD content type is empty holding text, and a
+ * `semantics` where the XSD's content expression, `apply` through `piecewise` and perhaps more
+ * members, does not name it. A document's message joins its segments with " | ", and only a
+ * document every segment of which matches is covered.
+ */
+const mathmlSegment = (() => {
+  const name = String.raw`\{http://www\.w3\.org/1998/Math/MathML\}`;
+  const members = [
+    "apply",
+    "bind",
+    "ci",
+    "cn",
+    "csymbol",
+    "cbytes",
+    "cerror",
+    "cs",
+    "share",
+    "piecewise",
+  ]
+    .map((member) => `${name}${member}`)
+    .join(", ");
+
+  return String.raw`line \d+ ${name}(?:\S+: Character content is not allowed, because the content type is empty|semantics: This element is not expected\. Expected is one of \( ${members}(?:, ${name}[\w.-]+)* \))\.`;
+})();
+
+const coveredMessages = new RegExp(String.raw`^${mathmlSegment}(?: \| ${mathmlSegment})*$`, "u");
+
+/**
  * The differences generated documents show that no corpus document does, classified as
  * {@link recorded} classifies the corpus's. A generated run draws its own documents, so a record
  * here may match nothing in a run, and none goes stale.
@@ -1105,6 +1134,21 @@ export const generatedRecorded: readonly Recorded[] = [
       reading: 2,
       says: "RELAX NG matches a whitespace-only text against `empty`",
       why: "a MathML element whose RelaxNG content is empty admits whitespace-only text, as RELAX NG matches it against empty; the normative MathML 3 RelaxNG is followed over QTI's bundled XSD, whose empty types refuse it (xmllint's XSD validator)",
+    },
+  },
+  {
+    class: "content",
+    // Every message is one a reading records: the XSD's empty types refusing whitespace text (the
+    // record above), or its content expression refusing a `semantics` the RelaxNG's `ContExp`
+    // admits, where xmllint expects the members the XSD's group names, `apply` first. Any other
+    // message of the document stands unrecorded and fails it.
+    detail: coveredMessages,
+    direction: "xsd-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "a `semantics` stands wherever a content expression does",
+      why: 'a semantics stands wherever a MathML 3 content expression does, as the RelaxNG\'s ContExp names semantics-contexp; the XSD drops it ("Ambiguous content model altered (ContExp)", mathml3-strict-content.xsd line 8), so xmllint refuses it there',
     },
   },
   {
@@ -1828,6 +1872,12 @@ const kindOfNode = (node: string): string =>
  * document's foreign elements are compared as one: an `xmllint` message on one of them is matched
  * by any refusal of its class at a node of a foreign kind, and such a refusal by any such message.
  *
+ * `xmllint` names an element by its expanded name alone, so a name both a kind's element and a
+ * foreign element of the document have, a QTI root nested in lax content beside the kind's own
+ * element (reading 6), could be either: a message on it is matched by a refusal of either, and a
+ * refusal of either by such a message. Where both have it, the element grain cannot tell them
+ * apart, and compares their messages and refusals as one.
+ *
  * @param xsd - `xmllint`'s verdict.
  * @param law - The law oracle's judgment.
  * @param comparison - The two compared class by class.
@@ -1861,32 +1911,26 @@ export const elementGrainDifferences = (
       : Option.getOrUndefined(
           Option.map(grammar.kinds.elementName.lookup({ kind: kindOfNode(node) }), messageName),
         );
-  const nameOfMessage = (name: string): string | undefined => {
-    if (foreignNames.has(name)) {
-      return foreignGroup;
-    }
-
-    return kinds.has(name) ? name : undefined;
-  };
+  // The groups a message's element may be in: its kind's, and the foreign elements', both where a
+  // kind's element and a foreign one share its name.
+  const groupsOfMessage = (name: string): readonly string[] => [
+    ...(kinds.has(name) ? [name] : []),
+    ...(foreignNames.has(name) ? [foreignGroup] : []),
+  ];
 
   return comparison.xsdClasses.flatMap((cls): readonly Difference[] => {
     if (!elementGrainClasses.has(cls) || !comparison.lawClasses.includes(cls)) {
       return [];
     }
 
-    const said = Map.groupBy(
-      xsd.messages.flatMap((message) =>
-        Option.contains(classOfMessage(message), cls)
-          ? Option.toArray(
-              message.element.pipe(
-                Option.flatMap((name) => Option.fromUndefinedOr(nameOfMessage(name))),
-                Option.map((name) => ({ message, name })),
-              ),
-            )
-          : [],
-      ),
-      ({ name }) => name,
-    );
+    const messages = xsd.messages.flatMap((message) => {
+      const groups = Option.contains(classOfMessage(message), cls)
+        ? Option.match(message.element, { onNone: () => [], onSome: groupsOfMessage })
+        : [];
+      const [name] = groups;
+
+      return name === undefined ? [] : [{ groups, message, name }];
+    });
     const refused = Map.groupBy(
       law.refusals.flatMap((refusal) => {
         const name = refusal.class === cls ? nameOfNode(refusal.node) : undefined;
@@ -1895,25 +1939,28 @@ export const elementGrainDifferences = (
       }),
       ({ name }) => name,
     );
+    const said = Map.groupBy(
+      messages.filter(({ groups }) => !groups.some((group) => refused.has(group))),
+      ({ name }) => name,
+    );
+    const heard = new Set(messages.flatMap(({ groups }) => groups));
 
     return [
-      ...[...said]
-        .filter(([name]) => !refused.has(name))
-        .map(([, held]): Difference => ({
-          class: cls,
-          // Each message names its own element, never the group's, so a classifier that reads
-          // where a message stands (reading 6's nested roots, reading 81's sets) still can.
-          detail: held
-            .map(
-              ({ message, name }) =>
-                `line ${String(message.line)} ${Option.getOrElse(message.element, () => name)}: ${message.text}`,
-            )
-            .join(" | "),
-          direction: "xsd-only",
-          rule: "",
-        })),
+      ...[...said].map(([, held]): Difference => ({
+        class: cls,
+        // Each message names its own element, never the group's, so a classifier that reads
+        // where a message stands (reading 6's nested roots, reading 81's sets) still can.
+        detail: held
+          .map(
+            ({ message, name }) =>
+              `line ${String(message.line)} ${Option.getOrElse(message.element, () => name)}: ${message.text}`,
+          )
+          .join(" | "),
+        direction: "xsd-only",
+        rule: "",
+      })),
       ...[...refused]
-        .filter(([name]) => !said.has(name))
+        .filter(([name]) => !heard.has(name))
         .flatMap(([, held]) =>
           held.map(({ refusal }): Difference => ({
             class: cls,

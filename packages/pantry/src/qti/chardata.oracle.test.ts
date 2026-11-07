@@ -797,9 +797,8 @@ describe("qti/chardata.ts", () => {
   it.effect(
     "admits exactly what XML's productions admit: a comment, an instruction's target and data, character data split into text and whitespace, and an entity reference's name",
     (ctx) =>
-      // Oracle: a second implementation, crust's reader (saxes, namespaces on) reading a document
-      // that writes each value, with Namespaces in XML 1.0 §7 (no colon in an entity name), which
-      // the reader does not hold, as the specification beside it.
+      // Oracle: a second implementation, crust's reader reading a document that writes each value,
+      // which holds Namespaces in XML 1.0 §7 (no colon in an entity name or a target) too.
       // Bound: exhaustive over each production's box (`boxes`): every value of length 0 to 5 over 4
       // characters for a comment and instruction data, 0 to 4 over 10 for a target, 0 to 3 over 9
       // for character data and over 5 for an entity name.
@@ -932,11 +931,12 @@ describe("qti/chardata.ts", () => {
     { timeout: boxTimeout },
   );
 
-  it("refuses a colon in an entity reference's name, which the reader admits and Namespaces in XML 1.0 §7 does not", () => {
+  it("refuses a colon in an entity reference's name at the reader and in its row, as Namespaces in XML 1.0 §7 does", () => {
     // Oracle: the specification as a checker, Namespaces in XML 1.0 §7: "No entity names ... contain
-    // any colons"; crust's reader reads `&a:b;` under an external subset (the named variant
-    // `entity-colon`), so the arm check, not the reader, refuses it.
-    assert.isTrue(readsBack("entityName", "a:b"));
+    // any colons". crust's reader refuses `&a:b;` under an external subset as not well-formed, as it
+    // holds every entity name to NCName (`@qti-pie/crust/names.ts`); the arm's pattern refuses it
+    // too, for a row a direct write could hold.
+    assert.isFalse(readsBack("entityName", "a:b"));
     assert.isFalse(charsPatterns.entityRef.test("&a:b;"));
   });
 

@@ -5,8 +5,11 @@
  *
  * - **O1, well-formedness:** crust's reader accepts a document exactly when libxml2's (`xmllint
  *   --noout --nonet`) does, a namespace error counting as a refusal (Namespaces in XML 1.0, section
- *   7: a conforming document is namespace-well-formed). A document whose declaration names another
- *   encoding than its bytes are in is a class of its own (XML 1.0 section 4.3.3).
+ *   7: a conforming document is namespace-well-formed), and an encoding error too: XML 1.0 section
+ *   4.3.3 makes bytes not legal in the entity's encoding a fatal error, which libxml2 2.9.13
+ *   reports as "encoding error : input conversion failed" and still exits 0 for when they follow
+ *   the root element. A document whose declaration names another encoding than its bytes are in is
+ *   a class of its own (XML 1.0 section 4.3.3).
  * - **O2, crust's own cycle:** a tree crust reads, written by crust in the label it was read under
  *   and read again, is the same tree, field for field; and the bytes crust writes decode, under
  *   Node's own decoder for that label, to the text crust's writer wrote.
@@ -115,7 +118,7 @@ const xmllint = (args: readonly string[]) => xmllintRun(args).pipe(Effect.orDie)
  */
 const messageClass = (line: string): string =>
   line
-    .replace(/^.*? (?:parser|namespace) error : /u, "")
+    .replace(/^(?:.*? )?(?:parser|namespace|encoding) error : /u, "")
     .replaceAll(/'[^']*'/gu, "'_'")
     .replaceAll(/%[^\s;%]+;/gu, "%_;")
     .replaceAll(/"[^"]*"/gu, '"_"')
@@ -129,16 +132,21 @@ const messageClass = (line: string): string =>
 
 /**
  * Class an `xmllint` refusal by its errors' messages: every error's class once, sorted, a run that
- * exits 0 having refused for its namespace errors alone. libxml2's report does not mark which error
- * was fatal, so the class is the set.
+ * exits 0 having refused for its namespace or encoding errors alone. libxml2's report does not mark
+ * which error was fatal, so the class is the set.
  *
  * @param stderr - What it wrote.
  * @param exited - Its exit status.
  * @returns The class.
  */
 export const libxml2Class = (stderr: string, exited: number): string => {
-  const errors = stderr.split("\n").filter((held) => / (?:parser|namespace) error : /u.test(held));
-  const lines = exited === 0 ? errors.filter((held) => / namespace error : /u.test(held)) : errors;
+  const errors = stderr
+    .split("\n")
+    .filter((held) => / (?:parser|namespace) error : |^encoding error : /u.test(held));
+  const lines =
+    exited === 0
+      ? errors.filter((held) => / namespace error : |^encoding error : /u.test(held))
+      : errors;
   const classes = new Set(
     (lines.length === 0 ? [stderr.split("\n")[0] ?? ""] : lines).map((line) => messageClass(line)),
   );
@@ -941,7 +949,8 @@ const wellFormedness = Effect.fnUntraced(function* wellFormedness(
   read: Result.Result<XmlDocument, ReaderRefusal | WellFormednessError>,
 ) {
   const linted = yield* xmllint(["--noout", "--nonet", file]);
-  const libxml2Accepts = linted.code === 0 && !/ namespace error : /u.test(linted.stderr);
+  const libxml2Accepts =
+    linted.code === 0 && !/ namespace error : |^encoding error : /mu.test(linted.stderr);
   const crustVerdict = Result.match(read, {
     onFailure: (failure) => `refused-${refusalRule(failure)}`,
     onSuccess: () => "accepted",
