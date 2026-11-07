@@ -18,7 +18,7 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
  * - `live`: one live set per roster whose sets a field holds, each beside its bits domain;
- * - `constants`: the closed constants the laws, generated fields and queries read, of the 64 closed
+ * - `constants`: the closed constants the laws, generated fields and queries read, of the 63 closed
  *   relations;
  * - `nodeAxes`: `Node`'s own foreign keys, its families' axes (the owner copy, the predecessor, the
  *   deferred last, and the attribute and namespace stand-ins);
@@ -26,7 +26,7 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  *   selections.
  */
 const measured = {
-  constants: 100,
+  constants: 99,
   live: 7,
   names: 35,
   nodeAxes: 5,

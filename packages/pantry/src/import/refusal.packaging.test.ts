@@ -15,11 +15,11 @@ import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
  * 2026-11-06 over the composed grammar, so a verdict names the rule the oracle predicts.
  *
  * A fixture that breaks several laws lists each one's rule, since PostgreSQL reports whichever
- * constraint it checks first: `lti300-as-301` breaks `ResourceTypeOf` and a value domain, and
- * `extmeta-item-href` breaks `RootOfType`, `Href listed`, `LomObjectIdentifier`, `Document lang`
- * and, since its item and its record name one file under two types, `Document entry`. A second
- * `GUID` (`csm-two-guids`) or a second set (`csm-two-sets`) breaks its particle's at-most-once,
- * which the content automaton holds (`N5 Follow`), so its rule is `ordering`.
+ * constraint it checks first: `extmeta-item-href` breaks `RootOfType`, `Href listed`,
+ * `LomObjectIdentifier`, `Document lang` and, since its item and its record name one file under
+ * two types, `Document entry`. A second `GUID` (`csm-two-guids`) or a second set (`csm-two-sets`)
+ * breaks its particle's at-most-once, which the content automaton holds (`N5 Follow`), so its rule
+ * is `ordering`.
  *
  * The guards' other fixtures break no law the cutover states: the LOM and CSM capacities, which
  * the deleted unsourced caps held, and the guards' departures from the XSD (plan §2.2). The
@@ -36,7 +36,7 @@ const refused = [
   ],
   ["extmeta-item-root", ["root-type-reverse"]],
   ["filelom-two-metadata", ["ordering"]],
-  ["lti300-as-301", ["resource-type", "attribute-lexical"]],
+  ["lti300-as-301", ["attribute-lexical"]],
   ["outcome-title", ["attribute-admission"]],
   ["usage3-bad-context", ["attribute-lexical"]],
   ["usage3-bad-month", ["attribute-lexical"]],

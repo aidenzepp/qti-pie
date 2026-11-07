@@ -14,7 +14,7 @@
  * comment names. PostgreSQL's SQLSTATE and that constraint are the verdict, and the transaction
  * rolls back.
  *
- * The cases over a whole imported package (the `lti` fixture refused under `resource-type`, a
+ * The cases over a whole imported package (the `lti` fixture refused under `attribute-lexical`, a
  * document whose root its resource type does not name, an href its resource's files do not list, a
  * document href with no entry, a resource sharing its manifest's identifier, and a package whose
  * entries pass one statement accepted) need the importer's ChangeSet (Q5.15), and are stated in
@@ -27,13 +27,7 @@ import { Effect, Option } from "effect";
 import type { Client } from "pg";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import {
-  AttributeName,
-  Flag,
-  NodeKind,
-  ResourceTypeOf,
-  SchemaVersion,
-} from "#pantry/grammar/install.ts";
+import { AttributeName, Flag, NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { LomResource } from "#pantry/qti/metadata.ts";
@@ -329,35 +323,16 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a resource's row by its own laws: its type, its code and its manifest's identifier",
+        "refuses a resource's row by its own laws: its code and its manifest's identifier",
         () =>
-          // Oracle: PostgreSQL, the resource row's CHECKs, judged as it is inserted: P1 `resource-type`
-          // (the `lti` fixture's (3.0.0, imslti_xmlv1p1), which no ResourceTypeOf row holds), C17's
-          // "E1 derived" (a code its lexical form does not spell), and P4 "Manifest id space".
+          // Oracle: PostgreSQL, the resource row's CHECKs, judged as it is inserted: C17's "E1
+          // derived" (a code its lexical form does not spell), and P4 "Manifest id space". Which
+          // types a version admits is the `type` attribute's value domain's (spec reading 67), a
+          // law of `Attribute`, so no law of the row reads it.
           // Bound: one row per law, every other law of the row kept.
           Effect.gen(function* resourceChecks() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            const ltiPair = { type: "imslti_xmlv1p1", version: "3.0.0" } as const;
-
-            assert.isFalse(
-              ResourceTypeOf.rows.some(
-                ({ type, version }) => type === ltiPair.type && version === ltiPair.version,
-              ),
-            );
-            assert.include(SchemaVersion.handles, ltiPair.version);
-
             const cases = [
-              {
-                law: containedIn("Resource", "ResourceTypeOf"),
-                name: "resource-type",
-                row: resourceRow({
-                  identifier: "r1",
-                  manifestIdentifier: "m",
-                  type: ltiPair.type,
-                  typeLexical: ltiPair.type,
-                  version: ltiPair.version,
-                }),
-              },
               {
                 law: checkNamed("Resource", "E1_derived"),
                 name: "E1 derived",

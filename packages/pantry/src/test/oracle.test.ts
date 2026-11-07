@@ -371,9 +371,9 @@ const overlayCases: readonly LawCase[] = [
         edit(itemResource, `type="imsqti_item_xmlv3p0"`, `type="imsqti_item_xmlv9"`),
       ),
     },
-    law: "ResourceTypeOf",
-    name: "a resource type no version admits",
-    rule: "resource-type",
+    law: "value domain",
+    name: "a resource type no version admits (spec reading 67: its version's enumeration)",
+    rule: "attribute-lexical",
   },
   {
     files: {
@@ -682,6 +682,34 @@ describe("each law, on a package that breaks it", () => {
       }),
     );
   }
+
+  it.effect(
+    "a resource type outside its version's enumeration is explained by the values that version admits",
+    () =>
+      // Oracle: the content-packaging XSD's enumeration of cp:resource's type, which the value
+      // domain keeps (spec reading 67): the explanation names the attribute, the version and each
+      // admitted value, not the compiled pattern.
+      Effect.gen(function* enumerated() {
+        const breaches = breachesOf(
+          yield* judged({
+            ...base,
+            "imsmanifest.xml": manifestOf(
+              edit(itemResource, `type="imsqti_item_xmlv3p0"`, `type="imsqti_item_xmlv9"`),
+            ),
+          }),
+        );
+        const domain = breaches.find(({ law }) => law === "value domain");
+        const text = domain === undefined ? "" : explain(domain.law, domain.keys, grammar);
+
+        assert.match(
+          text,
+          /^type: "imsqti_item_xmlv9" is not among the \d+ values of cp:resource@type in 3\.0\.[01]: imsqti_test_xmlv3p0, /u,
+          shown(breaches),
+        );
+        assert.include(text, "imsqti_item_xmlv3p0");
+        assert.notInclude(text, "^(?:");
+      }),
+  );
 
   it.effect(
     "two data-* names on a kind that admits the class break no law: AL1 admits the class, and AL2 masks it",
@@ -1037,6 +1065,7 @@ describe("the content references", () => {
  * @returns The domain.
  */
 const bounded = (facet: "maxExclusive" | "maxInclusive" | "minExclusive" | "minInclusive") => ({
+  enumeration: [],
   facets: [{ facet, value: "1.0" }],
   handle: facet,
   identity: Option.none(),

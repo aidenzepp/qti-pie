@@ -68,7 +68,6 @@ import {
   ReferenceAttribute,
   ResourceType,
   ResourceTypeLexical,
-  ResourceTypeOf,
   RootOfType,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
@@ -151,7 +150,7 @@ export const ManifestId = relation(
  * identifier, copied so a row check compares the two.
  *
  * The code is the builder's (C17): the handle the lexical form spells, or `none` for a form no
- * handle spells, which no `ResourceTypeOf` row holds.
+ * handle spells, which the attribute's value domain refuses (spec reading 67).
  */
 export const Resource = relation(
   "Resource",
@@ -543,7 +542,8 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  * - **the overlays:** each copies its node's {@link nodeRef} tuple, names a node of its kind and its
  *   package's `Document` row, and takes its attribute values from `Attribute` (C18); a file's and a
  *   dependency's resource is their node's parent; the manifest is one per package.
- * - **P1 `resource-type` ("ResourceTypeOf"):** a resource's (version, type) is in `ResourceTypeOf`.
+ * - **P1 (spec reading 67):** a resource's type is one its version's content-packaging XSD
+ *   enumerates, which the attribute's value domain states (`attribute-lexical`), and nothing here.
  * - **P2 `root-type-reverse` ("RootOfType"):** a document's (resource type, root kind) is a row of
  *   the set `RootOfType`, or it is the manifest, of type `none` (an included fragment's type holds
  *   every kind an include stands for, spec reading 114); every document-typed resource href's path
@@ -608,7 +608,6 @@ export const packageLaws = [
   check("E1_derived", Resource, (r) =>
     r.or(r.eq(r.type, "none"), r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical)),
   ),
-  contained(on(Resource, "version", "type"), on(ResourceTypeOf, "version", "type")),
   contained(on(Resource, "package", "manifestIdentifier"), on(ManifestId, "package", "identifier")),
   check("Manifest_id_space", Resource, (r) => r.ne(r.identifier, r.manifestIdentifier)),
   key(on(Resource, "package", "identifier")),

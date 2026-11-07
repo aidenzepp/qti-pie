@@ -641,7 +641,6 @@ const tiers: readonly (readonly Rule[])[] = [
     "include-target",
     "include-root",
     "inclusion-cycle",
-    "resource-type",
     "root-type-reverse",
     "entry-kind",
     "file-listed",

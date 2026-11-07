@@ -1713,9 +1713,16 @@ export const identities = ["ID", "IDREF", "IDREFS"] as const satisfies readonly 
 
 /**
  * A compiled value domain: the pattern its lexical forms match as written, the primitive its typed
- * value is derived in, the facets a typed-value law reads, and the identity type it is, if any.
+ * value is derived in, the facets a typed-value law reads, the identity type it is, if any, and the
+ * values its enumeration keeps.
  */
 export interface CompiledDomain {
+  /**
+   * The values an atomic definition's enumeration keeps, in the order it states them, each one its
+   * pattern matches: what an explanation lists of a value outside them. Empty for a definition
+   * that states no enumeration, and for a list or a union.
+   */
+  readonly enumeration: readonly string[];
   readonly facets: readonly ValueFacet[];
   readonly identity: Option.Option<Identity>;
   readonly pattern: string;
@@ -3644,6 +3651,12 @@ export const isEmptyDefinition = (failure: CompileError): boolean =>
   failure._tag === "UnreadDefinition" && failure.detail === emptyDefinition;
 
 /**
+ * The flags a compiled pattern is read with by a JavaScript host: `u`, so its `\u` escapes and
+ * supplementary characters read as code points, as PostgreSQL reads them.
+ */
+export const patternFlags = "u";
+
+/**
  * Compile a resolved definition into its value domain.
  *
  * Each call compiles: the attribute grammar compiles each distinct definition once
@@ -3670,25 +3683,27 @@ export const compile = (
       return yield* refuse(emptyDefinition);
     }
 
+    const pattern = emitWhole(tree);
+    const matches = new RegExp(pattern, patternFlags);
+
     return {
+      enumeration:
+        domain._tag === "atomic"
+          ? valuesOf(domain.facets, "enumeration").filter((value) => matches.test(value))
+          : [],
       facets,
       identity: identityOf(domain),
-      pattern: emitWhole(tree),
+      pattern,
       primitive: domain._tag === "atomic" ? domain.primitive : domain._tag,
     };
   });
-
-/**
- * The flags a compiled pattern is read with by a JavaScript host: `u`, so its `\u` escapes and
- * supplementary characters read as code points, as PostgreSQL reads them.
- */
-export const patternFlags = "u";
 
 /**
  * The compiled domain of `xs:anySimpleType`, every value with its whitespace preserved: the domain
  * an open name's value is read under, which a declaration of that type compiles to alike.
  */
 export const openCompiled: CompiledDomain = {
+  enumeration: [],
   facets: [],
   identity: Option.none(),
   pattern: emitWhole(anything),

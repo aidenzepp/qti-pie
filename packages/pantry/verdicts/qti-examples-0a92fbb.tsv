@@ -15,7 +15,7 @@ qtiv3-examples/packaging/externalMetadata/externalMetadata.zip	accepted
 qtiv3-examples/packaging/feedbackTest/feedbackTest.zip	refused	unmodeled-vocabulary
 qtiv3-examples/packaging/interactionMixSaxonyV3/interactionMixSaxonyV3.zip	accepted	
 qtiv3-examples/packaging/items/items.zip	refused	unmodeled-vocabulary
-qtiv3-examples/packaging/lti/lti.zip	refused	resource-type
+qtiv3-examples/packaging/lti/lti.zip	refused	attribute-lexical
 qtiv3-examples/packaging/maxfiles/maxfiles.zip	refused	P8
 qtiv3-examples/packaging/metaData/metaData.zip	refused	lom-identifier
 qtiv3-examples/packaging/pci-simple/pci_simple_example.zip	refused	unmodeled-vocabulary

@@ -396,11 +396,6 @@ export const packageMutations = {
         ),
     over: "package",
   },
-  // ResourceTypeOf (P1): the usage data's resource given a type no version admits.
-  ResourceTypeOf: passageAt(manifest, usageResource, [
-    usageResource.replace("qtiusagedata/xml", "qtiusagedata/xml2"),
-    usageResource.replace("qtiusagedata/xml", "imsqti_item_xmlv9"),
-  ]),
   // RootOfType (P2): the usage data listed as an item, a test or a stimulus.
   RootOfType: passageAt(manifest, usageResource, [
     usageResource.replace("qtiusagedata/xml", "imsqti_item_xmlv3p0"),

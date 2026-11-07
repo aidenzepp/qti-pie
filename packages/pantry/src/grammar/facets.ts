@@ -22,8 +22,7 @@ import { aritiesOf } from "#pantry/grammar/expression.ts";
 import type { ExpressionFacet } from "#pantry/grammar/expression.ts";
 import { fragmentRootsOf, fragmentType, includeAlternativesOf } from "#pantry/grammar/include.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
-import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import type { PackageFacet, ResourceTypes, RootOf } from "#pantry/grammar/package.ts";
+import type { PackageFacet, RootOf } from "#pantry/grammar/package.ts";
 import {
   asiReferences,
   mathmlReferences,
@@ -192,29 +191,22 @@ const resourceType = { kind: "cp:resource", name: "type" } as const;
 
 /**
  * Read the resource types from the attribute declarations: the enumeration of `cp:resource`'s
- * `type` in each version's content-packaging XSD (3.0.0 lists 19 and 3.0.1 lists 20, sharing 18),
- * one statement per type with the versions it holds in, in the order the versions first list them,
- * which is the `ResourceType` roster's code order.
+ * `type` in either version's content-packaging XSD (3.0.0 lists 19 and 3.0.1 lists 20, sharing
+ * 18), each once, in the order the versions first list them, which is the `ResourceType` roster's
+ * code order. Which version admits which is the attribute's value domain's (spec reading 67).
  *
  * @param declarations - The attribute declarations.
- * @returns The statements.
+ * @returns The types.
  */
-const resourceTypesIn = (
-  declarations: readonly AttributeDeclaration[],
-): readonly ResourceTypes[] => {
-  const versionsOf = new Map<string, SchemaVersion[]>();
-  for (const { domain, kind, name, versions } of declarations) {
-    if (kind === resourceType.kind && name === resourceType.name && domain._tag === "atomic") {
-      for (const { facet, value } of domain.facets) {
-        if (facet === "enumeration") {
-          versionsOf.set(value, [...new Set([...(versionsOf.get(value) ?? []), ...versions])]);
-        }
-      }
-    }
-  }
-
-  return [...versionsOf].map(([type, versions]) => ({ types: [type], versions }));
-};
+const resourceTypesIn = (declarations: readonly AttributeDeclaration[]): readonly string[] => [
+  ...new Set(
+    declarations.flatMap(({ domain, kind, name }) =>
+      kind === resourceType.kind && name === resourceType.name && domain._tag === "atomic"
+        ? domain.facets.flatMap(({ facet, value }) => (facet === "enumeration" ? [value] : []))
+        : [],
+    ),
+  ),
+];
 
 /**
  * Where `qti-ordering`'s restated model comes from: spec reading 61

@@ -1087,16 +1087,17 @@ describe.skipIf(!hasLease)(
         );
       }
 
-      it.effect("refuses lti under resource-type, locating the breach through the oracle", () =>
-        // Oracle: PostgreSQL, P1 (`ResourceTypeOf`), with the importer's refusal: its rule, and the
-        // node the oracle finds (Q5.06's case).
+      it.effect("refuses lti under attribute-lexical, locating the breach through the oracle", () =>
+        // Oracle: PostgreSQL, the value domain of cp:resource's type, its 3.0.0 enumeration (spec
+        // reading 67), with the importer's refusal: its rule, and the node the oracle finds (Q5.06's
+        // case).
         Effect.gen(function* lti() {
           const refused = yield* Effect.flip(importPackage(fixtures.lti, { locate: oracleLocate }));
 
           assert.instanceOf(refused, ImportRefused);
           assert.strictEqual(
             refused instanceof ImportRefused ? refused.rule : undefined,
-            "resource-type",
+            "attribute-lexical",
           );
         }),
       );

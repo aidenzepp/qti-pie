@@ -823,7 +823,6 @@ export const compose = <const V extends readonly Vocabulary[]>(
       package: yield* packageGrammar({
         facets: stated.map((facet) => facet.package),
         kinds: kinds.nodeKind,
-        versions: kinds.versions,
       }),
       recordBindingFit: yield* recordBindingFit({ facets: expression, kinds: kinds.nodeKind }),
       references: yield* references({

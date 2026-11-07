@@ -2,7 +2,11 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem, Formatter, Option, Result } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { admissionOf } from "#pantry/grammar/attributes.ts";
+import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { fin, roster } from "#pantry/grammar/closed.ts";
+import { composed } from "#pantry/grammar/compose.ts";
+import { patternFlags } from "#pantry/grammar/domains.ts";
 import {
   cp,
   documentRoots,
@@ -14,7 +18,9 @@ import {
   xi,
 } from "#pantry/grammar/facets.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
+import { noType } from "#pantry/grammar/xsi.ts";
 import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { loadXsd, XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
@@ -36,17 +42,52 @@ const cached = await Effect.runPromise(
  * The package relations of production's facets, over a roster of the kinds their roots name.
  */
 const relations = Effect.gen(function* packageRelations() {
-  const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
   const kinds = yield* Effect.fromResult(roster("NodeKind", [...documentRoots]));
 
   return yield* Effect.fromResult(
     packageGrammar({
       facets: [asi, cp, lom, ud, xi].map(({ package: stated }) => stated),
       kinds,
-      versions,
     }),
   );
 });
+
+/**
+ * The composed grammar, whose attribute grammar states which resource types each version admits:
+ * the value domain of `cp:resource`'s `type` (spec reading 67).
+ */
+const grammar = Result.getOrThrow(composed());
+
+/**
+ * Read the value domain a version reads `cp:resource`'s `type` under, its declared type governing.
+ *
+ * @param version - The version.
+ * @returns The domain.
+ */
+const resourceTypeDomain = (version: SchemaVersion): ValueDomain =>
+  Option.getOrThrowWith(
+    Option.flatMap(
+      admissionOf(grammar.attributes, {
+        governs: noType,
+        kind: "cp:resource",
+        name: "type",
+        version,
+      }),
+      ({ domain }) =>
+        Option.fromNullishOr(grammar.attributes.domains.find(({ handle }) => handle === domain)),
+    ),
+    () => new Error(`cp:resource admits no type in ${version}`),
+  );
+
+/**
+ * Whether a version's value domain of `cp:resource`'s `type` admits a lexical form as written.
+ *
+ * @param version - The version.
+ * @param type - The form.
+ * @returns Whether its pattern matches.
+ */
+const admits = (version: SchemaVersion, type: string): boolean =>
+  new RegExp(resourceTypeDomain(version).pattern, patternFlags).test(type);
 
 /**
  * Collect the enumeration values of a type's `type` attribute in a schema node's subtree, following
@@ -88,12 +129,18 @@ const enumerationOf = (
     return [...viaType, ...enumerationOf(child, named, inside || entering)];
   });
 
-describe.skipIf(!cached)("ResourceTypeOf against the content-packaging XSDs", () => {
+describe.skipIf(!cached)("cp:resource's type against the content-packaging XSDs", () => {
   it.effect(
-    "holds exactly the (version, type) pairs each version's resource type's @type enumerates",
+    "admits, in each version, exactly the types its content-packaging XSD enumerates, and keeps them as its enumeration: the one statement of spec reading 67",
     () =>
+      // Oracle: each version's XSD, its resource type's `type` enumeration read from the XSD itself.
+      // Bound: every type either version enumerates, the guide's own spelling of the response
+      // processing type, and three strangers to each (case, outer space, an empty form), in both
+      // versions. Spec reading 67 was stated twice, by this domain and by a ResourceTypeOf relation
+      // of (version, type) rows read from the same enumeration; the relation and its law are gone,
+      // and this domain refuses exactly what the two refused: a form outside its version's list.
       Effect.gen(function* resourceTypes() {
-        const { resourceTypeOf } = yield* relations;
+        const enumeratedOf = new Map<string, readonly string[]>();
         const target = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
         for (const [root, version] of [
           ["imsqtiv3p0_imscpv1p2_v1p0.xsd", "3.0.0"],
@@ -113,12 +160,24 @@ describe.skipIf(!cached)("ResourceTypeOf against the content-packaging XSDs", ()
 
           assert.isAbove(enumerated.length, 0, root);
           assert.deepStrictEqual(
-            new Set(
-              resourceTypeOf.rows.filter((row) => row.version === version).map(({ type }) => type),
-            ),
+            new Set(resourceTypeDomain(version).enumeration),
             new Set(enumerated),
             version,
           );
+          enumeratedOf.set(version, enumerated);
+        }
+
+        const every = [...new Set([...enumeratedOf.values()].flat())];
+        const strangers = every.flatMap((type) => [type.toUpperCase(), ` ${type}`, `${type} `]);
+        for (const version of schemaVersions) {
+          const enumerated = new Set(enumeratedOf.get(version));
+          for (const type of [...every, ...strangers, "imsqti_responseprocessing_xmlv3p0", ""]) {
+            assert.strictEqual(
+              admits(version, type),
+              enumerated.has(type),
+              `${version} ${JSON.stringify(type)}`,
+            );
+          }
         }
       }).pipe(Effect.provide(XsdOracleLayer)),
     120_000,
@@ -131,11 +190,11 @@ describe.skipIf(!cached)("ResourceTypeOf against the content-packaging XSDs", ()
  * facets: §6.2's table of resource types, whose descriptions name the class each file holds ("QTI 3
  * AssessmentTest", ...); §6.3's external metadata file, whose example's root is LOM's `lom`; and
  * §6.5's usage-data file, whose root is `usageData`. The guide's table spells the response
- * processing type `imsqti_responseprocessing_xmlv3p0`; the content-packaging XSDs, which
- * `ResourceTypeOf` follows, enumerate `imsqti_resprocessing_xmlv3p0`, so it is written as the XSD
- * spells it (spec reading 82). The table's other types (a fragment, web content, LTI links, PLS
- * lexicons, control files, non-IMS metadata, stylesheets) are no document of the composition, but
- * the fragment, an included document read in place (spec reading 114).
+ * processing type `imsqti_responseprocessing_xmlv3p0`; the content-packaging XSDs, whose
+ * enumeration the type's value domain is, enumerate `imsqti_resprocessing_xmlv3p0`, so it is
+ * written as the XSD spells it (spec reading 82). The table's other types (a fragment, web content,
+ * LTI links, PLS lexicons, control files, non-IMS metadata, stylesheets) are no document of the
+ * composition, but the fragment, an included document read in place (spec reading 114).
  */
 const statedRoots: readonly { readonly root: string; readonly type: string }[] = [
   { root: "qti-assessment-test", type: "imsqti_test_xmlv3p0" },
@@ -195,9 +254,7 @@ describe("RootOfType", () => {
   );
 
   it("refuses a root kind the composition's roster does not hold", () => {
-    const result = Result.flatMap(roster("SchemaVersion", schemaVersions), (versions) =>
-      packageGrammar({ facets: [asi.package, cp.package], kinds: fin("NodeKind", 1), versions }),
-    );
+    const result = packageGrammar({ facets: [asi.package, cp.package], kinds: fin("NodeKind", 1) });
 
     assert.strictEqual(
       Result.isFailure(result) ? result.failure._tag : "generated",
@@ -246,9 +303,9 @@ const guideTypes = [
 const manifestOfType = (version: string, type: string): string =>
   `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion></metadata><organizations/><resources><resource identifier="R" type="${type}" href="a.xml"><file href="a.xml"/></resource></resources></manifest>\n`;
 
-describe.skipIf(!cached)("ResourceTypeOf against xmllint", () => {
+describe.skipIf(!cached)("cp:resource's type against xmllint", () => {
   it.effect(
-    "admits each type of the guide's table, and the XSD's imsqti_resprocessing_xmlv3p0, in a version exactly when xmllint accepts a manifest whose resource carries it: every type in both versions",
+    "its value domain admits each type of the guide's table, and the XSD's imsqti_resprocessing_xmlv3p0, in a version exactly when xmllint accepts a manifest whose resource carries it: every type in both versions",
     () =>
       // Oracle: libxml2 over each version's content-packaging XSD, the normative source of the
       // vocabulary (spec reading 82): the guide is informative, so a spelling only it gives, such as
@@ -257,7 +314,6 @@ describe.skipIf(!cached)("ResourceTypeOf against xmllint", () => {
       // manifests.
       Effect.gen(function* againstXmllint() {
         const fs = yield* FileSystem.FileSystem;
-        const { resourceTypeOf } = yield* relations;
         const directory = yield* scratchDirectory("resource-types-");
         const oracle = yield* writeXsdOracle(directory);
         const cache = yield* xsdDirectory;
@@ -280,20 +336,16 @@ describe.skipIf(!cached)("ResourceTypeOf against xmllint", () => {
           });
           for (const [at, type] of guideTypes.entries()) {
             const valid = verdicts[at]?._tag === "Valid";
-            const admitted = Option.isSome(resourceTypeOf.lookup({ type, version }));
+            const admitted = admits(version, type);
             if (valid !== admitted) {
               disagreements.push(
-                `${version} ${type}: ResourceTypeOf ${admitted ? "admits" : "refuses"} it, xmllint ${valid ? "accepts" : "refuses"} ${Formatter.format(verdicts[at])}`,
+                `${version} ${type}: the value domain ${admitted ? "admits" : "refuses"} it, xmllint ${valid ? "accepts" : "refuses"} ${Formatter.format(verdicts[at])}`,
               );
             }
           }
         }
 
-        assert.isFalse(
-          Option.isSome(
-            resourceTypeOf.lookup({ type: "imsqti_responseprocessing_xmlv3p0", version: "3.0.1" }),
-          ),
-        );
+        assert.isFalse(admits("3.0.1", "imsqti_responseprocessing_xmlv3p0"));
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     120_000,

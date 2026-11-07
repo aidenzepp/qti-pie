@@ -31,8 +31,9 @@
  * - **§1.5:** AL1 to AL4 (distinctness masks the open classes, fin.md §16), each value domain's
  *   compiled pattern over the form as written (its whitespace class absorbed), and the IDREF
  *   tokens' targets.
- * - **§1.6:** `resource-type`, `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind` and
- *   `manifest-id-space`.
+ * - **§1.6:** `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind` and
+ *   `manifest-id-space`; a resource's type outside its version's enumeration is the attribute's
+ *   value domain's (spec reading 67).
  * - **§1.7, the overlays the grammar's relations state today:** O1 `document-key` over reading 101's
  *   bindings, an ID-typed element text's id bound to its parent, a cell's `headers` naming the
  *   `th`s of its own table (`table-headers`, reading 126: the information model states the rule
@@ -221,7 +222,6 @@ export const oracleRules = [
   "record-binding-fit",
   "required-attribute",
   "reserved-type",
-  "resource-type",
   "root-type-reverse",
   "section-identifier-target",
   "selection-bounds",
@@ -434,7 +434,6 @@ const lawRules = {
   RecordBindingFit: "record-binding-fit",
   "Reference type": "P24",
   "Reserved type": "reserved-type",
-  ResourceTypeOf: "resource-type",
   RootOfType: "root-type-reverse",
   "Rounding figures": "P10",
   "SSML lexicon reference": "ssml-fragment",
@@ -673,8 +672,6 @@ export const lawSources = {
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_IntegerOrVariableRef (§8.25, §8.24 and §8.42: an integerOrVariableRef, floatOrVariableRef or stringOrVariableRef names a template or outcome variable of that base type, single) (expression.ts ReferenceBase; the old checker's P24)",
   "Reserved type":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration, normative: 'SCORE needs to be a float', 'MAXSCORE needs to be a float', 'PASSED needs to be a boolean'; the non-normative overview, §2.2.2.3, says 'MUST'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_AssessmentItem_qti-context-declaration (§4.1.10, and §4.4.7 of a test, normative: 'An implementation MUST support the global variable 'QTI_CONTEXT' with record cardinality'), which the implementation guide declares explicitly (§3.7.11, 'an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 74)",
-  ResourceTypeOf:
-    "QTI 3 packaging: the resource types each schema version admits (package.ts); reading 33",
   RootOfType: "QTI 3 packaging: the document root of each resource type (package.ts)",
   "Rounding figures":
     "reading 119: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_EqualRounded.Attr_figures (§5.47.2: 'If roundingMode= 'significantFigures', the value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must be an integer greater than or equal to zero') and #DataCharacteristic_RoundTo.Attr_figures (§5.119.2, the same of rounding-mode), under the EqualRounded default significantFigures (§5.47.1): a figures whose collapsed form is an integer is at least 1 under significantFigures and at least 0 under decimalPlaces, a variable's name read at run time (operators.ts Rounding, Rounding_figures)",
@@ -1461,7 +1458,6 @@ export const otherLawNames = [
   "Graphic gap match default hotspot",
   "Context variable reference",
   "Quotation punctuation",
-  "ResourceTypeOf",
   "RootOfType",
   "File listed",
   "Href listed",
@@ -5448,7 +5444,7 @@ const documentLangBreaches = (
 
 /**
  * Evaluate the laws of §1.6 and O6 over a package: the stated limit `href-form` first, then
- * `resource-type`, `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind`, `file-exists`,
+ * `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind`, `file-exists`,
  * `manifest-id-space`, `self-dependency` and `lom-identifier`, and reading 85's `inclusion-cycle`
  * ({@link inclusionCycles}), then R26's `document-lang` ({@link documentLangBreaches}).
  *
@@ -5520,22 +5516,6 @@ const packageBreaches = (
             node: pathOf(manifest, resource.node.id),
           }),
         ),
-    ),
-    ...resources.flatMap((resource) =>
-      Option.exists(resource.handle, (type) =>
-        Option.isSome(
-          grammar.package.resourceTypeOf.lookup({ type, version: resource.node.version }),
-        ),
-      )
-        ? []
-        : [
-            breach("ResourceTypeOf", {
-              identifier: resource.identifier,
-              node: pathOf(manifest, resource.node.id),
-              type: resource.type,
-              version: resource.node.version,
-            }),
-          ],
     ),
     ...input.documents.flatMap((document) =>
       Option.exists(document.resource.handle, (type) =>
@@ -6076,18 +6056,20 @@ const kindsAt = (
 ];
 
 /**
- * Explain a value against the domain it is read under: the pattern it misses, or the residual
- * facets its typed value lies outside.
+ * Explain a value against the domain it is read under: the values an enumeration admits where it
+ * is outside them, the pattern it misses, or the residual facets its typed value lies outside.
  *
  * @param grammar - The composed grammar.
  * @param handle - The domain's handle, none when no cell gives one.
  * @param form - The lexical form as written.
+ * @param where - What the value is read for, and in which version, as `cp:resource@type in 3.0.0`.
  * @returns The explanation.
  */
 const domainExplained = (
   grammar: ComposedGrammar,
   handle: Option.Option<string>,
   form: string,
+  where: string,
 ): string =>
   Option.match(
     handle.pipe(
@@ -6101,10 +6083,14 @@ const domainExplained = (
           ? `${JSON.stringify(form)} is read under ${Option.getOrElse(handle, () => "")}, whose value space is empty: it holds the notations the schema declares, and no pinned schema declares one`
           : `${JSON.stringify(form)} is read under no value domain`,
       onSome: (domain) => {
-        const broken = facetsBroken(domain, form);
+        if (new RegExp(domain.pattern, patternFlags).test(form)) {
+          return `${JSON.stringify(form)} is outside ${domain.handle}'s ${facetsBroken(domain, form)
+            .map(({ facet, value }) => `${facet} ${value}`)
+            .join(", ")}`;
+        }
 
-        return new RegExp(domain.pattern, patternFlags).test(form)
-          ? `${JSON.stringify(form)} is outside ${domain.handle}'s ${broken.map(({ facet, value }) => `${facet} ${value}`).join(", ")}`
+        return domain.enumeration.length > 0
+          ? `${JSON.stringify(form)} is not among the ${String(domain.enumeration.length)} values of ${where}: ${domain.enumeration.join(", ")}`
           : `${JSON.stringify(form)} is outside ${domain.handle}, whose pattern is ${domain.pattern}`;
       },
     },
@@ -6515,12 +6501,6 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     `${field(keys, "kind")}'s ${field(keys, "attribute")} names ${field(keys, "identifier")}, which is no ${field(keys, "base")} single template or outcome variable`,
   "Reserved type": (keys) =>
     `${field(keys, "identifier")} is declared by ${field(keys, "kind")} of base type ${JSON.stringify(field(keys, "baseType"))} and cardinality ${JSON.stringify(field(keys, "cardinality"))}, where the specification types it otherwise`,
-  ResourceTypeOf: (keys, grammar) =>
-    `${field(keys, "identifier")} is of type ${JSON.stringify(field(keys, "type"))}, which ${field(keys, "version")} does not admit; it holds in ${inBraces(
-      grammar.package.resourceTypeOf.rows
-        .filter(({ type }) => type === field(keys, "type"))
-        .map(({ version }) => version),
-    )}`,
   RootOfType: (keys, grammar) =>
     `${field(keys, "path")} has root ${field(keys, "rootKind")} and is listed as ${field(keys, "type")}, which lists ${rootsExplained(grammar, field(keys, "type"))}`,
   "Rounding figures": (keys) =>
@@ -6600,6 +6580,7 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
         }),
       ),
       field(keys, "value"),
+      `${field(keys, "kind")}'s text in ${field(keys, "version")}`,
     ),
   "Track srclang": (keys) =>
     `a track ${field(keys, "trackKind") === "" ? "that writes no kind, so in its missing value default, the subtitles state," : "whose kind is subtitles"} carries no srclang, where a track in the subtitles state names its language`,
@@ -6657,6 +6638,7 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
         ({ domain }) => domain,
       ),
       field(keys, "lexical"),
+      `${field(keys, "kind")}@${field(keys, "name")} in ${field(keys, "version")}`,
     )}`,
   "ws arm": (keys) => armExplained("ws", keys),
   ...addedExplainers,

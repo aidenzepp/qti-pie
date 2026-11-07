@@ -270,7 +270,6 @@ export const precedence = [
   "include-root",
   "inclusion-cycle",
   // P1 to P4, packaging.
-  "resource-type",
   "root-type-reverse",
   "entry-kind",
   "file-listed",
@@ -918,11 +917,6 @@ export const lawTable = {
     rule: "reserved-type",
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration, normative: 'SCORE needs to be a float', 'MAXSCORE needs to be a float', 'PASSED needs to be a boolean'; the non-normative overview, §2.2.2.3, says 'MUST'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_AssessmentItem_qti-context-declaration (§4.1.10, and §4.4.7 of a test, normative: 'An implementation MUST support the global variable 'QTI_CONTEXT' with record cardinality'), which the implementation guide declares explicitly (§3.7.11, 'an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 74)",
-  },
-  ResourceTypeOf: {
-    rule: "resource-type",
-    source:
-      "QTI 3 packaging: the resource types each schema version admits (package.ts); reading 33",
   },
   RootOfType: {
     rule: "root-type-reverse",
@@ -1706,10 +1700,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [familyOf("ordered", sideOf("Entry", "package", "at"), "Package", "entries"), "Entry family"],
   [primaryKeyOf("Entry", "package", "at"), "Entry family"],
   [keyOver(sideOf("Entry", "package", "path")), "Entry family"],
-  [
-    containedIn(sideOf("Resource", "version", "type"), sideOf("ResourceTypeOf", "version", "type")),
-    "ResourceTypeOf",
-  ],
   [
     containedIn(
       sideOf("ResourceHref", "package", "path", "type"),

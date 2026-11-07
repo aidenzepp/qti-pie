@@ -279,6 +279,7 @@ const holdToOracle = (
       const actual = byHandle.get(handle) ?? assert.fail(`${where} names no domain`);
       assert.deepStrictEqual(
         {
+          enumeration: actual.enumeration,
           facets: actual.facets,
           identity: actual.identity,
           pattern: actual.pattern,

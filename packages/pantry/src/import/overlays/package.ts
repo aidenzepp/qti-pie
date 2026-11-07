@@ -113,8 +113,8 @@ const interactions: ReadonlySet<string> = new Set(interactionKinds);
  * Read the code of a resource's `type` from its lexical form.
  *
  * @param lexical - The `type` attribute's lexical form, as written.
- * @returns The handle it spells, or `none` for a form no handle spells, which `ResourceTypeOf`
- *   refuses as `resource-type`.
+ * @returns The handle it spells, or `none` for a form no handle spells, which the attribute's
+ *   value domain refuses as `attribute-lexical` (spec reading 67).
  */
 const typeOf = (lexical: string): ResourceTypeHandle => spelledTypes.get(lexical) ?? "none";
 
