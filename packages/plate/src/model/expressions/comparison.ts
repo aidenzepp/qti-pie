@@ -1,10 +1,10 @@
 /**
  * The comparison family of the item model: the kind rules and reader specs of `qti-match`,
- * `qti-equal`, `qti-gt`, `qti-gte`, `qti-lt` and `qti-lte`, and the unlanded rule and stub reader
- * spec of `qti-duration-lt` and `qti-duration-gte`, which M3.b-3 lands.
+ * `qti-equal`, `qti-gt`, `qti-gte`, `qti-lt`, `qti-lte`, `qti-duration-lt` and `qti-duration-gte`.
  *
  * Each kind gives a single boolean. `qti-match` takes two operands of one type, never a duration;
- * the others take single numbers, integer or float. `qti-equal`'s `tolerance` may name a variable,
+ * the two duration kinds take single durations; the others take single numbers, integer or float,
+ * since a duration is not numerical (G-R1, pending). `qti-equal`'s `tolerance` may name a variable,
  * so its rule declares it in its reference facet, unchecked (9.11): the walks mark a token that
  * names a variable the engine does not hold, and the engine resolves the rest.
  *
@@ -22,7 +22,6 @@ import {
   floatOrRefOf,
   singleOf,
   toleranceModes,
-  unlandedRule,
 } from "#plate/model/expression.ts";
 import type {
   ExpressionType,
@@ -31,7 +30,7 @@ import type {
   KindRule,
   OperandMismatch,
 } from "#plate/model/expression.ts";
-import type { FamilyReaders, ReaderSpec, UnlandedReader } from "#plate/model/expressions/read.ts";
+import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts";
 import { baseTypes, cardinalities } from "#plate/vocabulary.ts";
 import type { BaseType, Cardinality } from "#plate/vocabulary.ts";
 
@@ -156,13 +155,27 @@ const equalRule: KindRule = {
 };
 
 /**
- * The comparison family's kind rules by kind, and the unlanded rule for the two duration kinds.
+ * The rule of `qti-duration-lt` and `qti-duration-gte`: a single boolean, of "two sub-expressions
+ * which must both have single cardinality and base-type duration" (`info.txt:9486`, `:9490`), as
+ * the qti package reads it (P23, `operandRules` in `packages/pantry/src/processing/check.ts`).
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpDurationLT
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpDurationGTE
+ */
+const durationRule: KindRule = {
+  operandsAccept: everyOperand(["duration"], ["single"]),
+  references: [],
+  resultType: () => singleOf("boolean"),
+};
+
+/**
+ * The comparison family's kind rules by kind.
  */
 export const comparisonRules: FamilyRules<
   "duration-gte" | "duration-lt" | "equal" | "gt" | "gte" | "lt" | "lte" | "match"
 > = {
-  "duration-gte": unlandedRule,
-  "duration-lt": unlandedRule,
+  "duration-gte": durationRule,
+  "duration-lt": durationRule,
   equal: equalRule,
   gt: orderRule,
   gte: orderRule,
@@ -274,19 +287,31 @@ const lteReader: ReaderSpec<"lte"> = {
 };
 
 /**
- * The reader spec of each kind the family has not landed: the stub, which marks the kind's element
- * at its path and reads nothing in it.
+ * The reader spec of `qti-duration-lt`: its two operands, and no attribute.
  */
-const unlanded: UnlandedReader = { _tag: "unlanded" };
+const durationLtReader: ReaderSpec<"duration-lt"> = {
+  _tag: "generic",
+  arity: "two",
+  attributes: () => Effect.succeed((operands) => ({ kind: "duration-lt", operands })),
+};
 
 /**
- * The comparison family's reader specs by kind, and the stub for the two duration kinds.
+ * The reader spec of `qti-duration-gte`: its two operands, and no attribute.
+ */
+const durationGteReader: ReaderSpec<"duration-gte"> = {
+  _tag: "generic",
+  arity: "two",
+  attributes: () => Effect.succeed((operands) => ({ kind: "duration-gte", operands })),
+};
+
+/**
+ * The comparison family's reader specs by kind.
  */
 export const comparisonReaders: FamilyReaders<
   "duration-gte" | "duration-lt" | "equal" | "gt" | "gte" | "lt" | "lte" | "match"
 > = {
-  "duration-gte": unlanded,
-  "duration-lt": unlanded,
+  "duration-gte": durationGteReader,
+  "duration-lt": durationLtReader,
   equal: equalReader,
   gt: gtReader,
   gte: gteReader,

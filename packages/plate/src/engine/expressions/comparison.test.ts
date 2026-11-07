@@ -169,6 +169,61 @@ const tolerated = (
   variables: Variables = none,
 ): Value => evaluated(equalOf(x, y, { ...flags, tolerance, toleranceMode }), variables);
 
+/**
+ * The two duration comparisons the family runs.
+ */
+type DurationKind = "duration-gte" | "duration-lt";
+
+/**
+ * Construct the single duration value of a number of seconds.
+ *
+ * @param seconds The seconds, a double.
+ * @returns The value.
+ */
+const duration = (seconds: number): Value => ({
+  baseType: "duration",
+  cardinality: "single",
+  values: [{ baseType: "duration", value: seconds }],
+});
+
+/**
+ * The duration NULL.
+ */
+const durationNull: Value = nullOf("duration", "single");
+
+/**
+ * Give what `qti-duration-lt` and `qti-duration-gte` of two values give, in that order, through
+ * {@link evaluated}.
+ *
+ * @param left The first operand's value.
+ * @param right The second operand's value.
+ * @returns The two values.
+ */
+const durationsOf = (left: Value, right: Value): readonly Value[] => {
+  const kinds: readonly DurationKind[] = ["duration-lt", "duration-gte"];
+
+  return kinds.map((kind) => evaluated({ kind, operands: [operandOf(left), operandOf(right)] }));
+};
+
+/**
+ * Assert the two duration comparisons of two durations.
+ *
+ * @param left The first operand's seconds.
+ * @param right The second operand's seconds.
+ * @param expected What `qti-duration-lt` and `qti-duration-gte` give, in that order.
+ */
+const assertDurations = (
+  left: number,
+  right: number,
+  expected: readonly [boolean, boolean],
+): void => {
+  assert.deepStrictEqual(
+    durationsOf(duration(left), duration(right)),
+    expected.map((held) => truth(held)),
+    `${left} against ${right}`,
+  );
+};
+
 describe("the comparison family's evaluators", () => {
   it("[I-9a] qti-gt, qti-gte, qti-lt and qti-lte compare two integers, two floats, and an integer with a float either way", () => {
     assertOrders(integer(2n), integer(1n), [true, true, false, false]);
@@ -529,6 +584,41 @@ describe("the comparison family's evaluators", () => {
       evaluated(equalOf(float(10), float(10), { tolerance: [ref("NOTHING")] })),
       truth(true),
     );
+  });
+
+  it("[I-9a] qti-duration-lt is true when the first duration is shorter, and qti-duration-gte when it is as long or longer", () => {
+    assertDurations(89.9, 90, [true, false]);
+    assertDurations(90, 90, [false, true]);
+    assertDurations(90.5, 90, [false, true]);
+    assertDurations(-1.5, 0, [true, false]);
+  });
+
+  it("[I-9a] qti-duration-lt and qti-duration-gte give NULL when either operand is NULL", () => {
+    assert.deepStrictEqual(durationsOf(durationNull, duration(90)), [unknown, unknown]);
+    assert.deepStrictEqual(durationsOf(duration(90), durationNull), [unknown, unknown]);
+    assert.deepStrictEqual(durationsOf(durationNull, durationNull), [unknown, unknown]);
+  });
+
+  it("[I-9a] qti-duration-lt and qti-duration-gte give false either way when either duration is NaN", () => {
+    assertDurations(Number.NaN, 90, [false, false]);
+    assertDurations(90, Number.NaN, [false, false]);
+    assertDurations(Number.NaN, Number.NaN, [false, false]);
+  });
+
+  it("[I-9a] qti-duration-lt and qti-duration-gte compare INF and -INF as infinities", () => {
+    assertDurations(Number.POSITIVE_INFINITY, Number.MAX_VALUE, [false, true]);
+    assertDurations(Number.MAX_VALUE, Number.POSITIVE_INFINITY, [true, false]);
+    assertDurations(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, [false, true]);
+    assertDurations(Number.NEGATIVE_INFINITY, -Number.MAX_VALUE, [true, false]);
+    assertDurations(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, [true, false]);
+  });
+
+  it("[I-9a] qti-duration-lt and qti-duration-gte read the seconds exactly as doubles, with no truncation: 89.95 and 90 differ", () => {
+    assertDurations(89.95, 90, [true, false]);
+    assertDurations(90, 90 + 2 ** -46, [true, false]);
+    assertDurations(90 + 2 ** -46, 90, [false, true]);
+    assertDurations(5e-324, 0, [false, true]);
+    assertDurations(0, 5e-324, [true, false]);
   });
 
   it("[I-9a] qti-equal gives NULL when either operand is NULL, in every tolerance mode", () => {
