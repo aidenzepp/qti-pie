@@ -594,6 +594,7 @@ const addDeclaration = (
       identifierLexical: lexical,
       identifierTrail: pieces.trail,
       node: node.id,
+      parentKind,
     });
   }
   for (const baseType of Option.toArray(declared.baseType)) {

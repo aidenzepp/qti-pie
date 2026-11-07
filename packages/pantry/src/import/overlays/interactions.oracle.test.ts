@@ -789,6 +789,7 @@ const scored: Addition<typeof DeclarationName> = {
   identifierLexical: "SCORED",
   identifierTrail: "",
   node: idOf(1001),
+  parentKind: "qti-assessment-test",
 };
 
 /**

@@ -211,6 +211,7 @@ const nameFact = (node: number, identifierLexical: string): Addition<typeof Decl
   identifierLexical,
   identifierTrail: "",
   node: strayNode(node),
+  parentKind: "qti-assessment-item",
 });
 
 /**

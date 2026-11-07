@@ -1226,6 +1226,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               identifierLexical: "A",
               identifierTrail: "",
               node: strayNode(50),
+              parentKind: "qti-assessment-item",
             } satisfies Addition<typeof DeclarationName>;
 
             const choice = yield* db.apply(

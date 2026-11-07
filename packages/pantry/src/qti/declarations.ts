@@ -270,7 +270,8 @@ export const DeclarationBaseType = relation(
  * `identifierLexical`, the lexical form as written (C18's copy), as {@link RecordFieldName} holds a
  * field's; and its {@link Declaration}'s document, declaration kind, cardinality and count of base
  * types, copied through {@link declarationRef}, the fields a reference by name copies through
- * {@link declarationNameRef}.
+ * {@link declarationNameRef}; and `parentKind`, its {@link Declaration}'s, which `Reserved type`
+ * reads (reading 158).
  *
  * An `identifier` that is unwritten, or no NCName once collapsed, whitespace alone among them,
  * names nothing, so it has no row, and AL3 or its value domain (`IdentifierDType`, an `xs:NCName`)
@@ -290,6 +291,7 @@ export const DeclarationName = relation(
     identifierLexical: keyText,
     identifierTrail: Space,
     node: uuid,
+    parentKind: closedId(NodeKind),
   },
   ["node"],
 );
@@ -981,6 +983,7 @@ export const declarationLawsByName = {
       on(DeclarationName, "node", "document", "declarationKind", "cardinality", "baseTypes"),
       declarationRef,
     ),
+    contained(on(DeclarationName, "node", "parentKind"), on(Declaration, "node", "parentKind")),
     contained(on(cardinalities, "node", "lexical"), on(Declaration, "node", "cardinalityLexical")),
     contained(on(Declaration, "node"), on(cardinalities, "node")),
     contained(on(baseTypes, "node", "lexical"), on(DeclarationBaseType, "node", "baseTypeLexical")),

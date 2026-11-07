@@ -266,6 +266,7 @@ const walkDeclaration = (
       identifierLexical,
       identifierTrail: trail,
       node: tuple.node,
+      parentKind,
     });
   }
 
