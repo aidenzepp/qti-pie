@@ -2387,9 +2387,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
      and a reference that begins `C:` parses as one whose scheme is `C` (section 3.1), so neither names an entry of the
      package. A zip and a directory are read alike: one rule refuses both forms in either, with the reason it gives, and
      the import names it `href-path`, as it names every entry path outside the package. This binds pantry and plate
-     alike. (Decided 2026-11-07 by the coordinator, ruling P-7, from RV seat REP-B (`5502d569`): the zip reader refused
-     both forms, and the directory reader read a `\` as a character of a file name and a drive prefix as the start of a
-     relative path, so one package was read two ways by its form.)
+     alike. (Decided 2026-11-07 by the coordinator, ruling P-7, under the operator's standing ruling of 2026-11-05, from
+     RV seat REP-B (`5502d569`): the zip reader refused both forms, and the directory reader read a `\` as a character
+     of a file name and a drive prefix as the start of a relative path, so one package was read two ways by its form.)
 139. **A package zip's central directory ends where its end record begins: other bytes between them are refused under
      `zip-format`.** APPNOTE 6.3.10 lays a zip out as its local headers and data, then the central directory, then the
      ZIP64 end of central directory record and locator, then the end of central directory record (section 4.3.6), and
@@ -2401,8 +2401,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      format of its own: "Physical encapsulation shall be as a compressed binary file conforming to RFC1951" (section
      6.3, condition a), so the container's form is APPNOTE's. Refusing a malformed container is no refusal of valid QTI:
      reading 1 protects valid content, and these bytes make the file no valid package interchange file. This binds
-     pantry and plate alike. (Decided 2026-11-07 by the coordinator, on GEN-B/zip's finding, from RV seat REP-B
-     (`8558cbaa`, its comments renumbered in `bcafe951`).)
+     pantry and plate alike. (Decided 2026-11-07 by the coordinator, on GEN-B/zip's finding, under the operator's
+     standing ruling of 2026-11-05, from RV seat REP-B (`8558cbaa`, its comments renumbered in `bcafe951`).)
 140. **A reader refuses where the infoset the specification defines is undetermined.** crust checks no DTD validity in
      general, since QTI validity is XSD validity, but a default that references a general entity the internal subset
      declares only after the attribute-list declaration is refused everywhere:
@@ -2422,5 +2422,5 @@ against it. A reading that is not an information-model-over-XSD case says which 
        reference outside it. A parameter-entity reference in the internal subset takes a document out of the scope, as
        an external subset does.
 
-     This binds pantry and plate alike. (Operator ruling of 2026-11-07, through the coordinator's ruling 5, from
-     RV seat GEN-B/codec (`3fe6a888`, `bb71b197`; its guard `2e4d053b`).)
+     This binds pantry and plate alike. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
+     2026-11-05, from RV seat GEN-B/codec (`3fe6a888`, `bb71b197`; its guard `2e4d053b`).)
