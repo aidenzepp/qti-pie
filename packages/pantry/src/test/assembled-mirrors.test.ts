@@ -97,7 +97,6 @@ const unjudged = {
   "SectionSelection: a base term": unreadTerm("base"),
   "ShareFragment: a charLength function term":
     "its predicate calls Compute.charLength, a function the host's evaluator does not compute",
-  "ShareFragment: a literal term": "its predicate holds a literal of no datum's type",
   "Slider: a when term": unreadTerm("when"),
   "TextReference: a base term": unreadTerm("base"),
 } satisfies Readonly<Record<string, string>>;
