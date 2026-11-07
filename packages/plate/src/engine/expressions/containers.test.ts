@@ -1,8 +1,15 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Result } from "effect";
+import { Option, Result } from "effect";
 import type { Evaluate, Variables } from "#plate/engine/evaluate.ts";
 import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
-import type { Expression, ExpressionType, IntOrIdentifier } from "#plate/model/expression.ts";
+import { isUnlanded } from "#plate/model/expression.ts";
+import type {
+  Expression,
+  ExpressionType,
+  IntOrIdentifier,
+  ResultAttributes,
+} from "#plate/model/expression.ts";
+import { kindRules } from "#plate/model/expressions/read.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 import { bg007Item, integer } from "#plate/test/fixtures.ts";
@@ -368,6 +375,149 @@ describe("the containers family's evaluators", () => {
 
     assert.deepStrictEqual(evaluated(pairOf("contains", bag(), bag("A"))), unknown);
     assert.deepStrictEqual(evaluated(pairOf("contains", list("A"), list())), unknown);
+  });
+});
+
+/**
+ * The `qti-custom-operator` the item model reads from `<qti-custom-operator class="x"/>`, whose
+ * value plate never knows (9.21): the model types it unknown, and it gives NULL.
+ */
+const custom: Expression = {
+  class: Option.some("x"),
+  definition: Option.none(),
+  kind: "custom-operator",
+  operands: [],
+};
+
+/**
+ * Construct a `qti-multiple` of an expression and a value, so a test puts any operand, untyped or
+ * not, beside a typed one.
+ *
+ * @param operand Its first operand.
+ * @param value Its second operand's value.
+ * @returns The expression.
+ */
+const besideOf = (operand: Expression, value: Value): Expression => ({
+  kind: "multiple",
+  operands: [operand, operandOf(value)],
+});
+
+describe("the containers family's evaluators over an untyped operand", () => {
+  it("[I-9a] give NULL for qti-multiple, qti-ordered and qti-repeat beside a qti-custom-operator, where the model types the container unknown", () => {
+    assert.deepStrictEqual(evaluated(besideOf(custom, one("A"))), bag());
+    assert.deepStrictEqual(
+      evaluated({ kind: "ordered", operands: [operandOf(one("A")), custom] }),
+      list(),
+    );
+    assert.deepStrictEqual(
+      evaluated({
+        kind: "repeat",
+        numberRepeats: literal(2n),
+        operands: [custom, operandOf(one("A"))],
+      }),
+      list(),
+    );
+  });
+
+  it("[I-9a] give NULL for a container whose operand takes its unknown type from a qti-custom-operator: a container, qti-index, qti-delete's second operand, and each numerical aggregate", () => {
+    const aggregates = ["max", "min", "product", "subtract", "sum"] as const;
+    const routes: readonly (readonly [string, Expression, Value])[] = [
+      ["qti-ordered", { kind: "ordered", operands: [custom] }, one("A")],
+      ["qti-index", { kind: "index", n: literal(1n), operands: [custom] }, one("A")],
+      ["qti-delete", { kind: "delete", operands: [operandOf(one("A")), custom] }, one("A")],
+      ...aggregates.map((kind): readonly [string, Expression, Value] => [
+        `qti-${kind}`,
+        { kind, operands: [custom, operandOf(integer(1n))] },
+        integer(2n),
+      ]),
+    ];
+
+    for (const [route, operand, value] of routes) {
+      assert.deepStrictEqual(
+        evaluated(besideOf(operand, value)),
+        nullOf(value.baseType, "multiple"),
+        route,
+      );
+    }
+  });
+
+  it("[I-9a] give NULL for qti-index and qti-delete of a container over a qti-custom-operator", () => {
+    const untypedList: Expression = { kind: "ordered", operands: [custom, operandOf(one("A"))] };
+
+    assert.deepStrictEqual(
+      evaluated({ kind: "index", n: literal(1n), operands: [untypedList] }),
+      identifiers("single"),
+    );
+    assert.deepStrictEqual(
+      evaluated({ kind: "delete", operands: [operandOf(one("B")), untypedList] }),
+      list(),
+    );
+  });
+
+  it("[I-9a] keep a container whose operands are typed, skipping a NULL of any base type, qti-null's and a qti-custom-operator's as qti-delete's first operand among them", () => {
+    assert.deepStrictEqual(
+      evaluated(besideOf({ kind: "null", operands: [] }, one("A"))),
+      bag("A"),
+      "qti-null's NULL says no base type and is skipped",
+    );
+    assert.deepStrictEqual(
+      evaluated(besideOf({ kind: "delete", operands: [custom, operandOf(bag("A"))] }, one("B"))),
+      bag("B"),
+      "qti-delete takes its second operand's type, so its NULL is skipped",
+    );
+    assert.deepStrictEqual(
+      evaluated(
+        besideOf({ kind: "divide", operands: [custom, operandOf(integer(1n))] }, integer(2n)),
+      ),
+      {
+        baseType: "integer",
+        cardinality: "multiple",
+        values: [{ baseType: "integer", value: 2n }],
+      },
+      "qti-divide is a float whatever its operands, so its NULL is skipped",
+    );
+  });
+
+  it("hold the kinds the engine treats as untyped to the kind rules: each landed kind whose rule gives no base type over an unknown operand, and at which position", () => {
+    const unknown1: ExpressionType = { baseType: "unknown", cardinality: "single" };
+    const integer1: ExpressionType = { baseType: "integer", cardinality: "single" };
+    const attributes: ResultAttributes = {
+      baseType: "integer",
+      cardinality: "single",
+      name: "abs",
+    };
+    const passing = Object.entries(kindRules).flatMap(([kind, rule]) => {
+      if (isUnlanded(rule)) {
+        return [];
+      }
+
+      if (rule.resultType([integer1, integer1], attributes).baseType === "unknown") {
+        return [[kind, "always"] as const];
+      }
+
+      const positions = [
+        [unknown1, integer1],
+        [integer1, unknown1],
+      ].flatMap((operands, index) =>
+        rule.resultType(operands, attributes).baseType === "unknown" ? [String(index + 1)] : [],
+      );
+
+      return positions.length === 0 ? [] : [[kind, positions.join(" ")] as const];
+    });
+
+    assert.deepStrictEqual(Object.fromEntries(passing), {
+      "custom-operator": "always",
+      delete: "2",
+      index: "1",
+      max: "1 2",
+      min: "1 2",
+      multiple: "1 2",
+      ordered: "1 2",
+      product: "1 2",
+      repeat: "1 2",
+      subtract: "1 2",
+      sum: "1 2",
+    });
   });
 });
 

@@ -8,6 +8,12 @@
  * container emptied or built of nothing is NULL, since NULL is a value with no values at any
  * cardinality.
  *
+ * A container `qti-multiple`, `qti-ordered` or `qti-repeat` builds over an untyped operand, one the
+ * item model types with no base type because a `qti-custom-operator` gives it ({@link untyped}),
+ * is NULL: the model types such a container unknown, as the qti package does, so a rule that takes
+ * it may need any type, and NULL is the one value of every type. `qti-index` and `qti-delete` of
+ * such a container, or of the operator itself, get a NULL and give one.
+ *
  * A container `qti-multiple`, `qti-ordered` or `qti-repeat` builds is held to `containerSizeBound`
  * (`#plate/engine/numbers.ts`, the principle of the operator's ruling `afb7e648`): one of more than
  * 1,000,000 values is the NULL of its base type and cardinality, found before it is built, so a
@@ -25,7 +31,7 @@ import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/eval
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { booleanOf, integerValue, withinContainerBound } from "#plate/engine/numbers.ts";
 import { referenceInteger } from "#plate/engine/refs.ts";
-import type { Expression } from "#plate/model/expression.ts";
+import type { Expression, ExpressionKind } from "#plate/model/expression.ts";
 import { isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 
@@ -58,6 +64,64 @@ const valuesOf = (
   evaluate: Evaluate,
 ): Result.Result<Value[], EngineFailure> =>
   Result.all(operands.map((operand) => evaluate(operand, scope)));
+
+/**
+ * The kinds whose rule gives no base type when one of its operands has none, each operand counted
+ * but `qti-delete`'s first: the three constructors, `qti-index` and the numerical aggregates.
+ */
+const passesUnknownUp: ReadonlySet<ExpressionKind> = new Set([
+  "index",
+  "max",
+  "min",
+  "multiple",
+  "ordered",
+  "product",
+  "repeat",
+  "subtract",
+  "sum",
+]);
+
+/**
+ * Give the operands whose base type an expression's kind rule passes up as its own when they have
+ * none: `qti-delete`'s second, every operand of a kind {@link passesUnknownUp} names, and none of
+ * any other kind.
+ *
+ * @param expression The expression.
+ * @returns Those operands.
+ */
+const typeSourcesOf = (expression: Expression): readonly Expression[] => {
+  if (expression.kind === "delete") {
+    return [expression.operands[1]];
+  }
+
+  return passesUnknownUp.has(expression.kind) ? expression.operands : [];
+};
+
+/**
+ * Report whether the item model types an expression's values with no base type (`unknown`), as
+ * its kind's rule gives over its operands' types (`kindRules` in
+ * `#plate/model/expressions/read.ts`; the qti package types them alike, `resultType` in
+ * `packages/pantry/src/processing/types.ts`). On a checked item whose processing runs, that is a
+ * `qti-custom-operator`, whose value plate never knows (9.21), and the kinds whose rule passes an
+ * unknown operand's base type up: `qti-multiple`, `qti-ordered` and `qti-repeat` (`sharedBase`),
+ * `qti-index` (its operand's), `qti-delete` (its second operand's) and the numerical aggregates
+ * `qti-sum`, `qti-product`, `qti-subtract`, `qti-min` and `qti-max` (`numericalAggregate` in
+ * `#plate/model/expressions/arithmetic.ts`). A variable of a `record` declaration is typed unknown
+ * too, but no kind this reads takes a record operand (P23 refuses one), and a kind that names a
+ * variable the engine does not hold, or a kind its family has not landed, is marked, so its
+ * processing never runs.
+ *
+ * Every such expression gives NULL: the operator always does, an aggregate does when an operand
+ * is NULL, the three constructors do by this rule, and `qti-index` and `qti-delete` do when their
+ * container is NULL. So an untyped operand never holds a value, and its NULL's base type says
+ * nothing. The containers family's tests hold this list to the kind rules.
+ *
+ * @param expression The expression.
+ * @returns Whether the model types it unknown.
+ */
+const untyped = (expression: Expression): boolean =>
+  expression.kind === "custom-operator" ||
+  typeSourcesOf(expression).some((operand) => untyped(operand));
 
 /**
  * Give the base type of a container built from values: the first value's that is not NULL, else
@@ -103,17 +167,26 @@ const appendTo = (held: Single[], values: readonly Value[]): void => {
 };
 
 /**
- * Give the container of a cardinality that holds the values' values in order: a single value adds
- * itself, a container adds each of its values, and a NULL adds nothing, so the container is NULL
- * when every value is or there is none. One that would hold more than 1,000,000 values is NULL,
- * found from the values' sizes before it is built.
+ * Give the container of a cardinality that holds the operands' values in order: a single value
+ * adds itself, a container adds each of its values, and a NULL adds nothing, whatever its base
+ * type, so the container is NULL when every value is or there is none. It is NULL too when an
+ * operand is {@link untyped}, and when it would hold more than 1,000,000 values, found from the
+ * values' sizes before it is built.
  *
  * @param cardinality The container's cardinality.
- * @param values The values, in order.
+ * @param operands The operands, in order.
+ * @param values Their values, in order.
  * @returns The container, of the values' base type ({@link baseOf}).
  */
-const containerOf = (cardinality: "multiple" | "ordered", values: readonly Value[]): Value => {
-  if (!withinContainerBound(BigInt(sizeOf(values)))) {
+const containerOf = (
+  cardinality: "multiple" | "ordered",
+  operands: readonly Expression[],
+  values: readonly Value[],
+): Value => {
+  if (
+    operands.some((operand) => untyped(operand)) ||
+    !withinContainerBound(BigInt(sizeOf(values)))
+  ) {
     return nullOf(baseOf(values), cardinality);
   }
 
@@ -148,8 +221,8 @@ const equal = (left: Single, right: Single): boolean => match(singleOf(left), si
 /**
  * Give the value of a `qti-multiple`: a multiple container of its operands' values, a multiple
  * operand's added one by one and a NULL one ignored; NULL when there is no operand or every one is
- * NULL, and when it would hold more than 1,000,000 values. Applied to A, B and {C,D} it gives
- * {A,B,C,D}.
+ * NULL, when an operand is {@link untyped}, and when it would hold more than 1,000,000 values.
+ * Applied to A, B and {C,D} it gives {A,B,C,D}.
  *
  * @param expression The `qti-multiple`.
  * @param scope The item and the variables of the attempt.
@@ -159,13 +232,14 @@ const equal = (left: Single, right: Single): boolean => match(singleOf(left), si
  */
 const evaluateMultiple: Evaluator<"multiple"> = (expression, scope, evaluate) =>
   Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
-    containerOf("multiple", values),
+    containerOf("multiple", expression.operands, values),
   );
 
 /**
  * Give the value of a `qti-ordered`: an ordered container of its operands' values, an ordered
  * operand's added in order and a NULL one ignored; NULL when there is no operand or every one is
- * NULL, so it never gives an empty container, and when it would hold more than 1,000,000 values.
+ * NULL, so it never gives an empty container, when an operand is {@link untyped}, and when it would
+ * hold more than 1,000,000 values.
  *
  * @param expression The `qti-ordered`.
  * @param scope The item and the variables of the attempt.
@@ -175,14 +249,14 @@ const evaluateMultiple: Evaluator<"multiple"> = (expression, scope, evaluate) =>
  */
 const evaluateOrdered: Evaluator<"ordered"> = (expression, scope, evaluate) =>
   Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
-    containerOf("ordered", values),
+    containerOf("ordered", expression.operands, values),
   );
 
 /**
  * Give the value of a `qti-repeat`: an ordered container filled by evaluating each operand in turn
  * and adding its values, a NULL one ignored, `number-repeats` times in all; NULL when every operand
- * is NULL, when `number-repeats` is below 1 or names a variable that holds NULL, and when the
- * container would hold more than 1,000,000 values.
+ * is NULL, when an operand is {@link untyped}, when `number-repeats` is below 1 or names a variable
+ * that holds NULL, and when the container would hold more than 1,000,000 values.
  *
  * `number-repeats` is resolved first, then the operands are evaluated once, left to right; the
  * first failure is the result. That pass runs even when `number-repeats` is below 1, so the NULL
@@ -217,7 +291,12 @@ const evaluateRepeat: Evaluator<"repeat"> = (expression, scope, evaluate) =>
     const count = Option.getOrElse(repeats, () => 0n);
     const unset = nullOf(baseOf(pass), "ordered");
     const passSize = sizeOf(pass);
-    if (count < 1n || passSize === 0 || !withinContainerBound(BigInt(passSize) * count)) {
+    if (
+      count < 1n ||
+      passSize === 0 ||
+      expression.operands.some((operand) => untyped(operand)) ||
+      !withinContainerBound(BigInt(passSize) * count)
+    ) {
       return unset;
     }
 
