@@ -29,10 +29,12 @@
  *   `contentOfCell` (`#pantry/test/oracle.ts`) reads it too.
  *
  * A direction is the `dir` an element writes where its collapsed form is `ltr` or `rtl`, and else
- * the one its parent holds, `ltr` above every element (MathML 3 §3.1.5.1). A `dir` of any other
- * form, HTML's `auto` among them, has no `AlignDirection`, so it is written as none: the row's
- * `dirLexical` is empty and the element changes no direction, and a cell's root takes the direction
- * of the nearest ancestor that writes one of the two, the host's statement (audit items 1 and 2).
+ * the one its parent holds, except that an `m:math` that writes neither holds `ltr` (MathML 3
+ * §2.2.1 and §3.1.5.1, reading 144). A `dir` of any other form, HTML's `auto` among them, has no
+ * `AlignDirection`, so it is written as none: the row's `dirLexical` is empty and the element
+ * changes no direction. A cell's root takes the direction of the nearest ancestor up to its
+ * `m:math` that writes `ltr` or `rtl`, else `ltr`, the host's statement (audit items 1 and 2). An
+ * HTML ancestor's `dir` is not read.
  *
  * The rows are built in one pass over the nodes in document order, each parent's before its
  * children's, appending to its lists in place, so a document with one element of many children
@@ -431,7 +433,7 @@ export const rowsOf = (
     reading.owns.set(
       node.id,
       directionOf(reading.attributes.get(node.id)?.get("dir")) ??
-        reading.owns.get(node.parent) ??
+        (node.kind === "m:math" ? "ltr" : reading.owns.get(node.parent)) ??
         "ltr",
     );
     if (node.kind === "m:maction") {
