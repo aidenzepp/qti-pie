@@ -3,11 +3,14 @@ import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { foreignKinds, isForeignKind } from "#pantry/grammar/kinds.ts";
+import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
+import { roster } from "#pantry/grammar/closed.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import {
   expandedText,
+  heldRootsUnder,
   patternLiteral,
   textsPattern,
   vocabularyNamespacesPattern,
@@ -341,5 +344,61 @@ describe("HeldRootsUnder", () => {
         ({ names, parent }) => parent === "drd:accessForAllResource" && names !== "^$",
       ),
     );
+  });
+
+  it("names a root under a strictly held family only in the versions that declare it, over every version set of two roots", () => {
+    // Oracle: a naive model, a root is held in a version exactly when its versions include it.
+    // Bound: two roots, each declared in every subset of the two versions, 16 rosters, exhausted;
+    // one strictly held family in each version, whose wildcard reads every namespace.
+    const subsets: readonly (readonly SchemaVersion[])[] = [
+      [],
+      ["3.0.0"],
+      ["3.0.1"],
+      ["3.0.0", "3.0.1"],
+    ];
+    const versions = Result.getOrThrow(roster("SchemaVersion", schemaVersions));
+    const kinds = Result.getOrThrow(roster("NodeKind", ["host", "foreign-element"]));
+    const wrong: string[] = [];
+    for (const first of subsets) {
+      for (const second of subsets) {
+        const roots = [
+          { kind: "a:r", local: "r", namespace: "urn:a", versions: first },
+          { kind: "b:s", local: "s", namespace: "urn:b", versions: second },
+        ];
+        const relation = Result.getOrThrow(
+          heldRootsUnder({
+            classOf: () => "foreign-element",
+            held: schemaVersions.map((version) => ({
+              child: "foreign-element",
+              parent: "host",
+              version,
+            })),
+            kinds,
+            namespaceOf: () => "urn:host",
+            reads: () => true,
+            roots,
+            versions,
+          }),
+        );
+        for (const version of schemaVersions) {
+          const names = Option.getOrElse(
+            Option.map(relation.lookup({ parent: "host", version }), (row) => row.names),
+            () => "(none)",
+          );
+          for (const { local, namespace, versions: declared } of roots) {
+            const text = expandedText({ local, namespace });
+            if (matches(names, text) !== declared.includes(version)) {
+              wrong.push(`${version}: ${text} declared in {${declared.join(", ")}}, ${names}`);
+            }
+          }
+
+          if (matches(names, expandedText({ local: "s", namespace: "urn:a" }))) {
+            wrong.push(`${version}: a name no root has, ${names}`);
+          }
+        }
+      }
+    }
+
+    assert.deepStrictEqual(wrong, []);
   });
 });
