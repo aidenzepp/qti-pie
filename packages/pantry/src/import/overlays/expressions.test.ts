@@ -812,7 +812,7 @@ const rowsOfText = (text: string) =>
     const xml = yield* readXml(new TextEncoder().encode(text));
     const tree = yield* shred(xml, "3.0.0", shredGrammarOf(grammar));
 
-    return rowsOf(tree, { idOf });
+    return rowsOf(tree, { context: ownContext(idOf(0)), idOf });
   });
 
 /**

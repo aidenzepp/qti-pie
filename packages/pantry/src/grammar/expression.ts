@@ -10,6 +10,7 @@
  * and 3.0.1 XSDs give the same arity rows, which `expression.test.ts` checks over the pinned XSD
  * cache, and the binding and mapping rules are stated once for both versions.
  */
+import { Option } from "effect";
 import type { Array as Arr, Result } from "effect";
 import { closed, idField, int8Max, valueField } from "#pantry/grammar/closed.ts";
 import { maxOccursOf } from "#pantry/grammar/content.ts";
