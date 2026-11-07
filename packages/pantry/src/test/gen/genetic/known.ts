@@ -246,24 +246,25 @@ export const known = {
     fix: "N8: the oracle states the choice law the schema does, every choice in a choice interaction, so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
     owner: "OL",
   },
-  "import-only-law: Template reference, contained TemplateRef(node, attribute) in TemplateRefDeclaration(node, attribute)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
+  "import-only-law: Template reference, contained TemplateRef(node, attribute) in TemplateRefDeclaration(node, attribute)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
+        ],
+        [
+          "items/item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
+        ],
       ],
-    ],
-    fix: "a content reference's value names a variable only where it is an NCName, as the oracle reads a bare reference (oracle.ts referenced.bare): the import and the schema's reference sources read template-identifier=\"\" as a name no declaration holds, which its value domain refuses alone",
-    owner: "FB-INTER",
-  },
+      fix: "a content reference's value names a variable only where it is an NCName, as the oracle reads a bare reference (oracle.ts referenced.bare): the import and the schema's reference sources read template-identifier=\"\" as a name no declaration holds, which its value domain refuses alone",
+      owner: "FB-INTER",
+    },
   "import-only-law: Test overlay, contained Node(id) in ReferencePath(node)": {
     files: [
       [
