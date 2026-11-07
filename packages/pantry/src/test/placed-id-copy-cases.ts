@@ -65,7 +65,8 @@ export const packageOf = (drawnCase: CopyCase): PackageEntries => {
   const test = textOf(base, paths.test);
   const sectionRef = `<qti-assessment-section-ref identifier="placement" href="${paths.section}"/>`;
   const rubric = `<qti-rubric-block use="instructions" view="candidate"><qti-content-body><div id="${id}">Read on.</div></qti-content-body></qti-rubric-block>`;
-  const firstSection = `<qti-assessment-section identifier="first" title="First" visible="true">`;
+  // A section's rubric blocks follow its qti-ordering, so the rubric goes after it.
+  const firstSection = `<qti-assessment-section identifier="first" title="First" visible="true">\n      <qti-ordering shuffle="true"/>`;
   assert.include(section, "<div><qti-printed-variable", "the section document's rubric");
   assert.include(test, sectionRef, "the test's section ref");
   assert.include(test, firstSection, "the test's first section");

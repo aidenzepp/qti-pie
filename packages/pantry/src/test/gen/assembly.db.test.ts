@@ -3,7 +3,11 @@
  * and its verdict must be the generator's model's (`#pantry/test/gen/assembly.ts`
  * `modelVerdict`). Every package of the small box and a swarm's sample past it is imported in one
  * ChangeSet. An accepted import is the model's accepted, and a refused one is the model's refused,
- * under `branch-target` or `branch-forward`.
+ * under the rule of one of the faults it finds: a target that resolves nowhere or names an element
+ * of the wrong kind or part under `branch-target`, one that is not after its source under
+ * `branch-forward`. A package whose faults are all of one rule is refused under that rule alone:
+ * a resolution with no target breaks only its existence law, and `Branch_forward` judges only a
+ * target `Branch_target` admits, so no target breaks both.
  *
  * The law oracle states no breach of reading 87 (`assembly.test.ts`), so the model is this test's
  * oracle, not `importAgreesWithOracle`. Every import is refused before any SQL until grizzle
@@ -29,14 +33,20 @@ import {
   smallAssembly,
   swarmedAssembly,
 } from "#pantry/test/gen/assembly.ts";
-import type { Assembly } from "#pantry/test/gen/assembly.ts";
+import type { Assembly, RuleFault } from "#pantry/test/gen/assembly.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
- * The rules the database may refuse a generated package under: reading 87's two laws.
+ * The rule a fault of reading 87's model is refused under: a target that resolves nowhere, or to a
+ * name of the wrong kind or part, "Branch target"; one that is not after its source, "Branch
+ * forward".
+ *
+ * @param fault - The fault.
+ * @returns The rule.
  */
-const branchRules: ReadonlySet<string> = new Set(["branch-forward", "branch-target"]);
+const ruleOfFault = (fault: RuleFault): string =>
+  fault === "forward" ? "branch-forward" : "branch-target";
 
 /**
  * Import one generated package and hold the database's verdict to reading 87's model.
@@ -58,7 +68,14 @@ const importJudged = (assembly: Assembly) =>
       const refused = outcome.failure;
 
       assert.strictEqual(predicted.kind, "refused", `${literal} was refused: ${refused.message}`);
-      assert.isTrue(branchRules.has(refused.rule), `${literal}: ${refused.message}`);
+
+      const rules = new Set(
+        predicted.kind === "refused" ? [...predicted.faults].map(ruleOfFault) : [],
+      );
+      assert.isTrue(
+        rules.has(refused.rule),
+        `${literal} was refused under ${refused.rule}, and the model's faults are ${[...rules].join(", ")}: ${refused.message}`,
+      );
     } else {
       assert.fail(`${literal} failed with ${outcome.failure.message}`);
     }

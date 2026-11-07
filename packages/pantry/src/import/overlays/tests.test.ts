@@ -43,7 +43,7 @@ import type {
   XdmDocument,
 } from "#pantry/model/xdm.ts";
 import { exits, sectionParts } from "#pantry/qti/tests.ts";
-import type { BranchResolution } from "#pantry/qti/tests.ts";
+import type { BranchShuffle, BranchTarget } from "#pantry/qti/tests.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 
 /**
@@ -500,36 +500,68 @@ const sectionTargets: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * State `Branch_target` on the host: the target's kind, part and replacement, and an instance that
- * holds the rule's, reached through its child `via`.
+ * State `Branch_target`'s judgment of a target's name on the host: its kind and part, and no item
+ * ref a replacement can repeat.
  *
- * @param b - The resolution.
- * @param instanceStart - Its instance's start.
+ * @param b - The target.
+ * @returns Whether the name is admitted.
+ */
+const admitted = (b: Addition<typeof BranchTarget>): boolean =>
+  (b.ownerKind === "qti-test-part"
+    ? b.targetKind === "qti-test-part"
+    : sectionTargets.has(b.targetKind) && b.targetPart === b.ownerPart) &&
+  !(b.targetKind === "qti-assessment-item-ref" && b.targetReplaced);
+
+/**
+ * State `Branch_target` on the host: the name admitted, and an instance that holds the rule's,
+ * reached through its child `via`.
+ *
+ * @param b - The target.
  * @returns Whether the law accepts it.
  */
-const targetAccepts = (b: Addition<typeof BranchResolution>, instanceStart: bigint): boolean => {
-  const kind =
-    b.ownerKind === "qti-test-part"
-      ? b.targetKind === "qti-test-part"
-      : sectionTargets.has(b.targetKind) && b.targetPart === b.ownerPart;
-  const replaceable = b.targetKind === "qti-assessment-item-ref" && b.targetReplaced;
-  const above = b.targetInstanceStart <= instanceStart && instanceStart < b.targetInstanceEnd;
+const targetAccepts = (b: Addition<typeof BranchTarget>): boolean => {
+  const above = b.targetInstanceStart <= b.instanceStart && b.instanceStart < b.targetInstanceEnd;
   const through =
     b.targetInstance === b.instance
       ? b.via === b.instance
-      : b.viaParent === b.targetInstance && b.viaStart <= instanceStart && instanceStart < b.viaEnd;
+      : b.viaParent === b.targetInstance &&
+        b.viaStart <= b.instanceStart &&
+        b.instanceStart < b.viaEnd;
 
-  return kind && !replaceable && above && through;
+  return admitted(b) && above && through;
 };
 
 /**
- * State `Branch_forward` on the host: the target after the source's end, or the two unnested under
- * a common element whose order is drawn.
+ * State the shuffle's `Branch_forward` on the host: its common element holds the source's point,
+ * its child `branch` holds the target and not that point, and the common element's order is drawn.
  *
- * @param b - The resolution.
+ * @param s - The shuffle.
  * @returns Whether the law accepts it.
  */
-const forwardAccepts = (b: Addition<typeof BranchResolution>): boolean => {
+const shuffleAccepts = (s: Addition<typeof BranchShuffle>): boolean => {
+  const point = s.targetInstance === s.instance ? s.ownerStart : s.viaSiteStart;
+  const holds = (start: bigint, end: bigint) => start <= point && point < end;
+
+  return (
+    holds(s.commonStart, s.commonEnd) &&
+    s.branchParent === s.common &&
+    s.branchStart <= s.targetStart &&
+    s.targetStart < s.branchEnd &&
+    !holds(s.branchStart, s.branchEnd) &&
+    s.commonMixes
+  );
+};
+
+/**
+ * State the target's `Branch_forward` on the host: a name `Branch_target` does not admit is that
+ * law's alone; any other lies after the source's end, or the two are unnested and a shuffle
+ * orders them.
+ *
+ * @param b - The target.
+ * @param shuffles - Its shuffles, as `BranchTarget.shuffles` counts them.
+ * @returns Whether the law accepts it.
+ */
+const forwardAccepts = (b: Addition<typeof BranchTarget>, shuffles: number): boolean => {
   const same = b.targetInstance === b.instance;
   const point = same ? b.ownerStart : b.viaSiteStart;
   const holds = (start: bigint, end: bigint) => start <= point && point < end;
@@ -537,28 +569,41 @@ const forwardAccepts = (b: Addition<typeof BranchResolution>): boolean => {
   const nested =
     holds(b.targetStart, b.targetEnd) ||
     (same && b.ownerStart <= b.targetStart && b.targetStart < b.ownerEnd);
-  const shuffled =
-    holds(b.commonStart, b.commonEnd) &&
-    b.branchParent === b.common &&
-    b.branchStart <= b.targetStart &&
-    b.targetStart < b.branchEnd &&
-    !holds(b.branchStart, b.branchEnd) &&
-    b.commonMixes;
 
-  return forward || (b.ownerKind !== "qti-test-part" && !nested && shuffled);
+  return !admitted(b) || forward || (b.ownerKind !== "qti-test-part" && !nested && shuffles === 1);
 };
 
 /**
- * State `Branch_target` and `Branch_forward` on the host, over a resolution's fields, as
- * `#pantry/qti/tests.ts` states them.
+ * The rule PostgreSQL refuses one resolution under, by the laws restated on the host over its
+ * target and shuffle: no target breaks the resolution's existence law, "Branch target"; a target
+ * breaks `Branch_target` or `Branch_forward`, never both; a shuffle breaks its own
+ * `Branch_forward`.
  *
- * @param b - The resolution, as its writer writes it.
- * @param instanceStart - Its instance's start in the tree's pre-order, which grizzle copies onto
- *   it.
- * @returns Whether both laws accept it.
+ * @param target - The resolution's target, none where the builder wrote none.
+ * @param shuffle - Its shuffle, none where the builder wrote none.
+ * @returns The rule, or none where every law accepts it.
  */
-const lawAccepts = (b: Addition<typeof BranchResolution>, instanceStart: bigint): boolean =>
-  targetAccepts(b, instanceStart) && forwardAccepts(b);
+const rowRule = (
+  target: Addition<typeof BranchTarget> | undefined,
+  shuffle: Addition<typeof BranchShuffle> | undefined,
+): "branch-forward" | "branch-target" | undefined => {
+  if (target === undefined) {
+    assert.isUndefined(shuffle, "a shuffle without a target");
+
+    return "branch-target";
+  }
+
+  const targeted = targetAccepts(target);
+  const forwarded =
+    forwardAccepts(target, shuffle === undefined ? 0 : 1) &&
+    (shuffle === undefined || shuffleAccepts(shuffle));
+  assert.isTrue(targeted || forwarded, "a target breaks both branch laws");
+  if (!targeted) {
+    return "branch-target";
+  }
+
+  return forwarded ? undefined : "branch-forward";
+};
 
 /**
  * A package of the assembly box: the sites the test's section and each of two section documents
@@ -794,15 +839,23 @@ const assertPlacedRules = (
       { end: BigInt(end), start: BigInt(start) },
     ]),
   );
-  for (const resolution of assembled.BranchResolution.values()) {
-    const target = intervals.get(resolution.targetInstance);
-    const via = intervals.get(resolution.via);
-    assert.strictEqual(resolution.targetInstanceStart, target?.start);
-    assert.strictEqual(resolution.targetInstanceEnd, target?.end);
-    assert.strictEqual(resolution.viaStart, via?.start);
-    assert.strictEqual(resolution.viaEnd, via?.end);
-    assert.isTrue(
-      lawAccepts(resolution, intervals.get(resolution.instance)?.start ?? -1n),
+  assert.strictEqual(assembled.BranchTarget.size, assembled.BranchResolution.size);
+  for (const [at, resolution] of assembled.BranchResolution) {
+    const resolved = assembled.BranchTarget.get(at);
+    assert.isDefined(resolved, "a placed rule naming T resolves");
+    if (resolved === undefined) {
+      continue;
+    }
+
+    const target = intervals.get(resolved.targetInstance);
+    const via = intervals.get(resolved.via);
+    assert.strictEqual(resolved.instanceStart, intervals.get(resolution.instance)?.start);
+    assert.strictEqual(resolved.targetInstanceStart, target?.start);
+    assert.strictEqual(resolved.targetInstanceEnd, target?.end);
+    assert.strictEqual(resolved.viaStart, via?.start);
+    assert.strictEqual(resolved.viaEnd, via?.end);
+    assert.isUndefined(
+      rowRule(resolved, assembled.BranchShuffle.get(at)),
       "a placed rule naming T after its site",
     );
   }
@@ -1082,37 +1135,42 @@ const ancestors = (name: string): readonly string[] => {
 const isPart = (name: string): boolean => name === "P1" || name === "P2";
 
 /**
- * Judge a jump case by reading 87's bullets, over the case's own structure: a reserved exit; a
- * test part's rule naming a later test part; or a rule of an item ref or section naming an item
- * ref, section or section ref of its own part after its end, never an item ref a replacement can
- * repeat, the order exempt where the section holding both shuffles them and neither holds the
- * other.
+ * Judge a jump case by reading 87's bullets, over the case's own structure, and name the law that
+ * refuses it: a reserved exit is valid; a target that names nothing, a test part's rule naming no
+ * test part, or another's naming a test part, an element of another part or an item ref a
+ * replacement can repeat breaks "Branch target"; a test part's rule naming no later test part, or
+ * another's naming an element it nests with or one before its end that the section holding both
+ * does not shuffle, breaks "Branch forward".
  *
  * @param jump - The case.
- * @returns Whether the rule is valid.
+ * @returns The rule reading 87 refuses it under, or none where the rule is valid.
  */
-const readingAccepts = (jump: JumpCase): boolean => {
+const readingRule = (jump: JumpCase): "branch-forward" | "branch-target" | undefined => {
   if (exits.some((exit) => exit === jump.target)) {
-    return true;
+    return undefined;
   }
 
   const order = ["P1", "S", "I1", "I2", "P2", "S2", "I3"];
   const partOf = (name: string) => (isPart(name) ? name : ancestors(name).find(isPart));
   const { target } = jump;
   if (!order.includes(target)) {
-    return false;
+    return "branch-target";
   }
 
   if (isPart(jump.owner)) {
-    return isPart(target) && order.indexOf(target) > order.indexOf(jump.owner);
+    if (!isPart(target)) {
+      return "branch-target";
+    }
+
+    return order.indexOf(target) > order.indexOf(jump.owner) ? undefined : "branch-forward";
   }
 
   if (isPart(target) || partOf(target) !== partOf(jump.owner)) {
-    return false;
+    return "branch-target";
   }
 
   if (target.startsWith("I") && jump.replaced && ancestors(target).includes("S")) {
-    return false;
+    return "branch-target";
   }
 
   const nested =
@@ -1120,7 +1178,7 @@ const readingAccepts = (jump: JumpCase): boolean => {
     ancestors(target).includes(jump.owner) ||
     ancestors(jump.owner).includes(target);
   if (nested) {
-    return false;
+    return "branch-forward";
   }
 
   const ownerEnd = Math.max(
@@ -1131,7 +1189,9 @@ const readingAccepts = (jump: JumpCase): boolean => {
   );
   const common = ancestors(target).find((name) => ancestors(jump.owner).includes(name));
 
-  return order.indexOf(target) > ownerEnd || (common === "S" && jump.shuffle);
+  return order.indexOf(target) > ownerEnd || (common === "S" && jump.shuffle)
+    ? undefined
+    : "branch-forward";
 };
 
 describe("import/overlays/tests.ts, the jumps", () => {
@@ -1164,16 +1224,22 @@ describe("import/overlays/tests.ts, the jumps", () => {
             Effect.sync(() => {
               const documents = rowsOfPackage([["t.xml", jumpDocument(jump)]]);
               const assembled = assembledRowsOf(documents, () => idOf(999));
-              const expected = readingAccepts(jump);
+              const expected = readingRule(jump);
               const resolutions = [...assembled.BranchResolution.values()];
+              const resolvedTargets = [...assembled.BranchTarget.values()];
+              const shuffles = [...assembled.BranchShuffle.values()];
               if (exits.some((exit) => exit === jump.target)) {
                 c.note("exit");
                 assert.deepStrictEqual(resolutions, [], "an exit resolves nothing");
+                assert.deepStrictEqual(resolvedTargets, [], "an exit has no target");
+                assert.deepStrictEqual(shuffles, [], "an exit has no shuffle");
 
                 return;
               }
 
               assert.strictEqual(resolutions.length, 1);
+              assert.isAtMost(resolvedTargets.length, 1);
+              assert.isAtMost(shuffles.length, 1);
 
               const [resolution] = resolutions;
               assert.isDefined(resolution);
@@ -1181,29 +1247,41 @@ describe("import/overlays/tests.ts, the jumps", () => {
                 return;
               }
 
-              const name = (instance: string, node: string) =>
-                assembled.InstanceName.get(keyOf([instance, node]));
-              const resolved = name(resolution.targetInstance, resolution.targetNode) !== undefined;
-              const accepted = resolved && lawAccepts(resolution, 0n);
-              c.note(accepted ? "accepted" : "refused");
-              if (accepted && jump.owner === "I2" && jump.target === "I1") {
+              const [target] = resolvedTargets;
+              const [shuffle] = shuffles;
+              const rule = rowRule(target, shuffle);
+              c.note(rule === undefined ? "accepted" : "refused");
+              if (rule === undefined && jump.owner === "I2" && jump.target === "I1") {
                 c.note("shuffled backward");
               }
 
-              assert.strictEqual(accepted, expected, Formatter.format(jump));
-              if (resolved) {
-                const target = name(resolution.targetInstance, resolution.targetNode);
-                assert.strictEqual(target?.start, resolution.targetStart);
-                assert.strictEqual(target?.kind, resolution.targetKind);
-                assert.strictEqual(target?.identifier, resolution.target);
-                assert.strictEqual(
-                  name(resolution.instance, resolution.owner)?.end,
-                  resolution.ownerEnd,
-                );
-                assert.strictEqual(
-                  name(resolution.targetInstance, resolution.common)?.mixes,
-                  resolution.commonMixes,
-                );
+              assert.strictEqual(rule, expected, Formatter.format(jump));
+
+              const name = (instance: string, node: string) =>
+                assembled.InstanceName.get(keyOf([instance, node]));
+              assert.strictEqual(
+                name(resolution.instance, resolution.owner)?.end,
+                resolution.ownerEnd,
+              );
+              if (target !== undefined) {
+                const named = name(target.targetInstance, target.targetNode);
+                assert.isDefined(named, "a target names an InstanceName");
+                assert.strictEqual(named?.start, target.targetStart);
+                assert.strictEqual(named?.kind, target.targetKind);
+                assert.strictEqual(named?.identifier, target.target);
+                assert.strictEqual(target.instance, resolution.instance);
+                assert.strictEqual(target.rule, resolution.rule);
+                assert.strictEqual(target.ownerEnd, resolution.ownerEnd);
+              }
+
+              if (shuffle !== undefined) {
+                const common = name(shuffle.targetInstance, shuffle.common);
+                const branch = name(shuffle.targetInstance, shuffle.branch);
+                assert.isDefined(common, "a shuffle's common element names an InstanceName");
+                assert.isDefined(branch, "a shuffle's branch names an InstanceName");
+                assert.strictEqual(common?.mixes, shuffle.commonMixes);
+                assert.strictEqual(branch?.start, shuffle.branchStart);
+                assert.strictEqual(shuffle.targetStart, target?.targetStart);
               }
             }),
         ),

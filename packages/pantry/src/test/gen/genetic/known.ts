@@ -201,24 +201,6 @@ export const known = {
     fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "import-only-law: Branch forward, check Branch_forward on BranchResolution": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref><qti-branch-rule target="p7"/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "C6: a branch rule whose target names nothing writes no target row",
-    owner: "NIL",
-  },
   "import-only-law: E1 derived, check E1_derived on RecordField": {
     files: [
       [
@@ -914,6 +896,24 @@ export const fixed = {
       fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
       owner: "VD",
     },
+  "import-only-law: Branch forward, check Branch_forward on BranchResolution": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref><qti-branch-rule target="p7"/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "C6: a branch rule whose target names nothing writes no BranchTarget row, so only the resolution's existence law, Branch target, can break, and no Branch_forward",
+    owner: "NIL",
+  },
   "import-only-law: Declaration base type, check Declaration_base_type on Declaration": {
     files: [
       [

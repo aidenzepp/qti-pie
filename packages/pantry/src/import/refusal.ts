@@ -514,6 +514,8 @@ const patternLaws = (
 const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
   ["AssembledName", "Test name key"],
   ["BranchResolution", "Branch target"],
+  ["BranchShuffle", "Branch forward"],
+  ["BranchTarget", "Branch target"],
   ["Instance", "Inclusion cycle"],
   ["InstanceName", "Test name key"],
   ["ItemRefTarget", "Item ref target"],

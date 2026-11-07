@@ -1267,6 +1267,19 @@ against it. A reading that is not an information-model-over-XSD case says which 
     - No target is an item ref under a section whose `qti-selection` has `with-replacement` true, anywhere above it.
     - The target names exactly one element that meets these conditions; one that two placements of a section document
       supply twice (reading 86) is refused as ambiguous.
+    - One fault, one rule. A target that names no element of an instance holding the rule's, or names one of the
+      wrong kind, of another test part, or an item ref a replacement can repeat, breaks "Branch target" alone; only a
+      target that rule admits by its name is judged by "Branch forward". The law oracle already reads the bullets in
+      that order (`src/test/oracle-laws/tests.ts` `branchLawsOf`), and the schema states it: the resolution's target is
+      a row of its own (`BranchTarget`), absent where nothing resolves, so its existence law refuses it; and
+      `Branch_forward` holds of every target `Branch_target` refuses by its name. Before, an unresolved rule wrote a
+      stand-in target, which broke both CHECKs, and PostgreSQL reported the one whose name sorts first,
+      `branch_forward`.
+    - Where a shuffle orders the two, that shuffle is a row of its own too (`BranchShuffle`): written only where the
+      nearest name of the target's document holding the source and the target draws its children's order and its
+      child holding the target does not hold the source, its `Branch_forward` proving exactly that, and counted by
+      the target (`BranchTarget.shuffles`). A rule no shuffle orders has none, rather than a common element standing
+      in as the target itself.
 
     Pre-conditions and branch rules are ignored in nonlinear mode (section 2.8.3), but the target rules are stated
     without that condition, so they hold in every mode. This binds pantry and plate alike. This is not a case of
