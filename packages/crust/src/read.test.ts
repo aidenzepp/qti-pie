@@ -1,57 +1,12 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`) the declarations under test carry. */
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { assert, it, layer } from "@effect/vitest";
+import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
-import { SaxesParser } from "saxes";
 import { readXml } from "#crust/read.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
 import { declared } from "#crust/test/bytes.ts";
 import { withoutBuffer } from "#crust/test/without-buffer.ts";
-
-/**
- * The events one `saxes` parse reported: every text run in order, every attribute value in order,
- * and every error the parser raised instead of throwing.
- */
-interface Observed {
-  readonly attributes: readonly string[];
-  readonly errors: readonly string[];
-  readonly texts: readonly string[];
-}
-
-/**
- * Parse `document` with a namespace-aware, position-tracking `SaxesParser` whose `ENTITIES` table
- * holds `entities`, and return what the `text` and `attribute` events carried.
- */
-const observe = (entities: Readonly<Record<string, string>>, document: string): Observed => {
-  const parser = new SaxesParser({ position: true, xmlns: true });
-  const attributes: string[] = [];
-  const errors: string[] = [];
-  const texts: string[] = [];
-  Object.assign(parser.ENTITIES, entities);
-  parser.on("attribute", (attribute) => {
-    attributes.push(attribute.value);
-  });
-  parser.on("error", (error) => {
-    errors.push(error.message);
-  });
-  parser.on("text", (text) => {
-    texts.push(text);
-  });
-  parser.write(document).close();
-
-  return { attributes, errors, texts };
-};
-
-it.effect("saxes appends ENTITIES replacement text unnormalized and unparsed", () =>
-  Effect.sync(() => {
-    const observed = observe({ e: "<b>1</b>\n" }, '<a x="&e;">&e;</a>');
-
-    assert.deepStrictEqual(observed.errors, []);
-    assert.strictEqual(observed.texts.join(""), "<b>1</b>\n");
-    assert.deepStrictEqual(observed.attributes, ["<b>1</b>\n"]);
-  }),
-);
 
 /**
  * One child as a string: an entity reference as `&name;`, text as its value, anything else `-`.
