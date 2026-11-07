@@ -4,20 +4,12 @@ import type { Expression, ExpressionType } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
-import { assertKindType, evaluateIn, scopeOf } from "#plate/test/processing.ts";
+import { assertKindType, evaluateIn, operandOf, scopeOf } from "#plate/test/processing.ts";
 
 /**
  * 2^53, the least integer above which a double cannot hold every integer.
  */
 const twoTo53 = 9_007_199_254_740_992n;
-
-/**
- * Construct the `qti-base-value` operand of a value.
- *
- * @param value The value.
- * @returns The operand.
- */
-const operandOf = (value: Value): Expression => ({ kind: "base-value", operands: [], value });
 
 /**
  * Construct a container of integers.

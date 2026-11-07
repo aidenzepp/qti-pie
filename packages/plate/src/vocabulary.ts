@@ -241,8 +241,9 @@ export interface Renders {
    * `elements` is a mark keyed by its own name, response processing by a template URI outside the
    * built-ins is a mark keyed `template="<uri>"`, inline response processing with an element
    * outside `engine` and the registry's landed expression kinds is a mark keyed by that element's
-   * name (an XInclude `include` there is keyed `xi:include`), and a `qti-equal` outside its `exact`
-   * tolerance mode is a mark keyed `tolerance-mode="<mode>"`.
+   * name (an XInclude `include` there is keyed `xi:include`), and the text family's reader marks a
+   * `qti-pattern-match` literal it cannot compile `pattern`, a `qti-inside` coordinate written with
+   * `%` `area-coords-percent`, and every `qti-custom-operator` by its own name.
    */
   readonly marks: readonly FeatureRule[];
   /**

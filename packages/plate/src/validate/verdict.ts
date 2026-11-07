@@ -1298,13 +1298,12 @@ const alternatives = (list: string, word: (one: string) => string): string => {
 
 /**
  * Word an `expression-type` refusal of an operand the element does not take (`check: "operand"`,
- * pantry's P23, or today's `qti-equal` check, which writes no `check`), counted from 1.
+ * pantry's P23), counted from 1.
  *
  * The sentence names the type the operand has and what the element takes: the
  * `acceptsCardinalities` and `acceptsBaseTypes` its rule names, in the rule's order, where
- * `acceptsBaseTypes` of `any` is a kind that takes a value of any base type and names none. A
- * refusal without the two accepts facts is today's `qti-equal` check's, which takes a single
- * `integer` or `float`; that fallback goes once every operand check writes them.
+ * `acceptsBaseTypes` of `any` is a kind that takes a value of any base type and names none. Every
+ * producer writes both accepts facts (`operandTypes` in `#plate/validate/rules.ts`).
  *
  * @param refusal The refusal.
  * @param element The element's local name.
@@ -1313,38 +1312,24 @@ const alternatives = (list: string, word: (one: string) => string): string => {
  */
 const operandType = (refusal: Refusal, element: string, expression: string): string => {
   const operand = fact(refusal, "operand", "");
-  const accepts = Option.all({
-    baseTypes: optionalFact(refusal, "acceptsBaseTypes"),
-    cardinalities: optionalFact(refusal, "acceptsCardinalities"),
-  });
+  const baseTypes = fact(refusal, "acceptsBaseTypes", "");
+  const cardinalities = fact(refusal, "acceptsCardinalities", "");
+  const taken = withArticle(
+    baseTypes === "any"
+      ? `${alternatives(cardinalities, String)} value of any base type`
+      : `${alternatives(cardinalities, String)} ${alternatives(baseTypes, code)} value`,
+  );
 
-  return Option.match(accepts, {
-    onNone: () =>
-      sentence(
-        refusal,
-        `Operand ${operand} of ${code(element)} is a ${expression} value, not a single ${code("integer")} or ${code("float")}${citation(refusal)}.`,
-        `give operand ${operand} a single ${code("integer")} or ${code("float")} value`,
-      ),
-    onSome: ({ baseTypes, cardinalities }) => {
-      const taken = withArticle(
-        baseTypes === "any"
-          ? `${alternatives(cardinalities, String)} value of any base type`
-          : `${alternatives(cardinalities, String)} ${alternatives(baseTypes, code)} value`,
-      );
-
-      return sentence(
-        refusal,
-        `Operand ${operand} of ${code(element)} is ${withArticle(expression)} value, which ${code(element)} does not take; it takes ${taken}${citation(refusal)}.`,
-        `give operand ${operand} ${taken}`,
-      );
-    },
-  });
+  return sentence(
+    refusal,
+    `Operand ${operand} of ${code(element)} is ${withArticle(expression)} value, which ${code(element)} does not take; it takes ${taken}${citation(refusal)}.`,
+    `give operand ${operand} ${taken}`,
+  );
 };
 
 /**
- * Word an `expression-type` refusal without a `check`, as before the checks had one: today's
- * `qti-equal` operand, a lookup operand against its table (reading 28), or an expression against
- * the outcome it sets.
+ * Word an `expression-type` refusal without a `check`, as before the checks had one: a lookup
+ * operand against its table (reading 28), or an expression against the outcome it sets.
  *
  * @param refusal The refusal.
  * @param element The element's local name.
@@ -1354,21 +1339,17 @@ const operandType = (refusal: Refusal, element: string, expression: string): str
 const uncheckedType = (refusal: Refusal, element: string, expression: string): string => {
   const identifier = fact(refusal, "identifier", "the outcome");
 
-  if (Option.isSome(optionalFact(refusal, "operand"))) {
-    return operandType(refusal, element, expression);
-  }
-
   return Option.match(optionalFact(refusal, "table"), {
     onNone: () =>
       sentence(
         refusal,
-        `${code(element)} sets ${code(identifier)}, a ${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))} outcome, to a ${expression} value${citation(refusal)}.`,
+        `${code(element)} sets ${code(identifier)}, ${withArticle(`${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))}`)} outcome, to ${withArticle(expression)} value${citation(refusal)}.`,
         `give the expression the base type and cardinality of ${code(identifier)}, or change its declaration`,
       ),
     onSome: (table) =>
       sentence(
         refusal,
-        `${code(element)} looks ${code(identifier)} up in its ${code(table)} with a ${expression} value, which that table cannot read${citation(refusal)}.`,
+        `${code(element)} looks ${code(identifier)} up in its ${code(table)} with ${withArticle(expression)} value, which that table cannot read${citation(refusal)}.`,
         `look up a value of the base type ${code(table)} reads, or use the other lookup table`,
       ),
   });
@@ -1383,7 +1364,8 @@ const uncheckedType = (refusal: Refusal, element: string, expression: string): s
  *   variable of the base type the attribute holds.
  * - `template-read` (P26): template processing reads a response or outcome variable.
  * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`.
- * - None: today's sentences (see {@link uncheckedType}).
+ * - None: an expression against the outcome it sets, or a lookup operand against its table (see
+ *   {@link uncheckedType}).
  *
  * An `expressionBaseType` of `""`, a type with no base type of its own, is worded `untyped`.
  *
@@ -1597,7 +1579,7 @@ const wordings = {
 
     return sentence(
       refusal,
-      `${code(interaction)} cannot be bound to ${code(response)}, a ${fact(refusal, "cardinality", "")} response of base type ${baseTypeText(fact(refusal, "baseType", ""))}.`,
+      `${code(interaction)} cannot be bound to ${code(response)}, ${withArticle(`${fact(refusal, "cardinality", "")} response`)} of base type ${baseTypeText(fact(refusal, "baseType", ""))}.`,
       `bind ${code(interaction)} to a response of a base type and cardinality it accepts, or change the declaration of ${code(response)}`,
     );
   },

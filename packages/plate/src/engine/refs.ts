@@ -2,18 +2,19 @@
  * The engine's references to variables: the value a `qti-variable` reads ({@link variableValue}),
  * from the responses and outcomes the record holds ({@link own}) or from a built-in variable
  * ({@link builtInValue}), and the run-time resolver of an attribute that holds a literal or names a
- * variable ({@link referenceValue}).
+ * variable ({@link referenceValue}, and {@link referenceInteger} for an integer one).
  *
- * It value-imports only `effect`'s `Option` and `Result`, `#plate/engine/failures.ts` and
- * `#plate/model/values.ts`, and reads `Variables` from `#plate/engine/evaluate.ts` and the
- * reference types from `#plate/model/expression.ts` as types, so every expression family may
- * import it.
+ * It value-imports only `effect`'s `Option` and `Result`, `#plate/engine/failures.ts`,
+ * `#plate/engine/numbers.ts` and `#plate/model/values.ts`, and reads `Variables` from
+ * `#plate/engine/evaluate.ts` and the reference types from `#plate/model/expression.ts` as types,
+ * so every expression family may import it.
  *
  * @module
  */
 import { Option, Result } from "effect";
 import type { Variables } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
+import { integerOf, integerValue } from "#plate/engine/numbers.ts";
 import type {
   FloatOrRef,
   IntOrIdentifier,
@@ -54,11 +55,7 @@ export const own = (
  */
 export const builtInValue = (variables: Variables, identifier: string): Option.Option<Value> =>
   identifier === "numAttempts"
-    ? Option.map(Option.fromUndefinedOr(variables.numAttempts), (count): Value => ({
-        baseType: "integer",
-        cardinality: "single",
-        values: [{ baseType: "integer", value: count }],
-      }))
+    ? Option.map(Option.fromUndefinedOr(variables.numAttempts), integerValue)
     : Option.none();
 
 /**
@@ -164,3 +161,24 @@ export const referenceValue = (
     }
   }
 };
+
+/**
+ * Give the integer a checked integer attribute stands for when its expression is evaluated: its
+ * literal, or the value of the variable it names, through {@link referenceValue} with a checked
+ * integer site, as `qti-any-n`'s bounds, `qti-round-to`'s and `qti-equal-rounded`'s `figures`,
+ * `qti-index`'s `n` and `qti-repeat`'s `number-repeats` read it.
+ *
+ * @param variables The variables of the attempt.
+ * @param reference The attribute's value.
+ * @returns The integer; none when the named variable holds NULL or a value that is not a single
+ *   integer, which the validator refuses (P24) on a checked item; or an
+ *   {@link UnknownIdentifierError} when it names a variable the variables hold no value of.
+ */
+export const referenceInteger = (
+  variables: Variables,
+  reference: IntOrIdentifier | IntegerOrRef,
+): Result.Result<Option.Option<bigint>, UnknownIdentifierError> =>
+  Result.map(
+    referenceValue(variables, { baseType: "integer", checked: true, reference }),
+    integerOf,
+  );

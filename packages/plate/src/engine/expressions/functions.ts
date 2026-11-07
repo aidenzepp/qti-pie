@@ -39,7 +39,7 @@ import {
   tan,
   tanh,
 } from "#plate/engine/math.ts";
-import { numberOf, toFloat } from "#plate/engine/numbers.ts";
+import { floatOf, floatValue, integerValue, numberOf } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
@@ -66,47 +66,13 @@ const floatNull: Value = nullOf("float", "single");
 const integerNull: Value = nullOf("integer", "single");
 
 /**
- * Construct a single float value.
- *
- * @param value The float.
- * @returns The value.
- */
-const floatOf = (value: number): Value => ({
-  baseType: "float",
-  cardinality: "single",
-  values: [{ baseType: "float", value }],
-});
-
-/**
- * Construct a single integer value.
- *
- * @param value The integer.
- * @returns The value.
- */
-const integerOf = (value: bigint): Value => ({
-  baseType: "integer",
-  cardinality: "single",
-  values: [{ baseType: "integer", value }],
-});
-
-/**
  * Give the single float of a computed float, or the float NULL when it is NaN, the result of an
  * argument outside a function's natural domain. An infinity is kept.
  *
  * @param value The computed float.
  * @returns The value.
  */
-const floatOrNull = (value: number): Value => (Number.isNaN(value) ? floatNull : floatOf(value));
-
-/**
- * Give the float a single integer or float stands for: an integer through `toFloat`, the one
- * integer-to-float conversion.
- *
- * @param single The number.
- * @returns The float.
- */
-const asFloat = (single: NumberSingle): number =>
-  single.baseType === "integer" ? toFloat(single.value) : single.value;
+const floatOrNull = (value: number): Value => (Number.isNaN(value) ? floatNull : floatValue(value));
 
 /**
  * Give the reciprocal of a trigonometric or hyperbolic function's value, as the information model
@@ -247,14 +213,14 @@ const operate = (operation: Operation, numbers: readonly NumberSingle[]): Value 
 
       return x === undefined || rest.length > 0
         ? floatNull
-        : floatOrNull(operation.apply(asFloat(x)));
+        : floatOrNull(operation.apply(floatOf(x)));
     }
     case "pair": {
       const [y, x, ...rest] = numbers;
 
       return y === undefined || x === undefined || rest.length > 0
         ? floatNull
-        : floatOrNull(operation.apply(asFloat(y), asFloat(x)));
+        : floatOrNull(operation.apply(floatOf(y), floatOf(x)));
     }
     case "integer": {
       const [x, ...rest] = numbers;
@@ -262,7 +228,7 @@ const operate = (operation: Operation, numbers: readonly NumberSingle[]): Value 
         return integerNull;
       }
 
-      return Option.match(operation.apply(x), { onNone: () => integerNull, onSome: integerOf });
+      return Option.match(operation.apply(x), { onNone: () => integerNull, onSome: integerValue });
     }
     default: {
       return operation satisfies never;
@@ -322,7 +288,7 @@ const evaluateMathOperator: Evaluator<"math-operator"> = (expression, scope, eva
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMathConstant
  */
 const evaluateMathConstant: Evaluator<"math-constant"> = (expression) =>
-  Result.succeed(floatOf(expression.name === "pi" ? Math.PI : Math.E));
+  Result.succeed(floatValue(expression.name === "pi" ? Math.PI : Math.E));
 
 /**
  * Give the floats a container holds: each member, an integer through `toFloat`.
@@ -337,13 +303,11 @@ const membersOf = (value: Value): Option.Option<readonly number[]> => {
   }
 
   return Option.all(
-    value.values.map((single) => {
-      if (single.baseType === "integer") {
-        return Option.some(toFloat(single.value));
-      }
-
-      return single.baseType === "float" ? Option.some(single.value) : Option.none();
-    }),
+    value.values.map((single) =>
+      single.baseType === "integer" || single.baseType === "float"
+        ? Option.some(floatOf(single))
+        : Option.none(),
+    ),
   );
 };
 
@@ -459,9 +423,9 @@ const evaluatePower: Evaluator<"power"> = (expression, scope, evaluate) =>
           return floatNull;
         }
 
-        const result = pow(asFloat(base), asFloat(exponent));
+        const result = pow(floatOf(base), floatOf(exponent));
 
-        return Number.isFinite(result) ? floatOf(result) : floatNull;
+        return Number.isFinite(result) ? floatValue(result) : floatNull;
       },
     }),
   );

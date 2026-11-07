@@ -23,9 +23,9 @@
 import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { booleanOf, withinContainerBound } from "#plate/engine/numbers.ts";
-import { referenceValue } from "#plate/engine/refs.ts";
-import type { Expression, IntOrIdentifier } from "#plate/model/expression.ts";
+import { booleanOf, integerValue, withinContainerBound } from "#plate/engine/numbers.ts";
+import { referenceInteger } from "#plate/engine/refs.ts";
+import type { Expression } from "#plate/model/expression.ts";
 import { isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 
@@ -147,32 +147,6 @@ const same = (left: Single, right: Single): boolean =>
   match(singleValueOf(left), singleValueOf(right));
 
 /**
- * Give the integer an `n` or a `number-repeats` stands for: its literal, or the value of the
- * variable it names, through the resolver in `#plate/engine/refs.ts` with the kind's checked
- * integer facet.
- *
- * @param scope The item and the variables of the attempt.
- * @param attribute The `n` or the `number-repeats`.
- * @returns The integer; none when the named variable holds NULL or a value that is not a single
- *   integer, which the validator refuses (P24) on a checked item; or an `UnknownIdentifierError`
- *   when it names a variable the variables hold no value of.
- */
-const integerOf = (
-  scope: Scope,
-  attribute: IntOrIdentifier,
-): Result.Result<Option.Option<bigint>, EngineFailure> =>
-  Result.map(
-    referenceValue(scope.variables, { baseType: "integer", checked: true, reference: attribute }),
-    (value) => {
-      const [single, ...rest] = value.values;
-
-      return value.cardinality === "single" && rest.length === 0 && single?.baseType === "integer"
-        ? Option.some(single.value)
-        : Option.none();
-    },
-  );
-
-/**
  * Give the value of a `qti-multiple`: a multiple container of its operands' values, a multiple
  * operand's added one by one and a NULL one ignored; NULL when there is no operand or every one is
  * NULL, and when it would hold more than 1,000,000 values. Applied to A, B and {C,D} it gives
@@ -239,7 +213,7 @@ const evaluateOrdered: Evaluator<"ordered"> = (expression, scope, evaluate) =>
  */
 const evaluateRepeat: Evaluator<"repeat"> = (expression, scope, evaluate) =>
   Result.gen(function* repeatOperands() {
-    const repeats = yield* integerOf(scope, expression.numberRepeats);
+    const repeats = yield* referenceInteger(scope.variables, expression.numberRepeats);
     const pass = yield* valuesOf(expression.operands, scope, evaluate);
     const count = Option.getOrElse(repeats, () => 0n);
     const unset = nullOf(baseOf(pass), "ordered");
@@ -273,11 +247,7 @@ const evaluateRepeat: Evaluator<"repeat"> = (expression, scope, evaluate) =>
 const evaluateContainerSize: Evaluator<"container-size"> = (expression, scope, evaluate) => {
   const [operand] = expression.operands;
 
-  return Result.map(evaluate(operand, scope), (value): Value => ({
-    baseType: "integer",
-    cardinality: "single",
-    values: [{ baseType: "integer", value: BigInt(value.values.length) }],
-  }));
+  return Result.map(evaluate(operand, scope), (value) => integerValue(BigInt(value.values.length)));
 };
 
 /**
@@ -295,7 +265,7 @@ const evaluateContainerSize: Evaluator<"container-size"> = (expression, scope, e
  */
 const evaluateIndex: Evaluator<"index"> = (expression, scope, evaluate) =>
   Result.gen(function* pickIndex() {
-    const n = yield* integerOf(scope, expression.n);
+    const n = yield* referenceInteger(scope.variables, expression.n);
     const [operand] = expression.operands;
     const container = yield* evaluate(operand, scope);
     const picked = n.pipe(

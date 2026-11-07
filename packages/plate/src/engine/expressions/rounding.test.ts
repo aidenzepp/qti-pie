@@ -5,7 +5,7 @@ import type { Expression, ExpressionType, IntegerOrRef } from "#plate/model/expr
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
-import { assertKindType, evaluateIn, scopeOf } from "#plate/test/processing.ts";
+import { assertKindType, evaluateIn, operandOf, scopeOf } from "#plate/test/processing.ts";
 
 /**
  * The single integer type.
@@ -28,14 +28,6 @@ const truth = (held: boolean): Value => ({
   cardinality: "single",
   values: [{ baseType: "boolean", value: held }],
 });
-
-/**
- * Construct the `qti-base-value` operand of a value.
- *
- * @param value The value.
- * @returns The operand.
- */
-const operandOf = (value: Value): Expression => ({ kind: "base-value", operands: [], value });
 
 /**
  * Construct an integer literal of `figures`.

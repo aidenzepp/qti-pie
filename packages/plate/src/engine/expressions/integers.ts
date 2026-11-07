@@ -6,7 +6,9 @@
  * computes exactly; `qti-integer-to-float` makes its float through the one conversion, `toFloat`,
  * which gives an integer beyond the largest finite float that float, of its sign. A NULL operand
  * gives the NULL of the kind's type, before any other rule: a divisor of 0 gives NULL, and a NULL
- * beside a zero operand of `qti-lcm` gives NULL, not 0.
+ * beside a zero operand of `qti-lcm` gives NULL, not 0. An operand that holds a value other than
+ * an integer, which the validator refuses (P23) on a checked item, counts as NULL, as the
+ * information model counts a value that is not numerical.
  *
  * `qti-lcm` is the one kind here that can grow past its operands, so its integer is held to
  * `integerBitBound` (`#plate/engine/numbers.ts`, the operator's ruling `afb7e648`): one of more
@@ -24,23 +26,18 @@
 import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { boundedTimes, emptyProduct, toFloat } from "#plate/engine/numbers.ts";
+import {
+  boundedTimes,
+  emptyProduct,
+  floatValue,
+  integerOf,
+  integerValue,
+  toFloat,
+} from "#plate/engine/numbers.ts";
 import type { PartialProduct } from "#plate/engine/numbers.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-
-/**
- * Construct a single integer value.
- *
- * @param integer The integer.
- * @returns The value.
- */
-const integerValue = (integer: bigint): Value => ({
-  baseType: "integer",
-  cardinality: "single",
-  values: [{ baseType: "integer", value: integer }],
-});
 
 /**
  * Give the single integer NULL, the value of an integers expression whose value is not defined.
@@ -48,24 +45,6 @@ const integerValue = (integer: bigint): Value => ({
  * @returns The NULL.
  */
 const unsetInteger = (): Value => nullOf("integer", "single");
-
-/**
- * Give the integer a single integer value holds.
- *
- * Every operand of `qti-integer-divide`, `qti-integer-modulus` and `qti-integer-to-float` is a
- * single integer on a checked item: the validator refuses any other (P23). One that is not is
- * counted as NULL, as the information model counts a value that is not numerical.
- *
- * @param value The operand's value.
- * @returns The integer, or none when the value is NULL or not a single integer.
- */
-const integerOf = (value: Value): Option.Option<bigint> => {
-  const [single, ...rest] = value.values;
-
-  return value.cardinality === "single" && rest.length === 0 && single?.baseType === "integer"
-    ? Option.some(single.value)
-    : Option.none();
-};
 
 /**
  * Give every integer an operand of `qti-gcd` or `qti-lcm` holds: the one of a single, or each
@@ -231,11 +210,7 @@ const evaluateIntegerToFloat: Evaluator<"integer-to-float"> = (expression, scope
   return Result.map(evaluate(operand, scope), (value) =>
     Option.match(integerOf(value), {
       onNone: () => nullOf("float", "single"),
-      onSome: (integer): Value => ({
-        baseType: "float",
-        cardinality: "single",
-        values: [{ baseType: "float", value: toFloat(integer) }],
-      }),
+      onSome: (integer) => floatValue(toFloat(integer)),
     }),
   );
 };

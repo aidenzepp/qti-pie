@@ -21,7 +21,7 @@ import type { Expression, ExpressionType, ResultAttributes } from "#plate/model/
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
-import { assertKindType, evaluateIn, scopeOf } from "#plate/test/processing.ts";
+import { assertKindType, evaluateIn, operandOf, scopeOf } from "#plate/test/processing.ts";
 
 /**
  * A `qti-math-operator`'s name.
@@ -73,14 +73,6 @@ const integers = (cardinality: "multiple" | "ordered", members: readonly bigint[
   cardinality,
   values: members.map((value) => ({ baseType: "integer", value })),
 });
-
-/**
- * Construct the `qti-base-value` operand that gives a value.
- *
- * @param value The value.
- * @returns The operand.
- */
-const operandOf = (value: Value): Expression => ({ kind: "base-value", operands: [], value });
 
 /**
  * Give a value's type, as an operand of that value has it.

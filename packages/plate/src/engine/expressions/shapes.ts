@@ -19,7 +19,7 @@ import type { AreaMapEntry } from "#plate/model/item.ts";
  * @param to The other end.
  * @returns Whether the point is on the segment.
  */
-export const onSegment = (
+const onSegment = (
   x: number,
   y: number,
   from: readonly [number, number],
@@ -47,7 +47,7 @@ export const onSegment = (
  * @returns Whether the polygon holds the point.
  * @see https://html.spec.whatwg.org/multipage/image-maps.html#attr-area-shape-poly
  */
-export const polygonHolds = (
+const polygonHolds = (
   vertices: readonly (readonly [number, number])[],
   x: number,
   y: number,

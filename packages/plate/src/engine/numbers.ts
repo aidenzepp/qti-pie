@@ -1,10 +1,11 @@
 /**
  * The engine's numbers, a leaf the evaluator and the expression families share: the one conversion
- * from an integer to a float ({@link toFloat}), the one number a single numeric value holds
- * ({@link numberOf}), exact equality of two numbers ({@link sameNumber}), the single boolean a
- * test gives ({@link booleanOf}), and the bounds on what the engine computes
- * ({@link integerBitBound}, {@link containerSizeBound}), and a product held to the first, built one
- * factor at a time ({@link boundedTimes}).
+ * from an integer to a float ({@link toFloat}, and {@link floatOf} for a single number), the one
+ * number a single numeric value holds ({@link numberOf}, and {@link integerOf} for an integer),
+ * exact equality of two numbers ({@link sameNumber}), the single values a kind gives
+ * ({@link booleanOf}, {@link integerValue}, {@link floatValue}), and the bounds on what the engine
+ * computes ({@link integerBitBound}, {@link containerSizeBound}), and a product held to the first,
+ * built one factor at a time ({@link boundedTimes}).
  *
  * Integers are exact `bigint`s (reading 45) and floats are 64-bit doubles, never infinite when made
  * from an integer. An integer and a float compare exactly, never through a lossy conversion. The
@@ -25,6 +26,30 @@ export const booleanOf = (value: boolean): Value => ({
   baseType: "boolean",
   cardinality: "single",
   values: [{ baseType: "boolean", value }],
+});
+
+/**
+ * Construct a single integer value.
+ *
+ * @param value The integer.
+ * @returns The value.
+ */
+export const integerValue = (value: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value }],
+});
+
+/**
+ * Construct a single float value.
+ *
+ * @param value The float.
+ * @returns The value.
+ */
+export const floatValue = (value: number): Value => ({
+  baseType: "float",
+  cardinality: "single",
+  values: [{ baseType: "float", value }],
 });
 
 /**
@@ -75,6 +100,27 @@ export const numberOf = (value: Value): Option.Option<NumberSingle> => {
     ? Option.some(single)
     : Option.none();
 };
+
+/**
+ * Give the integer a single integer value holds.
+ *
+ * @param value The value.
+ * @returns The integer, or none when the value is NULL or not a single integer.
+ */
+export const integerOf = (value: Value): Option.Option<bigint> =>
+  Option.flatMap(numberOf(value), (single) =>
+    single.baseType === "integer" ? Option.some(single.value) : Option.none(),
+  );
+
+/**
+ * Give the float a single number stands for: a float as it is, an integer through
+ * {@link toFloat}, the one integer-to-float conversion.
+ *
+ * @param single The number.
+ * @returns The float.
+ */
+export const floatOf = (single: NumberSingle): number =>
+  single.baseType === "integer" ? toFloat(single.value) : single.value;
 
 /**
  * Report whether an integer and a float are the same number, exactly: the float is integral and
@@ -218,27 +264,6 @@ export const boundedTimes = (
   return exact <= integerBitBound
     ? Option.some({ integer, leastBits: exact, mostBits: exact })
     : Option.none();
-};
-
-/**
- * Give the product of two integers when it is within {@link integerBitBound}: 0 when either is 0,
- * whatever the other's size, and otherwise the product {@link boundedTimes} builds from
- * {@link emptyProduct}, which measures each integer once and the product only when their bit
- * lengths cannot decide it.
- *
- * @param left One integer.
- * @param right The other.
- * @returns The product, or none when it has more than 1,000,000 bits.
- */
-export const boundedProduct = (left: bigint, right: bigint): Option.Option<bigint> => {
-  if (left === 0n || right === 0n) {
-    return Option.some(0n);
-  }
-
-  return Option.map(
-    Option.flatMap(boundedTimes(emptyProduct, left), (held) => boundedTimes(held, right)),
-    (product) => product.integer,
-  );
 };
 
 /**

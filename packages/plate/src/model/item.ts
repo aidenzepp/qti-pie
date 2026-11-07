@@ -1702,17 +1702,14 @@ const readingOf = (build: Build): ExpressionReading => ({
  * `#plate/model/expressions/read.ts`), each kind by its family's reader spec.
  *
  * Every operand is read, so every element the engine does not run is marked, not only the first. A
- * kind whose family has not landed is marked `qti-<kind>` at its path. A `qti-equal` in its
- * `absolute` or `relative` tolerance mode is the mark `tolerance-mode="<mode>"` at its path, its
- * operands read after it; only the default `exact` mode runs. A `qti-variable`'s optional
+ * kind whose family has not landed is marked `qti-<kind>` at its path. A `qti-variable`'s optional
  * `weight-identifier` is read and held; an item's processing never evaluates it.
  *
  * @param build The build.
  * @param element The expression element.
- * @returns The expression, none when it holds an element or a tolerance mode the engine does not
- *   run, or the refusal `value-type` for a `qti-base-value` outside its lexical space. A document
- *   the validator would refuse can also fail with `attribute-type` for a `tolerance-mode` outside
- *   its three values.
+ * @returns The expression, none when it holds an element the engine does not run, or the refusal
+ *   `value-type` for a `qti-base-value` outside its lexical space. A document the validator would
+ *   refuse can also fail with `attribute-type` for a `tolerance-mode` outside its three values.
  */
 const expression = (
   build: Build,
@@ -2783,7 +2780,7 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * `area-coords-percent` there, and the processing is then none. An item whose root has a
  * `qti-template-processing` child keeps that element's mark and has no processing, whatever the
  * tree: template processing may set a template variable, a default value or a correct response,
- * and phase 1 runs none of it, so a score computed without it could be wrong.
+ * and the engine runs none of it, so a score computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
