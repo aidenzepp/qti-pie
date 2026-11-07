@@ -654,7 +654,6 @@ interface WrittenText {
   readonly idrefs: readonly {
     readonly after: string;
     readonly before: string;
-    readonly piece: string;
     readonly token: string;
   }[];
   readonly text: string;
@@ -667,14 +666,14 @@ interface WrittenText {
 const writtenTexts: readonly [WrittenText, ...WrittenText[]] = [
   {
     id: { after: "", before: "", value: "a" },
-    idrefs: [{ after: "", before: "", piece: "a", token: "a" }],
+    idrefs: [{ after: "", before: "", token: "a" }],
     text: "a",
   },
   {
     id: { after: " ", before: " ", value: "a b" },
     idrefs: [
-      { after: "", before: " ", piece: " a", token: "a" },
-      { after: " ", before: " ", piece: " b ", token: "b" },
+      { after: "", before: " ", token: "a" },
+      { after: " ", before: " ", token: "b" },
     ],
     text: " a b ",
   },
@@ -819,12 +818,7 @@ describe(
                         row.kind,
                         row.governs,
                         row.lexical,
-                        row.idrefs.map(({ after, before, piece, token }) => [
-                          before,
-                          token,
-                          after,
-                          piece,
-                        ]),
+                        row.idrefs.map(({ after, before, token }) => [before, token, after]),
                       ]),
                     ),
                   ),
@@ -838,11 +832,10 @@ describe(
                         choice.type,
                         choice.text.text,
                         choice.type === "xs:IDREF"
-                          ? choice.text.idrefs.map(({ after, before, piece, token }) => [
+                          ? choice.text.idrefs.map(({ after, before, token }) => [
                               before,
                               token,
                               after,
-                              piece,
                             ])
                           : [],
                       ]),

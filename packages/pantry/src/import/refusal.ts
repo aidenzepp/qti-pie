@@ -40,7 +40,13 @@ import { noSharedModel } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
-import { attributeLawsByName, EntityName, OpenLocal, Space } from "#pantry/qti/attributes.ts";
+import {
+  attributeLawsByName,
+  EntityName,
+  Idref,
+  OpenLocal,
+  Space,
+} from "#pantry/qti/attributes.ts";
 import {
   Affix,
   AssembledReference,
@@ -179,9 +185,9 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
-import { htmlLawsByName } from "#pantry/qti/html.ts";
-import { identityLawsByName } from "#pantry/qti/identity.ts";
-import { operatorLawsByName } from "#pantry/qti/operators.ts";
+import { HeaderToken, htmlLawsByName } from "#pantry/qti/html.ts";
+import { identityLawsByName, TextIdref } from "#pantry/qti/identity.ts";
+import { operatorLawsByName, ToleranceToken } from "#pantry/qti/operators.ts";
 import {
   EntryContent,
   HrefParams,
@@ -681,6 +687,14 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("RoundingModeFigures", "node"), "E1 derived"],
   [primaryKeyOf("Tolerance", "node"), "E1 derived"],
   [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
+  // An IDREF token's piece, a header's and a tolerance value's, is its own whitespace and token
+  // concatenated, its concat fold's step: written texts, none NULL, so the term is never NULL and
+  // no row breaks these. A piece past its keyText bound is refused by that type's pattern law, "Key
+  // text bound".
+  [generatedOf(Idref, "piece"), "E1 derived"],
+  [generatedOf(TextIdref, "piece"), "E1 derived"],
+  [generatedOf(HeaderToken, "piece"), "E1 derived"],
+  [generatedOf(ToleranceToken, "piece"), "E1 derived"],
   ...(
     [
       "Declaration",
@@ -861,6 +875,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
+  // A segment's token is its separator and its piece concatenated, its concat fold's step: written
+  // texts, none NULL, so no row breaks this. A token past its keyText bound is refused by that
+  // type's pattern law, "Key text bound".
+  [generatedOf(ReferenceSegment, "token"), "E1 derived"],
   ...[Reference, ReferencePath].map(
     ({ name, primaryKey }) =>
       [

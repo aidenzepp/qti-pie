@@ -368,9 +368,7 @@ const refusedCases = [
               {
                 ...row,
                 tokens: row.tokens.map((token) =>
-                  token.token === "0.1"
-                    ? { ...token, piece: token.piece.replace("0.1", "9"), token: "9" }
-                    : token,
+                  token.token === "0.1" ? { ...token, token: "9" } : token,
                 ),
               },
             ]),

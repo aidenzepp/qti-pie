@@ -867,7 +867,6 @@ describe("the written types", () => {
       nearestKind: true,
       prefix: true,
       state: true,
-      stringPiece: true,
       version: true,
     } as const satisfies Record<keyof NodeFields, true>;
     const member = {
@@ -895,7 +894,7 @@ describe("the written types", () => {
       local: true,
       uri: true,
     } as const satisfies Record<keyof OpenNameInsert, true>;
-    const idref = { after: true, before: true, piece: true, token: true } as const satisfies Record<
+    const idref = { after: true, before: true, token: true } as const satisfies Record<
       keyof IdrefInsert,
       true
     >;
@@ -938,12 +937,12 @@ describe("the written types", () => {
     };
 
     assert.isTrue(Object.values(noLeak).every(Boolean));
-    assert.lengthOf(Object.keys(root), 19);
+    assert.lengthOf(Object.keys(root), 18);
     assert.lengthOf(Object.keys(attribute), 9);
     assert.lengthOf(Object.keys(doubleValue), 1);
     assert.lengthOf(
       [openName, idref, entity, namespace, entry].flatMap((record) => Object.keys(record)),
-      13,
+      12,
     );
   });
 });
@@ -1136,10 +1135,10 @@ describe("idrefPiecesOf", () => {
   it.effect(
     "splits a form into its whitespace-separated tokens, whose pieces concatenate to it",
     (ctx) =>
-      // Oracle: the specification as a checker, `E1_derived` on `Idref` (each piece is its
-      // whitespace and token, the pieces concatenate to the lexical form, every token but the
-      // first follows whitespace), and a second implementation, `split` on XML's `S`, for the
-      // tokens.
+      // Oracle: the specification as a checker, `E1_derived` on `Idref` and its fold (each
+      // generated piece is its whitespace and token, the pieces concatenate to the lexical form,
+      // every token but the first follows whitespace), and a second implementation, `split` on
+      // XML's `S`, for the tokens.
       // Bound: every text of up to 5 characters over a, b, space and tab, (4⁶ − 1) / 3 = 1,365.
       searched(
         ctx,
@@ -1164,11 +1163,10 @@ describe("idrefPiecesOf", () => {
                 tokens,
               );
               assert.strictEqual(
-                pieces.map(({ piece }) => piece).join(""),
+                pieces.map(({ after, before, token }) => `${before}${token}${after}`).join(""),
                 tokens.length === 0 ? "" : lexical,
               );
-              for (const [at, { after, before, piece, token }] of pieces.entries()) {
-                assert.strictEqual(piece, `${before}${token}${after}`);
+              for (const [at, { after, before }] of pieces.entries()) {
                 assert.match(`${before}${after}`, /^[\t\n\r ]*$/u);
                 assert.isTrue(at === 0 || before.length > 0);
               }

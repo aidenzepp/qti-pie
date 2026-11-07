@@ -1338,7 +1338,7 @@ const pieceBreaches = (
   readings: readonly ReadingRow[],
 ): readonly string[] => {
   const where = keyOf([reference.assembly, reference.node, reference.attribute]);
-  const tokens = reference.segments.map(({ token }) => token);
+  const tokens = reference.segments.map(({ piece, separator }) => `${separator}${piece}`);
   const digits = reference.segments.filter(({ digit }) => digit).length;
   const counted =
     reference.role !== "variable" ||
@@ -1352,7 +1352,6 @@ const pieceBreaches = (
       const lawful =
         !segment.piece.includes(".") &&
         segment.separator === separator &&
-        segment.token === `${separator}${segment.piece}` &&
         segment.digit === (at > 0 && /^[0-9]+$/u.test(segment.piece));
 
       return lawful ? [] : [`${where}: piece ${String(at)}`];
@@ -1371,7 +1370,7 @@ const pieceBreaches = (
 const textHolds = (reference: AssembledReferenceOnHost, r: ReadingRow): boolean => {
   const before = reference.segments
     .slice(0, Number(r.split))
-    .map(({ token }) => token)
+    .map(({ piece, separator }) => `${separator}${piece}`)
     .join("");
   switch (r.form) {
     case "unsplit": {

@@ -767,12 +767,13 @@ export const Separator = str.regex("^\\.?$");
 
 /**
  * One dot-separated piece of a reference's name, at its place `at` from 0 (A59's split as a
- * sequence): its `piece`, which holds no dot, its `separator` and `token = separator ‖ piece`,
- * `digit`, whether it follows a dot and is all digits (a reading 88 instance number), and the
- * concatenation fold's running `before` and `after`, so `before` at `at = j` is the name's first
- * `j` pieces joined, the scope of its split at `j`.
+ * sequence): its `piece`, which holds no dot, its `separator`, `digit`, whether it follows a dot
+ * and is all digits (a reading 88 instance number), the generated `token = separator ‖ piece`, the
+ * concatenation's step, a `keyText` whose domain refuses a token past the bound, and the fold's
+ * running `before` and `after`, so `before` at `at = j` is the name's first `j` pieces joined, the
+ * scope of its split at `j`.
  */
-export const ReferenceSegment = relation(
+export const ReferenceSegment = relation.generated(
   "ReferenceSegment",
   {
     after: accumulated(keyText, ""),
@@ -784,9 +785,9 @@ export const ReferenceSegment = relation(
     node: uuid,
     piece: keyText,
     separator: Separator,
-    token: keyText,
   },
   ["assembly", "node", "attribute", "at"],
+  (s) => ({ token: generated(keyText, Compute.concat(s.separator, s.piece)) }),
 );
 
 /**
@@ -1864,7 +1865,6 @@ export const referenceLawsByName = {
     check("E1_derived", ReferenceSegment, (s) =>
       s.and(
         Compute.matches(s.piece, piecePattern),
-        s.eq(s.token, Compute.concat(s.separator, s.piece)),
         s.or(
           s.and(s.eq(s.at, 0n), s.eq(s.separator, ""), s.eq(s.digit, false)),
           s.and(

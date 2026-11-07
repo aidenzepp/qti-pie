@@ -53,6 +53,7 @@ import {
   drawn,
   fin,
   fold,
+  generated,
   key,
   Monoid,
   natural,
@@ -139,27 +140,30 @@ export const CellHeaders = relation(
  * its `piece` is a stretch of the value and the pieces concatenate to it, as `identity.ts`'s
  * `TextIdref` splits an element's text.
  *
- * - **the host's:** `before`, `token` and `after`, and `piece`, `before ‖ token ‖ after`, which
- *   `E1_derived` proves;
+ * - **the host's:** `before`, `token` and `after`;
+ * - **generated:** `piece`, `before ‖ token ‖ after`, the concatenation's step, a `keyText` whose
+ *   domain refuses a piece past the bound;
  * - **the family's group:** `node`, the cell;
  * - **drawn:** `at`;
  * - **accumulated:** `table`, its cell's, along the owner axis, which "Table headers" reads;
  *   `piecesWas` and `piecesAfter`, the concatenation before and after it.
  */
-export const HeaderToken = relation(
+export const HeaderToken = relation.generated(
   "HeaderToken",
   {
     after: Space,
     at: drawn(natural),
     before: Space,
     node: uuid,
-    piece: keyText,
     piecesAfter: accumulated(keyText, ""),
     piecesWas: accumulated(keyText, ""),
     table: accumulated(uuid, nilUuid),
     token: keyText,
   },
   ["node", "at"],
+  (t) => ({
+    piece: generated(keyText, Compute.concat(Compute.concat(t.before, t.token), t.after)),
+  }),
 );
 
 /**
@@ -357,11 +361,7 @@ export const htmlLawsByName = {
       ),
     ),
     check("E1_derived", HeaderToken, (t) =>
-      t.and(
-        t.eq(t.piece, Compute.concat(Compute.concat(t.before, t.token), t.after)),
-        Compute.matches(t.token, idValuePattern),
-        t.or(t.eq(t.at, 0n), t.ne(t.before, "")),
-      ),
+      t.and(Compute.matches(t.token, idValuePattern), t.or(t.eq(t.at, 0n), t.ne(t.before, ""))),
     ),
     contained(on(headerIds, "node", "document"), on(TableHeader, "node", "document")),
     contained(on(TableHeader, "node"), on(headerIds, "node")),

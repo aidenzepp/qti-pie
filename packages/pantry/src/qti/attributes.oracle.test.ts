@@ -7,6 +7,7 @@
  * The database tests (`attributes.db.test.ts`) judge the same laws through PostgreSQL.
  */
 import { schema } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
@@ -122,6 +123,27 @@ describe("qti/attributes.ts, declared", () => {
       "TextDomain",
       "value domain",
     ]);
+  });
+
+  it("generates each IDREF piece from its whitespace and token, so no writer states one", () => {
+    // Oracle: the write type, held by the compiler: `piece` is PostgreSQL's, `GENERATED ALWAYS AS
+    // ("before" || "token" || "after") STORED`, so the fold steps exactly the piece its parts
+    // spell. A planted piece is no field a writer holds (a type error below), and PostgreSQL
+    // refuses any value written into a generated column; `E1_derived` no longer restates it.
+    const fields = {
+      after: true,
+      attribute: true,
+      before: true,
+      node: true,
+      token: true,
+    } as const satisfies Record<keyof Addition<typeof Idref>, true>;
+    const planted = () =>
+      // @ts-expect-error -- A piece is generated from its parts, never written.
+      ({ ...fields, piece: true }) as const satisfies Record<keyof Addition<typeof Idref>, true>;
+
+    assert.lengthOf(Object.keys(fields), 5);
+    assert.isFunction(planted);
+    assert.strictEqual(Idref.fields.piece.writing, "generated");
   });
 
   it("types an open attribute's namespace names by the one namespace bound, and its local name by its own", () => {

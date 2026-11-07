@@ -142,11 +142,13 @@ describe("import/overlays/operators.ts, tolerancePiecesOf", () => {
                 JSON.stringify(lexical),
               );
               if (pieces.length > 0) {
-                assert.strictEqual(pieces.map(({ piece }) => piece).join(""), lexical);
+                assert.strictEqual(
+                  pieces.map(({ after, before, token }) => `${before}${token}${after}`).join(""),
+                  lexical,
+                );
               }
 
-              for (const [at, { after, before, piece, token }] of pieces.entries()) {
-                assert.strictEqual(piece, `${before}${token}${after}`);
+              for (const [at, { after, before }] of pieces.entries()) {
                 assert.isTrue(at === 0 || before !== "", JSON.stringify(lexical));
                 assert.isTrue(at === pieces.length - 1 || after === "", JSON.stringify(lexical));
               }

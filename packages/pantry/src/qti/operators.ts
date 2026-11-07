@@ -50,6 +50,7 @@ import {
   drawn,
   fin,
   fold,
+  generated,
   key,
   lexicalForm,
   mirrors,
@@ -213,25 +214,28 @@ export const Tolerance = relation(
  * `piece` is a stretch of the value and the pieces concatenate to it, as `identity.ts`'s
  * `TextIdref` splits an element's text.
  *
- * - **the host's:** `before`, `token` and `after`, and `piece`, `before ‖ token ‖ after`, which
- *   `E1_derived` proves;
+ * - **the host's:** `before`, `token` and `after`;
+ * - **generated:** `piece`, `before ‖ token ‖ after`, the concatenation's step, a `keyText` whose
+ *   domain refuses a piece past the bound;
  * - **the family's group:** `node`, the `qti-equal`;
  * - **drawn:** `at`;
  * - **accumulated:** `piecesWas` and `piecesAfter`, the concatenation before and after it.
  */
-export const ToleranceToken = relation(
+export const ToleranceToken = relation.generated(
   "ToleranceToken",
   {
     after: Space,
     at: drawn(natural),
     before: Space,
     node: uuid,
-    piece: keyText,
     piecesAfter: accumulated(keyText, ""),
     piecesWas: accumulated(keyText, ""),
     token: keyText,
   },
   ["node", "at"],
+  (x) => ({
+    piece: generated(keyText, Compute.concat(Compute.concat(x.before, x.token), x.after)),
+  }),
 );
 
 /**
@@ -459,11 +463,7 @@ export const operatorLawsByName = {
       ),
     ),
     check("E1_derived", ToleranceToken, (x) =>
-      x.and(
-        x.eq(x.piece, Compute.concat(Compute.concat(x.before, x.token), x.after)),
-        Compute.matches(x.token, idValuePattern),
-        x.or(x.eq(x.at, 0n), x.ne(x.before, "")),
-      ),
+      x.and(Compute.matches(x.token, idValuePattern), x.or(x.eq(x.at, 0n), x.ne(x.before, ""))),
     ),
   ],
   "Equal tolerance": [toleranceRequired, toleranceCount, tolerancePositive],

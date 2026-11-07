@@ -362,7 +362,7 @@ const idrefPiecesOf = (text: string): readonly TextIdrefInsert[] => {
     const { lead: before, token } = piecesOf(run[0]);
     const after = at === runs.length - 1 ? trail : "";
 
-    return { after, before, piece: `${before}${token}${after}`, token };
+    return { after, before, token };
   });
 };
 

@@ -1987,7 +1987,6 @@ const assembledReferenceOf = (
     digit: at > 0 && digits.test(piece),
     piece,
     separator: at === 0 ? "" : ".",
-    token: at === 0 ? piece : `.${piece}`,
   }));
   const readings = readingTextsOf(reference.identifier, reference.role).map((text) =>
     readingOf(lookups, assembly, reference, text),

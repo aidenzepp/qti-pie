@@ -196,7 +196,6 @@ const written = {
   nearestKind: "document",
   prefix: "",
   state: "3",
-  stringPiece: "",
   version: "3.0.1",
 } as const;
 
@@ -241,12 +240,13 @@ describe("Node's declarations", () => {
 
   it("types a write as the host's fields alone, the root field required on the root and supplied below it, and no field grizzle draws or fills", () => {
     // Oracle: the specification as a checker, the W5 contract's written fields (§C, with `ancestry`,
-    // `chars`, `first`, `last` and `stringPiece`, which the host writes and `E1_derived` proves,
-    // `first` and `last` by reading 127), held by the compiler: `satisfies`
-    // holds the written fields to exactly this record, a member written without `document` is
-    // accepted, and each refusal below is a type error. A member that carries `document` is not one:
-    // grizzle checks a nested member's fields by assignability, not for excess keys (the report's
-    // finding), so T0 refuses a wrong one in PostgreSQL (`node.oracle.db.test.ts`).
+    // `chars`, `first` and `last`, which the host writes and `E1_derived` proves, `first` and
+    // `last` by reading 127; the string value's fold steps `chars` itself), held by the compiler:
+    // `satisfies` holds the written fields to exactly this record, a member written without
+    // `document` is accepted, and each refusal below is a type error. A member that carries
+    // `document` is not one: grizzle checks a nested member's fields by assignability, not for
+    // excess keys (the report's finding), so T0 refuses a wrong one in PostgreSQL
+    // (`node.oracle.db.test.ts`).
     const fields = {
       ancestry: true,
       chars: true,
@@ -262,7 +262,6 @@ describe("Node's declarations", () => {
       parent: true,
       prefix: true,
       state: true,
-      stringPiece: true,
       version: true,
     } as const satisfies Record<keyof Addition<typeof Node>, true>;
     const leaf = { ...written, attributes: [], children: [], namespaces: [] } as const;
@@ -278,9 +277,11 @@ describe("Node's declarations", () => {
       ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, document: someId, was: "0" }]),
       // @ts-expect-error -- The parent is the nesting's, never the caller's.
       ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, document: someId, parent: someId }]),
+      // @ts-expect-error -- No field copies a node's characters; the fold steps `chars`.
+      ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, document: someId, stringPiece: "x" }]),
     ];
 
-    assert.lengthOf(Object.keys(fields), 16);
+    assert.lengthOf(Object.keys(fields), 15);
     assert.isDefined(accepted);
     assert.isFunction(refused);
   });

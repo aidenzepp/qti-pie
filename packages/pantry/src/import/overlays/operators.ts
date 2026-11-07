@@ -120,7 +120,7 @@ export const tolerancePiecesOf = (lexical: string): readonly ToleranceTokenInser
     const before = spacingOf(lexical.slice(end, run.index));
     end = run.index + token.length;
     const after = spacingOf(at === runs.length - 1 ? lexical.slice(end) : "");
-    pieces.push({ after, before, piece: `${before}${token}${after}`, token });
+    pieces.push({ after, before, token });
   }
 
   return pieces;
