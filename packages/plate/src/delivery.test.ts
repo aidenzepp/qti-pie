@@ -1138,7 +1138,7 @@ const submitPart: Intent = { kind: "submit-part" };
 
 describe("the M2 witness: the packages a test is delivered from", { tags: ["corpus"] }, () => {
   it.effect(
-    "[P-1] [P-4] openPackage gives each package its verdict: the fixture and BegGuide_March2025 accepted, CASE accepted with unsupported features, and test_package_minfiles, lti, testWithLti, sample_pci and pci_item_examples refused by their rules",
+    "[P-1] [P-4] openPackage gives each package its verdict: the fixture, BegGuide_March2025 and CASE accepted, and test_package_minfiles, lti, testWithLti, sample_pci and pci_item_examples refused by their rules",
     () =>
       Effect.gen(function* verdicts() {
         const fixture = yield* openFixture();
@@ -1166,7 +1166,7 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
 
         const caseVerdict = yield* openCorpusPackage(corpusPackages.case);
 
-        assert.strictEqual(caseVerdict.verdict, "accepted-with-unsupported");
+        assert.strictEqual(caseVerdict.verdict, "accepted");
         assert.isTrue(
           acceptedOf(caseVerdict).tests.has(`${corpusPackages.case}/testitems/-TX_G06SAMP_000.xml`),
         );
