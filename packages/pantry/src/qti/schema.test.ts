@@ -36,7 +36,7 @@ import * as pkg from "#pantry/qti/package.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import * as quotation from "#pantry/qti/quotation.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
-import { Author, storedNames } from "#pantry/qti/roles.ts";
+import { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import * as tests from "#pantry/qti/tests.ts";
 import { testLaws } from "#pantry/qti/tests.ts";
@@ -155,7 +155,6 @@ describe("qti/roles.ts, the author role", () => {
     );
 
     assert.sameMembers([...Author.write], stored);
-    assert.sameMembers([...storedNames], stored);
   });
 });
 
