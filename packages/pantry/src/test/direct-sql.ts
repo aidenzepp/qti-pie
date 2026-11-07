@@ -25,12 +25,12 @@ const authorAppRole = "qti__author_app";
 /**
  * The author role's PostgreSQL role, which is also the schema of its views.
  */
-const authorRole = "qti__author";
+export const authorRole = "qti__author";
 
 /**
  * The PostgreSQL schema of `Qti`'s tables.
  */
-const qtiSchema = "qti";
+export const qtiSchema = "qti";
 
 /**
  * The password a connection authenticates with, read once.
@@ -87,7 +87,7 @@ export const rowsOf = <R extends QueryResultRow>(
  * @param error - The failure's cause.
  * @returns Whether it is one.
  */
-const isServerError = (error: unknown): error is DatabaseError =>
+export const isServerError = (error: unknown): error is DatabaseError =>
   error instanceof Error && "code" in error && "constraint" in error;
 
 /**
@@ -124,6 +124,26 @@ const writtenColumnsOf = (client: Client, table: string) =>
       ORDER BY a.attnum`,
     [`${qtiSchema}.${table}`],
   );
+
+/**
+ * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
+ * catalogue: the constraints the containments between the two relations install.
+ *
+ * @param client - The session, before `SET ROLE`.
+ * @param from - The referencing table.
+ * @param to - The referenced table.
+ * @returns The constraint names.
+ */
+export const foreignKeysBetween = (client: Client, from: string, to: string) =>
+  rowsOf<{ readonly conname: string }>(
+    client,
+    `SELECT con.conname FROM pg_constraint con
+       JOIN pg_class src ON src.oid = con.conrelid
+       JOIN pg_class dst ON dst.oid = con.confrelid
+       JOIN pg_namespace n ON n.oid = src.relnamespace
+      WHERE con.contype = 'f' AND n.nspname = $1 AND src.relname = $2 AND dst.relname = $3`,
+    [qtiSchema, from, to],
+  ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
 
 /**
  * Write one statement of a case: its row's value for each written column of its table, a declared
