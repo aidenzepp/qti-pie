@@ -18,6 +18,7 @@ import { Qti } from "#pantry/qti/schema.ts";
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned
  * whole, which takes some seconds beside the composed grammar.
+ * Measured 2026-11-07: 0.04 s at a load average of 69 to 103, its slowest test.
  */
 const buildTimeout = 60_000;
 

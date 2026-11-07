@@ -24,6 +24,8 @@ const packageDirectory = path.resolve(import.meta.dirname, "..", "..");
 /**
  * How long the check may take. Measured wall time of `pnpm exec grizzle check`: 8.2 s at load 11,
  * 14.7 s at load 47 (refused at the schema), 22.1 s at load 50 (a full compile to drift).
+ * Measured 2026-11-07: 33.9 s at a load average of 68 to 116; the same day, 48.3 s while the load
+ * rose from 35 to 123.
  */
 const checkTimeoutMs = 300_000;
 
