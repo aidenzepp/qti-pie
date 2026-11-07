@@ -834,12 +834,18 @@ against it. A reading that is not an information-model-over-XSD case says which 
       comparison is in the title's value space, `xs:normalizedString`, so a tab, line feed or carriage return on
       either side reads as a space and nothing else changes.
 
+    The record is the resource's own: a `lom:lom` of the resource's `cp:metadata`. A record a `cp:file` of the resource
+    carries describes the file, not the item: "The scope of Metadata is the parent container class only" (IMS Content
+    Packaging 1.2, section 6.7, Metadata), and "A File holds meta-data describing a computer file" (section 6.6.3,
+    File). So its identifier entries and its title are outside the rule, whatever they name.
+
     The implementation guide's LOM profile says the same as a recommendation ("should", section 2.1.2), and the
     information model and the binding make it a requirement, so this reading is no exception to reading 1. This
     binds pantry and plate alike. This is not a case of documents in conflict: the information model and the binding
     agree, and the XSDs say nothing of it. (Upstream's reading 62 of 2026-11-06, merged with this repository's 62 of
     2026-11-05, which read the identifier only and from the guide; merged 2026-11-06 under the operator's standing
-    ruling of 2026-11-05 that the spec wins.)
+    ruling of 2026-11-05 that the spec wins. Amended 2026-11-07 by RV seat PG (`0ed523e1`), on the law oracle's LOM
+    records: the record the rule reads named, as the schema reads it; no verdict moved.)
 
 63. **Item session control is resolved attribute by attribute: each of its seven attributes comes from the nearest
     element that writes it.** For an item ref, each attribute of `qti-item-session-control` is taken from the item ref,

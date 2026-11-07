@@ -6135,11 +6135,18 @@ const packageBreaches = (
         return [];
       }
 
-      const loms = manifest.members.filter(
-        (member) =>
+      // The resource's own records, each a `lom:lom` of its `cp:metadata` (spec reading 62): a
+      // `cp:file`'s record describes the file ("The scope of Metadata is the parent container class
+      // only", IMS Content Packaging 1.2 §6.7).
+      const loms = manifest.members.filter((member) => {
+        const [metadata, owner] = ancestorsOf(manifest, member);
+
+        return (
           member.kind === "lom:lom" &&
-          ancestorsOf(manifest, member).includes(document.resource.node),
-      );
+          metadata?.kind === "cp:metadata.resource" &&
+          owner === document.resource.node
+        );
+      });
       const identifier = Option.isSome(
         grammar.package.rootOfType.lookup({
           root: document.rootKind,
