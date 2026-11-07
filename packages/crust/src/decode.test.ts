@@ -149,11 +149,11 @@ describe("decode refuses what it cannot decode faithfully", () => {
     }),
   );
 
-  it.effect("a declared UTF-16 with no byte order mark", () =>
+  it.effect("a declared UTF-16 in bytes that write ASCII as single bytes", () =>
     Effect.gen(function* refusesBareUtf16() {
       const refusal = yield* refusalOf(declared("UTF-16", ascii("x")));
 
-      assert.strictEqual(refusal.rule, "bare-utf16");
+      assert.strictEqual(refusal.rule, "encoding-mismatch");
     }),
   );
 
@@ -163,7 +163,8 @@ describe("decode refuses what it cannot decode faithfully", () => {
         utf16Bare('<?xml version="1.0" encoding="UTF-16"?><a>x</a>', "le"),
       );
 
-      assert.strictEqual(refusal.rule, "bare-utf16");
+      assert.strictEqual(refusal.rule, "encoding-mismatch");
+      assert.include(refusal.detail, "UTF-16");
     }),
   );
 
@@ -171,7 +172,7 @@ describe("decode refuses what it cannot decode faithfully", () => {
     Effect.gen(function* refusesNonUtf16() {
       const refusal = yield* refusalOf(declared("UTF-16LE", ascii("x")));
 
-      assert.strictEqual(refusal.rule, "decode");
+      assert.strictEqual(refusal.rule, "encoding-mismatch");
       assert.include(refusal.detail, "UTF-16LE");
     }),
   );
@@ -477,13 +478,14 @@ describe("decode reads the label and the bytes", () => {
     }),
   );
 
-  it.effect("decodes by the byte order Appendix F detects when the label names the other", () =>
-    Effect.gen(function* decodesByDetectedOrder() {
-      const text = '<?xml version="1.0" encoding="UTF-16LE"?><a>x</a>';
-      const decoded = yield* decode(utf16Bare(text, "be"));
+  it.effect("refuses a label naming the other byte order than Appendix F detects", () =>
+    Effect.gen(function* refusesTheOtherOrder() {
+      const refusal = yield* refusalOf(
+        utf16Bare('<?xml version="1.0" encoding="UTF-16LE"?><a>x</a>', "be"),
+      );
 
-      assert.strictEqual(decoded.label, "UTF-16LE");
-      assert.strictEqual(decoded.text, text);
+      assert.strictEqual(refusal.rule, "encoding-mismatch");
+      assert.include(refusal.detail, "UTF-16LE");
     }),
   );
 

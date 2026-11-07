@@ -6,8 +6,21 @@ import type { Child, XmlDocument } from "#crust/tree.ts";
 /**
  * How a label's characters become bytes: `decode-only` marks a label the reader can decode but the
  * writer cannot encode.
+ *
+ * Each of UTF-16's three Unicode encoding schemes is its own class, because each begins its bytes
+ * differently (Unicode 16.0 section 3.10, D96 to D98): `utf16` is the UTF-16 scheme, which an XML
+ * document begins with a byte order mark (XML 1.0 section 4.3.3), and `utf16be` and `utf16le` are
+ * UTF-16BE and UTF-16LE, which never begin with one, an initial `FE FF` or `FF FE` being the
+ * character U+FEFF (RFC 2781 sections 3.3, 4.1 and 4.2).
  */
-export type EncoderClass = "utf8" | "utf16" | "latin1" | "ascii" | "decode-only";
+export type EncoderClass =
+  | "utf8"
+  | "utf16"
+  | "utf16be"
+  | "utf16le"
+  | "latin1"
+  | "ascii"
+  | "decode-only";
 
 /**
  * A label's canonical name and encoder class.
@@ -35,8 +48,8 @@ const groups: readonly {
 }[] = [
   { aliases: [], canonical: "UTF-8", class: "utf8" },
   { aliases: [], canonical: "UTF-16", class: "utf16" },
-  { aliases: [], canonical: "UTF-16LE", class: "utf16" },
-  { aliases: [], canonical: "UTF-16BE", class: "utf16" },
+  { aliases: [], canonical: "UTF-16LE", class: "utf16le" },
+  { aliases: [], canonical: "UTF-16BE", class: "utf16be" },
   {
     aliases: [
       "ISO8859-1",
@@ -99,6 +112,8 @@ const thresholds: Readonly<Record<EncoderClass, Option.Option<number>>> = {
   "decode-only": Option.none(),
   latin1: Option.some(0xff),
   utf16: Option.none(),
+  utf16be: Option.none(),
+  utf16le: Option.none(),
   utf8: Option.none(),
 };
 
@@ -179,7 +194,7 @@ const ownHoldsAbove = (limit: number, node: Child): boolean => {
  *
  * @param label - The label the document was read under, as read.
  * @param doc - The document whose prolog, root subtree and epilog are inspected.
- * @returns `label` when its class is `utf8` or `utf16`, or is `latin1` or `ascii` and nothing
+ * @returns `label` when its class is `utf8` or one of UTF-16's, or is `latin1` or `ascii` and nothing
  *   inspected exceeds the class's threshold; `"UTF-8"` for a `decode-only` label and for a `latin1`
  *   or `ascii` document holding such a character.
  */

@@ -1672,7 +1672,7 @@ describe("the refusals made before the database", () => {
       ...(
         [
           "decode",
-          "bare-utf16",
+          "encoding-mismatch",
           "nul",
           "undeclared-entity",
           "entity-cycle",

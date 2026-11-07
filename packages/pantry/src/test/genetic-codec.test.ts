@@ -81,12 +81,6 @@ interface Recorded {
  */
 const recorded: readonly Recorded[] = [
   {
-    signature: /^O1 crust refused-bare-utf16, libxml2 accepts$/u,
-    source:
-      'XML 1.0 (Fifth Edition) section 4.3.3: "Entities encoded in UTF-16 MUST and entities encoded in UTF-8 MAY begin with the Byte Order Mark"',
-    why: "an unmarked document whose declaration names UTF-16, or names nothing after an Appendix F UTF-16 pattern, breaks the MUST; crust refuses it under bare-utf16 (decode.ts), libxml2 2.9.13 reads it",
-  },
-  {
     signature:
       /^O1 crust accepts, libxml2 refuses: Entity '_' not defined in an entity's replacement text$/u,
     source:
@@ -96,8 +90,8 @@ const recorded: readonly Recorded[] = [
   {
     signature: /^O1 encoding declared against the bytes: crust refuses, libxml2 accepts$/u,
     source:
-      'XML 1.0 (Fifth Edition) section 4.3.3: "it is a fatal error for an entity including an encoding declaration to be presented to the XML processor in an encoding other than that named in the declaration"',
-    why: "a document whose bytes are UTF-16 by their Appendix F pattern and whose declaration names UTF-8 is refused by crust, as the fatal error says; libxml2 2.9.13 reads it in the sniffed order (where crust accepts such a mismatch, the defect is N3's)",
+      'XML 1.0 (Fifth Edition) section 4.3.3: "it is a fatal error for an entity including an encoding declaration to be presented to the XML processor in an encoding other than that named in the declaration, or for an entity which begins with neither a Byte Order Mark nor an encoding declaration to use an encoding other than UTF-8", and "Entities encoded in UTF-16 MUST ... begin with the Byte Order Mark", the terms "UTF-8" and "UTF-16" not applying "to related character encodings, including but not limited to UTF-16BE, UTF-16LE"; Unicode 16.0 section 3.10, D96 and D97, and RFC 2781 sections 4.1 and 4.2: under UTF-16BE or UTF-16LE an initial FE FF or FF FE is U+FEFF, a character',
+    why: "a document in another encoding than its declaration names, or than UTF-8 where it names none, is refused by crust under encoding-mismatch (decode.ts): a UTF-16 mark under UTF-16LE or UTF-16BE, a UTF-8 mark under another label, an Appendix F UTF-16 pattern with no mark under UTF-16, under UTF-8 or under no label; libxml2 2.9.13 reads a UTF-16 mark or pattern in the encoding its first bytes say, and a UTF-8 mark under a single-byte label in that label",
   },
   {
     signature: /^O1 crust refused-entity-cycle, libxml2 accepts$/u,
@@ -145,12 +139,6 @@ const recorded: readonly Recorded[] = [
     why: "a prefixed declaration whose normalized value is whitespace alone, written through an entity or a character reference, is no URI reference and not empty, so the document is not namespace-well-formed; crust refuses it (saxes reads it as an undeclaration, the wrong reason but the right verdict); libxml2 2.9.13 accepts it",
   },
   {
-    signature: /^O\d declaration past the sniff window: .+$/u,
-    source:
-      "crust's documented reader limit, decode.ts declarationWindow: the first 1024 bytes of an ASCII-compatible document, and the first 1024 characters of a UTF-16 one, are searched for the declaration's encoding; XML 1.0 [23] XMLDecl and [3] S bound no declaration",
-    why: "a declaration whose encoding pseudo-attribute ends past crust's window is read as if it named none: an unmarked UTF-16 one is then bare-utf16 and an ASCII-compatible one UTF-8, where libxml2 reads the label; a limit crust states, kept apart so a change of the window is seen",
-  },
-  {
     signature: /^O1 crust refused-element-depth, libxml2 accepts$/u,
     source:
       "crust's reader bound, read.ts defaultElementDepth (256), which XML 1.0 leaves to the processor (section 5.1 sets no limit); libxml2 2.9.13's xmlParserMaxDepth of 256 is checked after the 257th element is pushed, so it reads 257 levels and refuses 258",
@@ -196,23 +184,6 @@ const open: readonly Open[] = [
     signature: /^O1 crust accepts, libxml2 refuses: (?:.+ \+ )?xmlns(?::\S+)?: '.*$/u,
     why: "Namespaces in XML 1.0 (Third Edition) section 2.2: \"The attribute's normalized value MUST be either a URI reference ... or an empty string\"; crust admits any string, libxml2 reports a namespace error (a spec question for the coordinator: pantry may read Namespaces 1.1's IRIs, which still exclude a quote)",
   },
-  {
-    finding:
-      "GEN-B/codec N3: a declaration naming another encoding than the one the bytes are in is accepted",
-    kept: [
-      { charset: "UTF-16BE", text: '<?xml version="1.0" encoding="UTF-16LE"?><!DOCTYPE r><r/>' },
-      { charset: "UTF-8 BOM", text: '<?xml version="1.0" encoding="UTF-16LE"?><r/>' },
-    ],
-    signature: /^O\d encoding declared against the bytes: (?!crust refuses, libxml2 accepts$).+$/u,
-    why: "XML 1.0 (Fifth Edition) section 4.3.3: \"it is a fatal error for an entity including an encoding declaration to be presented to the XML processor in an encoding other than that named in the declaration\"; crust decodes by the byte order mark or the Appendix F pattern and keeps or drops the label (decode.ts: a mark 'decides the encoding ... and the document's declaration is not consulted'; the utf16 decoder keeps 'the label as spelled even when it names the other order'), where it must refuse, and a UTF-8-marked document declaring UTF-16LE is then written without its mark and refused on reading; libxml2 refuses both (2.9.13 only once its input runs past its first buffer for the unmarked one)",
-  },
-
-  {
-    finding: "GEN-B/codec N4: a UTF-16LE or UTF-16BE document is written with a byte order mark",
-    kept: [{ charset: "UTF-16BE", text: '<?xml version="1.0" encoding="UTF-16BE"?><r/>' }],
-    signature: /^(?:O2 charset changes|O4 rows differ: charset)$/u,
-    why: "crust reads an unmarked UTF-16BE document as UTF-16BE and writes it FE FF first (encode.ts utf16Bytes), so it reads back as UTF-16; the Unicode Standard (section 3.10, D97 and D98) and RFC 2781 (section 3.3) give the UTF-16BE and UTF-16LE schemes no byte order mark, an initial FE FF in UTF-16BE being U+FEFF, so the bytes contradict their own declaration",
-  },
 ];
 
 /**
@@ -230,6 +201,22 @@ interface Fixed {
  * The defects closed since the search found them.
  */
 const fixed: readonly Fixed[] = [
+  {
+    commit:
+      "the commit that reads a document's encoding as a row of Appendix F.1, refuses a label the row rules out, and writes UTF-16LE and UTF-16BE with no byte order mark",
+    finding:
+      "GEN-B/codec N3: a declaration naming another encoding than the one the bytes are in was accepted",
+    kept: [
+      { charset: "UTF-16BE", text: '<?xml version="1.0" encoding="UTF-16LE"?><!DOCTYPE r><r/>' },
+      { charset: "UTF-8 BOM", text: '<?xml version="1.0" encoding="UTF-16LE"?><r/>' },
+    ],
+  },
+  {
+    commit:
+      "the commit that reads a document's encoding as a row of Appendix F.1, refuses a label the row rules out, and writes UTF-16LE and UTF-16BE with no byte order mark",
+    finding: "GEN-B/codec N4: a UTF-16LE or UTF-16BE document was written with a byte order mark",
+    kept: [{ charset: "UTF-16BE", text: '<?xml version="1.0" encoding="UTF-16BE"?><r/>' }],
+  },
   {
     commit:
       "the commit that lexes a declaration after an unread parameter entity without processing it",
