@@ -4,6 +4,7 @@ import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
 import { UnknownIdentifierError } from "#plate/engine/evaluate.ts";
+import { drawBelow, drawStream, responseKey } from "#plate/engine/random.ts";
 import { buildItem } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
@@ -44,6 +45,18 @@ const floatValue = (value: number): Value => ({
   baseType: "float",
   cardinality: "single",
   values: [{ baseType: "float", value }],
+});
+
+/**
+ * Construct a single boolean value.
+ *
+ * @param value The boolean.
+ * @returns The value.
+ */
+const booleanValue = (value: boolean): Value => ({
+  baseType: "boolean",
+  cardinality: "single",
+  values: [{ baseType: "boolean", value }],
 });
 
 /**
@@ -331,6 +344,113 @@ const failureOf = <A, E>(result: Result.Result<A, E>): E => {
   return Result.getOrThrow(Result.flip(result));
 };
 
+/**
+ * The number of values each `qti-random-integer` here draws among: 0 to 999,999.
+ */
+const drawnCount = 1_000_000n;
+
+/**
+ * Construct a `qti-random-integer` from 0 to {@link drawnCount} − 1, step 1.
+ *
+ * @returns The element.
+ */
+const randomInteger = (): SourceElement =>
+  el("qti-random-integer", [attr("max", String(drawnCount - 1n)), attr("min", "0")]);
+
+/**
+ * Construct a `qti-base-value`.
+ *
+ * @param baseType The `base-type` value.
+ * @param written The value's text.
+ * @returns The element.
+ */
+const baseValue = (baseType: string, written: string): SourceElement =>
+  el("qti-base-value", [attr("base-type", baseType)], [text(written)]);
+
+/**
+ * Construct a `qti-set-outcome-value`.
+ *
+ * @param identifier The outcome it sets.
+ * @param expression The expression whose value it sets.
+ * @returns The rule.
+ */
+const setting = (identifier: string, expression: SourceElement): SourceElement =>
+  el("qti-set-outcome-value", [attr("identifier", identifier)], [expression]);
+
+/**
+ * An item that sets the integer outcome `DRAWN` from a {@link randomInteger}.
+ */
+const drawsOnce = itemDocument(
+  trueFalse,
+  declaration("qti-outcome-declaration", "DRAWN", "integer"),
+  el("qti-response-processing", [], [setting("DRAWN", randomInteger())]),
+);
+
+/**
+ * An item that sets the boolean `FIRST` from a `qti-and` whose first operand is false and whose
+ * second compares a {@link randomInteger}, then sets the integer `SECOND` from another.
+ */
+const andThenDraws = itemDocument(
+  trueFalse,
+  declaration("qti-outcome-declaration", "FIRST", "boolean"),
+  declaration("qti-outcome-declaration", "SECOND", "integer"),
+  el(
+    "qti-response-processing",
+    [],
+    [
+      setting(
+        "FIRST",
+        el(
+          "qti-and",
+          [],
+          [
+            baseValue("boolean", "false"),
+            el("qti-gte", [], [randomInteger(), baseValue("integer", "0")]),
+          ],
+        ),
+      ),
+      setting("SECOND", randomInteger()),
+    ],
+  ),
+);
+
+/**
+ * An item that sets the integer `FIRST` from a `qti-custom-operator` holding a
+ * {@link randomInteger}, then sets the integer `SECOND` from another.
+ */
+const customThenDraws = itemDocument(
+  trueFalse,
+  declaration("qti-outcome-declaration", "FIRST", "integer"),
+  declaration("qti-outcome-declaration", "SECOND", "integer"),
+  el(
+    "qti-response-processing",
+    [],
+    [
+      setting("FIRST", el("qti-custom-operator", [attr("class", "x")], [randomInteger()])),
+      setting("SECOND", randomInteger()),
+    ],
+  ),
+);
+
+/**
+ * Give the value the nth {@link randomInteger} an attempt's response processing evaluates draws,
+ * counting from 1, with no seed: the nth `drawBelow` over the one stream of the attempt's response
+ * key.
+ *
+ * @param numAttempts The attempt's count, this attempt included.
+ * @param nth Which draw, from 1.
+ * @returns The integer.
+ */
+const responseDraw = (numAttempts: number, nth: number): bigint => {
+  const draw = drawStream(responseKey("", instance, numAttempts));
+  let drawn = drawBelow(draw, drawnCount);
+  for (let call = 1; call < nth; call += 1) {
+    drawn = drawBelow(draw, drawnCount);
+  }
+
+  return drawn;
+};
+
 describe("runAttempt", () => {
   it.effect(
     "[I-9b] scores a BG007-shaped item: true gives 1, false 0 and NULL 0, though SCORE's default is 1",
@@ -599,5 +719,60 @@ describe("runAttempt", () => {
       );
       assert.deepStrictEqual(record, before);
     }),
+  );
+
+  it.effect(
+    "[I-9a] draws attempt 1's response processing under the response key …␟response␟1, and attempt 2's under …␟2",
+    () =>
+      Effect.gen(function* drawsUnderResponseKey() {
+        const item = yield* buildItem(drawsOnce);
+        const first = yield* Effect.fromResult(
+          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+        );
+        const second = yield* Effect.fromResult(
+          runAttempt(item, first, { RESPONSE: identifierValue("true") }),
+        );
+
+        // The two response keys and the empty key give three values, so the case tells them apart.
+        assert.strictEqual(
+          new Set([responseDraw(1, 1), responseDraw(2, 1), drawBelow(drawStream(""), drawnCount)])
+            .size,
+          3,
+        );
+        assert.deepStrictEqual(first.outcomes["DRAWN"], integerValue(responseDraw(1, 1)));
+        assert.deepStrictEqual(second.outcomes["DRAWN"], integerValue(responseDraw(2, 1)));
+      }),
+  );
+
+  it.effect(
+    "[I-9a] evaluates every operand of qti-and, left to right, so the rule after it draws the response key's second value",
+    () =>
+      Effect.gen(function* evaluatesEveryOperand() {
+        const item = yield* buildItem(andThenDraws);
+        const after = yield* Effect.fromResult(
+          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+        );
+
+        // A qti-and that stopped at its false operand would leave SECOND the key's first value.
+        assert.notStrictEqual(responseDraw(1, 1), responseDraw(1, 2));
+        assert.deepStrictEqual(after.outcomes["FIRST"], booleanValue(false));
+        assert.deepStrictEqual(after.outcomes["SECOND"], integerValue(responseDraw(1, 2)));
+      }),
+  );
+
+  it.effect(
+    "[I-9a] evaluates no operand of qti-custom-operator, so the random kind inside it never draws and the rule after it draws the response key's first value",
+    () =>
+      Effect.gen(function* evaluatesNoCustomOperand() {
+        const item = yield* buildItem(customThenDraws);
+        const after = yield* Effect.fromResult(
+          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+        );
+
+        // An operator that evaluated its operand would leave SECOND the key's second value.
+        assert.notStrictEqual(responseDraw(1, 1), responseDraw(1, 2));
+        assert.deepStrictEqual(after.outcomes["FIRST"], nullOf("integer", "single"));
+        assert.deepStrictEqual(after.outcomes["SECOND"], integerValue(responseDraw(1, 1)));
+      }),
   );
 });
