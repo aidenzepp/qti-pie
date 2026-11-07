@@ -985,8 +985,8 @@ type RowOf<Name extends keyof PackageInputs> =
  *
  * `DeclaredValue`'s `Typed_value` reads the pattern of its base type's domain (Q5.08),
  * `Literal_lexical` its type code's and `ExpressionAttribute`'s `E1_derived` its attribute's and
- * base type's (Q5.10), and `UsageValueBaseType`'s `Usage_typed_value` its base type's (spec reading 105). A
- * relation joins this table when a check over it reads a pattern by a field.
+ * base type's (Q5.10), and `UsageValueBaseType`'s `Usage_typed_value` its base type's (spec reading
+ * 105). A relation joins this table when a check over it reads a pattern by a field.
  */
 export const patternInputs = {
   DeclaredValue: ["baseType"],

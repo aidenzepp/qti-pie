@@ -384,8 +384,7 @@ const matchingOf = (
 ) => {
   const written = caseText ?? "";
   const folded =
-    Option.contains(baseType, "string") &&
-    !booleanTrue.some((form) => form === collapse(written));
+    Option.contains(baseType, "string") && !booleanTrue.some((form) => form === collapse(written));
 
   return { caseText: written, folded, matched: folded ? lowerAscii(key) : key };
 };

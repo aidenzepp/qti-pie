@@ -942,8 +942,8 @@ const spelledUsageValues = select(UsageValue, (u) => u.in(u.baseTypeLexical, bas
  * - **Usage typed value:** each usage value that writes a `baseType` has its {@link UsageBaseType},
  *   and every such row is one, its lexical form the attribute's; each that also writes a
  *   `fieldIdentifier` has its {@link UsageValue}, and every such row is one, with its `baseType`
- *   copied from that row; its `text` is its node's string value; one whose `baseType` spells a
- *   code has its {@link UsageValueBaseType}, and every such row is one, its lexical form and text
+ *   copied from that row; its `text` is its node's string value; one whose `baseType` spells a code
+ *   has its {@link UsageValueBaseType}, and every such row is one, its lexical form and text
  *   copied; its code is the one its lexical form spells ("E1 derived"); and its text is a lexical
  *   form of that base type ("Usage typed value").
  */

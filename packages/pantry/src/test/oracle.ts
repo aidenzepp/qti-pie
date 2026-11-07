@@ -4374,7 +4374,10 @@ const overlayLaws: readonly ((
       : [
           {
             keys: {
-              ...Option.match(baseType, { onNone: () => ({}), onSome: (held) => ({ baseType: held }) }),
+              ...Option.match(baseType, {
+                onNone: () => ({}),
+                onSome: (held) => ({ baseType: held }),
+              }),
               cardinality,
               identifier: named.value,
               kind: node.kind,

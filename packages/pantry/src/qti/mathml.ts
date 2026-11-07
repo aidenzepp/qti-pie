@@ -54,9 +54,9 @@ const namedApart = (statement: (typeof mathmlLaws)[number]): boolean =>
  *   syntax tables list (`mathml-apply.ts`, reading R6-head-qualifiers);
  * - **MathML cn form:** a `cn`'s four part count containments, over the judged `cn`s and over every
  *   typed `cn` ({@link cnCountLaws}): a wrong part count is a `cn` of the wrong form;
- * - **E1 derived:** every other statement of the four families, a restatement of the tree, the
- *   align family's keys of one `selection` per `m:maction` and one `dir` per element among them
- *   (decision 426: uniqueness of derived rows, not a document's identity).
+ * - **E1 derived:** every other statement of the four families, a restatement of the tree, the align
+ *   family's keys of one `selection` per `m:maction` and one `dir` per element among them (decision
+ *   426: uniqueness of derived rows, not a document's identity).
  */
 export const mathmlLawsByName = {
   "E1 derived": mathmlLaws.filter((statement) =>
