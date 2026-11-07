@@ -1,11 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
-import type { InvalidRecord } from "#plate/codec/record.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
+import { fresh } from "#plate/model/record.ts";
+import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { restore } from "#plate/restore.ts";
 import { score } from "#plate/score.ts";
+import { float, integer } from "#plate/test/fixtures.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
@@ -14,6 +16,13 @@ import { acceptedItem } from "#plate/validate/verdict.ts";
  * under the corpus root, which `open` takes as its location.
  */
 const bg007 = "QTI3_BPIG_Examples/items/BG007.xml";
+
+/**
+ * The path under the corpus root of `template_digging`, an item whose template processing draws
+ * the template variables `PEOPLE`, `A`, `B` and `MIN` and sets the correct value of its float
+ * response `RESPONSE`.
+ */
+const templateDigging = "QTI3_BPIG_Examples/items/template_digging.xml";
 
 /**
  * The candidate's answer to BG007: the choice `true`.
@@ -25,40 +34,105 @@ const chosen: Value = {
 };
 
 /**
+ * Open an item from the corpus cache, which `check` must accept.
+ *
+ * @param location The item's path under the corpus root.
+ * @returns The accepted item.
+ */
+const opened = Effect.fnUntraced(function* opened(location: string) {
+  const verdict = yield* open(location, yield* readCorpusFile(location));
+
+  return Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${location} is ${verdict.verdict}, not accepted`),
+  );
+});
+
+/**
  * Open BG007 from the corpus cache and score one attempt of it answered {@link chosen}.
  *
  * @returns The accepted item and the record `score` returned, in the form the host stores.
  */
 const scored = Effect.fnUntraced(function* scored() {
-  const verdict = yield* open(bg007, yield* readCorpusFile(bg007));
-  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
-    assert.fail(`${bg007} is ${verdict.verdict}, not accepted`),
-  );
+  const accepted = yield* opened(bg007);
 
   return { accepted, stored: yield* Effect.fromResult(score(accepted, { RESPONSE: chosen })) };
 });
 
 /**
- * Give the tag and the stage of a failed restore.
+ * Give the tag of a failed restore, and the stage of an `InvalidRecord`.
  *
  * @param restored What `restore` returned.
- * @returns The failure's `_tag` and `stage`, none when `restored` succeeded.
+ * @returns The failure's `_tag`, then its `stage` where it has one; none when `restored`
+ * succeeded.
  */
-const failureOf = (
-  restored: Result.Result<unknown, InvalidRecord>,
-): Option.Option<readonly [string, string]> =>
-  Option.map(Result.getFailure(restored), (failure) => [failure._tag, failure.stage] as const);
+const failureOf = (restored: ReturnType<typeof restore>): Option.Option<readonly string[]> =>
+  Option.map(Result.getFailure(restored), (failure) =>
+    failure._tag === "InvalidRecord" ? [failure._tag, failure.stage] : [failure._tag],
+  );
 
 describe("restore", { tags: ["corpus"] }, () => {
-  it.effect("[T-14] gives back the responses of the record score returned for BG007", () =>
-    Effect.gen(function* restoresScored() {
-      const { accepted, stored } = yield* scored();
+  it.effect(
+    "[T-14] [I-5] gives back the record score returned for BG007, decoded, beside its responses",
+    () =>
+      Effect.gen(function* restoresScored() {
+        const { accepted, stored } = yield* scored();
+        const record = yield* Effect.fromResult(decodeRecord(stored));
 
-      assert.deepStrictEqual(
-        Result.getSuccess(restore(accepted, stored)),
-        Option.some({ values: { RESPONSE: chosen } }),
-      );
-    }),
+        assert.deepStrictEqual(
+          Result.getSuccess(restore(accepted, stored)),
+          Option.some({ record, values: { RESPONSE: chosen } }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] gives back a templated item's template values and correct responses in the record",
+    () =>
+      Effect.gen(function* restoresTemplated() {
+        const accepted = yield* opened(templateDigging);
+        const record: ItemRecord = {
+          ...fresh(accepted.item, "digging"),
+          correct: { RESPONSE: float(15) },
+          seed: "7",
+          templates: {
+            A: integer(3n),
+            B: integer(5n),
+            MIN: integer(15n),
+            PEOPLE: {
+              baseType: "string",
+              cardinality: "single",
+              values: [{ baseType: "string", value: "children" }],
+            },
+          },
+        };
+        const stored = yield* Effect.fromResult(encodeRecord(record));
+
+        assert.deepStrictEqual(
+          Result.getSuccess(restore(accepted, stored)),
+          Option.some({ record, values: record.responses }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] refuses another item's record, before checking it against the item's declarations: RecordMismatch",
+    () =>
+      Effect.gen(function* refusesAnotherItems() {
+        const { accepted } = yield* scored();
+        const digging = yield* opened(templateDigging);
+        const another = yield* Effect.fromResult(encodeRecord(fresh(digging.item, "digging")));
+        const refused = restore(accepted, another);
+
+        assert.deepStrictEqual(failureOf(refused), Option.some(["RecordMismatch"]));
+        assert.deepStrictEqual(
+          Option.flatMap(Result.getFailure(refused), (found) =>
+            found._tag === "RecordMismatch"
+              ? Option.some([found.item, found.recordItem])
+              : Option.none(),
+          ),
+          Option.some(["beginnersguide007", "template_digging"]),
+        );
+      }),
   );
 
   it.effect("[T-14] refuses a record the renderer could not have written: InvalidRecord", () =>
@@ -67,7 +141,7 @@ describe("restore", { tags: ["corpus"] }, () => {
 
       assert.deepStrictEqual(
         failureOf(restore(accepted, { ...stored, numAttempts: -1 })),
-        Option.some(["InvalidRecord", "decode"] as const),
+        Option.some(["InvalidRecord", "decode"]),
       );
     }),
   );
@@ -112,12 +186,12 @@ describe("restore", { tags: ["corpus"] }, () => {
         );
         assert.deepStrictEqual(
           failureOf(restore(accepted, twoValues)),
-          Option.some(["InvalidRecord", "decode"] as const),
+          Option.some(["InvalidRecord", "decode"]),
           "two values",
         );
         assert.deepStrictEqual(
           failureOf(restore(accepted, fullScore)),
-          Option.some(["InvalidRecord", "decode"] as const),
+          Option.some(["InvalidRecord", "decode"]),
           "SCORE full",
         );
       }),

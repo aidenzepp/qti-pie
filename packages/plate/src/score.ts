@@ -144,11 +144,17 @@ export const tierA: Configuration = {
 /**
  * Check that a record belongs to the item being scored.
  *
+ * `score` runs it on the record it is handed, and `restore` on the record it gives back, so
+ * another item's record is refused before either checks it against the item's declarations.
+ *
  * @param item The item.
  * @param record The decoded record.
  * @returns The record, or {@link RecordMismatch} when its item or document is another.
  */
-const belonging = (item: Item, record: ItemRecord): Result.Result<ItemRecord, RecordMismatch> =>
+export const belonging = (
+  item: Item,
+  record: ItemRecord,
+): Result.Result<ItemRecord, RecordMismatch> =>
   record.item === item.identifier && record.document === item.document
     ? Result.succeed(record)
     : Result.fail(
