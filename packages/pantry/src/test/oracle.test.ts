@@ -1710,8 +1710,8 @@ const withScore = (expression: string) =>
   withItem(`<qti-base-value base-type="float">1</qti-base-value>`, expression);
 
 /**
- * Packages valid under readings 2, 3, 9, 39, 41, 42, 43 and 47, each of which the readings' laws
- * must leave alone: the base package with one valid use of what a law judges.
+ * Packages valid under readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a, each of which the
+ * readings' laws must leave alone: the base package with one valid use of what a law judges.
  */
 const unownedValid: readonly {
   readonly files: Readonly<Record<string, string>>;
@@ -1779,6 +1779,57 @@ const unownedValid: readonly {
     ]),
     name: "reading 3: lookup naming its fragment's lexicon",
   },
+  {
+    files: withSpeech(["", `<ssml:s><ssml:voice gender="female">hi</ssml:voice></ssml:s>`]),
+    name: "reading 43: a voice inside an s, where no token or w restricts it",
+  },
+  {
+    files: withSpeech(["", `<ssml:s xml:space="preserve">hi</ssml:s>`]),
+    name: "reading 43: xml:space on an s",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice gender="">hi</ssml:voice>`]),
+    name: "reading 43: a voice whose gender is empty, which the XSD's union admits",
+  },
+  {
+    files: withSpeech(["", `<ssml:prosody pitch="10 Hz">hi</ssml:prosody>`]),
+    name: "reading 43: a prosody pitch of a number and a unit, which the XSD's union admits",
+  },
+  {
+    files: withSpeech([
+      "",
+      `<ssml:audio src="https://example.org/a.mp3" maxage="99999999999999999999">hi</ssml:audio>`,
+    ]),
+    name: "reading 43: an audio maxage beyond any machine integer, which its integer domain, unbounded, admits",
+  },
+  ...[
+    ["w", "x:noun", ` xmlns:x="urn:x"`],
+    ["token", "x:noun", ` xmlns:x="urn:x"`],
+    ["token", "noun xml:lang", ""],
+    ["w", "noun", ""],
+    ["token", "  noun \n verb  ", ""],
+  ].map(([tag, role, declaration]) => ({
+    files: withSpeech(["", `<ssml:${tag} role="${role}"${declaration}>hi</ssml:${tag}>`]),
+    name: `reading 83: an ssml:${tag} role of ${JSON.stringify(role)}${declaration === "" ? "" : " with its prefix bound"}, whose prefixes each resolve`,
+  })),
+  ...[
+    ["a valid value", `<p id="intro" data-ssml='{"break":{"strength":"weak"}}'>Pick one.</p>`],
+    [
+      "a name written twice, which RFC 8259 admits",
+      `<p id="intro" data-ssml='{"break":{"strength":"weak"},"break":{"time":"1s"}}'>Pick one.</p>`,
+    ],
+    [
+      "an escaped name and members in any order",
+      `<p id="intro" data-ssml='{ "sub" : {"alias":"a"}, "b\\u0072eak" : {"time":"1s"} }'>Pick one.</p>`,
+    ],
+    [
+      "any text on an li, which does not declare it, so it is a custom data-* attribute",
+      `<p id="intro">Pick one.</p><ul><li data-ssml="not json">a</li></ul>`,
+    ],
+  ].map(([what, body]) => ({
+    files: withItem(`<p id="intro">Pick one.</p>`, body ?? ""),
+    name: `R7-a: data-ssml holding ${what}, which the oracle reads as text (the importer's check judges its form)`,
+  })),
   {
     files: withMath(
       `<m:piecewise><m:piece><m:cn>1</m:cn><m:true/></m:piece><m:otherwise><m:cn>2</m:cn></m:otherwise><m:piece><m:cn>3</m:cn><m:false/></m:piece></m:piecewise>`,
@@ -1913,8 +1964,8 @@ const unownedValid: readonly {
 ];
 
 /**
- * Packages that break readings 2, 3, 9, 39, 41, 42, 43 and 47, each named by the law that refuses
- * it and the rule that law keeps.
+ * Packages that break readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a, each named by the law that
+ * refuses it and the rule that law keeps.
  */
 const unownedBroken: readonly LawCase[] = [
   {
@@ -2186,8 +2237,10 @@ const unownedBroken: readonly LawCase[] = [
 
 /**
  * Packages whose `xsi:type` breaks XML Schema's clause 4.1 or 4.2 (a value that is no QName in
- * scope, or one that names no type), which shred cannot represent: the codec refuses them before
- * any law reads a row (shred's `type-unresolved` and `type-unknown`).
+ * scope, or one that names no type), or whose SSML `role` item names a prefix nothing binds, which
+ * shred cannot represent: the codec refuses them before any law reads a row (shred's
+ * `type-unresolved`, `type-unknown` and `role-unresolved`; the reason is shred's own test's to
+ * assert, and the bound twins in the valid cases show the prefix is the cause).
  */
 const unownedCodec: readonly {
   readonly files: Readonly<Record<string, string>>;
@@ -2212,9 +2265,19 @@ const unownedCodec: readonly {
     },
     name: "reading 47: xsi:type on an element of an anonymous type, naming no type (case 130)",
   },
+  ...["w", "token"].flatMap((tag) => [
+    {
+      files: withSpeech(["", `<ssml:${tag} role="x:noun">hi</ssml:${tag}>`]),
+      name: `reading 83: an ssml:${tag} role item whose prefix is unbound`,
+    },
+    {
+      files: withSpeech(["", `<ssml:${tag} role="noun y:verb">hi</ssml:${tag}>`]),
+      name: `reading 83: an ssml:${tag} role whose second item's prefix is unbound`,
+    },
+  ]),
 ];
 
-describe("the unowned readings 2, 3, 9, 39, 41, 42, 43 and 47", () => {
+describe("the unowned readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a", () => {
   for (const { files, name } of unownedValid) {
     it.effect(`no law refuses ${name}`, () =>
       Effect.gen(function* valid() {
