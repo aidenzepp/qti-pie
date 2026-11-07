@@ -16,8 +16,18 @@
  *
  * {@link observe} drives a record through the browser entries only (`redactItem`, `render`,
  * `runAttempt`), and {@link startRecord} starts one with `firstAttempt`, so a page runs the same
- * steps as Node. Test support only, loadable in a page: it value-imports only browser modules and,
- * from `effect`, only `Option` and `Result`.
+ * steps as Node.
+ *
+ * {@link determinismTest} is a hand-built test that delivers the item as `ITEM1`, and
+ * {@link determinismScope} its test scope after the item's pinned attempt, both literals a page
+ * loads. Its outcome processing draws an integer, then draws in the second branch of a condition
+ * whose first branch, not taken, holds a draw, and reads the item's `SCORE` through its item ref.
+ * {@link observeOutcomes} runs it as runs 1 and 2 of a session through `runOutcomes`, each from the
+ * stream `outcomeLabel` keys by the seed, and {@link pinnedOutcomeDraws} pins what it gives under
+ * {@link determinismSeed}.
+ *
+ * Test support only, loadable in a page: it value-imports only browser modules and, from `effect`,
+ * only `Option` and `Result`.
  *
  * @module
  */
@@ -27,7 +37,10 @@ import type { UnknownPart } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
-import type { Expression, TemplateRule } from "#plate/model/expression.ts";
+import { runOutcomes } from "#plate/engine/outcome.ts";
+import { drawStream, outcomeLabel } from "#plate/engine/random.ts";
+import type { TestScope } from "#plate/engine/scope.ts";
+import type { Expression, Rule, TemplateRule } from "#plate/model/expression.ts";
 import type {
   BodyNode,
   Item,
@@ -38,6 +51,7 @@ import type {
   TemplateVisibility,
 } from "#plate/model/item.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
+import type { Test } from "#plate/model/test.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
 import { redactItem } from "#plate/payload.ts";
 import { render } from "#plate/render.ts";
@@ -615,4 +629,155 @@ export const observe = (
     const after = yield* runAttempt(determinismItem, record, determinismResponses);
 
     return { html: rendered.html, outcomes: after.outcomes, templates: record.templates };
+  });
+
+/**
+ * The item ref through which {@link determinismTest} delivers {@link determinismItem}.
+ */
+const itemRef = "ITEM1";
+
+/**
+ * Construct a `qti-variable` that reads one of the fixture item's variables through its item ref.
+ *
+ * @param name The item's variable.
+ * @returns The expression.
+ */
+const itemVariable = (name: string): Expression => variable(`${itemRef}.${name}`);
+
+/**
+ * Construct a `qti-set-outcome-value`.
+ *
+ * @param name The outcome it sets.
+ * @param expression Its expression.
+ * @returns The rule.
+ */
+const setOutcome = (name: string, expression: Expression): Rule => ({
+  expression,
+  identifier: name,
+  kind: "set-outcome",
+});
+
+/**
+ * The fixture test, as much of it as `runOutcomes` reads: its outcomes `DRAWN` and `BONUS`, single
+ * integers, and `TOTAL`, a single float, none with a default, and its outcome processing. That
+ * draws `DRAWN` from 1 to 100; then runs a condition whose first branch, `ITEM1.SCORE` below 0, is
+ * not taken and holds a draw, and whose second, `ITEM1.SCORE` at least 0.25, is taken and draws
+ * `BONUS` from 100 to 199; then sets `TOTAL` to `ITEM1.SCORE` plus `BONUS`. So the values pin the
+ * order of a run's draws: its rules in order, a condition's branches until the first true one.
+ * Written by hand (rule `3ad87993`) as a literal, so a page loads it.
+ */
+export const determinismTest: Pick<Test, "outcomeProcessing" | "outcomes"> = {
+  outcomeProcessing: {
+    kind: "runs",
+    rules: [
+      setOutcome("DRAWN", randomInteger(1n, 100n)),
+      {
+        branches: [
+          {
+            // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, the name the item model fixes; it is an array, never a function.
+            then: [setOutcome("BONUS", randomInteger(0n, 99n))],
+            when: { kind: "lt", operands: [itemVariable("SCORE"), baseValue(float(0))] },
+          },
+          {
+            // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, the name the item model fixes; it is an array, never a function.
+            then: [setOutcome("BONUS", randomInteger(100n, 199n))],
+            when: { kind: "gte", operands: [itemVariable("SCORE"), baseValue(float(0.25))] },
+          },
+        ],
+        kind: "condition",
+        otherwise: Option.none(),
+      },
+      setOutcome("TOTAL", { kind: "sum", operands: [itemVariable("SCORE"), variable("BONUS")] }),
+    ],
+  },
+  outcomes: new Map([
+    ["DRAWN", outcomeDeclaration("DRAWN", "integer")],
+    ["BONUS", outcomeDeclaration("BONUS", "integer")],
+    ["TOTAL", outcomeDeclaration("TOTAL", "float")],
+  ]),
+};
+
+/**
+ * The test scope of {@link determinismTest} after its item's pinned attempt: one part `P1` and one
+ * section `S1`, each holding `ITEM1`, which delivers {@link determinismItem}, presented and with one
+ * attempt processed. Its record holds {@link pinned}'s template values and outcomes, the responses
+ * {@link determinismResponses} and the correct response the item's template processing set, so
+ * `ITEM1.SCORE` reads {@link pinned}'s `SCORE`. The scope declares the test's outcomes and holds no
+ * time, which the test's processing does not read.
+ */
+export const determinismScope: TestScope = {
+  declared: new Set(determinismTest.outcomes.keys()),
+  duration: Option.none(),
+  items: [
+    {
+      categories: [],
+      declarations: {
+        outcomes: determinismItem.outcomes,
+        responses: determinismItem.responses,
+        templates: determinismItem.templates,
+      },
+      mappings: new Map(),
+      numAttempts: 1,
+      presented: true,
+      record: {
+        correct: { RESPONSE: identifier("B") },
+        defaults: {},
+        outcomes: pinned.outcomes,
+        responses: determinismResponses,
+        templates: pinned.templates,
+      },
+      ref: itemRef,
+      unheld: new Map(),
+      weights: new Map(),
+    },
+  ],
+  parts: new Map([["P1", [itemRef]]]),
+  sections: new Map([["S1", [itemRef]]]),
+};
+
+/**
+ * What {@link determinismTest}'s outcome processing gives as runs 1 and 2 of a session: the test's
+ * outcomes after each run, in run order.
+ */
+export type OutcomeDraws = readonly [
+  Readonly<Record<string, Value>>,
+  Readonly<Record<string, Value>>,
+];
+
+/**
+ * What {@link observeOutcomes} gives under {@link determinismSeed} and {@link determinismInstance},
+ * pinned. Each run starts from the outcomes' starting values and draws from its own stream, so run
+ * 2 differs from run 1 only in its draws. `TOTAL` is {@link pinned}'s `SCORE` plus `BONUS`.
+ */
+export const pinnedOutcomeDraws: OutcomeDraws = [
+  { BONUS: integer(129n), DRAWN: integer(22n), TOTAL: float(129.27261476873917) },
+  { BONUS: integer(128n), DRAWN: integer(56n), TOTAL: float(128.27261476873917) },
+];
+
+/**
+ * Run {@link determinismTest}'s outcome processing as runs 1 and 2 of a session under
+ * {@link determinismInstance}, through `runOutcomes` over {@link determinismScope}: run `n` draws
+ * from a fresh `drawStream(seed, outcomeLabel(determinismInstance, n))`, the stream a session's run
+ * `n` draws from.
+ *
+ * @param seed The processing seed the runs' streams are keyed by, {@link determinismSeed} by
+ *   default.
+ * @returns The outcomes after each run, or the first run's failure.
+ */
+export const observeOutcomes = (
+  seed: string = determinismSeed,
+): Result.Result<OutcomeDraws, EngineFailure> =>
+  Result.gen(function* observeOutcomeDraws() {
+    const first = yield* runOutcomes(
+      determinismTest,
+      determinismScope,
+      drawStream(seed, outcomeLabel(determinismInstance, 1)),
+    );
+    const second = yield* runOutcomes(
+      determinismTest,
+      determinismScope,
+      drawStream(seed, outcomeLabel(determinismInstance, 2)),
+    );
+
+    return [first, second] as const;
   });

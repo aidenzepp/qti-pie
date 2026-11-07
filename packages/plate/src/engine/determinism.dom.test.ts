@@ -1,12 +1,13 @@
 /**
  * Criterion 7 in Chromium's and WebKit's pages: the hand-built fixture of
  * `src/test/determinism.ts`, under its fixed seed and instance, gives the template values, HTML and
- * outcomes Node pinned, on every run (`GOAL.md` criterion 7; Node's half is
- * `determinism.test.ts`).
+ * outcomes Node pinned, on every run, and its test's outcome processing gives the outcomes Node
+ * pinned for runs 1 and 2 (`GOAL.md` criterion 7; Node's half is `determinism.test.ts`).
  *
  * The fixture runs through the browser entries only: `firstAttempt` starts the record, `redactItem`
- * and `render` write its HTML, and `runAttempt` scores the attempt. Never `begin`, `score` or
- * `restore`, the Schema side a page does not load. Every pinned value is drawn from the
+ * and `render` write its HTML, `runAttempt` scores the attempt, and `runOutcomes` runs the test's
+ * outcome processing over its scope. Never `begin`, `score` or `restore`, the Schema side a page
+ * does not load. Every pinned value is drawn from the
  * HMAC-SHA-256 stream keyed by the seed (`src/engine/sha256.ts`) and `S` is plate's FDLIBM `sin`,
  * so an equal value here is also the engine's check of SHA-256, HMAC-SHA-256 and the Math port. A
  * value that differs from Node's is a finding, never configured around (rule `c8a113fd`).
@@ -18,7 +19,14 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Result } from "effect";
 import { server } from "vite-plus/test/browser/context";
-import { observe, otherSeed, pinned, startRecord } from "#plate/test/determinism.ts";
+import {
+  observe,
+  observeOutcomes,
+  otherSeed,
+  pinned,
+  pinnedOutcomeDraws,
+  startRecord,
+} from "#plate/test/determinism.ts";
 
 /**
  * The runs each fresh record is driven through.
@@ -68,5 +76,32 @@ describe(server.browser, () => {
     }
 
     assert.notStrictEqual(Result.getOrThrow(observe(other)).html, pinned.html);
+  });
+
+  it("runOutcomes gives the pinned outcome draws of runs 1 and 2 on two fresh starts", () => {
+    const starts = [
+      Result.getOrThrow(observeOutcomes()),
+      Result.getOrThrow(observeOutcomes()),
+    ] as const;
+
+    assert.notStrictEqual(starts[0], starts[1]);
+
+    for (const [index, start] of starts.entries()) {
+      assert.deepStrictEqual(start, pinnedOutcomeDraws, `start ${index + 1}`);
+    }
+  });
+
+  it("runOutcomes gives other outcome draws under another seed", () => {
+    const other = Result.getOrThrow(observeOutcomes(otherSeed));
+
+    for (const [index, outcomes] of other.entries()) {
+      for (const drawn of ["DRAWN", "BONUS"]) {
+        assert.notDeepEqual(
+          outcomes[drawn],
+          pinnedOutcomeDraws[index]?.[drawn],
+          `run ${index + 1}, ${drawn}`,
+        );
+      }
+    }
   });
 });
