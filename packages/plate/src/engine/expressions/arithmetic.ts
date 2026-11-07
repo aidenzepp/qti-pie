@@ -55,10 +55,19 @@ type Members =
  * next, and integers all at once, so a kind that computes a new integer can hold it to the bound.
  */
 interface Step {
+  /**
+   * Combine the float held so far with the next, in 64-bit double arithmetic.
+   *
+   * @param held The float the numbers before `next` combine to.
+   * @param next The next float.
+   * @returns The float the two combine to.
+   */
   readonly float: (held: number, next: number) => number;
+
   /**
    * Combine every integer, left to right.
    *
+   * @param values The integers, one or more.
    * @returns The integer, or none when the kind's result is past `integerBitBound`, for the
    *   integer NULL.
    */

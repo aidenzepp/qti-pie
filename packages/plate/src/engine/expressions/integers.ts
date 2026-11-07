@@ -5,9 +5,9 @@
  * Every integer is an exact `bigint` (reading 45), so each kind but `qti-integer-to-float`
  * computes exactly; `qti-integer-to-float` makes its float through the one conversion, `toFloat`,
  * which gives an integer beyond the largest finite float that float, of its sign. A NULL operand
- * gives the NULL of the kind's type, before any other rule: a divisor of 0 gives NULL, and a NULL
- * beside a zero operand of `qti-lcm` gives NULL, not 0. An operand that holds a value other than
- * an integer, which the validator refuses (P23) on a checked item, counts as NULL, as the
+ * gives the NULL of the kind's type before any other rule, so a NULL beside a zero operand of
+ * `qti-lcm` gives NULL, not 0; a divisor of 0 gives NULL too. An operand that holds a value other
+ * than an integer, which the validator refuses (P23) on a checked item, counts as NULL, as the
  * information model counts a value that is not numerical.
  *
  * `qti-lcm` is the one kind here that can grow past its operands, so its integer is held to
@@ -152,7 +152,7 @@ const dividedOf = (
       Option.match(
         Option.filter(
           Option.all([integerOf(dividendValue), integerOf(divisorValue)]),
-          ([, held]) => held !== 0n,
+          ([, y]) => y !== 0n,
         ),
         {
           onNone: unsetInteger,

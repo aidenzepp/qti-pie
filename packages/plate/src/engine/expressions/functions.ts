@@ -154,7 +154,8 @@ const signOf = (value: bigint): bigint => {
  * - `sec`, `csc`, `cot`, `sech`, `csch` and `coth` are the {@link reciprocal} of `cos`, `sin`, `tan`,
  *   `cosh`, `sinh` and `tanh`; `asec`, `acsc` and `acot` are `acos`, `asin` and `atan` of `1 / x`,
  *   so an argument below 1 in magnitude gives NaN, NULL, for the first two.
- * - `toDegrees` and `toRadians` multiply, then divide, by `Math.PI`'s double.
+ * - `toDegrees` is `x × 180 / π` and `toRadians` is `x × π / 180`, multiplied first, with `Math.PI`'s
+ *   double for π.
  * - `abs` is `Math.abs`; `signum`, `floor` and `ceil` give an exact integer, the integer an integer
  *   operand holds for `floor` and `ceil`; ±INF and NaN give none for `floor` and `ceil`, NaN none
  *   for `signum`, whose ±INF is ±1 (9.10).

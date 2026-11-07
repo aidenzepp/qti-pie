@@ -18,7 +18,7 @@ const integerType: ExpressionType = { baseType: "integer", cardinality: "single"
 const floatType: ExpressionType = { baseType: "float", cardinality: "single" };
 
 /**
- * The single boolean value of a truth.
+ * Construct the single boolean value of a truth.
  *
  * @param held The truth.
  * @returns The value.
