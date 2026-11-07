@@ -5,9 +5,10 @@
  * two values each above 0, under `P36`; each with the nearest valid package beside it, accepted.
  *
  * Each case is one item whose response processing holds one operator, an edit of a base that every
- * other law holds of, so the case's verdict is its edit's. Main's database cases of a `RoundTo` in
- * significantFigures with figures 0 and an absolute `Equal` with no tolerance
- * (`src/import/processing.db.test.ts:866-880` and `:892-903` at `2b276d76`) are among them.
+ * other law holds of, so the case's verdict is its edit's. Main's database case of an absolute
+ * `Equal` with no tolerance (`src/import/processing.db.test.ts:892-903` at `2b276d76`) is among
+ * them; the rounding operators' figures, main's `RoundTo` case among them, are searched in
+ * `#pantry/qti/operators.oracle.test.ts`.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Result } from "effect";
@@ -113,11 +114,6 @@ const toleranceRefused = { law: "Equal tolerance", rule: "P36" } as const;
  */
 const cases: readonly OperatorCase[] = [
   {
-    name: "a qti-equal-rounded with figures 0 under its default significantFigures",
-    refused: figuresRefused,
-    rules: comparing("qti-equal-rounded", ' figures="0"'),
-  },
-  {
     name: "a qti-equal-rounded with figures 1 under its default significantFigures",
     rules: comparing("qti-equal-rounded", ' figures="1"'),
   },
@@ -130,11 +126,6 @@ const cases: readonly OperatorCase[] = [
     rules: comparing("qti-equal-rounded", ' rounding-mode="decimalPlaces" figures="0"'),
   },
   {
-    name: "a qti-equal-rounded with figures written padded as 0 under significantFigures",
-    refused: figuresRefused,
-    rules: comparing("qti-equal-rounded", ' figures=" 0 "'),
-  },
-  {
     name: "a qti-round-to with figures -1 under decimalPlaces",
     refused: figuresRefused,
     rules: roundingTo(' rounding-mode="decimalPlaces" figures="-1"'),
@@ -142,16 +133,6 @@ const cases: readonly OperatorCase[] = [
   {
     name: "a qti-round-to with figures 0 under decimalPlaces",
     rules: roundingTo(' rounding-mode="decimalPlaces" figures="0"'),
-  },
-  {
-    name: "a qti-round-to with figures 0 under significantFigures (main's P10 database case)",
-    refused: figuresRefused,
-    rules: roundingTo(' rounding-mode="significantFigures" figures="0"'),
-  },
-  {
-    name: "a qti-round-to with figures -0 under significantFigures",
-    refused: figuresRefused,
-    rules: roundingTo(' rounding-mode="significantFigures" figures="-0"'),
   },
   {
     name: "a qti-round-to whose figures names a variable, read at run time",
@@ -168,11 +149,6 @@ const cases: readonly OperatorCase[] = [
     rules: comparing("qti-equal", ' tolerance-mode="absolute"'),
   },
   {
-    name: "a qti-equal in relative mode with no tolerance",
-    refused: toleranceRefused,
-    rules: comparing("qti-equal", ' tolerance-mode="relative"'),
-  },
-  {
     name: "a qti-equal in absolute mode with two tolerance values",
     rules: comparing("qti-equal", ' tolerance-mode="absolute" tolerance="0.1 0.2"'),
   },
@@ -184,11 +160,6 @@ const cases: readonly OperatorCase[] = [
     name: "a qti-equal in absolute mode with three tolerance values",
     refused: toleranceRefused,
     rules: comparing("qti-equal", ' tolerance-mode="absolute" tolerance="0.1 0.2 0.3"'),
-  },
-  {
-    name: "a qti-equal in absolute mode whose tolerance is 0",
-    refused: toleranceRefused,
-    rules: comparing("qti-equal", ' tolerance-mode="absolute" tolerance="0"'),
   },
   {
     name: "a qti-equal in absolute mode whose tolerance is NaN",

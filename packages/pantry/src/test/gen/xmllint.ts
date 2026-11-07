@@ -36,7 +36,14 @@ import type {
 import type { Cost } from "#pantry/test/gen/vocab.ts";
 import { catalogText } from "#pantry/test/xsd-catalog.ts";
 import { xsNamespace } from "#pantry/vocab/namespaces.ts";
-import { xmllintValidate } from "#pantry/xml/oracle.ts";
+import {
+  cachedReport,
+  pinDigestsOf,
+  verdictCacheRoot,
+  verdictKey,
+  xmllintVersion,
+} from "#pantry/test/gen/verdict-cache.ts";
+import { verdictsOfReport, xmllintReportOf } from "#pantry/xml/oracle.ts";
 import type { XsdMessage } from "#pantry/xml/oracle.ts";
 
 /**
@@ -277,10 +284,12 @@ export const probeErrorsOf = (
 /**
  * Validate probes against a version's XSDs.
  *
- * Each batch is judged by `xmllintValidate` (`#pantry/xml/oracle.ts`), whose report reader reads
- * libxml2 2.12's messages and the unprefixed ones 2.13 and later write alike. Probe `i` of a batch
- * stands on its line `i + 2`, so each error is the probe's on the line it names; a warning judges
- * nothing.
+ * Each batch is judged by one `xmllint` run (`xmllintReportOf`, `#pantry/xml/oracle.ts`), whose
+ * report reader reads libxml2 2.12's messages and the unprefixed ones 2.13 and later write alike.
+ * Probe `i` of a batch stands on its line `i + 2`, so each error is the probe's on the line it
+ * names; a warning judges nothing. A batch's report is read from the verdict cache
+ * (`#pantry/test/gen/verdict-cache.ts`) when one is kept under the key of everything it depends
+ * on, and its run's report is kept there otherwise.
  *
  * @param directory - A scratch directory under the package's `work/`, which this writes the
  *   driver, the catalog and the batches into.
@@ -299,23 +308,37 @@ export const validate = Effect.fn("vocab.xmllint.validate")(function* validate(
   const cache = yield* Effect.orDie(xsdDirectory);
   const chunks = Arr.chunksOf(probes, batchSize);
 
+  const inputs = {
+    catalog: catalogText(cache),
+    driver: driverText(driver),
+    pins: yield* pinDigestsOf(cache),
+    xmllint: yield* xmllintVersion(),
+  };
+
   yield* fs.makeDirectory(directory, { recursive: true });
-  yield* fs.writeFileString(`${directory}/driver.xsd`, driverText(driver));
-  yield* fs.writeFileString(`${directory}/catalog.xml`, catalogText(cache));
+  yield* fs.writeFileString(`${directory}/driver.xsd`, inputs.driver);
+  yield* fs.writeFileString(`${directory}/catalog.xml`, inputs.catalog);
 
   const judged = yield* Effect.forEach(
     chunks,
     (chunk, at) =>
       Effect.gen(function* validateBatch() {
         const batch = `${directory}/batch-${at}.xml`;
+        const text = batchText(chunk);
 
-        yield* fs.writeFileString(batch, batchText(chunk));
+        yield* fs.writeFileString(batch, text);
 
-        const [verdict] = yield* xmllintValidate({
-          catalog: `${directory}/catalog.xml`,
-          paths: [batch],
-          schema: `${directory}/driver.xsd`,
-        });
+        const report = yield* cachedReport(
+          verdictCacheRoot,
+          yield* verdictKey({ ...inputs, batch: text }),
+          directory,
+          xmllintReportOf({
+            catalog: `${directory}/catalog.xml`,
+            paths: [batch],
+            schema: `${directory}/driver.xsd`,
+          }),
+        );
+        const [verdict] = yield* verdictsOfReport([batch], report);
 
         return yield* probeErrorsOf(
           batch,

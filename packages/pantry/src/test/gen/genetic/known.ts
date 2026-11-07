@@ -55,30 +55,6 @@ export const knownEntries = (known: Known): PackageEntries =>
  * The known disagreements, keyed by signature.
  */
 export const known = {
-  "dangling-uuid: AssembledId.copy": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "section.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS4: a test-level id with no copy is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
   "dangling-uuid: ItemRefDocument.document": {
     files: [
       [
@@ -229,30 +205,6 @@ export const known = {
       ],
     ],
     fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
-  "dangling-uuid: PlacedId.copy": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "section.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "NS4: a test-level id with no copy is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
   "dangling-uuid: PlacedVariableRef.declaration": {
@@ -442,25 +394,6 @@ export const known = {
     fix: "NS5: an unspelled count writes no CountBound row",
     owner: "NIL",
   },
-  "import-only-law: Binding declared, contained BoundVariable(node, attribute, kind, document, identifier) in BindingDeclaration(node, attribute, kind, document, identifier)":
-    {
-      files: [
-        [
-          "choice.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><qti-choice-interaction response-identifier="RESPONSE"/></qti-item-body></qti-assessment-item>`,
-        ],
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><cpx:variant/></resource></resources></manifest>`,
-        ],
-      ],
-      fix: "the variant class: a 3.0.1 cp:resource's cpx:variant has no Admission cell, so the oracle's fold keeps no rows of the manifest and raises N5 admitted alone; either 3.0.1's CP extension admits it (the grammar moves both sides) or the oracle judges the other documents' rows, so precedence picks among every breach",
-      owner: "VD",
-    },
   "import-only-law: Branch forward, check Branch_forward on BranchResolution": {
     files: [
       [
@@ -811,30 +744,6 @@ export const known = {
       fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
       owner: "NIL",
     },
-  "import-only-law: Idref target, contained IdrefTarget(document, id) in IdBinding(document, id)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/><resource type="imsqti_outcomes_xmlv3p0" href="items/fragment.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/fragment.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-portable-custom-interaction><qti-context-variable identifier="CTX2"/></qti-portable-custom-interaction></div>`,
-      ],
-      [
-        "items/item2.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-context-declaration identifier="CTX2"/><qti-item-body><xi:include href="fragment.xml"/></qti-item-body></qti-assessment-item>`,
-      ],
-    ],
-    fix: "a fragment listed under two resource types and included: the import heads it as an assembly of its own beside the splice, so its IDREF is judged against its own ids",
-    owner: "S-ORACLE",
-  },
   "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
     files: [
       [
@@ -891,18 +800,6 @@ export const known = {
     ],
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
-  },
-  "import-only-law: Key text bound, a text past Node.stringPiece's bound": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion><imsmd:lom><imsmd:metaMetadata><imsmd:language>Ké語é𝔸xéxééé語é語𝔸語𝔸語é𝔸ééx語語xx語𝔸x語éééxéé語éxx𝔸𝔸𝔸x語x語𝔸𝔸語語xé語語é𝔸語éxé語xxx語é語𝔸é𝔸語語𝔸語𝔸x語語x語𝔸éé𝔸é語xééxxé𝔸𝔸éé語é語語𝔸é𝔸xéx語é𝔸x語𝔸é語𝔸xé語語é語é語語𝔸éxxéx𝔸éé𝔸x𝔸é𝔸語𝔸x𝔸𝔸語語é語語語xéxéé𝔸𝔸語é語𝔸𝔸éé𝔸é語xxxé𝔸éx𝔸語語語𝔸xéx𝔸é語xé𝔸x語語é𝔸éxx𝔸𝔸語x語語𝔸語éx語語𝔸語xx語𝔸語語xéé𝔸éxxééxéééxé𝔸é𝔸x𝔸語𝔸語x語x𝔸xé語é𝔸é語xéx語x語xé𝔸é語é語x𝔸xéx語éx𝔸é語ééx語語𝔸éx語𝔸𝔸xé𝔸x語語éx𝔸x𝔸éxxé𝔸é語語x𝔸𝔸𝔸𝔸𝔸𝔸x𝔸éé語éééx𝔸語語x語語𝔸xxxé語語𝔸𝔸xx語𝔸語𝔸x語𝔸x𝔸語x𝔸éxx語𝔸𝔸𝔸語x語éé𝔸xé𝔸語x語語語𝔸𝔸é𝔸é𝔸語語ééé語x𝔸éé語éx𝔸éxéé語𝔸x𝔸𝔸x語éx語xé𝔸語語𝔸xéxxé語xéx語é語語xxé語x語éxé𝔸xx𝔸語𝔸𝔸𝔸語é𝔸𝔸𝔸x語𝔸𝔸𝔸𝔸𝔸x𝔸語𝔸éxéé語x語x𝔸é𝔸𝔸é語𝔸é語é語x𝔸xé語éé𝔸xéé語x語éx語語語語éé𝔸xé語語語𝔸𝔸𝔸éx𝔸é𝔸語xé語x𝔸𝔸x𝔸𝔸語xé𝔸𝔸𝔸𝔸𝔸xx𝔸𝔸𝔸𝔸x𝔸語x𝔸é𝔸語語𝔸𝔸é語𝔸語語語𝔸𝔸語éé語x𝔸éx𝔸x語éx語𝔸é𝔸𝔸𝔸é語語x語x語xééé𝔸語𝔸é𝔸x𝔸語ééxx𝔸é𝔸語𝔸𝔸𝔸語語𝔸語éxé語𝔸𝔸𝔸éé語x語語éé𝔸語𝔸語𝔸éé語𝔸語éxxx語語xx語é𝔸x語é語éxé語éxxééx語𝔸語𝔸語𝔸𝔸語𝔸𝔸é𝔸xéé語𝔸𝔸xé𝔸語éx語語𝔸語𝔸éx𝔸語xéxé𝔸x語𝔸x𝔸𝔸é𝔸ééx語語x𝔸ééééxé𝔸xxx語ééx語xx語𝔸𝔸x𝔸語𝔸語x語x語é語xéx語𝔸語語éxxé語xéx語語x𝔸x語𝔸ééé語é𝔸語語é𝔸𝔸é𝔸語語é𝔸𝔸xé𝔸xxéx𝔸語éx語𝔸𝔸語𝔸𝔸𝔸éé語x𝔸éxx語語x語𝔸x𝔸語x𝔸é語𝔸é𝔸𝔸𝔸é𝔸x語xxx𝔸語xé語xééééé語xx𝔸xé𝔸𝔸𝔸éxééééé𝔸xx語x語語語x𝔸語x𝔸x語語語𝔸éx𝔸𝔸語x語𝔸𝔸x𝔸語𝔸𝔸語é𝔸語x語語xé語語語éx𝔸é語é語xééxx𝔸𝔸éx語xxéééé𝔸x語xx語語𝔸é語xé𝔸é語語éx𝔸語x𝔸éé𝔸ééé語x語é𝔸語é𝔸xééé語xé𝔸𝔸語x語語ééé𝔸é語𝔸𝔸é𝔸é語éx𝔸x語éé𝔸𝔸語é語é語語語語é語é𝔸é𝔸éxé語𝔸語é語x</imsmd:language></imsmd:metaMetadata></imsmd:lom></metadata><resources><resource><cpx:variant/></resource></resources></manifest>`,
-      ],
-    ],
-    fix: "the variant class: a 3.0.1 cp:resource's cpx:variant has no Admission cell, so the oracle's fold keeps no rows of the manifest and raises N5 admitted alone; either 3.0.1's CP extension admits it (the grammar moves both sides) or the oracle judges the other documents' rows, so precedence picks among every breach",
-    owner: "VD",
   },
   "import-only-law: LomObjectIdentifier, contained LomEntry(holderParent) in LomObjectIdentifier(record)":
     {
@@ -1038,6 +935,24 @@ export const known = {
       fix: "(3), its law half: the Manifest overlay selections read the manifest's cp:* attributes alone, as the import writes ManifestId and Resource from imsmanifest.xml alone",
       owner: "GEN-A",
     },
+  "import-only-law: N8 nearest, contained Choice(node) in ChoiceInteraction(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p>a <qti-gap identifier="G1"/> b</p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "N8: the oracle states the choice law the schema does, every choice in a choice interaction, so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
+    owner: "OL",
+  },
   "import-only-law: Reserved type, contained Declaration(parent) in Node(id)": {
     files: [
       [
@@ -1173,55 +1088,6 @@ export const known = {
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
   },
-  "import-only-law: value domain, check value_domain on Attribute": {
-    files: [
-      [
-        "es/choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    
-    
-    <qti-item-body>
-        
-        <p>
-            <img aria-haspopup="x"/>
-        </p>
-        
-    </qti-item-body>
-    
-</qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2">
-    <metadata>
-        
-        <schemaversion>3.0.1</schemaversion>
-        
-    </metadata>
-    
-    <resources>
-        <resource>
-            
-            
-            
-            <cpx:variant identifier="v1" identifierref="choice_es">
-                
-            </cpx:variant>
-        </resource>
-        <resource type="imsqti_item_xmlv3p0" href="es/choice.xml">
-            
-        </resource>
-    </resources>
-</manifest>`,
-      ],
-    ],
-    fix: "the variant class: a 3.0.1 cp:resource's cpx:variant has no Admission cell, so the oracle's fold keeps no rows of the manifest and raises N5 admitted alone; either 3.0.1's CP extension admits it (the grammar moves both sides) or the oracle judges the other documents' rows, so precedence picks among every breach",
-    owner: "VD",
-  },
   "lone-refusal: AL3 required named item-ref-target, witness unreported": {
     files: [
       [
@@ -1278,42 +1144,6 @@ export const known = {
     ],
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
-  },
-  "lone-refusal: N5 admitted named attribute-lexical, witness unreported": {
-    files: [
-      [
-        "es/choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><img aria-haspopup="x"/></p></qti-item-body></qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="choice"><cpx:variant/></resource><resource identifier="choice_es" type="imsqti_item_xmlv3p0" href="es/choice.xml"><file href="es/choice.xml"/></resource></resources></manifest>`,
-      ],
-    ],
-    fix: "the variant class: a 3.0.1 cp:resource's cpx:variant has no Admission cell, so the oracle's fold keeps no rows of the manifest and raises N5 admitted alone; either 3.0.1's CP extension admits it (the grammar moves both sides) or the oracle judges the other documents' rows, so precedence picks among every breach",
-    owner: "VD",
-  },
-  "lone-refusal: N5 admitted named binding-declared, witness unreported": {
-    files: [
-      [
-        "choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><qti-choice-interaction response-identifier="RESPONSE"/></qti-item-body></qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><cpx:variant/></resource></resources></manifest>`,
-      ],
-    ],
-    fix: "the variant class: a 3.0.1 cp:resource's cpx:variant has no Admission cell, so the oracle's fold keeps no rows of the manifest and raises N5 admitted alone; either 3.0.1's CP extension admits it (the grammar moves both sides) or the oracle judges the other documents' rows, so precedence picks among every breach",
-    owner: "VD",
   },
   "lone-refusal: RootOfType named lom-identifier, witness unreported": {
     files: [
@@ -1518,6 +1348,73 @@ export const known = {
  * the lane that fixed it, the fix, and the package that showed it, which must never show it again.
  */
 export const fixed = {
+  "dangling-uuid: AssembledId.copy": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "section.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
+    owner: "NIL",
+  },
+  "dangling-uuid: PlacedId.copy": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="section.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "section.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"/>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
+    owner: "NIL",
+  },
+  "import-only-law: Binding declared, contained BoundVariable(node, attribute, kind, document, identifier) in BindingDeclaration(node, attribute, kind, document, identifier)":
+    {
+      files: [
+        [
+          "choice.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><qti-choice-interaction response-identifier="RESPONSE"/></qti-item-body></qti-assessment-item>`,
+        ],
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><cpx:variant/></resource></resources></manifest>`,
+        ],
+      ],
+      fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
+      owner: "VD",
+    },
   "import-only-law: Document entry, contained Site(package, path) in TestDocument(package, path)": {
     files: [
       [
@@ -1561,6 +1458,42 @@ export const fixed = {
       fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, and removes the containment this class broke, so no package can show it",
       owner: "NIL",
     },
+  "import-only-law: Idref target, contained IdrefTarget(document, id) in IdBinding(document, id)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item2.xml"/><resource type="imsqti_fragment_xmlv3p0" href="items/fragment.xml"/><resource type="imsqti_outcomes_xmlv3p0" href="items/fragment.xml"/></resources></manifest>`,
+      ],
+      [
+        "items/fragment.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-portable-custom-interaction><qti-context-variable identifier="CTX2"/></qti-portable-custom-interaction></div>`,
+      ],
+      [
+        "items/item2.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-context-declaration identifier="CTX2"/><qti-item-body><xi:include href="fragment.xml"/></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "NS4: the import and the law oracle read a path two resource types name once, as the first type, so the fragment is judged where item2.xml splices it, and the second type's href names no document of its type, Document entry alone (reading 93)",
+    owner: "S-ORACLE",
+  },
+  "import-only-law: Key text bound, a text past Node.stringPiece's bound": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion><imsmd:lom><imsmd:metaMetadata><imsmd:language>Ké語é𝔸xéxééé語é語𝔸語𝔸語é𝔸ééx語語xx語𝔸x語éééxéé語éxx𝔸𝔸𝔸x語x語𝔸𝔸語語xé語語é𝔸語éxé語xxx語é語𝔸é𝔸語語𝔸語𝔸x語語x語𝔸éé𝔸é語xééxxé𝔸𝔸éé語é語語𝔸é𝔸xéx語é𝔸x語𝔸é語𝔸xé語語é語é語語𝔸éxxéx𝔸éé𝔸x𝔸é𝔸語𝔸x𝔸𝔸語語é語語語xéxéé𝔸𝔸語é語𝔸𝔸éé𝔸é語xxxé𝔸éx𝔸語語語𝔸xéx𝔸é語xé𝔸x語語é𝔸éxx𝔸𝔸語x語語𝔸語éx語語𝔸語xx語𝔸語語xéé𝔸éxxééxéééxé𝔸é𝔸x𝔸語𝔸語x語x𝔸xé語é𝔸é語xéx語x語xé𝔸é語é語x𝔸xéx語éx𝔸é語ééx語語𝔸éx語𝔸𝔸xé𝔸x語語éx𝔸x𝔸éxxé𝔸é語語x𝔸𝔸𝔸𝔸𝔸𝔸x𝔸éé語éééx𝔸語語x語語𝔸xxxé語語𝔸𝔸xx語𝔸語𝔸x語𝔸x𝔸語x𝔸éxx語𝔸𝔸𝔸語x語éé𝔸xé𝔸語x語語語𝔸𝔸é𝔸é𝔸語語ééé語x𝔸éé語éx𝔸éxéé語𝔸x𝔸𝔸x語éx語xé𝔸語語𝔸xéxxé語xéx語é語語xxé語x語éxé𝔸xx𝔸語𝔸𝔸𝔸語é𝔸𝔸𝔸x語𝔸𝔸𝔸𝔸𝔸x𝔸語𝔸éxéé語x語x𝔸é𝔸𝔸é語𝔸é語é語x𝔸xé語éé𝔸xéé語x語éx語語語語éé𝔸xé語語語𝔸𝔸𝔸éx𝔸é𝔸語xé語x𝔸𝔸x𝔸𝔸語xé𝔸𝔸𝔸𝔸𝔸xx𝔸𝔸𝔸𝔸x𝔸語x𝔸é𝔸語語𝔸𝔸é語𝔸語語語𝔸𝔸語éé語x𝔸éx𝔸x語éx語𝔸é𝔸𝔸𝔸é語語x語x語xééé𝔸語𝔸é𝔸x𝔸語ééxx𝔸é𝔸語𝔸𝔸𝔸語語𝔸語éxé語𝔸𝔸𝔸éé語x語語éé𝔸語𝔸語𝔸éé語𝔸語éxxx語語xx語é𝔸x語é語éxé語éxxééx語𝔸語𝔸語𝔸𝔸語𝔸𝔸é𝔸xéé語𝔸𝔸xé𝔸語éx語語𝔸語𝔸éx𝔸語xéxé𝔸x語𝔸x𝔸𝔸é𝔸ééx語語x𝔸ééééxé𝔸xxx語ééx語xx語𝔸𝔸x𝔸語𝔸語x語x語é語xéx語𝔸語語éxxé語xéx語語x𝔸x語𝔸ééé語é𝔸語語é𝔸𝔸é𝔸語語é𝔸𝔸xé𝔸xxéx𝔸語éx語𝔸𝔸語𝔸𝔸𝔸éé語x𝔸éxx語語x語𝔸x𝔸語x𝔸é語𝔸é𝔸𝔸𝔸é𝔸x語xxx𝔸語xé語xééééé語xx𝔸xé𝔸𝔸𝔸éxééééé𝔸xx語x語語語x𝔸語x𝔸x語語語𝔸éx𝔸𝔸語x語𝔸𝔸x𝔸語𝔸𝔸語é𝔸語x語語xé語語語éx𝔸é語é語xééxx𝔸𝔸éx語xxéééé𝔸x語xx語語𝔸é語xé𝔸é語語éx𝔸語x𝔸éé𝔸ééé語x語é𝔸語é𝔸xééé語xé𝔸𝔸語x語語ééé𝔸é語𝔸𝔸é𝔸é語éx𝔸x語éé𝔸𝔸語é語é語語語語é語é𝔸é𝔸éxé語𝔸語é語x</imsmd:language></imsmd:metaMetadata></imsmd:lom></metadata><resources><resource><cpx:variant/></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
+    owner: "VD",
+  },
   "import-only-law: Test overlay, contained Site(node, package, path) in ReferencePath(node, package, path)":
     {
       files: [
@@ -1580,4 +1513,107 @@ export const fixed = {
       fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, and removes the containment this class broke, so no package can show it",
       owner: "NIL",
     },
+  "import-only-law: value domain, check value_domain on Attribute": {
+    files: [
+      [
+        "es/choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    
+    
+    <qti-item-body>
+        
+        <p>
+            <img aria-haspopup="x"/>
+        </p>
+        
+    </qti-item-body>
+    
+</qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2">
+    <metadata>
+        
+        <schemaversion>3.0.1</schemaversion>
+        
+    </metadata>
+    
+    <resources>
+        <resource>
+            
+            
+            
+            <cpx:variant identifier="v1" identifierref="choice_es">
+                
+            </cpx:variant>
+        </resource>
+        <resource type="imsqti_item_xmlv3p0" href="es/choice.xml">
+            
+        </resource>
+    </resources>
+</manifest>`,
+      ],
+    ],
+    fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
+    owner: "VD",
+  },
+  "lone-refusal: N5 Follow named owner-copy, witness unreported": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p>a <qti-gap identifier="G1"/> b</p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "TD-B's or-n6-missing, kept as a planted bug: the oracle's N6 reads the flags a kind needs (Needs), so a qti-gap outside every qti-gap-match-interaction breaks N6 beside N5 Follow, and N5 Follow is never the oracle's lone law here",
+    owner: "GEN-A",
+  },
+  "lone-refusal: N5 admitted named attribute-lexical, witness unreported": {
+    files: [
+      [
+        "es/choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><img aria-haspopup="x"/></p></qti-item-body></qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="choice"><cpx:variant/></resource><resource identifier="choice_es" type="imsqti_item_xmlv3p0" href="es/choice.xml"><file href="es/choice.xml"/></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
+    owner: "VD",
+  },
+  "lone-refusal: N5 admitted named binding-declared, witness unreported": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><qti-choice-interaction response-identifier="RESPONSE"/></qti-item-body></qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"><cpx:variant/></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
+    owner: "VD",
+  },
 } satisfies Entries;

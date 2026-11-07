@@ -132,9 +132,9 @@ CREATE INDEX "__instance_ix_document_rhvczgk_64_o_names_y_5_jy_2_spup5ono3j" ON 
 
 CREATE INDEX "__instance_ix_document_rhvczgk_64_o_rules_ifltb_6_bfu3kdnc4f" ON "qti"."instance" USING btree ("__document_rhvczgk64o", "__rules_ifltb6mctd");
 
-CREATE INDEX "__instance_ix_id_pw_5_xaukp_2_l_assembly_2_bth_77_u_duwcdae7o3" ON "qti"."instance" USING btree ("__id_pw5xaukp2l", "__assembly_2bth77u5h5", "__assembly_kind_bixx5reh6b", "__document_rhvczgk64o");
-
 CREATE INDEX "__instance_ix_id_spoxawgzkd_document_z_464_tmpugd_z6o4bnanft" ON "qti"."instance" USING btree ("__id_spoxawgzkd", "__document_z464tmpugd", "__assembly_gwkpmxdmvu");
+
+CREATE INDEX "__instance_ix_id_uu_6_dmbaxjz_assembly_kfl_4_hggern_enqhsq6tlr" ON "qti"."instance" USING btree ("__id_uu6dmbaxjz", "__assembly_kfl4hggern", "__assembly_kind_urfzl7hgv2", "__document_mfczcavrbd");
 
 CREATE INDEX "__instance_ix_parent_document_rwupqx_3_wr_4_site_hdx_u33charzd5" ON "qti"."instance" USING btree ("__parent_document_rwupqx3wr4", "__site_hdx6niaggk", "__site_loose_chain_auzbyxsd6l", "__site_mixes_3a6cfv2jw2", "__site_part_robpllbu4o", "__site_replaced_wek36iyig7", "__site_start_xdxepuvnp7");
 

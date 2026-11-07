@@ -17,15 +17,17 @@
  * with a fragment), a wrong root type (a resource's type, or a document's root swapped for another
  * kind's), an absent required attribute, a key text at the key-text bound and one byte either side
  * of it, in characters of mixed widths, a cycle of references, a duplicate identifier, a bad
- * lexical form, and a misplaced element (a donor under a parent that does not admit it). The
- * reference graph's shapes (the history's hot spot 6): a diamond (one document placed twice), an
- * `xml:base` on a reference's element, its href rewritten or not, or an href percent-encoded; one
- * path listed under two types, the second a document type `RootOfType` pairs two times in three; a
- * content packaging element outside the manifest; an include in foreign or wildcard content. And
- * absence (hot spot 8): a present value equal to a sentinel the import or the schema spells (empty,
- * `0`, `none`, `single`, the nil uuid, the document's own identifier). And a wild attribute: one or
- * two names no kind admits, or that name an open class no name of which they are, on one element,
- * the order of whose refusals no law may read (reading 137).
+ * lexical form, a misplaced element (a donor under a parent that does not admit it), and an element
+ * outside the ancestor it needs (a kind `Needs` holds, such as `qti-gap`, under a parent that
+ * admits it but below no element that enters its flag, N6, the gap flag `qti-gap-match-interaction`
+ * enters). The reference graph's shapes (the history's hot spot 6): a diamond (one document placed
+ * twice), an `xml:base` on a reference's element, its href rewritten or not, or an href
+ * percent-encoded; one path listed under two types, the second a document type `RootOfType` pairs
+ * two times in three; a content packaging element outside the manifest; an include in foreign or
+ * wildcard content. And absence (hot spot 8): a present value equal to a sentinel the import or the
+ * schema spells (empty, `0`, `none`, `single`, the nil uuid, the document's own identifier). And a
+ * wild attribute: one or two names no kind admits, or that name an open class no name of which they
+ * are, on one element, the order of whose refusals no law may read (reading 137).
  *
  * Which operators a run draws, and how often, is its swarm (`@grizzle/testing/swarm`): drawn per
  * run, one operator always on, so no run is left with nothing to breed by.
@@ -97,6 +99,7 @@ export const faults = [
   "duplicate-identifier",
   "bad-lexical",
   "misplaced-element",
+  "outside-needed-ancestor",
   "diamond",
   "xml-base",
   "two-types",
@@ -436,6 +439,34 @@ const admits = (
   parent: string,
   child: string,
 ): boolean => Option.isSome(breeding.grammar.admission.lookup({ child, parent, version }));
+
+/**
+ * List the kinds on the way down to an element, the root's first and the element's own last.
+ *
+ * @param root - The document's root.
+ * @param address - The element's address under it.
+ * @param kindOf - Names an element's kind.
+ * @returns The kinds.
+ */
+const kindsDown = (
+  root: Element,
+  address: readonly number[],
+  kindOf: (element: Element) => string,
+): readonly string[] => {
+  const kinds = [kindOf(root)];
+  let at = root;
+  for (const index of address) {
+    const child = at.children[index];
+    if (child?.kind !== "element") {
+      break;
+    }
+
+    at = child;
+    kinds.push(kindOf(at));
+  }
+
+  return kinds;
+};
 
 /**
  * Wrap an edit's genome and note as the engine takes them.
@@ -976,6 +1007,70 @@ const operations: Readonly<
         insertAt(without, target.address, at, selfContained(moved.element)),
       ),
       `move-element: ${kind} under ${breeding.corpus.kindOf(target.element)} in ${document.path}`,
+    );
+  },
+  "outside-needed-ancestor": (genome, _mate, breeding) => (source) => {
+    const { enters, needs } = breeding.grammar.ancestry;
+    const kind = source.draw(oneOf([...new Set(needs.rows.map((row) => row.kind))]));
+    const document = source.draw(
+      oneOf(documentsOf(genome).filter(({ path }) => path !== manifestPath)),
+    );
+    if (kind === undefined || document === undefined) {
+      return Option.none();
+    }
+
+    const needed = new Set(needs.rows.flatMap((row) => (row.kind === kind ? [row.flag] : [])));
+    const entering = new Set(
+      enters.rows.flatMap((row) => (needed.has(row.flag) ? [row.kind] : [])),
+    );
+    const version = versionIn(genome);
+    const host = source.draw(
+      oneOf(
+        document.elements.filter(
+          ({ address, element }) =>
+            admits(breeding, version, breeding.corpus.kindOf(element), kind) &&
+            !kindsDown(document.root, address, breeding.corpus.kindOf).some((above) =>
+              entering.has(above),
+            ),
+        ),
+      ),
+    );
+    if (host === undefined) {
+      return Option.none();
+    }
+
+    const local = kind.split(".")[0] ?? kind;
+    const placed: Element = {
+      attributes: [
+        {
+          local: "identifier",
+          namespace: "",
+          prefix: "",
+          qname: "identifier",
+          references: [],
+          value: `G${String(source.pick(0, 99))}`,
+        },
+      ],
+      children: [],
+      kind: "element",
+      local,
+      namespace: host.element.namespace,
+      prefix: host.element.prefix,
+      qname: host.element.prefix === "" ? local : `${host.element.prefix}:${local}`,
+    };
+
+    return edited(
+      withDocumentRoot(
+        genome,
+        document.path,
+        insertAt(
+          document.root,
+          host.address,
+          source.draw(below(host.element.children.length + 1)),
+          placed,
+        ),
+      ),
+      `outside-needed-ancestor: a ${kind} under ${breeding.corpus.kindOf(host.element)} in ${document.path}, outside every ${[...entering].join(", ")}`,
     );
   },
   "over-long-key": (genome, _mate, breeding) => (source) => {

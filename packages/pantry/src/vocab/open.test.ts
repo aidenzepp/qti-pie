@@ -383,7 +383,10 @@ const absence = await Effect.runPromise(
  * and of the four tests that read the pinned XSDs. Measured 2026-11-07: 108.0 s at a load average
  * of 76 to 87, the hook, beside three other suites that read the pinned XSDs, under `nice -n 15`;
  * the slowest test took 9.1 s. The budget is twice the slowest, rounded up to the next minute. On
- * 2026-11-05 the hook took 25 to 35 s at a load average near 12. Raise it only on a new measurement
+ * 2026-11-05 the hook took 25 to 35 s at a load average near 12. With every batch's report in the
+ * verdict cache (`#pantry/test/gen/verdict-cache.ts`) the hook took 26.2 s at 68 to 88, but a run
+ * that finds none, as a fresh clone's or one after a probe changes, pays the whole, so the budget
+ * is the uncached run's. Raise it only on a new measurement
  * recorded here, never to make a run pass.
  */
 const hookTimeoutMs = 240_000;

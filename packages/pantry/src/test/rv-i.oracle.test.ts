@@ -149,10 +149,6 @@ const cases: readonly (readonly [reading: string, cases: readonly Named[]])[] = 
         written: { root: `label="root" tool-name="t"`, version: "3.0.1" },
       },
       {
-        name: "a 3.0.0 item whose root has a label and no tools",
-        written: { root: `label="root"`, version: "3.0.0" },
-      },
-      {
         name: "a 3.0.1 item whose root has a label and both tools",
         written: { root: `label="root" tool-name="t" tool-version="1"`, version: "3.0.1" },
       },

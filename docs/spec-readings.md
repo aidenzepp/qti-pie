@@ -2701,8 +2701,34 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      before. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from RV seat CRUST (`23329950`), on GEN-B/codec's
      findings N3 and N4.)
+142. **crust's reader holds a namespace declaration's normalized value to RFC 3986's `URI-reference` in an XML 1.0
+     document and to RFC 3987's `IRI-reference` in an XML 1.1 one, and an XML 1.1 document is one whose version is
+     `1.1`.** Reading 131 holds pantry and plate to Namespaces in XML 1.0 (Third Edition) section 3, "The attribute's
+     normalized value MUST be either a URI reference — the namespace name identifying the namespace — or an empty
+     string", with section 2.1's "An XML namespace is identified by a URI reference [RFC3986]"; crust's reader now
+     refuses such a declaration itself, as a well-formedness error, so neither reader of the codec sees a namespace name
+     outside the grammar, and pantry's `NamespaceUri` pattern takes its source from crust's (`@qti-pie/crust/uri.ts`),
+     byte for byte the pattern it held. Namespaces in XML 1.0 says "This specification applies to XML 1.0 documents" and
+     Namespaces in XML 1.1 (Second Edition) "applies to XML 1.1 documents" (each section 7), and the latter's section 3
+     asks "either an IRI reference ... or an empty string" (RFC 3987 section 2.2, which widens `unreserved` by `ucschar`
+     and `query` by `iprivate` and changes nothing else). XML 1.1's [26] VersionNum is `1.1` alone, and XML 1.0 section
+     2.8 has an XML 1.0 processor read a document that "specifies a 1.x version number other than '1.0'" as a 1.0
+     document; so a document declaring `1.1` is held to Namespaces 1.1, IRIs and prefix undeclaring included, and every
+     other one, one declaring no version or `1.5` among them, to Namespaces 1.0. The value is the one attribute-value
+     normalization leaves: "replacement of XML character and entity references has already been done before any
+     comparison" (Namespaces 1.0 section 2.3), so `xmlns:p="&#x20;"` holds a space, which no URI reference holds, and is
+     refused as no URI reference, not as the empty value an undeclaration would be; a literal tab becomes a space and is
+     refused the same way. A value that keeps a reference to an entity only an unread external subset may declare names
+     a namespace no reader knows (XML 1.0 section 4.4.3); crust does not judge its grammar, and pantry refuses it under
+     `namespace-entity`. libxml2 2.9.13's `xmllint` reports `namespace error : xmlns:p: '…' is not a valid URI` for
+     `&#x20;`, `&#x20;urn:x`, `a b`, `%zz`, `urn:a#b#c`, `&quot;`, `urn:é`, `&#9;` and `http://[bad` alike, as this
+     reading refuses them; with `--noout` it reports nothing for `&#38;f;http://x`, whose first segment holds a colon
+     (RFC 3986 section 4.2), which this reading refuses, and only `--c14n` refuses it. This binds pantry and plate
+     alike, which read through crust. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from RV seat CRUST (`daed3e96`), on GEN-B/codec's
+     finding N2.)
 
-142. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+143. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 2.2.2.3, Outcomes Variable (https://www.imsglobal.org/spec/qti/v3p0/info#IV_Outcome), says of SCORE
      "Items that declare a numeric outcome variable representing the candidate's overall performance on the item should
      use the outcome name 'SCORE' for the variable. SCORE MUST be a float." (`info.txt:8478`), and of MAXSCORE "Items that

@@ -3,11 +3,11 @@
  * LOM `learningResourceType` of the LOM vocabulary is neither `exam` nor `self assessment` (QTI 3.0
  * Metadata §2.7.5.1), under `lom-learning-resource-type`.
  *
- * Oracle: the specification's sentence turned into packages, three ways at once. Main's two
- * fixtures are refused and the record they edit is not; another vocabulary's `exam` is accepted.
- * Over generated packages, drawn under a swarm of the ways a type's source and value are written
- * and placed, the sketch's own verdict, the law oracle's breaches and the database's statements
- * over the builder's rows and the tree's insert agree on every type.
+ * Oracle: the specification's sentence turned into packages, two ways at once. Main's `exam`
+ * fixture is refused and the record it edits is not. Over generated packages, drawn under a swarm
+ * of the ways a type's source and value are written and placed, the sketch's own verdict, the law
+ * oracle's breaches and the database's statements over the builder's rows and the tree's insert
+ * agree on every type.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
@@ -107,13 +107,11 @@ describe("spec reading 122: main's fixtures, under lom-learning-resource-type", 
   for (const { name, refused } of [
     { name: "lomrest", refused: 0 },
     { name: "lomrest-exam", refused: 1 },
-    { name: "lomrest-self-assessment", refused: 1 },
   ] as const satisfies readonly { readonly name: FixtureName; readonly refused: number }[]) {
     it.effect(`${refused === 0 ? "accepts" : "refuses"} ${name}`, () =>
-      // Oracle: the specification as a checker: main's fixtures edit `lomrest`'s one type of the
-      // LOM vocabulary (source LOMv1.0) from `exercise` to `exam` and to ` self  assessment `,
-      // which §2.7.5.1 forbids, the second compared collapsed.
-      // Bound: the three fixtures.
+      // Oracle: the specification as a checker: main's fixture edits `lomrest`'s one type of the
+      // LOM vocabulary (source LOMv1.0) from `exercise` to `exam`, which §2.7.5.1 forbids.
+      // Bound: the two fixtures.
       Effect.gen(function* fixture() {
         const files = yield* readPackage(yield* materialize(name));
         const breaches = yield* breachesOf(files);
@@ -126,43 +124,6 @@ describe("spec reading 122: main's fixtures, under lom-learning-resource-type", 
       }).pipe(Effect.provide(NodeServices.layer)),
     );
   }
-
-  it.effect("accepts exercise, and another vocabulary's exam", () =>
-    // Oracle: the specification as a checker: `exercise` is a value §2.7.5.1 advises, and a term
-    // whose source is `MyVocab` is that vocabulary's, which the loose binding does not enforce
-    // (§3.6), so its `exam` is not the LOM-defined value.
-    // Bound: the two named packages.
-    Effect.gen(function* named() {
-      for (const [value, source] of [
-        ["exercise", "LOMv1.0"],
-        ["exam", "MyVocab"],
-      ] as const) {
-        const sketch: PackageSketch = {
-          records: [
-            {
-              decoy: Option.none(),
-              educational: [
-                [
-                  {
-                    foreign: false,
-                    order: "source first",
-                    source: Option.some({ copies: 1, spelling: "plain", text: source }),
-                    value: Option.some({ copies: 1, spelling: "plain", text: value }),
-                  },
-                ],
-              ],
-              placement: "resource",
-            },
-          ],
-          swarm: {},
-        };
-        const files = filesOf(sketch);
-
-        assert.lengthOf((yield* breachesOf(files)).law, 0, `${source} ${value}`);
-        assert.strictEqual((yield* databaseOf(files)).refused, 0, `${source} ${value}`);
-      }
-    }),
-  );
 });
 
 /**

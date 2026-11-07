@@ -494,8 +494,9 @@ export const ShareFragment = relation(
 /**
  * One ID of an instance of an assembly (Q5.13's `Instance`, spec reading 117), keyed by the
  * instance and the element that carries it: a {@link DocumentId} of the instance's document, with
- * the instance's assembly and assembly kind, and its `copy`, the instance, but the nil uuid under a
- * test's assembly, where a section document placed twice is written once (reading 86).
+ * the instance's assembly and assembly kind, and its `copy`: the instance, or under a test's
+ * assembly its document, since a section document placed twice is written once there (reading 86),
+ * and the element carrying the ID already names its document. Each value is an id the import mints.
  */
 export const PlacedId = relation(
   "PlacedId",
@@ -1133,7 +1134,7 @@ export const identityLawsByName = {
     ),
     check("E1_derived", PlacedId, (p) =>
       p.or(
-        p.and(p.eq(p.assemblyKind, testKind), p.eq(p.copy, nilUuid)),
+        p.and(p.eq(p.assemblyKind, testKind), p.eq(p.copy, p.document)),
         p.and(p.ne(p.assemblyKind, testKind), p.eq(p.copy, p.instance)),
       ),
     ),

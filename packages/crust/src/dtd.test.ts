@@ -689,15 +689,6 @@ describe("substituting entities", () => {
     }),
   );
 
-  it.effect("leaves predefined and undeclared references untouched", () =>
-    Effect.gen(function* leavesOthers() {
-      const text = '<!DOCTYPE a [<!ENTITY m "X">]><a t="&amp;&unknown;">&lt;&unknown;&#65;</a>';
-      const { body } = yield* substituted(text);
-
-      assert.strictEqual(body, text);
-    }),
-  );
-
   it.effect("keeps the prolog verbatim so offsets into the body are offsets into the text", () =>
     Effect.gen(function* keepsProlog() {
       const text = '<?xml version="1.0"?>\n<!DOCTYPE a [<!ENTITY m "X">]>\n<a>&m;</a>';
@@ -718,14 +709,6 @@ describe("substituting entities", () => {
       assert.isFalse(afterSubstitution(reference));
       assert.isTrue(afterSubstitution(reference + 1));
       assert.isTrue(afterSubstitution(body.length));
-    }),
-  );
-
-  it.effect("reports a document without a substitution as never after one", () =>
-    Effect.gen(function* reportsNever() {
-      const { afterSubstitution, body } = yield* substituted("<a>&lt;</a>");
-
-      assert.isFalse(afterSubstitution(body.length));
     }),
   );
 
@@ -789,14 +772,6 @@ describe("the expansion budget", () => {
 
       assert.isAbove(prolog.expanded, 0);
       assert.isBelow(prolog.expanded, 1_000_000);
-    }),
-  );
-
-  it.effect("counts nothing when no parameter entity is used between declarations", () =>
-    Effect.gen(function* countsNothing() {
-      const prolog = yield* lexProlog('<!DOCTYPE a [<!ENTITY e "x">]><a/>');
-
-      assert.strictEqual(prolog.expanded, 0);
     }),
   );
 

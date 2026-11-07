@@ -177,9 +177,10 @@ export const assembledRoots = [testKind, sectionKind] as const satisfies readonl
  * item ref, a section or a section ref alone (`IncludeRoot`), and no other parent's include stands
  * for any of them.
  *
- * The schema's heads ({@link inclusionLaws}), the import's (`#pantry/import/overlays/tests.ts`
- * `assembledRowsOf`) and the law oracle's documents judged in place (`#pantry/test/oracle.ts`)
- * read this list, and nothing else decides a head.
+ * The schema's heads ({@link inclusionLaws}) and the import's (`#pantry/import/overlays/tests.ts`
+ * `assembledRowsOf`) read this list, and nothing else of them decides a head. The law oracle, the
+ * second implementation, states its own from the grammar (`#pantry/test/oracle.ts`
+ * `splicingParentsOf`), and `splicing-parents.oracle.test.ts` holds the two equal.
  */
 export const splicingParents = includeParentKinds.filter((kind) => kind !== sectionKind);
 

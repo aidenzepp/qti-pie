@@ -77,7 +77,10 @@ const absence = await Effect.runPromise(
  * average of 76 to 87, the xmllint agreement test, and 231.4 s the hook, beside three other suites
  * that read the pinned XSDs, under `nice -n 15`. The budget is twice the slowest, rounded up to the
  * next minute. On 2026-11-05 the hook took 25 to 35 s at a load average near 12, and four times
- * that, 160 s, cut it at the busier load. Raise it only on a new measurement recorded here, never
+ * that, 160 s, cut it at the busier load. With every batch's report in the verdict cache
+ * (`#pantry/test/gen/verdict-cache.ts`) the hook took 32.5 s at 68 to 88, but a run that finds
+ * none, as a fresh clone's or one after a probe changes, pays the whole, so the budget is the
+ * uncached run's. Raise it only on a new measurement recorded here, never
  * to make a run pass.
  */
 const hookTimeoutMs = 660_000;

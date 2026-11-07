@@ -119,6 +119,7 @@ import type {
   XdmChild,
   XdmClosedElement,
   XdmDocument,
+  XdmElement,
 } from "#pantry/model/xdm.ts";
 import { dataSsmlFaultIn } from "#pantry/vocab/data-ssml.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
@@ -126,7 +127,6 @@ import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { splicingParents } from "#pantry/qti/tests.ts";
 import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
@@ -2583,10 +2583,16 @@ const referencesOf = (
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
+ * @param assembled - The ids of the document's assembly beyond its own, which its IDREFs may name
+ *   (spec reading 117).
  * @returns The breaches, element by element, each element's law by law.
  */
-const attributeBreaches = (view: View, laws: Laws): readonly Breach[] => {
-  const ids = new Set(idsOf(view, laws).map(({ id }) => id));
+const attributeBreaches = (
+  view: View,
+  laws: Laws,
+  assembled: ReadonlySet<string>,
+): readonly Breach[] => {
+  const ids = new Set([...idsOf(view, laws).map(({ id }) => id), ...assembled]);
 
   return [...view.attributesOf].flatMap(([owner, owned]) => {
     const node = view.byId.get(owner);
@@ -2848,9 +2854,15 @@ const keyTexts = (
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
+ * @param assembled - The ids of the document's assembly beyond its own, which its IDREF texts may
+ *   name (spec reading 117).
  * @returns The breaches.
  */
-const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
+const wholeBreaches = (
+  view: View,
+  laws: Laws,
+  assembled: ReadonlySet<string>,
+): readonly Breach[] => {
   const { rows } = view;
   const breach = (law: LawName, keys: Keys = {}): Breach => ({
     document: view.path,
@@ -2876,7 +2888,7 @@ const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
   );
   const foreign = new Set(rows.nodes.filter(({ kind }) => isForeignKind(kind)).map(({ id }) => id));
   const documentNodes = rows.nodes.filter(({ start }) => start === 0n).length;
-  const ids = new Set(idsOf(view, laws).map(({ id }) => id));
+  const ids = new Set([...idsOf(view, laws).map(({ id }) => id), ...assembled]);
 
   return [
     ...(documentNodes === 1
@@ -4442,6 +4454,8 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
  * @param path - The document's path in its package.
  * @param rows - Its folded rows.
  * @param laws - The grammar's tables.
+ * @param assembled - The ids of the document's assembly beyond its own, which its IDREFs may name
+ *   (spec reading 117), none for a document judged alone.
  * @returns The breaches: the node laws in their order, the child sets, the attribute laws, the
  *   laws over the whole document, then the overlays.
  */
@@ -4449,6 +4463,7 @@ export const documentBreaches = (
   path: string,
   rows: FoldedRows<Composed>,
   laws: Laws,
+  assembled: ReadonlySet<string> = new Set(),
 ): readonly Breach[] => {
   const typed = typedReadingOf(laws);
   const view = viewOf(path, rows, typed);
@@ -4470,8 +4485,8 @@ export const documentBreaches = (
         })),
       ),
     ),
-    ...attributeBreaches(view, laws),
-    ...wholeBreaches(view, laws),
+    ...attributeBreaches(view, laws, assembled),
+    ...wholeBreaches(view, laws, assembled),
     ...overlayBreaches(view, laws),
     ...lawDocumentBreaches(path, rows, laws.grammar, typed),
   ];
@@ -4483,10 +4498,9 @@ export const documentBreaches = (
  */
 interface Listed {
   /**
-   * Its rows indexed for the laws, or the one breach of a document the folds refuse, since it has
-   * no rows for any other law to read.
+   * Its rows indexed for the laws, less what the folds refused, and the breach of each refusal.
    */
-  readonly folded: Result.Result<View, Breach>;
+  readonly folded: Folded;
   /**
    * The collapsed `identifier` its root element carries, none when it carries none.
    */
@@ -4686,7 +4700,7 @@ const inclusionCycles = (
 ): readonly (readonly string[])[] => {
   const edges = new Map<string, readonly string[]>();
   for (const { folded, path } of documents) {
-    for (const view of Result.isSuccess(folded) ? [folded.success] : []) {
+    for (const view of Option.toArray(folded.view)) {
       edges.set(path, [
         ...(edges.get(path) ?? []),
         ...view.members
@@ -4764,11 +4778,11 @@ const referenceBreaches = (
   const rootKinds = new Map(documents.map((listed) => [listed.path, listed.rootKind] as const));
 
   return documents.flatMap(({ folded, path }) => {
-    if (Result.isFailure(folded)) {
+    if (Option.isNone(folded.view)) {
       return [];
     }
 
-    const view = folded.success;
+    const view = folded.view.value;
     const breach = (law: LawName, keys: Keys): Breach => ({
       document: path,
       keys: { node: "", ...keys },
@@ -4983,11 +4997,11 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
   const byPath = new Map(documents.map((listed) => [listed.path, listed] as const).toReversed());
 
   return documents.flatMap((document) => {
-    if (Result.isFailure(document.folded)) {
+    if (Option.isNone(document.folded.view)) {
       return [];
     }
 
-    const view = document.folded.success;
+    const view = document.folded.view.value;
 
     return view.members
       .filter((member) => merges(grammar, member))
@@ -5010,15 +5024,29 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
 };
 
 /**
- * Decide whether an include under a parent is spliced in place, by the schema's one statement of it
- * (`#pantry/qti/tests.ts` `splicingParents`, spec reading 117): one a section holds is a site of
- * the test's assembly instead, which reading 86 reads as Q5.13's instances do, each written element
- * once, so its document is judged as written.
+ * The include parents whose include splices its fragment in place, as the oracle reads reading 117
+ * itself: every parent the composed grammar gives an Include (reading 114) but a section, since an
+ * include in a section follows reading 86's rule for a section document ("includes in a section
+ * follow it"), a site of the test's assembly that writes each element once, so its document is
+ * judged as written. The schema states its own list (`#pantry/qti/tests.ts` `splicingParents`), and
+ * `splicing-parents.oracle.test.ts` holds the two equal, so a bug in either shows there and is not
+ * shared.
  *
+ * @param grammar - The composed grammar.
+ * @returns The parents' kinds.
+ */
+export const splicingParentsOf = (grammar: ComposedGrammar): ReadonlySet<string> =>
+  new Set([...includeParentsOf(grammar)].filter((parent) => parent !== "qti-assessment-section"));
+
+/**
+ * Decide whether an include under a parent is spliced in place ({@link splicingParentsOf}).
+ *
+ * @param grammar - The composed grammar.
  * @param parent - The include's parent's kind.
  * @returns Whether it is.
  */
-const splices = (parent: string): boolean => splicingParents.some((kind) => kind === parent);
+const splices = (grammar: ComposedGrammar, parent: string): boolean =>
+  splicingParentsOf(grammar).has(parent);
 
 /**
  * Decide whether a site splices its target in place: an include outside a section whose target is
@@ -5029,7 +5057,7 @@ const splices = (parent: string): boolean => splicingParents.some((kind) => kind
  * @returns The target, none for a site that splices nothing.
  */
 const splicedTarget = (grammar: ComposedGrammar, site: SiteOf): Option.Option<Listed> =>
-  site.node.kind === "xi:include" && splices(site.node.parentKind)
+  site.node.kind === "xi:include" && splices(grammar, site.node.parentKind)
     ? site.target.pipe(
         Option.filter((target) =>
           standsFor(grammar, site.node.version, site.node.parentKind, target.rootKind),
@@ -5124,23 +5152,25 @@ const inclusionBreaches = (
 ): readonly Breach[] => {
   const sites = sitesOf(documents, grammar);
   const includes = documents.flatMap(({ folded, path }) =>
-    Result.isSuccess(folded)
-      ? folded.success.members
+    Option.match(folded.view, {
+      onNone: () => [],
+      onSome: (view) =>
+        view.members
           .filter(({ kind }) => kind === "xi:include")
           .flatMap((node) =>
-            Option.toArray(valueOf(folded.success, node.id, "href")).flatMap((href) =>
+            Option.toArray(valueOf(view, node.id, "href")).flatMap((href) =>
               href.includes("#")
                 ? [
                     {
                       document: path,
-                      keys: { href, node: pathOf(folded.success, node.id) },
+                      keys: { href, node: pathOf(view, node.id) },
                       law: "Include fragment identifier" as const,
                     },
                   ]
                 : [],
             ),
-          )
-      : [],
+          ),
+    }),
   );
   let contexts: ReadonlyMap<string, string> = new Map();
   for (let round = 0; round <= documents.length; round += 1) {
@@ -5271,7 +5301,7 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
         : child;
     }
 
-    if (child.kind === "xi:include" && splices(parent)) {
+    if (child.kind === "xi:include" && splices(grammar, parent)) {
       const href = closedValueOf(child, "href");
       const resolution = href.pipe(
         Option.map((value) =>
@@ -5417,11 +5447,13 @@ const documentLangBreaches = (
       : listed;
     const forms = new Set(
       merged.flatMap(({ folded }) =>
-        Result.isSuccess(folded)
-          ? [...folded.success.valuesOf]
-              .filter(([id]) => !inCatalog(folded.success, id))
-              .flatMap(([, named]) => Option.toArray(Option.fromNullishOr(named.get("xml:lang"))))
-          : [],
+        Option.match(folded.view, {
+          onNone: () => [],
+          onSome: (view) =>
+            [...view.valuesOf]
+              .filter(([id]) => !inCatalog(view, id))
+              .flatMap(([, named]) => Option.toArray(Option.fromNullishOr(named.get("xml:lang")))),
+        }),
       ),
     );
 
@@ -5495,7 +5527,7 @@ const packageBreaches = (
       grammar.package.rootOfType.rows.some((row) => row.type === type),
     );
   const typesAt = new Map<string, ReadonlySet<string>>();
-  for (const { path, resource } of input.documents) {
+  for (const { path, resource } of documentsOf(resources, grammar)) {
     typesAt.set(path, new Set([...(typesAt.get(path) ?? []), resource.type]));
   }
   const manifestNode = manifest.members.find(({ kind }) => kind === "cp:manifest");
@@ -5563,9 +5595,9 @@ const packageBreaches = (
       .flatMap((resource) => Option.toArray(resource.resolved))
       .filter(({ resolution }) => resolution.scope !== "entry")
       .map(({ path }) => breach("Document entry", { path })),
-    // A path two resources name under two document types would be two documents at one path,
-    // which `Document`'s key over (package, path) refuses: the import reads each (path, type) a
-    // resource's href names as a document of that type (reading 93).
+    // A path two resources name under two document types is one document, of the first type
+    // (reading 93), so the second's href names no document of its type: "Document entry" alone,
+    // and the document is judged once, where its sites place it.
     ...[...typesAt]
       .filter(([, types]) => types.size > 1)
       .map(([path, types]) =>
@@ -5782,14 +5814,132 @@ const refusalBreach = (
 };
 
 /**
+ * A document folded for the laws: its rows indexed, less each node or attribute a fold refused,
+ * and the breach of each refusal.
+ */
+interface Folded {
+  /**
+   * The breach of each node or attribute the folds refused, in the order they met them.
+   */
+  readonly refusals: readonly Breach[];
+  /**
+   * Its rows indexed for the laws, none where the folds refused its root element.
+   */
+  readonly view: Option.Option<View>;
+}
+
+/**
+ * Read the slots that lead from a document's root element down to one of its nodes: each node's
+ * place among its parent's children, as `flatten` numbers them.
+ *
+ * @param tree - The document.
+ * @param idOf - Draws the id of each node, as `fold` reads it.
+ * @param node - The node's id, as a fold's refusal names it.
+ * @returns Its slots below the root, empty for the root itself; none for a node the document does
+ *   not hold.
+ */
+const slotsTo = (
+  tree: XdmDocument<Composed>,
+  idOf: (index: number) => NodeId,
+  node: string,
+): Option.Option<readonly number[]> => {
+  const rows = flatten(tree, idOf);
+  const byId = new Map<string, NodeRow<Composed>>(rows.nodes.map((row) => [row.id, row] as const));
+  const slots: number[] = [];
+  let row = byId.get(node);
+  while (row !== undefined && row.parent !== rows.document.node) {
+    slots.unshift(Number(row.at));
+    row = byId.get(row.parent);
+  }
+
+  return row === undefined ? Option.none() : Option.some(slots);
+};
+
+/**
+ * Rebuild an element with one of its descendants changed: the element the slots lead to, given to
+ * `change`.
+ *
+ * @param element - The element.
+ * @param slots - The slots from it down to the element to change, empty for itself.
+ * @param change - The change.
+ * @returns The element rebuilt.
+ */
+const changedAt = <E extends XdmElement<Composed>>(
+  element: E,
+  slots: readonly number[],
+  change: (target: XdmElement<Composed>) => XdmElement<Composed>,
+): E => {
+  const [slot, ...rest] = slots;
+  if (slot === undefined) {
+    // SAFETY: each change spreads the element it is given and replaces only its children or its
+    // attributes, so the element it returns keeps every field of E.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+    return change(element) as E;
+  }
+
+  return {
+    ...element,
+    children: element.children.map((child, at) =>
+      at === slot && "children" in child ? changedAt(child, rest, change) : child,
+    ),
+  };
+};
+
+/**
+ * Set aside what a fold refused: the child and its subtree, or the attribute.
+ *
+ * @param tree - The document.
+ * @param idOf - Draws the id of each node, as `fold` reads it.
+ * @param refusal - The fold's refusal.
+ * @returns The document without it; none where the refused node is the root element, which no
+ *   document stands without.
+ */
+const withoutRefused = (
+  tree: XdmDocument<Composed>,
+  idOf: (index: number) => NodeId,
+  refusal: FoldRefusal,
+): Option.Option<XdmDocument<Composed>> =>
+  Option.flatMap(slotsTo(tree, idOf, refusal.node), (slots) => {
+    if (refusal._tag === "ChildUnadmitted") {
+      const parent = slots.slice(0, -1);
+      const slot = slots.at(-1);
+
+      return slot === undefined
+        ? Option.none()
+        : Option.some({
+            ...tree,
+            root: changedAt(tree.root, parent, (element) => ({
+              ...element,
+              children: element.children.filter((_, at) => at !== slot),
+            })),
+          });
+    }
+
+    return Option.some({
+      ...tree,
+      root: changedAt(tree.root, slots, (element) => ({
+        ...element,
+        attributes: element.attributes.filter((_, at) => BigInt(at) !== refusal.at),
+      })),
+    });
+  });
+
+/**
  * Fold one shredded document and index its rows for the laws.
+ *
+ * A fold that meets a missing cell, a child its parent does not admit or an attribute its kind does
+ * not admit, refuses that node. Its breach is kept, the child and its subtree or the attribute are
+ * set aside, and the rest is folded again, until the document folds: so every other row of the
+ * document is judged, and through the manifest every document it lists, and precedence picks among
+ * every breach, as the importer writes every row and the database judges them all. The refused
+ * subtree is the one part left unjudged, since no state places it; a refused root leaves no rows.
  *
  * @param path - The document's path in its package.
  * @param tree - The document.
  * @param idOf - Draws the id of each node, as `fold` reads it.
  * @param grammar - The closed relations the folds read.
  * @param typed - How an attribute's type reads its value.
- * @returns The view, or the breach of a fold that meets a missing cell and so has no rows.
+ * @returns The document's rows and its refusals' breaches.
  */
 const foldedOf = (
   path: string,
@@ -5797,11 +5947,21 @@ const foldedOf = (
   idOf: (index: number) => NodeId,
   grammar: FoldGrammar<Composed>,
   typed: TypedReading,
-): Result.Result<View, Breach> =>
-  Result.mapBoth(fold(tree, idOf, grammar), {
-    onFailure: (refusal) => refusalBreach(path, tree, idOf, refusal),
-    onSuccess: (rows) => viewOf(path, rows, typed),
-  });
+): Folded => {
+  const refusals: Breach[] = [];
+  let current: Option.Option<XdmDocument<Composed>> = Option.some(tree);
+  while (Option.isSome(current)) {
+    const folded = fold(current.value, idOf, grammar);
+    if (Result.isSuccess(folded)) {
+      return { refusals, view: Option.some(viewOf(path, folded.success, typed)) };
+    }
+
+    refusals.push(refusalBreach(path, current.value, idOf, folded.failure));
+    current = withoutRefused(current.value, idOf, folded.failure);
+  }
+
+  return { refusals, view: Option.none() };
+};
 
 /**
  * Read the collapsed `identifier` of a document's root element.
@@ -5837,11 +5997,148 @@ const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
   );
 
 /**
+ * One judged document's assembly, as Q5.13's instances place it (spec reading 117): the ids of the
+ * documents its section refs and its sections' includes place, at any depth, beyond its own, which
+ * its IDREFs may name ("Idref target" over the assembly), and the breaches of "DocumentId key"
+ * across its instances. A test's assembly writes each element once however often its document is
+ * placed (reading 86), and any other's once per placement.
+ */
+interface Assembly {
+  readonly breaches: readonly Breach[];
+  readonly ids: ReadonlySet<string>;
+}
+
+/**
+ * Decide whether a site places its target whole, an instance of its own, rather than splicing it
+ * in place: a section ref, or an include under a section ({@link splicingParentsOf}).
+ *
+ * @param grammar - The composed grammar.
+ * @param site - The site.
+ * @returns Whether it does.
+ */
+const placesWhole = (grammar: ComposedGrammar, site: SiteOf): boolean =>
+  site.node.kind !== "xi:include" || !splices(grammar, site.node.parentKind);
+
+/**
+ * Drop the breaches two assemblies report alike, a nested one's and its container's.
+ *
+ * @param breaches - The breaches.
+ * @returns Each once, in their first order.
+ */
+const dedupedBreaches = (breaches: readonly Breach[]): readonly Breach[] => [
+  ...new Map(
+    breaches.map((held) => [JSON.stringify([held.document, held.law, held.keys]), held] as const),
+  ).values(),
+];
+
+/**
+ * Build every judged document's assembly ({@link Assembly}): its instances, itself and each
+ * document a site of an instance places whole, in pre-order, a document already on the chain left
+ * out (the chain is "Inclusion cycle"'s), each instance's ids its document's in place.
+ *
+ * @param grammar - The composed grammar.
+ * @param byPath - The listed documents, by path.
+ * @param sites - Every site of the package.
+ * @param read - Each judged document's fold in place: its rows, where the fold kept its root, and
+ *   its refusals.
+ * @param laws - The law tables.
+ * @returns Each judged document's assembly, by path.
+ */
+const assembliesOf = (
+  grammar: ComposedGrammar,
+  byPath: ReadonlyMap<string, Listed>,
+  sites: readonly SiteOf[],
+  read: ReadonlyMap<string, Folded>,
+  laws: Laws,
+): ReadonlyMap<string, Assembly> => {
+  const views = new Map(
+    [...read].flatMap(([path, { view }]) =>
+      Option.toArray(view).map((held) => [path, held] as const),
+    ),
+  );
+  const ids = new Map([...views].map(([path, view]) => [path, idsOf(view, laws)] as const));
+  const placements = new Map<string, readonly string[]>();
+  for (const site of sites.filter((held) => placesWhole(grammar, held))) {
+    for (const target of Option.toArray(site.target)) {
+      placements.set(site.document.path, [
+        ...(placements.get(site.document.path) ?? []),
+        target.path,
+      ]);
+    }
+  }
+
+  const instancesOf = (path: string, chain: readonly string[]): readonly string[] => [
+    path,
+    ...(placements.get(path) ?? []).flatMap((target) =>
+      chain.includes(target) ? [] : instancesOf(target, [...chain, target]),
+    ),
+  ];
+
+  return new Map(
+    [...views].map(([head]) => {
+      const instances = instancesOf(head, [head]);
+      const once = byPath.get(head)?.rootKind === "qti-assessment-test";
+      const carriers = instances.flatMap((path, at) =>
+        (ids.get(path) ?? []).map(({ id, owner }) => ({
+          id,
+          instance: once ? path : String(at),
+          owner,
+          path,
+        })),
+      );
+      const breaches = [...Map.groupBy(carriers, ({ id }) => id)].flatMap(([id, held]) => {
+        const byInstance = new Map<string, (typeof held)[number]>();
+        for (const carrier of held) {
+          if (!byInstance.has(carrier.instance)) {
+            byInstance.set(carrier.instance, carrier);
+          }
+        }
+
+        const [first, ...others] = [...byInstance.values()];
+        const firstView = first === undefined ? undefined : views.get(first.path);
+
+        return first === undefined || firstView === undefined
+          ? []
+          : others.flatMap(({ owner, path }): readonly Breach[] => {
+              const view = views.get(path);
+
+              return view === undefined
+                ? []
+                : [
+                    {
+                      document: path,
+                      keys: {
+                        first: `${first.path} ${pathOf(firstView, first.owner)}`,
+                        id,
+                        kind: view.byId.get(owner)?.kind ?? "",
+                        node: pathOf(view, owner),
+                        version: view.byId.get(owner)?.version ?? "",
+                      },
+                      law: "DocumentId key",
+                    },
+                  ];
+            });
+      });
+
+      return [
+        head,
+        {
+          breaches,
+          ids: new Set(
+            instances.slice(1).flatMap((path) => (ids.get(path) ?? []).map(({ id }) => id)),
+          ),
+        },
+      ] as const;
+    }),
+  );
+};
+
+/**
  * Judge every listed document's own laws in place (reading 117): a document an include splices into
  * another is judged inside each document that splices it, and not alone; every other document is
  * judged with its includes spliced, as XInclude's result infoset reads it, so its included
  * fragments' content stands where it is included, binding its item's responses and counting among
- * its IDs. A document whose fold meets a missing cell has that refusal as its one breach.
+ * its IDs. A fold's refusals are breaches beside the rest of the document's ({@link foldedOf}).
  *
  * Breaches inside spliced content are reported against the including document, at their path in
  * its merged tree.
@@ -5869,30 +6166,53 @@ const inPlaceBreaches = (
       Option.isSome(splicedTarget(grammar, site)) ? [site.document.path] : [],
     ),
   );
+  const read = new Map(
+    documents
+      .flatMap((listed, index): readonly (readonly [string, Folded])[] => {
+        if (Option.isNone(listed.folded.view)) {
+          return [[listed.path, listed.folded]];
+        }
 
-  return documents.flatMap((listed, index) => {
-    if (Result.isFailure(listed.folded)) {
-      return [listed.folded.failure];
-    }
+        if (placed.has(listed.path)) {
+          return [];
+        }
 
-    if (placed.has(listed.path)) {
-      return [];
-    }
+        if (!splicing.has(listed.path)) {
+          return [[listed.path, listed.folded]];
+        }
 
-    if (!splicing.has(listed.path)) {
-      return documentBreaches(listed.path, listed.folded.success.rows, laws);
-    }
+        const tree: XdmDocument<Composed> = {
+          ...listed.tree,
+          root: splicedElement(grammar, byPath, listed.tree.root, listed.path, [listed.path]),
+        };
 
-    const tree: XdmDocument<Composed> = {
-      ...listed.tree,
-      root: splicedElement(grammar, byPath, listed.tree.root, listed.path, [listed.path]),
-    };
+        return [[listed.path, foldedOf(listed.path, tree, idsFor(index + 1), foldGrammar, typed)]];
+      })
+      .toReversed(),
+  );
+  const assemblies = assembliesOf(grammar, byPath, sites, read, laws);
 
-    return Result.match(foldedOf(listed.path, tree, idsFor(index + 1), foldGrammar, typed), {
-      onFailure: (breach) => [breach],
-      onSuccess: (read) => documentBreaches(read.path, read.rows, laws),
-    });
-  });
+  return [
+    ...documents.flatMap((listed) =>
+      Option.match(Option.fromUndefinedOr(read.get(listed.path)), {
+        onNone: () => [],
+        onSome: ({ refusals, view }) => [
+          ...refusals,
+          ...Option.match(view, {
+            onNone: () => [],
+            onSome: (held) =>
+              documentBreaches(
+                held.path,
+                held.rows,
+                laws,
+                assemblies.get(listed.path)?.ids ?? new Set(),
+              ),
+          }),
+        ],
+      }),
+    ),
+    ...dedupedBreaches([...assemblies.values()].flatMap(({ breaches }) => breaches)),
+  ];
 };
 
 /**
@@ -5950,18 +6270,21 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
       shredGrammar,
     );
     const manifest = foldedOf(manifestFile.path, manifestTree, idsFor(0), foldGrammar, typed);
-    const listing = Result.match(manifest, {
-      onFailure: () => [],
-      onSuccess: (view) => documentsOf(resourcesOf(view, grammar), grammar),
+    const listing = Option.match(manifest.view, {
+      onNone: () => [],
+      onSome: (view) => documentsOf(resourcesOf(view, grammar), grammar),
     });
     const byPath = new Map(files.map((file) => [file.path, file]));
     const documents: Listed[] = [];
     const missing: string[] = [];
+    const read = new Set<string>();
     for (const [index, { path, resource }] of listing.entries()) {
       const file = byPath.get(path);
       if (file === undefined) {
         missing.push(path);
-      } else {
+      } else if (!read.has(path)) {
+        read.add(path);
+
         const xml = yield* readDocument(path, file.bytes);
         const tree = yield* shredDocument(path, xml, version, shredGrammar);
         const fault = dataSsmlFaultIn(tree);
@@ -5994,30 +6317,28 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
 
   const { documents, manifest, missing } = outcome.success;
 
-  return Result.match(manifest, {
-    onFailure: (breach): Judged => ({
+  return Option.match(manifest.view, {
+    onNone: (): Judged => ({
       _tag: "Judged",
-      breaches: [breach],
+      breaches: manifest.refusals,
       documents: [manifestFile.path],
     }),
-    onSuccess: (view): Judged => ({
+    onSome: (view): Judged => ({
       _tag: "Judged",
       breaches: [
         ...packageBreaches({ documents, files, manifest: view, missing }, laws),
+        ...manifest.refusals,
         ...documentBreaches(view.path, view.rows, laws),
         ...inPlaceBreaches(documents, grammar, foldGrammar, laws),
         ...lawPackageBreaches(
           {
             documents: documents.flatMap((listed) =>
-              Result.isSuccess(listed.folded)
-                ? [
-                    {
-                      path: listed.path,
-                      resourceType: listed.resource.type,
-                      rows: listed.folded.success.rows,
-                    },
-                  ]
-                : [],
+              Option.match(listed.folded.view, {
+                onNone: () => [],
+                onSome: ({ rows }) => [
+                  { path: listed.path, resourceType: listed.resource.type, rows },
+                ],
+              }),
             ),
             entries: files.map(({ path }) => path),
             manifest: { path: view.path, rows: view.rows },

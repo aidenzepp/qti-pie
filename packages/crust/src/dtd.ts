@@ -1,5 +1,7 @@
 import { Effect, Option } from "effect";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
+import { NAME_CHAR, NAME_START, productionViolation } from "#crust/names.ts";
+import type { Production } from "#crust/names.ts";
 import type { XmlDeclaration } from "#crust/tree.ts";
 
 /**
@@ -157,18 +159,6 @@ const declaredAfterDefault = (
       : `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" before the internal subset declares it, which breaks XML 1.0 section 4.1's validity constraint Entity Declared and leaves the default's value undetermined, since nothing defines what a reader supplies for an entity it has not yet seen. Move the entity's declaration before the attribute-list declaration.`,
     rule: "undeclared-entity",
   });
-
-/**
- * The characters that may start an XML name (XML 1.0 section 2.3, `NameStartChar`), as the inside
- * of a `u`-mode character class.
- */
-export const NAME_START = String.raw`:A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}`;
-
-/**
- * The characters that may continue an XML name (`NameChar`), as the inside of a `u`-mode character
- * class.
- */
-export const NAME_CHAR = String.raw`${NAME_START}\-.0-9\u00B7\u0300-\u036F\u203F\u2040`;
 
 /**
  * An XML name, without anchors, for building the patterns below.
@@ -425,7 +415,7 @@ interface Literal {
  * @param offset - A position in `source`, possibly its length.
  * @returns The 1-based line and column of the character at `offset`.
  */
-const positionOf = (source: string, offset: number) => {
+export const positionOf = (source: string, offset: number) => {
   const before = source.slice(0, offset);
   let line = 1;
   let lineStart = 0;
@@ -553,22 +543,57 @@ const expectSpace = Effect.fnUntraced(function* expectWhiteSpace(
 });
 
 /**
- * Read an XML name.
+ * Read an XML name that must match a namespace production where it stands.
  *
  * @param cursor - The read position.
  * @param context - What the name names, for the message.
- * @returns The name; fails when none starts here.
+ * @param production - The production Namespaces in XML asks the name to match there
+ *   (`#crust/names.ts`).
+ * @returns The name; fails when none starts here, or the name does not match the production.
  */
 const readName = Effect.fnUntraced(function* readXmlName(
   cursor: Cursor,
   context: string,
+  production: Production,
 ): Effect.fn.Return<string, WellFormednessError> {
+  const start = cursor.offset;
   const name = consume(cursor, NAME_AT);
   if (Option.isNone(name)) {
     return yield* failure(cursor, `${context}: expected a name, found ${found(cursor)}.`);
   }
 
+  const violation = productionViolation(name.value, production);
+  if (Option.isSome(violation)) {
+    return yield* failure(cursor, `${context}: ${violation.value}.`, start);
+  }
+
   return name.value;
+});
+
+/**
+ * Hold every name a run of declaration text holds to a namespace production: the names a
+ * NOTATION type lists, or the element names an element type declaration's content model gives.
+ *
+ * @param cursor - The read position, for failures.
+ * @param text - The run of declaration text.
+ * @param start - The offset `text` starts at.
+ * @param production - The production each name must match.
+ * @param context - What the names name, for the message.
+ * @returns Nothing; fails at the first name that does not match.
+ */
+const namesHeldTo = Effect.fnUntraced(function* namesHeldToProduction(
+  cursor: Cursor,
+  text: string,
+  start: number,
+  production: Production,
+  context: string,
+): Effect.fn.Return<void, WellFormednessError> {
+  for (const held of text.matchAll(new RegExp(NAME, "gu"))) {
+    const violation = productionViolation(held[0], production);
+    if (Option.isSome(violation)) {
+      yield* failure(cursor, `${context}: ${violation.value}.`, start + held.index);
+    }
+  }
 });
 
 /**
@@ -661,7 +686,7 @@ const skipInstruction = Effect.fnUntraced(function* skipProcessingInstruction(
   cursor: Cursor,
 ): Effect.fn.Return<void, WellFormednessError> {
   cursor.offset += "<?".length;
-  const target = yield* readName(cursor, "processing instruction");
+  const target = yield* readName(cursor, "processing instruction", "NCName");
   if (/^xml$/iu.test(target)) {
     yield* failure(
       cursor,
@@ -801,6 +826,11 @@ const expandEntityValue = (tables: Tables, cursor: Cursor, literal: Literal) =>
         return [yield* characterOf(cursor, token, offset)];
       }
 
+      const violation = productionViolation(general ?? parameter ?? "", "NCName");
+      if (Option.isSome(violation)) {
+        return yield* failure(cursor, `entity value: ${violation.value}.`, offset);
+      }
+
       if (general !== undefined) {
         return [whole];
       }
@@ -888,6 +918,11 @@ const expandDefault = (
         return [{ kind: "text", text: yield* characterOf(cursor, token, where) }];
       }
 
+      const violation = productionViolation(entity ?? "", "NCName");
+      if (Option.isSome(violation)) {
+        return yield* failure(cursor, `attribute default: ${violation.value}.`, where);
+      }
+
       if (entity === undefined) {
         return yield* failure(
           cursor,
@@ -969,7 +1004,7 @@ const skipExternalEntity = Effect.fnUntraced(function* skipExternalEntityDeclara
   skipSpace(cursor);
   if (!parameter && take(cursor, "NDATA")) {
     yield* expectSpace(cursor, context);
-    yield* readName(cursor, context);
+    yield* readName(cursor, `${context}, notation name`, "NCName");
     skipSpace(cursor);
   }
 
@@ -996,7 +1031,7 @@ const lexEntity = Effect.fnUntraced(function* lexEntityDeclaration(
     yield* expectSpace(cursor, context);
   }
 
-  const name = yield* readName(cursor, context);
+  const name = yield* readName(cursor, context, "NCName");
   yield* expectSpace(cursor, context);
 
   const key = `${parameter ? "%" : "&"}${name}`;
@@ -1032,7 +1067,7 @@ const lexAttributeType = Effect.fnUntraced(function* lexAttributeTypeDeclaration
   }
 
   const start = cursor.offset;
-  const keyword = yield* readName(cursor, `${context}, attribute type`);
+  const keyword = yield* readName(cursor, `${context}, attribute type`, "Name");
   if (!ATTRIBUTE_TYPES.has(keyword)) {
     return yield* failure(
       cursor,
@@ -1043,12 +1078,17 @@ const lexAttributeType = Effect.fnUntraced(function* lexAttributeTypeDeclaration
 
   if (keyword === "NOTATION") {
     yield* expectSpace(cursor, context);
-    if (Option.isNone(consume(cursor, ENUMERATION))) {
+
+    const listed = cursor.offset;
+    const names = consume(cursor, ENUMERATION);
+    if (Option.isNone(names)) {
       return yield* failure(
         cursor,
         `${context}: expected the parenthesized notation names, found ${found(cursor)}.`,
       );
     }
+
+    yield* namesHeldTo(cursor, names.value, listed, "NCName", `${context}, notation name`);
   }
 
   return keyword;
@@ -1102,7 +1142,7 @@ const lexAttlist = Effect.fnUntraced(function* lexAttlistDeclaration(
   const context = "attribute-list declaration";
   yield* expectSpace(cursor, context);
 
-  const element = yield* readName(cursor, `${context}, element name`);
+  const element = yield* readName(cursor, `${context}, element name`, "QName");
   for (;;) {
     const spaced = skipSpace(cursor);
     if (take(cursor, ">")) {
@@ -1113,7 +1153,7 @@ const lexAttlist = Effect.fnUntraced(function* lexAttlistDeclaration(
       yield* failure(cursor, `${context}: expected white space or ">", found ${found(cursor)}.`);
     }
 
-    const name = yield* readName(cursor, `${context}, attribute name`);
+    const name = yield* readName(cursor, `${context}, attribute name`, "QName");
     yield* expectSpace(cursor, context);
 
     const type = yield* lexAttributeType(cursor);
@@ -1211,7 +1251,7 @@ const readParameterReference = Effect.fnUntraced(function* readParameterEntityRe
   WellFormednessError | ReaderRefusal
 > {
   cursor.offset += "%".length;
-  const name = yield* readName(cursor, "parameter-entity reference");
+  const name = yield* readName(cursor, "parameter-entity reference", "NCName");
   yield* expect(cursor, ";", "parameter-entity reference");
   tables.referencesParameters = true;
 
@@ -1281,10 +1321,42 @@ const unprocessed = (tables: Tables): Tables => ({
 });
 
 /**
+ * Read an element type declaration's names after its keyword and skip the rest: the element's
+ * name ([17] elementdecl) and every name its content model gives ([18] cp, [19] Mixed) are each a
+ * QName (Namespaces in XML section 5); the model's keywords, `EMPTY`, `ANY` and `#PCDATA`'s
+ * `PCDATA`, are QNames too.
+ *
+ * @param cursor - The read position, just after `<!ELEMENT`.
+ * @returns Nothing; fails when a name is no QName or the declaration is not closed.
+ */
+const lexElementNames = Effect.fnUntraced(function* lexElementDeclarationNames(
+  cursor: Cursor,
+): Effect.fn.Return<void, WellFormednessError> {
+  const context = "element type declaration";
+  yield* expectSpace(cursor, context);
+  yield* readName(cursor, context, "QName");
+
+  const model = cursor.offset;
+  const rest = consume(cursor, DECLARATION_REST);
+  if (Option.isNone(rest)) {
+    yield* failure(cursor, "declaration: the declaration that starts here is not closed.");
+  }
+
+  yield* namesHeldTo(
+    cursor,
+    Option.getOrElse(rest, () => ""),
+    model,
+    "QName",
+    `${context}, content model`,
+  );
+});
+
+/**
  * Read one comment, processing instruction or markup declaration of the internal subset.
  *
- * `ELEMENT` and `NOTATION` declarations are skipped. An `ENTITY` or `ATTLIST` declaration after
- * the subset stopped is lexed but not processed (XML 1.0 section 5.1).
+ * `ELEMENT` and `NOTATION` declarations are read for their names alone (Namespaces in XML sections
+ * 5 and 7). An `ENTITY` or `ATTLIST` declaration after the subset stopped is lexed but not
+ * processed (XML 1.0 section 5.1).
  *
  * @param tables - The subset's declarations.
  * @param cursor - The read position, at a `<`.
@@ -1304,7 +1376,11 @@ const lexMarkup = Effect.fnUntraced(function* lexSubsetMarkup(
     // section 5.1) but is still held to its production: it is lexed into tables of its own, which
     // are dropped.
     const into = tables.stopped ? unprocessed(tables) : tables;
-    if (keyword.endsWith("ELEMENT") || keyword.endsWith("NOTATION")) {
+    if (keyword.endsWith("ELEMENT")) {
+      yield* lexElementNames(cursor);
+    } else if (keyword.endsWith("NOTATION")) {
+      yield* expectSpace(cursor, "notation declaration");
+      yield* readName(cursor, "notation declaration", "NCName");
       yield* skipDeclaration(cursor);
     } else if (keyword.endsWith("ENTITY")) {
       yield* lexEntity(into, cursor);
@@ -1390,7 +1466,7 @@ const lexDoctype = Effect.fnUntraced(function* lexDoctypeDeclaration(
   const start = cursor.offset;
   cursor.offset += "<!DOCTYPE".length;
   yield* expectSpace(cursor, context);
-  yield* readName(cursor, context);
+  yield* readName(cursor, context, "QName");
   skipSpace(cursor);
 
   tables.externalSubset = yield* skipExternalId(cursor, context);

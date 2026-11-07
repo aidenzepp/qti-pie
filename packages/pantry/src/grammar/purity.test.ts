@@ -159,10 +159,7 @@ const oracleDataModules: ReadonlySet<string> = new Set(["#pantry/qti/limits.ts"]
  * schema's by a test, and its entry goes in the same commit. Only metadata is shared, through the
  * law catalog.
  */
-const oracleStatementReads: readonly string[] = [
-  "test/key-copies.ts: #pantry/qti/schema.ts",
-  "test/oracle.ts: #pantry/qti/tests.ts",
-];
+const oracleStatementReads: readonly string[] = ["test/key-copies.ts: #pantry/qti/schema.ts"];
 
 /**
  * Read a module's text by its path relative to `src`.
