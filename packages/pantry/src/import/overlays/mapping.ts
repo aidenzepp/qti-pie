@@ -372,14 +372,20 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
  * `folded` where its mapping is of strings and the value is not true, and `matched`, the key's
  * ASCII lowercase where `folded`.
  *
- * @param baseType - The entry's mapping's base type.
+ * @param baseType - The entry's mapping's base type, none for a record's mapping.
  * @param caseText - The entry's `case-sensitive`, where written.
  * @param key - The entry's `map-key`.
  * @returns The `MapKey` row's matching fields.
  */
-const matchingOf = (baseType: BaseTypeHandle, caseText: string | undefined, key: string) => {
+const matchingOf = (
+  baseType: Option.Option<BaseTypeHandle>,
+  caseText: string | undefined,
+  key: string,
+) => {
   const written = caseText ?? "";
-  const folded = baseType === "string" && !booleanTrue.some((form) => form === collapse(written));
+  const folded =
+    Option.contains(baseType, "string") &&
+    !booleanTrue.some((form) => form === collapse(written));
 
   return { caseText: written, folded, matched: folded ? lowerAscii(key) : key };
 };

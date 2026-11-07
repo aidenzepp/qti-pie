@@ -155,9 +155,9 @@ export const MappingBaseType = relation(
  *
  * It also holds how the key is matched (reading 98, §7.21.3): `caseText`, the entry's
  * `case-sensitive` as written, empty where it is unwritten; `folded`, whether a response is matched
- * to the key without regard to case, which is where the mapping's base type is `string` and the
- * entry's `case-sensitive` is not true; and `matched`, the key a response meets, the key's ASCII
- * lowercase where `folded` and the key as written otherwise.
+ * to the key without regard to case, which is where the mapping's base type, its
+ * {@link MapKeyType}'s, is `string` and the entry's `case-sensitive` is not true; and `matched`, the
+ * key a response meets, the key's ASCII lowercase where `folded` and the key as written otherwise.
  */
 export const MapKey = relation(
   "MapKey",
@@ -524,6 +524,25 @@ const caseAttributes = select(Attribute, (a) =>
 );
 
 /**
+ * The map keys matched without regard to case: each is a string mapping's ({@link stringKeys}).
+ */
+const foldedKeys = select(MapKey, (k) => k.eq(k.folded, true));
+
+/**
+ * The map keys of string mappings, by their {@link MapKeyType}: each is folded unless its entry's
+ * `case-sensitive` is true ({@link foldedOrCaseKeys}).
+ */
+const stringKeys = select(MapKeyType, (k) => k.eq(k.baseType, "string"));
+
+/**
+ * The map keys folded or matched by code points because their entry's `case-sensitive` is true: a
+ * string mapping's key is one of them, so a key that is neither is of no string mapping.
+ */
+const foldedOrCaseKeys = select(MapKey, (k) =>
+  k.or(k.eq(k.folded, true), k.in(Compute.collapse(k.caseText), booleanTrue)),
+);
+
+/**
  * The map keys whose mapping's declaration has a base type: each has its {@link MapKeyType}, and
  * only these do.
  */
@@ -632,17 +651,18 @@ export const mappingLawsByName = {
     key(on(lookupAttributes, "node")),
   ],
   "E1 derived": [
-    check("E1_derived", MapKey, (k) => {
-      const matchedCase = k.and(
-        k.eq(k.baseType, "string"),
-        k.not(k.in(Compute.collapse(k.caseText), booleanTrue)),
-      );
-
-      return k.or(
-        k.and(k.eq(k.folded, true), matchedCase, k.eq(k.matched, Compute.lowerAscii(k.key))),
-        k.and(k.eq(k.folded, false), k.not(matchedCase), k.eq(k.matched, k.key)),
-      );
-    }),
+    check("E1_derived", MapKey, (k) =>
+      k.or(
+        k.and(
+          k.eq(k.folded, true),
+          k.not(k.in(Compute.collapse(k.caseText), booleanTrue)),
+          k.eq(k.matched, Compute.lowerAscii(k.key)),
+        ),
+        k.and(k.eq(k.folded, false), k.eq(k.matched, k.key)),
+      ),
+    ),
+    contained(on(foldedKeys, "node"), on(stringKeys, "node")),
+    contained(on(stringKeys, "node"), on(foldedOrCaseKeys, "node")),
     check("E1_derived", MapKeyInteger, (m) =>
       m.eq(m.key, Compute.concat(Compute.concat(m.sign, m.zeros), m.digits)),
     ),
