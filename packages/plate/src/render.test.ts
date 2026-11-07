@@ -237,6 +237,8 @@ const item: Item = {
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "The capital",
   unsupported: [],
 };

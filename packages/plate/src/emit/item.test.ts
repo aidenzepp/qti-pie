@@ -295,6 +295,8 @@ const rivers: Item = {
       },
     ]),
   ),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Rivers",
   unsupported: [],
 };

@@ -151,6 +151,8 @@ const fruitItem: Opened = (() => {
         },
       ],
     ]),
+    templateProcessing: Option.none(),
+    templates: new Map(),
     title: "Fruit",
     unsupported: [],
   };

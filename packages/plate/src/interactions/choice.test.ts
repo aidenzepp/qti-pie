@@ -128,6 +128,8 @@ const itemOf = (interaction: ChoiceInteraction): Item => ({
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Colours",
   unsupported: [],
 });

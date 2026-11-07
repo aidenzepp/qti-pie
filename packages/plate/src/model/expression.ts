@@ -574,6 +574,50 @@ export type Rule =
     };
 
 /**
+ * One `qti-template-if` or `qti-template-else-if`: its condition and the template rules it runs.
+ */
+export interface TemplateBranch {
+  readonly then: readonly TemplateRule[];
+  readonly when: Expression;
+}
+
+/**
+ * A template rule, a child of `qti-template-processing` or of a template condition's part, which
+ * QTI 3.0's XSD admits in the same six forms at either depth:
+ *
+ * - `set-template-value`, a `qti-set-template-value`: sets the template variable `identifier` to the
+ *   expression's value.
+ * - `set-correct-response`, a `qti-set-correct-response`: sets the correct response of the response
+ *   variable `identifier` to the expression's value.
+ * - `set-default-value`, a `qti-set-default-value`: sets the default value of the response or outcome
+ *   variable `identifier` to the expression's value.
+ * - `template-condition`, a `qti-template-condition`: its `qti-template-if` and each
+ *   `qti-template-else-if` in order as `branches`, and its `qti-template-else`, when it has one, as
+ *   `otherwise`. The first branch whose condition is true runs; a false or NULL condition passes to
+ *   the next part, and `otherwise` runs when no condition is true.
+ * - `template-constraint`, a `qti-template-constraint`: when its expression is not true (NULL
+ *   included), the template variables return to their defaults and template processing starts
+ *   again, up to a finite number of times.
+ * - `exit-template`, a `qti-exit-template`: ends template processing; what the rules before it set
+ *   stays.
+ *
+ * It is its own union, never a {@link Rule}: response processing holds none of these forms.
+ */
+export type TemplateRule =
+  | {
+      readonly expression: Expression;
+      readonly identifier: string;
+      readonly kind: "set-correct-response" | "set-default-value" | "set-template-value";
+    }
+  | {
+      readonly branches: readonly TemplateBranch[];
+      readonly kind: "template-condition";
+      readonly otherwise: Option.Option<readonly TemplateRule[]>;
+    }
+  | { readonly expression: Expression; readonly kind: "template-constraint" }
+  | { readonly kind: "exit-template" };
+
+/**
  * The type of an expression as the kind rules give it: a base type and a cardinality.
  *
  * `any` is the base type of a value that takes any type, `qti-null`'s NULL; `unknown` is one no
