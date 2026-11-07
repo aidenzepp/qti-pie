@@ -12,16 +12,15 @@
  */
 import { Option } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { Malformed } from "#plate/form/encoding.ts";
+import type { Malformed } from "#plate/form/encoding.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { validateExtendedText } from "#plate/interactions/extended-text.ts";
 import { validateInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { validateTextEntry } from "#plate/interactions/text-entry.ts";
-import { message } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Interaction, Item } from "#plate/model/item.ts";
 import type { ResponsesRecord } from "#plate/model/record.ts";
-import { isNull, nullOf } from "#plate/model/values.ts";
+import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { redactItem } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
@@ -119,17 +118,6 @@ const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Inter
   );
 
 /**
- * Say whether a caller passed candidate input for a response: a value that is not NULL, or the
- * {@link Malformed} `decode` gave for entries posted under it. NULL is what a response left out
- * reads as, so it carries none.
- *
- * @param given The response's input, undefined when the caller left it out.
- * @returns Whether it carries input.
- */
-const carriesInput = (given: Value | Malformed | undefined): boolean =>
-  given !== undefined && (given instanceof Malformed || !isNull(given));
-
-/**
  * Validate responses as the item's interactions do, without scoring them.
  *
  * It judges only what the page showed: the interactions of the item as `redact` shows it under the
@@ -142,12 +130,11 @@ const carriesInput = (given: Value | Malformed | undefined): boolean =>
  * holds its item back.
  *
  * A choice its template hides, or withholds because the record holds no value of its template
- * variable, is not among the choices presented, so posting it gives `unknownChoice`. An
- * interaction a hidden or withheld template block, inline or choice holds is absent: no limit on
- * it holds a post back, and a response bound to no interaction shown that carries input for it (a
- * value that is not NULL, or a {@link Malformed}) is refused with `unknownChoice`, as a post for a
- * control the page never showed, so it never reaches response processing. Its NULL reads as left
- * out.
+ * variable, is not among the choices presented, so posting it to its interaction gives
+ * `unknownChoice`. An interaction a hidden or withheld template block, inline or choice holds is
+ * absent, and a response bound to no interaction shown is ignored, whatever it holds: no limit on
+ * it holds a post back, so the stored value a host passes for it, such as a session's declared or
+ * template-set default, gives no message.
  *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with (each template variable at its declared default); for an item whose template
@@ -164,38 +151,19 @@ const carriesInput = (given: Value | Malformed | undefined): boolean =>
  * @param configuration The configuration, which gives the locale and `validateResponses`.
  * @param record The template values of the attempt the page showed, the record `redact` took; none
  *   to judge the item as it reads with no record.
- * @returns The messages of the interactions shown, in their document order, then one
- *   `unknownChoice` for each response that carries input for content the page did not show, in the
- *   document order of the first interaction binding it; none when all are accepted.
+ * @returns Every message of the interactions shown, in their document order; none when all are
+ *   accepted.
  */
 export const checkResponses = (
   document: Accepted,
   responses: Readonly<Record<string, Value | Malformed>>,
   configuration: Configuration,
   record?: ResponsesRecord,
-): readonly ValidationMessage[] => {
-  const given = (response: string): Value | Malformed | undefined =>
-    Object.hasOwn(responses, response) ? responses[response] : undefined;
-  const shown = shownInteractions(document.item, record);
-  const bound = new Set(shown.map((interaction) => interaction.response));
-  const unshown = new Set(
-    interactionsIn(document.item.body).flatMap((interaction) =>
-      bound.has(interaction.response) ? [] : [interaction.response],
-    ),
-  );
+): readonly ValidationMessage[] =>
+  shownInteractions(document.item, record).flatMap((interaction) => {
+    const given = Object.hasOwn(responses, interaction.response)
+      ? responses[interaction.response]
+      : undefined;
 
-  return [
-    ...shown.flatMap((interaction) =>
-      validate(
-        interaction,
-        given(interaction.response) ?? absent(document.item, interaction),
-        configuration,
-      ),
-    ),
-    ...[...unshown].flatMap((response): readonly ValidationMessage[] =>
-      carriesInput(given(response))
-        ? [{ response, text: message(configuration.locale, "unknownChoice") }]
-        : [],
-    ),
-  ];
-};
+    return validate(interaction, given ?? absent(document.item, interaction), configuration);
+  });

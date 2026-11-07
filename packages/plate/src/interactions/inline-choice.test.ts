@@ -975,9 +975,9 @@ describe("checkResponses", () => {
   );
 
   it.effect(
-    "[I-5] refuses with unknownChoice a response posted for a hidden or withheld template inline's Inline Choice, and takes its NULL as left out",
+    "[I-5] ignores a response bound only to a hidden or withheld template inline's Inline Choice, whatever it holds, and judges the inline shown",
     () =>
-      Effect.gen(function* hiddenInline() {
+      Effect.gen(function* ignoredInline() {
         const strict = yield* configure({ validateResponses: true });
         const accepted = acceptForTest(
           templatedOf({
@@ -995,20 +995,18 @@ describe("checkResponses", () => {
         );
 
         assert.deepStrictEqual(
-          checkResponses(accepted, { [response]: chosen("A") }, strict, visibleAs("W")),
-          [unknown],
+          checkResponses(accepted, { [response]: chosen("Z") }, strict, visibleAs("W")),
+          [],
         );
-        assert.deepStrictEqual(checkResponses(accepted, { [response]: chosen("A") }, strict), [
-          unknown,
-        ]);
+        assert.deepStrictEqual(checkResponses(accepted, { [response]: chosen("Z") }, strict), []);
         assert.deepStrictEqual(
           checkResponses(accepted, { [response]: nothing }, strict, visibleAs("W")),
           [],
         );
         assert.deepStrictEqual(checkResponses(accepted, {}, strict, visibleAs("W")), []);
         assert.deepStrictEqual(
-          checkResponses(accepted, { [response]: chosen("A") }, strict, visibleAs("X")),
-          [],
+          checkResponses(accepted, { [response]: chosen("Z") }, strict, visibleAs("X")),
+          [unknown],
         );
         assert.deepStrictEqual(checkResponses(accepted, {}, strict, visibleAs("X")), [
           atLeast("1"),

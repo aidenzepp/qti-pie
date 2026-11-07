@@ -20,7 +20,6 @@ import type {
   TemplateVisibility,
 } from "#plate/model/item.ts";
 import type { ResponsesRecord } from "#plate/model/record.ts";
-import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, postings, redactItem } from "#plate/payload.ts";
 import type {
@@ -1700,25 +1699,30 @@ describe("checkResponses", () => {
   );
 
   it.effect(
-    "[I-5] refuses with unknownChoice a response posted for a hidden or withheld template block's Choice, and takes its NULL as left out",
+    "[I-5] ignores a response bound only to a hidden or withheld template block's Choice, whatever it holds, so its stored default passes, and judges the block shown",
     () =>
-      Effect.gen(function* postedHidden() {
-        const configuration = yield* configure({});
-        const accepted = acceptForTest(blockItem);
-        const refused = [{ response, text: message("en", "unknownChoice") }];
-        const posted = identifiersOf("multiple", "A");
+      Effect.gen(function* ignoredHidden() {
+        const configuration = yield* configure({ validateResponses: true });
+        const stored = identifiersOf("multiple", "B");
+        const accepted = acceptForTest({
+          ...blockItem,
+          responses: new Map(
+            Array.from(blockItem.responses, ([identifier, declaration]) => [
+              identifier,
+              { ...declaration, defaultValue: Option.some(stored) },
+            ]),
+          ),
+        });
+        const over = identifiersOf("multiple", "A", "B", "C");
 
         assert.deepStrictEqual(
-          checkResponses(accepted, { [response]: posted }, configuration, visibleAs("W")),
-          refused,
+          checkResponses(accepted, { [response]: over }, configuration, visibleAs("W")),
+          [],
         );
+        assert.deepStrictEqual(checkResponses(accepted, { [response]: over }, configuration), []);
         assert.deepStrictEqual(
-          checkResponses(accepted, { [response]: posted }, configuration),
-          refused,
-        );
-        assert.deepStrictEqual(
-          checkResponses(accepted, { [response]: posted }, configuration, { templates: {} }),
-          refused,
+          checkResponses(accepted, { [response]: over }, configuration, { templates: {} }),
+          [],
         );
         assert.deepStrictEqual(
           checkResponses(
@@ -1727,27 +1731,21 @@ describe("checkResponses", () => {
             configuration,
             visibleAs("W"),
           ),
-          refused,
-        );
-        assert.deepStrictEqual(
-          checkResponses(
-            accepted,
-            { [response]: nullOf("identifier", "multiple") },
-            configuration,
-            visibleAs("W"),
-          ),
           [],
         );
         assert.deepStrictEqual(
-          checkResponses(accepted, { [response]: posted }, configuration, visibleAs("X")),
+          checkResponses(accepted, { [response]: stored }, configuration, visibleAs("W")),
           [],
+        );
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: over }, configuration, visibleAs("X")),
+          [{ response, text: message("en", "atMost", { n: "2" }) }],
         );
       }),
   );
 
-  it("[I-5] makes score refuse, through ResponsesRefused, a response for a hidden template block's Choice and a hidden choice", () => {
-    const unknown = [{ response, text: message("en", "unknownChoice") }];
-    const refusalOf = (item: Item, posted: Value) =>
+  it("[I-5] makes score refuse a hidden choice through ResponsesRefused, and leaves a hidden template block's response unrefused", () => {
+    const outcomeOf = (item: Item, posted: Value) =>
       Result.match(score(acceptForTest(item), { [response]: posted }), {
         onFailure: (failure) =>
           failure._tag === "ResponsesRefused" ? failure.messages : [failure._tag],
@@ -1756,8 +1754,13 @@ describe("checkResponses", () => {
     const hiddenByDefault = templatedOf(blockColours, blockItem.body, false);
     const choicesByDefault = templatedOf(templatedColours, [templatedColours], false);
 
-    assert.deepStrictEqual(refusalOf(hiddenByDefault, identifiersOf("multiple", "A")), unknown);
-    assert.deepStrictEqual(refusalOf(choicesByDefault, identifiersOf("single", "B")), unknown);
-    assert.deepStrictEqual(refusalOf(choicesByDefault, identifiersOf("single", "A")), []);
+    assert.deepStrictEqual(outcomeOf(choicesByDefault, identifiersOf("single", "B")), [
+      { response, text: message("en", "unknownChoice") },
+    ]);
+    assert.deepStrictEqual(outcomeOf(choicesByDefault, identifiersOf("single", "A")), []);
+    assert.deepStrictEqual(
+      outcomeOf(hiddenByDefault, identifiersOf("multiple", "A", "B", "C")),
+      [],
+    );
   });
 });
