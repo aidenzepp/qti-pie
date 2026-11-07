@@ -74,8 +74,11 @@
  * "` of an `m:mpadded`); `m:cbytes` holding `AQID AQID`; and the A1 attributes padded and unsigned:
  * `position=" 1 "` on an `m:msrow` inside an `m:mstack`, `rowspan=" 2 "`, `length=" 3 "` on an
  * `m:msline` and `scriptsizemultiplier=" 0.5 "`. The one sign is `scriptlevel="+1"`, the one the
- * REC's syntax lists (D6). The one block under 3.0.1 is `kind-mfrac-3p0p1`, a copy of `kind-mfrac`;
- * the oracle below judges every item under both versions.
+ * REC's syntax lists (D6). The blocks under 3.0.1 are `kind-mfrac-3p0p1`, a copy of `kind-mfrac`,
+ * and `attr-semantics-contexp`, added by this port: it writes the attributes of
+ * `m:semantics.contexp`, a `m:semantics` standing as a content expression (an operand of `m:apply`,
+ * spec reading 2), the one kind no generated block wrote; the oracle below judges every item under
+ * both versions.
  *
  * The groups are the generated fixtures, named `math-gen-<n>`: every block, in the order of
  * `mathmlBlocks` within its group, in one group of its version. The generator capped a group at 40
@@ -7373,6 +7376,28 @@ export const mathmlBlocks: readonly MathmlBlock[] = [
     xml: '<m:math id="attr-semantics-ci-root"><m:apply><m:int/><m:bvar><m:semantics id="attr-semantics-ci" xref="attr-semantics-ci-root" cd="arith1" class="x1" definitionURL="https://example.org/definition#a" href="https://example.org/a" name="nm" style="text" other="text" encoding="text/plain"><m:ci>x</m:ci><m:annotation encoding="text/plain">x</m:annotation></m:semantics></m:bvar><m:apply><m:sin/><m:ci>x</m:ci></m:apply></m:apply></m:math>',
   },
   {
+    handles: ["m:math", "m:apply", "m:plus", "m:semantics.contexp", "m:ci", "m:annotation"],
+    name: "attr-semantics-contexp",
+    pairs: [
+      ["m:math", "id"],
+      ["m:semantics.contexp", "id"],
+      ["m:semantics.contexp", "xref"],
+      ["m:semantics.contexp", "cd"],
+      ["m:semantics.contexp", "class"],
+      ["m:semantics.contexp", "definitionURL"],
+      ["m:semantics.contexp", "href"],
+      ["m:semantics.contexp", "name"],
+      ["m:semantics.contexp", "style"],
+      ["m:semantics.contexp", "other"],
+      ["m:semantics.contexp", "encoding"],
+      ["m:annotation", "encoding"],
+    ],
+    part: "attribute",
+    site: "body",
+    version: "3.0.1",
+    xml: '<m:math id="attr-semantics-contexp-root"><m:apply><m:plus/><m:semantics id="attr-semantics-contexp" xref="attr-semantics-contexp-root" cd="arith1" class="x1" definitionURL="https://example.org/definition#a" href="https://example.org/a" name="nm" style="text" other="text" encoding="text/plain"><m:ci>x</m:ci><m:annotation encoding="text/plain">x</m:annotation></m:semantics><m:ci>y</m:ci></m:apply></m:math>',
+  },
+  {
     handles: [
       "m:math",
       "m:mstyle",
@@ -7973,7 +7998,7 @@ const groupPlans: readonly MathmlGroupPlan[] = [
     version: "3.0.0",
   },
   {
-    blocks: ["kind-mfrac-3p0p1"],
+    blocks: ["kind-mfrac-3p0p1", "attr-semantics-contexp"],
     name: "math-gen-16",
     version: "3.0.1",
   },

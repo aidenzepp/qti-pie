@@ -117,9 +117,12 @@ const cutOf = <const Name extends string>(
 const alttextItem = "items/qti3-choice-aria-mathml-catalog.xml";
 
 /**
- * The item `math-class` is cut from, its path in `shared-vocabulary-imsmanifest`.
+ * The item `math-class` is cut from, its path in `shared-vocabulary-imsmanifest`: an extended-text
+ * item whose formula has an `mo` with a `class`. The item phase 6 spec 4.11 first named,
+ * `Item_QTI3_RichardTake2_01`'s, repeats the inline-choice identifiers G, L and Y, which is no
+ * MathML failure, so the importer refuses it under `choice-identifier-distinct`.
  */
-const classItem = "Items/Item_QTI3_RichardTake2_01/inline_choice_qti3.xml";
+const classItem = "Items/Item_QTI3_WritingPostcard_03/extended_text_qti3.xml";
 
 /**
  * The `qti-catalog-info` of `qti3-choice-aria-mathml-catalog.xml`, the lines `math-alttext` removes
@@ -184,7 +187,8 @@ const inlineChoiceBase = cutOf(
  *
  * - `math-alttext` also has the catalog, the two `data-catalog-idref` attributes and its
  *   `data-reading-type` removed, edits that apply before the cut.
- * - `math-class` has the `data-prompt` of its inline choice interaction removed.
+ * - `math-class` has the `patternMask` of its extended text interaction removed (a camel-case
+ *   attribute no QTI element names, which the codec refuses under `attribute-admission`).
  */
 const cutSpecs = [
   mathmlBase,
@@ -223,7 +227,7 @@ const cutSpecs = [
   cutOf("math-either-or", members.BBQsTest, "id-5c1b1e2d56bd/either-or.xml", "3.0.0"),
   inlineChoiceBase,
   cutOf("math-class", members.sharedVocabulary, classItem, "3.0.0", [
-    replaceIn(classItem, ' data-prompt="Select an Answer"', ""),
+    replaceIn(classItem, ' patternMask="[0-9\\.]+"', ""),
   ]),
 ] as const satisfies readonly FixtureSpec[];
 
@@ -691,19 +695,11 @@ const rulingEntries = [
 ] as const satisfies readonly PromptEntry[];
 
 /**
- * The expected law of a negative: a law of the law oracle, `codec` where the codec refuses the
- * package so that no row is written and no law reads it, or a law the revision's slices add to the
- * oracle.
+ * The expected law of a negative: a law of the law oracle (the MathML laws of this revision are
+ * among them), or `codec` where the codec refuses the package so that no row is written and no
+ * law reads it.
  */
-export type MathmlLaw =
-  | LawName
-  | "MathML align first"
-  | "MathML align placement"
-  | "MathML cn form"
-  | "MathML head qualifier"
-  | "MathML maction selection"
-  | "MathML share cycle"
-  | "codec";
+export type MathmlLaw = LawName | "codec";
 
 /**
  * Who decides a fixture's expectation: `phase-6`, where this phase's laws do, or `pr-46`, where
@@ -727,9 +723,12 @@ interface NegativeEntry extends PromptEntry {
  * The 48 negatives of revision N spec 6.2, in the table's order.
  *
  * - The expected law and rule are the table's. Where two laws break the verdict's rule follows
- *   `precedence`; the oracle test (p6n-24) records what it measures instead of changing it. For
+ *   `precedence`; the oracle test (p6n-24.1) records what it measures instead of changing it. For
  *   `math-bind-no-bvar` and `math-mscarries-last` the table expects the automaton's `N7 Last` and
- *   `child-set`, and the oracle test records what it reports.
+ *   `child-set`. The oracle measures `math-mscarries-last` as expected (`N7 Last`, `child-set`),
+ *   but `math-bind-no-bvar` as `N5 Follow`, `ordering`: the restated `bind` model has no position
+ *   that names its `m:ci` after the head, so the ordering law refuses before any last-position law
+ *   reads it. The entry holds the measured law and rule.
  * - `owner` is `pr-46` for `math-number-plus`, `math-cn-base-plus` (PR #46's `+0.5` item, expected
  *   `attribute-lexical`) and the 14 negatives PR #46's reply measured as refused today, under the
  *   rules it gives (not main's); every other expectation is phase 6's.
@@ -981,10 +980,10 @@ const negativeEntries = [
   },
   {
     block: "<m:math><m:bind><m:forall/><m:ci>x</m:ci></m:bind></m:math>",
-    law: "N7 Last",
+    law: "N5 Follow",
     name: "math-bind-no-bvar",
     owner: "phase-6",
-    rule: "child-set",
+    rule: "ordering",
   },
   {
     block: "<m:math><m:mstack><m:mn>1</m:mn><m:mscarries/></m:mstack></m:math>",
