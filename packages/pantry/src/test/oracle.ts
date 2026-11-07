@@ -115,6 +115,7 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
+import { splicingParents } from "#pantry/qti/tests.ts";
 import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
@@ -4147,16 +4148,15 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
 };
 
 /**
- * Decide whether an include under a parent is spliced in place: one a section holds is a site of
- * the test's assembly instead, which reading 86 reads as Q5.13's instances do, each written
- * element once, so its document is judged as written.
+ * Decide whether an include under a parent is spliced in place, by the schema's one statement of it
+ * (`#pantry/qti/tests.ts` `splicingParents`, spec reading 117): one a section holds is a site of
+ * the test's assembly instead, which reading 86 reads as Q5.13's instances do, each written element
+ * once, so its document is judged as written.
  *
- * @param grammar - The composed grammar.
  * @param parent - The include's parent's kind.
  * @returns Whether it is.
  */
-const splices = (grammar: ComposedGrammar, parent: string): boolean =>
-  parent !== "qti-assessment-section" && includeParentsOf(grammar).has(parent);
+const splices = (parent: string): boolean => splicingParents.some((kind) => kind === parent);
 
 /**
  * Decide whether a site splices its target in place: an include outside a section whose target is
@@ -4167,7 +4167,7 @@ const splices = (grammar: ComposedGrammar, parent: string): boolean =>
  * @returns The target, none for a site that splices nothing.
  */
 const splicedTarget = (grammar: ComposedGrammar, site: SiteOf): Option.Option<Listed> =>
-  site.node.kind === "xi:include" && splices(grammar, site.node.parentKind)
+  site.node.kind === "xi:include" && splices(site.node.parentKind)
     ? site.target.pipe(
         Option.filter((target) =>
           standsFor(grammar, site.node.version, site.node.parentKind, target.rootKind),
@@ -4384,7 +4384,7 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
         : child;
     }
 
-    if (child.kind === "xi:include" && splices(grammar, parent)) {
+    if (child.kind === "xi:include" && splices(parent)) {
       const href = closedValueOf(child, "href");
       const resolution = href.pipe(
         Option.map((value) =>

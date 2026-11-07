@@ -173,8 +173,9 @@ interface SiteOf {
 }
 
 /**
- * Every listed document's context, and the documents some site names, each the root of an
- * assembly of its own and an instance under every document that places it (Q5.13's `Instance`).
+ * Every listed document's context, and the documents some site names, each an instance under every
+ * document that places it (Q5.13's `Instance`), and the root of an assembly of its own unless an
+ * include splices it in place (`splicingParents`, spec reading 117).
  */
 export interface Contexts {
   /**

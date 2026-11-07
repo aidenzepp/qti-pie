@@ -1680,6 +1680,20 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ),
     "E1 derived",
   ],
+  // The includes that splice a document, whose count is 0 exactly where it heads an assembly
+  // (reading 117, tests.ts splicingParents), and each assembly's root a head's: both the import's
+  // own derivation, so a breach is the import's. The heads' other half, a root for each head, is
+  // "Inclusion cycle" with its group.
+  [
+    foldOf(
+      { count: "targetedBy", owner: "Document" },
+      "count",
+      sideOf("SiteTarget", "target"),
+      sideOf("Document", "node", "spliced"),
+    ),
+    "E1 derived",
+  ],
+  [containedIn(sideOf("Instance", "document"), sideOf("Document", "node")), "E1 derived"],
   [containedIn(sideOf("TestDocument", "node"), sideOf("Document", "node")), "E1 derived"],
   [
     containedIn(
@@ -1963,15 +1977,17 @@ export const lawsOfStatement = (statement: Statement): readonly Law[] =>
  *
  * - **Tests** (`tests.ts`, Q5.13): every overlay's row, copies and families is "Test overlay"; the
  *   assembled test's instance tree is "Inclusion cycle", since no finite instance tree has one
- *   child per site under a cycle, which the deferred foreign key from `Instance` into
- *   `TestDocument.sites` refuses; its names are "Test name key"; its branch resolutions are "Branch
- *   target"; each item ref's target is "Item ref target". A row of {@link writtenLaws} names a law
- *   of a group otherwise: a section document's key and an href's entry ("Document entry"), a named
- *   element's key ("Structure identifier") and the required members ("Selection required"), a
- *   variable mapping's target key ("Variable mapping target"), a stimulus ref's key ("Stimulus ref
- *   key"), the item ref target's copy of its resolved path ("E1 derived"), an include's site into
- *   its document ("Include target") and its root's kind ("Include root"), the sites' count and
- *   context fold under their document and the assembled documents' copies ("E1 derived").
+ *   child per site under a cycle a head reaches, which the deferred foreign key from `Instance`
+ *   into `TestDocument.sites` refuses, and none places a document of a cycle no head reaches, which
+ *   `TestDocument.instances`' check refuses; its names are "Test name key"; its branch resolutions
+ *   are "Branch target"; each item ref's target is "Item ref target". A row of {@link writtenLaws}
+ *   names a law of a group otherwise: a section document's key and an href's entry ("Document
+ *   entry"), a named element's key ("Structure identifier") and the required members ("Selection
+ *   required"), a variable mapping's target key ("Variable mapping target"), a stimulus ref's key
+ *   ("Stimulus ref key"), the item ref target's copy of its resolved path ("E1 derived"), an
+ *   include's site into its document ("Include target") and its root's kind ("Include root"), the
+ *   sites' count, their context and splice folds under their document, the assembled documents'
+ *   copies and each assembly's root a head's ("E1 derived").
  */
 export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
   [testOverlayLaws, "Test overlay"],

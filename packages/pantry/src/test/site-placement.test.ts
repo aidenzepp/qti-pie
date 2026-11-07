@@ -9,7 +9,14 @@
  * placing instance's part. An include under an item's body or processing, or under a fragment's
  * content, is such a site, and its placement's document is a fragment, whose root is any kind the
  * include may stand for (spec readings 114 and 117). Each package below is the every-relation
- * package, which the law oracle accepts, with one site placed differently.
+ * package, which the law oracle accepts, with one site placed differently, and every law the host
+ * judges (`#pantry/test/host-judge.ts`) holds over its rows.
+ *
+ * A section's include is no splice: it places its document as a section ref does (readings 86 and
+ * 117, "includes in a section follow it"), so a section document a section includes twice is
+ * written once, and the document is judged as its own, its IDREFs resolving among its own IDs. A
+ * section among `splicingParents` would splice it into the including test, whose IDs it would
+ * then resolve among.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -19,6 +26,7 @@ import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
 import { Duration, Effect, Formatter, Option } from "effect";
+import { lawIdentity, ruleOfLaws } from "#pantry/import/refusal.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -26,7 +34,8 @@ import { Qti } from "#pantry/qti/schema.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { checkOf } from "#pantry/test/key-copies.ts";
+import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
+import { checkOf, judgedLaws } from "#pantry/test/key-copies.ts";
 import type { Datum } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/locate.ts";
 
@@ -41,7 +50,7 @@ type Row = Readonly<Record<string, Datum>>;
  * - An include in an item's body (`qti-item-body`) and in its response processing
  *   (`qti-response-processing`), the every-relation package's own;
  * - An include of a section document in a section (`qti-assessment-section`), where the package's
- *   section ref was;
+ *   section ref was, once, or twice side by side;
  * - A section ref directly under the test part (`qti-test-part`);
  * - An include in a fragment's content (`div`), of a second fragment.
  */
@@ -49,6 +58,7 @@ const placements = [
   { kind: "xi:include", name: "item body", parentKind: "qti-item-body" },
   { kind: "xi:include", name: "item processing", parentKind: "qti-response-processing" },
   { kind: "xi:include", name: "section", parentKind: "qti-assessment-section" },
+  { kind: "xi:include", name: "section twice", parentKind: "qti-assessment-section" },
   { kind: "qti-assessment-section-ref", name: "test part", parentKind: "qti-test-part" },
   { kind: "xi:include", name: "fragment", parentKind: "div" },
 ] as const;
@@ -137,6 +147,18 @@ const packageOf = (placement: Placement): PackageEntries => {
         sectionRef,
         '<xi:include href="section.xml"/>',
       ),
+    "section twice": () =>
+      replaced(
+        replaced(
+          base,
+          "test.xml",
+          "<qti-assessment-test ",
+          `<qti-assessment-test xmlns:xi="${xi}" `,
+        ),
+        "test.xml",
+        sectionRef,
+        '<xi:include href="section.xml"/><xi:include href="section.xml"/>',
+      ),
     "test part": () =>
       replaced(
         base,
@@ -173,6 +195,11 @@ const siteRow = (site: Addition<typeof Site>) =>
 const siteCheck = Option.getOrThrow(checkOf(Qti.statements, "Site", "E1_derived"));
 
 const instanceCheck = Option.getOrThrow(checkOf(Qti.statements, "Instance", "E1_derived"));
+
+/**
+ * Every law the host judges, read once.
+ */
+const laws = judgedLaws(Qti.statements);
 
 /**
  * Every instance below an assembly's root as the database holds it, its drawn and accumulated
@@ -248,7 +275,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
         ctx,
         exhaust(
           {
-            box: "every placement of a site: an include in an item's body, its processing, a section and a fragment, and a section ref under a test part",
+            box: "every placement of a site: an include in an item's body, its processing, a section, twice in a section, and a fragment, and a section ref under a test part",
             caseHang: Duration.minutes(2),
             coverage: requiredInSpace<Reached>([
               "part is the document",
@@ -279,6 +306,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
 
                 assert.deepStrictEqual(verdict, { kind: "accepted" }, placement.name);
                 assert.isNotEmpty(sites, `${placement.name}: no site there`);
+                assert.deepStrictEqual(
+                  judge(hostRowsOf(program.inputs), laws).broken.map(
+                    ({ law, rows }) => `${lawIdentity(law)}: ${Formatter.format(rows)}`,
+                  ),
+                  [],
+                  `${placement.name}: a law the import's rows break`,
+                );
                 for (const site of sites) {
                   const part = partOf(site);
                   c.note(part);
@@ -309,6 +343,51 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
               }),
             ),
         ),
+      ),
+    600_000,
+  );
+
+  it.effect(
+    "refuses a section document a section includes whose IDREF names an ID of the including test, as the law oracle does: the document is its own, not spliced",
+    () =>
+      // Oracle: the law oracle's verdict, and every law the host judges over the import's rows.
+      // Bound: the section placement's package, its test's section holding an ID its included
+      // section document's rubric names.
+      Effect.scoped(
+        Effect.gen(function* ownDocument() {
+          const named = replaced(
+            replaced(
+              packageOf({
+                kind: "xi:include",
+                name: "section",
+                parentKind: "qti-assessment-section",
+              }),
+              "test.xml",
+              '      <qti-ordering shuffle="false"/>\n',
+              '      <qti-ordering shuffle="false"/>\n      <qti-rubric-block use="instructions" view="candidate"><qti-content-body><p id="outer">Outer.</p></qti-content-body></qti-rubric-block>\n',
+            ),
+            "section.xml",
+            "      <div><qti-printed-variable",
+            '      <div aria-labelledby="outer"><qti-printed-variable',
+          );
+          const dir = yield* scopedPackage(named);
+          const verdict = yield* oracleVerdict(yield* readPackage(dir));
+          const program = yield* readProgram(dir);
+          const { broken } = judge(hostRowsOf(program.inputs), laws);
+          const [first, ...rest] = broken.map(({ law }) => law);
+          const rule = first === undefined ? Option.none() : ruleOfLaws([first, ...rest]);
+
+          assert.deepStrictEqual(
+            verdict.kind === "refused" ? [...verdict.rules] : [],
+            ["idref-target"],
+            "section.xml's IDREF to test.xml's ID: the oracle's rules",
+          );
+          assert.deepStrictEqual(
+            Option.getOrUndefined(rule),
+            "idref-target",
+            `section.xml's IDREF to test.xml's ID: the import's rule, by ${broken.map(({ law }) => lawIdentity(law)).join("; ") || "no law"}`,
+          );
+        }),
       ),
     600_000,
   );
