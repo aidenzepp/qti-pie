@@ -66,7 +66,7 @@ const noEnds: Ends = endsOf("");
  * @throws {Error} When a node of a character kind has no row of its kind, which `flatten` writes for
  *   every such node: a defect of the rows, never of the document.
  */
-const charactersIn = (rows: FlatRows<Composed>) => {
+export const charactersIn = (rows: FlatRows<Composed>) => {
   const held = new Map<NodeId, string>([
     ...rows.texts.map(({ node, value }) => [node, value] as const),
     ...rows.whitespace.map(({ node, value }) => [node, value] as const),

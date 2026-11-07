@@ -751,7 +751,7 @@ const treeOfFixture = (file: string) =>
  * @returns Its rows.
  */
 const rowsOfFixture = (file: string) =>
-  Effect.map(treeOfFixture(file), (tree) => rowsOf(tree, { idOf }));
+  Effect.map(treeOfFixture(file), (tree) => rowsOf(tree, { context: ownContext(idOf(0)), idOf }));
 
 describe("import/overlays/expressions.ts, the fixtures' verdicts", () => {
   it.effect(
@@ -829,7 +829,10 @@ describe("import/overlays/expressions.ts, a base value's base-type", () => {
               `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="I" title="I" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="${form}">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
             ),
           );
-          const rows = rowsOf(yield* shred(xml, "3.0.0", shredGrammarOf(grammar)), { idOf });
+          const rows = rowsOf(yield* shred(xml, "3.0.0", shredGrammarOf(grammar)), {
+            context: ownContext(idOf(0)),
+            idOf,
+          });
           const value = [...rows.Expression.values()].find(({ kind }) => kind === "qti-base-value");
           const known = spelled.includes(form);
           const where = JSON.stringify(form);
@@ -1958,7 +1961,7 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
           ],
         ),
       );
-      const rows = rowsOf(tree, { idOf });
+      const rows = rowsOf(tree, { context: ownContext(idOf(0)), idOf });
       const variables = [...rows.Expression.values()].find(
         ({ kind }) => kind === "qti-test-variables",
       );
@@ -1987,7 +1990,7 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
       Effect.gen(function* claimsProved() {
         for (const { file } of frozen) {
           const tree = yield* treeOfFixture(file);
-          const rows = rowsOf(tree, { idOf });
+          const rows = rowsOf(tree, { context: ownContext(idOf(0)), idOf });
           const declared = declarationsInTree(tree);
 
           for (const reference of rows.VariableRef.values()) {
