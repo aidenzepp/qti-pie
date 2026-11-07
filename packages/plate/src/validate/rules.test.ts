@@ -2273,7 +2273,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-5] refuses a qti-set-template-value, a qti-set-correct-response and a qti-set-default-value whose expression is not their variable's type (P20)", () => {
+    it("[I-5] refuses a qti-set-template-value, a qti-set-correct-response and a qti-set-default-value whose expression is not their variable's type, with the variable's kind (P20)", () => {
       const processingPath = "qti-assessment-item/qti-template-processing";
 
       assert.deepStrictEqual(
@@ -2288,11 +2288,11 @@ describe("checkRules", () => {
         ),
         (
           [
-            ["qti-set-template-value", "N", "float", "integer"],
-            ["qti-set-correct-response", "RESPONSE", "integer", "identifier"],
-            ["qti-set-default-value", "SCORE", "integer", "float"],
+            ["qti-set-template-value", "N", "float", "integer", "template"],
+            ["qti-set-correct-response", "RESPONSE", "integer", "identifier", "response"],
+            ["qti-set-default-value", "SCORE", "integer", "float", "outcome"],
           ] as const
-        ).map(([element, identifier, expressionBaseType, outcomeBaseType]) => ({
+        ).map(([element, identifier, expressionBaseType, outcomeBaseType, targetKind]) => ({
           detail: {
             element,
             expressionBaseType,
@@ -2300,10 +2300,54 @@ describe("checkRules", () => {
             identifier,
             outcomeBaseType,
             outcomeCardinality: "single",
+            targetKind,
           },
           path: `${processingPath}/${element}`,
           rule: "expression-type",
         })),
+      );
+    });
+
+    it("[I-5] refuses a qti-set-template-value naming nothing, a response or a built-in, a qti-set-correct-response naming an outcome and a qti-set-default-value naming a template variable (pantry P8, DeclaredRefKind)", () => {
+      const processingPath = "qti-assessment-item/qti-template-processing";
+
+      assert.deepStrictEqual(
+        templated(
+          setTemplate("NOPE", baseValue("integer", "1")),
+          setTemplate("RESPONSE", baseValue("identifier", "A")),
+          setTemplate("numAttempts", baseValue("integer", "1")),
+          el("qti-set-correct-response", [attr("identifier", "SCORE")], [baseValue("float", "1")]),
+          el("qti-set-default-value", [attr("identifier", "N")], [baseValue("integer", "1")]),
+        ),
+        (
+          [
+            ["qti-set-template-value[1]", "qti-set-template-value", "NOPE", "template"],
+            ["qti-set-template-value[2]", "qti-set-template-value", "RESPONSE", "template"],
+            ["qti-set-template-value[3]", "qti-set-template-value", "numAttempts", "template"],
+            ["qti-set-correct-response", "qti-set-correct-response", "SCORE", "response"],
+            ["qti-set-default-value", "qti-set-default-value", "N", "response outcome"],
+          ] as const
+        ).map(([step, element, identifier, expected]) => ({
+          detail: { element, expected, identifier },
+          path: `${processingPath}/${step}`,
+          rule: "undeclared-variable",
+        })),
+      );
+    });
+
+    it("[I-5] accepts a qti-set-template-value of a template variable, a qti-set-correct-response of a response and a qti-set-default-value of a response and of an outcome", () => {
+      assert.deepStrictEqual(
+        templated(
+          setTemplate("N", baseValue("integer", "1")),
+          setCorrect("RESPONSE"),
+          el(
+            "qti-set-default-value",
+            [attr("identifier", "RESPONSE")],
+            [baseValue("identifier", "A")],
+          ),
+          el("qti-set-default-value", [attr("identifier", "SCORE")], [baseValue("float", "1")]),
+        ),
+        [],
       );
     });
 

@@ -1303,10 +1303,10 @@ const variableType = (
  * `qti-set-outcome-value` and `qti-lookup-outcome-value` name an outcome declaration or
  * `completionStatus`. The qti package refuses each as P8 (`reference` and `target` in
  * `packages/pantry/src/processing/check.ts`). A reference attribute that names no variable is
- * {@link attributeReferences}' refusal. In template processing a name that template processing may
- * not read ({@link forbiddenRead}) is {@link templateReads}' refusal (P26) alone, as the qti
- * package, which keeps its first refusal, reports it: `read` refuses it before anything else judges
- * the name.
+ * {@link attributeReferences}' refusal, and a template rule's target {@link templateTarget}'s. In
+ * template processing a name that template processing may not read ({@link forbiddenRead}) is
+ * {@link templateReads}' refusal (P26) alone, as the qti package, which keeps its first refusal,
+ * reports it: `read` refuses it before anything else judges the name.
  *
  * One that reads the built-in `duration`, which no declaration of the expected kind answers, in an
  * item that is not time dependent is refused too, with `check: "untimed-duration"`
@@ -1559,54 +1559,168 @@ const agree = (one: ExpressionType, other: ExpressionType): boolean =>
     other.cardinality === "unknown");
 
 /**
- * The template rules that set a variable to their expression, and the declarations whose variable
- * each may set: `qti-set-template-value` "sets the value of a template variable"
- * (`info-compact.txt:11913`), `qti-set-correct-response` names "The response variable to have its
- * correct value set" (`:11917`), and `qti-set-default-value` "The response variable or outcome
- * variable to have its default value set" (`:11916`).
+ * The kind of variable a template rule sets: a template variable, a response's correct or default
+ * value, or an outcome's default value.
  */
-const templateSetters: ReadonlyMap<string, readonly string[]> = new Map<string, readonly string[]>([
-  ["qti-set-correct-response", ["qti-response-declaration"]],
-  ["qti-set-default-value", ["qti-response-declaration", "qti-outcome-declaration"]],
-  ["qti-set-template-value", ["qti-template-declaration"]],
+type TargetKind = "outcome" | "response" | "template";
+
+/**
+ * The declaration that declares a variable of each kind a template rule may set.
+ */
+const targetDeclarations = {
+  outcome: "qti-outcome-declaration",
+  response: "qti-response-declaration",
+  template: "qti-template-declaration",
+} as const satisfies Record<TargetKind, string>;
+
+/**
+ * The template rules that set a variable to their expression, and the kinds of variable each may
+ * set, as the information model names them: `qti-set-template-value` "sets the value of a template
+ * variable" (`info.txt:65138`), `qti-set-correct-response` names "The response variable to have its
+ * correct value set" (`:65246`), and `qti-set-default-value` "The response variable or outcome
+ * variable to have its default value set" (`:65219`). The qti package admits the same kinds
+ * (`DeclaredRefKind` in `packages/pantry/src/schema/processing.ts`, P8).
+ */
+const templateSetters: ReadonlyMap<string, readonly TargetKind[]> = new Map<
+  string,
+  readonly TargetKind[]
+>([
+  ["qti-set-correct-response", ["response"]],
+  ["qti-set-default-value", ["response", "outcome"]],
+  ["qti-set-template-value", ["template"]],
 ]);
 
 /**
+ * A template rule's target: the name its `identifier` gives, the kinds of variable the rule may
+ * set, and the declaration that answers the name when it declares a variable of one of those kinds.
+ */
+interface TemplateTarget {
+  readonly identifier: string;
+  readonly kinds: readonly TargetKind[];
+  readonly set: Option.Option<{ readonly declaration: SourceElement; readonly kind: TargetKind }>;
+}
+
+/**
+ * Read the target of a template rule that sets a variable ({@link templateSetters}).
+ *
+ * A name that a declaration of another kind answers, or only a built-in, sets nothing the rule may
+ * set: a built-in is set only by a `qti-set-outcome-value` ({@link builtInSetters}).
+ *
+ * @param element The element.
+ * @param context The item's declarations.
+ * @returns The target; none for an element that is not such a rule and for one with no
+ *   `identifier`, which is the structural validator's `missing-attribute`.
+ */
+const templateTargetOf = (
+  element: SourceElement,
+  context: Context,
+): Option.Option<TemplateTarget> => {
+  const kinds = element.namespace === qtiNamespace ? templateSetters.get(element.local) : undefined;
+  if (kinds === undefined) {
+    return Option.none();
+  }
+
+  return Option.map(attributeOf(element, "identifier"), (written) => {
+    const identifier = identifierOf(written);
+    const declaration = context.variables.get(identifier);
+
+    return {
+      identifier,
+      kinds,
+      set:
+        declaration === undefined
+          ? Option.none()
+          : Option.map(
+              Arr.findFirst(kinds, (kind) =>
+                isQti(declaration, (local) => local === targetDeclarations[kind]),
+              ),
+              (kind) => ({ declaration, kind }),
+            ),
+    };
+  });
+};
+
+/**
+ * Apply `undeclared-variable` to a template rule whose `identifier` names no variable of a kind the
+ * rule may set ({@link templateTargetOf}): a `qti-set-template-value` names a template variable, a
+ * `qti-set-correct-response` a response, and a `qti-set-default-value` a response or an outcome.
+ *
+ * A name the item declares no variable for, one a declaration of another kind answers, and a
+ * built-in are refused alike, as a `qti-set-outcome-value` that names no outcome is
+ * ({@link undeclaredVariable}), with the kinds the rule may set as `expected`, space-separated. The
+ * qti package refuses the first as P8 (`target` in `packages/pantry/src/processing/check.ts`), the
+ * second as P8 (`DeclaredRefKind`) and the third as P9 (`BuiltInRefKind`, both in
+ * `packages/pantry/src/schema/processing.ts`).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns The refusal at the rule's path when its target is not a variable it may set; none for
+ *   any other element and for one outside template processing.
+ */
+const templateTarget = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  const target = templateTargetOf(visit.element, context);
+  if (
+    Option.isNone(target) ||
+    Option.isSome(target.value.set) ||
+    !underTemplateProcessing(context, visit.element)
+  ) {
+    return [];
+  }
+
+  return [
+    refusal(source, "undeclared-variable", visit.path, {
+      element: visit.element.local,
+      expected: target.value.kinds.join(" "),
+      identifier: target.value.identifier,
+    }),
+  ];
+};
+
+/**
  * Give the variable a setting rule sets and its type: a `qti-set-outcome-value`'s outcome, as
- * {@link variableType} finds it, or a template rule's variable among the declarations
- * {@link templateSetters} lets it set.
+ * {@link variableType} finds it, or a template rule's variable among the kinds
+ * {@link templateSetters} lets it set, with that kind.
  *
  * @param element The rule.
  * @param context The item's declarations.
- * @returns The variable's identifier and type; none for an element that sets no variable, for one
- *   whose variable is undeclared or of a kind it may not set, and for a declaration whose type is
- *   not judged.
+ * @returns The variable's identifier and type, and its kind for a template rule; none for an
+ *   element that sets no variable, for one whose variable is undeclared or of a kind it may not
+ *   set, and for a declaration whose type is not judged.
  */
 const setTarget = (
   element: SourceElement,
   context: Context,
-): Option.Option<{ readonly identifier: string; readonly type: ExpressionType }> => {
+): Option.Option<{
+  readonly identifier: string;
+  readonly kind: Option.Option<TargetKind>;
+  readonly type: ExpressionType;
+}> => {
   if (isQti(element, (local) => local === "qti-set-outcome-value")) {
     return Option.flatMap(referenceOf(element), (reference) =>
       Option.map(Option.flatten(variableType(reference, context)), (type) => ({
         identifier: reference.identifier,
+        kind: Option.none(),
         type,
       })),
     );
   }
 
-  const kinds = element.namespace === qtiNamespace ? templateSetters.get(element.local) : undefined;
-  const written = attributeOf(element, "identifier");
-  if (kinds === undefined || Option.isNone(written)) {
-    return Option.none();
-  }
-
-  const identifier = identifierOf(written.value);
-  const declaration = context.variables.get(identifier);
-
-  return declaration === undefined || !isQti(declaration, (local) => kinds.includes(local))
-    ? Option.none()
-    : Option.map(declarationType(declaration), (type) => ({ identifier, type }));
+  return Option.flatMap(templateTargetOf(element, context), ({ identifier, set }) =>
+    set.pipe(
+      Option.flatMap(({ declaration, kind }) =>
+        Option.map(declarationType(declaration), (type) => ({
+          identifier,
+          kind: Option.some(kind),
+          type,
+        })),
+      ),
+    ),
+  );
 };
 
 /**
@@ -1619,10 +1733,12 @@ const setTarget = (
  * agree}), the outcome's, the template variable's, or the response's or outcome's whose correct or
  * default value the rule sets ({@link setTarget}). A type with no base type (a `record`) compares
  * by cardinality alone. A variable or an expression that is not typed is not judged, nor is a
- * template rule's variable that is undeclared or of a kind the rule may not set. The qti package
- * refuses the same as P20 (`setKinds` and `typeRule` in `packages/pantry/src/processing/check.ts`).
- * The detail names the variable's type `outcomeBaseType` and `outcomeCardinality` whatever its
- * kind, and `element` names the rule.
+ * template rule's variable that is undeclared or of a kind the rule may not set
+ * ({@link templateTarget} refuses that). The qti package refuses the same as P20 (`setKinds` and
+ * `typeRule` in `packages/pantry/src/processing/check.ts`). The detail names the variable's type
+ * `outcomeBaseType` and `outcomeCardinality` whatever its kind, and `element` names the rule; a
+ * template rule's detail names the variable's kind too, `targetKind` (`template`, `response` or
+ * `outcome`), so its sentence does not word a template variable or a response as an outcome.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1653,6 +1769,10 @@ const setType = (source: SourceDocument, visit: Visit, context: Context): readon
           identifier: target.value.identifier,
           outcomeBaseType: baseTypeText(target.value.type),
           outcomeCardinality: target.value.type.cardinality,
+          ...Option.match(target.value.kind, {
+            onNone: () => ({}),
+            onSome: (targetKind) => ({ targetKind }),
+          }),
         }),
       ];
 };
@@ -2164,15 +2284,16 @@ const setCorrectResponses = (
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry,
  * and the variables its reference attributes name, through its kind's reference facet, and refuses
- * a read of the built-in `duration` in an item whose `time-dependent` is false and a rule other
- * than `qti-set-outcome-value` that sets a built-in. `expression-type` judges what a
- * `qti-set-outcome-value`, `qti-set-template-value`, `qti-set-correct-response` or
- * `qti-set-default-value` sets, a branch's or a template constraint's condition, a lookup's
- * operand, every expression's operands by its kind's rule, the variables its reference attributes
- * name, and a read template processing may not make. Each expression is typed through its kind's
- * rule in the registry (`kindRules` in `#plate/model/expressions/read.ts`), and one whose kind's
- * family has not landed is untyped and not judged. The variable, type and reference rules judge
- * inline response processing and template processing alike, as the qti package does.
+ * a read of the built-in `duration` in an item whose `time-dependent` is false, a rule other than
+ * `qti-set-outcome-value` that sets a built-in, and a template rule that sets a variable of a kind
+ * it may not set. `expression-type` judges what a `qti-set-outcome-value`,
+ * `qti-set-template-value`, `qti-set-correct-response` or `qti-set-default-value` sets, a
+ * branch's or a template constraint's condition, a lookup's operand, every expression's operands
+ * by its kind's rule, the variables its reference attributes name, and a read template processing
+ * may not make. Each expression is typed through its kind's rule in the registry (`kindRules` in
+ * `#plate/model/expressions/read.ts`), and one whose kind's family has not landed is untyped and
+ * not judged. The variable, type and reference rules judge inline response processing and template
+ * processing alike, as the qti package does.
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
@@ -2233,6 +2354,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...attributeValueType(source, visit, context),
       ...textValueType(source, visit, context),
       ...undeclaredVariable(source, visit, context),
+      ...templateTarget(source, visit, context),
       ...templateReads(source, visit, context),
       ...attributeReferences(source, visit, context),
       ...setType(source, visit, context),

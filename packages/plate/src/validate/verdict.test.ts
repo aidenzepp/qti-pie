@@ -2258,6 +2258,98 @@ describe("describeRefusal", () => {
     assert.notInclude(remedy, "qti-default");
   });
 
+  it("[I-5] names the template variable a qti-set-template-value sets to a value of another type, not an outcome (pantry P20)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-set-template-value",
+        expressionBaseType: "float",
+        expressionCardinality: "single",
+        identifier: "N",
+        outcomeBaseType: "integer",
+        outcomeCardinality: "single",
+        targetKind: "template",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-set-template-value` sets `N`, a single `integer` template variable, to a single `float` value.",
+    );
+    assert.notInclude(sentence, "outcome");
+  });
+
+  it("[I-5] names the response whose correct response a qti-set-correct-response sets to a value of another type, not an outcome (pantry P20)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-set-correct-response",
+        expressionBaseType: "integer",
+        expressionCardinality: "single",
+        identifier: "RESPONSE",
+        outcomeBaseType: "identifier",
+        outcomeCardinality: "single",
+        targetKind: "response",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-set-correct-response` sets the correct response of `RESPONSE`, a single `identifier` response, to a single `integer` value.",
+    );
+    assert.notInclude(sentence, "outcome");
+  });
+
+  it("[I-5] names the outcome a qti-set-outcome-value sets, with no target kind in its detail (pantry P20)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-set-outcome-value",
+        expressionBaseType: "integer",
+        expressionCardinality: "single",
+        identifier: "SCORE",
+        outcomeBaseType: "float",
+        outcomeCardinality: "single",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-set-outcome-value` sets `SCORE`, a single `float` outcome, to a single `integer` value.",
+    );
+  });
+
+  it("[I-5] names the kinds of variable a template rule's target must be when the item declares none of them by its name (pantry P8, DeclaredRefKind)", () => {
+    const template = describeRefusal(
+      refusalOf("undeclared-variable", {
+        element: "qti-set-template-value",
+        expected: "template",
+        identifier: "RESPONSE",
+      }),
+    );
+    const defaulted = describeRefusal(
+      refusalOf("undeclared-variable", {
+        element: "qti-set-default-value",
+        expected: "response outcome",
+        identifier: "N",
+      }),
+    );
+
+    assert.include(
+      template,
+      "`qti-set-template-value` names `RESPONSE`, and the item declares no template variable `RESPONSE`.",
+    );
+    assert.include(
+      template,
+      "To make it valid: declare `RESPONSE`, or name a declared template variable.",
+    );
+    assert.include(
+      defaulted,
+      "`qti-set-default-value` names `N`, and the item declares no response or outcome `N`.",
+    );
+    assert.include(
+      defaulted,
+      "To make it valid: declare `N`, or name a declared response or outcome.",
+    );
+  });
+
   it("names the base type of a weighted qti-test-variables that is not float", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
