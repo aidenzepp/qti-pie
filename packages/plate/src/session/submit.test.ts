@@ -5,6 +5,9 @@ import { decodeRecord } from "#plate/codec/record.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
+import { UnknownIdentifierError } from "#plate/engine/failures.ts";
+import { runOutcomes, testScopeOf } from "#plate/engine/outcome.ts";
+import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
@@ -224,6 +227,20 @@ const partOf = (
 });
 
 /**
+ * What a hand-built test declares of its own outcomes, as text: its outcome declarations, and the
+ * rules of its `qti-outcome-processing`, which it holds only when they are not empty.
+ */
+interface BuiltOutcomes {
+  readonly declarations: string;
+  readonly rules: string;
+}
+
+/**
+ * The outcomes of a test that declares none and holds no outcome processing.
+ */
+const noOutcomes: BuiltOutcomes = { declarations: "", rules: "" };
+
+/**
  * Write the text of a hand-built test, each part holding one section with its item refs, each ref
  * naming the document `<ref>.xml` beside the test. A part with no item ref holds a section ref,
  * which the test marks and does not deliver, since a section must hold a child (reading 26): such
@@ -231,11 +248,17 @@ const partOf = (
  *
  * @param identifier The test's identifier.
  * @param parts The parts, in document order.
+ * @param outcomes The test's outcome declarations and outcome processing.
  * @returns The test's text.
  */
-const testXml = (identifier: string, parts: readonly BuiltPart[]): string =>
+const testXml = (
+  identifier: string,
+  parts: readonly BuiltPart[],
+  outcomes: BuiltOutcomes = noOutcomes,
+): string =>
   [
     `<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}">`,
+    outcomes.declarations,
     ...parts.map((part) =>
       [
         `<qti-test-part identifier="${part.identifier}" navigation-mode="${part.navigation}" submission-mode="${part.submission}">`,
@@ -251,6 +274,9 @@ const testXml = (identifier: string, parts: readonly BuiltPart[]): string =>
         "</qti-assessment-section></qti-test-part>",
       ].join(""),
     ),
+    outcomes.rules === ""
+      ? ""
+      : `<qti-outcome-processing>${outcomes.rules}</qti-outcome-processing>`,
     "</qti-assessment-test>",
   ].join("");
 
@@ -261,17 +287,19 @@ const testXml = (identifier: string, parts: readonly BuiltPart[]): string =>
  * @param identifier The test's identifier.
  * @param parts The test's parts.
  * @param items Each item ref's identifier with its item's text.
+ * @param outcomes The test's outcome declarations and outcome processing.
  * @returns The test and its items.
  */
 const builtDelivery = Effect.fnUntraced(function* builtDelivery(
   identifier: string,
   parts: readonly BuiltPart[],
   items: readonly (readonly [string, string])[],
+  outcomes: BuiltOutcomes = noOutcomes,
 ) {
   const encoder = new TextEncoder();
   const test = yield* openTest(
     `tests/${identifier}.xml`,
-    encoder.encode(testXml(identifier, parts)),
+    encoder.encode(testXml(identifier, parts, outcomes)),
   );
   const accepted = new Map<string, Accepted>();
   for (const [ref, xml] of items) {
@@ -1473,5 +1501,402 @@ describe("endPart", () => {
         "wrong-submission-mode",
       );
     }),
+  );
+});
+
+/**
+ * The processing seed every outcome run case starts its session with, so the runs' draws are fixed.
+ */
+const processingSeed = "outcome-run-seed";
+
+/**
+ * The outcomes of a test whose outcome processing draws `DRAW` from 1 to 1,000,000, sums every
+ * item's `SCORE` into `TOTAL`, reads item ref `one`'s `SCORE` into `FIRST` through its prefix,
+ * and reads the test's own `duration` into `TIME`, in that order.
+ */
+const summingOutcomes: BuiltOutcomes = {
+  declarations: [
+    '<qti-outcome-declaration identifier="DRAW" cardinality="single" base-type="integer"/>',
+    '<qti-outcome-declaration identifier="FIRST" cardinality="single" base-type="float"/>',
+    '<qti-outcome-declaration identifier="TIME" cardinality="single" base-type="duration"/>',
+    '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/>',
+  ].join(""),
+  rules: [
+    '<qti-set-outcome-value identifier="DRAW"><qti-random-integer min="1" max="1000000"/></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="TOTAL"><qti-sum><qti-test-variables variable-identifier="SCORE"/></qti-sum></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="FIRST"><qti-variable identifier="one.SCORE"/></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="TIME"><qti-variable identifier="duration"/></qti-set-outcome-value>',
+  ].join(""),
+};
+
+/**
+ * A single integer value.
+ *
+ * @param value The integer.
+ * @returns The value.
+ */
+const integerOf = (value: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value }],
+});
+
+/**
+ * A single duration value.
+ *
+ * @param seconds The duration in seconds.
+ * @returns The value.
+ */
+const secondsOf = (seconds: number): Value => ({
+  baseType: "duration",
+  cardinality: "single",
+  values: [{ baseType: "duration", value: seconds }],
+});
+
+/**
+ * Give the `DRAW` that {@link summingOutcomes}' `qti-random-integer` takes as the first draw of a
+ * stream: 1 plus a draw below 1,000,000.
+ *
+ * @param seed The stream's seed.
+ * @param label The stream's label.
+ * @returns The single integer.
+ */
+const drawnBy = (seed: string, label: string): Value =>
+  integerOf(1n + drawBelow(drawStream(seed, label), 1_000_000n));
+
+/**
+ * Give the outcomes run `run` of {@link summingOutcomes} leaves, from what it reads.
+ *
+ * @param run The run's number, counted from 1.
+ * @param read What the run reads.
+ * @param read.first Item ref `one`'s `SCORE`.
+ * @param read.seconds The test's `duration`.
+ * @param read.total The sum of every item's `SCORE`.
+ * @returns The outcomes, by identifier.
+ */
+const summed = (
+  run: number,
+  read: { readonly first: number; readonly seconds: number; readonly total: number },
+) => ({
+  DRAW: drawnBy(processingSeed, outcomeLabel(instance, run)),
+  FIRST: scored(read.first),
+  TIME: secondsOf(read.seconds),
+  TOTAL: scored(read.total),
+});
+
+/**
+ * Start a session of a delivery under {@link processingSeed}, failing the test when `startTest`
+ * refuses.
+ *
+ * @param delivery The test and its items.
+ * @param configuration The host's configuration.
+ * @returns The session.
+ */
+const seeded = (delivery: Delivery, configuration: Configuration): TestSession =>
+  Result.getOrElse(
+    startTest(delivery.test, delivery.items, configuration, {
+      instance,
+      now: startedAt,
+      seed: processingSeed,
+    }),
+    (failure) => assert.fail(`startTest refused: ${failure.message}`),
+  );
+
+describe("outcome processing in a session", () => {
+  it.effect(
+    "[T-9] an outcome run follows each submitItem in an individual part, counted by outcomeRuns, its duration the seconds from started to now",
+    () =>
+      Effect.gen(function* afterSubmitItem() {
+        const delivery = yield* builtDelivery(
+          "summing",
+          [partOf("part", ["one", "two"])],
+          [
+            ["one", choiceItemXml("one")],
+            ["two", choiceItemXml("two")],
+          ],
+          summingOutcomes,
+        );
+        const session = seeded(delivery, defaults);
+        assert.strictEqual(session.outcomeRuns, 0);
+
+        const first = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            session,
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            defaults,
+            { now: after(5) },
+          ),
+        );
+        assert.strictEqual(first.outcomeRuns, 1);
+        assert.deepStrictEqual(first.outcomes, summed(1, { first: 1, seconds: 5, total: 1 }));
+
+        const second = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            shown(delivery, first, 2, after(6)),
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            defaults,
+            { now: after(9.25) },
+          ),
+        );
+        assert.strictEqual(second.outcomeRuns, 2);
+        assert.deepStrictEqual(second.outcomes, summed(2, { first: 1, seconds: 9.2, total: 2 }));
+        assert.strictEqual(second.status, "interacting");
+      }),
+  );
+
+  it.effect(
+    "[T-9] an outcome run follows submitPart once, after every item of the simultaneous part is processed",
+    () =>
+      Effect.gen(function* afterSubmitPart() {
+        const delivery = yield* builtDelivery(
+          "summing",
+          [
+            partOf("together", ["one", "two"], { submission: "simultaneous" }),
+            partOf("after", ["three"]),
+          ],
+          [
+            ["one", choiceItemXml("one")],
+            ["two", choiceItemXml("two")],
+            ["three", choiceItemXml("three")],
+          ],
+          summingOutcomes,
+        );
+        const savedOnOne = accepted(
+          recordStep(
+            seeded(delivery, defaults),
+            { intent: { kind: "go", sequenceIndex: 2 }, responses: { RESPONSE: chosen("A") } },
+            after(2),
+          ),
+        );
+
+        const submitted = accepted(
+          submitPart(
+            delivery.test,
+            delivery.items,
+            shown(delivery, savedOnOne, 2, after(3)),
+            stepOf("submit-part", { RESPONSE: chosen("A") }),
+            { now: after(8) },
+          ),
+        );
+
+        assert.strictEqual(submitted.outcomeRuns, 1);
+        assert.deepStrictEqual(submitted.outcomes, summed(1, { first: 1, seconds: 8, total: 2 }));
+        assert.strictEqual(submitted.status, "interacting");
+        assert.deepStrictEqual(
+          submitted.parts.map((part) => part.status),
+          ["ended", "current"],
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] the close runs one more outcome run: a submitPart that closes the test runs twice at one now, the close's run differing only in its draws",
+    () =>
+      Effect.gen(function* closingSubmitPart() {
+        const delivery = yield* builtDelivery(
+          "summing",
+          [partOf("together", ["one", "two"], { submission: "simultaneous" })],
+          [
+            ["one", choiceItemXml("one")],
+            ["two", choiceItemXml("two")],
+          ],
+          summingOutcomes,
+        );
+
+        const closed = accepted(
+          submitPart(
+            delivery.test,
+            delivery.items,
+            seeded(delivery, defaults),
+            stepOf("submit-part", { RESPONSE: chosen("A") }),
+            { now: after(8) },
+          ),
+        );
+
+        assert.strictEqual(closed.status, "closed");
+        assert.strictEqual(closed.outcomeRuns, 2);
+        assert.deepStrictEqual(closed.outcomes, summed(2, { first: 1, seconds: 8, total: 1 }));
+
+        const before = Result.getOrElse(
+          runOutcomes(
+            delivery.test.test,
+            testScopeOf(delivery.test.test, delivery.items, closed, Option.some(8)),
+            drawStream(processingSeed, outcomeLabel(instance, 1)),
+          ),
+          (failure) => assert.fail(`the first run failed: ${failure.message}`),
+        );
+        assert.deepStrictEqual(before, summed(1, { first: 1, seconds: 8, total: 1 }));
+        assert.notDeepEqual(
+          closed.outcomes["DRAW"],
+          drawnBy(processingSeed, outcomeLabel(instance, 1)),
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] an endPart that closes the test runs an outcome run, whose duration reads the close",
+    () =>
+      Effect.gen(function* closingEndPart() {
+        const delivery = yield* builtDelivery(
+          "summing",
+          [partOf("first", ["one"]), partOf("last", ["two"])],
+          [
+            ["one", choiceItemXml("one")],
+            ["two", choiceItemXml("two")],
+          ],
+          summingOutcomes,
+        );
+        const submitted = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            seeded(delivery, defaults),
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            defaults,
+            { now: after(4) },
+          ),
+        );
+        const moved = accepted(
+          endPart(delivery.test, delivery.items, submitted, stepOf("end-part"), { now: after(6) }),
+        );
+        assert.strictEqual(moved.status, "interacting");
+        assert.strictEqual(moved.outcomeRuns, 1);
+        assert.deepStrictEqual(moved.outcomes, submitted.outcomes);
+
+        const closed = accepted(
+          endPart(delivery.test, delivery.items, moved, stepOf("end-part"), { now: after(12.5) }),
+        );
+        assert.strictEqual(closed.status, "closed");
+        assert.strictEqual(closed.outcomeRuns, 2);
+        assert.deepStrictEqual(closed.outcomes, summed(2, { first: 1, seconds: 12.5, total: 1 }));
+      }),
+  );
+
+  it.effect(
+    "[T-9] an outcome run draws from the processing seed under its run's outcome label, never the default key",
+    () =>
+      Effect.gen(function* keyedDraws() {
+        const delivery = yield* builtDelivery(
+          "summing",
+          [partOf("part", ["one"])],
+          [["one", choiceItemXml("one")]],
+          summingOutcomes,
+        );
+        const session = seeded(delivery, defaults);
+        assert.strictEqual(session.seed, processingSeed);
+
+        const submitted = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            session,
+            stepOf("submit-item", { RESPONSE: chosen("B") }),
+            defaults,
+            { now: after(3) },
+          ),
+        );
+        const closed = accepted(
+          endPart(delivery.test, delivery.items, submitted, stepOf("end-part"), { now: after(4) }),
+        );
+
+        const runOne = drawnBy(processingSeed, outcomeLabel(instance, 1));
+        const runTwo = drawnBy(processingSeed, outcomeLabel(instance, 2));
+        assert.strictEqual(outcomeLabel(instance, 1), "sitting\u001Foutcome\u001F1");
+        assert.deepStrictEqual(submitted.outcomes["DRAW"], runOne);
+        assert.deepStrictEqual(closed.outcomes["DRAW"], runTwo);
+        assert.notDeepEqual(runOne, runTwo);
+        assert.notDeepEqual(runOne, drawnBy("", ""));
+        assert.notDeepEqual(runTwo, drawnBy("", ""));
+      }),
+  );
+
+  it.effect(
+    "[T-9] a test whose outcome processing is absent or marked keeps its defaults: no outcome run is counted",
+    () =>
+      Effect.gen(function* notRun() {
+        const declared =
+          '<qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer"><qti-default-value><qti-value>7</qti-value></qti-default-value></qti-outcome-declaration>';
+        const kinds: readonly (readonly [string, BuiltOutcomes])[] = [
+          ["absent", { declarations: declared, rules: "" }],
+          [
+            "marked",
+            {
+              declarations: declared,
+              rules:
+                '<qti-set-outcome-value identifier="COUNT"><qti-variable identifier="numAttempts"/></qti-set-outcome-value>',
+            },
+          ],
+        ];
+        for (const [kind, outcomes] of kinds) {
+          const delivery = yield* builtDelivery(
+            "unrun",
+            [partOf("part", ["one"])],
+            [["one", choiceItemXml("one")]],
+            outcomes,
+          );
+          assert.strictEqual(delivery.test.test.outcomeProcessing.kind, kind);
+
+          const session = seeded(delivery, defaults);
+
+          const submitted = accepted(
+            submitItem(
+              delivery.test,
+              delivery.items,
+              session,
+              stepOf("submit-item", { RESPONSE: chosen("A") }),
+              defaults,
+              { now: after(3) },
+            ),
+          );
+          const closed = accepted(
+            endPart(delivery.test, delivery.items, submitted, stepOf("end-part"), {
+              now: after(4),
+            }),
+          );
+
+          assert.strictEqual(closed.status, "closed", kind);
+          assert.deepStrictEqual([submitted.outcomeRuns, closed.outcomeRuns], [0, 0], kind);
+          assert.deepStrictEqual(closed.outcomes, { COUNT: integerOf(7n) }, kind);
+        }
+      }),
+  );
+
+  it.effect(
+    "[T-9] an outcome run's EngineFailure passes through endPart: a stored item record lacking an outcome the run reads",
+    () =>
+      Effect.gen(function* failingRun() {
+        const delivery = yield* builtDelivery(
+          "summing",
+          [partOf("part", ["one"])],
+          [["one", choiceItemXml("one")]],
+          summingOutcomes,
+        );
+        const session = seeded(delivery, defaults);
+        const lacking: TestSession = {
+          ...session,
+          items: session.items.map((item) =>
+            item.ref === "one" ? { ...item, record: { ...item.record, outcomes: {} } } : item,
+          ),
+        };
+
+        const failure = Option.getOrElse(
+          Result.getFailure(
+            endPart(delivery.test, delivery.items, lacking, stepOf("end-part"), { now: after(2) }),
+          ),
+          () => assert.fail("expected the closing outcome run to fail, and endPart succeeded"),
+        );
+
+        assert.instanceOf(failure, UnknownIdentifierError);
+        assert.deepStrictEqual(
+          failure instanceof UnknownIdentifierError
+            ? [failure.holder, failure.identifier, failure.role]
+            : [],
+          ["record", "SCORE", "outcome"],
+        );
+      }),
   );
 });
