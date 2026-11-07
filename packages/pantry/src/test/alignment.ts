@@ -604,7 +604,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     115,
     {
       owner:
-        "IN's `Site` into `Document` and every include its site (`src/qti/tests.ts`, Include target), and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target and Include fragment identifier",
+        "IN's `SiteTarget`, each site's target, a row only where its href names a document the manifest lists: `Site` into `SiteTarget` and `SiteTarget` into `Document`, and every include its site (`src/qti/tests.ts`, Include target), and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target and Include fragment identifier",
       status: "G",
     },
   ],
@@ -620,7 +620,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     117,
     {
       owner:
-        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through `nodeContext`; `Site`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang`, `AssembledLang` and `PlacedGeneralLang` (`src/qti/identity.ts`) and `PlacedVariableRef` (`src/qti/expressions.ts`) under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item; the laws it lists are known under-refusals",
+        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through `nodeContext`; `SiteTarget`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang`, `AssembledLang` and `PlacedGeneralLang` (`src/qti/identity.ts`) and `PlacedVariableRef` (`src/qti/expressions.ts`) under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item; the laws it lists are known under-refusals",
       status: "G",
     },
   ],
