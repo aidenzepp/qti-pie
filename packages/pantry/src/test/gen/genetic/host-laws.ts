@@ -938,7 +938,10 @@ const translated = (text: string, from: string, to: string): string =>
     .join("");
 
 /**
- * The `Compute` functions over texts this module reads, each from its arguments' texts.
+ * The `Compute` functions over texts this module reads, each from its arguments' texts, and
+ * `singleton`, the set holding a closed id's one handle, from the handle's text a row holds for the
+ * id (grizzle's README, "Tables and types"): AL1's admission, E1 derived's slot and N5's and N7's
+ * memberships read `{h} ⊆ S` through it.
  */
 const textFunctions: ReadonlyMap<string, (texts: readonly string[]) => Datum | undefined> = new Map<
   string,
@@ -956,6 +959,7 @@ const textFunctions: ReadonlyMap<string, (texts: readonly string[]) => Datum | u
     ([text, pattern]) =>
       text === undefined || pattern === undefined ? undefined : matchesPattern(text, pattern),
   ],
+  ["singleton", ([id]) => (id === undefined ? undefined : new Set([id]))],
   [
     "startsWith",
     ([text, prefix]) =>
