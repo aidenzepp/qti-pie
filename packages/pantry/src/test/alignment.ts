@@ -611,7 +611,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     115,
     {
       owner:
-        "IN's `SiteTarget`, each site's target, a row only where its href names a document the manifest lists: `Site` into `SiteTarget` and `SiteTarget` into `Document`, and every include its site (`src/qti/tests.ts`, Include target), and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target and Include fragment identifier",
+        'IN\'s `SitePath` and `SiteTarget` (`src/qti/tests.ts`): a site\'s href is its `SitePath`, written only where it resolves to a path of the package, its `entry` held by `File_exists` ("File exists"); every include has its `SitePath` and each include path an entry holds its `SiteTarget` (Include target), and every section ref its `SitePath` ("Document entry"); `SiteTarget` into `Document`; and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle\'s Include target, Document entry and Include fragment identifier, the box `src/test/gen/sites.test.ts` exhausts',
       status: "G",
     },
   ],
