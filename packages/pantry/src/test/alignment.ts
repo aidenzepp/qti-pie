@@ -815,6 +815,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    142,
+    {
+      owner:
+        "crust's namespace pass (`packages/crust/src/namespaces.ts` `bindingViolation`, `namespacesVersionOf`) over `packages/crust/src/uri.ts` (`uriReference`, RFC 3986's URI-reference, which pantry's `NamespaceUri` reads; `isNamespaceName`, RFC 3987's IRI-reference under Namespaces 1.1); held by `src/test/namespace-name.test.ts` against the law oracle's `#pantry/test/uri-reference.ts`, `packages/crust/src/uri.test.ts` against RFC 3987 §2.2's ranges, and `src/test/genetic-codec.test.ts`'s fixed seed N2",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
