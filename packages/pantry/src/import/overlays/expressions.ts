@@ -2346,8 +2346,10 @@ const mappingSourcesOf = (
 
 /**
  * Write what each variable mapping's item ref names, its `ItemRefTarget`'s type, which leaves a
- * mapping under an LTI link unchecked (spec reading 110). A mapping whose item ref has no target
- * has none, and "Item ref target" refuses it with its item ref.
+ * mapping under an LTI link unchecked (spec reading 110), or {@link noResource} where the item ref
+ * has no target: it writes no href, which AL3 alone refuses (spec reading 155), or its href names
+ * no resource, which "Item ref target" refuses over the item ref. "Variable mapping source" judges
+ * such a mapping, as `NameLookup` gives such an item ref the type `none`.
  *
  * @param documents - Every document of the package.
  * @param lookups - The lookups, which hold each item ref's target.
@@ -2359,13 +2361,17 @@ const mappingItemRefsOf = (
 ): ReadonlyMap<string, Addition<typeof MappingItemRef>> =>
   new Map(
     documents.flatMap((input) =>
-      [...input.tests.VariableMapping.values()].flatMap((mapping) => {
-        const type = lookups.targets.get(mapping.parent);
-
-        return type === undefined
-          ? []
-          : [[mapping.node, { itemRef: mapping.parent, node: mapping.node, type }] as const];
-      }),
+      [...input.tests.VariableMapping.values()].map(
+        (mapping) =>
+          [
+            mapping.node,
+            {
+              itemRef: mapping.parent,
+              node: mapping.node,
+              type: lookups.targets.get(mapping.parent) ?? noResource,
+            },
+          ] as const,
+      ),
     ),
   );
 
