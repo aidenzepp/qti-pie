@@ -1133,15 +1133,22 @@ const modelStates: Arr.NonEmptyReadonlyArray<ModelState> = (() => {
  * is the small scope (115 models where `ContentModelOf` has 1,288 families); the kinds an
  * explanation lists at each position are read in that family.
  */
-const models: Arr.NonEmptyReadonlyArray<Arr.NonEmptyReadonlyArray<ModelState>> = nonEmpty(
-  "the content models",
-  [
-    ...Map.groupBy(
-      [...Map.groupBy(modelStates, ({ parent, version }) => `${version} ${parent}`).values()],
-      ([{ parent, version }]) => modelOf.get(`${version} ${parent}`) ?? "",
-    ).values(),
-  ].map(([states]) => nonEmpty("a model's states", states)),
-);
+const models: Arr.NonEmptyReadonlyArray<Arr.NonEmptyReadonlyArray<ModelState>> = (() => {
+  const first = new Map<string, Arr.NonEmptyReadonlyArray<ModelState>>();
+  for (const states of Map.groupBy(
+    modelStates,
+    ({ parent, version }) => `${version} ${parent}`,
+  ).values()) {
+    const family = nonEmpty("a model's states", states);
+    const [{ parent, version }] = family;
+    const model = modelOf.get(`${version} ${parent}`) ?? "";
+    if (!first.has(model)) {
+      first.set(model, family);
+    }
+  }
+
+  return nonEmpty("the content models", [...first.values()]);
+})();
 
 /**
  * The positions `Follow` holds after each state of each model, read from its rows directly, keyed
