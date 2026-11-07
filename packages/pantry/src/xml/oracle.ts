@@ -326,6 +326,67 @@ export const verdictsOf = (
   });
 
 /**
+ * One `xmllint` run's report: its exit status, and what it wrote to standard output then to
+ * standard error, as one text.
+ */
+export interface XmllintReport {
+  readonly code: number;
+  readonly report: string;
+}
+
+/**
+ * Run `xmllint --nonet --noout` once over files against a schema, and collect its report:
+ * {@link xmllintValidate}'s one process, before its report is read.
+ *
+ * @param input - What to validate, as {@link xmllintValidate} takes it; every file goes to the one
+ *   process.
+ * @param input.schema - The schema document to validate against.
+ * @param input.catalog - The XML catalog that maps the schema's imports onto files, if it has any.
+ * @param input.language - The schema's language, `xsd` unless given.
+ * @param input.paths - The files to judge.
+ * @returns The run's report, whatever its status; an {@link OracleUnavailable} when `xmllint` does
+ *   not start.
+ */
+export const xmllintReportOf = Effect.fn("oracle.xmllintReportOf")(
+  function* xmllintReportOf(input: {
+    readonly catalog?: string;
+    readonly language?: "relax-ng" | "xsd";
+    readonly paths: readonly string[];
+    readonly schema: string;
+  }): Effect.fn.Return<XmllintReport, OracleUnavailable, ChildProcessSpawner.ChildProcessSpawner> {
+    const mode = input.language === "relax-ng" ? "--relaxng" : "--schema";
+    const env: Readonly<Record<string, string>> =
+      input.catalog === undefined ? {} : { XML_CATALOG_FILES: input.catalog };
+    const result = yield* xmllintRun(
+      ["--nonet", "--noout", mode, input.schema, ...input.paths],
+      env,
+    );
+
+    return {
+      code: result.code,
+      report: `${new TextDecoder().decode(result.stdout)}${result.stderr}`,
+    };
+  },
+);
+
+/**
+ * Read one run's report as each file's verdict: exit status 0, 1 (a file not well-formed or not
+ * found) and 3 (a file invalid) are reports, read by {@link verdictsOf}, and any other is an
+ * {@link OracleError}, the schema not compiling (5) among them.
+ *
+ * @param paths - The files the run judged.
+ * @param run - Its report.
+ * @returns Each file's verdict, in `paths` order, or {@link verdictsOf}'s refusal.
+ */
+export const verdictsOfReport = (
+  paths: readonly string[],
+  run: XmllintReport,
+): Effect.Effect<readonly XsdVerdict[], OracleError | OracleUnreadable> =>
+  [0, 1, 3].includes(run.code)
+    ? verdictsOf(paths, run.report)
+    : Effect.fail(new OracleError({ exitCode: run.code, stderr: run.report }));
+
+/**
  * Validate files against a schema with `xmllint --nonet`, libxml2's own validator, and return each
  * file's verdict: an XML Schema (`--schema`) unless `input.language` is `relax-ng` (`--relaxng`).
  *
@@ -362,20 +423,10 @@ export const xmllintValidate = Effect.fn("oracle.xmllintValidate")(
   > {
     yield* Effect.annotateCurrentSpan({ files: input.paths.length, schema: input.schema });
 
-    const mode = input.language === "relax-ng" ? "--relaxng" : "--schema";
-    const env: Readonly<Record<string, string>> =
-      input.catalog === undefined ? {} : { XML_CATALOG_FILES: input.catalog };
     const chunks = yield* Effect.forEach(Arr.chunksOf(input.paths, filesPerProcess), (chunk) =>
-      Effect.gen(function* validateChunk() {
-        const result = yield* xmllintRun(["--nonet", "--noout", mode, input.schema, ...chunk], env);
-        const report = `${new TextDecoder().decode(result.stdout)}${result.stderr}`;
-
-        if (![0, 1, 3].some((code) => result.code === ChildProcessSpawner.ExitCode(code))) {
-          return yield* new OracleError({ exitCode: result.code, stderr: report });
-        }
-
-        return yield* verdictsOf(chunk, report);
-      }),
+      Effect.flatMap(xmllintReportOf({ ...input, paths: chunk }), (run) =>
+        verdictsOfReport(chunk, run),
+      ),
     );
 
     return chunks.flat();

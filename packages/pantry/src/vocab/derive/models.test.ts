@@ -110,7 +110,10 @@ const absence = await Effect.runPromise(
  * `nice -n 15`; its slowest test took 103.9 s. The budget is twice the slowest, rounded up to the
  * next minute. On 2026-11-05, at a load average near 12, reading a version's 20 pinned files took 4
  * to 5 s and `xmllint` 7 to 10 s a version, and four times that, 240 s, cut the hook at the busier
- * load. Raise it only on a new measurement recorded here, never to make a run pass.
+ * load. With every batch's report in the verdict cache (`#pantry/test/gen/verdict-cache.ts`) the
+ * hook took 72.9 s at 68 to 88, but a run that finds none, as a fresh clone's or one after a probe
+ * changes, pays the whole, so the budget is the uncached run's. Raise it only on a new measurement
+ * recorded here, never to make a run pass.
  */
 const hookTimeoutMs = 900_000;
 
