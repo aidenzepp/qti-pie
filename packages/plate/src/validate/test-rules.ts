@@ -13,12 +13,17 @@
  * the variables its printed variables name, as the qti package binds them (`bindsVariables`). A
  * section declares nothing, so a section document's printed variables are not judged.
  *
+ * A test's and a section's expressions, in outcome processing, pre-conditions, branch rules and
+ * template defaults, are judged by the item's processing rules too (`processingRefusals`), against
+ * the processing scope: a test's processing reads more built-ins than its printed variables name.
+ *
  * Two things a test may hold are valid here and are never refused. A dotted reference
  * (`ITEMREF.VAR`, `ITEMREF.N.VAR`, a part's or a section's `duration`) is valid in pre-conditions,
- * branch rules and outcome processing (readings 4, 5 and 37); reading 48 refuses one only when two
- * readings of it each name a real item ref, part or section and a variable it has, which needs the
- * items' declared variables, so only a package can judge it. A `min-time` above a `max-time` is
- * valid, each limit enforced on its own (T-O8).
+ * branch rules and outcome processing (readings 4, 5 and 37), and is typed `unknown` here
+ * ({@link unknownPrefix}); reading 48 refuses one only when two readings of it each name a real
+ * item ref, part or section and a variable it has, which needs the items' declared variables, so
+ * only a package can judge it. A `min-time` above a `max-time` is valid, each limit enforced on its
+ * own (T-O8).
  *
  * @module
  */
@@ -34,8 +39,12 @@ import { singleOf } from "#plate/model/expression.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
-import { declarationsOf, printedVariableReferences } from "#plate/validate/rules.ts";
-import type { NamedVariable, VariableScope } from "#plate/validate/rules.ts";
+import {
+  declarationsOf,
+  printedVariableReferences,
+  processingRefusals,
+} from "#plate/validate/rules.ts";
+import type { NamedVariable, PrefixedTyper, VariableScope } from "#plate/validate/rules.ts";
 import { governingTables } from "#plate/validate/structure.ts";
 import type { Tables } from "#plate/validate/xsd.ts";
 
@@ -144,6 +153,32 @@ const testScope = (source: SourceDocument): VariableScope => ({
   declarer: "test",
   variables: new Map(testDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
 });
+
+/**
+ * Type a test's prefixed read when the test is checked alone: `unknown`, which satisfies every
+ * rule, since only a package holds the items whose variables it reads.
+ *
+ * @returns The type `unknown` of `unknown` cardinality.
+ */
+const unknownPrefix: PrefixedTyper = () => ({ baseType: "unknown", cardinality: "unknown" });
+
+/**
+ * Give the element path a refusal points at: an element's path as it is, an attribute's without
+ * its last step, and none for a refusal located otherwise.
+ *
+ * @param refusal The refusal.
+ * @returns The path of its element, or the empty string when it points at no path.
+ */
+const elementPathOf = (refusal: Refusal): string => {
+  if (refusal.location.kind !== "path") {
+    return "";
+  }
+
+  const { path } = refusal.location;
+  const attribute = path.lastIndexOf("/@");
+
+  return attribute === -1 ? path : path.slice(0, attribute);
+};
 
 /**
  * The elements the rules judge, with each element's parent.
@@ -457,6 +492,12 @@ const expressionPlacement = (
  * context variable or a built-in of the test (`QTI_CONTEXT`, `duration`) is refused by its kind. A
  * section document's printed variables are not judged, since a section declares nothing.
  *
+ * Its expressions are judged by the item's processing rules (`processingRefusals`, the qti
+ * package's P8, P20 to P24 and P29), with every prefixed read typed `unknown`
+ * ({@link unknownPrefix}). Each of their refusals is placed after the test rules' at the element
+ * it judges ({@link elementPathOf}); one at no judged element, which those rules never give, would
+ * follow all the others rather than be lost.
+ *
  * The rules judge exactly what the structural walk checks, and only a document they can read
  * whole:
  *
@@ -494,15 +535,23 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
   const scope = isQti(source.root, (local) => local === "qti-assessment-test")
     ? Option.some(testScope(source))
     : Option.none();
+  const processing = Map.groupBy(processingRefusals(source, tables, unknownPrefix), elementPathOf);
+  const placed = visits.flatMap((visit) => {
+    const atVisit = processing.get(visit.path) ?? [];
+    processing.delete(visit.path);
 
-  return visits.flatMap((visit) => [
-    ...duplicateIdentifier(source, visit, seen),
-    ...sectionChildCount(source, visit),
-    ...misplacedInTestContent(source, visit, parents),
-    ...expressionPlacement(source, visit, parents),
-    ...Option.match(scope, {
-      onNone: () => [],
-      onSome: (declared) => printedVariableReferences(source, visit, declared),
-    }),
-  ]);
+    return [
+      ...duplicateIdentifier(source, visit, seen),
+      ...sectionChildCount(source, visit),
+      ...misplacedInTestContent(source, visit, parents),
+      ...expressionPlacement(source, visit, parents),
+      ...Option.match(scope, {
+        onNone: () => [],
+        onSome: (declared) => printedVariableReferences(source, visit, declared),
+      }),
+      ...atVisit,
+    ];
+  });
+
+  return [...placed, ...[...processing.values()].flat()];
 };

@@ -446,8 +446,19 @@ const responseRules = (
 };
 
 /**
- * The item's declarations a rule resolves identifiers against, and each element's parent, as the
- * walk has met them. As a {@link VariableScope} it is the item's, with the item's built-ins.
+ * Type a name a test's processing reads with a `.` in it that the test does not declare whole: a
+ * prefixed read (`ITEMREF.VAR`, `ITEMREF.N.VAR`, a part's or a section's `duration`; readings 4
+ * and 37), which only the test's items can type.
+ *
+ * @param name The name, as its attribute gives it.
+ * @returns Its type: `unknown` when the caller holds no items, which satisfies every rule.
+ */
+export type PrefixedTyper = (name: string) => ExpressionType;
+
+/**
+ * The document's declarations a rule resolves identifiers against, and each element's parent, as
+ * the walk has met them. As a {@link VariableScope} it is the document's, with its built-ins: an
+ * item's, or the processing scope of a test or a section ({@link processingRefusals}).
  */
 interface Context extends VariableScope {
   readonly outcomes: ReadonlyMap<string, SourceElement>;
@@ -460,6 +471,12 @@ interface Context extends VariableScope {
    * The responses whose correct response the item's template processing sets, by identifier.
    */
   readonly setCorrectResponses: ReadonlySet<string>;
+  /**
+   * Type a name that no declaration and no built-in answers: none for every name in an item, whose
+   * reading of such a name is `undeclared-variable`; a prefixed read's type in a test; `unknown`
+   * for every name in a section, which resolves its names in each test that holds it (reading 5).
+   */
+  readonly typeUnanswered: (identifier: string) => Option.Option<ExpressionType>;
   /**
    * Each expression typed so far, with its type ({@link expressionType}), so an expression's type
    * is worked out once however many of its ancestors judge their operands.
@@ -667,22 +684,31 @@ const enclosing = (
 };
 
 /**
- * The processing an element of an item's rules belongs to: the item's response processing or its
- * template processing.
+ * The processing an element of the rules belongs to, as the qti package names its languages
+ * (`Language` in `packages/pantry/src/processing/ast.ts`): an item's response processing or
+ * template processing, a test's outcome processing, or the expression a test or a section holds in
+ * a `qti-pre-condition`, a `qti-branch-rule` or a `qti-template-default`. A template default is an
+ * expression, never template processing: it may read an outcome, a built-in and an item's variable
+ * (9.24), so the template read rule ({@link templateReads}, P26) never judges it.
  */
-type Processing = "response" | "template";
+type Processing = "expression" | "outcome" | "response" | "template";
 
 /**
- * The element that holds each processing, by its local name.
+ * The element that holds each processing, by its local name: the qti package judges all four test
+ * contexts (`packages/pantry/src/processing/ast.ts`, `import/processing.ts`).
  */
 const processings: ReadonlyMap<string, Processing> = new Map<string, Processing>([
+  ["qti-branch-rule", "expression"],
+  ["qti-outcome-processing", "outcome"],
+  ["qti-pre-condition", "expression"],
   ["qti-response-processing", "response"],
+  ["qti-template-default", "expression"],
   ["qti-template-processing", "template"],
 ]);
 
 /**
- * Give the processing an element lies in: the nearest of its ancestors that is a
- * `qti-response-processing` or a `qti-template-processing`.
+ * Give the processing an element lies in: the nearest of its ancestors that holds one
+ * ({@link processings}).
  *
  * @param context The parents the walk has met.
  * @param element The element.
@@ -704,9 +730,9 @@ const processingOf = (context: Context, element: SourceElement): Option.Option<P
 };
 
 /**
- * Report whether an element lies anywhere under a `qti-response-processing` or a
- * `qti-template-processing`, the processing the type and reference rules judge. The qti package
- * judges both alike (`checkProcessing` in `packages/pantry/src/processing/check.ts`).
+ * Report whether an element lies anywhere under an element that holds a processing
+ * ({@link processings}), the processing the type and reference rules judge. The qti package judges
+ * them alike (`checkProcessing` in `packages/pantry/src/processing/check.ts`).
  *
  * @param context The parents the walk has met.
  * @param element The element.
@@ -716,8 +742,8 @@ const inProcessing = (context: Context, element: SourceElement): boolean =>
   Option.isSome(processingOf(context, element));
 
 /**
- * Report whether an element lies anywhere under the element that holds one processing: a
- * `qti-response-processing` or a `qti-template-processing`.
+ * Report whether an element lies anywhere under the element that holds one processing
+ * ({@link processings}).
  *
  * @param context The parents the walk has met.
  * @param element The element.
@@ -1028,6 +1054,42 @@ const builtIns: ReadonlyMap<string, ExpressionType> = new Map<string, Expression
 ]);
 
 /**
+ * The kind of each built-in variable, which is declared implicitly (`info.txt:8440`): "There are
+ * two built-in response variables: 'numAttempts' and 'duration'" (`:8466`), "There is one built-in
+ * outcome variable, 'completionStatus'" (`:8488`), and "There is one built-in context variable:
+ * 'QTI_CONTEXT'" (`:8456`). Their types are {@link builtIns}'.
+ */
+const builtInKinds: ReadonlyMap<string, NamedKind> = new Map<string, NamedKind>([
+  ["completionStatus", "outcome"],
+  ["duration", "response"],
+  ["numAttempts", "response"],
+  ["QTI_CONTEXT", "context"],
+]);
+
+/**
+ * The item's built-ins as a printed variable or a `template-identifier` names them: each of
+ * {@link builtInKinds} with its type from {@link builtIns}.
+ */
+const itemBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
+  [...builtInKinds].map(([identifier, kind]) => [
+    identifier,
+    { kind, type: Option.fromUndefinedOr(builtIns.get(identifier)) },
+  ]),
+);
+
+/**
+ * What a reference resolves a name against beside the declarations: the document's built-ins and
+ * the typer of a name neither answers, as a {@link Context} holds them.
+ */
+type Names = Pick<Context, "builtIns" | "typeUnanswered">;
+
+/**
+ * An item's {@link Names}: its built-ins, and no type for a name nothing answers, which is
+ * `undeclared-variable`.
+ */
+const itemNames: Names = { builtIns: itemBuiltIns, typeUnanswered: () => Option.none() };
+
+/**
  * Report whether a name, which no declaration answers, reads the built-in `duration` of an item
  * that is not time dependent: "The value of duration for items that are not time dependent must
  * not be used in any item or test-level expression" (`info-compact.txt:8472`). The qti package
@@ -1287,12 +1349,14 @@ const declarationsNamable = (
 /**
  * Find the variable a reference names, and its type.
  *
- * A declaration of the expected kind wins over a built-in of the same name. Identifiers compare
- * exactly, so one that holds `.` names the declaration of that exact identifier (reading 37); a
- * prefixed reference (`ITEMREF.VAR`, reading 4) belongs to a test's processing.
+ * A declaration of the expected kind wins over a built-in of the same name, and a built-in of the
+ * document's ({@link VariableScope}'s `builtIns`) over the context's typer of a name neither
+ * answers (`typeUnanswered`). Identifiers compare exactly, so one that holds `.` names the
+ * declaration of that exact identifier (reading 37); in an item the typer answers nothing, and a
+ * prefixed reference (`ITEMREF.VAR`, reading 4) is typed only in a test's processing.
  *
  * @param reference The reference.
- * @param context The item's declarations.
+ * @param context The document's declarations, built-ins and typer.
  * @returns The variable's type, itself none when its declaration's type is not judged; none when
  *   no variable of the expected kind has the identifier.
  */
@@ -1306,10 +1370,12 @@ const variableType = (
   }
 
   const namable: readonly string[] = builtInsNamed[reference.expected];
+  const builtIn = context.builtIns.get(reference.identifier);
+  if (builtIn !== undefined && namable.includes(reference.identifier)) {
+    return Option.some(builtIn.type);
+  }
 
-  return namable.includes(reference.identifier)
-    ? Option.some(Option.fromUndefinedOr(builtIns.get(reference.identifier)))
-    : Option.none();
+  return Option.map(context.typeUnanswered(reference.identifier), Option.some);
 };
 
 /**
@@ -1336,6 +1402,11 @@ const variableType = (
  * holds none. A rule other than {@link builtInSetters} that targets a built-in no declaration
  * answers, a `qti-lookup-outcome-value` of `completionStatus`, is refused with
  * `check: "built-in-target"` and the information model's line as `source` (pantry's P9).
+ *
+ * In a test a name its context's typer answers (`typeUnanswered`), a prefixed read, is never
+ * refused here, nor is any name in a section ({@link processingRefusals}): the qti package types
+ * the first through the test's reach (`reference` and `target` in
+ * `packages/pantry/src/processing/check.ts`), which a package judges.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1372,7 +1443,8 @@ const undeclaredVariable = (
     ];
   }
 
-  const builtIn = !declarationsNamable(expected, context).has(identifier);
+  const builtIn =
+    !declarationsNamable(expected, context).has(identifier) && context.builtIns.has(identifier);
   if (builtIn && referencing.has(visit.element.local) && !builtInSetters.has(visit.element.local)) {
     return [
       refusal(source, "undeclared-variable", visit.path, {
@@ -1796,9 +1868,14 @@ const setType = (source: SourceDocument, visit: Visit, context: Context): readon
 
 /**
  * The local names of the rules whose first child is a condition: the branches of a response
- * condition and of a template condition, and a template constraint.
+ * condition, of an outcome condition and of a template condition, and a template constraint, as
+ * the qti package's `conditionKinds` lists them (`packages/pantry/src/processing/check.ts`). A
+ * `qti-pre-condition` and a `qti-branch-rule` are not among them: the information model words
+ * each as "If the expression evaluates to 'true'" (`info.txt` 5.23) and types neither.
  */
 const conditionBranches: ReadonlySet<string> = new Set([
+  "qti-outcome-else-if",
+  "qti-outcome-if",
   "qti-response-else-if",
   "qti-response-if",
   "qti-template-constraint",
@@ -1808,8 +1885,9 @@ const conditionBranches: ReadonlySet<string> = new Set([
 
 /**
  * Apply `expression-type` to the condition of a `qti-response-if` or `qti-response-else-if` of
- * inline response processing, or of a `qti-template-if`, `qti-template-else-if` or
- * `qti-template-constraint` of template processing.
+ * inline response processing, of a `qti-outcome-if` or `qti-outcome-else-if` of a test's outcome
+ * processing, or of a `qti-template-if`, `qti-template-else-if` or `qti-template-constraint` of
+ * template processing.
  *
  * "A responseIf part consists of an expression which must have an effective base-type of boolean
  * and single cardinality" (`info-compact.txt:10963`), and a `qti-response-else-if` part likewise
@@ -1987,8 +2065,46 @@ const lookupOperandType = (
 };
 
 /**
- * Apply `expression-type` to the operands of an expression of inline response processing or of
- * template processing: each operand its kind's rule does not accept (`operandsAccept` in the
+ * Apply `expression-type` with `check: "weight"` to a `qti-test-variables` of a test's outcome
+ * processing that has a `weight-identifier` and a `base-type` other than `float`: the qti package
+ * refuses it as P29 (`checkWeight` in `packages/pantry/src/processing/check.ts`), since a weighted
+ * value is a float. One with no `base-type` is not refused. A `base-type` outside the vocabulary is
+ * the structural validator's refusal, so it is not judged here. It reads the two attributes alone,
+ * so it judges the kind whether its family has landed or not.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The test's declarations and the parents the walk has met.
+ * @returns The refusal at the expression's path, with its `baseType`; none for any other element
+ *   and for one outside outcome processing.
+ */
+const weightType = (source: SourceDocument, visit: Visit, context: Context): readonly Refusal[] => {
+  if (
+    !isQti(visit.element, (local) => local === "qti-test-variables") ||
+    Option.isNone(attributeOf(visit.element, "weight-identifier")) ||
+    !liesIn(context, visit.element, "outcome")
+  ) {
+    return [];
+  }
+
+  return Option.match(vocabularyValue(visit.element, "base-type", baseTypes), {
+    onNone: () => [],
+    onSome: (baseType) =>
+      baseType === "float"
+        ? []
+        : [
+            refusal(source, "expression-type", visit.path, {
+              baseType,
+              check: "weight",
+              element: visit.element.local,
+            }),
+          ],
+  });
+};
+
+/**
+ * Apply `expression-type` to the operands of an expression that lies in a processing
+ * ({@link processings}): each operand its kind's rule does not accept (`operandsAccept` in the
  * registry, `kindRules` in `#plate/model/expressions/read.ts`), so the engine never meets an
  * operand its evaluator does not take. The qti package refuses the same as P23 (`operandRules` in
  * `packages/pantry/src/processing/check.ts`).
@@ -2090,13 +2206,21 @@ const valuesOf = (written: string, entry: ReferenceEntry): readonly string[] =>
  * a `tolerance` that names such a variable is not refused (OD-P8-20). A reference that names
  * nothing, or a template variable of another type, is refused as in response processing.
  *
+ * In a test's processing a name its typer answers (`typeUnanswered`), which no declaration and no
+ * built-in does, is a prefixed read: it is never `undeclared-variable`, and it is P24's when its
+ * type does not agree with the entry's single base type, as the qti package's
+ * `checkAttributeReference` judges the variable it resolves to. In a section every name is typed
+ * `unknown`, so none is refused.
+ *
  * It reads only the facet entries it is given, so it judges any kind whose rule declares them.
  *
  * @param source The document.
  * @param visit The expression's visit.
  * @param references The reference facet of the expression's kind.
- * @param declarations Every declaration of the item, by identifier.
+ * @param declarations Every declaration of the document, by identifier.
  * @param processing The processing the expression lies in, response processing unless given.
+ * @param names The document's built-ins and the typer of a name nothing else answers, an item's
+ *   unless given.
  * @returns The refusals at the expression's path, one per value that names no variable, one of
  *   another kind or type, or one template processing may not read, and one more for each that
  *   names the `duration` an item that is not time dependent does not have.
@@ -2107,6 +2231,7 @@ export const referenceRefusals = (
   references: readonly ReferenceEntry[],
   declarations: ReadonlyMap<string, SourceElement>,
   processing: Processing = "response",
+  names: Names = itemNames,
 ): readonly Refusal[] =>
   references.flatMap((entry) => {
     const written = attributeOf(visit.element, entry.attribute);
@@ -2114,7 +2239,10 @@ export const referenceRefusals = (
       return [];
     }
 
-    const declared: ReadonlySet<string> = new Set([...declarations.keys(), ...builtIns.keys()]);
+    const declared: ReadonlySet<string> = new Set([
+      ...declarations.keys(),
+      ...names.builtIns.keys(),
+    ]);
 
     return valuesOf(written.value.value, entry).flatMap((value) => {
       const classified = classifiers[entry.baseType](value, declared);
@@ -2138,7 +2266,11 @@ export const referenceRefusals = (
       }
 
       const declaration = declarations.get(identifier);
-      if (declaration === undefined && !builtIns.has(identifier)) {
+      const unanswered =
+        declaration === undefined && !names.builtIns.has(identifier)
+          ? Option.some(names.typeUnanswered(identifier))
+          : Option.none();
+      if (Option.exists(unanswered, Option.isNone)) {
         return [
           refusal(source, "undeclared-variable", visit.path, {
             attribute: entry.attribute,
@@ -2149,16 +2281,19 @@ export const referenceRefusals = (
         ];
       }
 
-      const fits =
-        declaration !== undefined &&
-        isQti(
-          declaration,
-          (local) => local === "qti-template-declaration" || local === "qti-outcome-declaration",
-        ) &&
-        !Option.exists(
-          declarationType(declaration),
-          (type) => !agree(type, singleOf(entry.baseType)),
-        );
+      const fits = Option.match(Option.flatten(unanswered), {
+        onNone: () =>
+          declaration !== undefined &&
+          isQti(
+            declaration,
+            (local) => local === "qti-template-declaration" || local === "qti-outcome-declaration",
+          ) &&
+          !Option.exists(
+            declarationType(declaration),
+            (type) => !agree(type, singleOf(entry.baseType)),
+          ),
+        onSome: (type) => agree(type, singleOf(entry.baseType)),
+      });
 
       return [
         ...(declaration === undefined && untimedDuration(source, identifier)
@@ -2187,8 +2322,9 @@ export const referenceRefusals = (
   });
 
 /**
- * Apply {@link referenceRefusals} to an expression of inline response processing or of template
- * processing, with its kind's reference facet from the registry and the processing it lies in.
+ * Apply {@link referenceRefusals} to an expression that lies in a processing ({@link processings}),
+ * with its kind's reference facet from the registry, the processing it lies in and the context's
+ * built-ins and typer.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -2204,7 +2340,14 @@ const attributeReferences = (
   Option.match(Option.all([kindOf(visit.element), processingOf(context, visit.element)]), {
     onNone: () => [],
     onSome: ([kind, processing]) =>
-      referenceRefusals(source, visit, kindRules[kind].references, context.variables, processing),
+      referenceRefusals(
+        source,
+        visit,
+        kindRules[kind].references,
+        context.variables,
+        processing,
+        context,
+      ),
   });
 
 /**
@@ -2231,19 +2374,6 @@ const printedKinds: Readonly<Record<VariableScope["declarer"], string>> = {
 export type NamedKind = "context" | "outcome" | "response" | "template";
 
 /**
- * The kind of each built-in variable, which is declared implicitly (`info.txt:8440`): "There are
- * two built-in response variables: 'numAttempts' and 'duration'" (`:8466`), "There is one built-in
- * outcome variable, 'completionStatus'" (`:8488`), and "There is one built-in context variable:
- * 'QTI_CONTEXT'" (`:8456`). Their types are {@link builtIns}'.
- */
-const builtInKinds: ReadonlyMap<string, NamedKind> = new Map<string, NamedKind>([
-  ["completionStatus", "outcome"],
-  ["duration", "response"],
-  ["numAttempts", "response"],
-  ["QTI_CONTEXT", "context"],
-]);
-
-/**
  * The kind each declaration that a `qti-variable` may read declares, by its local name.
  */
 const declarationKinds: ReadonlyMap<string, NamedKind> = new Map<string, NamedKind>([
@@ -2261,17 +2391,6 @@ export interface NamedVariable {
   readonly kind: NamedKind;
   readonly type: Option.Option<ExpressionType>;
 }
-
-/**
- * The item's built-ins as a printed variable or a `template-identifier` names them: each of
- * {@link builtInKinds} with its type from {@link builtIns}.
- */
-const itemBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
-  [...builtInKinds].map(([identifier, kind]) => [
-    identifier,
-    { kind, type: Option.fromUndefinedOr(builtIns.get(identifier)) },
-  ]),
-);
 
 /**
  * The variables a name that a printed variable or a `template-identifier` gives resolves against in
@@ -2796,6 +2915,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
     parents: new Map(),
     responses: declarationsOf(source, "qti-response-declaration"),
     setCorrectResponses: setCorrectResponses(source, visits),
+    typeUnanswered: itemNames.typeUnanswered,
     types: new Map(),
     variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
   };
@@ -2823,6 +2943,145 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...conditionType(source, visit, context),
       ...lookupTableRequirements(source, visit, context),
       ...lookupOperandType(source, visit, context),
+      ...operandTypes(source, visit, context),
+    );
+  }
+
+  return refusals;
+};
+
+/**
+ * The built-in variables a test's processing reads, with the types the qti package gives them in a
+ * test (`builtInsOf("test")` in `packages/pantry/src/processing/env.ts`): `duration` a single
+ * duration, "the time spent on the test [...] of base-type duration and single cardinality"
+ * (`info.txt:9226`, reading 29), and `numAttempts`, `completionStatus` and `QTI_CONTEXT` typed as
+ * an item's. A test's printed variables name fewer: only `duration` and `QTI_CONTEXT`
+ * (`testBuiltIns` in `#plate/validate/test-rules.ts`).
+ */
+const testProcessingBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
+  [...builtInKinds].map(([identifier, kind]) => [
+    identifier,
+    {
+      kind,
+      type: Option.fromUndefinedOr(
+        identifier === "duration" ? singleOf("duration") : builtIns.get(identifier),
+      ),
+    },
+  ]),
+);
+
+/**
+ * The processing scope of a test or a section: what its expressions resolve a name against, beside
+ * its outcomes ({@link Context}).
+ *
+ * A test's is its outcome and context declarations, the four built-ins its processing reads
+ * ({@link testProcessingBuiltIns}), and the typer of a prefixed read: a name with a `.` that no
+ * declaration answers whole. A section's is no declaration and no built-in, with every name typed
+ * `unknown`: a section resolves its names in each test that holds it (reading 5), so only the rules
+ * that need no declaration judge it.
+ *
+ * @param source The document.
+ * @param typePrefixed The typer of a test's prefixed reads.
+ * @returns The scope, none for a root that is neither a QTI test nor a QTI section.
+ */
+const processingScope = (
+  source: SourceDocument,
+  typePrefixed: PrefixedTyper,
+): Option.Option<
+  Pick<Context, "builtIns" | "declarer" | "outcomes" | "typeUnanswered" | "variables">
+> => {
+  if (isQti(source.root, (local) => local === "qti-assessment-test")) {
+    return Option.some({
+      builtIns: testProcessingBuiltIns,
+      declarer: "test",
+      outcomes: declarationsOf(source, "qti-outcome-declaration"),
+      typeUnanswered: (identifier) =>
+        identifier.includes(".") ? Option.some(typePrefixed(identifier)) : Option.none(),
+      variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
+    });
+  }
+
+  return isQti(source.root, (local) => local === "qti-assessment-section")
+    ? Option.some({
+        builtIns: new Map(),
+        declarer: "test",
+        outcomes: new Map(),
+        typeUnanswered: () => Option.some(untyped),
+        variables: new Map(),
+      })
+    : Option.none();
+};
+
+/**
+ * Check a test's or a section's expressions against the item's processing rules, each where the
+ * qti package applies it (`checkProcessing` in `packages/pantry/src/processing/check.ts`, over the
+ * four test contexts of `packages/pantry/src/processing/ast.ts`):
+ *
+ * - `undeclared-variable` (P8, {@link undeclaredVariable}), and the operand and reference-attribute
+ *   types of `expression-type` (P23, {@link operandTypes}; P24, {@link attributeReferences}), in a
+ *   `qti-outcome-processing`, a `qti-pre-condition`, a `qti-branch-rule` and a
+ *   `qti-template-default`.
+ * - What a `qti-set-outcome-value` sets (P20, {@link setType}) and a `qti-lookup-outcome-value`'s
+ *   table and operand (P22, {@link lookupTableRequirements}, {@link lookupOperandType}) in outcome
+ *   processing.
+ * - The condition of a `qti-outcome-if` or a `qti-outcome-else-if` (P21, {@link conditionType}),
+ *   never of a pre-condition or a branch rule.
+ * - A weighted `qti-test-variables` whose base type is not `float` (P29, {@link weightType}).
+ *
+ * The rules are the item's own, so the two runs cannot drift. Names resolve against the processing
+ * scope ({@link processingScope}): a test's declarations and built-ins, where a name with a `.`
+ * that the test does not declare whole is a prefixed read, typed by `typePrefixed` and never
+ * refused `undeclared-variable` here (reading 48 is a package's); a section's names are all typed
+ * `unknown`. A template default is an expression, so the template read rule (P26) and the template
+ * rules' targets do not judge it, and its own target, an item's template variable, is a package's.
+ *
+ * As {@link checkRules} does, it judges exactly what the structural walk checks, and gives no
+ * refusal for a document whose judged elements hold an unexpanded entity reference. Every refusal
+ * is at the path of the element it judges, in document order.
+ *
+ * @param source The test or section document.
+ * @param tables The tables generated from the QTI XSD, the ones `checkStructure` checks the
+ *   document by.
+ * @param typePrefixed The type of each prefixed read: `unknown` for a test checked alone, which
+ *   satisfies every rule; the items' types for a test a package holds.
+ * @returns The refusals, empty when every rule holds or the document is not a test or a section.
+ */
+export const processingRefusals = (
+  source: SourceDocument,
+  tables: Tables,
+  typePrefixed: PrefixedTyper,
+): readonly Refusal[] => {
+  const scope = processingScope(source, typePrefixed);
+  if (Option.isNone(scope)) {
+    return [];
+  }
+
+  const visits = judgedVisits(source, tables);
+  if (visits.some((visit) => holdsUnexpanded(visit.element))) {
+    return [];
+  }
+
+  const context: Context = {
+    ...scope.value,
+    parents: new Map(),
+    responses: new Map(),
+    setCorrectResponses: new Set(),
+    types: new Map(),
+  };
+  const refusals: Refusal[] = [];
+  for (const visit of visits) {
+    if (Option.isSome(visit.parent)) {
+      context.parents.set(visit.element, visit.parent.value);
+    }
+
+    refusals.push(
+      ...undeclaredVariable(source, visit, context),
+      ...attributeReferences(source, visit, context),
+      ...setType(source, visit, context),
+      ...conditionType(source, visit, context),
+      ...lookupTableRequirements(source, visit, context),
+      ...lookupOperandType(source, visit, context),
+      ...weightType(source, visit, context),
       ...operandTypes(source, visit, context),
     );
   }

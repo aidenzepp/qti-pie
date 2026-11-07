@@ -308,6 +308,121 @@ const declaration = (
   ]);
 
 /**
+ * Construct a `qti-base-value` of a base type.
+ *
+ * @param baseType Its `base-type`.
+ * @param value The value, as written.
+ * @returns The base value.
+ */
+const baseValue = (baseType: string, value: string): SourceElement =>
+  el("qti-base-value", [attr("base-type", baseType)], [text(value)]);
+
+/**
+ * Construct a `qti-sum` of its operands.
+ *
+ * @param operands The operands, in document order.
+ * @returns The sum.
+ */
+const sum = (...operands: readonly SourceElement[]): SourceElement => el("qti-sum", [], operands);
+
+/**
+ * Construct an item ref's `qti-template-default` holding one expression.
+ *
+ * @param identifier Its `template-identifier`.
+ * @param expression The expression.
+ * @returns The template default.
+ */
+const templateDefault = (identifier: string, expression: SourceElement): SourceElement =>
+  el("qti-template-default", [attr("template-identifier", identifier)], [expression]);
+
+/**
+ * Construct a test with the float `SCORE` and one item ref, `ITEM1`, whose outcome processing sets
+ * `SCORE` to an expression.
+ *
+ * @param expression The expression.
+ * @returns The test.
+ */
+const scoring = (expression: SourceElement): SourceDocument =>
+  assessmentTest([
+    score,
+    part("P", [section("S", [itemRef("ITEM1")])]),
+    outcomeProcessing(expression),
+  ]);
+
+/**
+ * Construct a test with the float `SCORE` whose four processing contexts each hold an expression:
+ * its part's pre-condition and its item ref's branch rule each as a `qti-gte` against 1, its item
+ * ref's template default, and its outcome processing, which sets `SCORE` to it.
+ *
+ * @param expression Construct the expression, once per context, so each context holds its own
+ *   element.
+ * @returns The test.
+ */
+const inEveryContext = (expression: () => SourceElement): SourceDocument =>
+  assessmentTest([
+    score,
+    part("P", [
+      preCondition(atLeastOne(expression())),
+      section("S", [
+        itemRef("I1", [
+          branchRule("EXIT_TEST", atLeastOne(expression())),
+          templateDefault("T", expression()),
+        ]),
+      ]),
+    ]),
+    outcomeProcessing(expression()),
+  ]);
+
+/**
+ * The paths of the elements that hold {@link inEveryContext}'s expressions, in document order.
+ */
+const contextPaths = [
+  `${partPath}/qti-pre-condition/qti-gte`,
+  `${sectionPath}/qti-assessment-item-ref/qti-branch-rule/qti-gte`,
+  `${sectionPath}/qti-assessment-item-ref/qti-template-default`,
+  "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+] as const;
+
+/**
+ * Construct a test's `qti-outcome-processing` that holds one `qti-outcome-condition`.
+ *
+ * @param branches The condition's branches, in document order.
+ * @returns The outcome processing.
+ */
+const outcomeCondition = (...branches: readonly SourceElement[]): SourceElement =>
+  el("qti-outcome-processing", [], [el("qti-outcome-condition", [], branches)]);
+
+/**
+ * Construct a branch of an outcome condition that sets `SCORE` to 1 when its condition holds.
+ *
+ * @param local `qti-outcome-if` or `qti-outcome-else-if`.
+ * @param condition The condition.
+ * @returns The branch.
+ */
+const scoringBranch = (local: string, condition: SourceElement): SourceElement =>
+  el(
+    local,
+    [],
+    [
+      condition,
+      el("qti-set-outcome-value", [attr("identifier", "SCORE")], [baseValue("float", "1")]),
+    ],
+  );
+
+/**
+ * Construct a `qti-test-variables` of `SCORE` weighted by `W`.
+ *
+ * @param baseType Its `base-type`, none when absent.
+ * @returns The expression.
+ */
+const weighted = (baseType?: string): SourceElement =>
+  el("qti-test-variables", [
+    ...(baseType === undefined ? [] : [attr("base-type", baseType)]),
+    attr("variable-identifier", "SCORE"),
+    attr("weight-identifier", "W"),
+  ]);
+
+/**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
  *
  * @param source The document to check.
@@ -769,11 +884,14 @@ describe("checkTestRules", () => {
     it("accepts the outcome-only expressions and a weighted variable in outcome processing", () => {
       assert.deepStrictEqual(
         judged(
-          oneSection(
-            [itemRef("I1")],
-            [preCondition(atLeastOne(variable("I1.SCORE")))],
-            [outcomeProcessing(el("qti-sum", [], [...outcomeOnly, variable("I1.SCORE", "W")]))],
-          ),
+          assessmentTest([
+            score,
+            part("P", [
+              preCondition(atLeastOne(variable("I1.SCORE"))),
+              section("S", [itemRef("I1")]),
+            ]),
+            outcomeProcessing(el("qti-sum", [], [...outcomeOnly, variable("I1.SCORE", "W")])),
+          ]),
         ),
         [],
       );
@@ -804,11 +922,16 @@ describe("checkTestRules", () => {
     it("accepts a.b.SCORE in a test whose item refs are a and a.b, which only a package can judge", () => {
       assert.deepStrictEqual(
         judged(
-          oneSection(
-            [itemRef("a"), itemRef("a.b", [preCondition(atLeastOne(variable("a.b.SCORE")))])],
-            [],
-            [outcomeProcessing(variable("a.b.SCORE"))],
-          ),
+          assessmentTest([
+            score,
+            part("P", [
+              section("S", [
+                itemRef("a"),
+                itemRef("a.b", [preCondition(atLeastOne(variable("a.b.SCORE")))]),
+              ]),
+            ]),
+            outcomeProcessing(variable("a.b.SCORE")),
+          ]),
         ),
         [],
       );
@@ -837,6 +960,294 @@ describe("checkTestRules", () => {
           ),
         ),
         [],
+      );
+    });
+  });
+
+  describe("the processing rules on a test's expressions (D4-10, P29)", () => {
+    it("[T-9] refuses outcome processing that sets the float SCORE from a string (pantry P20)", () => {
+      assert.deepStrictEqual(judged(scoring(baseValue("string", "x"))), [
+        {
+          detail: {
+            element: "qti-set-outcome-value",
+            expressionBaseType: "string",
+            expressionCardinality: "single",
+            identifier: "SCORE",
+            outcomeBaseType: "float",
+            outcomeCardinality: "single",
+          },
+          path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+          rule: "expression-type",
+        },
+      ]);
+    });
+
+    it("[T-9] refuses a qti-outcome-if over a single integer and a qti-outcome-else-if over a string, with check condition (pantry P21)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            score,
+            part("P", [section("S", [itemRef("I1")])]),
+            outcomeCondition(
+              scoringBranch("qti-outcome-if", integer("1")),
+              scoringBranch("qti-outcome-else-if", baseValue("string", "x")),
+            ),
+          ]),
+        ),
+        (
+          [
+            ["qti-outcome-if", "integer"],
+            ["qti-outcome-else-if", "string"],
+          ] as const
+        ).map(([element, expressionBaseType]) => ({
+          detail: {
+            check: "condition",
+            element,
+            expressionBaseType,
+            expressionCardinality: "single",
+          },
+          path: `qti-assessment-test/qti-outcome-processing/qti-outcome-condition/${element}`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[T-9] refuses a qti-lookup-outcome-value whose operand is a string under a match table (pantry P22, reading 28)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            el(
+              "qti-outcome-declaration",
+              [
+                attr("base-type", "identifier"),
+                attr("cardinality", "single"),
+                attr("identifier", "GRADE"),
+              ],
+              [
+                el(
+                  "qti-match-table",
+                  [],
+                  [
+                    el("qti-match-table-entry", [
+                      attr("source-value", "1"),
+                      attr("target-value", "A"),
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+            part("P", [section("S", [itemRef("I1")])]),
+            el(
+              "qti-outcome-processing",
+              [],
+              [
+                el(
+                  "qti-lookup-outcome-value",
+                  [attr("identifier", "GRADE")],
+                  [baseValue("string", "x")],
+                ),
+              ],
+            ),
+          ]),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-lookup-outcome-value",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              identifier: "GRADE",
+              reading: "28",
+              table: "qti-match-table",
+            },
+            path: "qti-assessment-test/qti-outcome-processing/qti-lookup-outcome-value",
+            rule: "expression-type",
+          },
+        ],
+      );
+    });
+
+    it("[T-9] refuses a qti-sum over a string in outcome processing, a pre-condition, a branch rule and a template default (pantry P23)", () => {
+      assert.deepStrictEqual(
+        judged(inEveryContext(() => sum(baseValue("string", "x")))),
+        contextPaths.map((path) => ({
+          detail: {
+            acceptsBaseTypes: "integer float",
+            acceptsCardinalities: "multiple ordered single",
+            check: "operand",
+            element: "qti-sum",
+            expressionBaseType: "string",
+            expressionCardinality: "single",
+            operand: "1",
+          },
+          path: `${path}/qti-sum`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[T-9] refuses an unprefixed qti-variable naming nothing the test declares in outcome processing, a pre-condition, a branch rule and a template default (pantry P8)", () => {
+      assert.deepStrictEqual(
+        judged(inEveryContext(() => variable("NOPE"))),
+        contextPaths.map((path) => ({
+          detail: { element: "qti-variable", expected: "variable", identifier: "NOPE" },
+          path: `${path}/qti-variable`,
+          rule: "undeclared-variable",
+        })),
+      );
+    });
+
+    it("[T-9] accepts a pre-condition and a branch rule whose expression is a single integer, since no condition rule judges them (pantry conditionKinds)", () => {
+      assert.deepStrictEqual(
+        judged(
+          oneSection(
+            [itemRef("I1", [branchRule("EXIT_TEST", integer("1"))])],
+            [preCondition(integer("1"))],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("[T-9] accepts a template default that sets a template variable from a string in a test alone, whose item only a package holds (pantry P20)", () => {
+      assert.deepStrictEqual(
+        judged(oneSection([itemRef("I1", [templateDefault("T", baseValue("string", "x"))])])),
+        [],
+      );
+    });
+
+    it("[T-9] accepts a template default that reads a test outcome and ITEM1.SCORE, since the template read rule does not judge a test (pantry P26)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            score,
+            part("P", [
+              section("S", [
+                itemRef("ITEM1"),
+                itemRef("I2", [
+                  templateDefault("T", sum(variable("SCORE"), variable("ITEM1.SCORE"))),
+                ]),
+              ]),
+            ]),
+          ]),
+        ),
+        [],
+      );
+    });
+
+    it("[T-9] the processing scope: accepts outcome processing that reads numAttempts and sets completionStatus, both unprefixed, and still refuses a printed numAttempts (pantry builtInsOf, printed-variable-ref)", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            rubricBlock(el("p", [], [printed("numAttempts")])),
+            part("P", [section("S", [itemRef("I1")])]),
+            outcomeCondition(
+              el(
+                "qti-outcome-if",
+                [],
+                [
+                  atLeastOne(variable("numAttempts")),
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", "completionStatus")],
+                    [baseValue("identifier", "completed")],
+                  ),
+                ],
+              ),
+            ),
+          ]),
+        ),
+        [
+          {
+            detail: {
+              attribute: "identifier",
+              declarer: "test",
+              element: "qti-printed-variable",
+              expected: "outcome",
+              identifier: "numAttempts",
+            },
+            path: "qti-assessment-test/qti-rubric-block/qti-content-body/p/qti-printed-variable/@identifier",
+            rule: "undeclared-variable",
+          },
+        ],
+      );
+    });
+
+    it("[T-9] refuses a weighted qti-test-variables whose base type is integer, with check weight (pantry P29)", () => {
+      assert.deepStrictEqual(judged(scoring(weighted("integer"))), [
+        {
+          detail: { baseType: "integer", check: "weight", element: "qti-test-variables" },
+          path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-test-variables",
+          rule: "expression-type",
+        },
+      ]);
+    });
+
+    it("[T-9] accepts a weighted qti-test-variables whose base type is float or absent (pantry P29)", () => {
+      assert.deepStrictEqual(
+        [judged(scoring(weighted("float"))), judged(scoring(weighted()))],
+        [[], []],
+      );
+    });
+
+    it("[T-9] accepts ITEM1.SCORE in a test alone, whose items only a package holds", () => {
+      assert.deepStrictEqual(judged(scoring(variable("ITEM1.SCORE"))), []);
+    });
+
+    it("[T-9] judges a section document's expressions only by the rules that need no declaration (reading 5)", () => {
+      assert.deepStrictEqual(
+        judged(
+          sectionDocument("S", [
+            preCondition(atLeastOne(variable("NOPE"))),
+            branchRule("EXIT_SECTION", atLeastOne(sum(baseValue("string", "x")))),
+            itemRef("I1", [templateDefault("T", variable("numAttempts"))]),
+          ]),
+        ),
+        [
+          {
+            detail: {
+              acceptsBaseTypes: "integer float",
+              acceptsCardinalities: "multiple ordered single",
+              check: "operand",
+              element: "qti-sum",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              operand: "1",
+            },
+            path: "qti-assessment-section/qti-branch-rule/qti-gte/qti-sum",
+            rule: "expression-type",
+          },
+        ],
+      );
+    });
+
+    it("[T-9] gives the processing rules' refusals in document order among the test rules'", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            part("P", [preCondition(atLeastOne(variable("NOPE"))), section("S1", [itemRef("I1")])]),
+            part("P", [section("S2", [itemRef("I2")])]),
+            outcomeProcessing(variable("GONE")),
+          ]),
+        ).map(({ detail, path, rule }) => [rule, path, detail["identifier"]]),
+        [
+          [
+            "undeclared-variable",
+            "qti-assessment-test/qti-test-part[1]/qti-pre-condition/qti-gte/qti-variable",
+            "NOPE",
+          ],
+          ["duplicate-identifier", "qti-assessment-test/qti-test-part[2]/@identifier", "P"],
+          [
+            "undeclared-variable",
+            "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+            "SCORE",
+          ],
+          [
+            "undeclared-variable",
+            "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable",
+            "GONE",
+          ],
+        ],
       );
     });
   });

@@ -8,8 +8,10 @@ import type {
   SourceElement,
 } from "#plate/document/source.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import { singleOf } from "#plate/model/expression.ts";
 import type { ReferenceEntry } from "#plate/model/expression.ts";
-import { checkRules, referenceRefusals } from "#plate/validate/rules.ts";
+import { checkRules, processingRefusals, referenceRefusals } from "#plate/validate/rules.ts";
+import type { PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 
 /**
@@ -3071,6 +3073,176 @@ describe("referenceRefusals", () => {
   it("[I-9a] refuses a braced name in a string attribute that names a response (P24)", () => {
     assert.deepStrictEqual(referring("qti-pattern-match", "pattern", "{RESPONSE}"), [
       mistyped("qti-pattern-match", "pattern", "string", "RESPONSE"),
+    ]);
+  });
+});
+
+/**
+ * The location of the hand-built test {@link scoringTest} builds.
+ */
+const testLocation = "tests/rules.xml";
+
+/**
+ * Construct a hand-built test with a float `SCORE`, one part, one section and the item ref
+ * `ITEM1`, whose outcome processing sets `SCORE` to an expression.
+ *
+ * @param expression The expression.
+ * @returns The test as a source document.
+ */
+const scoringTest = (expression: SourceElement): SourceDocument =>
+  doc(
+    testLocation,
+    el(
+      "qti-assessment-test",
+      [attr("identifier", "T"), attr("title", "Test")],
+      [
+        outcome("SCORE"),
+        el(
+          "qti-test-part",
+          [
+            attr("identifier", "P"),
+            attr("navigation-mode", "linear"),
+            attr("submission-mode", "individual"),
+          ],
+          [
+            el(
+              "qti-assessment-section",
+              [attr("identifier", "S"), attr("title", "S"), attr("visible", "true")],
+              [
+                el("qti-assessment-item-ref", [
+                  attr("href", "items/ITEM1.xml"),
+                  attr("identifier", "ITEM1"),
+                ]),
+              ],
+            ),
+          ],
+        ),
+        el("qti-outcome-processing", [], [setScore(expression)]),
+      ],
+    ),
+  );
+
+/**
+ * Construct a typer that gives one prefixed read a type and every other name `unknown`.
+ *
+ * @param name The prefixed read it types.
+ * @param baseType The base type it gives that read, single.
+ * @returns The typer.
+ */
+const typing =
+  (name: string, baseType: "float" | "integer" | "string"): PrefixedTyper =>
+  (read) =>
+    read === name ? singleOf(baseType) : { baseType: "unknown", cardinality: "unknown" };
+
+/**
+ * Check a test with {@link processingRefusals} under a typer.
+ *
+ * @param source The test.
+ * @param typePrefixed The typer of its prefixed reads.
+ * @returns The refusals, reduced to their rule, path and detail.
+ */
+const processed = (source: SourceDocument, typePrefixed: PrefixedTyper) =>
+  processingRefusals(source, tables, typePrefixed).map((refusal) => ({
+    detail: refusal.detail,
+    path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+    rule: refusal.rule,
+  }));
+
+/**
+ * Construct a {@link scoringTest} that sets `SCORE` to itself rounded to `ITEM1.N` decimal places,
+ * a prefixed read in a reference attribute.
+ *
+ * @returns The test.
+ */
+const roundedByItem = (): SourceDocument =>
+  scoringTest(
+    el(
+      "qti-round-to",
+      [attr("figures", "ITEM1.N"), attr("rounding-mode", "decimalPlaces")],
+      [variable("SCORE")],
+    ),
+  );
+
+describe("processingRefusals", () => {
+  it("[T-9] types a prefixed read with the typer it is given, so a string ITEM1.SCORE cannot set a float SCORE (pantry P20)", () => {
+    assert.deepStrictEqual(
+      [
+        processed(scoringTest(variable("ITEM1.SCORE")), typing("ITEM1.SCORE", "string")),
+        processed(scoringTest(variable("ITEM1.SCORE")), typing("ITEM1.SCORE", "float")),
+      ],
+      [
+        [
+          {
+            detail: {
+              element: "qti-set-outcome-value",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              identifier: "SCORE",
+              outcomeBaseType: "float",
+              outcomeCardinality: "single",
+            },
+            path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+            rule: "expression-type",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] judges a prefixed name in a reference attribute by the type the typer gives it (pantry P24)", () => {
+    assert.deepStrictEqual(
+      [
+        processed(roundedByItem(), typing("ITEM1.N", "string")),
+        processed(roundedByItem(), typing("ITEM1.N", "integer")),
+      ],
+      [
+        [
+          {
+            detail: {
+              attribute: "figures",
+              check: "reference",
+              element: "qti-round-to",
+              expectedBaseType: "integer",
+              identifier: "ITEM1.N",
+            },
+            path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-round-to",
+            rule: "expression-type",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] gives nothing for an item, whose processing checkRules judges, and checkRules nothing for a test", () => {
+    const undeclaredItem = item(
+      [outcome("SCORE")],
+      [],
+      [processing(undefined, [setScore(variable("NOPE"))])],
+    );
+    const undeclaredTest = scoringTest(variable("NOPE"));
+
+    assert.deepStrictEqual(
+      [
+        processingRefusals(undeclaredItem, tables, typing("NOPE", "float")).length,
+        checkRules(undeclaredItem, tables).map((refusal) => refusal.rule),
+        checkRules(undeclaredTest, tables).length,
+        processingRefusals(undeclaredTest, tables, typing("NOPE", "float")).map(
+          (refusal) => refusal.rule,
+        ),
+      ],
+      [0, ["undeclared-variable"], 0, ["undeclared-variable"]],
+    );
+  });
+
+  it("[T-9] leaves an item's run unchanged: a dotted name the item does not declare stays undeclared-variable (reading 37)", () => {
+    assert.deepStrictEqual(settingScore(variable("ITEM1.SCORE")), [
+      {
+        detail: { element: "qti-variable", expected: "variable", identifier: "ITEM1.SCORE" },
+        path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-variable",
+        rule: "undeclared-variable",
+      },
     ]);
   });
 });
