@@ -5,10 +5,12 @@
  *
  * QTI bases `format` on the C conversion specifiers (ISO 9899) and gives a worked table
  * (`B#format-attribute-of-printed-variable`, Appendix E), but leaves open the default form, the
- * text around a conversion, the base of `index` and an exact tie. The defaults here are drafted
+ * text around a conversion, the base of `index`, an exact tie, a float under an integer
+ * conversion, a `base` outside 2 to 36, a negative under `o`, `x` or `X`, an infinity or NaN under
+ * an integer conversion, and a width or precision too long to hold. The defaults here are drafted
  * readings, each marked "G-R2, pending" where it is applied. Every float reaches decimal digits
- * through {@link shortestDecimal}, the one approximated step, and is rounded as that decimal, never
- * as the double's binary expansion, so a page and Node print the same text.
+ * through {@link shortestDecimal}, the one approximated step, and is rounded or truncated as that
+ * decimal, never as the double's binary expansion, so a page and Node print the same text.
  *
  * @module
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Derived_PrintedVariable
@@ -24,12 +26,13 @@ import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
  *
  * - `format`: the conversion specifier, with any text around it; absent, the value prints in its
  *   default form.
- * - `base`: the radix of the `i` conversion, 10 when absent; a base outside 2 to 36 writes base 10.
+ * - `base`: the radix of the `i` conversion, 10 when absent; a base outside 2 to 36 writes base 10
+ *   (G-R2, pending).
  * - `index`: the member of an `ordered` value to print, counting from 1 (G-R2, pending); absent or
  *   out of range, every member prints. The information model scopes it to `ordered`, so another
  *   cardinality ignores it.
- * - `powerForm`: when true, a float printed with no `format` writes its exponent `e+n` as `× 10 to
- *   the power n` (G-R2, pending).
+ * - `powerForm`: when true, a float printed with no `format` writes its exponent `e+n` as `x 10 to
+ *   the power n`, with an ASCII `x` as the information model writes it (G-R2, pending).
  * - `delimiter`: the text between a container's printed members, `;` when absent.
  * - `mappingIndicator`: the text between a record field's name and value, `=` when absent. No value
  *   of the model is a record until records are modelled, so nothing reads it yet.
@@ -128,8 +131,9 @@ const conversionPattern =
 
 /**
  * The largest field width or precision the formatter writes, 1,000,000 characters. A specifier
- * past it prints nothing, as NULL does: `%1000000000i` would ask for a string longer than an engine
- * holds (V8's longest is 2^29 − 24 characters), and the engine must not throw.
+ * past it prints nothing, the format's literal text included, as NULL does (G-R2, pending):
+ * `%1000000000i` would ask for a string longer than an engine holds (V8's longest is 2^29 − 24
+ * characters), and the engine must not throw.
  */
 const fieldBound = 1_000_000n;
 
@@ -339,7 +343,7 @@ const floatingField = (negative: boolean, decimal: Decimal, conversion: Conversi
 
 /**
  * Choose the radix of an integer conversion: 8 for `o`, 16 for `x` and `X`, and for `i` the base
- * given, or 10 when it is outside 2 to 36, which have no digits to write it in.
+ * given, or 10 when it is outside 2 to 36, which have no digits to write it in (G-R2, pending).
  *
  * @param conversion The conversion, one of `i o x X`.
  * @param base The resolved `base`.
@@ -359,7 +363,9 @@ const radixOf = (conversion: Conversion, base: bigint): number => {
 
 /**
  * Convert an integer under an integer conversion, `i o x X`: `i` in the base given, `o` in octal,
- * `x` and `X` in hexadecimal. A negative writes `-` and its magnitude's digits.
+ * `x` and `X` in hexadecimal. A negative writes `-` and its magnitude's digits; under `o`, `x` and
+ * `X`, which C reads as unsigned, that is a drafted reading (G-R2, pending), since an unbounded
+ * integer has no two's complement to write.
  *
  * The precision is the least number of digits, so `%.0i` of 0 writes none; `#` makes octal start
  * with `0` and puts `0x` or `0X` before a hexadecimal other than 0.
@@ -393,7 +399,8 @@ const integerField = (integer: bigint, conversion: Conversion, base: bigint): Fi
 
 /**
  * Convert an infinity or NaN, under any conversion, as C writes them under a floating one: `inf`
- * and `nan`, in upper case for `E G R X`, never padded with zeros.
+ * and `nan`, in upper case for `E G R X`, never padded with zeros. Under `i o x X`, where C gives
+ * no value, it prints `inf`, `-inf` or `nan` the same way, upper case under `X` (G-R2, pending).
  *
  * @param x The infinity or NaN.
  * @param conversion The conversion.
@@ -411,10 +418,25 @@ const nonFiniteField = (x: number, conversion: Conversion): Field => {
 };
 
 /**
+ * Take the integer part of a finite float's shortest decimal, truncated toward zero with its sign
+ * kept: `1e23` is `100000000000000000000000` and `-2.7` is `-2`, never the double's binary value
+ * (`99999999999999991611392` for `1e23`).
+ *
+ * @param x A finite float.
+ * @returns Its integer part.
+ */
+const truncated = (x: number): bigint => {
+  const whole = BigInt(fixed(decimalOf(shortestDecimal(Math.abs(x))), 0, false));
+
+  return x < 0 ? -whole : whole;
+};
+
+/**
  * Convert a number under a conversion. An integer under a floating conversion writes its exact
  * decimal; a float under an integer conversion is truncated toward zero first, as C converts a
- * double to an integer type. QTI says floats "should only" take the floating conversions, and
- * states neither case.
+ * double to an integer type, but from its shortest decimal ({@link truncated}; G-R2, pending), so
+ * `%i` and `%.0f` of `1e23` print the same digits. QTI says floats "should only" take the floating
+ * conversions, and states neither case.
  *
  * @param single The integer or float.
  * @param conversion The conversion.
@@ -442,7 +464,7 @@ const fieldOf = (
   }
 
   return isInteger
-    ? integerField(BigInt(Math.trunc(x)), conversion, base)
+    ? integerField(truncated(x), conversion, base)
     : floatingField(x < 0 || Object.is(x, -0), decimalOf(shortestDecimal(Math.abs(x))), conversion);
 };
 
@@ -541,7 +563,7 @@ const layoutOf = (format: string): Layout => {
  * `-INF` and `NaN` by name; every other base type as the value model writes it.
  *
  * @param single The value.
- * @param powerForm Whether a float's exponent `e+n` is written `× 10 to the power n`, as the
+ * @param powerForm Whether a float's exponent `e+n` is written `x 10 to the power n`, as the
  *   information model words `power-form`.
  * @returns The text.
  */
@@ -565,7 +587,7 @@ const defaultForm = (single: Single, powerForm: boolean): string => {
 
   const text = shortestDecimal(x);
 
-  return powerForm ? text.replace(/e\+?(?<power>-?[0-9]+)$/u, " × 10 to the power $<power>") : text;
+  return powerForm ? text.replace(/e\+?(?<power>-?[0-9]+)$/u, " x 10 to the power $<power>") : text;
 };
 
 /**

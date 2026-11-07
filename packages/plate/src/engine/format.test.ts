@@ -208,12 +208,12 @@ describe("formatPrinted: NULL and containers (G-R2, pending)", () => {
 });
 
 describe("formatPrinted: power-form (G-R2, pending)", () => {
-  it("[I-5] writes a float's exponent as a power of 10 when no format is given", () => {
+  it("[I-5] writes a float's exponent as a power of 10 with the standard's ASCII x when no format is given", () => {
     assert.strictEqual(
       formatPrinted(float(1.5e21), { powerForm: true }),
-      "1.5 × 10 to the power 21",
+      "1.5 x 10 to the power 21",
     );
-    assert.strictEqual(formatPrinted(float(1e-7), { powerForm: true }), "1 × 10 to the power -7");
+    assert.strictEqual(formatPrinted(float(1e-7), { powerForm: true }), "1 x 10 to the power -7");
   });
 
   it("[I-5] leaves a float with no exponent, an integer, and any formatted value as they are", () => {
@@ -250,6 +250,17 @@ describe("formatPrinted: the conversions beyond the worked table", () => {
     assert.strictEqual(formatPrinted(float(255.9), { format: "%#x" }), "0xff");
   });
 
+  it("[I-5] truncates a float's shortest decimal under an integer conversion, never the double's binary value (G-R2, pending)", () => {
+    assert.strictEqual(formatPrinted(float(1e23), { format: "%i" }), "100000000000000000000000");
+    assert.strictEqual(formatPrinted(float(1e23), { format: "%.0f" }), "100000000000000000000000");
+    assert.strictEqual(
+      formatPrinted(float(Number(2n ** 53n + 2n)), { format: "%i" }),
+      "9007199254740994",
+    );
+    assert.strictEqual(formatPrinted(float(1.5e300), { format: "%i" }), `15${"0".repeat(299)}`);
+    assert.strictEqual(formatPrinted(float(1e21), { format: "%x" }), (10n ** 21n).toString(16));
+  });
+
   it("[I-5] writes the non-finite floats as C does under a conversion, padded with spaces", () => {
     assert.strictEqual(formatPrinted(float(Number.POSITIVE_INFINITY), { format: "%f" }), "inf");
     assert.strictEqual(formatPrinted(float(Number.NEGATIVE_INFINITY), { format: "%E" }), "-INF");
@@ -279,6 +290,28 @@ describe("formatPrinted: the conversions beyond the worked table", () => {
   it("[I-5] g and r read a precision of 0 as 1, and . alone as 0", () => {
     assert.strictEqual(formatPrinted(float(987), { format: "%.0g" }), "1e+03");
     assert.strictEqual(formatPrinted(float(2.5), { format: "%.f" }), "3");
+  });
+
+  it("[I-5] i writes base 10 for any base outside 2 to 36 (G-R2, pending)", () => {
+    for (const base of [1n, 0n, -16n, 37n]) {
+      assert.strictEqual(formatPrinted(integer(35n), { base, format: "%i" }), "35");
+    }
+  });
+
+  it("[I-5] writes a negative under o, x or X as - and its magnitude's digits (G-R2, pending)", () => {
+    assert.strictEqual(formatPrinted(integer(-255n), { format: "%x" }), "-ff");
+    assert.strictEqual(formatPrinted(integer(-8n), { format: "%o" }), "-10");
+  });
+
+  it("[I-5] writes an infinity or NaN under i, o, x or X as C writes it under a floating conversion (G-R2, pending)", () => {
+    assert.strictEqual(formatPrinted(float(Number.NaN), { format: "%i" }), "nan");
+    assert.strictEqual(formatPrinted(float(Number.POSITIVE_INFINITY), { format: "%X" }), "INF");
+    assert.strictEqual(formatPrinted(float(Number.NEGATIVE_INFINITY), { format: "%i" }), "-inf");
+  });
+
+  it("[I-5] prints nothing, the format's literal text included, for a width or precision past 1,000,000 (G-R2, pending)", () => {
+    assert.strictEqual(formatPrinted(integer(5n), { format: "x %1000001i" }), "");
+    assert.strictEqual(formatPrinted(float(1.5), { format: "%.1000001f" }), "");
   });
 
   it("[I-5] prints nothing for a width or precision past 1,000,000, which no host could hold", () => {
