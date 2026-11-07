@@ -2198,6 +2198,53 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "outcome, to a");
   });
 
+  it("[I-5] names a printed variable's identifier that names a response as neither a template nor an outcome variable, and says no base type (pantry printed-variable-ref)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "identifier",
+        check: "reference",
+        element: "qti-printed-variable",
+        identifier: "RESPONSE",
+        source: "info.txt:70296",
+        variableKind: "response",
+      }),
+    );
+    const remedy = sentence.slice(sentence.indexOf("To make it valid:"));
+
+    assert.include(
+      sentence,
+      "`qti-printed-variable`'s attribute `identifier` names `RESPONSE`, a response variable, which is neither a template nor an outcome variable (info.txt:70296).",
+    );
+    assert.include(remedy, "name a template or outcome variable in `identifier`");
+    assert.include(remedy, "an outcome that response processing sets to the response's value");
+    assert.notInclude(sentence, "base type");
+    assert.notInclude(sentence, "untyped");
+    assert.notInclude(sentence, "single");
+  });
+
+  it("[I-5] names a printed variable's identifier that names a context variable, with no remedy about a response (pantry printed-variable-ref)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "identifier",
+        check: "reference",
+        element: "qti-printed-variable",
+        identifier: "CONTEXT",
+        source: "info.txt:70296",
+        variableKind: "context",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-printed-variable`'s attribute `identifier` names `CONTEXT`, a context variable, which is neither a template nor an outcome variable (info.txt:70296).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: name a template or outcome variable in `identifier`.",
+    );
+    assert.notInclude(sentence, "base type");
+  });
+
   it("[I-5] names the response variable a template rule reads, which may read only template and context variables (pantry P26)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {

@@ -1402,7 +1402,11 @@ const templateReadSource = "info.txt:65111";
  * - `condition` (pantry's P21): the condition of a rule's branch is not a single `boolean`.
  * - `operand` (P23): an operand the element does not take, and what it takes.
  * - `reference` (P24): an attribute names a variable that is not a single template or outcome
- *   variable of the base type the attribute holds.
+ *   variable of the base type the attribute holds. With a `variableKind` fact, the attribute is a
+ *   printed variable's `identifier`, which may name a template or outcome variable of any type
+ *   (pantry's `printed-variable-ref`): the sentence names the kind the variable has, `response` or
+ *   `context`, says no base type, and cites what settles it ({@link settled}). For a response, the
+ *   remedy offers an outcome set to its value, as the information model suggests.
  * - `template-read` (P26): template processing reads a variable that is neither a template nor a
  *   context variable (a response, an outcome or a built-in), by an element or through the reference
  *   attribute an `attribute` fact names. It cites the information model's line, which allows only
@@ -1438,11 +1442,20 @@ const expressionType = (refusal: Refusal): string => {
       const attribute = code(fact(refusal, "attribute", "the attribute"));
       const expected = baseTypeText(fact(refusal, "expectedBaseType", ""));
 
-      return sentence(
-        refusal,
-        `${code(element)}'s attribute ${attribute} names ${identifier}, which is not a single template or outcome variable of base type ${expected}${cite}.`,
-        `name a single template or outcome variable of base type ${expected} in ${attribute}, or write a value of that base type there`,
-      );
+      return Option.match(optionalFact(refusal, "variableKind"), {
+        onNone: () =>
+          sentence(
+            refusal,
+            `${code(element)}'s attribute ${attribute} names ${identifier}, which is not a single template or outcome variable of base type ${expected}${cite}.`,
+            `name a single template or outcome variable of base type ${expected} in ${attribute}, or write a value of that base type there`,
+          ),
+        onSome: (kind) =>
+          sentence(
+            refusal,
+            `${code(element)}'s attribute ${attribute} names ${identifier}, ${withArticle(kind)} variable, which is neither a template nor an outcome variable${settled(refusal)}.`,
+            `name a template or outcome variable in ${attribute}${kind === "response" ? ", such as an outcome that response processing sets to the response's value" : ""}`,
+          ),
+      });
     }
     case "template-read": {
       const variable = Option.match(optionalFact(refusal, "variableKind"), {
