@@ -56,7 +56,7 @@ import type {
   TextIdref,
   XmlLang,
 } from "#pantry/qti/identity.ts";
-import { objectTypes } from "#pantry/qti/metadata.ts";
+import { objectTypes, recordDocumentTypes } from "#pantry/qti/metadata.ts";
 import { itemKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 
@@ -80,6 +80,11 @@ export interface IdentityIds {
    */
   readonly context?: DocumentContext;
   readonly documentAt: (path: string) => Option.Option<NodeId>;
+  /**
+   * The document's type, the resource's that lists it, `none` for the manifest: its LOM records
+   * are read where it is of a type a package's records are read from (`recordDocumentTypes`).
+   */
+  readonly documentType: Addition<typeof GeneralNamed>["named"];
   readonly idOf: (index: number) => NodeId;
 }
 
@@ -185,6 +190,11 @@ const identityAt: ReadonlyMap<string, string> = new Map(
  * The `ResourceType` handle a `cp:resource`'s `type` names.
  */
 type ResourceTypeHandle = Addition<typeof GeneralNamed>["named"];
+
+/**
+ * The types of the documents a package's records are read from (`recordDocumentTypes`).
+ */
+const recordTypes: ReadonlySet<string> = new Set(recordDocumentTypes);
 
 /**
  * The handles a resource's `type` names a document by, each spelled as written (C17): an item's
@@ -514,7 +524,8 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
  * Build the rows a document's LOM general categories give: each `lom:language`'s `LomLanguage`,
  * with its tag case-folded, and its category's language set, by those tags; and, for a category of
  * a resource's record, its `GeneralNamed` and, where the record names a document, its
- * `GeneralObject`.
+ * `GeneralObject`. A document of a type no package record is read from (`recordDocumentTypes`)
+ * gives none: its `lom:*` elements are no record's (170356bd's ruling).
  *
  * @param tree - The document's tree.
  * @param ids - The ids its rows are written under, whose `documentAt` resolves a resource's href.
@@ -534,7 +545,7 @@ const lomRowsOf = (
   // Each resource's href resolved as its `ResourceHref` is, read only for a manifest's records.
   let resourcePaths: ReadonlyMap<NodeId, string> | undefined;
 
-  for (const node of tree.rows.nodes) {
+  for (const node of recordTypes.has(ids.documentType) ? tree.rows.nodes : []) {
     const text = tree.values.get(node.id) ?? "";
     const parent = tree.byId.get(node.parent);
     if (node.kind === "lom:language" && parent?.kind === "lom:general") {

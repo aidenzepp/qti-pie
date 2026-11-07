@@ -98,6 +98,12 @@ export interface NodeIds {
    */
   readonly entryAt: (path: string) => boolean;
   /**
+   * The document's type, the type of the resource that lists it, `none` for the manifest, which no
+   * resource lists: every node of the document copies it (`Node.documentType`), so a law can
+   * tell the manifest's elements from another document's.
+   */
+  readonly documentType: ListedDocument["resourceType"];
+  /**
    * The id of the node or attribute numbered `index` by `flatten`: the nodes in document order from
    * the document node's 0, then the attributes, so every caller that flattens the document under
    * it names each node by one id. The same index always gives the same id.
@@ -218,7 +224,7 @@ export const nodeIdsOf = (
     }));
 
   return {
-    documents: documents.flatMap(({ path }, at) => {
+    documents: documents.flatMap(({ path, resourceType }, at) => {
       const idOf = idOfs[at];
 
       return idOf === undefined
@@ -228,6 +234,7 @@ export const nodeIdsOf = (
               assembled: assembled.has(idOf(0)),
               context: contextAt(contexts, idOf(0)),
               documentAt,
+              documentType: resourceType,
               entryAt,
               idOf,
               package: packageId,
@@ -545,9 +552,10 @@ interface WrittenMember {
  * @param folded - Its fold (`foldOf`): its ancestry, its nearest interaction, its state, and
  *   whether its characters are its `stringPiece`.
  * @param own - Its own rows: its attributes and declarations, its characters, its namespace name
- *   and the document's version, with the attribute families' rows indexed.
+ *   and the document's version and type, with the attribute families' rows indexed.
  * @param own.attributes - Its attributes, in slot order.
  * @param own.chars - Its characters, empty for a node that holds none.
+ * @param own.documentType - The type of the resource that lists its document.
  * @param own.indexed - The document's open names and entity references, by attribute.
  * @param own.indexed.entities - The entity references.
  * @param own.indexed.openNames - The open names.
@@ -562,6 +570,7 @@ const memberOf = (
   own: {
     readonly attributes: readonly AttributeRow<Composed>[];
     readonly chars: string;
+    readonly documentType: ListedDocument["resourceType"];
     readonly indexed: Parameters<typeof attributeOf>[2];
     readonly namespace: string;
     readonly namespaces: readonly FlatRows<Composed>["namespaces"][number][];
@@ -585,6 +594,7 @@ const memberOf = (
       ),
       chars: own.chars,
       children,
+      documentType: own.documentType,
       first: ends.first,
       governs: node.governs,
       id: node.id,
@@ -614,19 +624,22 @@ const memberOf = (
  *   E1, N8 and spec reading 117); the document node's are its context's, its state 0;
  * - `chars`, a text or whitespace node's characters and an entity reference's `&name;`, empty
  *   elsewhere, `first` and `last`, the first and last code points of `chars` (`endsOf`);
- * - `governs` and `prefix`, an element's own, `none` and empty for any other node.
+ * - `governs` and `prefix`, an element's own, `none` and empty for any other node;
+ * - `documentType`, the document's type (`NodeIds.documentType`), every node's alike, which its
+ *   `Document` row and the tree's owner axis prove.
  *
  * The walk reads `flatten`'s rows in document order, each node nested in its parent's list, so a
  * tree of any depth is written without recursion.
  *
  * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param ids - The ids its rows are written under, and its type.
  * @returns The document node, with its tree nested.
  */
 export const rootInsertOf = (
   doc: XdmDocument<Composed>,
-  ids: Pick<NodeIds, "idOf"> & Partial<Pick<NodeIds, "context">>,
+  ids: Pick<NodeIds, "documentType" | "idOf"> & Partial<Pick<NodeIds, "context">>,
 ): NodeRoot => {
+  const { documentType } = ids;
   const rows = flatten(doc, ids.idOf);
   const { version } = doc;
   const chars = new Map<string, string>([
@@ -652,6 +665,7 @@ export const rootInsertOf = (
     chars: "",
     children: [],
     document: self,
+    documentType,
     first: "",
     governs: "none",
     id: self,
@@ -683,6 +697,7 @@ export const rootInsertOf = (
     const written = memberOf(node, folded, {
       attributes: attributes.get(node.id) ?? [],
       chars: chars.get(node.id) ?? "",
+      documentType,
       indexed,
       namespace: foreignKinds.has(node.kind)
         ? (foreignNamespace.get(node.id) ?? "")

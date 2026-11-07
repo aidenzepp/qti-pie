@@ -582,6 +582,227 @@ describe("the direct writer's tree slots and hidden folds", () => {
 });
 
 /**
+ * The resource types a drawn document holds: an item's, a test's, and a manifest's, `none`.
+ */
+const documentTypes = ["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0", "none"] as const;
+
+/**
+ * A drawn tree of `Node` facts with up to two attributes on each node, its resource type stated on
+ * its `Document` row or on its root, and the order its facts are stated in.
+ */
+interface TypedTree {
+  readonly attributes: readonly number[];
+  readonly byDocument: boolean;
+  readonly order: readonly number[];
+  readonly tree: DrawnTree;
+  readonly type: (typeof documentTypes)[number];
+}
+
+/**
+ * Draw a typed tree: a drawn tree, each node's attributes, where its type is stated, and a
+ * permutation of all its facts.
+ */
+const drawnTypedTree: Gen<TypedTree> = (source) => {
+  const tree = source.draw(drawnTree);
+  const attributes = tree.kinds.map(() => source.draw(int(0, 2)));
+  const byDocument = source.draw(element([false, true] as const));
+  const size =
+    tree.kinds.length + attributes.reduce((sum, count) => sum + count, 0) + (byDocument ? 1 : 0);
+  const order = source.draw(
+    shuffled(
+      Array.from({ length: size }, (_, at) => at),
+      { max: size, min: size },
+    ),
+  );
+
+  return { attributes, byDocument, order, tree, type: source.draw(element(documentTypes)) };
+};
+
+/**
+ * A typed tree's facts, unordered: its nodes, its attributes, and its `Document` row where the
+ * type is stated there, the root stating it otherwise.
+ *
+ * @param typed - The typed tree.
+ * @returns The facts.
+ */
+const typedFacts = ({ attributes, byDocument, tree, type }: TypedTree): readonly Stated[] => [
+  ...handFolded(tree).map(({ fact }): Stated => ({
+    fact: fact.start === 0n && !byDocument ? { ...fact, documentType: type } : fact,
+    relation: Node,
+  })),
+  ...attributes.flatMap((count, node) =>
+    Array.from({ length: count }, (_, at): Stated => ({
+      fact: { at: BigInt(at), id: `a${String(node)}.${String(at)}`, node: `n${String(node)}` },
+      relation: Attribute,
+    })),
+  ),
+  ...(byDocument ? [{ fact: { node: "n0", resourceType: type }, relation: Document }] : []),
+];
+
+/**
+ * Assert the writer gives every node and attribute of a typed tree its document's type, from the
+ * root's statement or its `Document` row's, whatever order the facts are stated in.
+ *
+ * @param typed - The typed tree.
+ */
+const assertTyped = (typed: TypedTree): void => {
+  const facts = typedFacts(typed);
+  const stated = typed.order.flatMap((at) => facts.slice(at, at + 1));
+  for (const { fact, relation } of pinned(stated)) {
+    if (relation === Node || relation === Attribute) {
+      assert.strictEqual(
+        fact["documentType"],
+        typed.type,
+        `${relation.name} ${String(fact["id"])}`,
+      );
+    }
+  }
+};
+
+/**
+ * The features of a typed tree: where its type is stated, and whether a member or an attribute is
+ * stated before the node it copies from.
+ */
+type TypedFeature =
+  | "typed by its document"
+  | "typed on its root"
+  | "a member stated before its parent"
+  | "an attribute stated before its element"
+  | "a member two below its root";
+
+/**
+ * The features a typed tree reaches.
+ *
+ * @param typed - The typed tree.
+ * @returns Its features.
+ */
+const typedFeatures = (typed: TypedTree): readonly TypedFeature[] => {
+  const stated = typed.order.flatMap((at) => typedFacts(typed).slice(at, at + 1));
+  const placeOf = (id: string) => stated.findIndex(({ fact }) => fact["id"] === id);
+  const before = (relation: Stated["relation"], owner: string) =>
+    stated.some(
+      ({ fact, relation: held }, at) =>
+        held === relation && at < placeOf(String(fact[owner])) && fact["start"] !== 0n,
+    );
+
+  return [
+    typed.byDocument ? ("typed by its document" as const) : ("typed on its root" as const),
+    ...(before(Node, "parent") ? ["a member stated before its parent" as const] : []),
+    ...(before(Attribute, "node") ? ["an attribute stated before its element" as const] : []),
+    ...(typed.tree.parents.some((parent) => parent > 0)
+      ? ["a member two below its root" as const]
+      : []),
+  ];
+};
+
+describe("the direct writer's copies across containments", () => {
+  it.effect(
+    "gives every node and attribute its document's type, from its Document row or its root, in any stated order",
+    (ctx) =>
+      // Oracle: the specification as a checker, Qti's statements: T3 holds a tree member's
+      // documentType to its parent's, AL1 owner an attribute's to its element's, and the
+      // `Document` row's containment into `nodeContext` the root's to its resourceType, so every
+      // node and attribute of a document holds the one type.
+      // Bound: trees of up to 8 nodes with up to two attributes each, the type stated on the root
+      // or on its Document row, in a drawn order of all the facts.
+      searched(
+        ctx,
+        explore(
+          {
+            ...budget,
+            coverage: required<TypedFeature>(
+              [
+                "typed by its document",
+                "typed on its root",
+                "a member stated before its parent",
+                "an attribute stated before its element",
+                "a member two below its root",
+              ],
+              { cases: 300, sense: notesOnly },
+            ),
+            draw: drawn(drawnTypedTree),
+            oracle: {
+              kind: "specification",
+              name: "one type per document, by T3, AL1 owner and the Document row",
+            },
+            runs: 300,
+            suite: "test/direct-sql/document-type",
+          },
+          (typed, c) =>
+            Effect.sync(() => {
+              for (const feature of typedFeatures(typed)) {
+                c.note(feature);
+              }
+
+              assertTyped(typed);
+            }),
+        ),
+      ),
+    { timeout: searchTimeoutMs },
+  );
+
+  it.effect(
+    "types every tree of up to three nodes from its Document row or its root, stated in order and reversed",
+    (ctx) =>
+      // Oracle: one type per document, as above.
+      // Bound: the small scope exhausted, the four trees of up to three nodes, one attribute on
+      // the last node, the type on the Document row or the root, in order and reversed: 16 cases.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every tree of up to three nodes, by Document or root, in order and reversed: 16 cases",
+            caseHang: Duration.minutes(1),
+            coverage: requiredInSpace<TypedFeature>([
+              "typed by its document",
+              "typed on its root",
+              "a member stated before its parent",
+              "an attribute stated before its element",
+              "a member two below its root",
+            ]),
+            generator: (source) => ({
+              above: source.draw(element([[], [0], [0, 0], [0, 1]] as const)),
+              byDocument: source.draw(element([false, true] as const)),
+              reversed: source.draw(element([false, true] as const)),
+            }),
+            limit: 16,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "one type per document, by T3, AL1 owner and the Document row",
+            },
+            suite: "test/direct-sql/document-type-small",
+          },
+          ({ above, byDocument, reversed }, c) =>
+            Effect.sync(() => {
+              const kinds = [0, ...above].map(() => "p");
+              const size = kinds.length + 1 + (byDocument ? 1 : 0);
+              const typed: TypedTree = {
+                attributes: kinds.map((_, node) => (node === kinds.length - 1 ? 1 : 0)),
+                byDocument,
+                order: Array.from({ length: size }, (_, at) => (reversed ? size - 1 - at : at)),
+                tree: {
+                  kinds,
+                  order: kinds.map((_, node) => node),
+                  parents: above,
+                  states: kinds.map(() => "1"),
+                  version: "3.0.1",
+                },
+                type: "imsqti_item_xmlv3p0",
+              };
+              for (const feature of typedFeatures(typed)) {
+                c.note(feature);
+              }
+
+              assertTyped(typed);
+            }),
+        ),
+      ),
+    { timeout: searchTimeoutMs },
+  );
+});
+
+/**
  * The ends a drawn catalogue's folds take, each a field of `Node`.
  */
 const foldEnds = ["countedChildren", "barredChildren", "elementChildren"] as const;

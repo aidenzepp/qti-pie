@@ -448,7 +448,11 @@ export const namedHrefFamily = counted(
 );
 
 /**
- * Select the attributes of one name on elements of one kind: the source of an overlay's copy (C18).
+ * Select the attributes of one name on elements of one kind in the package's manifest: the source
+ * of an overlay's copy (C18). The manifest is the package's one `imsmanifest.xml` (IMS Content
+ * Packaging 1.2), the one document of type `none` (`RootOfType`'s check), and a content packaging
+ * element of another document describes no part of the package (170356bd's ruling), so its
+ * attributes are no overlay's source.
  *
  * A copy, `contained(on(selection, "node", "lexical"), on(O, "node", field))`, makes the
  * attribute's lexical form the overlay's field and its existence the overlay row's. Every
@@ -466,7 +470,10 @@ export const namedHrefFamily = counted(
 const attributesOf = (
   kind: "cp:dependency" | "cp:file" | "cp:manifest" | "cp:resource",
   name: "href" | "identifier" | "identifierref" | "type",
-) => select(Attribute, (a) => a.and(a.eq(a.name, name), a.eq(a.kind, kind)));
+) =>
+  select(Attribute, (a) =>
+    a.and(a.eq(a.name, name), a.eq(a.kind, kind), a.eq(a.documentType, "none")),
+  );
 
 /**
  * The `identifier` of each `cp:manifest`.

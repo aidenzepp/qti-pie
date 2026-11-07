@@ -230,7 +230,7 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
 const roundTripOf = (tree: XdmDocument<Composed>, ids: (index: number) => NodeId) =>
   assemble(
     flatRowsOf(
-      rootInsertOf(tree, { idOf: ids }),
+      rootInsertOf(tree, { documentType: "none", idOf: ids }),
       documentRowsOf(
         { path: "item.xml", resourceType: "none", tree },
         { idOf: ids, package: packageId },
@@ -459,7 +459,9 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
               );
               const byId = new Map(folded.nodes.map((node) => [node.id, node] as const));
               const attributes = new Map(folded.attributes.map((row) => [row.id, row] as const));
-              for (const node of nodesOf(rootInsertOf(generated.document, { idOf }))) {
+              for (const node of nodesOf(
+                rootInsertOf(generated.document, { documentType: "imsqti_item_xmlv3p0", idOf }),
+              )) {
                 const expected = byId.get(node.id);
                 if (expected === undefined) {
                   assert.fail(`the fold holds no node ${node.id}`);
@@ -710,6 +712,7 @@ describe("the written types", () => {
     const node = {
       ancestry: true,
       chars: true,
+      documentType: true,
       first: true,
       governs: true,
       id: true,
@@ -785,7 +788,7 @@ describe("the written types", () => {
     };
 
     assert.isTrue(Object.values(noLeak).every(Boolean));
-    assert.lengthOf(Object.keys(root), 17);
+    assert.lengthOf(Object.keys(root), 18);
     assert.lengthOf(Object.keys(attribute), 8);
     assert.lengthOf(
       [openName, idref, entity, namespace, entry].flatMap((record) => Object.keys(record)),

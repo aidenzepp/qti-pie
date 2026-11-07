@@ -24,8 +24,14 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
 import { Duration, Effect, Formatter, Option } from "effect";
+import { grammar } from "#pantry/grammar/install.ts";
 import { assembledRowsOf, keyOf, piecesOf, rowsOf } from "#pantry/import/overlays/tests.ts";
-import type { AssembledRows, InstanceMember, TestRows } from "#pantry/import/overlays/tests.ts";
+import type {
+  AssembledRows,
+  InstanceMember,
+  TestIds,
+  TestRows,
+} from "#pantry/import/overlays/tests.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
 import type {
@@ -102,6 +108,16 @@ const idsOf =
     `00000000-0000-4000-${(0x80_00 + n).toString(16)}-${index.toString(16).padStart(12, "0")}`;
 
 /**
+ * The type a document is listed under, as its root's kind gives it (`RootOfType`), `none` for a
+ * root no type lists, which no case writes.
+ *
+ * @param doc - The document.
+ * @returns Its type.
+ */
+const listedTypeOf = (doc: XdmDocument<Composed>): TestIds["documentType"] =>
+  grammar.package.rootOfType.rows.find(({ root }) => root === doc.root.kind)?.type ?? "none";
+
+/**
  * Read the rows of a package's documents, each under its own ids, every site's target found
  * among them by path.
  *
@@ -116,6 +132,7 @@ const rowsOfPackage = (
   return documents.map(([path, doc], n) =>
     rowsOf(doc, {
       documentAt: (at) => Option.fromNullishOr(nodes.get(at)),
+      documentType: listedTypeOf(doc),
       idOf: idsOf(n),
       package: packageId,
       path,

@@ -81,9 +81,11 @@ const shredGrammar = shredGrammarOf(grammar);
  * Draw the ids of one document's rows, numbered by its place in the package, the manifest 0.
  *
  * @param document - The document's number.
+ * @param documentType - The type it is listed under, `none` for the manifest.
  * @returns The ids.
  */
-const idsFor = (document: number): MetadataIds => ({
+const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => ({
+  documentType,
   idOf: (index) =>
     `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`,
   package: "00000000-0000-4000-8000-00000000c0de",
@@ -139,8 +141,13 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
       Effect.flatMap((xml) => shred(xml, version, shredGrammar)),
       Effect.option,
     );
-    if (Option.isSome(tree)) {
-      const ids = idsFor(at + 1);
+    const listed = tree.pipe(
+      Option.flatMap(({ root }) =>
+        Option.fromNullishOr(grammar.package.rootOfType.rows.find((row) => row.root === root.kind)),
+      ),
+    );
+    if (Option.isSome(tree) && Option.isSome(listed)) {
+      const ids = idsFor(at + 1, listed.value.type);
       const rows = rowsOf(tree.value, ids);
       documents.set(file.path, {
         document: ids.idOf(0),
@@ -153,8 +160,8 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
 
   return {
     dates,
-    manifest: rowsOf(manifest, idsFor(0)),
-    objects: objectRowsOfPackage(manifest, idsFor(0), documents),
+    manifest: rowsOf(manifest, idsFor(0, "none")),
+    objects: objectRowsOfPackage(manifest, idsFor(0, "none"), documents),
     values,
   };
 });

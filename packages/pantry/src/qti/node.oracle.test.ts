@@ -183,6 +183,7 @@ const someId: Uuid = "00000000-0000-4000-8000-000000000001";
 const written = {
   ancestry: Bits.of(install.Flag, []),
   chars: "",
+  documentType: "imsqti_item_xmlv3p0",
   first: "",
   governs: "none",
   id: someId,
@@ -247,6 +248,7 @@ describe("Node's declarations", () => {
       ancestry: true,
       chars: true,
       document: true,
+      documentType: true,
       first: true,
       governs: true,
       id: true,
@@ -275,7 +277,7 @@ describe("Node's declarations", () => {
       ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, document: someId, parent: someId }]),
     ];
 
-    assert.lengthOf(Object.keys(fields), 15);
+    assert.lengthOf(Object.keys(fields), 16);
     assert.isDefined(accepted);
     assert.isFunction(refused);
   });

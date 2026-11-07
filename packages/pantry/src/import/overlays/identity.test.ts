@@ -19,6 +19,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { GoverningOf } from "#pantry/grammar/install.ts";
 import { languageRowsOf, rowsOf } from "#pantry/import/overlays/identity.ts";
+import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
 import type {
@@ -169,10 +170,28 @@ const documentOf = (
 });
 
 /**
- * The ids every content and LOM case's rows are written under: `idOf`, numbering nodes in document
- * order, in a package that holds no document at any path a resource names.
+ * The ids every content case's rows are written under: `idOf`, numbering nodes in document order,
+ * in a package that holds no document at any path a resource names, the document an item.
  */
-const ids = { documentAt: () => Option.none(), idOf };
+const ids = {
+  documentAt: () => Option.none(),
+  documentType: "imsqti_item_xmlv3p0",
+  idOf,
+} as const satisfies IdentityIds;
+
+/**
+ * The ids a case's stimulus is read under: {@link ids}, the document a stimulus.
+ */
+const stimulusIds = {
+  ...ids,
+  documentType: "imsqti_stimulus_xmlv3p0",
+} as const satisfies IdentityIds;
+
+/**
+ * The ids a LOM case's record file is read under: {@link ids}, the document an external record
+ * file, whose records a package reads.
+ */
+const recordIds = { ...ids, documentType: "resourcemetadata/xml" } as const satisfies IdentityIds;
 
 /**
  * The document node's id, node 0 of every case.
@@ -319,7 +338,10 @@ describe(
                   attributesOf({ id: Option.none(), label: drawn.rootLabel, lang: drawn.rootLang }),
                   drawn.children.map((choice) => elementOf("div", attributesOf(choice), [])),
                 );
-                const rows = rowsOf(documentOf(root, drawn.version), ids);
+                const rows = rowsOf(
+                  documentOf(root, drawn.version),
+                  drawn.rootKind === "qti-assessment-item" ? ids : stimulusIds,
+                );
                 const placed = [
                   {
                     choice: { id: Option.none(), label: drawn.rootLabel, lang: drawn.rootLang },
@@ -539,7 +561,7 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
                 children.push(elementOf("lom:educational", [], [languageOf("de")]));
               }
 
-              const rows = rowsOf(documentOf(elementOf("lom:lom", [], children)), ids);
+              const rows = rowsOf(documentOf(elementOf("lom:lom", [], children)), recordIds);
               const expected: {
                 readonly general: string;
                 readonly lang: string;
@@ -1022,10 +1044,12 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               const manifestRows = rowsOf(documentOf(manifest), {
                 documentAt: (path) =>
                   path === itemPath ? Option.some(itemDocument) : Option.none(),
+                documentType: "none",
                 idOf,
               });
               const itemRows = rowsOf(documentOf(item), {
                 documentAt: () => Option.none(),
+                documentType: "imsqti_item_xmlv3p0",
                 idOf: itemIdOf,
               });
               const witnesses = languageRowsOf([manifestRows, itemRows]).GeneralLang;

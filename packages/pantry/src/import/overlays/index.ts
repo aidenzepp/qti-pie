@@ -125,7 +125,9 @@ interface DocumentRows {
  * Run every document builder over one document: each finds the elements its overlays describe by
  * their kind, so a document that holds none gives it no row. The manifest overlays are the
  * package manifest's alone (`noPackageRows`): `rowsOf` of `#pantry/import/overlays/package.ts`
- * reads the manifest's tree, and a `cp:*` element of another document is no part of the package.
+ * reads the manifest's tree, and a `cp:*` element of another document is no part of the package,
+ * so the metadata overlays read the package's records from the manifest and its record files alone
+ * (`rowsOf` of `#pantry/import/overlays/metadata.ts`, by the document's type).
  *
  * @param document - The document, listed, under its ids.
  * @param document.ids - Its ids.

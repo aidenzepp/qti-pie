@@ -98,6 +98,11 @@ export interface TestIds {
   readonly context?: DocumentContext;
   readonly documentAt: (path: string) => Option.Option<NodeId>;
   /**
+   * The document's type, the resource's that lists it, which each site copies from its include's
+   * node.
+   */
+  readonly documentType: Addition<typeof Site>["documentType"];
+  /**
    * Whether the package holds an entry at a path; where none is given, exactly where it holds a
    * document.
    */
@@ -740,6 +745,7 @@ const sitesOf = (
             ...tupleOf(view, node),
             ancestry: Bits.of(Flag, [...(view.folds.get(node.id)?.ancestry ?? [])]),
             children: BigInt(view.childrenOf.get(node.id)?.length ?? 0),
+            documentType: view.ids.documentType,
             governs: node.governs,
             nearestKind: view.folds.get(node.id)?.nearestKind ?? "document",
             parentKind,

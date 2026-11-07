@@ -37,7 +37,9 @@ import {
   Follow,
   GoverningOf,
   grammar,
+  nonElementKinds,
   Position,
+  RootOfType,
   SharedModelOf,
   Symbol as ContentSymbol,
   TextDomain,
@@ -476,10 +478,36 @@ const inStringValue = (
 };
 
 /**
+ * The kinds that are no element, as a set.
+ */
+const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
+
+/**
+ * The resource type of a folded document: the one `RootOfType` names for its root element's kind,
+ * `none` for a manifest, which no resource lists.
+ *
+ * @param rows - The document's folded rows.
+ * @returns The type.
+ */
+const documentTypeOf = (rows: FoldedRows<Composed>) => {
+  // The nodes are in pre-order, so the first element below the document node is its root.
+  const root = rows.nodes.find(({ kind, start }) => start > 0n && !nonElements.has(kind))?.kind;
+  if (root === "cp:manifest") {
+    return "none";
+  }
+
+  const types = RootOfType.rows.filter((row) => row.root === root).map(({ type }) => type);
+  assert.lengthOf(types, 1, `${root ?? "no root"}: the one resource type RootOfType names for it`);
+
+  return types[0] ?? "none";
+};
+
+/**
  * State a document's `Node` facts, every field the host writes, in pre-order: the fields from the
  * host's fold, and the string value's running text as `node.ts`'s fold steps it. The writer derives
  * the rest from `Qti`'s statements: ‹n› and ‹ps› from the parent, and the counted and barred folds'
- * accumulators and ends from the members their selections hold. `parentParentKind` is accumulated,
+ * accumulators and ends from the members their selections hold, and each member's documentType from
+ * its root's, which the root states (T3). `parentParentKind` is accumulated,
  * so the host never writes it: the fact states it as grizzle's owner-axis copy does, the parent's
  * `parentKind`, the root's own, and steps the children whose text an overlay copies by two kinds
  * (`copiedUnder`) as the fold does.
@@ -521,7 +549,7 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
     }
   }
 
-  return rows.nodes.map((node) => {
+  const facts = rows.nodes.map((node): Stated => {
     const parent = node.start === 0n ? node : (byId.get(node.parent) ?? node);
     const own = running.get(node.id) ?? { charsAfter: "", charsWas: "", piece: "" };
     const last = Arr.last(familyOf.get(node.id) ?? []).pipe(
@@ -573,6 +601,13 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
       relation: Node,
     };
   });
+  const type = documentTypeOf(rows);
+
+  return facts.map((stated) =>
+    stated.fact["start"] === 0n
+      ? { ...stated, fact: { ...stated.fact, documentType: type } }
+      : stated,
+  );
 };
 
 /**
@@ -1422,6 +1457,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
 
                       const uses = identityRowsOf(tree, {
                         documentAt: () => Option.none(),
+                        documentType: "imsqti_item_xmlv3p0",
                         idOf,
                       }).LabelUse.values();
                       const verdict = yield* judged(

@@ -164,7 +164,7 @@ const exported = Effect.fn("test.attributeOrder.exported")(function* exportedOf(
   label: string,
 ) {
   const tree: XdmDocument<Composed> = yield* Effect.orDie(shred(source, version, shredGrammar));
-  const insert = rootInsertOf(tree, { idOf: scan.ids });
+  const insert = rootInsertOf(tree, { documentType: "imsqti_item_xmlv3p0", idOf: scan.ids });
   const root = insert.children.filter(({ kind }) => kind === tree.root.kind).slice(0, 1);
 
   for (const [held, nested] of familiesOf([tree.root], root)) {
