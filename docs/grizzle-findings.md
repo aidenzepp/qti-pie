@@ -1869,6 +1869,46 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   `Document`'s `node` mirrors the document-kind nodes (`chardata.ts:617` to `623`), so each copy equals its node's
   value.
 
+### A statement can't be built by a helper generic over relations that share a heading (a limit of the typed builders; lane REP-A)
+
+- **Classified:** a limit of the typed statement builders, not a defect: the checks are conditional types, which
+  TypeScript defers over a type parameter. Checked at the pin `72f7d03` and at grizzle's newest `main`, `64eacbb4`.
+- **The cause:** `contained` takes `right: R & SidesCompatible<L, R>` (`packages/engine/src/schema/api.ts:343` to
+  `346`), and `SidesCompatible` is a conditional type over each side's host field types
+  (`packages/engine/src/types/schema/statements.ts:521` to `525`). When the left side is `on(member, …)` with `member`
+  a type parameter, the conditional cannot be resolved, so no right side is assignable. `select` and a row predicate's
+  `in` carry `Parameterless` and `Fit` or `ContractAdmits` over the row, which defer the same way.
+- **Reproduction,** run by lane REP-A in a git archive of grizzle `64eacbb4` with grizzle's own `tsc` (7.1.0-beta, the
+  effect tsgo build), saved with its command and output in `~/.cache/gr8des/rep-a/generic-limit-run.md`:
+
+  ```ts
+  const heading = { id: uuid, owner: uuid };
+  const A = relation("A", heading, ["id"]);
+  const B = relation("B", heading, ["id"]);
+  const Owner = relation("Owner", { id: uuid }, ["id"]);
+  export const control = contained(on(A, "owner"), on(Owner, "id"));
+  const ownedBy = <R extends typeof A | typeof B>(member: R) =>
+    contained(on(member, "owner"), on(Owner, "id"));
+  ```
+
+  - **case:** `ownedBy`'s `on(Owner, "id")` gives `error TS2345: Argument of type 'Side<Relation<"Owner", …>, readonly
+    ["id"]>' is not assignable to parameter of type 'Side<Relation<"Owner", …>, readonly ["id"]> & ...'`, whose
+    unresolved part is `[…] extends [readonly [FieldTypeOf<SideRelation<R>, "owner">]] ? unknown : Refusal<"the sides'
+    field types differ">`, exit 2;
+  - **control:** `control`, the same containment over the concrete `A`, compiles, and is the run's only other
+    statement.
+
+- **Where pantry meets it:** `qti/interactions.ts` states the same three or four laws for each of nine content
+  reference relations, five over `referenceFields` (`:1023`) and four over `sectionReferenceFields` (`:1194`): the
+  ContentReference containment, the `declarationRef` containment over the non-built-ins, the name containment and the
+  `X_reference` check. A table of the nine with two helpers (REP-A's audit item I1) would state each once, but each
+  helper is generic over the relation, so it compiles only with an assertion at every builder, which switches off the
+  `SidesCompatible` check the statement relies on.
+- **What would lift it:** a builder form that checks compatibility where the helper is applied, such as a
+  `forEach(relations, (r) => statements)` typed as a mapped tuple over the concrete relations; or a `SidesCompatible`
+  that resolves through the side's heading rather than its relation.
+- **Workaround in pantry:** the nine blocks stay unrolled, each fully typed.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
