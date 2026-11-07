@@ -297,19 +297,6 @@ export const known = {
       fix: "two declarations of one identifier: the oracle raises the VariableLookup containment that breaks beside Declaration key, so precedence sees it",
       owner: "OL",
     },
-  "import-only-law: E1 derived, contained LomObject(package, path, document) in Document(package, path, node)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="../choice.xml"><metadata><imsmd:lom/></metadata></resource></resources></manifest>`,
-        ],
-      ],
-      fix: "NS6: a resource whose href names no document writes no record object",
-      owner: "NIL",
-    },
   "import-only-law: E1 derived, contained LomObjectIdentifier(document, identifier) in AssessmentObject(document, identifier)":
     {
       files: [
@@ -411,32 +398,6 @@ export const known = {
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
   },
-  "import-only-law: LomObjectIdentifier, contained LomObjectIdentifier(entry, general, record, identifier) in LomEntry(node, holder, holderParent, token)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="stimulus.xml"><metadata><imsmd:lom><imsmd:general><imsmd:identifier><imsmd:entry>choice</imsmd:entry></imsmd:identifier></imsmd:general></imsmd:lom></metadata></resource></resources></manifest>`,
-        ],
-      ],
-      fix: "NS6: a resource whose href names no document writes no record object",
-      owner: "NIL",
-    },
-  "import-only-law: LomObjectTitle, contained LomObjectTitle(string, record, title) in LomTitleString(node, record, textValue)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="example.xml"><metadata><imsmd:lom><imsmd:general><imsmd:title/></imsmd:general></imsmd:lom></metadata></resource></resources></manifest>`,
-        ],
-      ],
-      fix: "NS6: a resource whose href names no document writes no record object",
-      owner: "NIL",
-    },
   "import-only-law: N8 nearest, contained Choice(node) in ChoiceInteraction(node)": {
     files: [
       [
@@ -474,24 +435,6 @@ export const known = {
       fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
       owner: "NIL",
     },
-  "import-only-law: Test overlay, contained Named(node, identifier) in TestToken(node, value)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part/></qti-assessment-test>`,
-      ],
-    ],
-    fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-    owner: "NIL",
-  },
   "import-only-law: Test overlay, contained Node(id) in ReferencePath(node)": {
     files: [
       [
@@ -1091,6 +1034,19 @@ export const fixed = {
       fix: "fix (3): a package's records are read from its manifest and its record files alone (recordDocumentTypes), and the Manifest overlay selections read the manifest's cp:* attributes alone, each by its node's and attribute's documentType (170356bd's reading)",
       owner: "GEN-A",
     },
+  "import-only-law: E1 derived, contained LomObject(package, path, document) in Document(package, path, node)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="../choice.xml"><metadata><imsmd:lom/></metadata></resource></resources></manifest>`,
+        ],
+      ],
+      fix: "NS6: a record names a document only where its resource's href names one (LomResource.named, by targetAt), so a record whose href names none writes no LomObject, LomObjectIdentifier, LomObjectTitle or GeneralObject, and Document entry alone refuses the href",
+      owner: "FIX-GENOBJ",
+    },
   "import-only-law: E1 derived, contained LomResource(node) in Resource(node)": {
     files: [
       [
@@ -1242,6 +1198,32 @@ export const fixed = {
       fix: "fix (3): a package's records are read from its manifest and its record files alone (recordDocumentTypes), and the Manifest overlay selections read the manifest's cp:* attributes alone, each by its node's and attribute's documentType (170356bd's reading)",
       owner: "GEN-A",
     },
+  "import-only-law: LomObjectIdentifier, contained LomObjectIdentifier(entry, general, record, identifier) in LomEntry(node, holder, holderParent, token)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="stimulus.xml"><metadata><imsmd:lom><imsmd:general><imsmd:identifier><imsmd:entry>choice</imsmd:entry></imsmd:identifier></imsmd:general></imsmd:lom></metadata></resource></resources></manifest>`,
+        ],
+      ],
+      fix: "NS6: a record names a document only where its resource's href names one (LomResource.named, by targetAt), so a record whose href names none writes no LomObject, LomObjectIdentifier, LomObjectTitle or GeneralObject, and Document entry alone refuses the href",
+      owner: "FIX-GENOBJ",
+    },
+  "import-only-law: LomObjectTitle, contained LomObjectTitle(string, record, title) in LomTitleString(node, record, textValue)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="example.xml"><metadata><imsmd:lom><imsmd:general><imsmd:title/></imsmd:general></imsmd:lom></metadata></resource></resources></manifest>`,
+        ],
+      ],
+      fix: "NS6: a record names a document only where its resource's href names one (LomResource.named, by targetAt), so a record whose href names none writes no LomObject, LomObjectIdentifier, LomObjectTitle or GeneralObject, and Document entry alone refuses the href",
+      owner: "FIX-GENOBJ",
+    },
   "import-only-law: LomObjectTitle, contained LomTitle(record) in LomObjectTitle(record)": {
     files: [
       [
@@ -1322,6 +1304,24 @@ export const fixed = {
     ],
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
+  },
+  "import-only-law: Test overlay, contained Named(node, identifier) in TestToken(node, value)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part/></qti-assessment-test>`,
+      ],
+    ],
+    fix: "reading 147: a test part, section, section ref, item ref or stimulus ref that writes no identifier names nothing, so it writes no Named or StimulusRef row, and AL3 alone refuses it",
+    owner: "FB-TESTS",
   },
   "import-only-law: Test overlay, contained Site(node, package, path) in ReferencePath(node, package, path)":
     {

@@ -14,7 +14,7 @@
  * never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import type { DocumentContext } from "#pantry/import/context.ts";
+import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import { Option } from "effect";
 import { collapse } from "#pantry/grammar/domains.ts";
 import {
@@ -25,7 +25,7 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { lowerAscii } from "#pantry/import/overlays/metadata.ts";
+import { lowerAscii, namesNoDocument } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
@@ -63,8 +63,8 @@ import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by
- * the number `flatten` gives it, and the document node of each path of its package, which a
- * resource's `href` names.
+ * the number `flatten` gives it, and the document a resource names at each path of its package,
+ * which a resource's `href` names.
  *
  * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
  * the tree's rows name each node by one id.
@@ -80,13 +80,20 @@ export interface IdentityIds {
    * fragment's nodes take the interaction their includes stand in as their nearest.
    */
   readonly context?: DocumentContext;
-  readonly documentAt: (path: string) => Option.Option<NodeId>;
   /**
    * The document's type, the resource's that lists it, `none` for the manifest: its LOM records
    * are read where it is of a type a package's records are read from (`recordDocumentTypes`).
    */
   readonly documentType: Addition<typeof GeneralNamed>["named"];
   readonly idOf: (index: number) => NodeId;
+  /**
+   * The document a resource names at a path of the package, none where no resource names one
+   * there, the manifest's included, as Q5.12's `LomResource.named` reads it.
+   *
+   * @param path - A path in the package, as `ResourceHref` compares it.
+   * @returns The document's node.
+   */
+  readonly targetAt: (path: string) => Option.Option<Pick<ListedTarget, "node">>;
 }
 
 /**
@@ -525,11 +532,14 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
  * Build the rows a document's LOM general categories give: each `lom:language`'s `LomLanguage`,
  * with its tag case-folded, and its category's language set, by those tags; and, for a category of
  * a resource's record, its `GeneralNamed` and, where the record names a document, its
- * `GeneralObject`. A document of a type no package record is read from (`recordDocumentTypes`)
- * gives none: its `lom:*` elements are no record's (170356bd's ruling).
+ * `GeneralObject`. A record names the document its resource's `href` names, where the resource's
+ * type is an item's or a test's and a resource names a document at that path (Q5.12's
+ * `LomRecord.named`); a record whose `href` names none names nothing, and "Document entry" refuses
+ * the href. A document of a type no package record is read from (`recordDocumentTypes`) gives
+ * none: its `lom:*` elements are no record's (170356bd's ruling).
  *
  * @param tree - The document's tree.
- * @param ids - The ids its rows are written under, whose `documentAt` resolves a resource's href.
+ * @param ids - The ids its rows are written under, whose `targetAt` resolves a resource's href.
  * @returns The rows, each by its key text.
  */
 const lomRowsOf = (
@@ -543,10 +553,20 @@ const lomRowsOf = (
   const lomSets = new Map<string, Addition<typeof ResourceLomLanguageSet>>();
   const named = new Map<string, Addition<typeof GeneralNamed>>();
   const objects = new Map<string, Addition<typeof GeneralObject>>();
-  // Each resource's href resolved as its `ResourceHref` is, read only for a manifest's records.
-  let resourcePaths: ReadonlyMap<NodeId, string> | undefined;
+  const rows = {
+    GeneralNamed: named,
+    GeneralObject: objects,
+    LomLanguage: lomLanguages,
+    ResourceLomLanguageSet: lomSets,
+  };
+  if (!recordTypes.has(ids.documentType)) {
+    return rows;
+  }
 
-  for (const node of recordTypes.has(ids.documentType) ? tree.rows.nodes : []) {
+  // Each resource's href resolved as its `ResourceHref` is, by which its records name a document.
+  const resourcePaths = resourcePathsOf(tree.rows);
+
+  for (const node of tree.rows.nodes) {
     const text = tree.values.get(node.id) ?? "";
     const parent = tree.byId.get(node.parent);
     if (node.kind === "lom:language" && parent?.kind === "lom:general") {
@@ -560,29 +580,26 @@ const lomRowsOf = (
       continue;
     }
 
-    const href = tree.valueOf(owner.parent, "href");
-    const naming =
-      href === undefined ? undefined : namingTypes.get(tree.valueOf(owner.parent, "type") ?? "");
-    named.set(node.id, { general: node.id, named: naming ?? "none", record: parent.id });
-    if (href !== undefined && naming !== undefined) {
-      resourcePaths ??= resourcePathsOf(tree.rows);
-      objects.set(node.id, {
-        document: Option.getOrElse(
-          ids.documentAt(resourcePaths.get(owner.parent) ?? ""),
-          () => tree.document,
-        ),
-        general: node.id,
-        record: parent.id,
-      });
+    // The type and the document the record names: its resource's, where its `type` spells an
+    // item's or a test's handle and a resource names a document at its `href`'s path.
+    const object = Option.zipWith(
+      Option.fromNullishOr(tree.valueOf(owner.parent, "type")).pipe(
+        Option.flatMap((type) => Option.fromNullishOr(namingTypes.get(type))),
+      ),
+      Option.fromNullishOr(resourcePaths.get(owner.parent)).pipe(Option.flatMap(ids.targetAt)),
+      (type, { node: document }) => ({ document, type }),
+    );
+    named.set(node.id, {
+      general: node.id,
+      named: Option.match(object, { onNone: () => namesNoDocument, onSome: ({ type }) => type }),
+      record: parent.id,
+    });
+    for (const { document } of Option.toArray(object)) {
+      objects.set(node.id, { document, general: node.id, record: parent.id });
     }
   }
 
-  return {
-    GeneralNamed: named,
-    GeneralObject: objects,
-    LomLanguage: lomLanguages,
-    ResourceLomLanguageSet: lomSets,
-  };
+  return rows;
 };
 
 /**
@@ -709,10 +726,10 @@ const ssmlRowsOf = (
  * {@link DocumentGenerals} row, whose count the database draws.
  *
  * A resource's general category names the type its record names: the resource's `type` where that
- * spells an item's or a test's handle and the resource has an `href` (Q5.12's `LomRecord.named`),
- * else `none`; and a naming category describes the document at the `href`'s path (reading 102), or
- * the manifest itself where the package holds none there, as Q5.12's `LomObject` does, whose
- * containments refuse it.
+ * spells an item's or a test's handle and its `href` names a document a resource names, at the path
+ * its `ResourceHref` compares it by (reading 102; Q5.12's `LomRecord.named`), else `none`; and a
+ * naming category describes that document, as Q5.12's `LomObject` does. A category whose `href`
+ * names no document describes none, and "Document entry" refuses the href.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.

@@ -83,7 +83,8 @@ const namespaces = {
 
 /**
  * Draw the ids of one document's rows: a uuid whose groups spell the document's number and the
- * row's, so two documents' rows never share an id.
+ * row's, so two documents' rows never share an id, in a package where a resource names no
+ * document, which the manifest's ids replace by {@link targetsOf}.
  *
  * @param document - The document's number in its package, the manifest 0.
  * @param documentType - The type it is listed under, `none` for the manifest.
@@ -94,7 +95,20 @@ const idsFor = (document: number, documentType: MetadataIds["documentType"]): Me
   idOf: (index) =>
     `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`,
   package: packageId,
+  targetAt: () => Option.none(),
 });
+
+/**
+ * Read the document a resource names at each path, as the importer's `targetAt` does: the listed
+ * document there, none at any other path.
+ *
+ * @param documents - The package's listed documents, by path.
+ * @returns The lookup.
+ */
+const targetsOf =
+  (documents: ReadonlyMap<string, NamedDocument>): MetadataIds["targetAt"] =>
+  (path) =>
+    Option.map(Option.fromNullishOr(documents.get(path)), ({ document }) => ({ node: document }));
 
 /**
  * Read the schema version a manifest declares: its root's `metadata` child's `schemaversion` text.
@@ -198,10 +212,12 @@ const builtOf = (input: Shredded): Built => {
     }
   }
 
+  const manifestIds = { ...idsFor(0, "none"), targetAt: targetsOf(documents) };
+
   return {
-    manifest: rowsOf(input.manifest, idsFor(0, "none")),
+    manifest: rowsOf(input.manifest, manifestIds),
     objects,
-    rows: objectRowsOfPackage(input.manifest, idsFor(0, "none"), documents),
+    rows: objectRowsOfPackage(input.manifest, manifestIds, documents),
   };
 };
 

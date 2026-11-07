@@ -174,9 +174,9 @@ const documentOf = (
  * in a package that holds no document at any path a resource names, the document an item.
  */
 const ids = {
-  documentAt: () => Option.none(),
   documentType: "imsqti_item_xmlv3p0",
   idOf,
+  targetAt: () => Option.none(),
 } as const satisfies IdentityIds;
 
 /**
@@ -1042,15 +1042,15 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               );
               const itemDocument = itemIdOf(0);
               const manifestRows = rowsOf(documentOf(manifest), {
-                documentAt: (path) =>
-                  path === itemPath ? Option.some(itemDocument) : Option.none(),
                 documentType: "none",
                 idOf,
+                targetAt: (path) =>
+                  path === itemPath ? Option.some({ node: itemDocument }) : Option.none(),
               });
               const itemRows = rowsOf(documentOf(item), {
-                documentAt: () => Option.none(),
                 documentType: "imsqti_item_xmlv3p0",
                 idOf: itemIdOf,
+                targetAt: () => Option.none(),
               });
               const witnesses = languageRowsOf([manifestRows, itemRows]).GeneralLang;
 
@@ -1062,23 +1062,21 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                 next += 1 + 2 * langs.length;
               }
 
+              // A record names the item only where its resource is an item's and its href names
+              // the item, the one document the package holds: an href to no document names none.
               const named =
-                drawn.type === "imsqti_item_xmlv3p0" && Option.isSome(drawn.href)
+                drawn.type === "imsqti_item_xmlv3p0" &&
+                Option.exists(drawn.href, (href) => href === itemPath)
                   ? drawn.type
                   : "none";
-              const described = Option.exists(drawn.href, (href) => href === itemPath)
-                ? itemDocument
-                : documentNode;
               const forms = [
                 ...new Set([...Option.toArray(drawn.rootLang), ...Option.toArray(drawn.divLang)]),
               ];
               const stated = forms.filter((form) => collapsed(form) !== "");
               const naming = named === "none" ? [] : generals;
-              const holds = stated.every((form) =>
-                naming.every(({ langs }) => described !== itemDocument || lists(langs, form)),
-              );
+              const holds = stated.every((form) => naming.every(({ langs }) => lists(langs, form)));
 
-              if (stated.length > 0 && naming.length > 0 && described === itemDocument) {
+              if (stated.length > 0 && naming.length > 0) {
                 c.note(holds ? "every category lists it" : "a category lacks it");
               }
 
@@ -1112,7 +1110,7 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                     (row) => `${row.general} ${row.record} ${row.document}`,
                   ),
                 ),
-                naming.map(({ node }) => `${node} ${record} ${described}`).toSorted(),
+                naming.map(({ node }) => `${node} ${record} ${itemDocument}`).toSorted(),
               );
               assert.deepStrictEqual(
                 asSet(
@@ -1120,7 +1118,7 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                     JSON.stringify([row.general, row.document, row.lang, row.value]),
                   ),
                 ),
-                (described === itemDocument ? naming : [])
+                naming
                   .flatMap(({ langs, node }) =>
                     stated
                       .filter((form) => lists(langs, form))

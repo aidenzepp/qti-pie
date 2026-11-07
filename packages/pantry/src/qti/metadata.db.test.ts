@@ -78,7 +78,8 @@ const fixtures = inject("fixtures");
 const shredGrammar = shredGrammarOf(grammar);
 
 /**
- * Draw the ids of one document's rows, numbered by its place in the package, the manifest 0.
+ * Draw the ids of one document's rows, numbered by its place in the package, the manifest 0, in a
+ * package where a resource names no document, which the manifest's ids replace.
  *
  * @param document - The document's number.
  * @param documentType - The type it is listed under, `none` for the manifest.
@@ -89,6 +90,7 @@ const idsFor = (document: number, documentType: MetadataIds["documentType"]): Me
   idOf: (index) =>
     `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`,
   package: "00000000-0000-4000-8000-00000000c0de",
+  targetAt: () => Option.none(),
 });
 
 /**
@@ -158,10 +160,19 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
     }
   }
 
+  // The document a resource names at each path, as the importer's `targetAt` reads it.
+  const manifestIds: MetadataIds = {
+    ...idsFor(0, "none"),
+    targetAt: (path) =>
+      Option.map(Option.fromNullishOr(documents.get(path)), ({ document }) => ({
+        node: document,
+      })),
+  };
+
   return {
     dates,
-    manifest: rowsOf(manifest, idsFor(0, "none")),
-    objects: objectRowsOfPackage(manifest, idsFor(0, "none"), documents),
+    manifest: rowsOf(manifest, manifestIds),
+    objects: objectRowsOfPackage(manifest, manifestIds, documents),
     values,
   };
 });

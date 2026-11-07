@@ -6,13 +6,15 @@
  * was last updated, with the laws that read them across rows.
  *
  * A record names its document when it is a `lom:lom` child of the `cp:metadata` of a resource of
- * type `imsqti_item_xmlv3p0` or `imsqti_test_xmlv3p0` that has an `href` (reading 93): its
- * {@link LomRecord}'s `named` is the resource's type, and its {@link LomObject} the document at the
- * `href`. A file's record describes the file, and an external record ({@link LomRecord}'s owner is
- * the document node) may describe many items, so neither names one. Spec reading 62, as UP's audit
- * merges it (§2.2), reads the information model's "MUST be the same" (sections 4.1.1, 4.1.2, 4.4.1
- * and 4.4.2) through the metadata binding's LOM profile (QTI 3.0 Metadata §2.7.1, normative by its
- * §1.2):
+ * type `imsqti_item_xmlv3p0` or `imsqti_test_xmlv3p0` whose `href` names a document (reading 93):
+ * its {@link LomRecord}'s `named` is the resource's type, and its {@link LomObject} the document at
+ * the `href`. A file's record describes the file, and an external record ({@link LomRecord}'s owner
+ * is the document node) may describe many items, so neither names one. A record whose resource's
+ * `href` names no document names none, so no law here reads it: there is no "associated item, test
+ * or object bank" (§2.7.1) to read it against, and "Document entry" refuses the `href`. Spec
+ * reading 62, as UP's audit merges it (§2.2), reads the information model's "MUST be the same"
+ * (sections 4.1.1, 4.1.2, 4.4.1 and 4.4.2) through the metadata binding's LOM profile (QTI 3.0
+ * Metadata §2.7.1, normative by its §1.2):
  *
  * - **`lom-identifier`** (law "LomObjectIdentifier", §2.7.1.1: "One of the values given for the
  *   identifier must have an entry that matches the identifier of the associated item, test or
@@ -195,7 +197,10 @@ const Space = str.regex("^[\\t\\n\\r ]*$");
 /**
  * A resource as the LOM laws read it, keyed by its `cp:resource` node: `named`, the type of the
  * assessment object document its `href` names: its type where it has a {@link TypedHref} of an item
- * or a test, else `none`. A resource whose `type` spells nothing names no document.
+ * or a test whose path a resource names a document at, else `none`. A resource whose `type` spells
+ * nothing names no document, and neither does one whose `href` names none: an item's or a test's
+ * {@link TypedHref} is its resource's `named` exactly where the `href` names a document, so the
+ * containment that holds it breaks only where "Document entry" does, and is stated under that law.
  */
 export const LomResource = relation(
   "LomResource",
@@ -761,8 +766,10 @@ const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
 /**
  * Every statement over the metadata overlays, each `check` named by its oracle law:
  *
- * - **the resources:** each `Resource` has its {@link LomResource}, both ways; and its `named` is its
- *   {@link TypedHref}'s type where that is an item's or a test's, else `none` ("E1 derived").
+ * - **the resources:** each `Resource` has its {@link LomResource}, both ways; and its `named` is
+ *   `none` or its {@link TypedHref}'s type, an item's or a test's ("E1 derived"), and that type
+ *   wherever its `href` is of an item's or a test's type, which holds exactly where the `href`
+ *   names a document ("Document entry").
  * - **the records:** each `lom:lom` has its {@link LomRecord}; its tuple and its owner's are its
  *   nodes'; its `named` is its resource's where its owner is a resource's metadata, else `none`;
  *   and each naming record has its {@link LomObject}, the document at its resource's `href`'s
@@ -802,6 +809,7 @@ const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
  *   ("Usage typed value").
  */
 export const metadataLawsByName = {
+  "Document entry": [contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named"))],
   "DocumentId key": [
     key(on(stringLanguageAttributes, "node")),
     key(on(objectIdentifiers, "node")),
@@ -812,7 +820,6 @@ export const metadataLawsByName = {
   ],
   "E1 derived": [
     mirrors(on(LomResource, "node"), on(Resource, "node")),
-    contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named")),
     contained(on(namingResources, "node", "named"), on(objectHrefs, "node", "type")),
     contained(
       on(LomRecord, "node", "document", "kind", "start", "nearest", "version", "parent"),
