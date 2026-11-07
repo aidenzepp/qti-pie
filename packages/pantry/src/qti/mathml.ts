@@ -27,17 +27,17 @@ export const mathmlRelations = {
 export const mathmlLaws = [...applyLaws, ...cnLaws, ...alignLaws, ...shareLaws];
 
 /**
- * {@link mathmlLaws} by the law each states, the law's name its key, as every other module names its
- * laws where it states them (`namedLaws`, `#pantry/import/refusal.ts`):
+ * {@link mathmlLaws} by the law each states, the law's name its key, as every other module names
+ * its laws where it states them (`namedLaws`, `#pantry/import/refusal.ts`):
  *
- * - **MathML head qualifier:** the apply family's head qualifier containment, a pair MathML 3's
- *   §4.4 syntax tables list (`mathml-apply.ts`, reading R6-head-qualifiers; its check is "MathML
- *   arity", named by the check itself);
+ * - **MathML head qualifier:** the apply family's head qualifier containment, a pair MathML 3's §4.4
+ *   syntax tables list (`mathml-apply.ts`, reading R6-head-qualifiers; its check is "MathML arity",
+ *   named by the check itself);
  * - **MathML cn form:** a `cn`'s four part count containments, over the judged `cn`s and over every
  *   typed `cn` ({@link cnCountLaws}): a wrong part count is a `cn` of the wrong form;
- * - **DocumentId key:** the align family's keys of one `selection` per `m:maction` and one `dir`
- *   per element ({@link attributeKeyLaws}), the name a key over one attribute per node had before
- *   PR #46's 6caa20ef;
+ * - **DocumentId key:** the align family's keys of one `selection` per `m:maction` and one `dir` per
+ *   element ({@link attributeKeyLaws}), the name a key over one attribute per node had before PR
+ *   #46's 6caa20ef;
  * - **E1 derived:** every other statement of the four families, a restatement of the tree.
  */
 export const mathmlLawsByName = {

@@ -23,12 +23,12 @@
  *   processing makes resolves, through a name the test places once (readings 48 and 88, M3), with
  *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`); a braced one
  *   (a string attribute's) that resolves nowhere is a string value, with two readings still refused
- *   (reading R15-k); and the content references, each resolving in the test's
- *   declarations or its built-ins (A43 to A45: `Feedback reference`, `Feedback outcome type`,
- *   `Printed variable reference`, `Template reference`, `Context variable reference`), with a
- *   section document's feedback naming a built-in variable judged by the type its name has
- *   (`Feedback outcome type`). Each is judged over every document the test places and every
- *   fragment those documents splice in place (spec reading 117).
+ *   (reading R15-k); and the content references, each resolving in the test's declarations or its
+ *   built-ins (A43 to A45: `Feedback reference`, `Feedback outcome type`, `Printed variable
+ *   reference`, `Template reference`, `Context variable reference`), with a section document's
+ *   feedback naming a built-in variable judged by the type its name has (`Feedback outcome type`).
+ *   Each is judged over every document the test places and every fragment those documents splice in
+ *   place (spec reading 117).
  */
 import { Option, Result } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";

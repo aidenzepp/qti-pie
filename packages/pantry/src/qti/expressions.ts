@@ -1556,7 +1556,6 @@ const resolves = (r: ReadingRow) =>
   );
 
 /**
-/**
  * The variable mappings whose item ref names no LTI link: a mapping under an LTI item ref has no
  * item, so no source declaration, and is accepted unchecked (spec reading 110). A mapping under an
  * item ref that names an item, a missing document or nothing the package lists must have its
