@@ -2604,3 +2604,18 @@ against it. A reading that is not an information-model-over-XSD case says which 
      scan of their 1,100 `resource` and `file` elements. This binds pantry and plate alike. This is not a case of
      documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of
      2026-11-05, from seat FIX-MANIFEST.)
+147. **A test part, section, section ref, item ref or stimulus ref that writes no `identifier` names nothing: it holds
+     no place in its document's namespace, and AL3 alone refuses it.** The ASI XSD requires the identifier of each,
+     with no default: `<xs:attribute name="identifier" use="required" type="IdentifierDType" />` in `TestPartDType`,
+     `AssessmentSectionDType`, `AssessmentSectionRefDType`, `AssessmentItemRefDType` and `AssessmentStimulusRefDType`
+     (`imsqti_asiv3p0_v1p0.xsd`), and `IdentifierDType` restricts `xs:NCName`, so no identifier is empty. An element
+     that writes none has no identifier, not the empty one: it shares no identifier with another element ("Structure
+     identifier", "Test name key", "Stimulus ref key", reading 86), and no branch rule names it (reading 87). It has
+     no `Named` or `StimulusRef` row, and the importer's laws that require one require it only of an element that
+     writes its identifier; AL3 ("required-attribute") refuses the element under its own rule. A branch rule whose
+     owner names nothing resolves from no source, and "Branch target" refuses it beside AL3, as the law oracle refuses
+     a rule whose owner it holds no name for. This sets aside the reading of an unwritten identifier as the empty one:
+     the importer's, under which "Test overlay"'s copy of the identifier broke beside AL3, and the law oracle's
+     (`testDocumentOf`'s empty default, `src/test/oracle-laws/assembly.ts`), under which two such elements of one
+     document break "Structure identifier". This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07
+     by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-TESTS.)

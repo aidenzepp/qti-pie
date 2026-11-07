@@ -23,7 +23,7 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
-import { Duration, Effect, Formatter, Option } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { assembledRowsOf, keyOf, piecesOf, rowsOf } from "#pantry/import/overlays/tests.ts";
 import type {
@@ -487,6 +487,163 @@ describe("import/overlays/tests.ts, pieces", () => {
           }),
       ),
     ),
+  );
+});
+
+/**
+ * An identifier as the names box writes it: unwritten, bare, padded, or whitespace alone.
+ */
+const identifierForms: readonly [Option.Option<string>, ...Option.Option<string>[]] = [
+  Option.none(),
+  Option.some("a"),
+  Option.some(" a\t"),
+  Option.some("  "),
+];
+
+/**
+ * A test and an item whose names and stimulus refs each write one of {@link identifierForms}: a
+ * test part holding a section that holds an item ref and a section ref, and an item holding two
+ * stimulus refs.
+ *
+ * @param forms - The six elements' identifiers, in document order.
+ * @returns The two documents by path.
+ */
+const namesDocuments = (
+  forms: readonly Option.Option<string>[],
+): readonly (readonly [string, XdmDocument<Composed>])[] => {
+  const written = (at: number): readonly (readonly [ClosedName<Composed>, string])[] =>
+    Option.toArray(Option.flatten(Arr.get(forms, at))).map((form) => ["identifier", form] as const);
+
+  return [
+    [
+      "t.xml",
+      documentOf(
+        el(
+          "qti-assessment-test",
+          [["identifier", "T"]],
+          [
+            el(
+              "qti-test-part",
+              [...written(0), ["navigation-mode", "linear"], ["submission-mode", "individual"]],
+              [
+                el(
+                  "qti-assessment-section",
+                  [...written(1), ["visible", "true"]],
+                  [
+                    el("qti-assessment-item-ref", [...written(2), ["href", "i.xml"]]),
+                    el("qti-assessment-section-ref", [...written(3), ["href", "s.xml"]]),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ],
+    [
+      "i.xml",
+      documentOf(
+        el(
+          "qti-assessment-item",
+          [["identifier", "I"]],
+          [
+            el("qti-assessment-stimulus-ref", [...written(4), ["href", "a.xml"]]),
+            el("qti-assessment-stimulus-ref", [...written(5), ["href", "b.xml"]]),
+          ],
+        ),
+      ),
+    ],
+  ];
+};
+
+/**
+ * The kinds whose identifier a `Named` or a `StimulusRef` row holds.
+ */
+const identifiedKinds: ReadonlySet<string> = new Set([
+  "qti-assessment-item-ref",
+  "qti-assessment-section",
+  "qti-assessment-section-ref",
+  "qti-assessment-stimulus-ref",
+  "qti-test-part",
+]);
+
+/**
+ * Read each identified element's collapsed identifier by a direct pre-order walk of the XDM tree,
+ * numbered as {@link partsByWalk} numbers it: none for one that writes no identifier.
+ *
+ * @param doc - The document.
+ * @returns Each identified element's start, with its identifier collapsed, where it writes one.
+ */
+const identifiersByWalk = (doc: XdmDocument<Composed>): ReadonlyMap<bigint, string> => {
+  const found = new Map<bigint, string>();
+  let next = 1n;
+  const visit = (node: XdmClosedElement<Composed>): void => {
+    const start = next;
+    next += 1n;
+    const form = node.attributes.find(
+      (attribute) => attribute.name._tag === "closed" && attribute.name.handle === "identifier",
+    );
+    if (form !== undefined && identifiedKinds.has(node.kind)) {
+      found.set(start, form.lexical.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, ""));
+    }
+
+    for (const child of node.children) {
+      if (child._tag === "element") {
+        visit(child);
+      }
+    }
+  };
+  visit(doc.root);
+
+  return found;
+};
+
+describe("import/overlays/tests.ts, names", () => {
+  it.effect(
+    "writes a Named or StimulusRef row exactly where its element writes an identifier, holding it collapsed",
+    (ctx) =>
+      // Oracle: a second implementation, a direct pre-order walk of the XDM tree, with XML Schema
+      // Part 2 §4.3.6's collapse, and reading 147: an element that writes no identifier names
+      // nothing, so it has no row.
+      // Bound: a test of a part, a section, an item ref and a section ref, and an item of two
+      // stimulus refs, each identifier unwritten, bare, padded or whitespace alone, 4,096.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "a test's four names and an item's two stimulus refs, each identifier unwritten, bare, padded or blank",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<"unwritten" | "written">(["unwritten", "written"]),
+            generator: array(element(identifierForms), { max: 6, min: 6 }),
+            limit: 5000,
+            literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "a direct pre-order walk of the XDM tree, with collapse",
+            },
+            suite: "import/overlays-tests-names",
+          },
+          (forms: readonly Option.Option<string>[], c) =>
+            Effect.sync(() => {
+              for (const form of forms) {
+                c.note(Option.isSome(form) ? "written" : "unwritten");
+              }
+
+              const documents = namesDocuments(forms);
+              assert.deepStrictEqual(
+                rowsOfPackage(documents).map(
+                  (rows) =>
+                    new Map(
+                      [...rows.Named.values(), ...rows.StimulusRef.values()].map(
+                        ({ identifier, start }) => [start, identifier] as const,
+                      ),
+                    ),
+                ),
+                documents.map(([, doc]) => identifiersByWalk(doc)),
+              );
+            }),
+        ),
+      ),
   );
 });
 

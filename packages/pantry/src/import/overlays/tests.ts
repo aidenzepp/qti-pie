@@ -514,8 +514,9 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
 };
 
 /**
- * Write a document's names: each test part, section, section ref and item ref, with its collapsed
- * identifier and its scope in the document.
+ * Write a document's names: each test part, section, section ref and item ref that writes an
+ * identifier, with its collapsed identifier and its scope in the document. One that writes none
+ * names nothing, so it has no row, and AL3 refuses it alone (spec reading 147).
  *
  * @param view - The document.
  * @param token - Each node's tokens.
@@ -530,24 +531,31 @@ const namedOf = (
   new Map(
     view.rows.nodes
       .filter(({ kind }) => among(namedKinds, kind))
-      .map((node) => {
+      .flatMap((node) => {
+        const identifier = token(node, "identifier");
+        if (identifier === undefined) {
+          return [];
+        }
+
         const own = scopes.get(node.id);
         const above = aboveOf(view, scopes, node);
         const isPart = node.kind === partKind;
 
         return [
-          node.id,
-          {
-            ...tupleOf(view, node),
-            end: node.end,
-            identifier: token(node, "identifier") ?? "",
-            looseChain: own?.looseChain ?? false,
-            mixes: own?.mixes ?? false,
-            parentKind: kindOf(view, node.parent),
-            part: isPart ? node.id : (own?.part ?? above.part),
-            replaced: !isPart && above.replaced,
-          },
-        ] as const;
+          [
+            node.id,
+            {
+              ...tupleOf(view, node),
+              end: node.end,
+              identifier,
+              looseChain: own?.looseChain ?? false,
+              mixes: own?.mixes ?? false,
+              parentKind: kindOf(view, node.parent),
+              part: isPart ? node.id : (own?.part ?? above.part),
+              replaced: !isPart && above.replaced,
+            },
+          ] as const,
+        ];
       }),
   );
 
@@ -951,7 +959,8 @@ const mappingsOf = (
 
 /**
  * Write a document's stimulus refs, each with its collapsed identifier, whatever the document's
- * root: a stimulus ref sits in an item.
+ * root: a stimulus ref sits in an item. One that writes no identifier has no row, and AL3 refuses
+ * it alone (spec reading 147).
  *
  * @param view - The document.
  * @param token - Each node's tokens.
@@ -964,13 +973,13 @@ const stimulusRefsOf = (
   new Map(
     view.rows.nodes
       .filter(({ kind }) => kind === stimulusRefKind)
-      .map(
-        (node) =>
-          [
-            node.id,
-            { ...tupleOf(view, node), identifier: token(node, "identifier") ?? "" },
-          ] as const,
-      ),
+      .flatMap((node) => {
+        const identifier = token(node, "identifier");
+
+        return identifier === undefined
+          ? []
+          : [[node.id, { ...tupleOf(view, node), identifier }] as const];
+      }),
   );
 
 /**
@@ -989,8 +998,8 @@ const keptIf = <A>(assembled: boolean, rows: ReadonlyMap<string, A>): ReadonlyMa
  * test or a section, none otherwise.
  *
  * An absent required attribute leaves out the row whose copy proves it (an item ref's or a site's
- * `href`, a selection's `select`), or leaves its field at its null value (an identifier's empty
- * value, a section's `visible` false), and AL3 refuses the element either way.
+ * `href`, a selection's `select`, a name's or a stimulus ref's `identifier`), or leaves its field
+ * at its null value (a section's `visible` false), and AL3 refuses the element either way.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
