@@ -2807,6 +2807,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD COLUMN \"__node_iz4wh6p7bb\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (109::smallint, 300::smallint, 110::smallint, 112::smallint) AND \"name\" = 86::smallint THEN \"node\" END) STORED"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD COLUMN \"__node_gucjs2ezyo\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (109::smallint, 300::smallint) AND \"name\" = 95::smallint THEN \"node\" END) STORED"
 					},
 					{
@@ -2816,6 +2820,10 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD COLUMN \"__node_3wva4opu4y\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (300::smallint) AND \"name\" = 233::smallint THEN \"node\" END) STORED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD COLUMN \"__node_6piwdwr2vb\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (92::smallint) AND \"name\" = 86::smallint THEN \"node\" END) STORED"
 					},
 					{
 						"kind": "statement",
@@ -4827,10 +4835,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"node\" ADD COLUMN \"__id_dnjigs5xma\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (109::smallint, 300::smallint, 110::smallint, 112::smallint) THEN \"id\" END) STORED"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"node\" ADD COLUMN \"__id_lsekb7odow\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" IN (109::smallint, 300::smallint, 110::smallint, 642::smallint) AND \"parent_kind\" = 300::smallint THEN \"id\" END) STORED"
 					},
 					{
@@ -4900,10 +4904,6 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"node\" ADD COLUMN \"__id_xzp4ngpydi\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" = 110::smallint THEN \"id\" END) STORED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"node\" ADD COLUMN \"__id_x7b5vg7ebm\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"kind\" = 92::smallint THEN \"id\" END) STORED"
 					},
 					{
 						"kind": "statement",
@@ -8583,6 +8583,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD CONSTRAINT \"__attribute_fk_node_k6cmdugvob\" FOREIGN KEY (\"__node_iz4wh6p7bb\") REFERENCES \"qti\".\"named\" (\"node\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD CONSTRAINT \"__attribute_fk_node_name_lexical_7xsjqkozkv\" FOREIGN KEY (\"__node_gucjs2ezyo\", \"__name_nwp4lvripb\", \"__lexical_ck7uxfycmz\") REFERENCES \"qti\".\"test_flag\" (\"node\", \"name\", \"lexical\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
@@ -8592,6 +8596,10 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD CONSTRAINT \"__attribute_fk_node_name_lexical_eynsroq5nf\" FOREIGN KEY (\"__node_3wva4opu4y\", \"__name_36ptddiue7\", \"__lexical_xyx37ltudg\") REFERENCES \"qti\".\"test_flag\" (\"node\", \"name\", \"lexical\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"attribute\" ADD CONSTRAINT \"__attribute_fk_node_opyqwajtfr\" FOREIGN KEY (\"__node_6piwdwr2vb\") REFERENCES \"qti\".\"stimulus_ref\" (\"node\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
@@ -10219,10 +10227,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"node\" ADD CONSTRAINT \"__node_fk_id_rfyqueyt5l\" FOREIGN KEY (\"__id_dnjigs5xma\") REFERENCES \"qti\".\"named\" (\"node\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"node\" ADD CONSTRAINT \"__node_fk_id_ma2hhvseuz\" FOREIGN KEY (\"__id_lsekb7odow\") REFERENCES \"qti\".\"section_member\" (\"node\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
@@ -10292,10 +10296,6 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"node\" ADD CONSTRAINT \"__node_fk_id_kt65otdhvs\" FOREIGN KEY (\"__id_xzp4ngpydi\") REFERENCES \"qti\".\"site\" (\"node\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"node\" ADD CONSTRAINT \"__node_fk_id_npkyiaqskv\" FOREIGN KEY (\"__id_x7b5vg7ebm\") REFERENCES \"qti\".\"stimulus_ref\" (\"node\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
@@ -11556,7 +11556,15 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "CREATE INDEX \"__attribute_ix_node_6_piwdwr_2_vb_nar3y3mfn6\" ON \"qti\".\"attribute\" USING btree (\"__node_6piwdwr2vb\")"
+					},
+					{
+						"kind": "statement",
 						"statement": "CREATE INDEX \"__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt\" ON \"qti\".\"attribute\" USING btree (\"__node_7iuvvf6ijd\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__attribute_ix_node_iz_4_wh_6_p_7_bb_zjmlxwu56b\" ON \"qti\".\"attribute\" USING btree (\"__node_iz4wh6p7bb\")"
 					},
 					{
 						"kind": "statement",
@@ -12148,10 +12156,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE INDEX \"__node_ix_id_dnjigs_5_xma_kcy2npavdt\" ON \"qti\".\"node\" USING btree (\"__id_dnjigs5xma\")"
-					},
-					{
-						"kind": "statement",
 						"statement": "CREATE INDEX \"__node_ix_id_fh_4_h_2_bqbbf_7kgc2fhw2x\" ON \"qti\".\"node\" USING btree (\"__id_fh4h2bqbbf\")"
 					},
 					{
@@ -12205,10 +12209,6 @@
 					{
 						"kind": "statement",
 						"statement": "CREATE INDEX \"__node_ix_id_v_3_yvnypwaj_sz2qes5tv3\" ON \"qti\".\"node\" USING btree (\"__id_v3yvnypwaj\")"
-					},
-					{
-						"kind": "statement",
-						"statement": "CREATE INDEX \"__node_ix_id_x_7_b_5_vg_7_ebm_q4gzx2hmeh\" ON \"qti\".\"node\" USING btree (\"__id_x7b5vg7ebm\")"
 					},
 					{
 						"kind": "statement",
@@ -17741,6 +17741,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"attribute\".\"__node_iz4wh6p7bb\" IS 'node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\",\"qti-assessment-section-ref\",\"qti-test-part\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"identifier\"}}'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"attribute\".\"__node_gucjs2ezyo\" IS 'node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"required\"}}'"
 					},
 					{
@@ -17750,6 +17754,10 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"attribute\".\"__node_3wva4opu4y\" IS 'node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"visible\"}}'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"attribute\".\"__node_6piwdwr2vb\" IS 'node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-stimulus-ref\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"identifier\"}}'"
 					},
 					{
 						"kind": "statement",
@@ -19761,10 +19769,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"node\".\"__id_dnjigs5xma\" IS 'id where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\",\"qti-assessment-section-ref\",\"qti-test-part\"]}'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"node\".\"__id_lsekb7odow\" IS 'id where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\",\"qti-assessment-section-ref\",\"xi:include\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"parentKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}'"
 					},
 					{
@@ -19834,10 +19838,6 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"node\".\"__id_xzp4ngpydi\" IS 'id where {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section-ref\"}}'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"node\".\"__id_x7b5vg7ebm\" IS 'id where {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-stimulus-ref\"}}'"
 					},
 					{
 						"kind": "statement",
@@ -22809,6 +22809,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__attribute_fk_node_k6cmdugvob\" ON \"qti\".\"attribute\" IS 'foreign key Attribute(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\",\"qti-assessment-section-ref\",\"qti-test-part\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"identifier\"}}) to Named(node)'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__attribute_fk_node_name_lexical_7xsjqkozkv\" ON \"qti\".\"attribute\" IS 'foreign key Attribute(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"required\"}}, name where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"required\"}}, lexical where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"required\"}}) to TestFlag(node, name, lexical)'"
 					},
 					{
@@ -22818,6 +22822,10 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__attribute_fk_node_name_lexical_eynsroq5nf\" ON \"qti\".\"attribute\" IS 'foreign key Attribute(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"visible\"}}, name where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"visible\"}}, lexical where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"visible\"}}) to TestFlag(node, name, lexical)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__attribute_fk_node_opyqwajtfr\" ON \"qti\".\"attribute\" IS 'foreign key Attribute(node where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-stimulus-ref\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"identifier\"}}) to StimulusRef(node)'"
 					},
 					{
 						"kind": "statement",
@@ -24445,10 +24453,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__node_fk_id_rfyqueyt5l\" ON \"qti\".\"node\" IS 'foreign key Node(id where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\",\"qti-assessment-section-ref\",\"qti-test-part\"]}) to Named(node)'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__node_fk_id_ma2hhvseuz\" ON \"qti\".\"node\" IS 'foreign key Node(id where {\"arg\":{\"field\":\"kind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-item-ref\",\"qti-assessment-section\",\"qti-assessment-section-ref\",\"xi:include\"]} and {\"kind\":\"compare\",\"left\":{\"field\":\"parentKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}) to SectionMember(node)'"
 					},
 					{
@@ -24518,10 +24522,6 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__node_fk_id_kt65otdhvs\" ON \"qti\".\"node\" IS 'foreign key Node(id where {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section-ref\"}}) to Site(node)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__node_fk_id_npkyiaqskv\" ON \"qti\".\"node\" IS 'foreign key Node(id where {\"kind\":\"compare\",\"left\":{\"field\":\"kind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-stimulus-ref\"}}) to StimulusRef(node)'"
 					},
 					{
 						"kind": "statement",
@@ -25777,7 +25777,15 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__attribute_ix_node_6_piwdwr_2_vb_nar3y3mfn6\" IS 'btree index Attribute(__node_6piwdwr2vb)'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt\" IS 'btree index Attribute(__node_7iuvvf6ijd)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__attribute_ix_node_iz_4_wh_6_p_7_bb_zjmlxwu56b\" IS 'btree index Attribute(__node_iz4wh6p7bb)'"
 					},
 					{
 						"kind": "statement",
@@ -26369,10 +26377,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__node_ix_id_dnjigs_5_xma_kcy2npavdt\" IS 'btree index Node(__id_dnjigs5xma)'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__node_ix_id_fh_4_h_2_bqbbf_7kgc2fhw2x\" IS 'btree index Node(__id_fh4h2bqbbf)'"
 					},
 					{
@@ -26426,10 +26430,6 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__node_ix_id_v_3_yvnypwaj_sz2qes5tv3\" IS 'btree index Node(__id_v3yvnypwaj)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON INDEX \"qti\".\"__node_ix_id_x_7_b_5_vg_7_ebm_q4gzx2hmeh\" IS 'btree index Node(__id_x7b5vg7ebm)'"
 					},
 					{
 						"kind": "statement",
@@ -26914,7 +26914,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "789732631d30bc4c371914dd0dee3bda228e07009132515b936ea4f28fd0ca8b"
+		"target": "f9c8dc8931ddf20a75ff02959a40b635ae89e532f19b26b0dc8457383be31243"
 	},
-	"seal": "935375054303cb32167522c77763f223db822836566f782e129b39186a787938"
+	"seal": "295d3002bb629227f75edd7a5cb5f809755270d3bb242749d59e95ed05e4569f"
 }

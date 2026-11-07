@@ -2877,11 +2877,15 @@ COMMENT ON COLUMN "qti"."attribute"."__node_lv6ndxfese" IS 'node where {"arg":{"
 
 COMMENT ON COLUMN "qti"."attribute"."__node_zuvdigwypi" IS 'node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-assessment-stimulus-ref","qti-test-part"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}';
 
+COMMENT ON COLUMN "qti"."attribute"."__node_iz4wh6p7bb" IS 'node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-test-part"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}';
+
 COMMENT ON COLUMN "qti"."attribute"."__node_gucjs2ezyo" IS 'node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}}';
 
 COMMENT ON COLUMN "qti"."attribute"."__node_kmcvlhvytf" IS 'node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"keep-together"}}';
 
 COMMENT ON COLUMN "qti"."attribute"."__node_3wva4opu4y" IS 'node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"visible"}}';
+
+COMMENT ON COLUMN "qti"."attribute"."__node_6piwdwr2vb" IS 'node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-stimulus-ref"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}';
 
 COMMENT ON COLUMN "qti"."attribute"."__node_qbkby3urcl" IS 'node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-branch-rule"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}}';
 
@@ -3887,8 +3891,6 @@ COMMENT ON COLUMN "qti"."node"."__id_rbrnmh2xkm" IS 'id where {"arg":{"field":"k
 
 COMMENT ON COLUMN "qti"."node"."__id_4vxvcu7dk3" IS 'id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-and","qti-any-n","qti-base-value","qti-container-size","qti-contains","qti-correct","qti-custom-operator","qti-default","qti-delete","qti-divide","qti-duration-gte","qti-duration-lt","qti-equal","qti-equal-rounded","qti-field-value","qti-gcd","qti-gt","qti-gte","qti-index","qti-inside","qti-integer-divide","qti-integer-modulus","qti-integer-to-float","qti-is-null","qti-lcm","qti-lt","qti-lte","qti-map-response","qti-map-response-point","qti-match","qti-math-constant","qti-math-operator","qti-max","qti-member","qti-min","qti-multiple","qti-not","qti-null","qti-number-correct","qti-number-incorrect","qti-number-presented","qti-number-responded","qti-number-selected","qti-or","qti-ordered","qti-outcome-maximum","qti-outcome-minimum","qti-pattern-match","qti-power","qti-product","qti-random","qti-random-float","qti-random-integer","qti-repeat","qti-round","qti-round-to","qti-stats-operator","qti-string-match","qti-substring","qti-subtract","qti-sum","qti-test-variables","qti-truncate","qti-variable"]}';
 
-COMMENT ON COLUMN "qti"."node"."__id_dnjigs5xma" IS 'id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-test-part"]}';
-
 COMMENT ON COLUMN "qti"."node"."__id_lsekb7odow" IS 'id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","xi:include"]} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}';
 
 COMMENT ON COLUMN "qti"."node"."__id_i3372l665q" IS 'id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-associate-interaction","qti-choice-interaction","qti-custom-interaction","qti-drawing-interaction","qti-end-attempt-interaction","qti-extended-text-interaction","qti-gap-match-interaction","qti-graphic-associate-interaction","qti-graphic-gap-match-interaction","qti-graphic-order-interaction","qti-hotspot-interaction","qti-hottext-interaction","qti-inline-choice-interaction","qti-match-interaction","qti-media-interaction","qti-order-interaction","qti-portable-custom-interaction","qti-position-object-interaction","qti-select-point-interaction","qti-slider-interaction","qti-text-entry-interaction","qti-upload-interaction"]} and {"kind":"compare","left":{"args":[{"field":"ancestry","kind":"field"},{"args":[{"kind":"literal","value":"qti-feedback-block"}],"kind":"closedRow","relation":"Enters"}],"fn":"disjoint","kind":"compute"},"op":"eq","right":{"kind":"literal","value":true}}';
@@ -3924,8 +3926,6 @@ COMMENT ON COLUMN "qti"."node"."__id_krhskfntdz" IS 'id where {"kind":"compare",
 COMMENT ON COLUMN "qti"."node"."__id_xxjhviby37" IS 'id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}';
 
 COMMENT ON COLUMN "qti"."node"."__id_xzp4ngpydi" IS 'id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section-ref"}}';
-
-COMMENT ON COLUMN "qti"."node"."__id_x7b5vg7ebm" IS 'id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-stimulus-ref"}}';
 
 COMMENT ON COLUMN "qti"."node"."__id_4p3x6fs6ds" IS 'id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-base-value"}}';
 
@@ -5411,11 +5411,15 @@ COMMENT ON CONSTRAINT "__attribute_fk_node_lexical_aljnmxnynz" ON "qti"."attribu
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_name_lexical_32pyhid2jr" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-assessment-stimulus-ref","qti-test-part"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-assessment-stimulus-ref","qti-test-part"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-assessment-stimulus-ref","qti-test-part"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}) to TestToken(node, name, lexical)';
 
+COMMENT ON CONSTRAINT "__attribute_fk_node_k6cmdugvob" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-test-part"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}) to Named(node)';
+
 COMMENT ON CONSTRAINT "__attribute_fk_node_name_lexical_7xsjqkozkv" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"required"}}) to TestFlag(node, name, lexical)';
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_name_lexical_ow5bljygwl" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"keep-together"}}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"keep-together"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"keep-together"}}) to TestFlag(node, name, lexical)';
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_name_lexical_eynsroq5nf" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"visible"}}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"visible"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-section"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"visible"}}) to TestFlag(node, name, lexical)';
+
+COMMENT ON CONSTRAINT "__attribute_fk_node_opyqwajtfr" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-stimulus-ref"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}}) to StimulusRef(node)';
 
 COMMENT ON CONSTRAINT "__attribute_fk_node_name_lexical_qzy6cfm6z5" ON "qti"."attribute" IS 'foreign key Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-branch-rule"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}}, name where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-branch-rule"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}}, lexical where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-branch-rule"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"target"}}) to TestToken(node, name, lexical)';
 
@@ -6229,8 +6233,6 @@ COMMENT ON CONSTRAINT "__node_fk_id_fk2vwz6paf" ON "qti"."node" IS 'foreign key 
 
 COMMENT ON CONSTRAINT "__node_fk_id_lusyfdw7r7" ON "qti"."node" IS 'foreign key Node(id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-and","qti-any-n","qti-base-value","qti-container-size","qti-contains","qti-correct","qti-custom-operator","qti-default","qti-delete","qti-divide","qti-duration-gte","qti-duration-lt","qti-equal","qti-equal-rounded","qti-field-value","qti-gcd","qti-gt","qti-gte","qti-index","qti-inside","qti-integer-divide","qti-integer-modulus","qti-integer-to-float","qti-is-null","qti-lcm","qti-lt","qti-lte","qti-map-response","qti-map-response-point","qti-match","qti-math-constant","qti-math-operator","qti-max","qti-member","qti-min","qti-multiple","qti-not","qti-null","qti-number-correct","qti-number-incorrect","qti-number-presented","qti-number-responded","qti-number-selected","qti-or","qti-ordered","qti-outcome-maximum","qti-outcome-minimum","qti-pattern-match","qti-power","qti-product","qti-random","qti-random-float","qti-random-integer","qti-repeat","qti-round","qti-round-to","qti-stats-operator","qti-string-match","qti-substring","qti-subtract","qti-sum","qti-test-variables","qti-truncate","qti-variable"]}) to Expression(node)';
 
-COMMENT ON CONSTRAINT "__node_fk_id_rfyqueyt5l" ON "qti"."node" IS 'foreign key Node(id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-test-part"]}) to Named(node)';
-
 COMMENT ON CONSTRAINT "__node_fk_id_ma2hhvseuz" ON "qti"."node" IS 'foreign key Node(id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","xi:include"]} and {"kind":"compare","left":{"field":"parentKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}) to SectionMember(node)';
 
 COMMENT ON CONSTRAINT "__node_fk_id_aa3gw2ylli" ON "qti"."node" IS 'foreign key Node(id where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-correct-response","qti-default-value"]} and {"arg":{"field":"parentKind","kind":"field"},"kind":"in","values":["qti-context-declaration","qti-outcome-declaration","qti-response-declaration","qti-template-declaration"]}) to ValueSet(node)';
@@ -6266,8 +6268,6 @@ COMMENT ON CONSTRAINT "__node_fk_id_tag_name_href_lhoojnkj6g" ON "qti"."node" IS
 COMMENT ON CONSTRAINT "__node_fk_id_nftkgac4kh" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}) to Section(node)';
 
 COMMENT ON CONSTRAINT "__node_fk_id_kt65otdhvs" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section-ref"}}) to Site(node)';
-
-COMMENT ON CONSTRAINT "__node_fk_id_npkyiaqskv" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-stimulus-ref"}}) to StimulusRef(node)';
 
 COMMENT ON CONSTRAINT "__node_fk_id_string_value_5ka4srxr3v" ON "qti"."node" IS 'foreign key Node(id where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-base-value"}}, stringValue where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-base-value"}}) to Literal(node, text)';
 
@@ -6895,7 +6895,11 @@ COMMENT ON INDEX "qti"."__assembled_reference_ix_node_attribute_document_izcuteb
 
 COMMENT ON INDEX "qti"."__assessment_object_ix_node_6_wcvqzkni_5_lang_uhblgy657t" IS 'btree index AssessmentObject(__node_6wcvqzkni5, __lang_vscshxypk3)';
 
+COMMENT ON INDEX "qti"."__attribute_ix_node_6_piwdwr_2_vb_nar3y3mfn6" IS 'btree index Attribute(__node_6piwdwr2vb)';
+
 COMMENT ON INDEX "qti"."__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt" IS 'btree index Attribute(__node_7iuvvf6ijd)';
+
+COMMENT ON INDEX "qti"."__attribute_ix_node_iz_4_wh_6_p_7_bb_zjmlxwu56b" IS 'btree index Attribute(__node_iz4wh6p7bb)';
 
 COMMENT ON INDEX "qti"."__attribute_ix_node_vakq_25_d_2_th_dq3p5mlkpj" IS 'btree index Attribute(__node_vakq25d2th)';
 
@@ -7191,8 +7195,6 @@ COMMENT ON INDEX "qti"."__node_ix_id_apujacx_2_gd_hleehmvdyg" IS 'btree index No
 
 COMMENT ON INDEX "qti"."__node_ix_id_buqmbkuqrp_3l33y67exd" IS 'btree index Node(__id_buqmbkuqrp)';
 
-COMMENT ON INDEX "qti"."__node_ix_id_dnjigs_5_xma_kcy2npavdt" IS 'btree index Node(__id_dnjigs5xma)';
-
 COMMENT ON INDEX "qti"."__node_ix_id_fh_4_h_2_bqbbf_7kgc2fhw2x" IS 'btree index Node(__id_fh4h2bqbbf)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_gb_2_nnvx_2_kq_ocguajr7cg" IS 'btree index Node(__id_gb2nnvx2kq)';
@@ -7220,8 +7222,6 @@ COMMENT ON INDEX "qti"."__node_ix_id_rbrnmh_2_xkm_73o3wfx6yz" IS 'btree index No
 COMMENT ON INDEX "qti"."__node_ix_id_tht_2_ejquu_7_v6y5s6u3as" IS 'btree index Node(__id_tht2ejquu7)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_v_3_yvnypwaj_sz2qes5tv3" IS 'btree index Node(__id_v3yvnypwaj)';
-
-COMMENT ON INDEX "qti"."__node_ix_id_x_7_b_5_vg_7_ebm_q4gzx2hmeh" IS 'btree index Node(__id_x7b5vg7ebm)';
 
 COMMENT ON INDEX "qti"."__node_ix_id_xxjhviby_37_2hf4xzjzjl" IS 'btree index Node(__id_xxjhviby37)';
 

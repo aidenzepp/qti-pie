@@ -10,7 +10,11 @@ CREATE INDEX "__assembled_reference_ix_node_attribute_document_izcuteb6lm" ON "q
 
 CREATE INDEX "__assessment_object_ix_node_6_wcvqzkni_5_lang_uhblgy657t" ON "qti"."assessment_object" USING btree ("__node_6wcvqzkni5", "__lang_vscshxypk3");
 
+CREATE INDEX "__attribute_ix_node_6_piwdwr_2_vb_nar3y3mfn6" ON "qti"."attribute" USING btree ("__node_6piwdwr2vb");
+
 CREATE INDEX "__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt" ON "qti"."attribute" USING btree ("__node_7iuvvf6ijd");
+
+CREATE INDEX "__attribute_ix_node_iz_4_wh_6_p_7_bb_zjmlxwu56b" ON "qti"."attribute" USING btree ("__node_iz4wh6p7bb");
 
 CREATE INDEX "__attribute_ix_node_vakq_25_d_2_th_dq3p5mlkpj" ON "qti"."attribute" USING btree ("__node_vakq25d2th");
 
@@ -306,8 +310,6 @@ CREATE INDEX "__node_ix_id_apujacx_2_gd_hleehmvdyg" ON "qti"."node" USING btree 
 
 CREATE INDEX "__node_ix_id_buqmbkuqrp_3l33y67exd" ON "qti"."node" USING btree ("__id_buqmbkuqrp");
 
-CREATE INDEX "__node_ix_id_dnjigs_5_xma_kcy2npavdt" ON "qti"."node" USING btree ("__id_dnjigs5xma");
-
 CREATE INDEX "__node_ix_id_fh_4_h_2_bqbbf_7kgc2fhw2x" ON "qti"."node" USING btree ("__id_fh4h2bqbbf");
 
 CREATE INDEX "__node_ix_id_gb_2_nnvx_2_kq_ocguajr7cg" ON "qti"."node" USING btree ("__id_gb2nnvx2kq");
@@ -335,8 +337,6 @@ CREATE INDEX "__node_ix_id_rbrnmh_2_xkm_73o3wfx6yz" ON "qti"."node" USING btree 
 CREATE INDEX "__node_ix_id_tht_2_ejquu_7_v6y5s6u3as" ON "qti"."node" USING btree ("__id_tht2ejquu7");
 
 CREATE INDEX "__node_ix_id_v_3_yvnypwaj_sz2qes5tv3" ON "qti"."node" USING btree ("__id_v3yvnypwaj");
-
-CREATE INDEX "__node_ix_id_x_7_b_5_vg_7_ebm_q4gzx2hmeh" ON "qti"."node" USING btree ("__id_x7b5vg7ebm");
 
 CREATE INDEX "__node_ix_id_xxjhviby_37_2hf4xzjzjl" ON "qti"."node" USING btree ("__id_xxjhviby37");
 

@@ -405,7 +405,7 @@ packages:
     engines: {node: '>=6.9.0'}
 
   '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz':
-    resolution: {integrity: sha512-wujq4YVaXXWV4/x7ykLT6r3j+owMBlDcjTXefBPECTpc9K7xleC6PmdOSYeAH4BlhDoqUtzbwVM/zwrkEP3dTw==, tarball: file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz}
+    resolution: {integrity: sha512-1xMCmSLswajIaagc9KcIaKLdJhmteM31dliYIm3rUPw6Kq89IwR1Jg5uhEpRTjoslcrA7XYi+bvqdDM4Rq52jA==, tarball: file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz}
     version: 1.0.0-beta.0
     engines: {node: '>=26'}
     peerDependencies:
