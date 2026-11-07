@@ -1077,6 +1077,109 @@ describe("render, the instance token", () => {
   );
 });
 
+/**
+ * An item whose template processing runs, with a paragraph that prints the template variable `N`,
+ * declared with the default 3, and no response processing.
+ */
+const counting: Item = {
+  ...item,
+  body: [
+    {
+      attributes: [],
+      children: [
+        words("There are "),
+        {
+          base: { _tag: "literal", value: 10n },
+          delimiter: ";",
+          field: Option.none(),
+          format: Option.none(),
+          identifier: "N",
+          index: Option.none(),
+          kind: "printed-variable",
+          mappingIndicator: "=",
+          path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
+          powerForm: false,
+        },
+        words(" cities."),
+      ],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  processing: Option.none(),
+  templateProcessing: Option.some([]),
+  templates: new Map([
+    [
+      "N",
+      {
+        baseType: "integer",
+        cardinality: "single",
+        defaultValue: Option.some(one({ baseType: "integer", value: 3n })),
+        identifier: "N",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+};
+
+/**
+ * Give the texts of the Notice parts a render shows, in document order.
+ *
+ * @param rendered The render.
+ * @returns Each Notice's text.
+ */
+const noticesIn = (rendered: Rendered): readonly string[] =>
+  elementsIn(rendered)
+    .filter((element) => element.attrs["data-slot"] === rowFor("item", "notice").slot)
+    .map(textOf);
+
+describe("redact, a printed variable", () => {
+  it.effect("[I-5] prints the value the record holds, which render writes as text", () =>
+    Effect.gen(function* printsRecorded() {
+      const configuration = yield* defaults;
+      const recorded = redact(acceptForTest(counting), {
+        outcomes: {},
+        templates: { N: one({ baseType: "integer", value: 7n }) },
+      });
+      const rendered = yield* Effect.fromResult(render(recorded, configuration, { instance }));
+
+      assert.include(textOf(rootOf(rendered)), "There are 7 cities.");
+      assert.deepStrictEqual(noticesIn(rendered), []);
+    }),
+  );
+
+  it.effect(
+    "[I-5] shows a templated item's printed variable as its notice when no record is passed (H3)",
+    () =>
+      Effect.gen(function* withholdsUnrecorded() {
+        const configuration = yield* defaults;
+        const rendered = yield* Effect.fromResult(
+          render(redact(acceptForTest(counting)), configuration, { instance }),
+        );
+
+        assert.deepStrictEqual(noticesIn(rendered), [
+          message(configuration.locale, "notice", { feature: "qti-printed-variable" }),
+        ]);
+        assert.notInclude(textOf(rootOf(rendered)), "There are 3");
+      }),
+  );
+
+  it.effect(
+    "[I-5] prints the declared default of an item without template processing when no record is passed (H3)",
+    () =>
+      Effect.gen(function* printsDeclared() {
+        const configuration = yield* defaults;
+        const declared = redact(acceptForTest({ ...counting, templateProcessing: Option.none() }));
+        const rendered = yield* Effect.fromResult(render(declared, configuration, { instance }));
+
+        assert.include(textOf(rootOf(rendered)), "There are 3 cities.");
+        assert.deepStrictEqual(noticesIn(rendered), []);
+      }),
+  );
+});
+
 describe("renderStatus", () => {
   /**
    * A scored Status input for {@link instance}.

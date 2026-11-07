@@ -6,9 +6,10 @@
  * author's {@link View} into the {@link Payload}, the only input the emitter receives. Each copies
  * every field it names one by one and never spreads a model object, so a field the model gains
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
- * a response or outcome default, a processing rule, a template value or feedback content, and the
- * payload holds no seed: the view's seed only orders a shuffled Choice's or Inline Choice's
- * choices. What the page cannot be given, it cannot leak. A `solution` render shows correct
+ * a response default, a processing rule, a template rule or feedback content, nor any outcome or
+ * template value but the ones the body's printed variables print, as text; and neither holds a
+ * seed: the view's seed only orders a shuffled Choice's or Inline Choice's choices. What the page
+ * cannot be given, it cannot leak. A `solution` render shows correct
  * responses only when the author passes them as the view's values; nothing here reads them from the
  * item.
  *
@@ -20,11 +21,16 @@ import type { Brand } from "effect";
 import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
+import { formatPrinted } from "#plate/engine/format.ts";
+import type { PrintOptions } from "#plate/engine/format.ts";
+import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
+import { own } from "#plate/engine/refs.ts";
 import { entryName, isPosted } from "#plate/form/encoding.ts";
 import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
+import type { IntegerOrRef } from "#plate/model/expression.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
@@ -33,11 +39,14 @@ import type {
   InlineChoiceInteraction,
   Interaction,
   Item,
+  PrintedVariable,
   SimpleChoice,
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
-import { format } from "#plate/model/values.ts";
+import { outcomeDefaults } from "#plate/model/record.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
+import { format, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 
 /**
@@ -1107,10 +1116,138 @@ interface RedactedBody {
 }
 
 /**
- * Withhold each printed variable of an item's body behind its notice, `qti-printed-variable` at
- * the variable's path, and list the features the body then shows as notices: the item's
- * notice-shown features in their order, with each printed variable's notice where the item would
- * list it were the notice one of its unsupported features.
+ * Give the value a record holds for a variable: its template value, else its outcome value (an
+ * item's identifiers are unique across both), read from the record's own keys only.
+ *
+ * @param record The record.
+ * @param identifier The variable's identifier.
+ * @returns The value, or none when the record holds no value by that name.
+ */
+const heldValue = (record: RedactRecord, identifier: string): Option.Option<Value> =>
+  Option.orElse(own(record.templates, identifier), () => own(record.outcomes, identifier));
+
+/**
+ * Resolve a printed variable's `base` or `index`: a literal as written, or the integer the record
+ * holds for the variable it names.
+ *
+ * @param written The attribute's value.
+ * @param record The record.
+ * @returns Some integer; some none when the named variable is NULL or not a single integer, which
+ *   the validator refuses (`printed-variable-ref`) on a checked item, so the formatter's default
+ *   applies; none when the record holds no value by that name.
+ */
+const resolvedInteger = (
+  written: IntegerOrRef,
+  record: RedactRecord,
+): Option.Option<Option.Option<bigint>> =>
+  written._tag === "literal"
+    ? Option.some(Option.some(written.value))
+    : Option.map(heldValue(record, written.identifier), integerOf);
+
+/**
+ * Give a printed variable's attributes as the formatter takes them, its `base` and `index` read
+ * from the record where written as names.
+ *
+ * @param node The printed variable.
+ * @param record The record.
+ * @returns The options, or none when the record holds no value of a name `base` or `index` names.
+ */
+const printOptionsOf = (node: PrintedVariable, record: RedactRecord): Option.Option<PrintOptions> =>
+  Option.map(
+    Option.all([
+      resolvedInteger(node.base, record),
+      Option.match(node.index, {
+        onNone: () => Option.some(Option.none<bigint>()),
+        onSome: (index) => resolvedInteger(index, record),
+      }),
+    ]),
+    ([base, index]): PrintOptions => ({
+      ...Option.match(base, { onNone: () => ({}), onSome: (radix) => ({ base: radix }) }),
+      delimiter: node.delimiter,
+      ...Option.match(node.format, { onNone: () => ({}), onSome: (code) => ({ format: code }) }),
+      ...Option.match(index, { onNone: () => ({}), onSome: (member) => ({ index: member }) }),
+      mappingIndicator: node.mappingIndicator,
+      powerForm: node.powerForm,
+    }),
+  );
+
+/**
+ * Give the text a printed variable prints from a record: `formatPrinted`'s text for the value of
+ * the variable it names.
+ *
+ * @param node The printed variable.
+ * @param record The record.
+ * @returns The text, empty for NULL; or none when the record holds no value of the variable, or of
+ *   a name its `base` or `index` names.
+ */
+const printedText = (node: PrintedVariable, record: RedactRecord): Option.Option<string> =>
+  Option.flatMap(heldValue(record, node.identifier), (value) =>
+    Option.map(printOptionsOf(node, record), (options) => formatPrinted(value, options)),
+  );
+
+/**
+ * A path at or below the root's `qti-template-processing`: the root's step, then that element's
+ * step, with its `[n]` where the walk writes one, then the end or a further step.
+ */
+const templateProcessingPath = /^[^/]+\/qti-template-processing(?:\[\d+\])?(?:\/|$)/u;
+
+/**
+ * Report whether an item has a `qti-template-processing` the engine does not run: the item model
+ * holds no template rules and marks something at or below that element's path. Its first attempt
+ * then holds no template value, since nothing computed one, as `firstAttempt` in
+ * `#plate/engine/attempt.ts` reads it.
+ *
+ * @param item The item.
+ * @returns Whether its template processing exists and does not run.
+ */
+const unrunTemplateProcessing = (item: Item): boolean =>
+  Option.isNone(item.templateProcessing) &&
+  item.unsupported.some((entry) => templateProcessingPath.test(entry.path));
+
+/**
+ * Give the values a redaction prints from: the record given; or, with none, for an item whose
+ * template processing does not run, the values its first attempt starts with (H3): each template
+ * variable at its declared default, else NULL, and none where the item has a template processing
+ * the engine does not run; and each outcome at its starting value ({@link outcomeDefaults}). An
+ * item whose template processing runs has no such values without its record.
+ *
+ * @param item The item.
+ * @param record The record, if any.
+ * @returns The values, or none for an item whose template processing runs and no record.
+ */
+const printingOf = (item: Item, record?: RedactRecord): Option.Option<RedactRecord> => {
+  if (record !== undefined) {
+    return Option.some(record);
+  }
+
+  if (Option.isSome(item.templateProcessing)) {
+    return Option.none();
+  }
+
+  const templates: RedactRecord["templates"] = unrunTemplateProcessing(item)
+    ? {}
+    : Object.fromEntries(
+        Array.from(item.templates, ([identifier, declaration]) => [
+          identifier,
+          Option.getOrElse(declaration.defaultValue, () =>
+            nullOf(declaration.baseType, declaration.cardinality),
+          ),
+        ]),
+      );
+
+  return Option.some({ outcomes: outcomeDefaults(item), templates });
+};
+
+/**
+ * Print each printed variable of an item's body from the values given, and withhold the rest
+ * behind its notice, `qti-printed-variable` at the variable's path; then list the features the
+ * body shows as notices: the item's notice-shown features in their order, with each withheld
+ * printed variable's notice where the item would list it were the notice one of its unsupported
+ * features.
+ *
+ * A printed variable whose value, and whose `base`'s and `index`'s where they name variables, the
+ * values hold becomes a text node of what it prints, or nothing when that is empty (a NULL value).
+ * One the values do not cover, and every one when there are no values, is withheld.
  *
  * The item lists its notices in the order of the elements they sit at: in document order once
  * `check` has accepted it, and in the order the model read the body when the item was built by
@@ -1122,9 +1259,11 @@ interface RedactedBody {
  * place after the rest.
  *
  * @param item The item.
- * @returns The body, every printed variable its notice, and the features shown as notices.
+ * @param printing The values its printed variables print, none to withhold every one.
+ * @returns The body, every printed variable its text or its notice, and the features shown as
+ *   notices.
  */
-const withholdPrinted = (item: Item): RedactedBody => {
+const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
   const notices: string[] = [];
   let next = 0;
@@ -1135,7 +1274,7 @@ const withholdPrinted = (item: Item): RedactedBody => {
     }
   };
   const nodesOf = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
-    nodes.map((node): BodyNode => {
+    nodes.flatMap((node): readonly BodyNode[] => {
       switch (node.kind) {
         case "element": {
           const held = new Set(
@@ -1145,17 +1284,25 @@ const withholdPrinted = (item: Item): RedactedBody => {
           );
           pass((entry) => entry.path === node.path && !held.has(entry.feature));
 
-          return { ...node, children: nodesOf(node.children) };
+          return [{ ...node, children: nodesOf(node.children) }];
         }
         case "unsupported": {
           pass((entry) => entry.feature === node.feature && entry.path === node.path);
 
-          return node;
+          return [node];
         }
         case "printed-variable": {
-          notices.push(printedNotice);
+          return Option.match(
+            printing.pipe(Option.flatMap((record) => printedText(node, record))),
+            {
+              onNone: (): readonly BodyNode[] => {
+                notices.push(printedNotice);
 
-          return { feature: printedNotice, kind: "unsupported", path: node.path };
+                return [{ feature: printedNotice, kind: "unsupported", path: node.path }];
+              },
+              onSome: (printed) => (printed === "" ? [] : [{ kind: "text", text: printed }]),
+            },
+          );
         }
         case "choice": {
           pass((entry) => entry.path === node.path);
@@ -1166,12 +1313,12 @@ const withholdPrinted = (item: Item): RedactedBody => {
             content: nodesOf(choice.content),
           }));
 
-          return { ...node, choices, prompt };
+          return [{ ...node, choices, prompt }];
         }
         case "extended-text": {
           pass((entry) => entry.path === node.path);
 
-          return { ...node, prompt: node.prompt.pipe(Option.map(nodesOf)) };
+          return [{ ...node, prompt: node.prompt.pipe(Option.map(nodesOf)) }];
         }
         case "inline-choice": {
           pass((entry) => entry.path === node.path);
@@ -1182,11 +1329,11 @@ const withholdPrinted = (item: Item): RedactedBody => {
             content: nodesOf(choice.content),
           }));
 
-          return { ...node, choices, label };
+          return [{ ...node, choices, label }];
         }
         case "text":
         case "text-entry": {
-          return node;
+          return [node];
         }
         default: {
           return node satisfies never;
@@ -1203,17 +1350,33 @@ const withholdPrinted = (item: Item): RedactedBody => {
  * {@link Redacted} from an item.
  *
  * It copies, each by name, the document location, the identifier, the title, `lang`, the body,
- * each response's binding and the features shown as notices. It copies no outcome declaration,
- * correct response, mapping, response default or processing rule, and no field it does not name.
- * The body's printed variables are not copied: each becomes its notice, `qti-printed-variable`,
- * which `notices` names in document order among the item's notice-shown features, so the result is
- * what it was when the model held a printed variable as that notice.
+ * each response's binding and the features shown as notices. Each printed variable of the body is
+ * copied as the text it prints: the value the record holds for the variable it names, its
+ * template value else its outcome value, written by `formatPrinted` (`#plate/engine/format.ts`)
+ * through its `format`, `base`, `index`, `power-form` and `delimiter`, a `base` or `index` written
+ * as a name read from the record too. A NULL value prints nothing. A printed variable whose value,
+ * or whose named `base`'s or `index`'s, the record does not hold stays its notice,
+ * `qti-printed-variable`, which `notices` names in document order among the item's notice-shown
+ * features.
+ *
+ * With no record, an item whose template processing does not run reads as the record its first
+ * attempt starts with: each template variable at its declared default, else NULL (none where the
+ * item has a `qti-template-processing` the engine does not run, since nothing computed them), and
+ * each outcome at its starting value. An item whose template processing runs has no values
+ * without its record, so each of its printed variables stays its notice (H3).
+ *
+ * It never copies an outcome declaration, a correct response, a mapping, a response default, a
+ * processing rule, a template rule, a template value or an outcome value it does not print, the
+ * seed or an override template processing set (the record's part it reads holds neither), or a
+ * field it does not name.
  *
  * @param item The item.
+ * @param record The template values and outcome values of the attempt shown, which its printed
+ *   variables print; none to show the item as it reads with no record.
  * @returns The redacted item.
  */
-export const redactItem = (item: Item): Redacted => {
-  const { body, notices } = withholdPrinted(item);
+export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
+  const { body, notices } = printBody(item, printingOf(item, record));
 
   return brandRedacted({
     body,
