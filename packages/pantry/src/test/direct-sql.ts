@@ -126,6 +126,30 @@ const writtenColumnsOf = (client: Client, table: string) =>
   );
 
 /**
+ * The one constraint of one of `Qti`'s tables whose comment matches a `LIKE` pattern: a key's or a
+ * foreign key's, which grizzle names by a digest and describes by its comment.
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @param pattern - The comment's pattern.
+ * @returns The constraint's name; none or several fail the case.
+ */
+export const constraintDescribed = (client: Client, table: string, pattern: string) =>
+  rowsOf<{ readonly conname: string }>(
+    client,
+    `SELECT c.conname FROM pg_catalog.pg_constraint c
+      WHERE c.conrelid = pg_catalog.to_regclass($1)
+        AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE $2`,
+    [`${qtiSchema}.${table}`, pattern],
+  ).pipe(
+    Effect.map((rows) => {
+      assert.lengthOf(rows, 1, `${table}: one constraint described ${pattern}`);
+
+      return rows[0]?.conname ?? "";
+    }),
+  );
+
+/**
  * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
  * catalogue: the constraints the containments between the two relations install.
  *

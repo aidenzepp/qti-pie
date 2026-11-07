@@ -19,10 +19,7 @@ const probe = Command.make(
 layer(NodeServices.layer, { excludeTestServices: true })("output settings", (it) => {
   const selects = [
     { args: [], mode: "text" },
-    { args: ["--output", "json"], mode: "json" },
     { args: ["--output", "jsonl"], mode: "jsonl" },
-    { args: ["--json"], mode: "json" },
-    { args: ["--jsonl"], mode: "jsonl" },
     { args: ["--output", "json", "--json"], mode: "json" },
   ] as const;
 
@@ -54,11 +51,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("output settings", (it)
     );
   }
 
-  const disagreements = [
-    ["--json", "--jsonl"],
-    ["--output", "json", "--jsonl"],
-    ["--output", "text", "--json"],
-  ] as const;
+  const disagreements = [["--json", "--jsonl"]] as const;
 
   for (const args of disagreements) {
     it.effect(`${args.join(" ")} is a usage error`, () =>

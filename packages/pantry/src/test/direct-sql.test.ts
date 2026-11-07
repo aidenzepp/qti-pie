@@ -24,7 +24,9 @@ import {
   ReferenceDocument,
   TestReference,
 } from "#pantry/qti/expressions.ts";
+import { Document } from "#pantry/qti/chardata.ts";
 import { LomResource } from "#pantry/qti/metadata.ts";
+import { DocumentId, IdBinding } from "#pantry/qti/identity.ts";
 import { Node } from "#pantry/qti/node.ts";
 import { NamedHref, ResourceHref } from "#pantry/qti/package.ts";
 import { accumulatorOf, columnKeys, pinned, statedInserts } from "#pantry/test/direct-sql.ts";
@@ -121,6 +123,19 @@ const href: readonly Stated[] = [
 ];
 
 /**
+ * One id twice under one parent, as identity.db states it: the document, the id's binding, and
+ * the two IDs that carry it, each a member of the binding's family and the document's.
+ */
+const twoIds: readonly Stated[] = [
+  { fact: { node: "D" }, relation: Document },
+  { fact: { document: "D", id: "a", owner: "n3" }, relation: IdBinding },
+  ...[4, 5].map((node): Stated => ({
+    fact: { document: "D", id: "a", node: `n${String(node)}`, owner: "n3" },
+    relation: DocumentId,
+  })),
+];
+
+/**
  * The tables a case's inserts write, in order.
  *
  * @param stated - The facts.
@@ -173,6 +188,41 @@ describe("the direct writer's order and slots", () => {
       "the owner's count of the family LomResource.hrefs": 1,
       "the owner's count of the family NamedHref.names": 1,
     });
+  });
+
+  it("gives two members of two counted families distinct slots under each owner, whatever order they are stated in", () => {
+    // Oracle: the slots identity.db's hand rows wrote for one id twice under one parent: the two
+    // `DocumentId` rows at index 0 and 1 of 2 in both `IdBinding.carriers` and `Document.ids`, in
+    // the order they are stated, the owners' counts 2, and each owner written first.
+    // Bound: every order of the case's four facts, 24.
+    for (const order of permutations(twoIds)) {
+      const inserts = statedInserts(order);
+      const tables = inserts.map(({ table }) => table);
+      const members = inserts.filter(({ table }) => table === "document_id");
+
+      assert.isBelow(tables.indexOf("document"), tables.indexOf("document_id"));
+      assert.isBelow(tables.indexOf("id_binding"), tables.indexOf("document_id"));
+      assert.deepStrictEqual(
+        inserts
+          .filter(({ table }) => table !== "document_id")
+          .map(({ row }) => [row["ids"], row["carriers"]].filter((count) => count !== undefined)),
+        tables.filter((table) => table !== "document_id").map(() => ["2"]),
+      );
+      assert.sameDeepMembers(
+        members.map(({ hidden, row }) => [String(row["node"]), hidden]),
+        order
+          .filter(({ relation }) => relation === DocumentId)
+          .map(({ fact }, index) => [
+            String(fact["node"]),
+            {
+              "the index of the family Document.ids": index,
+              "the index of the family IdBinding.carriers": index,
+              "the owner's count of the family Document.ids": 2,
+              "the owner's count of the family IdBinding.carriers": 2,
+            },
+          ]),
+      );
+    }
   });
 });
 

@@ -795,11 +795,14 @@ describe("rosters and value fields", () => {
                     [...new Set(drawnColumn.column)].toSorted((left, right) => left - right),
                   ];
                 }
-                default: {
+                case "string": {
                   return [
                     valueField("v", drawnColumn.column).values,
                     [...new Set(drawnColumn.column)].toSorted(byCodeUnits),
                   ];
+                }
+                default: {
+                  return drawnColumn satisfies never;
                 }
               }
             })();

@@ -59,6 +59,7 @@ import { bitsText } from "#pantry/test/bits.ts";
 import {
   accumulatorOf,
   authorRole,
+  constraintDescribed,
   judged,
   loginSession,
   pinned,
@@ -699,29 +700,6 @@ const attributeFactsOf = (rows: FoldedRows<Composed>): Stated[] =>
       relation: Attribute,
     };
   });
-
-/**
- * Read the one constraint of a table whose comment matches a `LIKE` pattern.
- *
- * @param client - The session.
- * @param table - The table.
- * @param pattern - The comment's pattern.
- * @returns The constraint's name.
- */
-const constraintDescribed = (client: Client, table: string, pattern: string) =>
-  rowsOf<{ readonly conname: string }>(
-    client,
-    `SELECT c.conname FROM pg_catalog.pg_constraint c
-      WHERE c.conrelid = pg_catalog.to_regclass($1)
-        AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE $2`,
-    [`${qtiSchema}.${table}`, pattern],
-  ).pipe(
-    Effect.map((rows) => {
-      assert.lengthOf(rows, 1, `${table}: one constraint described ${pattern}`);
-
-      return rows[0]?.conname ?? "";
-    }),
-  );
 
 /**
  * An item whose root may carry a `label`, a `tool-name` and a `tool-version`, and whose body's

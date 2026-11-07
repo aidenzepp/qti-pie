@@ -333,7 +333,10 @@ export const idField = <const Name extends string, Handle extends string>(
 
 /**
  * Order two values of one primitive type: numbers and bigints by magnitude, strings by code unit,
- * `false` before `true`.
+ * `false` before `true`. The positive branch is needed though V8's sort reads only whether a
+ * comparison is below zero: ECMA-262's `Array.prototype.sort` leaves the order
+ * implementation-defined for a comparator that is not consistent (§23.1.3.30), as one that never
+ * answers positive is not.
  *
  * @param left - A value.
  * @param right - A value of the same type.

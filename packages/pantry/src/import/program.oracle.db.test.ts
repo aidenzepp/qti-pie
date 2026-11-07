@@ -21,7 +21,7 @@ import { CommitUnknown, Db, query, uuid, v } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, DbConnection, Law, Plan } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Duration, Effect, Formatter, Layer, Redacted, Result } from "effect";
+import { Duration, Effect, Formatter, Layer, Option, Redacted, Result } from "effect";
 import { Client } from "pg";
 import type { QueryResultRow } from "pg";
 import { describe, inject } from "vitest";
@@ -43,7 +43,7 @@ import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 import { oracleLocate } from "#pantry/test/locate.ts";
-import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
@@ -248,6 +248,40 @@ const applyEdited = (
     });
 
     return { outcome, packageId: program.packageId };
+  });
+
+/**
+ * Hold PostgreSQL to a verdict on a package: an accepted one commits, and a refused one is
+ * refused under its rule.
+ *
+ * @param name - The package's name, for the assertions' messages.
+ * @param dir - The package.
+ * @param verdict - The verdict it is held to.
+ * @returns Nothing, once PostgreSQL's verdict is the one given.
+ */
+const holdsVerdict = (
+  name: string,
+  dir: string,
+  verdict:
+    | { readonly verdict: "accepted" }
+    | { readonly rule: string; readonly verdict: "refused" },
+) =>
+  Effect.gen(function* heldToVerdict() {
+    if (verdict.verdict === "accepted") {
+      const { outcome } = yield* applyEdited(dir);
+
+      assert.strictEqual(outcome.kind, "accepted", `${name}: ${Formatter.format(outcome)}`);
+
+      return;
+    }
+
+    const refused = yield* Effect.flip(importPackage(dir));
+
+    assert.strictEqual(
+      refused instanceof ImportRefused ? refused.rule : refused._tag,
+      verdict.rule,
+      name,
+    );
   });
 
 /**
@@ -1049,14 +1083,29 @@ describe.skipIf(!hasLease)(
           // Oracle: the specification as a checker, the stated verdicts (Q5.10,
           // `processing-verdicts.ts`, which the law oracle predicts with no database): a checker's
           // fixture is refused under its frozen rule, a codec-refused one under the codec's rule, a
-          // guard's by AL3, N7's Last or N5's Follow, and an accepted one commits; a package with
-          // no frozen row (a round-trip or template package) is accepted.
+          // guard's by AL3, N7's Last or N5's Follow, and an accepted one commits. A package with
+          // no frozen row (a round-trip, template or padded package) has no stated verdict, so the
+          // law oracle's verdict on it is the one PostgreSQL is held to.
           Effect.gen(function* processingVerdict() {
-            const verdict = (yield* processingVerdicts).get(name);
+            const stated = (yield* processingVerdicts)(name);
             const dir = yield* materializeProcessing(name);
 
-            if (verdict === undefined || verdict.rule === "accepted") {
-              assert.strictEqual((yield* applyEdited(dir)).outcome.kind, "accepted", name);
+            if (Option.isNone(stated)) {
+              const grammar = Result.getOrThrow(composed());
+
+              yield* holdsVerdict(
+                name,
+                dir,
+                verdictOf(yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar))),
+              );
+
+              return;
+            }
+
+            const verdict = stated.value;
+
+            if (verdict.rule === "accepted") {
+              yield* holdsVerdict(name, dir, { verdict: "accepted" });
 
               return;
             }
@@ -1076,13 +1125,7 @@ describe.skipIf(!hasLease)(
               return;
             }
 
-            const refused = yield* Effect.flip(importPackage(dir));
-
-            assert.strictEqual(
-              refused instanceof ImportRefused ? refused.rule : refused._tag,
-              verdict.rule,
-              name,
-            );
+            yield* holdsVerdict(name, dir, { rule: verdict.rule, verdict: "refused" });
           }),
         );
       }

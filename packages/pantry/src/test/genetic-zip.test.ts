@@ -214,7 +214,7 @@ const reportsOf = Effect.fn("test.geneticZip.reportsOf")(function* reportsOf(
     const shown = last[0]?.disagreements.find((held) => held.kind === kind) ?? disagreement;
     reports.push(
       [
-        `${kind}`,
+        kind,
         `  reader: ${shown.got}`,
         `  policy over python: ${shown.expected}`,
         `  bred by: ${lineage.join(" ; ") || "(a seed or a box case)"}`,
@@ -247,7 +247,7 @@ const seedGen: Gen<ZipIntent> = (source) => {
   const entryOf = (name: string): EntryIntent => {
     const data = source.draw(element(datas));
     const host = source.draw(element(hosts));
-    const plainName = [...name].every((character) => character < "\u0080");
+    const plainName = /^[ -~]*$/u.test(name);
 
     return {
       ...plainEntry(name, data),

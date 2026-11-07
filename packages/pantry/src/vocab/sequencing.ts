@@ -49,28 +49,15 @@ export type PositionSymbol =
 /**
  * One position of a content model: an element particle or a wildcard that may occur, numbered from
  * 1 in the model's tree order (U4's particle numbering, and the Glushkov automaton's positions). A
- * particle that cannot occur, its own `maxOccurs` or an enclosing group's 0, has no position, and
- * neither has a choice group that cannot.
+ * particle that cannot occur, its own `maxOccurs` or an enclosing group's 0, has no position.
  *
- * `choice` is the innermost choice group that encloses it, numbered from 1 per model, 0 for none,
- * and `sources` its particle's, where each version of its model states it.
+ * `sources` are its particle's, where each version of its model states it.
  */
 export interface Position {
-  readonly choice: number;
   readonly number: number;
   readonly occurs: Occurs;
   readonly sources: Sources;
   readonly symbol: PositionSymbol;
-}
-
-/**
- * One choice group of a content model, numbered from 1 in tree order, with its own bounds and the
- * choice group that encloses it (0 for none).
- */
-export interface ChoiceGroup {
-  readonly number: number;
-  readonly occurs: Occurs;
-  readonly parent: number;
 }
 
 /**
@@ -83,24 +70,22 @@ export interface ChoiceGroup {
  * one number per particle; a particle's counts are its own law already. Over the pinned models the
  * relaxation loses only the counts.
  *
- * - `first`: the positions a child word may start at; `last`: those it may end at; `nullable`:
- *   whether the empty word is in the language.
- * - `follow`: per position (index `n - 1` for position `n`), the positions that may come next.
- * - `shared`: the kinds two or more positions name, where a child's kind does not decide its
- *   particle, and the automaton's state does.
+ * The automaton's states are the installed `Follow` and `Last`'s own: state 0 is the start, before
+ * any child, and state `n` is the state after a child at position `n`.
+ *
+ * - `next`: per state, `next[0]` the start's, the positions a child may take there; it holds one
+ *   entry more than `positions`.
+ * - `ends`: the states a family may end in, 0 among them exactly when the empty word is in the
+ *   language.
  * - `ambiguous`: Unique Particle Attribution's breaches (XML Schema 1.0 Part 1, 3.8.6): a state from
  *   which one kind, or a wildcard and a kind it admits, leads to two positions. A breach is a
  *   finding about the XSD, never repaired here.
  */
 export interface Automaton {
   readonly ambiguous: readonly Ambiguity[];
-  readonly choices: readonly ChoiceGroup[];
-  readonly first: ReadonlySet<number>;
-  readonly follow: readonly ReadonlySet<number>[];
-  readonly last: ReadonlySet<number>;
-  readonly nullable: boolean;
+  readonly ends: ReadonlySet<number>;
+  readonly next: readonly ReadonlySet<number>[];
   readonly positions: readonly Position[];
-  readonly shared: readonly string[];
 }
 
 /**
@@ -295,16 +280,16 @@ export const automatonOf = (
   own: string,
 ): Automaton => {
   const positions: Position[] = [];
-  const choices: ChoiceGroup[] = [];
-  const follow: Set<number>[] = [];
+  // State 0, the start, then one state per position, each the state after a child there.
+  const next: Set<number>[] = [new Set()];
   const link = (from: ReadonlySet<number>, to: ReadonlySet<number>): void => {
     for (const at of from) {
-      for (const next of to) {
-        follow[at - 1]?.add(next);
+      for (const taken of to) {
+        next[at]?.add(taken);
       }
     }
   };
-  const visit = (node: Particle, choice: number): Reading => {
+  const visit = (node: Particle): Reading => {
     if (never(node.occurs)) {
       return { first: new Set(), last: new Set(), nullable: true };
     }
@@ -313,7 +298,6 @@ export const automatonOf = (
       const number = positions.length + 1;
 
       positions.push({
-        choice,
         number,
         occurs: node.occurs,
         sources: node.sources,
@@ -322,7 +306,7 @@ export const automatonOf = (
             ? { _tag: "kinds", kinds: node.kinds }
             : { _tag: "wildcard", namespace: node.namespace, processing: node.processing },
       });
-      follow.push(new Set());
+      next.push(new Set());
 
       const here = new Set([number]);
 
@@ -333,17 +317,11 @@ export const automatonOf = (
       return { first: here, last: here, nullable: node.occurs.min === 0 };
     }
 
-    const inner =
-      node.compositor === "choice"
-        ? (() => {
-            const number = choices.length + 1;
-
-            choices.push({ number, occurs: node.occurs, parent: choice });
-
-            return node.particles.map((member) => visit(member, number));
-          })()
-        : node.particles.map((member) => visit(member, choice));
-    const body = bodyOf(node.compositor, inner, link);
+    const body = bodyOf(
+      node.compositor,
+      node.particles.map((member) => visit(member)),
+      link,
+    );
 
     if (repeats(node.occurs)) {
       link(body.last, body.first);
@@ -351,21 +329,10 @@ export const automatonOf = (
 
     return { ...body, nullable: body.nullable || node.occurs.min === 0 };
   };
-  const whole = visit(particle, 0);
-  const counts = new Map<string, number>();
+  const whole = visit(particle);
+  link(new Set([0]), whole.first);
 
-  for (const { symbol } of positions) {
-    if (symbol._tag === "kinds") {
-      for (const kind of new Set(symbol.kinds)) {
-        counts.set(kind, (counts.get(kind) ?? 0) + 1);
-      }
-    }
-  }
-
-  const shared = [...counts]
-    .flatMap(([kind, count]) => (count > 1 ? [kind] : []))
-    .toSorted((left, right) => (left < right ? -1 : 1));
-  const ambiguous = [whole.first, ...follow].flatMap((state, at) =>
+  const ambiguous = next.flatMap((state, at) =>
     clashesIn(
       [...state].flatMap((number) => Option.toArray(Arr.get(positions, number - 1))),
       namespaceOf,
@@ -375,12 +342,8 @@ export const automatonOf = (
 
   return {
     ambiguous,
-    choices,
-    first: whole.first,
-    follow,
-    last: whole.last,
-    nullable: whole.nullable,
+    ends: new Set([...(whole.nullable ? [0] : []), ...whole.last]),
+    next,
     positions,
-    shared,
   };
 };

@@ -669,19 +669,17 @@ const endedBy = (
     return Result.succeed(automaton);
   }
 
-  const ends = (number: number): boolean =>
+  // A state is the position its family's last child stands at; state 0, the empty family, has no
+  // last child, so no position names its kinds and an ending drops it.
+  const listed = (state: number): boolean =>
     automaton.positions.some(
       ({ number: at, symbol }) =>
-        at === number &&
+        at === state &&
         symbol._tag === "kinds" &&
         endings.every(({ kinds }) => symbol.kinds.every((held) => kinds.includes(held))),
     );
 
-  return Result.succeed({
-    ...automaton,
-    last: new Set([...automaton.last].filter(ends)),
-    nullable: false,
-  });
+  return Result.succeed({ ...automaton, ends: new Set([...automaton.ends].filter(listed)) });
 };
 
 /**
@@ -732,17 +730,25 @@ const cappedBy = (
 };
 
 /**
- * The automaton of a content type that holds no particle: no position, and the empty family.
+ * The automaton of a content type that holds no particle: no position, and the empty family, which
+ * ends at the start.
  */
 const noAutomaton: Automaton = {
   ambiguous: [],
-  choices: [],
-  first: new Set(),
-  follow: [],
-  last: new Set(),
-  nullable: true,
+  ends: new Set([0]),
+  next: [new Set()],
   positions: [],
-  shared: [],
+};
+
+/**
+ * The automaton of a family no content model holds: its start, which nothing follows and nothing
+ * ends at, so the family admits no word, not even the empty one.
+ */
+const emptyLanguage: Automaton = {
+  ambiguous: [],
+  ends: new Set(),
+  next: [new Set()],
+  positions: [],
 };
 
 /**
@@ -760,7 +766,7 @@ const undecidedKindOf = (
   symbols: ReadonlyMap<string, readonly number[]>,
 ): Option.Option<string> =>
   Arr.findFirst([...symbols], ([, numbers]) =>
-    [automaton.first, ...automaton.follow].some(
+    automaton.next.some(
       (next) => [...new Set(numbers)].filter((number) => next.has(number)).length > 1,
     ),
   ).pipe(Option.map(([kind]) => kind));
@@ -820,16 +826,12 @@ const familiesOf = (rosters: {
  */
 const signatureOf = (automaton: Automaton): string =>
   [
-    String(automaton.positions.length + 1),
-    [
-      ...[...automaton.first].map((to) => `0>${String(to)}`),
-      ...automaton.follow.flatMap((next, index) =>
-        [...next].map((to) => `${String(index + 1)}>${String(to)}`),
-      ),
-    ]
+    String(automaton.next.length),
+    automaton.next
+      .flatMap((next, from) => [...next].map((to) => `${String(from)}>${String(to)}`))
       .toSorted()
       .join(" "),
-    [...(automaton.nullable ? [0] : []), ...automaton.last].map(String).toSorted().join(" "),
+    [...automaton.ends].map(String).toSorted().join(" "),
   ].join("|");
 
 /**
@@ -1071,7 +1073,7 @@ export const contentOf = (input: {
     const sizes = new Map(
       installed.map(({ automaton, parent: held, version: in_ }) => [
         `${in_} ${held}`,
-        automaton.positions.length + 1,
+        automaton.next.length,
       ]),
     );
     // A family's positions are 0, its start, then its model's own: the dependent sum Σ (P + 1).
@@ -1097,8 +1099,7 @@ export const contentOf = (input: {
     const contentModels = modelsOf(input, (held) =>
       Option.some(
         Option.match(Option.fromNullishOr(byFamily.get(held)), {
-          // The family of no model: one position, which nothing follows and nothing ends at.
-          onNone: () => ({ signature: "1||", value: undefined }),
+          onNone: () => ({ signature: signed(emptyLanguage), value: emptyLanguage }),
           onSome: (entry) => ({ signature: signed(entry.automaton), value: entry.automaton }),
         }),
       ),
@@ -1112,12 +1113,12 @@ export const contentOf = (input: {
           : Option.some({
               signature: [
                 entry.parent,
-                String(entry.automaton.positions.length + 1),
+                String(entry.automaton.next.length),
                 ...shared
                   .flatMap(({ kind, numbers }) => numbers.map((number) => `${kind}:${number}`))
                   .toSorted(),
               ].join(" "),
-              value: { positions: entry.automaton.positions.length + 1, shared },
+              value: { positions: entry.automaton.next.length, shared },
             });
       }),
     );
@@ -1127,10 +1128,7 @@ export const contentOf = (input: {
       yield* roster("SharedModel", [noSharedModel, ...sharedModels.handles]),
     );
     const modelSizes = new Map(
-      contentModels.models.map(({ handle, value }) => [
-        handle,
-        value === undefined ? 1 : value.positions.length + 1,
-      ]),
+      contentModels.models.map(({ handle, value }) => [handle, value.next.length]),
     );
     const sharedSizes = new Map(
       sharedModels.models.map(({ handle, value }) => [handle, value.positions]),
@@ -1267,18 +1265,9 @@ export const contentOf = (input: {
           name: "Follow",
           payload: [],
           rows: contentModels.models.flatMap(({ handle, value }) =>
-            value === undefined
-              ? []
-              : [
-                  ...[...value.first].map((to) => ({ from: "0", model: handle, to: String(to) })),
-                  ...value.follow.flatMap((next, index) =>
-                    [...next].map((to) => ({
-                      from: String(index + 1),
-                      model: handle,
-                      to: String(to),
-                    })),
-                  ),
-                ],
+            value.next.flatMap((next, from) =>
+              [...next].map((to) => ({ from: String(from), model: handle, to: String(to) })),
+            ),
           ),
         }),
         last: yield* closed({
@@ -1286,15 +1275,7 @@ export const contentOf = (input: {
           name: "Last",
           payload: [],
           rows: contentModels.models.flatMap(({ handle, value }) =>
-            value === undefined
-              ? []
-              : [
-                  ...(value.nullable ? [{ model: handle, position: "0" }] : []),
-                  ...[...value.last].map((number) => ({
-                    model: handle,
-                    position: String(number),
-                  })),
-                ],
+            [...value.ends].map((state) => ({ model: handle, position: String(state) })),
           ),
         }),
         modelPositions: yield* closed({

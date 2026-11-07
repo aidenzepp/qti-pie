@@ -40,13 +40,7 @@ import { noSharedModel } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
-import {
-  attributeLawsByName,
-  EntityName,
-  Lexical,
-  OpenLocal,
-  Space,
-} from "#pantry/qti/attributes.ts";
+import { attributeLawsByName, EntityName, OpenLocal, Space } from "#pantry/qti/attributes.ts";
 import {
   Affix,
   AssembledReference,
@@ -168,7 +162,7 @@ import {
   UsageBaseType,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
-import { Chars, EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
+import { EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
 import { htmlLawsByName } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
@@ -1444,22 +1438,59 @@ interface TextType {
 }
 
 /**
- * Build the pattern law of each text type, as its domain's CHECK reports it, once per language:
- * grizzle reports one law for every spelling of the same pattern, so two types of one source are
- * one law.
+ * Two text types whose rows of {@link writtenLaws} name one pattern law by two names.
+ */
+export interface PatternConflict {
+  readonly first: LawName;
+  readonly identity: string;
+  readonly second: LawName;
+}
+
+/**
+ * Build the pattern law of each text type, as its domain's CHECK reports it, once per language.
+ *
+ * Grizzle reports one law for every spelling of the same pattern, carrying only its source and its
+ * flags (docs/grizzle-findings.md, the pattern law's refusal), so two types of one source are one
+ * law, and one name must hold for both: a refusal cannot tell which type's column broke it. Two
+ * rows of one source that name two laws are a conflict, never the first row's silent win.
  *
  * @param types - Each type, with the law it states.
- * @returns The laws, the first type's name kept for a source two types share.
+ * @returns The laws, one per source; or the first {@link PatternConflict}.
+ */
+export const patternLawsOf = (
+  types: readonly (readonly [TextType, LawName])[],
+): Result.Result<readonly (readonly [Law, LawName])[], PatternConflict> => {
+  const named = new Map<string, readonly [Law, LawName]>();
+  for (const [{ pattern }, name] of types) {
+    const law: Law = { flags: pattern.flags, kind: "pattern", source: pattern.source };
+    const identity = lawIdentity(law);
+    const held = named.get(identity);
+    if (held === undefined) {
+      named.set(identity, [law, name]);
+    } else if (held[1] !== name) {
+      return Result.fail({ first: held[1], identity, second: name });
+    }
+  }
+
+  return Result.succeed([...named.values()]);
+};
+
+/**
+ * {@link patternLawsOf} of the table's own rows, which fails the module's load on a conflict, naming
+ * the pattern and its two laws, since the table is a constant no caller can repair.
+ *
+ * @param types - Each type, with the law it states.
+ * @returns The laws, one per source.
  */
 const patternLaws = (
   types: readonly (readonly [TextType, LawName])[],
 ): readonly (readonly [Law, LawName])[] =>
-  Arr.dedupeWith(
-    types.map(
-      ([{ pattern }, name]) =>
-        [{ flags: pattern.flags, kind: "pattern", source: pattern.source }, name] as const,
-    ),
-    ([a], [b]) => lawIdentity(a) === lawIdentity(b),
+  Result.getOrThrowWith(
+    patternLawsOf(types),
+    ({ first, identity, second }) =>
+      new Error(
+        `Two rows of writtenLaws in src/import/refusal.ts name the law ${identity} "${first}" and "${second}", and grizzle reports one law per pattern. Name both rows by the one law a package can break, or give one type a pattern of its own.`,
+      ),
   );
 
 /**
@@ -1506,8 +1537,11 @@ const cnCountIdentities: ReadonlySet<string> = new Set(cnCountLaws.map(lawIdenti
  *     §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
  *     with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
  *     refuses an absolute name;
- *   - An unbounded XML production (`Char*`, a comment, an instruction, a doctype, an encoding name, a
- *     version number, an NCName) is "XML production", which crust refuses before any row exists;
+ *   - An unbounded XML production (a comment, an instruction, a doctype, an encoding name, a version
+ *     number, an NCName) is "XML production", which crust refuses before any row exists. `Char*`
+ *     (`Chars`, an attribute's `Lexical`) has the foreign namespace name's very pattern, so it is
+ *     that law, "Key text bound": grizzle reports one law per pattern ({@link patternLawsOf}), and
+ *     the bound is the one cause of it a package reaches;
  *   - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
  *     which crust does not check, so the domain is the law;
  *   - The whitespace around an IDREF token and an entry's base64 bytes are the host's own split and
@@ -1528,8 +1562,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     [NamespacePrefix, "Key text bound"],
     [ForeignNamespace, "Key text bound"],
     [EntryPath, "Key text bound"],
-    [Chars, "XML production"],
-    [Lexical, "XML production"],
     [NamespaceUri, "Namespace name"],
     [CommentText, "XML production"],
     [PiTarget, "XML production"],
