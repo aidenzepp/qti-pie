@@ -3,7 +3,9 @@
  * document node's model admits the manifest's root and each root kind `RootOfType` pairs with a
  * resource type, and no other (spec readings 93 and 114). Any other element at a document's root
  * has no representation, so the codec refuses its package as `unmodeled-vocabulary` before any row
- * exists, the importer and the oracle alike; a root it admits is read, and its document is judged.
+ * exists, the importer and the oracle alike. A root it admits is read, and its document breaks
+ * `RootOfType` (P2, `root-type-reverse`) exactly where its (resource type, root kind) is no pair
+ * of the relation.
  *
  * Oracle: the specification's statement of `RootOfType`, the closed relation's rows, which say
  * which root kinds a document of some type may have, so no expected verdict is computed by shred's
@@ -19,6 +21,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, FileSystem, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { manifestRoot } from "#pantry/grammar/facets.ts";
+import { fragmentType } from "#pantry/grammar/include.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
@@ -98,9 +101,9 @@ const packageOf = (drawn: RootCase): readonly PackageFile[] => {
  * Read a case's package through the import's reader, its files written to a scratch folder.
  *
  * @param drawn - The case.
- * @returns The rule the reader refuses it under, or `read` when it builds every row.
+ * @returns The program, or the reader's refusal.
  */
-const readerVerdict = (drawn: RootCase) =>
+const programOf = (drawn: RootCase) =>
   Effect.scoped(
     Effect.gen(function* readCase() {
       const fs = yield* FileSystem.FileSystem;
@@ -109,14 +112,24 @@ const readerVerdict = (drawn: RootCase) =>
         yield* fs.writeFile(`${dir}/${path}`, bytes);
       }
 
-      const read = yield* Effect.result(readProgram(dir));
-      if (Result.isSuccess(read)) {
-        return "read";
-      }
-
-      return read.failure._tag === "ImportRefused" ? read.failure.rule : read.failure._tag;
+      return yield* Effect.result(readProgram(dir));
     }),
   );
+
+/**
+ * Name what the import's reader did with a case's package.
+ *
+ * @param drawn - The case.
+ * @returns The rule the reader refuses it under, or `read` when it builds every row.
+ */
+const readerVerdict = (drawn: RootCase) =>
+  Effect.map(programOf(drawn), (read) => {
+    if (Result.isSuccess(read)) {
+      return "read";
+    }
+
+    return read.failure._tag === "ImportRefused" ? read.failure.rule : read.failure._tag;
+  });
 
 /**
  * Every element kind any schema of QTI 3.0 declares globally, the elements XML Schema would assess
@@ -145,6 +158,51 @@ type RootSituation =
   | "a root no resource type lists, refused before any row"
   | "a root some resource type lists, read"
   | "p29's qti-outcome-processing";
+
+/**
+ * The resource types that list documents, each once, in `RootOfType`'s order.
+ */
+const documentTypes = [...new Set(rootsOfType.map(({ type }) => type))];
+
+/**
+ * The root kinds of the documents a type other than the included fragment's lists, each once, and
+ * the manifest's: a fragment's type holds every kind an include stands for (spec reading 114), and
+ * the box takes each type's own roots.
+ */
+const ownRoots = [
+  ...new Set([
+    ...rootsOfType.filter(({ type }) => type !== fragmentType).map(({ root }) => root),
+    manifestRoot,
+  ]),
+];
+
+/**
+ * Each root kind of {@link ownRoots} as the root of the one document of a resource of each type of
+ * {@link documentTypes}.
+ */
+const pairCases: Gen<RootCase> = (source) => ({
+  root: source.draw(
+    element(
+      Arr.isReadonlyArrayNonEmpty(ownRoots) ? ownRoots : assert.fail("no type lists a document"),
+    ),
+  ),
+  type: source.draw(
+    element(
+      Arr.isReadonlyArrayNonEmpty(documentTypes)
+        ? documentTypes
+        : assert.fail("no type lists a document"),
+    ),
+  ),
+});
+
+/**
+ * A situation the pair box must reach: a pair `RootOfType` holds, one it does not, and the
+ * database case's item listed as a stimulus (`import/program.db.test.ts`, root-type-reverse).
+ */
+type PairSituation =
+  | "a pair RootOfType holds"
+  | "a pair RootOfType does not hold"
+  | "an item listed as a stimulus";
 
 describe("model/shred.ts and test/oracle.ts, a document's root", () => {
   it.effect(
@@ -196,6 +254,69 @@ describe("model/shred.ts and test/oracle.ts, a document's root", () => {
                   ? { oracle: "judged", reader: "read" }
                   : { oracle: "unmodeled-vocabulary", reader: "unmodeled-vocabulary" },
                 JSON.stringify(drawn),
+              );
+            }).pipe(Effect.provide(NodeServices.layer)),
+        ),
+      ),
+    240_000,
+  );
+
+  it.effect(
+    "breaks RootOfType exactly where a document's (resource type, root kind) is no pair of it, the cell the import writes",
+    (ctx) =>
+      // Oracle: `RootOfType`'s rows. Bound: every type that lists documents, 10, by every root kind
+      // of a type but the fragment's and the manifest's, 9: 90 packages.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every resource type that lists documents, by every root kind a type other than the fragment's lists and the manifest's, as its one document's root",
+            caseHang: Duration.seconds(30),
+            coverage: requiredInSpace<PairSituation>([
+              "a pair RootOfType holds",
+              "a pair RootOfType does not hold",
+              "an item listed as a stimulus",
+            ]),
+            generator: pairCases,
+            limit: 120,
+            literal: (drawn) => JSON.stringify(drawn),
+            oracle: {
+              kind: "specification",
+              name: "RootOfType's (type, root) rows (spec readings 93 and 114, P2 root-type-reverse)",
+            },
+            suite: "model/document-root-types",
+          },
+          (drawn: RootCase, c) =>
+            Effect.gen(function* pairCase() {
+              const paired = rootsOfType.some(
+                ({ root, type }) => type === drawn.type && root === drawn.root,
+              );
+              const judgment = yield* judge(packageOf(drawn), grammar, laws);
+              const read = yield* programOf(drawn);
+
+              c.note(paired ? "a pair RootOfType holds" : "a pair RootOfType does not hold");
+              if (
+                drawn.type === "imsqti_stimulus_xmlv3p0" &&
+                drawn.root === "qti-assessment-item"
+              ) {
+                c.note("an item listed as a stimulus");
+              }
+
+              assert.isTrue(judgment._tag === "Judged", JSON.stringify(drawn));
+              assert.strictEqual(
+                judgment._tag === "Judged" &&
+                  judgment.breaches.some(({ law }) => law === "RootOfType"),
+                !paired,
+                `${JSON.stringify(drawn)}: the oracle breaks RootOfType`,
+              );
+              assert.deepStrictEqual(
+                Result.isSuccess(read)
+                  ? [...read.success.inputs.Document.values()]
+                      .filter(({ path }) => path === "doc.xml")
+                      .map(({ resourceType, rootKind }) => `${resourceType} ${rootKind}`)
+                  : read.failure._tag,
+                [`${drawn.type} ${drawn.root}`],
+                `${JSON.stringify(drawn)}: the import's Document cell`,
               );
             }).pipe(Effect.provide(NodeServices.layer)),
         ),
