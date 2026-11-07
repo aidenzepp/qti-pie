@@ -1356,21 +1356,30 @@ describe("check, every QTI 3 root", () => {
   );
 
   it.effect(
-    "[T-4] [S-0] accepts -TX_G06SAMP_000.xml as a test with unsupported features, its outcome processing marked",
+    "[T-4] [S-0] accepts rtest08.xml as a test with unsupported features, its rubric blocks marked",
     () =>
-      Effect.gen(function* weightedTest() {
-        const location = "qtiv3-examples/packaging/CASE/testitems/-TX_G06SAMP_000.xml";
+      Effect.gen(function* rubricTest() {
+        const location = "qtiv3-examples/tests/rtest08.xml";
         const accepted = acceptedTestOf(
           yield* corpusVerdict(location),
           "accepted-with-unsupported",
         );
+        const nonlinear = "qti-assessment-test/qti-test-part[2]";
 
-        assert.deepInclude(accepted.unsupported, {
-          feature: "qti-outcome-processing",
-          path: "qti-assessment-test/qti-outcome-processing",
-          shown: "mark",
-        });
+        assert.deepStrictEqual(accepted.unsupported, [
+          {
+            feature: "qti-rubric-block",
+            path: `${nonlinear}/qti-assessment-section[1]/qti-rubric-block`,
+            shown: "mark",
+          },
+          {
+            feature: "qti-rubric-block",
+            path: `${nonlinear}/qti-assessment-section[2]/qti-rubric-block`,
+            shown: "mark",
+          },
+        ]);
         assert.deepStrictEqual(accepted.unsupported, accepted.test.unsupported);
+        assert.deepStrictEqual(accepted.test.outcomeProcessing, { kind: "absent" });
       }),
     { tags: ["corpus"] },
   );
@@ -1629,13 +1638,14 @@ describe("acceptForTest", () => {
 const handTest: Test = {
   document: "tests/hand.xml",
   identifier: "hand",
+  outcomeProcessing: { kind: "absent" },
   outcomes: new Map(),
   parts: [],
   title: "Hand",
   unsupported: [
     {
-      feature: "qti-outcome-processing",
-      path: "qti-assessment-test/qti-outcome-processing",
+      feature: "qti-pre-condition",
+      path: "qti-assessment-test/qti-test-part/qti-pre-condition",
       shown: "mark",
     },
   ],

@@ -8,6 +8,7 @@ import type {
   SourceElement,
 } from "#plate/document/source.ts";
 import { buildItem } from "#plate/model/item.ts";
+import type { Rule } from "#plate/model/expression.ts";
 import type { UnsupportedFeature } from "#plate/model/item.ts";
 import { absentControl, buildTest } from "#plate/model/test.ts";
 import type { MarkedFeature, Section, SectionChild, Test } from "#plate/model/test.ts";
@@ -391,10 +392,10 @@ describe("buildTest", () => {
             "max-attempts:negative",
             `${firstSection}/qti-assessment-item-ref[1]/qti-item-session-control/@max-attempts`,
           ),
-          mark("qti-weight", `${firstSection}/qti-assessment-item-ref[1]/qti-weight`),
           mark("qti-assessment-section-ref", `${firstPart}/qti-assessment-section-ref`),
-          mark("qti-outcome-processing", `${root}/qti-outcome-processing`),
         ]);
+        assert.deepStrictEqual([...nodeNamed(built, "I1", "item-ref").weights], [["DOUBLE", 2]]);
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
         assert.deepStrictEqual(
           built.parts.map((testPart) => testPart.children.map(outline)),
           [[["S1", ["I1", "I2"]]]],
@@ -646,5 +647,303 @@ describe("buildTest", () => {
       });
       assert.deepStrictEqual(refusal.detail, { baseType: "xs:int", lexical: "2147483648" });
     }),
+  );
+});
+
+/**
+ * The path of a test's `qti-outcome-processing`, where a name its rules read and the engine does
+ * not hold is marked.
+ */
+const processingPath = `${root}/qti-outcome-processing`;
+
+/**
+ * Construct a `qti-base-value`.
+ *
+ * @param baseType Its `base-type`.
+ * @param value Its text.
+ * @returns The element.
+ */
+const baseValue = (baseType: string, value: string): SourceElement =>
+  el("qti-base-value", [attr("base-type", baseType)], [text(value)]);
+
+/**
+ * Construct a `qti-variable`.
+ *
+ * @param identifier The name it reads.
+ * @returns The element.
+ */
+const variable = (identifier: string): SourceElement =>
+  el("qti-variable", [attr("identifier", identifier)]);
+
+/**
+ * Construct a rule that names an outcome and holds one expression.
+ *
+ * @param local `qti-set-outcome-value` or `qti-lookup-outcome-value`.
+ * @param identifier The outcome.
+ * @param expression Its expression.
+ * @returns The element.
+ */
+const setting = (
+  local: "qti-lookup-outcome-value" | "qti-set-outcome-value",
+  identifier: string,
+  expression: SourceElement,
+): SourceElement => el(local, [attr("identifier", identifier)], [expression]);
+
+/**
+ * Construct a test of one part `P1`, one section `S1` and one item reference `I1`, with a float
+ * `SCORE`, a duration `TIME` and outcome processing of the given rules.
+ *
+ * @param rules The rules its `qti-outcome-processing` holds.
+ * @returns The document.
+ */
+const processed = (rules: readonly SourceChild[]): SourceDocument =>
+  test([
+    outcome("SCORE", "float", [defaultValue("0")]),
+    outcome("TIME", "duration"),
+    part("P1", "linear", "individual", [section("S1", [itemRef("I1", "items/one.xml")])]),
+    el("qti-outcome-processing", [], rules),
+  ]);
+
+/**
+ * The float single value of a number, as a `qti-base-value` reads.
+ *
+ * @param value The number.
+ * @returns The expression.
+ */
+const floatValue = (value: number) =>
+  ({
+    kind: "base-value",
+    operands: [],
+    value: { baseType: "float", cardinality: "single", values: [{ baseType: "float", value }] },
+  }) as const;
+
+/**
+ * The expression a {@link variable} reads into.
+ *
+ * @param identifier The name it reads.
+ * @returns The expression.
+ */
+const variableRead = (identifier: string) =>
+  ({
+    identifier,
+    kind: "variable",
+    operands: [],
+    weightIdentifier: Option.none(),
+  }) as const;
+
+describe("buildTest's outcome processing, weights and variable mappings", () => {
+  it.effect("[T-9] absent, marked or runs: a test with no outcome processing is absent", () =>
+    Effect.gen(function* absent() {
+      const built = yield* buildTest(twoParts);
+
+      assert.deepStrictEqual(built.outcomeProcessing, { kind: "absent" });
+    }),
+  );
+
+  it.effect(
+    "[T-9] absent, marked or runs: one the engine runs is runs, its five rules read in order and a fragment's in its place",
+    () =>
+      Effect.gen(function* runs() {
+        const document = processed([
+          el(
+            "qti-outcome-condition",
+            [],
+            [
+              el(
+                "qti-outcome-if",
+                [],
+                [
+                  el("qti-gte", [], [variable("SCORE"), baseValue("float", "1")]),
+                  setting("qti-set-outcome-value", "SCORE", baseValue("float", "2")),
+                ],
+              ),
+              el("qti-outcome-else-if", [], [variable("I1.PASSED"), el("qti-exit-test")]),
+              el(
+                "qti-outcome-else",
+                [],
+                [setting("qti-set-outcome-value", "SCORE", baseValue("float", "0"))],
+              ),
+            ],
+          ),
+          setting("qti-lookup-outcome-value", "SCORE", variable("I1.SCORE")),
+          el(
+            "qti-outcome-processing-fragment",
+            [],
+            [setting("qti-set-outcome-value", "SCORE", variable("SCORE"))],
+          ),
+          el("qti-exit-test"),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(built.outcomeProcessing, {
+          kind: "runs",
+          rules: [
+            {
+              branches: [
+                {
+                  // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, as `Branch` names it.
+                  then: [{ expression: floatValue(2), identifier: "SCORE", kind: "set-outcome" }],
+                  when: { kind: "gte", operands: [variableRead("SCORE"), floatValue(1)] },
+                },
+                // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, as `Branch` names it.
+                { then: [{ kind: "exit" }], when: variableRead("I1.PASSED") },
+              ],
+              kind: "condition",
+              otherwise: Option.some<readonly Rule[]>([
+                { expression: floatValue(0), identifier: "SCORE", kind: "set-outcome" },
+              ]),
+            },
+            { expression: variableRead("I1.SCORE"), identifier: "SCORE", kind: "lookup-outcome" },
+            { expression: variableRead("SCORE"), identifier: "SCORE", kind: "set-outcome" },
+            { kind: "exit" },
+          ],
+        });
+      }),
+  );
+
+  it.effect(
+    "[T-9] absent, marked or runs: one that reads numAttempts is marked variable:numAttempts at the processing",
+    () =>
+      Effect.gen(function* readsAttempts() {
+        const document = processed([
+          el(
+            "qti-outcome-condition",
+            [],
+            [
+              el(
+                "qti-outcome-if",
+                [],
+                [
+                  el("qti-gte", [], [variable("numAttempts"), baseValue("integer", "1")]),
+                  setting("qti-set-outcome-value", "SCORE", baseValue("float", "1")),
+                ],
+              ),
+            ],
+          ),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [mark("variable:numAttempts", processingPath)]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] absent, marked or runs: one that reads a part's, a section's or an item ref's duration is marked by each name, unless the test declares it whole",
+    () =>
+      Effect.gen(function* readsDurations() {
+        const document = processed([
+          setting("qti-set-outcome-value", "TIME", variable("P1.duration")),
+          setting("qti-set-outcome-value", "TIME", variable("S1.duration")),
+          setting("qti-set-outcome-value", "TIME", variable("I1.duration")),
+          setting("qti-set-outcome-value", "TIME", variable("duration")),
+        ]);
+        const built = yield* buildTest(document);
+        const declared = test([
+          outcome("P1.duration", "duration"),
+          part("P1", "linear", "individual", [section("S1", [itemRef("I1", "items/one.xml")])]),
+          el(
+            "qti-outcome-processing",
+            [],
+            [setting("qti-set-outcome-value", "P1.duration", variable("P1.duration"))],
+          ),
+        ]);
+        const whole = yield* buildTest(declared);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [
+          mark("variable:P1.duration", processingPath),
+          mark("variable:S1.duration", processingPath),
+          mark("variable:I1.duration", processingPath),
+        ]);
+        assert.strictEqual(whole.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(whole.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[T-9] absent, marked or runs: one whose qti-test-variables names duration is marked variable:duration at the processing",
+    () =>
+      Effect.gen(function* collectsDurations() {
+        const document = processed([
+          setting(
+            "qti-set-outcome-value",
+            "SCORE",
+            el(
+              "qti-sum",
+              [],
+              [el("qti-test-variables", [attr("variable-identifier", "duration")])],
+            ),
+          ),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepInclude(built.unsupported, mark("variable:duration", processingPath));
+      }),
+  );
+
+  it.effect(
+    "[T-9] absent, marked or runs: one that holds an xi:include is marked xi:include at the include, once",
+    () =>
+      Effect.gen(function* holdsInclude() {
+        const document = processed([
+          setting("qti-set-outcome-value", "SCORE", baseValue("float", "1")),
+          el("include", [attr("href", "shared/processing.xml")], [], xincludeNamespace),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [
+          mark("xi:include", `${processingPath}/{${xincludeNamespace}}include`),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] reads each qti-weight and qti-variable-mapping onto its item ref, and marks neither",
+    () =>
+      Effect.gen(function* readsWeights() {
+        const document = test([
+          part("P1", "linear", "individual", [
+            section("S1", [
+              itemRef(
+                "I1",
+                "items/one.xml",
+                [],
+                [
+                  el("qti-variable-mapping", [
+                    attr("source-identifier", "SCORE"),
+                    attr("target-identifier", "RAW"),
+                  ]),
+                  el("qti-weight", [attr("identifier", "DOUBLE"), attr("value", " 2.5 ")]),
+                  el("qti-weight", [attr("identifier", "NONE"), attr("value", "0")]),
+                ],
+              ),
+              itemRef("I2", "items/two.xml"),
+            ]),
+          ]),
+        ]);
+        const built = yield* buildTest(document);
+        const weighted = nodeNamed(built, "I1", "item-ref");
+        const plain = nodeNamed(built, "I2", "item-ref");
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(
+          [...weighted.weights],
+          [
+            ["DOUBLE", 2.5],
+            ["NONE", 0],
+          ],
+        );
+        assert.deepStrictEqual([...weighted.mappings], [["RAW", "SCORE"]]);
+        assert.deepStrictEqual([plain.weights.size, plain.mappings.size], [0, 0]);
+      }),
   );
 });

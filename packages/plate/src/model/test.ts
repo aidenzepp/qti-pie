@@ -3,24 +3,30 @@
  * accepts and does not deliver named as a mark.
  *
  * {@link buildTest} reads the parts, their sections and item references in document order, each
- * `qti-item-session-control` attribute by attribute, and the test's outcome declarations through
- * the item model's own reader, with the item model's element and attribute readers. The features
- * `testMarks` lists are marks on the verdict, never notices, and the tree leaves them out or holds
- * them inert, so a sequence walked from it ignores them.
+ * `qti-item-session-control` attribute by attribute, each item reference's weights and variable
+ * mappings, the test's outcome declarations through the item model's own reader, and its outcome
+ * processing into the item model's rules through the registry's expression reader, with the item
+ * model's element and attribute readers. The features `testMarks` lists are marks on the verdict,
+ * never notices, and the tree leaves them out or holds them inert, so a sequence walked from it
+ * ignores them.
  *
  * @module
  */
-import { Array as Arr, Effect, Option } from "effect";
+import { Array as Arr, Effect, Option, pipe } from "effect";
 import { attributePath, walk, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
   attributeOf,
   childrenNamed,
+  elementsOf,
+  floatOf,
   greatestInt,
   identifierAttribute,
+  identifierOf,
   isQti,
   leastInt,
   listed,
+  nameOf,
   pathOf,
   refusal,
   requiredAttribute,
@@ -30,9 +36,12 @@ import {
   xsBooleanOf,
 } from "#plate/model/attributes.ts";
 import type { ModelWalk } from "#plate/model/attributes.ts";
+import type { Branch, Expression, KindRule, Rule } from "#plate/model/expression.ts";
+import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
+import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { outcomeDeclaration, pathsOf, xmlWhitespaceRun } from "#plate/model/item.ts";
 import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
-import { integerLexical, trimXmlSpace } from "#plate/model/values.ts";
+import { integerLexical, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import { navigationModes, renders, submissionModes, testMarks } from "#plate/vocabulary.ts";
 import type {
@@ -80,7 +89,16 @@ export interface ItemRef {
   readonly href: string;
   readonly identifier: string;
   readonly kind: "item-ref";
+  /**
+   * Each `qti-variable-mapping`'s `target-identifier`, keyed to its `source-identifier`: a read of
+   * the target through this item reference reads the item's source outcome.
+   */
+  readonly mappings: ReadonlyMap<string, string>;
   readonly required: boolean;
+  /**
+   * Each `qti-weight`'s `identifier`, keyed to its `value`, an `xs:double`.
+   */
+  readonly weights: ReadonlyMap<string, number>;
 }
 
 /**
@@ -125,12 +143,23 @@ export interface MarkedFeature extends UnsupportedFeature {
 }
 
 /**
+ * A test's `qti-outcome-processing`, in one of three states: `absent` when the test has none,
+ * `marked` when it has one the engine cannot run (its marks are in `Test.unsupported`), and `runs`
+ * with its rules otherwise. A reader switches over the three exhaustively.
+ */
+export type OutcomeProcessing =
+  | { readonly kind: "absent" }
+  | { readonly kind: "marked" }
+  | { readonly kind: "runs"; readonly rules: readonly Rule[] };
+
+/**
  * A valid `qti-assessment-test` as M2 models it.
  *
  * `outcomes` holds the test's outcome declarations of modelled base types and cardinalities, as the
- * item model holds an item's. `unsupported` lists every feature not delivered, in document order,
- * each once per feature and path: the keys of `testMarks`, and the marks the item model gives an
- * outcome declaration it does not hold.
+ * item model holds an item's, and `outcomeProcessing` its outcome processing in one of three
+ * states. `unsupported` lists every feature not delivered, in document order, each once per feature
+ * and path: the keys of `testMarks`, the marks the item model gives an outcome declaration it does
+ * not hold, and the marks of outcome processing the engine cannot run.
  */
 export interface Test {
   /**
@@ -138,6 +167,7 @@ export interface Test {
    */
   readonly document: string;
   readonly identifier: string;
+  readonly outcomeProcessing: OutcomeProcessing;
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   readonly parts: readonly TestPart[];
   readonly title: string;
@@ -348,7 +378,53 @@ const controlOf = (
   });
 
 /**
- * Read a `qti-assessment-item-ref`.
+ * Read a `qti-weight`: its `identifier`, and its `value` as an `xs:double`, outer whitespace gone
+ * (readings 7 and 56), as `doubleAttribute` in `#plate/model/attributes.ts` reads one.
+ *
+ * @param build The build.
+ * @param element The weight.
+ * @returns The identifier and the weight, or the refusal `value-type` at a value outside the
+ *   double's lexical space. A document the validator would refuse can also fail with
+ *   `missing-attribute`.
+ */
+const weightOf = (
+  build: ModelWalk,
+  element: SourceElement,
+): Effect.Effect<readonly [string, number], Refusal> =>
+  Effect.gen(function* readWeight() {
+    const identifier = yield* identifierAttribute(build, element, "identifier");
+    const written = yield* requiredAttribute(build, element, "value");
+    const lexical = trimXmlSpace(written.value);
+    const value = yield* Effect.mapError(Effect.fromResult(parseLexical("float", lexical)), () =>
+      refusal(build, "value-type", attributePath(pathOf(build, element), written), {
+        baseType: "xs:double",
+        lexical,
+      }),
+    );
+
+    return [identifier, floatOf(build, value)] as const;
+  });
+
+/**
+ * Read a `qti-variable-mapping`: its `target-identifier` and the `source-identifier` it reads.
+ *
+ * @param build The build.
+ * @param element The mapping.
+ * @returns The target and the source; a document the validator would refuse can fail with
+ *   `missing-attribute`.
+ */
+const mappingOf = (
+  build: ModelWalk,
+  element: SourceElement,
+): Effect.Effect<readonly [string, string], Refusal> =>
+  Effect.all([
+    identifierAttribute(build, element, "target-identifier"),
+    identifierAttribute(build, element, "source-identifier"),
+  ]);
+
+/**
+ * Read a `qti-assessment-item-ref`, its weights and its variable mappings among it. A later weight
+ * or mapping of the same identifier replaces an earlier one.
  *
  * @param build The build.
  * @param element The item reference.
@@ -361,6 +437,12 @@ const itemRef = (build: ModelWalk, element: SourceElement): Effect.Effect<ItemRe
     const required = yield* xsBoolean(build, element, "required", false);
     const fixed = yield* xsBoolean(build, element, "fixed", false);
     const control = yield* controlOf(build, element);
+    const mappings = yield* Effect.forEach(childrenNamed(element, "qti-variable-mapping"), (each) =>
+      mappingOf(build, each),
+    );
+    const weights = yield* Effect.forEach(childrenNamed(element, "qti-weight"), (each) =>
+      weightOf(build, each),
+    );
 
     return {
       category: Option.match(valueOf(element, "category"), {
@@ -372,7 +454,9 @@ const itemRef = (build: ModelWalk, element: SourceElement): Effect.Effect<ItemRe
       href: trimXmlSpace(href).replaceAll(xmlWhitespaceRun, " "),
       identifier,
       kind: "item-ref",
+      mappings: new Map(mappings),
       required,
+      weights: new Map(weights),
     };
   });
 
@@ -525,12 +609,18 @@ const controlMarks = (control: SourceElement, path: string): readonly MarkedFeat
  * own subtree is not searched, so a rubric block's stylesheet is not marked apart from the block. A
  * `qti-item-session-control` gives its own marks. A test-level outcome declaration is marked as the
  * item model marks an item's: the `renders` marks that sit on it, at its path, and each `qti-*`
- * element below it that the model does not read, keyed by its name, its subtree not searched.
+ * element below it that the model does not read, keyed by its name, its subtree not searched. An
+ * element a reader has marked already, the outcome processing, gives the reader's marks where it
+ * stands, its subtree not searched, so an `xi:include` in it is marked once.
  *
  * @param source The test.
+ * @param placed The marks a reader gave, keyed by the element they stand at.
  * @returns The marks, each once per feature and path.
  */
-const marksOf = (source: SourceDocument): readonly MarkedFeature[] => {
+const marksOf = (
+  source: SourceDocument,
+  placed: ReadonlyMap<SourceElement, readonly MarkedFeature[]>,
+): readonly MarkedFeature[] => {
   const marks: MarkedFeature[] = [];
   const quiet = new Set<SourceElement>();
   const declared = new Set<SourceElement>();
@@ -538,7 +628,11 @@ const marksOf = (source: SourceDocument): readonly MarkedFeature[] => {
     const { element, path } = visit;
     const parent = Option.getOrUndefined(visit.parent);
     const feature = Option.getOrUndefined(elementMark(element));
+    const read = placed.get(element);
     if (parent !== undefined && quiet.has(parent)) {
+      quiet.add(element);
+    } else if (read !== undefined) {
+      marks.push(...read);
       quiet.add(element);
     } else if (parent !== undefined && declared.has(parent)) {
       if (
@@ -574,14 +668,547 @@ const marksOf = (source: SourceDocument): readonly MarkedFeature[] => {
 };
 
 /**
+ * The built-in variables a test's processing may name, as the qti package gives them for a test
+ * (`builtInsOf("test")` in `packages/pantry/src/processing/env.ts`), whatever the engine holds of
+ * them. Of these the engine holds only the test's own `duration` (G-R3, pending: a test's
+ * processing reads only the test's declared outcomes and its own `duration`).
+ */
+const processingBuiltIns: readonly string[] = [
+  "completionStatus",
+  "duration",
+  "numAttempts",
+  "QTI_CONTEXT",
+];
+
+/**
+ * The last step of a dotted name that reads a part's, a section's or an item reference's duration.
+ */
+const durationStep = ".duration";
+
+/**
+ * What a test's outcome processing resolves a name against.
+ */
+interface ProcessingNames {
+  /**
+   * Every identifier the test's outcome and context declarations declare whole.
+   */
+  readonly declared: ReadonlySet<string>;
+  /**
+   * {@link ProcessingNames.declared} and {@link processingBuiltIns}: the names a braced string
+   * attribute reads as a reference, and an unchecked reference is judged by.
+   */
+  readonly named: ReadonlySet<string>;
+  /**
+   * The outcomes the model holds, which the engine reads and sets.
+   */
+  readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
+  /**
+   * The identifiers of the test's parts, sections and item references.
+   */
+  readonly structure: ReadonlySet<string>;
+}
+
+/**
+ * Give the identifiers of a test's parts, sections and item references, nested sections included.
+ *
+ * @param parts The test's parts.
+ * @returns Their identifiers.
+ */
+const structureOf = (parts: readonly TestPart[]): ReadonlySet<string> => {
+  const identifiers = new Set<string>();
+  const add = (child: SectionChild): void => {
+    identifiers.add(child.identifier);
+    if (child.kind === "section") {
+      for (const each of child.children) {
+        add(each);
+      }
+    }
+  };
+  for (const read of parts) {
+    identifiers.add(read.identifier);
+    for (const each of read.children) {
+      add(each);
+    }
+  }
+
+  return identifiers;
+};
+
+/**
+ * Give what a test's outcome processing resolves a name against.
+ *
+ * @param root The test's root.
+ * @param outcomes The outcomes the model holds.
+ * @param parts The test's parts.
+ * @returns The names.
+ */
+const processingNamesOf = (
+  root: SourceElement,
+  outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  parts: readonly TestPart[],
+): ProcessingNames => {
+  const declared = new Set(
+    [
+      ...childrenNamed(root, "qti-outcome-declaration"),
+      ...childrenNamed(root, "qti-context-declaration"),
+    ].flatMap((declaration) =>
+      Option.toArray(Option.map(valueOf(declaration, "identifier"), identifierOf)),
+    ),
+  );
+
+  return {
+    declared,
+    named: new Set([...declared, ...processingBuiltIns]),
+    outcomes,
+    structure: structureOf(parts),
+  };
+};
+
+/**
+ * Report whether the engine holds a variable a test's outcome processing reads by a name. A name
+ * the test declares whole is held when the model holds it as an outcome, so a context variable and
+ * an outcome the model does not hold are not. A dotted name the test does not declare whole is a
+ * prefixed read, which the test scope resolves, held unless it is a part's, a section's or an item
+ * reference's `duration` (G-R3, pending). Any other name is held only when it is the test's own
+ * `duration`: `numAttempts`, `completionStatus` and `QTI_CONTEXT` are not.
+ *
+ * @param names What the processing resolves a name against.
+ * @param name The name.
+ * @returns Whether the engine holds it.
+ */
+const isHeld = (names: ProcessingNames, name: string): boolean => {
+  if (names.declared.has(name)) {
+    return names.outcomes.has(name);
+  }
+
+  if (name.includes(".")) {
+    return !(
+      name.endsWith(durationStep) && names.structure.has(name.slice(0, -durationStep.length))
+    );
+  }
+
+  return name === "duration";
+};
+
+/**
+ * Report whether a value a variant's field holds is a reference to a variable, the `ref` member of
+ * `LiteralOrRef` in `#plate/model/expression.ts`.
+ *
+ * @param held The field's value, or one value of a list field.
+ * @returns Whether it is a reference.
+ */
+const isReference = (
+  held: unknown,
+): held is { readonly _tag: "ref"; readonly identifier: string } =>
+  typeof held === "object" &&
+  held !== null &&
+  "_tag" in held &&
+  held._tag === "ref" &&
+  "identifier" in held &&
+  typeof held.identifier === "string";
+
+/**
+ * Give each variable an expression's attributes name through its kind's reference facet, with
+ * whether a reference there is checked, in the facet's order and, within a list attribute, in
+ * written order.
+ *
+ * @param operand The expression.
+ * @param kindRule Its kind's rule.
+ * @returns The names and whether each is checked.
+ */
+const referencesOf = (
+  operand: Expression,
+  kindRule: KindRule,
+): readonly { readonly checked: boolean; readonly identifier: string }[] => {
+  const fields = new Map<string, unknown>(Object.entries(operand));
+
+  return kindRule.references.flatMap((entry) => {
+    const held = fields.get(entry.field);
+    const values: readonly unknown[] = entry.list && Array.isArray(held) ? held : [held];
+
+    return values
+      .filter((value) => isReference(value))
+      .map((reference) => ({ checked: entry.checked, identifier: reference.identifier }));
+  });
+};
+
+/**
+ * Give each name a test's outcome rules read or set that the engine does not hold, once, in the
+ * order the rules first name it, as the item model finds an item's (`unheldIdentifiers` in
+ * `#plate/model/item.ts`), each expression through its kind's rule in the registry.
+ *
+ * A rule sets a name the engine holds only when the model holds it as an outcome. An expression
+ * reads, by its kind's declaration facet, a name {@link isHeld} holds; a kind that expects a
+ * response reads only a prefixed one, since a test declares no response. A checked reference reads
+ * a name {@link isHeld} holds; an unchecked one is judged only when a declaration or a built-in
+ * names it.
+ *
+ * @param rules The rules.
+ * @param names What the processing resolves a name against.
+ * @returns The names the engine does not hold, empty when it can run the rules.
+ */
+const unheldNames = (rules: readonly Rule[], names: ProcessingNames): readonly string[] => {
+  const unheld = new Set<string>();
+
+  /**
+   * Add each name an expression and its operands read that the engine does not hold.
+   *
+   * @param operand The expression.
+   */
+  const read = (operand: Expression): void => {
+    const kindRule: KindRule = kindRules[operand.kind];
+    if (kindRule.declaration !== undefined && "identifier" in operand) {
+      const { identifier } = operand;
+      const held =
+        kindRule.declaration.expected === "response"
+          ? !names.declared.has(identifier) && identifier.includes(".") && isHeld(names, identifier)
+          : isHeld(names, identifier);
+      if (!held) {
+        unheld.add(identifier);
+      }
+    }
+
+    for (const { checked, identifier } of referencesOf(operand, kindRule)) {
+      if ((checked || names.named.has(identifier)) && !isHeld(names, identifier)) {
+        unheld.add(identifier);
+      }
+    }
+
+    for (const each of operand.operands) {
+      read(each);
+    }
+  };
+
+  /**
+   * Add each name a rule sequence names, nested branches included, that the engine does not hold.
+   *
+   * @param sequence The rules, in order.
+   */
+  const run = (sequence: readonly Rule[]): void => {
+    for (const each of sequence) {
+      if (each.kind === "condition") {
+        for (const { then, when } of each.branches) {
+          read(when);
+          run(then);
+        }
+        if (Option.isSome(each.otherwise)) {
+          run(each.otherwise.value);
+        }
+      } else if (each.kind !== "exit") {
+        if (!names.outcomes.has(each.identifier)) {
+          unheld.add(each.identifier);
+        }
+
+        read(each.expression);
+      }
+    }
+  };
+  run(rules);
+
+  return [...unheld];
+};
+
+/**
+ * Report whether an element holds a `qti-test-variables` whose `variable-identifier` is `duration`,
+ * read from the attribute whatever the kind's reader holds: the engine holds no item's `duration`
+ * (G-R3, pending).
+ *
+ * @param element The element.
+ * @returns Whether it, or an element below it, is one.
+ */
+const collectsDurations = (element: SourceElement): boolean =>
+  (isQti(element, "qti-test-variables") &&
+    Option.exists(
+      valueOf(element, "variable-identifier"),
+      (written) => identifierOf(written) === "duration",
+    )) ||
+  elementsOf(element).some(collectsDurations);
+
+/**
+ * Give the generic expression reader its context for a test's outcome processing: the walk, the
+ * names a braced string attribute reads as a reference, and the two ways to record a mark, each
+ * recorded once per feature and path, in the order they are read.
+ *
+ * @param build The build.
+ * @param named The names a braced string attribute reads as a reference.
+ * @param marks Where the marks are recorded.
+ * @returns The reading context.
+ */
+const processingReading = (
+  build: ModelWalk,
+  named: ReadonlySet<string>,
+  marks: MarkedFeature[],
+): ExpressionReading => {
+  const recorded = new Set<string>();
+  const record = (element: SourceElement, feature: string): void => {
+    const path = pathOf(build, element);
+    const key = JSON.stringify([feature, path]);
+    if (!recorded.has(key)) {
+      recorded.add(key);
+      marks.push({ feature, path, shown: "mark" });
+    }
+  };
+
+  return {
+    declared: named,
+    mark: (element, feature) =>
+      Effect.sync(() => {
+        record(element, feature);
+      }),
+    unread: (element, feature = nameOf(element)) =>
+      Effect.sync(() => {
+        record(element, feature);
+
+        return Option.none();
+      }),
+    walk: build,
+  };
+};
+
+/**
+ * Construct a branch of an outcome condition.
+ *
+ * @param when Its condition.
+ * @param then The rules it runs.
+ * @returns The branch.
+ */
+// oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, as `Branch` names it; it is an array, never a function, so no `await` treats a branch as a promise.
+const branchOf = (when: Expression, then: readonly Rule[]): Branch => ({ then, when });
+
+/**
+ * Read a sequence of outcome rules. A `qti-outcome-processing-fragment`'s rules take its place, so
+ * the sequence holds no fragment.
+ *
+ * @param reading The processing's reading context.
+ * @param elements The rule elements, in order.
+ * @returns The rules, none when any holds an element the engine does not run, or a refusal.
+ */
+const outcomeRules = (
+  reading: ExpressionReading,
+  elements: readonly SourceElement[],
+): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
+  pipe(
+    elements,
+    // oxlint-disable-next-line eslint/no-use-before-define -- `outcomeRules` and `outcomeRule` are mutually recursive, as conditions and fragments nest; the call runs only after both are defined.
+    Effect.forEach((element) => outcomeRule(reading, element)),
+    Effect.map((read) => Option.map(Option.all(read), (each) => each.flat())),
+  );
+
+/**
+ * Read a `qti-outcome-if` or `qti-outcome-else-if`: its first child is the condition and the rest
+ * are the rules it runs.
+ *
+ * @param reading The processing's reading context.
+ * @param element The branch element.
+ * @returns The branch, none when it holds no condition or an element the engine does not run, or a
+ *   refusal.
+ */
+const outcomeBranch = (
+  reading: ExpressionReading,
+  element: SourceElement,
+): Effect.Effect<Option.Option<Branch>, Refusal> =>
+  Effect.gen(function* readOutcomeBranch() {
+    const [test, ...body] = elementsOf(element);
+    if (test === undefined) {
+      return yield* reading.unread(element);
+    }
+
+    const when = yield* readExpression(reading, test);
+    const run = yield* outcomeRules(reading, body);
+
+    return Option.all([when, run]).pipe(Option.map(([read, then]) => branchOf(read, then)));
+  });
+
+/**
+ * Report whether a part of an outcome condition is a branch: a `qti-outcome-if` or a
+ * `qti-outcome-else-if`.
+ *
+ * @param part The part.
+ * @returns Whether it is one.
+ */
+const isOutcomeBranch = (part: SourceElement): boolean =>
+  isQti(part, "qti-outcome-if") || isQti(part, "qti-outcome-else-if");
+
+/**
+ * Read a `qti-outcome-condition`: its `qti-outcome-if` and each `qti-outcome-else-if` in order as
+ * its branches, and its first `qti-outcome-else` as its otherwise. Every other child is marked by
+ * its name.
+ *
+ * @param reading The processing's reading context.
+ * @param element The condition.
+ * @returns The rule, none when any part holds an element the engine does not run, or a refusal.
+ */
+const outcomeCondition = (
+  reading: ExpressionReading,
+  element: SourceElement,
+): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
+  Effect.gen(function* readOutcomeCondition() {
+    const parts = elementsOf(element);
+    const branches = yield* Effect.forEach(parts.filter(isOutcomeBranch), (part) =>
+      outcomeBranch(reading, part),
+    );
+    const otherwise = yield* Option.match(
+      Arr.findFirst(parts, (part) => isQti(part, "qti-outcome-else")),
+      {
+        onNone: () => Effect.succeed(Option.some(Option.none<readonly Rule[]>())),
+        onSome: (part) =>
+          Effect.map(outcomeRules(reading, elementsOf(part)), Option.map(Option.some)),
+      },
+    );
+    const strays = yield* Effect.forEach(
+      parts.filter((part) => !isOutcomeBranch(part) && !isQti(part, "qti-outcome-else")),
+      (part) => reading.unread(part),
+    );
+
+    return Option.map(
+      Option.all({ branches: Option.all(branches), otherwise, strays: Option.all(strays) }),
+      (read): readonly Rule[] => [
+        { branches: read.branches, kind: "condition", otherwise: read.otherwise },
+      ],
+    );
+  });
+
+/**
+ * Read a `qti-set-outcome-value` or a `qti-lookup-outcome-value`: the outcome it names and the one
+ * expression it holds.
+ *
+ * @param reading The processing's reading context.
+ * @param element The rule element.
+ * @param kind The rule's kind.
+ * @returns The rule, none when it does not hold exactly one expression or its expression holds an
+ *   element the engine does not run, or a refusal.
+ */
+const outcomeSetting = (
+  reading: ExpressionReading,
+  element: SourceElement,
+  kind: "lookup-outcome" | "set-outcome",
+): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
+  Effect.gen(function* readOutcomeSetting() {
+    const identifier = yield* identifierAttribute(reading.walk, element, "identifier");
+    const [operand, ...extra] = elementsOf(element);
+    if (operand === undefined || extra.length > 0) {
+      return yield* reading.unread(element);
+    }
+
+    const read = yield* readExpression(reading, operand);
+
+    return read.pipe(
+      Option.map((expression): readonly Rule[] => [{ expression, identifier, kind }]),
+    );
+  });
+
+/**
+ * Read one outcome rule element into the rules it runs: a `qti-outcome-condition`, a
+ * `qti-set-outcome-value`, a `qti-lookup-outcome-value` and a `qti-exit-test` are one rule each,
+ * and a `qti-outcome-processing-fragment` is its own rules, read in place, nested fragments
+ * included. An XInclude `include` is never fetched (S-6): it is marked `xi:include` at its path.
+ * Any other element is marked by its name.
+ *
+ * @param reading The processing's reading context.
+ * @param element The rule element.
+ * @returns The rules, none when it holds an element the engine does not run, or a refusal.
+ */
+const outcomeRule = (
+  reading: ExpressionReading,
+  element: SourceElement,
+): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> => {
+  if (element.namespace === xincludeNamespace && element.local === "include") {
+    return reading.unread(element, includeMark);
+  }
+
+  if (isQti(element, "qti-outcome-processing-fragment")) {
+    return outcomeRules(reading, elementsOf(element));
+  }
+
+  if (isQti(element, "qti-exit-test")) {
+    return Effect.succeed(Option.some<readonly Rule[]>([{ kind: "exit" }]));
+  }
+
+  if (isQti(element, "qti-set-outcome-value")) {
+    return outcomeSetting(reading, element, "set-outcome");
+  }
+
+  if (isQti(element, "qti-lookup-outcome-value")) {
+    return outcomeSetting(reading, element, "lookup-outcome");
+  }
+
+  return isQti(element, "qti-outcome-condition")
+    ? outcomeCondition(reading, element)
+    : reading.unread(element);
+};
+
+/**
+ * A test's outcome processing as read: its state, and the marks it gives, in reading order.
+ */
+interface ReadProcessing {
+  readonly marks: readonly MarkedFeature[];
+  readonly outcomeProcessing: OutcomeProcessing;
+}
+
+/**
+ * Read a test's `qti-outcome-processing` into the rules it runs.
+ *
+ * Its rules are read into the item model's {@link Rule} union, each expression through the
+ * registry's generic reader. It is `marked`, and nothing is refused, when the engine cannot run
+ * it: an element the reader marks at its path (an expression kind the registry has not landed, an
+ * `xi:include`, a rule of a malformed shape), or a name the engine does not hold in a test
+ * ({@link unheldNames}, and a `qti-test-variables` that names `duration`,
+ * {@link collectsDurations}), each the mark `variable:<name>` at the processing element's path, as
+ * the item model marks an item's. Otherwise it `runs` with its rules.
+ *
+ * @param build The build.
+ * @param element The `qti-outcome-processing` element.
+ * @param names What the processing resolves a name against.
+ * @returns The state and its marks, the processing element's own first; or the refusal an
+ *   attribute gives, such as `value-type` for a `qti-base-value` outside its lexical space.
+ */
+const outcomeProcessingOf = (
+  build: ModelWalk,
+  element: SourceElement,
+  names: ProcessingNames,
+): Effect.Effect<ReadProcessing, Refusal> =>
+  Effect.gen(function* readOutcomeProcessing() {
+    const recorded: MarkedFeature[] = [];
+    const tree = yield* outcomeRules(
+      processingReading(build, names.named, recorded),
+      elementsOf(element),
+    );
+    const unheld = new Set(Option.isSome(tree) ? unheldNames(tree.value, names) : []);
+    if (collectsDurations(element)) {
+      unheld.add("duration");
+    }
+
+    const path = pathOf(build, element);
+    const marks: readonly MarkedFeature[] = [
+      ...Array.from(unheld, (name): MarkedFeature => ({
+        feature: `variable:${name}`,
+        path,
+        shown: "mark",
+      })),
+      ...recorded,
+    ];
+
+    return {
+      marks,
+      outcomeProcessing:
+        Option.isSome(tree) && marks.length === 0
+          ? { kind: "runs", rules: tree.value }
+          : { kind: "marked" },
+    };
+  });
+
+/**
  * Build the test model of a valid `qti-assessment-test`.
  *
  * The parts, their sections and item references are read in document order; a
  * `qti-assessment-section-ref` and an `xi:include` are marked and left out, and every other
  * `testMarks` feature is marked and left out of the tree or, as `allow-comment` and a negative
  * `max-attempts`, held as written. Each `qti-item-session-control` attribute is held as written or
- * absent. The test's outcome declarations are held and marked as the item model holds and marks an
- * item's.
+ * absent, and each item reference's weights and variable mappings are read. The test's outcome
+ * declarations are held and marked as the item model holds and marks an item's. Its outcome
+ * processing is `absent` when it has none, `marked` when the engine cannot run it
+ * ({@link outcomeProcessingOf}), and `runs` with its rules otherwise; nothing in it is refused but
+ * an attribute outside its type.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The test, or the refusal `value-type` at the first typed value outside its lexical
@@ -605,13 +1232,27 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
     const parts = yield* Effect.forEach(childrenNamed(root, "qti-test-part"), (part) =>
       testPart(build, part),
     );
+    const processing = Arr.head(childrenNamed(root, "qti-outcome-processing"));
+    const read = yield* Option.match(processing, {
+      onNone: () =>
+        Effect.succeed<ReadProcessing>({ marks: [], outcomeProcessing: { kind: "absent" } }),
+      onSome: (element) =>
+        outcomeProcessingOf(build, element, processingNamesOf(root, outcomes, parts)),
+    });
+    const placed = new Map<SourceElement, readonly MarkedFeature[]>(
+      Option.match(processing, {
+        onNone: () => [],
+        onSome: (element) => [[element, read.marks]],
+      }),
+    );
 
     return {
       document: source.location,
       identifier,
+      outcomeProcessing: read.outcomeProcessing,
       outcomes,
       parts,
       title,
-      unsupported: marksOf(source),
+      unsupported: marksOf(source, placed),
     };
   });
