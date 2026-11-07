@@ -632,13 +632,13 @@ const ssmlNames = [
 ] as const;
 
 /**
- * The names of the eight `data-*` fixtures of phase 8's stage N (spec 5.3): five positives and
- * three negatives. `cut-data-dash` and `cut-data-attributes` are the corpus's two items with custom
+ * The names of the eight `data-*` fixtures of phase 8's stage N (spec 5.3): four positives and four
+ * negatives. `cut-data-dash` and `cut-data-attributes` are the corpus's two items with custom
  * `data-*` attributes, cut; `data-custom` puts the name class through `simple` (every host kind,
- * every name shape, every value shape); `data-entity` holds an entity reference in a value;
- * `data-non-ascii` is a name with a non-ASCII letter, which reading 13 admits. The negatives break
- * the name language, `data-uppercase` and `data-bare-prefix`, or name a host that does not admit
- * the class, `data-item-body`.
+ * every name shape, every value shape); `data-entity` holds an entity reference in a value; The
+ * negatives break the name language, `data-non-ascii` (a name with a non-ASCII letter, which the
+ * information model's pattern bars, reading 13), `data-uppercase` and `data-bare-prefix`, or name a
+ * host that does not admit the class, `data-item-body`.
  */
 const dataNames = [
   "cut-data-dash",
@@ -6461,7 +6461,8 @@ const dataTen = `<p ${Array.from({ length: 10 }, (_, index) => `data-k${String(i
  *   and custom where it does not; ten names on one element; and {@link dataCustomValues}.
  * - `data-entity` is `doctype` with `data-org="&org;"` on the prompt, the entity declared in the
  *   internal subset.
- * - `data-non-ascii` is `data-é="x"` on a `p`, a name HTML's rule and reading 13 admit.
+ * - `data-non-ascii` is `data-é="x"` on a `p`, a name with a non-ASCII letter, which the information
+ *   model's pattern bars (reading 13).
  * - `data-uppercase` is `data-Group="g"` on `qti-choice-interaction`, `data-bare-prefix` is
  *   `data-="x"` on a `p`, and `data-item-body` is `data-x="1"` on `qti-item-body`.
  */

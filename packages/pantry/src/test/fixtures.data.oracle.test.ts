@@ -52,16 +52,14 @@ interface Expectation {
 }
 
 /**
- * The five positives of phase 8's stage N (spec 5.3 and decision 324), each with a passage unique
- * to it among the five. `data-non-ascii` is a positive: no standard bans `data-é`, and reading 13
- * admits it.
+ * The four positives of phase 8's stage N (spec 5.3 and decision 324), each with a passage unique
+ * to it among the four.
  */
 const positives: readonly Expectation[] = [
   { marker: 'data-group-name="group1"', name: "cut-data-dash" },
   { marker: 'use="instructions" view="candidate"', name: "cut-data-attributes" },
   { marker: 'data-qti-suppress-tts="true"', name: "data-custom" },
   { marker: 'data-org="&org;"', name: "data-entity" },
-  { marker: 'data-é="x"', name: "data-non-ascii" },
 ];
 
 /**
@@ -76,11 +74,13 @@ interface Refusal {
 }
 
 /**
- * The three negatives: two names the class's language refuses, and a name on an element that
+ * The four negatives: three names the class's language refuses (`data-é` among them, which
+ * reading 13's pattern bars), and a name on an element that
  * admits no `data-*` attribute.
  */
 const negatives: readonly Refusal[] = [
   { name: "data-uppercase", reason: "data-name", rule: "unmodeled-vocabulary" },
+  { name: "data-non-ascii", reason: "data-name", rule: "unmodeled-vocabulary" },
   { name: "data-bare-prefix", reason: "data-name", rule: "unmodeled-vocabulary" },
   { name: "data-item-body", reason: "unadmitted", rule: "attribute-admission" },
 ];
