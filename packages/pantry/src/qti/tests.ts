@@ -475,6 +475,12 @@ export const SectionOrdering = relation(
  *   it is placed in, its parent's: `part`, `replaced` (its parent section's `replacing`),
  *   `parentMixes` and `parentLooseChain`.
  *
+ * Its `part` is the test part it sits in: its parent section's under a section, its parent under a
+ * test part, and its own document under any other parent (an item's body or processing, a
+ * fragment's content, a test's feedback), where its placement takes its placing instance's part
+ * ({@link placedScope}). Only a section's scope is replaced, mixed or loose, so a site under any
+ * other parent is none of them.
+ *
  * The document its href names is its {@link SiteTarget}, a row of its own, since a href may name
  * none (spec reading 115).
  */
@@ -1459,7 +1465,15 @@ export const testOverlayLaws = [
       s.or(
         s.eq(s.parentKind, sectionKind),
         s.and(
+          s.eq(s.parentKind, partKind),
           s.eq(s.part, s.parent),
+          s.eq(s.replaced, false),
+          s.eq(s.parentMixes, false),
+          s.eq(s.parentLooseChain, false),
+        ),
+        s.and(
+          s.not(s.in(s.parentKind, [sectionKind, partKind])),
+          s.eq(s.part, s.document),
           s.eq(s.replaced, false),
           s.eq(s.parentMixes, false),
           s.eq(s.parentLooseChain, false),
@@ -1523,14 +1537,16 @@ type InstanceRow = RowScalars<typeof Instance>;
  * State that an instance's scope is its site's and its parent's: its test part the site's where
  * the site's document has one, else its parent's; a replacement above it at its site or above its
  * parent; and its order drawn where the site's parent's is, or where the site's parent is loose to
- * its document's root and its parent's order is drawn.
+ * its document's root and its parent's order is drawn. Its document's root is any kind its site
+ * may stand for: a section ref's is a section ("Document entry"), and an include's the root its
+ * parent admits ("Include root", spec reading 114), which an item's body, its processing or a
+ * fragment includes as well as a section does.
  *
  * @param i - The row.
  * @returns The predicate.
  */
 const placedScope = (i: InstanceRow) =>
   i.and(
-    i.eq(i.rootKind, sectionKind),
     i.or(
       i.and(i.eq(i.sitePart, i.parentDocument), i.eq(i.part, i.parentPart)),
       i.and(i.ne(i.sitePart, i.parentDocument), i.eq(i.part, i.sitePart)),
