@@ -4,8 +4,8 @@ import { decodeRecord } from "#plate/codec/record.ts";
 import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { score } from "#plate/index.ts";
-import type { Accepted } from "#plate/index.ts";
+import { begin, score, solution } from "#plate/index.ts";
+import type { Accepted, StoredRecord } from "#plate/index.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -18,15 +18,15 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { outcomeDefaults } from "#plate/model/record.ts";
-import { format, trimXmlSpace } from "#plate/model/values.ts";
+import { format, isNull, trimXmlSpace } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
-import { acceptedOf, openCorpus } from "#plate/test/sweep.ts";
+import { acceptedOf, openCorpus, sweepInstance, sweepSeeds, templated } from "#plate/test/sweep.ts";
 import { templatePrefixes } from "#plate/vocabulary.ts";
 
 /**
- * Opening the corpus (about 800 members) and scoring each templated item three times runs in
- * seconds here; the bound leaves room for a slow machine without letting a hung run stall the
- * suite.
+ * Opening the corpus (about 800 members) and scoring each item a built-in template processes three
+ * times, an item whose template processing runs once more under each sweep seed, runs in seconds
+ * here; the bound leaves room for a slow machine without letting a hung run stall the suite.
  */
 const sweepTimeoutMs = 600_000;
 
@@ -80,7 +80,9 @@ type Bound =
 
 /**
  * An item the sweep scores: an accepted item whose processing runs by a built-in template and
- * whose `RESPONSE` declares a correct response and is bound to one interaction that renders.
+ * whose `RESPONSE` has a correct response and is bound to one interaction that renders. An item
+ * whose template processing runs is scored once under each sweep seed, over the record `begin`
+ * starts under it, and its correct response is the one `solution` reads from that record.
  */
 interface Scored {
   readonly accepted: Accepted;
@@ -89,6 +91,16 @@ interface Scored {
   readonly interaction: Bound;
   readonly kind: "scored";
   readonly location: string;
+  /**
+   * The record every attempt is scored over: `begin`'s under {@link Scored.seed} for an item whose
+   * template processing runs; none for any other, which `score` starts from its declared defaults.
+   */
+  readonly record: Option.Option<StoredRecord>;
+  /**
+   * The sweep seed the record was begun under, which a failure names so the run repeats; none for
+   * an item whose template processing does not run.
+   */
+  readonly seed: Option.Option<string>;
   readonly template: BuiltIn;
 }
 
@@ -99,7 +111,22 @@ interface Skipped {
   readonly kind: "skipped";
   readonly location: string;
   readonly reasons: readonly string[];
+  /**
+   * The sweep seed the item's record was begun under, which a failure names; none for an item
+   * whose template processing does not run.
+   */
+  readonly seed: Option.Option<string>;
   readonly template: BuiltIn;
+}
+
+/**
+ * The record an item whose template processing runs is scored over under one sweep seed: the form
+ * the host stores, which `score` takes, and the correct responses `solution` reads from it.
+ */
+interface Begun {
+  readonly correct: Readonly<Record<string, Value>>;
+  readonly record: StoredRecord;
+  readonly seed: string;
 }
 
 /**
@@ -171,24 +198,45 @@ const interactionsOf = (nodes: readonly BodyNode[]): readonly Bound[] =>
   });
 
 /**
- * Decide whether the sweep scores an accepted item its built-in template processes.
+ * Decide whether the sweep scores an accepted item its built-in template processes, from its
+ * declared correct response, or, for an item whose template processing runs, over a record `begin`
+ * started, from the correct response `solution` reads from that record.
  *
  * @param location The item's corpus path.
  * @param accepted The accepted item.
  * @param template The template its processing names.
+ * @param start The record begun under a sweep seed for an item whose template processing runs;
+ *   none for any other.
  * @returns The item to score, or the item skipped with every reason.
  */
-const classify = (location: string, accepted: Accepted, template: BuiltIn): Scored | Skipped => {
+const classify = (
+  location: string,
+  accepted: Accepted,
+  template: BuiltIn,
+  start: Option.Option<Begun>,
+): Scored | Skipped => {
   const { item } = accepted;
   const declaration = Option.fromUndefinedOr(item.responses.get(response));
+  const correct = Option.match(start, {
+    onNone: () => declaration.pipe(Option.flatMap((declared) => declared.correct)),
+    onSome: (started) =>
+      Option.fromUndefinedOr(started.correct[response]).pipe(
+        Option.filter((value) => !isNull(value)),
+      ),
+  });
+  const seed = start.pipe(Option.map((started) => started.seed));
   const bound = interactionsOf(item.body).filter(
     (interaction) => interaction.response === response,
   );
   const [interaction] = bound;
   const reasons = [
     ...(Option.isNone(declaration) ? [`${response} is not a response the model holds`] : []),
-    ...(Option.isSome(declaration) && Option.isNone(declaration.value.correct)
-      ? [`${response} declares no correct response`]
+    ...(Option.isSome(declaration) && Option.isNone(correct)
+      ? [
+          Option.isSome(start)
+            ? `solution gives ${response} no correct response under the record`
+            : `${response} declares no correct response`,
+        ]
       : []),
     ...(Option.isNone(item.processing) ? ["the engine does not run its response processing"] : []),
     ...(bound.length === 0 ? [`${response} is bound to no interaction that renders`] : []),
@@ -198,37 +246,92 @@ const classify = (location: string, accepted: Accepted, template: BuiltIn): Scor
   if (
     reasons.length > 0 ||
     Option.isNone(declaration) ||
-    Option.isNone(declaration.value.correct) ||
+    Option.isNone(correct) ||
     interaction === undefined
   ) {
-    return { kind: "skipped", location, reasons, template };
+    return { kind: "skipped", location, reasons, seed, template };
   }
 
   return {
     accepted,
-    correct: declaration.value.correct.value,
+    correct: correct.value,
     declaration: declaration.value,
     interaction,
     kind: "scored",
     location,
+    record: start.pipe(Option.map((started) => started.record)),
+    seed,
     template,
   };
 };
 
 /**
- * Every accepted corpus item whose processing runs by a built-in template, scored or skipped, in
- * the set's order. It runs once per test file, as `openCorpus` does.
+ * Begin an item's record under a sweep seed, with the fixed instance {@link sweepInstance}, and
+ * read the item's correct responses from it through `solution`, as a host would.
+ *
+ * @param accepted The item, whose template processing runs.
+ * @param seed The sweep seed.
+ * @returns The record and the correct responses it holds, or what failed.
  */
-const templated = Effect.runSync(
+const begun = (accepted: Accepted, seed: string): Result.Result<Begun, string> =>
+  Result.gen(function* beginRecord() {
+    const record = yield* Result.mapError(
+      begin(accepted, { instance: sweepInstance, seed }),
+      (error) => `begin failed: ${error._tag}: ${error.message}`,
+    );
+    const decoded = yield* Result.mapError(
+      decodeRecord(record),
+      (error) => `the record does not decode: ${error.message}`,
+    );
+
+    return { correct: solution(accepted, decoded), record, seed };
+  });
+
+/**
+ * Give the sweep's entries for one accepted item its built-in template processes: one scored from
+ * the item's declared defaults, or, for an item whose template processing runs, one over the record
+ * `begin` starts under each sweep seed.
+ *
+ * @param location The item's corpus path.
+ * @param accepted The accepted item.
+ * @param template The template its processing names.
+ * @returns The item's entries, each to score or skipped with every reason.
+ */
+const entriesOf = (
+  location: string,
+  accepted: Accepted,
+  template: BuiltIn,
+): readonly (Scored | Skipped)[] =>
+  templated(accepted)
+    ? sweepSeeds.map((seed) =>
+        Result.match(begun(accepted, seed), {
+          onFailure: (reason): Skipped => ({
+            kind: "skipped",
+            location,
+            reasons: [reason],
+            seed: Option.some(seed),
+            template,
+          }),
+          onSuccess: (start) => classify(location, accepted, template, Option.some(start)),
+        }),
+      )
+    : [classify(location, accepted, template, Option.none())];
+
+/**
+ * Every accepted corpus item whose processing runs by a built-in template, scored or skipped, in
+ * the set's order, an item whose template processing runs once under each sweep seed. It runs once
+ * per test file, as `openCorpus` does.
+ */
+const builtInItems = Effect.runSync(
   Effect.cached(
-    Effect.gen(function* templatedItems() {
+    Effect.gen(function* builtInItems() {
       const entries: (Scored | Skipped)[] = [];
       for (const member of yield* openCorpus) {
         const accepted = acceptedOf(member);
         if (Option.isSome(accepted)) {
           const template = builtInOf(yield* readSource(member.location, member.bytes));
           if (Option.isSome(template)) {
-            entries.push(classify(member.location, accepted.value, template.value));
+            entries.push(...entriesOf(member.location, accepted.value, template.value));
           }
         }
       }
@@ -239,11 +342,38 @@ const templated = Effect.runSync(
 );
 
 /**
+ * Report whether an entry is one the sweep scores.
+ *
+ * @param entry The entry.
+ * @returns Whether it is scored rather than skipped.
+ */
+const isScored = (entry: Scored | Skipped): entry is Scored => entry.kind === "scored";
+
+/**
  * The items the sweep scores.
  */
-const scoredItems = templated.pipe(
-  Effect.map((entries) => entries.filter((entry): entry is Scored => entry.kind === "scored")),
+const scoredItems = builtInItems.pipe(Effect.map((entries) => entries.filter(isScored)));
+
+/**
+ * The entries of the items whose template processing runs, one per item and sweep seed, scored or
+ * skipped.
+ */
+const templatedEntries = builtInItems.pipe(
+  Effect.map((entries) => entries.filter((entry) => Option.isSome(entry.seed))),
 );
+
+/**
+ * Name an entry as a failure names it: its corpus path and template, and the sweep seed its record
+ * was begun under where it has one, so the run repeats.
+ *
+ * @param entry The entry.
+ * @returns Its name.
+ */
+const placeOf = (entry: Scored | Skipped): string =>
+  Option.match(entry.seed, {
+    onNone: () => `${entry.location} (${entry.template})`,
+    onSome: (seed) => `${entry.location} (${entry.template}, seed ${JSON.stringify(seed)})`,
+  });
 
 /**
  * Report whether two single values are the same value: the same base type and the same lexical
@@ -594,7 +724,9 @@ const wrongOf = (scored: Scored): Result.Result<Value, string> => {
 };
 
 /**
- * Score one attempt from a fresh record and read `SCORE` from the record it returns.
+ * Score one attempt from the item's starting record, `begin`'s for an item whose template
+ * processing runs and its declared defaults for any other, and read `SCORE` from the record it
+ * returns.
  *
  * @param scored The item.
  * @param responses The responses, none for no response.
@@ -606,7 +738,7 @@ const scoreOf = (
 ): Result.Result<Numeric, string> =>
   Result.gen(function* scoreOnce() {
     const stored = yield* Result.mapError(
-      score(scored.accepted, responses),
+      score(scored.accepted, responses, Option.getOrUndefined(scored.record)),
       (error) => `score failed: ${error._tag}: ${error.message}`,
     );
     const record = yield* Result.mapError(
@@ -666,7 +798,7 @@ const sweepProblems = (
   problemsOf: (scored: Scored) => Result.Result<Option.Option<string>, string>,
 ): readonly string[] =>
   items.flatMap((scored) => {
-    const where = `${scored.location} (${scored.template})`;
+    const where = placeOf(scored);
 
     return Result.match(problemsOf(scored), {
       onFailure: (reason) => [`${where}: ${reason}`],
@@ -675,27 +807,66 @@ const sweepProblems = (
     });
   });
 
+/**
+ * Check that an item scores its correct response at its template's maximum.
+ *
+ * @param scored The item.
+ * @returns What fails, none when it holds, or why the check cannot run.
+ */
+const correctProblem = (scored: Scored): Result.Result<Option.Option<string>, string> =>
+  Result.gen(function* correctScore() {
+    const maximum = yield* maximumOf(scored);
+    const got = yield* scoreOf(scored, { [response]: scored.correct });
+
+    return compare(got, maximum) === 0
+      ? Option.none()
+      : Option.some(`the correct response scores ${got.value}, the maximum is ${maximum.value}`);
+  });
+
+/**
+ * Check that an item scores a constructed wrong response below its template's maximum.
+ *
+ * @param scored The item.
+ * @returns What fails, none when it holds, or why the check cannot run.
+ */
+const wrongProblem = (scored: Scored): Result.Result<Option.Option<string>, string> =>
+  Result.gen(function* wrongScore() {
+    const maximum = yield* maximumOf(scored);
+    const wrong = yield* wrongOf(scored);
+    const got = yield* scoreOf(scored, { [response]: wrong });
+
+    return compare(got, maximum) === -1
+      ? Option.none()
+      : Option.some(
+          `the wrong response ${JSON.stringify(wrong.values.map((single) => String(single.value)))} scores ${got.value}, not below the maximum ${maximum.value}`,
+        );
+  });
+
+/**
+ * Check that an item gives no response its template's NULL result.
+ *
+ * @param scored The item.
+ * @returns What fails, none when it holds, or why the check cannot run.
+ */
+const nullProblem = (scored: Scored): Result.Result<Option.Option<string>, string> =>
+  Result.gen(function* nullScore() {
+    const expected = yield* nullResultOf(scored);
+    const got = yield* scoreOf(scored, {});
+
+    return compare(got, expected) === 0
+      ? Option.none()
+      : Option.some(`no response scores ${got.value}, the NULL result is ${expected.value}`);
+  });
+
 describe("the scoring sweep over the corpus", { tags: ["corpus"] }, () => {
   it.effect(
     "[I-9b] each item a built-in template scores scores its correct response at the template's maximum",
     () =>
       Effect.gen(function* correctAtMaximum() {
         const items = yield* scoredItems;
-        const problems = sweepProblems(items, (scored) =>
-          Result.gen(function* correctScore() {
-            const maximum = yield* maximumOf(scored);
-            const got = yield* scoreOf(scored, { [response]: scored.correct });
-
-            return compare(got, maximum) === 0
-              ? Option.none()
-              : Option.some(
-                  `the correct response scores ${got.value}, the maximum is ${maximum.value}`,
-                );
-          }),
-        );
 
         assert.isNotEmpty(items, "no corpus item is scored by a built-in template");
-        assert.deepStrictEqual(problems, []);
+        assert.deepStrictEqual(sweepProblems(items, correctProblem), []);
       }),
     sweepTimeoutMs,
   );
@@ -704,21 +875,7 @@ describe("the scoring sweep over the corpus", { tags: ["corpus"] }, () => {
     "[I-9b] each item a built-in template scores scores a constructed wrong response below the maximum",
     () =>
       Effect.gen(function* wrongBelowMaximum() {
-        const problems = sweepProblems(yield* scoredItems, (scored) =>
-          Result.gen(function* wrongScore() {
-            const maximum = yield* maximumOf(scored);
-            const wrong = yield* wrongOf(scored);
-            const got = yield* scoreOf(scored, { [response]: wrong });
-
-            return compare(got, maximum) === -1
-              ? Option.none()
-              : Option.some(
-                  `the wrong response ${JSON.stringify(wrong.values.map((single) => String(single.value)))} scores ${got.value}, not below the maximum ${maximum.value}`,
-                );
-          }),
-        );
-
-        assert.deepStrictEqual(problems, []);
+        assert.deepStrictEqual(sweepProblems(yield* scoredItems, wrongProblem), []);
       }),
     sweepTimeoutMs,
   );
@@ -727,20 +884,36 @@ describe("the scoring sweep over the corpus", { tags: ["corpus"] }, () => {
     "[I-9b] each item a built-in template scores gives no response the template's NULL result",
     () =>
       Effect.gen(function* noResponse() {
-        const problems = sweepProblems(yield* scoredItems, (scored) =>
-          Result.gen(function* nullScore() {
-            const expected = yield* nullResultOf(scored);
-            const got = yield* scoreOf(scored, {});
+        assert.deepStrictEqual(sweepProblems(yield* scoredItems, nullProblem), []);
+      }),
+    sweepTimeoutMs,
+  );
 
-            return compare(got, expected) === 0
-              ? Option.none()
-              : Option.some(
-                  `no response scores ${got.value}, the NULL result is ${expected.value}`,
-                );
-          }),
+  it.effect(
+    "[I-5] each item a built-in template scores whose template processing runs is scored over begin's record under each sweep seed: the correct response solution reads from it at the maximum, a wrong one below it, and no response at the NULL result",
+    () =>
+      Effect.gen(function* templatedScores() {
+        const entries = yield* templatedEntries;
+        const items = entries.filter(isScored);
+        const skipped = entries.flatMap((entry) =>
+          entry.kind === "skipped"
+            ? [`${placeOf(entry)}: not scored: ${entry.reasons.join("; ")}`]
+            : [],
         );
 
-        assert.deepStrictEqual(problems, []);
+        assert.isNotEmpty(
+          items,
+          "no corpus item a built-in template scores has template processing that runs",
+        );
+        assert.deepStrictEqual(
+          [
+            ...skipped,
+            ...sweepProblems(items, correctProblem),
+            ...sweepProblems(items, wrongProblem),
+            ...sweepProblems(items, nullProblem),
+          ],
+          [],
+        );
       }),
     sweepTimeoutMs,
   );

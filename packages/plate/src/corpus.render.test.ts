@@ -8,12 +8,21 @@ import type { BodyNode, InlineChoiceInteraction } from "#plate/model/item.ts";
 import { refusalRules } from "#plate/validate/refusal.ts";
 import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
-import { acceptedOf, openCorpus, sweepInstance, threeStates } from "#plate/test/sweep.ts";
-import type { Member } from "#plate/test/sweep.ts";
+import {
+  acceptedOf,
+  openCorpus,
+  recordStates,
+  sweepInstance,
+  sweepSeeds,
+  templated,
+  threeStates,
+} from "#plate/test/sweep.ts";
+import type { Member, RecordState, RenderState } from "#plate/test/sweep.ts";
 
 /**
- * Opening the corpus (about 800 members) and rendering every accepted item in three states runs
- * in seconds here; the bound leaves room for a slow machine without letting a hung run stall the
+ * Opening the corpus (about 800 members) and rendering every accepted item in three states, an
+ * item whose template processing runs under each sweep seed's record and with none, runs in
+ * seconds here; the bound leaves room for a slow machine without letting a hung run stall the
  * suite.
  */
 const sweepTimeoutMs = 600_000;
@@ -117,7 +126,16 @@ const withheldNotices: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * One accepted member's render: its three states, or the error `render` gave.
+ * What can fail one render: `begin` starting a templated item's record or its decoding, or
+ * `render`.
+ */
+type RenderFailure =
+  | Result.Result.Failure<ReturnType<typeof recordStates>>
+  | Result.Result.Failure<ReturnType<typeof threeStates>>;
+
+/**
+ * One accepted member's render under one record state: its three states, or the error that failed
+ * them.
  */
 interface Rendering {
   readonly accepted: Accepted;
@@ -127,19 +145,58 @@ interface Rendering {
   readonly locale: Configuration["locale"];
   readonly location: string;
   /**
+   * The record state an item whose template processing runs rendered in: `begin`'s record under a
+   * sweep seed, or no record. None for any other item, which renders with no record.
+   */
+  readonly state: Option.Option<RecordState>;
+  /**
    * The notice of each printed variable, template block and template inline `redact` shows as a
    * notice ({@link withheldNotices}), which the verdict names none of.
    */
   readonly withheld: readonly string[];
-  readonly states: ReturnType<typeof threeStates>;
+  readonly states: Result.Result<readonly RenderState[], RenderFailure>;
 }
 
 /**
- * Render every accepted member in its three states.
+ * The state named when `begin` cannot start a templated item's records, or one does not decode.
+ */
+const unbegun: RecordState = { name: "begun under the sweep seeds", record: Option.none() };
+
+/**
+ * Render an accepted item in its three states, under a record state's record where it has one.
+ *
+ * @param accepted The accepted item.
+ * @param location Its corpus path.
+ * @param configuration The configuration every state renders with.
+ * @param state The record state, for an item whose template processing runs; none for any other.
+ * @returns The item's render.
+ */
+const renderingOf = (
+  accepted: Accepted,
+  location: string,
+  configuration: Configuration,
+  state: Option.Option<RecordState>,
+): Rendering => {
+  const record = Option.getOrUndefined(state.pipe(Option.flatMap((found) => found.record)));
+
+  return {
+    accepted,
+    locale: configuration.locale,
+    location,
+    state,
+    states: threeStates(accepted, configuration, record),
+    withheld: redact(accepted, record).notices.filter((feature) => withheldNotices.has(feature)),
+  };
+};
+
+/**
+ * Render every accepted member in its three states: an item whose template processing runs under
+ * the record `begin` starts under each sweep seed and with no record, every other item with no
+ * record.
  *
  * @param members The opened members.
  * @param configuration The configuration every state renders with.
- * @returns Each accepted member's render, in the set's order.
+ * @returns Each accepted member's renders, in the set's order.
  */
 const renderingsOf = (
   members: readonly Member[],
@@ -147,18 +204,41 @@ const renderingsOf = (
 ): readonly Rendering[] =>
   members.flatMap((member) =>
     Option.match(acceptedOf(member), {
-      onNone: () => [],
-      onSome: (accepted) => [
-        {
-          accepted,
-          locale: configuration.locale,
-          location: member.location,
-          states: threeStates(accepted, configuration),
-          withheld: redact(accepted).notices.filter((feature) => withheldNotices.has(feature)),
-        },
-      ],
+      onNone: (): readonly Rendering[] => [],
+      onSome: (accepted) =>
+        templated(accepted)
+          ? Result.match(recordStates(accepted), {
+              onFailure: (error): readonly Rendering[] => [
+                {
+                  accepted,
+                  locale: configuration.locale,
+                  location: member.location,
+                  state: Option.some(unbegun),
+                  states: Result.fail(error),
+                  withheld: [],
+                },
+              ],
+              onSuccess: (states) =>
+                states.map((state) =>
+                  renderingOf(accepted, member.location, configuration, Option.some(state)),
+                ),
+            })
+          : [renderingOf(accepted, member.location, configuration, Option.none())],
     }),
   );
+
+/**
+ * Name a render as a failure names it: its corpus path, and its record state where it has one, so
+ * the run repeats.
+ *
+ * @param rendering The render.
+ * @returns Its name.
+ */
+const placeOf = (rendering: Rendering): string =>
+  Option.match(rendering.state, {
+    onNone: () => rendering.location,
+    onSome: (state) => `${rendering.location} (${state.name})`,
+  });
 
 /**
  * Collect the problems one check finds in every state of every render, naming the member and the
@@ -174,12 +254,10 @@ const statesProblems = (
 ): readonly string[] =>
   renderings.flatMap((rendering) =>
     Result.match(rendering.states, {
-      onFailure: (error) => [
-        `${rendering.location}: render failed: ${error._tag}: ${error.message}`,
-      ],
+      onFailure: (error) => [`${placeOf(rendering)}: failed: ${error._tag}: ${error.message}`],
       onSuccess: (states) =>
         states.flatMap((state) => {
-          const where = `${rendering.location}, ${state.name}`;
+          const where = `${placeOf(rendering)}, ${state.name}`;
 
           return Option.match(rootOf(state.html), {
             onNone: () => [`${where}: the HTML is not exactly one element`],
@@ -432,8 +510,13 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
         const counted = verdictsOf(members).filter(
           ([, verdict]) => verdict.kind === "item" && acceptingVerdicts.has(verdict.verdict),
         );
+        const rendered = new Set(renderings.map((rendering) => rendering.location));
 
-        assert.lengthOf(renderings, counted.length, "every item's accepting verdict is rendered");
+        assert.strictEqual(
+          rendered.size,
+          counted.length,
+          "every item's accepting verdict is rendered",
+        );
         assert.deepStrictEqual(statesProblems(renderings, r1Problems), []);
       }),
     sweepTimeoutMs,
@@ -460,6 +543,44 @@ describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, (
 
         assert.isNotEmpty(renderings, "no accepted corpus item renders an Inline Choice");
         assert.deepStrictEqual(statesProblems(renderings, inlineChoiceProblems), []);
+      }),
+    sweepTimeoutMs,
+  );
+
+  it.effect(
+    "[I-5] each item whose template processing runs renders in three states under begin's record for each sweep seed and with no record, round-trips, shows exactly its notice-shown features as notices, passes checkTree at base level 2, and under a record shows none of its printed variables, template blocks and template inlines as a notice",
+    () =>
+      Effect.gen(function* templatedRenders() {
+        const renderings = renderingsOf(yield* openCorpus, yield* configure({})).filter(
+          (rendering) => templated(rendering.accepted),
+        );
+        const files = new Set(renderings.map((rendering) => rendering.location));
+        const uncounted = [...files].flatMap((location) => {
+          const states = renderings.filter((rendering) => rendering.location === location).length;
+
+          return states === sweepSeeds.length + 1
+            ? []
+            : [`${location}: rendered in ${String(states)} record states`];
+        });
+        const notices = renderings.flatMap((rendering) =>
+          Option.exists(rendering.state, (state) => Option.isSome(state.record)) &&
+          rendering.withheld.length > 0
+            ? [
+                `${placeOf(rendering)}: redact shows ${JSON.stringify(rendering.withheld)} as notices`,
+              ]
+            : [],
+        );
+
+        assert.isNotEmpty(files, "no accepted corpus item's template processing runs");
+        assert.deepStrictEqual(
+          [
+            ...uncounted,
+            ...notices,
+            ...statesProblems(renderings, r1Problems),
+            ...statesProblems(renderings, treeProblems),
+          ],
+          [],
+        );
       }),
     sweepTimeoutMs,
   );
