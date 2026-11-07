@@ -427,6 +427,22 @@ const anyNOf = (min: string, max: string): SourceElement =>
   el("qti-any-n", [attr("min", min), attr("max", max)], [baseValue("boolean", "true")]);
 
 /**
+ * Construct a `qti-printed-variable`.
+ *
+ * @param identifier Its `identifier`, as written.
+ * @param attributes Its other attributes, such as `base` and `index`, as written.
+ * @returns The printed variable.
+ */
+const printed = (
+  identifier: string,
+  attributes: Readonly<Record<string, string>> = {},
+): SourceElement =>
+  el("qti-printed-variable", [
+    attr("identifier", identifier),
+    ...Object.entries(attributes).map(([local, value]) => attr(local, value)),
+  ]);
+
+/**
  * The refusal of a read template processing may not make (P26).
  *
  * @param path The reading element's path.
@@ -2401,6 +2417,157 @@ describe("checkRules", () => {
           setTemplate("F", variable("F", "qti-default")),
           el("qti-template-constraint", [], [variable("B")]),
           setCorrect("RESPONSE"),
+        ),
+        [],
+      );
+    });
+  });
+
+  describe("a printed variable's references (pantry printed-variable-ref, R37 and R39)", () => {
+    const bodyPath = "qti-assessment-item/qti-item-body/p";
+
+    /**
+     * The declarations every case below may name: a single identifier `RESPONSE`, the string
+     * context variable `CONTEXT`, a float `SCORE` and an integer `COUNT` outcome, and the template
+     * variables `N` (single integer), `F` (single float) and `M` (multiple integer).
+     */
+    const declared = [
+      declaration("qti-context-declaration", "CONTEXT", "single", "string"),
+      response("RESPONSE", "single", "identifier"),
+      outcome("SCORE"),
+      outcome("COUNT", "integer"),
+      declaration("qti-template-declaration", "N", "single", "integer"),
+      declaration("qti-template-declaration", "F", "single", "float"),
+      declaration("qti-template-declaration", "M", "multiple", "integer"),
+    ];
+
+    /**
+     * Check an item with {@link declared}'s declarations whose body holds one paragraph of the
+     * given printed variables.
+     *
+     * @param variables The printed variables, in document order.
+     * @returns The refusals, reduced.
+     */
+    const printing = (...variables: readonly SourceElement[]) =>
+      judged(item(declared, [el("p", [], variables)]));
+
+    it("[I-5] refuses a printed variable whose identifier, base or index names nothing the item declares or builds in, at that attribute (pantry printed-variable-ref)", () => {
+      assert.deepStrictEqual(
+        printing(
+          printed("NOPE"),
+          printed("SCORE", { base: "RADIX" }),
+          printed("M", { index: "POSITION" }),
+        ),
+        (
+          [
+            ["1", "identifier", "NOPE"],
+            ["2", "base", "RADIX"],
+            ["3", "index", "POSITION"],
+          ] as const
+        ).map(([position, attribute, identifier]) => ({
+          detail: {
+            attribute,
+            element: "qti-printed-variable",
+            expected: "outcome template",
+            identifier,
+          },
+          path: `${bodyPath}/qti-printed-variable[${position}]/@${attribute}`,
+          rule: "undeclared-variable",
+        })),
+      );
+    });
+
+    it("[I-5] refuses a printed variable whose identifier names a response or a context variable, the built-ins numAttempts, duration and QTI_CONTEXT among them, with its kind and no base type (pantry printed-variable-ref, PrintedVariableRefKind; Mind amendment 1)", () => {
+      assert.deepStrictEqual(
+        printing(
+          printed("RESPONSE"),
+          printed("CONTEXT"),
+          printed("numAttempts"),
+          printed("duration"),
+          printed("QTI_CONTEXT"),
+        ),
+        (
+          [
+            ["1", "RESPONSE", "response"],
+            ["2", "CONTEXT", "context"],
+            ["3", "numAttempts", "response"],
+            ["4", "duration", "response"],
+            ["5", "QTI_CONTEXT", "context"],
+          ] as const
+        ).map(([position, identifier, variableKind]) => ({
+          detail: {
+            attribute: "identifier",
+            check: "reference",
+            element: "qti-printed-variable",
+            identifier,
+            source: "info.txt:70296",
+            variableKind,
+          },
+          path: `${bodyPath}/qti-printed-variable[${position}]/@identifier`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[I-5] refuses a printed variable's index naming a float or the built-in response numAttempts, and its base naming a multiple integer, a response or the built-in identifier completionStatus, where a single integer outcome or template variable is needed (pantry printed-variable-ref, PrintedVariableVarRefType; Mind amendment 1)", () => {
+      assert.deepStrictEqual(
+        printing(
+          printed("M", { index: "F" }),
+          printed("SCORE", { base: "M" }),
+          printed("COUNT", { base: "RESPONSE" }),
+          printed("M", { index: "numAttempts" }),
+          printed("COUNT", { base: "completionStatus" }),
+        ),
+        (
+          [
+            ["1", "index", "F"],
+            ["2", "base", "M"],
+            ["3", "base", "RESPONSE"],
+            ["4", "index", "numAttempts"],
+            ["5", "base", "completionStatus"],
+          ] as const
+        ).map(([position, attribute, identifier]) => ({
+          detail: {
+            attribute,
+            check: "reference",
+            element: "qti-printed-variable",
+            expectedBaseType: "integer",
+            identifier,
+          },
+          path: `${bodyPath}/qti-printed-variable[${position}]/@${attribute}`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[I-5] accepts a printed variable of an outcome or a template variable of any type, the built-in outcome completionStatus among them, a base or index naming a single integer outcome or template variable, and a base or index written as an integer (Mind amendment 1)", () => {
+      assert.deepStrictEqual(
+        printing(
+          printed("SCORE", { format: "%.1f" }),
+          printed("completionStatus"),
+          printed("F"),
+          printed(" M "),
+          printed("M", { index: "N" }),
+          printed("COUNT", { base: "COUNT", format: "%i" }),
+          printed("N", { base: " 16 ", format: "%i" }),
+          printed("M", { index: "-1" }),
+        ),
+        [],
+      );
+    });
+
+    it("[I-5] does not judge a printed variable in a stimulus, which declares no variable", () => {
+      assert.deepStrictEqual(
+        checkRules(
+          doc(
+            location,
+            el(
+              "qti-assessment-stimulus",
+              [attr("identifier", "stimulus"), attr("title", "Stimulus")],
+              [el("qti-stimulus-body", [], [el("p", [], [printed("NOPE")])])],
+            ),
+          ),
+          tables,
         ),
         [],
       );
