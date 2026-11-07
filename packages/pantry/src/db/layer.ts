@@ -5,8 +5,6 @@ import { Effect, FileSystem, Layer, Schema } from "effect";
 import { loginConnection } from "#pantry/db/connection.ts";
 import { SnapshotLoadError, SnapshotText, snapshotPath } from "#pantry/db/snapshot.ts";
 
-export { SnapshotLoadError } from "#pantry/db/snapshot.ts";
-
 /**
  * The PostgreSQL role grizzle installs for the author login, `<schema>__<login>` (`qti` and
  * `author_app`), which names the password file scripts/db.sh writes for it.
