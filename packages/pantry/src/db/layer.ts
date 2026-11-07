@@ -1,38 +1,11 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 import { DbLayer } from "@bjornpagen/grizzle";
 import type { PoolBounds } from "@bjornpagen/grizzle";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { Effect, FileSystem, Layer, Schema } from "effect";
-import { fileURLToPath } from "node:url";
 import { loginConnection } from "#pantry/db/connection.ts";
+import { SnapshotLoadError, SnapshotText, snapshotPath } from "#pantry/db/snapshot.ts";
 
-/**
- * The migrations snapshot could not be read from disk or is not a JSON object with a `fingerprint`.
- * The usual cause is a checkout made without git-lfs, which leaves a pointer file where the
- * snapshot belongs.
- */
-export class SnapshotLoadError extends Schema.TaggedError<SnapshotLoadError>()(
-  "SnapshotLoadError",
-  { path: Schema.String, reason: Schema.Unknown },
-) {
-  /**
-   * The file, why that is likely, and the command that fixes it.
-   */
-  override get message(): string {
-    return `Cannot read the migrations snapshot at ${this.path}. Without git-lfs it checks out as a pointer file. Run \`git lfs pull\` in this checkout, then try again.`;
-  }
-}
-
-/**
- * The snapshot file's text as the JSON value `DbLayer.make` takes: an object with its `fingerprint`
- * and every other key kept, because grizzle parses the whole form itself.
- */
-const SnapshotText = Schema.fromJsonString(
-  Schema.StructWithRest(Schema.Struct({ fingerprint: Schema.String }), [
-    Schema.Record(Schema.String, Schema.Json),
-  ]),
-);
+export { SnapshotLoadError } from "#pantry/db/snapshot.ts";
 
 /**
  * The PostgreSQL role grizzle installs for the author login, `<schema>__<login>` (`qti` and
@@ -73,7 +46,6 @@ export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
     const fs = yield* FileSystem.FileSystem;
     const connection = yield* loginConnection(authorAppRole);
-    const snapshotPath = fileURLToPath(import.meta.resolve("#migrations/qti/snapshot.json"));
     const snapshot = yield* fs.readFileString(snapshotPath).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(SnapshotText)),
       Effect.mapError((reason) => new SnapshotLoadError({ path: snapshotPath, reason })),
