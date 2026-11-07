@@ -18,9 +18,9 @@
  * revisits why. Compiling the same program again would cost about 55 s each at grizzle `4b155e8`
  * (measured 2026-11-06 at load average 60 to 70) and test nothing new.
  *
- * The list is qti's side of the program only. A difference that lived in grizzle's own lowering of
- * one list would not show in it; grizzle states no public canonical form of a Description to key
- * on instead. The layer needs the committed snapshot to be the schema's, as every `DbLayer` does,
+ * The list is a complete key: a ChangeSet's compiled program depends only on its Description and
+ * the schema, never on the rows bound at run time, so two packages with one list have one program.
+ * The layer needs the committed snapshot to be the schema's, as every `DbLayer` does,
  * and the import's write program is also declared in the author login's workload
  * (`#pantry/qti/logins.ts` `importWork`).
  */
