@@ -77,7 +77,6 @@ import {
   contentEnds,
   contentFollows,
   contentModelOf,
-  contentStep,
   noSharedModel,
 } from "#pantry/grammar/content.ts";
 import { mathArities, mathQualifiers } from "#pantry/grammar/expression.ts";
@@ -422,6 +421,46 @@ const admittedPosition =
     Option.map(grammar.admission.lookup(key), ({ position }) => Number(position));
 
 /**
+ * Step a child by its installed cells, as the oracle reads C5 itself beside the host's
+ * `placedStep`: its `Admission` position where `Follow` allows it from `was`; for a cell of
+ * position 0, the one position its kind shares in the family's model that `Follow` allows, or `was`
+ * for a kind that shares none, as character data.
+ *
+ * @param grammar - The composed grammar.
+ * @param key - The child's `Admission` key.
+ * @param was - The predecessor's state, 0 for the first child.
+ * @returns The child's state; none for a child its parent does not admit, or one no position of
+ *   which follows `was`.
+ */
+const cellStepOf = (grammar: ComposedGrammar, key: ChildKey, was: number): Option.Option<number> =>
+  Option.flatMap(admittedPosition(grammar)(key), (position) => {
+    const follows = (to: number): boolean =>
+      contentFollows(grammar.content, {
+        from: String(was),
+        parent: key.parent,
+        to: String(to),
+        version: key.version,
+      });
+
+    if (position !== 0) {
+      return Option.liftPredicate(position, follows);
+    }
+
+    const shared = grammar.content.sharedPositions({
+      kind: key.child,
+      parent: key.parent,
+      version: key.version,
+    });
+    if (shared.length === 0) {
+      return Option.some(was);
+    }
+
+    const next = shared.filter(follows);
+
+    return next.length === 1 ? Option.fromNullishOr(next[0]) : Option.none();
+  });
+
+/**
  * Read the key of a node's `Admission` cell.
  *
  * @param node - The node.
@@ -436,9 +475,9 @@ const childKeyOf = (node: FoldedNode<Composed>): ChildKey => ({
 /**
  * Derive a node's generated fields from its own fields and the closed relations, as PostgreSQL
  * does (E1), from the node's `Admission` cell: `ancestry = parentAncestry | Enters[kind]`, `state`
- * the cell's position where it names one, else `contentStep` of `#pantry/grammar/content.ts` over
- * `Symbol` and `Follow` (the predecessor's state for character data), an absent cell or step
- * leaving `was`, and `elements = elementsWas + IsElement[kind]`.
+ * the cell's position where it names one, else the oracle's own step over the shared positions
+ * and `Follow` ({@link cellStepOf}; the predecessor's state for character data), an absent cell or
+ * step leaving `was`, and `elements = elementsWas + IsElement[kind]`.
  *
  * @param node - The node.
  * @param grammar - The composed grammar.
@@ -457,7 +496,7 @@ const derivationOf = (node: FoldedNode<Composed>, grammar: ComposedGrammar): Nod
       onNone: () => node.was,
       onSome: (position) =>
         position === 0
-          ? Option.getOrElse(contentStep(grammar.content, admitted, key, node.was), () => node.was)
+          ? Option.getOrElse(cellStepOf(grammar, key, node.was), () => node.was)
           : position,
     }),
   };
@@ -1108,12 +1147,11 @@ const nodeLaws: readonly NodeLaw[] = [
   },
   {
     breaks: (node, _view, { grammar }) => {
-      const admitted = admittedPosition(grammar);
       const key = childKeyOf(node);
 
-      return Option.isNone(admitted(key))
+      return Option.isNone(admittedPosition(grammar)(key))
         ? Option.none()
-        : unless(Option.isSome(contentStep(grammar.content, admitted, key, node.was)), () => ({
+        : unless(Option.isSome(cellStepOf(grammar, key, node.was)), () => ({
             was: String(node.was),
           }));
     },
