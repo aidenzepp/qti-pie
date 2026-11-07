@@ -4,9 +4,10 @@
  * sends to a page, and {@link decodeRedacted} checks that form before `render` takes it.
  *
  * A `Redacted` holds Effect `Option`s and `bigint` counts, which `JSON.stringify` cannot write, so
- * this file owns the one wire form: an `Option` is an optional key, absent when none, and a count
- * is its decimal digits. `decodeRedacted` is the second way to a `Redacted`, beside
- * `redactItem`'s allowlisted copy, and brands only what its Schema checked.
+ * this file owns the one wire form: an `Option` is an optional key, absent when none, a count is
+ * its decimal digits, and a body node holds no path into its source document ({@link NoPath}).
+ * `decodeRedacted` is the second way to a `Redacted`, beside `redactItem`'s allowlisted copy, and
+ * brands only what its Schema checked.
  *
  * No browser module imports this file, so Schema stays out of the browser bundle.
  *
@@ -37,13 +38,12 @@ interface BodyAttributeJson {
 }
 
 /**
- * An HTML element of the body in the JSON form.
+ * An HTML element of the body in the JSON form, with no path ({@link NoPath}).
  */
 interface BodyElementJson {
   readonly attributes: readonly BodyAttributeJson[];
   readonly children: readonly BodyNodeJson[];
   readonly kind: "element";
-  readonly path: string;
   readonly tag: string;
 }
 
@@ -65,7 +65,8 @@ interface SimpleChoiceJson {
 }
 
 /**
- * A Choice in the JSON form: its counts as decimal digits, and each `Option` an optional key.
+ * A Choice in the JSON form: its counts as decimal digits, each `Option` an optional key, and no
+ * path ({@link NoPath}).
  */
 interface ChoiceInteractionJson {
   readonly ariaLabel?: string;
@@ -78,15 +79,14 @@ interface ChoiceInteractionJson {
   readonly messages: { readonly max?: string; readonly min?: string };
   readonly minChoices: string;
   readonly orientation?: string;
-  readonly path: string;
   readonly prompt?: readonly BodyNodeJson[];
   readonly response: string;
   readonly shuffle: boolean;
 }
 
 /**
- * An Inline Choice in the JSON form: `minChoices` as decimal digits, and each `Option` an optional
- * key, its Label among them.
+ * An Inline Choice in the JSON form: `minChoices` as decimal digits, each `Option` an optional key,
+ * its Label among them, and no path ({@link NoPath}).
  */
 interface InlineChoiceInteractionJson {
   readonly ariaLabel?: string;
@@ -97,7 +97,6 @@ interface InlineChoiceInteractionJson {
   readonly label?: readonly BodyNodeJson[];
   readonly messages: { readonly min?: string };
   readonly minChoices: string;
-  readonly path: string;
   readonly placeholder?: string;
   readonly required: boolean;
   readonly response: string;
@@ -105,8 +104,8 @@ interface InlineChoiceInteractionJson {
 }
 
 /**
- * A Text Entry in the JSON form: `expectedLength` as decimal digits, and each `Option` an optional
- * key.
+ * A Text Entry in the JSON form: `expectedLength` as decimal digits, each `Option` an optional key,
+ * and no path ({@link NoPath}).
  */
 interface TextEntryInteractionJson {
   readonly ariaLabel?: string;
@@ -116,7 +115,6 @@ interface TextEntryInteractionJson {
   readonly class: string;
   readonly expectedLength?: string;
   readonly kind: "text-entry";
-  readonly path: string;
   readonly patternMask?: string;
   readonly patternMaskMessage?: string;
   readonly placeholder?: string;
@@ -138,12 +136,11 @@ interface ExtendedTextInteractionJson extends Omit<TextEntryInteractionJson, "ki
 }
 
 /**
- * A body part plate does not render, in the JSON form.
+ * A body part plate does not render, in the JSON form, with no path ({@link NoPath}).
  */
 interface UnsupportedJson {
   readonly feature: string;
   readonly kind: "unsupported";
-  readonly path: string;
 }
 
 /**
@@ -172,6 +169,26 @@ const BodyNodes = Schema.Array(
  * A text the author may omit: an optional key, absent when none.
  */
 const OptionalText = Schema.OptionFromOptionalKey(Schema.String);
+
+/**
+ * A body node's path into its source document, which the JSON form never holds (review P2-6). A
+ * path names where a node sits among its siblings, so the path of a shown template block's
+ * content, `…/qti-template-block[2]/qti-content-body/p`, or of a kept choice's content,
+ * `…/qti-simple-choice[3]/span`, would tell a page that hidden template content exists and where;
+ * and nothing after redaction reads a path (the emitter, the interactions and the form do not).
+ *
+ * Encoding writes no `path` key, and decoding gives every node the path `""`. A `path` key in the
+ * input, as JSON written before the form dropped it holds, is dropped whatever its value, as
+ * {@link decodeRedacted} drops any key the form does not hold. The type side keeps `path:
+ * string`, so the codec's body-node union stays the model's `BodyNode`, and `redact`'s own result
+ * keeps its paths on the server.
+ */
+const NoPath = Schema.optionalKey(Schema.Unknown).pipe(
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.succeed(""),
+    encode: SchemaGetter.omit(),
+  }),
+);
 
 /**
  * `max-choices` and `min-choices`: a count from 0 to 2^63-1, held exactly and written as its
@@ -315,7 +332,7 @@ const textControlFields = {
   baseType: Schema.Literals(["float", "integer", "string"]),
   class: Schema.String,
   expectedLength: OptionalCount,
-  path: Schema.String,
+  path: NoPath,
   patternMask: OptionalText,
   patternMaskMessage: OptionalText,
   placeholder: OptionalText,
@@ -324,15 +341,16 @@ const textControlFields = {
 
 /**
  * The Schema of one body node, a union over the ten kinds of `BodyNode`, every field included; its
- * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no printed
- * variable ({@link NoPrintedVariable}) and no template block or inline ({@link NoTemplateContent}).
+ * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no path
+ * ({@link NoPath}), no printed variable ({@link NoPrintedVariable}) and no template block or inline
+ * ({@link NoTemplateContent}).
  */
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
     attributes: Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.String })),
     children: BodyNodes,
     kind: Schema.Literal("element"),
-    path: Schema.String,
+    path: NoPath,
     tag: Schema.String,
   }),
   Schema.Struct({ kind: Schema.Literal("text"), text: Schema.String }),
@@ -347,7 +365,7 @@ const BodyNodeSchema = Schema.Union([
     messages: Schema.Struct({ max: OptionalText, min: OptionalText }),
     minChoices: ChoiceCount,
     orientation: OptionalText,
-    path: Schema.String,
+    path: NoPath,
     prompt: Schema.OptionFromOptionalKey(BodyNodes),
     response: Schema.String,
     shuffle: Schema.Boolean,
@@ -361,7 +379,7 @@ const BodyNodeSchema = Schema.Union([
     label: Schema.OptionFromOptionalKey(BodyNodes),
     messages: Schema.Struct({ min: OptionalText }),
     minChoices: ChoiceCount,
-    path: Schema.String,
+    path: NoPath,
     placeholder: OptionalText,
     required: Schema.Boolean,
     response: Schema.String,
@@ -381,7 +399,7 @@ const BodyNodeSchema = Schema.Union([
   Schema.Struct({
     feature: Schema.String,
     kind: Schema.Literal("unsupported"),
-    path: Schema.String,
+    path: NoPath,
   }),
   NoPrintedVariable,
   NoTemplateContent,
@@ -417,8 +435,8 @@ export const RedactedSchema = Schema.Struct({
 
 /**
  * A redacted item in the form a host sends to a page: plain JSON, which `JSON.stringify` writes
- * without loss. An `Option` is an optional key, absent when none, and a count is its decimal
- * digits.
+ * without loss. An `Option` is an optional key, absent when none, a count is its decimal digits,
+ * and a body node holds no path ({@link NoPath}).
  */
 export type RedactedJson = typeof RedactedSchema.Encoded;
 
@@ -468,9 +486,10 @@ export class InvalidRedacted extends Data.TaggedError("InvalidRedacted")<{
  * Write a redacted item in the JSON form a host sends to a page.
  *
  * @param item The item `redact` gave.
- * @returns The {@link RedactedJson}, which `JSON.stringify` writes without loss and
- *   {@link decodeRedacted} reads back to `item`, or {@link InvalidRedacted} at stage `encode`
- *   naming a field that does not fit.
+ * @returns The {@link RedactedJson}, which holds no body node's path ({@link NoPath}), which
+ *   `JSON.stringify` writes without loss, and which {@link decodeRedacted} reads back to `item`
+ *   with every path `""`; or {@link InvalidRedacted} at stage `encode` naming a field that does
+ *   not fit.
  */
 export const encodeRedacted = (item: Redacted): Result.Result<RedactedJson, InvalidRedacted> =>
   Result.mapError(
@@ -705,9 +724,9 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  *   deep, which no item the reader accepts reaches. So is a live object that throws when read,
  *   such as one hiding a deep field in its prototype or a non-enumerable property, or holding a
  *   getter that throws; plain JSON data never does.
- * @returns The redacted item, branded only after every field passed {@link RedactedSchema} and its
- *   body held no interaction where `render` cannot emit one, or {@link InvalidRedacted} at stage
- *   `decode` naming what does not fit.
+ * @returns The redacted item, every body node's path `""` ({@link NoPath}), branded only after
+ *   every field passed {@link RedactedSchema} and its body held no interaction where `render`
+ *   cannot emit one, or {@link InvalidRedacted} at stage `decode` naming what does not fit.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The JSON form arrives from the host as any value, and this is the check that parses it.
 export const decodeRedacted = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
