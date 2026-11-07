@@ -3958,7 +3958,31 @@ const overlayLaws: readonly ((
       ({ kind }) => kind === "qti-outcome-declaration",
     );
     if (outcome === undefined) {
-      return [];
+      // A built-in session variable's name has no declaration, and the schema types it by the table
+      // `builtInBase` states for its name, whichever root the document has (an item's `duration` a
+      // float, a test's a duration): `numAttempts` and `duration` name no identifier outcome, and
+      // `completionStatus` is a single identifier (reading 77).
+      const builtIn = overlay.laws.grammar.references.builtIn.lookup({
+        root: "qti-assessment-item",
+        variable: named.value,
+      });
+
+      return Option.isSome(builtIn) &&
+        !(
+          builtIn.value.baseType === "identifier" &&
+          (builtIn.value.cardinality === "single" || builtIn.value.cardinality === "multiple")
+        )
+        ? [
+            {
+              keys: {
+                baseType: builtIn.value.baseType,
+                cardinality: builtIn.value.cardinality,
+                identifier: named.value,
+              },
+              law: "Feedback outcome type",
+            },
+          ]
+        : [];
     }
 
     // An outcome that writes no cardinality is refused by AL3 ("required-attribute") alone, not

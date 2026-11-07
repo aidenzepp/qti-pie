@@ -820,9 +820,10 @@ const readingsOf = (
 /**
  * Judge a section document's feedback reference as the schema's `Feedback_outcome_type` judges the
  * one `SectionFeedbackRef` resolves under each test that reaches it: an outcome its test declares
- * has the base type `identifier` and the cardinality `single` or `multiple`. A name no outcome of
- * the test declares, a built-in session variable and an outcome that writes no cardinality (refused
- * by `required-attribute` alone) are not judged here.
+ * has the base type `identifier` and the cardinality `single` or `multiple`, and a built-in session
+ * variable stands as the type its name has (`completionStatus` an identifier, `numAttempts` and
+ * `duration` not). A name no outcome of the test declares and an outcome that writes no cardinality
+ * (refused by `required-attribute` alone) are not judged here.
  *
  * @param assembled - The test's assembly.
  * @param grammar - The composed grammar.
@@ -839,12 +840,32 @@ const feedbackTypeOf = (
   const named = collapsedOf(rows, node.id, "outcome-identifier");
   if (
     Option.isNone(named) ||
-    sessionVariables.has(named.value) ||
     !grammar.references.contentReference.rows.some(
       (row) => row.kind === node.kind && row.attribute === "outcome-identifier",
     )
   ) {
     return [];
+  }
+
+  // A built-in session variable's name is declared by no test, and the schema types it by the table
+  // `builtInBase` states for its name (the item root's rows): `numAttempts` and `duration` name no
+  // identifier outcome, and `completionStatus` is a single identifier.
+  const builtIn = grammar.references.builtIn.lookup({
+    root: "qti-assessment-item",
+    variable: named.value,
+  });
+  if (Option.isSome(builtIn)) {
+    return builtIn.value.baseType === "identifier" &&
+      (builtIn.value.cardinality === "single" || builtIn.value.cardinality === "multiple")
+      ? []
+      : [
+          breachAt(rows, node, "Feedback outcome type", {
+            assembly: assembled.test.listed.path,
+            baseType: builtIn.value.baseType,
+            cardinality: builtIn.value.cardinality,
+            identifier: named.value,
+          }),
+        ];
   }
 
   const declared = assembled.test.listed.rows;
