@@ -297,6 +297,25 @@ const reportedDeclaration = [
 ].join("");
 
 /**
+ * An item written for this test whose template processing sets the default of its single
+ * identifier response `RESPONSE`, which declares none, to `B`.
+ */
+const defaultingXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="defaulting"',
+  ' title="Defaulting" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+  "<qti-template-processing>",
+  '<qti-set-default-value identifier="RESPONSE">',
+  '<qti-base-value base-type="identifier">B</qti-base-value>',
+  "</qti-set-default-value>",
+  "</qti-template-processing>",
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Yes</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">No</qti-simple-choice>',
+  "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
  * An item written for this test whose template processing sets `HIDDEN` to `B` and `BLOCK` to `Y`.
  * Its shuffled Choice bound to `RESPONSE` holds `A` to `D`, `B` hidden while `HIDDEN` holds `B`;
  * its template block `X`, shown only while `BLOCK` holds `X`, holds a shuffled Choice bound to
@@ -1109,6 +1128,82 @@ describe("results", () => {
           BLOCK: { attributes: hidingTemplate("BLOCK"), values: ["Y"] },
           HIDDEN: { attributes: hidingTemplate("HIDDEN"), values: ["B"] },
         });
+      }),
+    { tags: ["qti-xsd"] },
+  );
+
+  it.effect(
+    "[I-5] gives the answeredStatus against the default template processing set: presented for a response left at it, in a session and alone, answered for another value",
+    () =>
+      Effect.gen(function* templateDefaultAnswered() {
+        const defaulting = yield* acceptItem(
+          "items/defaulting.xml",
+          new TextEncoder().encode(defaultingXml),
+        );
+        const test = yield* acceptTest("defaulting", [
+          part("P1", individual, [
+            ref("untouched", "defaulting.xml"),
+            ref("answered", "defaulting.xml"),
+          ]),
+        ]);
+        const untouched = yield* Effect.fromResult(
+          firstAttempt(defaulting.item, { instance: `${instance}.1`, seed }),
+        );
+        const answering = yield* Effect.fromResult(
+          firstAttempt(defaulting.item, { instance: `${instance}.2`, seed }),
+        );
+        assert.deepStrictEqual(untouched.defaults["RESPONSE"], identifiers("B"));
+        assert.deepStrictEqual(untouched.responses["RESPONSE"], identifiers("B"));
+
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([
+            ["untouched", defaulting],
+            ["answered", defaulting],
+          ]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(defaulting, "untouched", 1, { presented: true, record: untouched }),
+            sessionItem(defaulting, "answered", 2, {
+              ...saving({ RESPONSE: identifiers("A") }),
+              record: answering,
+            }),
+          ]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(
+          ["untouched", "answered"].map((identifier) => {
+            const response = itemOf(report, identifier).responses["RESPONSE"];
+
+            return [response?.attributes["answeredStatus"], response?.values];
+          }),
+          [
+            ["presented", ["B"]],
+            ["answered", ["A"]],
+          ],
+        );
+
+        const begun = yield* Effect.fromResult(begin(defaulting, { instance, seed }));
+        const aloneStatus = Effect.fnUntraced(function* aloneStatus(responses: Responses) {
+          const record = yield* Effect.fromResult(score(defaulting, responses, begun));
+          const written = yield* reported({
+            context,
+            datestamp: new Date(updated),
+            document: defaulting,
+            kind: "item",
+            record,
+          });
+
+          return itemOf(written.report, "defaulting").responses["RESPONSE"]?.attributes[
+            "answeredStatus"
+          ];
+        });
+        assert.deepStrictEqual(
+          [yield* aloneStatus({}), yield* aloneStatus({ RESPONSE: identifiers("A") })],
+          ["presented", "answered"],
+        );
       }),
     { tags: ["qti-xsd"] },
   );

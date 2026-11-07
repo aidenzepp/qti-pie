@@ -19,9 +19,10 @@ import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord } from "#plate/codec/record.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import { own } from "#plate/engine/refs.ts";
 import type { Item } from "#plate/model/item.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
-import type { RedactRecord } from "#plate/model/record.ts";
+import type { ItemRecord } from "#plate/model/record.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
 import { isNull, match } from "#plate/model/values.ts";
 import { postings, redactItem } from "#plate/payload.ts";
@@ -61,7 +62,7 @@ export type SubmissionIntent = "end-part" | "submit-item" | "submit-part";
  * - `attempts-exhausted`: the item's processed attempts have reached its attempt limit.
  * - `item-closed`: the item is closed for another reason.
  * - `skipping-not-allowed`: the item's `allow-skipping` is false and every response a page can post
- *   is NULL or its declared default.
+ *   is NULL or its default: the one the item's template processing set, else its declared one.
  * - `responses-invalid`: the item's `validate-responses` is true and a response breaks a limit of its
  *   interaction; or, for `submit-part`, `score` refuses a presented item's responses, which break a
  *   limit the item sets whatever the configuration (tier (a)). The refusal carries the messages and
@@ -127,7 +128,7 @@ export class SubmissionRefused extends Data.TaggedError("SubmissionRefused")<{
           : `${item} validates its responses (validate-responses is true), and they break its interactions' limits (${said}). Show these messages, for example through render's messages option, and submit the corrected responses.`;
       }
       case "skipping-not-allowed": {
-        return `${item} may not be skipped (allow-skipping is false), and every response posted for it is NULL or its declared default. Give at least one response another value, then submit again.`;
+        return `${item} may not be skipped (allow-skipping is false), and every response posted for it is NULL or the default it started with. Give at least one response another value, then submit again.`;
       }
       case "test-closed": {
         return `The test session has closed, so it takes no ${this.intent}. Show the summary current gives instead.`;
@@ -276,7 +277,8 @@ export const deliveredItem = (
 
 /**
  * Give the responses an item's attempt is processed with: each saved response, else its record's,
- * which holds NULL or, once the item is presented, its declared default.
+ * which holds NULL or, once the item is presented, its default (D4-11): the one its template
+ * processing set, else its declared one.
  *
  * @param item The session item.
  * @returns The responses, by identifier.
@@ -292,8 +294,13 @@ const valuesOf = (item: SessionItem): Responses =>
  *
  * The information model defines an item as skipped when every response variable is submitted with
  * its default value or is NULL, and an item with no response variable as never skipped (Table
- * 7.19.6, `allow-skipping`). A response is at its default when it `match`es the declaration's
- * `qti-default-value`.
+ * 7.19.6, `allow-skipping`; "all responses submitted with their default value or NULL",
+ * `info.txt:68904`). A response is at its default when it `match`es the default the attempt starts
+ * it with (D4-11): the one the record's `defaults` holds, which the item's template processing set
+ * (`qti-set-default-value`, `info.txt:65219`), else its declaration's `qti-default-value`. So a
+ * response left at a default template processing set skips the item as one left at a declared
+ * default does, and a value equal to the declared default answers it when template processing set
+ * another.
  *
  * Only the responses a rendered page can post count: those `postings` lists for the item redacted
  * under its record (ruling R2 of phase 4's repair, 2026-11-06), so the template values the page was
@@ -306,14 +313,15 @@ const valuesOf = (item: SessionItem): Responses =>
  * a response that is not counted does not answer the item either.
  *
  * @param item The item.
- * @param record The item's record, whose template values its page was shown with.
+ * @param record The item's record: the template values its page was shown with, the outcomes its
+ *   redaction reads, and the defaults its template processing set.
  * @param instance The item's instance, which names its postings.
  * @param values The responses, by identifier; one left out is NULL.
  * @returns Whether the item is skipped.
  */
 const skipped = (
   item: Item,
-  record: RedactRecord,
+  record: Pick<ItemRecord, "defaults" | "outcomes" | "templates">,
   instance: string,
   values: Responses,
 ): boolean => {
@@ -334,7 +342,13 @@ const skipped = (
       return (
         value === undefined ||
         isNull(value) ||
-        Option.exists(declaration.defaultValue, (fallback) => match(value, fallback))
+        Option.exists(
+          Option.orElse(
+            own(record.defaults, declaration.identifier),
+            () => declaration.defaultValue,
+          ),
+          (fallback) => match(value, fallback),
+        )
       );
     })
   );
@@ -463,7 +477,8 @@ const partEnded = (
  * `wrong-submission-mode`; an item whose processed attempts, the record's `numAttempts`, have
  * reached its effective attempt limit above 0 is `attempts-exhausted`, and an item closed otherwise
  * `item-closed`; under `allow-skipping` false an item whose every response a page can post is NULL
- * or its declared default is `skipping-not-allowed`; under `validate-responses` true, responses
+ * or its default, the one its record's template processing set or else its declared one, is
+ * `skipping-not-allowed`; under `validate-responses` true, responses
  * `checkResponses` gives messages for are `responses-invalid`. `checkResponses` judges them under
  * the item's record, the template values its page was shown with, so a choice its template hides
  * is refused and one it shows is judged as the page showed it, and an interaction a hidden template

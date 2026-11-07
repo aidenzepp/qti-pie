@@ -4,7 +4,7 @@
  *
  * Nothing new is stored for a result. The built-in `numAttempts` and `sessionStatus` are derived
  * from whether an item was presented, its record's count of processed attempts and its effective
- * attempt limit; `answeredStatus` from its values, its declarations and `checkResponses`. The
+ * attempt limit; `answeredStatus` from its values, its defaults and `checkResponses`. The
  * built-in `completionStatus` is the record's once an attempt is processed, and derived like the
  * others before. Every value is written in the lexical form `#plate/results/values.ts`
  * fixes, and no `correctResponse` is written. A result names its item's or test's outcomes and
@@ -197,6 +197,11 @@ interface ItemReport {
    */
   readonly answers: ItemRecord["responses"];
   readonly datestamp: string;
+  /**
+   * The defaults the item's template processing set, by identifier: its record's, and none for an
+   * item never presented in a test, whose record no attempt started.
+   */
+  readonly defaults: ItemRecord["defaults"];
   /**
    * Its built-in `duration` in seconds, none when it is not known.
    */
@@ -442,15 +447,20 @@ const attemptsOf = (presented: boolean, processed: number, limit: number): Attem
 /**
  * Give a response's answered status by Results Reporting 2.7.1's criteria.
  *
- * @param declaredDefault The response's declared default, if any.
+ * A response at its default is skipped, as `allow-skipping` reads it ("all responses submitted
+ * with their default value or NULL", `info.txt:68904`), so its default is the one the attempt
+ * starts it with (D4-11): the one the item's template processing set, else its declared one.
+ *
+ * @param responseDefault The response's default, if any: the one template processing set, else
+ *   its declared one.
  * @param value The value reported.
  * @param presented Whether the candidate was shown the item.
  * @param invalid Whether the item's interaction refuses the value, on any limit of either tier.
- * @returns `notpresented` for an item never shown; `presented` for NULL or the declared default,
+ * @returns `notpresented` for an item never shown; `presented` for NULL or the response's default,
  *   which is skipping it; `attempted` for a value the interaction refuses; else `answered`.
  */
 const answeredStatusOf = (
-  declaredDefault: Option.Option<Value>,
+  responseDefault: Option.Option<Value>,
   value: Value,
   presented: boolean,
   invalid: boolean,
@@ -459,7 +469,7 @@ const answeredStatusOf = (
     return "notpresented";
   }
 
-  if (isNull(value) || Option.exists(declaredDefault, (fallback) => match(value, fallback))) {
+  if (isNull(value) || Option.exists(responseDefault, (fallback) => match(value, fallback))) {
     return "presented";
   }
 
@@ -499,7 +509,8 @@ const completionOf = (report: ItemReport): Value => {
  * status, one template variable per declared template variable ({@link templateVariables}), and
  * one outcome variable per declared outcome, in the order the Results XSD lists the three. An
  * answered status judges only the interactions the page showed under the record's template values,
- * as `checkResponses` does.
+ * as `checkResponses` does, and reads a response's default as the record's template processing set
+ * it, else as declared ({@link answeredStatusOf}).
  *
  * @param report What the result says about the item.
  * @returns The `itemResult`.
@@ -516,7 +527,7 @@ const itemResult = (report: ItemReport): Element => {
       nullOf(declaration.baseType, declaration.cardinality),
     );
     const answered = answeredStatusOf(
-      declaration.defaultValue,
+      Option.orElse(own(report.defaults, declaration.identifier), () => declaration.defaultValue),
       value,
       report.presented,
       invalid.has(declaration.identifier),
@@ -648,8 +659,8 @@ const documentOf = (children: readonly Element[]): string =>
  * Write the result of an item delivered alone.
  *
  * The host holds the item's presentation and its attempt limit, so the result reads the record
- * alone: each processed attempt is one started and finished, a record with none is an item not
- * yet presented, its outcomes and template values are the record's, and its duration is not
+ * alone: each processed attempt is one started and finished, a record with none is an item not yet
+ * presented, its outcomes, template values and defaults are the record's, and its duration is not
  * known. No `choiceSequence` is written, since the record's instance need not be the one the item
  * was rendered with.
  *
@@ -683,6 +694,7 @@ const itemResults = (
       itemResult({
         answers: record.responses,
         datestamp: input.datestamp.toISOString(),
+        defaults: record.defaults,
         duration: Option.none(),
         identifier: input.document.item.identifier,
         item: input.document,
@@ -871,7 +883,8 @@ const deliveredItem = (
  * the record's otherwise: the last processed, or the starting values before any. A presented
  * shuffled Choice or Inline Choice carries the order it was presented in, under the session's seed
  * and the item's instance `<session instance>.<sequenceIndex>`, listing only the choices the
- * record's template values showed. Its template values are its record's.
+ * record's template values showed. Its template values, and the defaults its answered status reads,
+ * are its record's.
  *
  * @param test The test.
  * @param controls The session control of each of the test's item refs, by identifier, as
@@ -915,6 +928,7 @@ const sessionItemReport = (
     return {
       answers,
       datestamp: entry.datestamp,
+      defaults: entry.record.defaults,
       duration: Option.some(entry.duration),
       identifier: entry.ref,
       item: document,
