@@ -63,7 +63,7 @@ import type {
   ItemTiming,
   Literal,
   MappingLookup,
-  MappingSource,
+  MappingSourceDeclaration,
   NameLookup,
   Operand,
   PlacedDocument,
@@ -76,6 +76,7 @@ import type {
   ReferenceSegment,
   SectionIdentifier,
   TemplateDefault,
+  TemplateDefaultTarget,
   TestReference,
   VariableLookup,
   VariableRef,
@@ -1369,12 +1370,13 @@ export interface AssembledExpressionRows {
   readonly ItemRefDocument: ReadonlyMap<string, Addition<typeof ItemRefDocument>>;
   readonly ItemRefTarget: ReadonlyMap<string, Addition<typeof ItemRefTarget>>;
   readonly MappingLookup: ReadonlyMap<string, Addition<typeof MappingLookup>>;
-  readonly MappingSource: ReadonlyMap<string, Addition<typeof MappingSource>>;
+  readonly MappingSourceDeclaration: ReadonlyMap<string, Addition<typeof MappingSourceDeclaration>>;
   readonly NameLookup: ReadonlyMap<string, Addition<typeof NameLookup>>;
   readonly PlacedDocument: ReadonlyMap<string, Addition<typeof PlacedDocument>>;
   readonly PlacedReference: ReadonlyMap<string, Addition<typeof PlacedReference>>;
   readonly Reading: ReadonlyMap<string, Addition<typeof Reading>>;
   readonly TemplateDefault: ReadonlyMap<string, Addition<typeof TemplateDefault>>;
+  readonly TemplateDefaultTarget: ReadonlyMap<string, Addition<typeof TemplateDefaultTarget>>;
   readonly VariableLookup: ReadonlyMap<string, Addition<typeof VariableLookup>>;
 }
 
@@ -1410,6 +1412,11 @@ interface Lookups {
   readonly declarations: ReadonlyMap<string, Addition<typeof VariableLookup>>;
   readonly items: ReadonlyMap<string, NodeId>;
   readonly mappings: Map<string, Addition<typeof MappingLookup>>;
+  /**
+   * Each mapping whose source its item declares, by its item ref and its target: the declaration a
+   * mapped reading reads.
+   */
+  readonly mappingSources: Map<string, Addition<typeof MappingSourceDeclaration>>;
   readonly names: Map<string, Addition<typeof NameLookup>>;
   readonly probes: Map<string, Addition<typeof VariableLookup>>;
   readonly targets: ReadonlyMap<string, Addition<typeof ItemRefTarget>["type"]>;
@@ -1460,16 +1467,7 @@ const mappingProbe = (
     return held;
   }
 
-  const absent: Addition<typeof MappingLookup> = {
-    baseType: "none",
-    cardinality: "single",
-    declaration: itemRef,
-    declarationKind: "qti-outcome-declaration",
-    itemRef,
-    mapped: false,
-    mapping: itemRef,
-    name,
-  };
+  const absent: Addition<typeof MappingLookup> = { itemRef, mapped: false, name };
   lookups.mappings.set(key, absent);
 
   return absent;
@@ -1624,10 +1622,14 @@ const builtInOf = (text: ReadingText, scope: Scope, itemScoped: boolean): boolea
 
 /**
  * What a reading's variable is, and the codes of the declaration that types it: declared, else
- * mapped, else built in, else none, the null objects where no declaration types it.
+ * mapped, else built in, else none, the null objects where no declaration types it. A mapped
+ * variable's declaration is its mapping's source's; a mapping whose source its item declares
+ * nothing under has none, so its reading holds the null objects, and the law that refuses the
+ * mapping refuses the reading's claim to it ("Variable mapping source").
  *
  * @param declared - Its declaration lookup, where it reads one.
  * @param mapped - Its mapping lookup, where it reads one.
+ * @param mappedSource - Its mapping's source declaration, where its item declares one.
  * @param builtIn - The declaration kind of the built-in of its scope it names, if any.
  * @param scope - Its scope.
  * @returns The source and the codes.
@@ -1635,6 +1637,7 @@ const builtInOf = (text: ReadingText, scope: Scope, itemScoped: boolean): boolea
 const sourceOf = (
   declared: Addition<typeof VariableLookup> | undefined,
   mapped: Addition<typeof MappingLookup> | undefined,
+  mappedSource: Addition<typeof MappingSourceDeclaration> | undefined,
   builtIn: Addition<typeof Reading>["declarationKind"] | undefined,
   scope: Scope,
 ): Pick<
@@ -1652,13 +1655,21 @@ const sourceOf = (
   }
 
   if (mapped?.mapped === true) {
-    return {
-      declBaseType: mapped.baseType,
-      declCardinality: mapped.cardinality,
-      declaration: mapped.declaration,
-      declarationKind: mapped.declarationKind,
-      source: "mapped",
-    };
+    return mappedSource === undefined
+      ? {
+          declBaseType: "none",
+          declCardinality: "single",
+          declaration: scope.itemDocument,
+          declarationKind: "qti-outcome-declaration",
+          source: "mapped",
+        }
+      : {
+          declBaseType: mappedSource.declBaseType,
+          declCardinality: mappedSource.declCardinality,
+          declaration: mappedSource.declaration,
+          declarationKind: mappedSource.declarationKind,
+          source: "mapped",
+        };
   }
 
   return {
@@ -1714,6 +1725,7 @@ const readingOf = (
   const typed = sourceOf(
     declared,
     mapped,
+    itemScoped ? lookups.mappingSources.get(lookupKey(scope.node, text.variable)) : undefined,
     builtInOf(text, scope, itemScoped)
       ? builtInKindsByRoot.get(builtInRootOf(text, itemScoped))?.get(text.variable)
       : undefined,
@@ -1819,8 +1831,20 @@ const instancesIn = (
 ): readonly (InstanceMember | InstanceRoot)[] => [member, ...member.children.flatMap(instancesIn)];
 
 /**
- * Write a test's template defaults, each with the template declaration of the item its item ref
- * names and its one expression's type.
+ * A test's template defaults, each by its node: its row, and its target, the template declaration
+ * of the item its item ref names, where that item declares a variable of its name.
+ */
+interface TemplateDefaultRows {
+  readonly targets: readonly (readonly [string, Addition<typeof TemplateDefaultTarget>])[];
+  readonly templateDefaults: readonly (readonly [string, Addition<typeof TemplateDefault>])[];
+}
+
+/**
+ * Write a test's template defaults, each that writes its `template-identifier`, which every one
+ * must (AL3): its row, and its target where its item ref names an item that declares a variable of
+ * its template's name and it holds its expression, with that declaration and the expression's
+ * type. A template default with no target has none: no value stands for the declaration it lacks,
+ * so "Template default target" refuses it, and its row says nothing of an item.
  *
  * @param input - A document.
  * @param lookups - The lookups.
@@ -1829,49 +1853,62 @@ const instancesIn = (
 const templateDefaultsOf = (
   input: AssembledExpressionInput,
   lookups: Lookups,
-): readonly (readonly [string, Addition<typeof TemplateDefault>])[] => {
+): TemplateDefaultRows => {
   const rows = flatten(input.tree, input.ids.idOf);
   const held = new Map(
     [...input.expressions.Expression.values()]
       .filter(({ parentKind }) => parentKind === "qti-template-default")
       .map((row) => [row.parent, row] as const),
   );
+  const written = rows.attributes.filter(({ name }) => name === "template-identifier");
+  const defaults = rows.nodes.flatMap((node) => {
+    const attribute =
+      node.kind === "qti-template-default"
+        ? written.find(({ node: owner }) => owner === node.id)
+        : undefined;
 
-  return rows.nodes.flatMap((node) => {
-    if (node.kind !== "qti-template-default") {
-      return [];
-    }
-
-    const lexical =
-      rows.attributes.find(
-        ({ name, node: owner }) => owner === node.id && name === "template-identifier",
-      )?.lexical ?? "";
-    const { lead, name, trail } = piecesOf(lexical);
-    const itemDocument = lookups.items.get(node.parent) ?? nilUuid;
-    const declared = lookups.declarations.get(lookupKey(itemDocument, name));
-    const expression = held.get(node.id);
-
-    return [
-      [
-        node.id,
-        {
-          declBaseType: declared?.baseType ?? "none",
-          declCardinality: declared?.cardinality ?? "single",
-          declaration: declared?.declared === true ? declared.declaration : nilUuid,
-          declarationKind: declared?.declarationKind ?? "qti-template-declaration",
-          heldBase: expression?.baseType ?? "unknown",
-          heldCardinality: expression?.cardinality ?? "unknown",
-          itemDocument,
-          itemRef: node.parent,
-          lead,
-          lexical,
-          node: node.id,
-          template: name,
-          trail,
-        },
-      ] as const,
-    ];
+    return attribute === undefined
+      ? []
+      : [{ lexical: attribute.lexical, node, pieces: piecesOf(attribute.lexical) }];
   });
+
+  return {
+    targets: defaults.flatMap(({ node, pieces }) => {
+      const itemDocument = lookups.items.get(node.parent);
+      const declared =
+        itemDocument === undefined
+          ? undefined
+          : lookups.declarations.get(lookupKey(itemDocument, pieces.name));
+      const expression = held.get(node.id);
+
+      return itemDocument === undefined || declared?.declared !== true || expression === undefined
+        ? []
+        : [
+            [
+              node.id,
+              {
+                declBaseType: declared.baseType,
+                declCardinality: declared.cardinality,
+                declaration: declared.declaration,
+                declarationKind: declared.declarationKind,
+                heldBase: expression.baseType,
+                heldCardinality: expression.cardinality,
+                itemDocument,
+                itemRef: node.parent,
+                node: node.id,
+                template: pieces.name,
+              },
+            ] as const,
+          ];
+    }),
+    templateDefaults: defaults.map(
+      ({ lexical, node, pieces: { lead, name, trail } }) =>
+        [
+          node.id,
+          { itemRef: node.parent, lead, lexical, node: node.id, template: name, trail },
+        ] as const,
+    ),
+  };
 };
 
 /**
@@ -1941,6 +1978,7 @@ const lookupsOf = (
   items: new Map(
     [...items.itemRefDocuments.values()].map(({ document, node }) => [node, document]),
   ),
+  mappingSources: new Map(),
   mappings: new Map(),
   names: new Map(),
   probes: new Map(),
@@ -1955,46 +1993,48 @@ const lookupsOf = (
 });
 
 /**
- * Write each variable mapping's source in the item it maps, and force its target into the item
- * ref's mapping lookups.
+ * Write each variable mapping's source in the item it maps, where its item ref names an item that
+ * declares a variable of its source's name, with that declaration and whether the item declares
+ * its target too; and force its target into the item ref's mapping lookups, a mapping whose source
+ * is undeclared included, since the item ref maps the name all the same. A mapping with no source
+ * declaration has none: no value stands for it, so "Variable mapping source" refuses it.
  *
  * @param documents - Every document of the package.
  * @param lookups - The lookups, which this adds to.
- * @returns The sources, by the mapping's node.
+ * @returns The source declarations, by the mapping's node.
  */
 const mappingSourcesOf = (
   documents: readonly AssembledExpressionInput[],
   lookups: Lookups,
-): ReadonlyMap<string, Addition<typeof MappingSource>> => {
-  const sources = new Map<string, Addition<typeof MappingSource>>();
+): ReadonlyMap<string, Addition<typeof MappingSourceDeclaration>> => {
+  const sources = new Map<string, Addition<typeof MappingSourceDeclaration>>();
   for (const input of documents) {
     for (const mapping of input.tests.VariableMapping.values()) {
-      const itemDocument = lookups.items.get(mapping.parent) ?? nilUuid;
-      const source = lookups.declarations.get(lookupKey(itemDocument, mapping.source));
-      const declared = source?.declared === true ? source : undefined;
-      const row: Addition<typeof MappingSource> = {
-        declBaseType: declared?.baseType ?? "none",
-        declCardinality: declared?.cardinality ?? "single",
-        declaration: declared?.declaration ?? nilUuid,
-        declarationKind: declared?.declarationKind ?? "qti-outcome-declaration",
-        itemDocument,
-        itemRef: mapping.parent,
-        node: mapping.node,
-        source: mapping.source,
-        target: mapping.target,
-        targetDeclared: declarationProbe(lookups, itemDocument, mapping.target).declared,
-      };
-      sources.set(mapping.node, row);
-      lookups.mappings.set(lookupKey(mapping.parent, mapping.target), {
-        baseType: row.declBaseType,
-        cardinality: row.declCardinality,
-        declaration: row.declaration,
-        declarationKind: row.declarationKind,
-        itemRef: mapping.parent,
-        mapped: true,
-        mapping: mapping.node,
-        name: mapping.target,
-      });
+      const key = lookupKey(mapping.parent, mapping.target);
+      lookups.mappings.set(key, { itemRef: mapping.parent, mapped: true, name: mapping.target });
+
+      const itemDocument = lookups.items.get(mapping.parent);
+      const source =
+        itemDocument === undefined
+          ? undefined
+          : lookups.declarations.get(lookupKey(itemDocument, mapping.source));
+
+      if (itemDocument !== undefined && source?.declared === true) {
+        const row: Addition<typeof MappingSourceDeclaration> = {
+          declBaseType: source.baseType,
+          declCardinality: source.cardinality,
+          declaration: source.declaration,
+          declarationKind: source.declarationKind,
+          itemDocument,
+          itemRef: mapping.parent,
+          node: mapping.node,
+          source: mapping.source,
+          target: mapping.target,
+          targetDeclared: declarationProbe(lookups, itemDocument, mapping.target).declared,
+        };
+        sources.set(mapping.node, row);
+        lookups.mappingSources.set(key, row);
+      }
     }
   }
 
@@ -2148,10 +2188,8 @@ export const assembledExpressionRowsOf = (
   forceNames(documents, assembled, lookups);
 
   const placed = placedRowsOf(documents, assembled, lookups);
-  const templateDefaults = new Map(
-    documents.flatMap((input) =>
-      tests.has(input.tree.root.kind) ? templateDefaultsOf(input, lookups) : [],
-    ),
+  const templateDefaults = documents.flatMap((input) =>
+    tests.has(input.tree.root.kind) ? [templateDefaultsOf(input, lookups)] : [],
   );
 
   return {
@@ -2159,9 +2197,10 @@ export const assembledExpressionRowsOf = (
     ItemRefDocument: items.itemRefDocuments,
     ItemRefTarget: items.itemRefTargets,
     MappingLookup: lookups.mappings,
-    MappingSource: sources,
+    MappingSourceDeclaration: sources,
     NameLookup: lookups.names,
-    TemplateDefault: templateDefaults,
+    TemplateDefault: new Map(templateDefaults.flatMap((rows) => rows.templateDefaults)),
+    TemplateDefaultTarget: new Map(templateDefaults.flatMap((rows) => rows.targets)),
     VariableLookup: lookups.probes,
   };
 };

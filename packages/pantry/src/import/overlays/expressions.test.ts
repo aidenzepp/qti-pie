@@ -2151,12 +2151,14 @@ const itemRefCaseOf = (c: ItemRefCase): readonly (readonly [string, XdmDocument<
 };
 
 describe("import/overlays/expressions.ts, an item ref's declarations", () => {
-  it("names no item under an item ref that names an LTI link, so its mapping's source and its template default's template are undeclared", () => {
+  it("names no item under an item ref that names an LTI link, so its mapping and its template default have no declaration row", () => {
     // Oracle: spec reading 110 (§7.48 and §5.152 name variables declared in the corresponding
     // item; an LTI link, the implementation guide's §6.2.9, declares none) and the UP audit's B3:
-    // the item ref's target is the link's resource type, it has no item document, and the laws
-    // that name the item's declarations, `Variable_mapping_source` and `Template_default_target`,
-    // find none. Bound: the item ref case's first package, its item replaced by an LTI link.
+    // the item ref's target is the link's resource type, it has no item document, and a mapping's
+    // source and a template default's template have no declaration, so neither has the row of its
+    // own that `Variable mapping source` and `Template default target` require (the ruling of
+    // 2026-11-06: a missing value is a row of its own relation, never a sentinel). Bound: the item
+    // ref case's first package, its item replaced by an LTI link.
     const [test] = itemRefCaseOf({
       heldBase: "integer",
       source: "SCORE",
@@ -2172,19 +2174,15 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
       ["imslti_xmlv1p1"],
     );
     assert.strictEqual(rows.together.ItemRefDocument.size, 0);
+    assert.strictEqual(rows.together.MappingSourceDeclaration.size, 0);
+    assert.strictEqual(rows.together.TemplateDefaultTarget.size, 0);
     assert.deepStrictEqual(
-      [...rows.together.MappingSource.values()].map(({ declaration, itemDocument }) => [
-        declaration,
-        itemDocument,
-      ]),
-      [[nilUuid, nilUuid]],
+      [...rows.together.TemplateDefault.values()].map(({ template }) => template),
+      ["T"],
     );
     assert.deepStrictEqual(
-      [...rows.together.TemplateDefault.values()].map(({ declaration, itemDocument }) => [
-        declaration,
-        itemDocument,
-      ]),
-      [[nilUuid, nilUuid]],
+      [...rows.together.MappingLookup.values()].map(({ mapped, name }) => [name, mapped]),
+      [["S2", true]],
     );
   });
 
@@ -2193,10 +2191,12 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
     // names a template variable of its item (§5.152, A37) and its expression fits that variable's
     // type (A38, P20); a mapping's source is an outcome of its item (§7.48, A34) and its target
     // names no other variable of the item (reading 97). Against the laws over the rows the
-    // builders write: `Template_default_target` (a declaration found, and a template one),
-    // `Template_default_type`, `Variable_mapping_source` and `Variable_mapping_target`.
+    // builders write: `Template default target` (a target row, and a template declaration),
+    // `Template_default_type`, `Variable mapping source` (a source row, and an outcome
+    // declaration) and `Variable_mapping_target`; no row holds the nil uuid.
     // Bound: every template of {T, U, SCORE}, expression of {integer, float}, source of {SCORE,
     // MISSING, T} and target of {S2, X, SCORE}: 54 packages.
+    const nil = "00000000-0000-0000-0000-000000000000";
     let judged = 0;
     for (const template of ["T", "U", "SCORE"] as const) {
       for (const heldBase of ["integer", "float"] as const) {
@@ -2206,31 +2206,46 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
             const rows = packageRowsOf(itemRefCaseOf(c));
             const { together } = rows;
             const [templateDefault] = [...together.TemplateDefault.values()];
-            const [mapping] = [...together.MappingSource.values()];
+            const templateTarget = together.TemplateDefaultTarget.get(templateDefault?.node ?? "");
+            const [mapping] = rows.documents.flatMap(({ tests }) => [
+              ...tests.VariableMapping.values(),
+            ]);
+            const mappingSource = together.MappingSourceDeclaration.get(mapping?.node ?? "");
             const where = JSON.stringify(c);
 
+            assert.isFalse(
+              [
+                ...together.TemplateDefaultTarget.values(),
+                ...together.MappingSourceDeclaration.values(),
+              ].some(
+                ({ declaration, itemDocument }) => declaration === nil || itemDocument === nil,
+              ),
+              where,
+            );
+            assert.strictEqual(templateTarget !== undefined, template !== "U", where);
             assert.strictEqual(
-              templateDefault?.declaration !== nilUuid &&
-                templateDefault?.declarationKind === "qti-template-declaration",
+              templateTarget?.declarationKind === "qti-template-declaration",
               template === "T",
               where,
             );
             assert.strictEqual(
               template !== "T" ||
-                (templateDefault?.heldBase === "integer" &&
-                  templateDefault.declBaseType === "integer"),
+                (templateTarget?.heldBase === "integer" &&
+                  templateTarget.declBaseType === "integer"),
               template !== "T" || heldBase === "integer",
               where,
             );
+            assert.strictEqual(mappingSource !== undefined, source !== "MISSING", where);
             assert.strictEqual(
-              mapping?.declaration !== nilUuid &&
-                mapping?.declarationKind === "qti-outcome-declaration",
+              mappingSource?.declarationKind === "qti-outcome-declaration",
               source === "SCORE",
               where,
             );
             assert.strictEqual(
-              mapping?.targetDeclared === false || mapping?.target === mapping?.source,
-              target === "S2" || target === source,
+              mappingSource === undefined ||
+                !mappingSource.targetDeclared ||
+                mappingSource.target === mappingSource.source,
+              source === "MISSING" || target === "S2" || target === source,
               where,
             );
             assert.deepStrictEqual(structuralBreaches(rows), [], where);

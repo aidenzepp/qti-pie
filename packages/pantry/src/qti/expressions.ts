@@ -32,8 +32,8 @@
  *   ({@link NameLookup}), the declarations ({@link VariableLookup}) and the item ref's mappings
  *   ({@link MappingLookup}); exactly one reading resolves (M3). Beside them, a template default's
  *   and a variable mapping's declarations in the item their item ref names
- *   ({@link TemplateDefault}, {@link MappingSource}), and a `section-identifier`'s name
- *   ({@link SectionIdentifier}).
+ *   ({@link TemplateDefaultTarget}, {@link MappingSourceDeclaration}), and a `section-identifier`'s
+ *   name ({@link SectionIdentifier}).
  *
  * The laws, each named by its oracle law with spaces written as underscores, and the rule each
  * keeps: `Arity` (P2); `Operand_fit` and `One_base` (P23); `Condition_type` (P21); `Set_type`
@@ -518,10 +518,10 @@ export const VariableLookup = relation(
 
 /**
  * A test's template default, keyed by its `qti-template-default` node (the UP audit's A37 and A38;
- * spec reading 108): its item ref (`itemRef`, its parent), the item that names (`itemDocument`,
- * through {@link ItemRefDocument}), its `template-identifier` as written (`lexical`) and collapsed
- * (`lead`, `template`, `trail`), the template declaration of the item it names with that
- * declaration's codes, and `heldBase` and `heldCardinality`, its one expression's type. The
+ * spec reading 108): its item ref (`itemRef`, its parent) and its `template-identifier` as written
+ * (`lexical`) and collapsed (`lead`, `template`, `trail`). It exists exactly where the attribute is
+ * written, which every template default must write (AL3). What only a template the item declares
+ * has, its declaration and its expression's type, is {@link TemplateDefaultTarget}'s. The
  * information model says of TemplateDefault (§5.152) "The default value of a template variable in
  * an item can be overridden based on the test context ... The value is obtained by evaluating an
  * expression defined within the reference to the item at test level", and of `template-identifier`
@@ -530,13 +530,6 @@ export const VariableLookup = relation(
 export const TemplateDefault = relation(
   "TemplateDefault",
   {
-    declBaseType: closedId(BaseType),
-    declCardinality: closedId(Cardinality),
-    declaration: uuid,
-    declarationKind: closedId(DeclarationKind),
-    heldBase: closedId(ValueBase),
-    heldCardinality: closedId(ValueCardinality),
-    itemDocument: uuid,
     itemRef: uuid,
     lead: Space,
     lexical: keyText,
@@ -548,15 +541,46 @@ export const TemplateDefault = relation(
 );
 
 /**
- * A variable mapping's source in the item it maps, keyed by the mapping's node (the UP audit's
- * A34; spec readings 97 and 107): its item ref and that ref's item, its collapsed `source` and
- * `target` (`VariableMapping`'s, each copied by a containment of its own, since one index holds at
- * most one key text, `#pantry/qti/limits.ts`), the outcome declaration of the item `source` names
- * with its codes, and `targetDeclared`, whether the item declares `target` too, read from
- * {@link VariableLookup}.
+ * The variable a template default affects, keyed by its `qti-template-default` node: a row of its
+ * own, since a template default whose item declares no such variable has none (the ruling of
+ * 2026-11-06, AGENTS.md's Schema intent: a value that may be missing is a row of its own relation).
+ * It holds the item its item ref names (`itemDocument`, through `ItemRefDocument`), the
+ * declaration of that item `template` names with the declaration's codes, and `heldBase` and
+ * `heldCardinality`, its one expression's type, with its `TemplateDefault`'s `itemRef` and
+ * `template`. Every template default has one ("Template default target"), whose declaration is a
+ * template declaration (`Template_default_target`) of a type its expression fits
+ * (`Template_default_type`).
  */
-export const MappingSource = relation(
-  "MappingSource",
+export const TemplateDefaultTarget = relation(
+  "TemplateDefaultTarget",
+  {
+    declBaseType: closedId(BaseType),
+    declCardinality: closedId(Cardinality),
+    declaration: uuid,
+    declarationKind: closedId(DeclarationKind),
+    heldBase: closedId(ValueBase),
+    heldCardinality: closedId(ValueCardinality),
+    itemDocument: uuid,
+    itemRef: uuid,
+    node: uuid,
+    template: keyText,
+  },
+  ["node"],
+);
+
+/**
+ * A variable mapping's source in the item it maps, keyed by the mapping's node (the UP audit's
+ * A34; spec readings 97 and 107): a row of its own, since a mapping whose item declares no
+ * variable of its source's name has none (the ruling of 2026-11-06). It holds its item ref and the
+ * item that names (`itemDocument`, through `ItemRefDocument`), its collapsed `source` and `target`
+ * (`VariableMapping`'s, each copied by a containment of its own, since one index holds at most one
+ * key text, `#pantry/qti/limits.ts`), the declaration of the item `source` names with its codes,
+ * and `targetDeclared`, whether the item declares `target` too, read from {@link VariableLookup}.
+ * Every mapping has one ("Variable mapping source"), whose declaration is an outcome declaration
+ * (`Variable_mapping_source`).
+ */
+export const MappingSourceDeclaration = relation(
+  "MappingSourceDeclaration",
   {
     declBaseType: closedId(BaseType),
     declCardinality: closedId(Cardinality),
@@ -573,23 +597,14 @@ export const MappingSource = relation(
 );
 
 /**
- * Whether an item ref maps a name, keyed by the item ref and the name (M2): each mapping is forced
- * in by its target, `mapped`, with its node and its source's declaration and codes; every other row
- * is a probe of a name the item ref maps nothing to, its mapping and declaration the item ref
- * itself and its codes the null objects.
+ * Whether an item ref maps a name, keyed by the item ref and the name (M2): each variable mapping
+ * is forced in by its target, `mapped`, and every other row is a probe of a name the item ref maps
+ * nothing to. The verdict is the row's one datum: a mapped name's variable, its source's
+ * declaration, is {@link MappingSourceDeclaration}'s.
  */
 export const MappingLookup = relation(
   "MappingLookup",
-  {
-    baseType: closedId(BaseType),
-    cardinality: closedId(Cardinality),
-    declaration: uuid,
-    declarationKind: closedId(DeclarationKind),
-    itemRef: uuid,
-    mapped: pg.boolean,
-    mapping: uuid,
-    name: keyText,
-  },
+  { itemRef: uuid, mapped: pg.boolean, name: keyText },
   ["itemRef", "name"],
 );
 
@@ -830,7 +845,7 @@ export const referenceRelations = {
   AssembledReference,
   DeclarationTable,
   MappingLookup,
-  MappingSource,
+  MappingSourceDeclaration,
   NameLookup,
   PlacedDocument,
   PlacedReference,
@@ -840,6 +855,7 @@ export const referenceRelations = {
   ReferenceSegment,
   SectionIdentifier,
   TemplateDefault,
+  TemplateDefaultTarget,
   TestReference,
   VariableLookup,
 };
@@ -1507,6 +1523,14 @@ const mappedNames = select(MappingLookup, (m) => m.eq(m.mapped, true));
 const sectionIdentifierAttributes = select(Attribute, (a) => a.eq(a.name, "section-identifier"));
 
 /**
+ * The one expression each template default holds (TemplateDefaultDType's content), whose type its
+ * {@link TemplateDefaultTarget} copies.
+ */
+const templateDefaultExpressions = select(Expression, (e) =>
+  e.eq(e.parentKind, "qti-template-default"),
+);
+
+/**
  * The `template-identifier` of each template default, `TemplateDefault`'s source.
  */
 const templateIdentifiers = select(Attribute, (a) =>
@@ -1580,11 +1604,15 @@ export const readingFamily = counted(
  * law:
  *
  * - **the lookups:** `VariableLookup`, `NameLookup` and `MappingLookup`, each with its facts forced
- *   in, its found rows justified and its absent rows' null objects (`E1_derived`);
- * - **an item ref's declarations:** a template default's template declaration
- *   (`Template_default_target`) and its type fit (`Template_default_type`, P20); a mapping's
- *   source, an outcome of the item (`Variable_mapping_source`), and its target, no other variable
- *   of the item (`Variable_mapping_target`, reading 97);
+ *   in and its found rows justified; `VariableLookup`'s and `NameLookup`'s absent rows' null
+ *   objects (`E1_derived`); `MappingLookup` holds its verdict alone;
+ * - **an item ref's declarations,** each a row of its own that every template default and every
+ *   mapping must have, so a name its item declares nothing under is refused by that law alone: a
+ *   template default's {@link TemplateDefaultTarget}, a template declaration
+ *   (`Template_default_target`) its expression's type fits (`Template_default_type`, P20); a
+ *   mapping's {@link MappingSourceDeclaration}, an outcome of the item (`Variable_mapping_source`),
+ *   and its target, no other variable of the item (`Variable_mapping_target`, reading 97); and a
+ *   mapped reading's declaration, its mapping's source's;
  * - **the references:** each test or section document's, placed once per instance of every test that
  *   places its document and read once per test, its name split at every dot (A59's concatenation),
  *   its readings exactly the readings of its name, exactly one of them resolving
@@ -1595,7 +1623,7 @@ export const readingFamily = counted(
  */
 export const referenceLawsByName = {
   "DocumentId key": [
-    // TemplateDefault: its template-identifier, its item, its template declaration and its type.
+    // TemplateDefault: its template-identifier.
     key(on(templateIdentifiers, "node")),
     // SectionIdentifier: its copy, its document, and the name it spells. The copy is the forward
     // containment: each attribute's row holds its name, kind and lexical form. The reverse only
@@ -1698,14 +1726,10 @@ export const referenceLawsByName = {
         ),
       ),
     ),
+    // TemplateDefault: its template-identifier, written exactly where its element writes one (AL3
+    // requires it), and its item ref; its target's copy of both, and its expression's type.
     contained(on(templateIdentifiers, "node", "lexical"), on(TemplateDefault, "node", "lexical")),
-    contained(
-      on(
-        select(Node, (n) => n.eq(n.kind, "qti-template-default")),
-        "id",
-      ),
-      on(TemplateDefault, "node"),
-    ),
+    contained(on(TemplateDefault, "node"), on(templateIdentifiers, "node")),
     contained(on(TemplateDefault, "node", "itemRef"), on(Node, "id", "parent")),
     check("E1_derived", TemplateDefault, (t) =>
       t.and(
@@ -1714,83 +1738,31 @@ export const referenceLawsByName = {
       ),
     ),
     contained(
-      on(
-        select(Expression, (e) => e.eq(e.parentKind, "qti-template-default")),
-        "parent",
-        "baseType",
-        "cardinality",
-      ),
-      on(TemplateDefault, "node", "heldBase", "heldCardinality"),
+      on(TemplateDefaultTarget, "node", "itemRef", "template"),
+      on(TemplateDefault, "node", "itemRef", "template"),
     ),
-    // MappingSource and MappingLookup: each mapping's item, its source and its target (A34, A35).
-    contained(on(VariableMapping, "node"), on(MappingSource, "node")),
+    key(on(templateDefaultExpressions, "parent")),
     contained(
-      on(MappingSource, "node", "itemRef", "source"),
+      on(TemplateDefaultTarget, "node", "heldBase", "heldCardinality"),
+      on(templateDefaultExpressions, "parent", "baseType", "cardinality"),
+    ),
+    // MappingSourceDeclaration's copy of its mapping and its target's lookup; MappingLookup's
+    // mapped rows, each mapping's target forced in and each a mapping's (A34, A35).
+    contained(
+      on(MappingSourceDeclaration, "node", "itemRef", "source"),
       on(VariableMapping, "node", "parent", "source"),
     ),
-    contained(on(MappingSource, "node", "target"), on(VariableMapping, "node", "target")),
-    key(on(MappingSource, "itemRef", "target")),
     contained(
-      on(MappingSource, "itemDocument", "target", "targetDeclared"),
+      on(MappingSourceDeclaration, "node", "target"),
+      on(VariableMapping, "node", "target"),
+    ),
+    contained(
+      on(MappingSourceDeclaration, "itemDocument", "target", "targetDeclared"),
       on(VariableLookup, "document", "name", "declared"),
     ),
-    contained(
-      on(
-        MappingSource,
-        "itemRef",
-        "target",
-        "node",
-        "declaration",
-        "declarationKind",
-        "declBaseType",
-        "declCardinality",
-      ),
-      on(
-        MappingLookup,
-        "itemRef",
-        "name",
-        "mapping",
-        "declaration",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-    ),
-    contained(
-      on(
-        mappedNames,
-        "mapping",
-        "itemRef",
-        "name",
-        "declaration",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      on(
-        MappingSource,
-        "node",
-        "itemRef",
-        "target",
-        "declaration",
-        "declarationKind",
-        "declBaseType",
-        "declCardinality",
-      ),
-    ),
-    check("E1_derived", MappingLookup, (m) =>
-      m.or(
-        m.and(m.eq(m.mapped, true), m.ne(m.mapping, m.itemRef)),
-        m.and(
-          m.eq(m.mapped, false),
-          m.eq(m.mapping, m.itemRef),
-          m.eq(m.declaration, m.itemRef),
-          m.eq(m.declarationKind, "qti-outcome-declaration"),
-          m.eq(m.baseType, "none"),
-          m.eq(m.cardinality, "single"),
-        ),
-      ),
-    ),
+    key(on(mappedNames, "itemRef", "name")),
+    contained(on(VariableMapping, "parent", "target"), on(mappedNames, "itemRef", "name")),
+    contained(on(mappedNames, "itemRef", "name"), on(VariableMapping, "parent", "target")),
     contained(
       on(sectionIdentifierAttributes, "node", "name", "kind", "lexical"),
       on(SectionIdentifier, "node", "attribute", "kind", "lexical"),
@@ -2019,26 +1991,6 @@ export const referenceLawsByName = {
       ),
     ),
     contained(
-      on(
-        mappedReadings,
-        "named",
-        "variable",
-        "declaration",
-        "declarationKind",
-        "declBaseType",
-        "declCardinality",
-      ),
-      on(
-        MappingLookup,
-        "itemRef",
-        "name",
-        "declaration",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-    ),
-    contained(
       on(timedReadings, "lookupDocument", "timeDependent"),
       on(ItemTiming, "document", "timeDependent"),
     ),
@@ -2182,13 +2134,14 @@ export const referenceLawsByName = {
     ),
   ],
   "Template default target": [
+    contained(on(TemplateDefault, "node"), on(TemplateDefaultTarget, "node")),
     contained(
-      on(TemplateDefault, "itemRef", "itemDocument"),
+      on(TemplateDefaultTarget, "itemRef", "itemDocument"),
       on(ItemRefDocument, "node", "document"),
     ),
     contained(
       on(
-        TemplateDefault,
+        TemplateDefaultTarget,
         "declaration",
         "itemDocument",
         "template",
@@ -2198,12 +2151,12 @@ export const referenceLawsByName = {
       ),
       declarationRef,
     ),
-    check("Template_default_target", TemplateDefault, (t) =>
+    check("Template_default_target", TemplateDefaultTarget, (t) =>
       t.eq(t.declarationKind, "qti-template-declaration"),
     ),
   ],
   "Template default type": [
-    check("Template_default_type", TemplateDefault, (t) =>
+    check("Template_default_type", TemplateDefaultTarget, (t) =>
       t.and(
         t.or(
           t.eq(t.heldBase, ValueBaseOf.at("value", t.declBaseType)),
@@ -2248,10 +2201,14 @@ export const referenceLawsByName = {
     ),
   ],
   "Variable mapping source": [
-    contained(on(heldMappings, "itemRef", "itemDocument"), on(ItemRefDocument, "node", "document")),
+    contained(on(VariableMapping, "node"), on(MappingSourceDeclaration, "node")),
+    contained(
+      on(MappingSourceDeclaration, "itemRef", "itemDocument"),
+      on(ItemRefDocument, "node", "document"),
+    ),
     contained(
       on(
-        heldMappings,
+        MappingSourceDeclaration,
         "declaration",
         "itemDocument",
         "source",
@@ -2261,12 +2218,35 @@ export const referenceLawsByName = {
       ),
       declarationRef,
     ),
-    check("Variable_mapping_source", MappingSource, (m) =>
+    check("Variable_mapping_source", MappingSourceDeclaration, (m) =>
       m.eq(m.declarationKind, "qti-outcome-declaration"),
+    ),
+    // A mapped reading's declaration is its mapping's source's, so a reading through a mapping
+    // whose source its item declares nothing under is refused under the mapping's law.
+    contained(
+      on(
+        mappedReadings,
+        "named",
+        "variable",
+        "declaration",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
+      on(
+        MappingSourceDeclaration,
+        "itemRef",
+        "target",
+        "declaration",
+        "declarationKind",
+        "declBaseType",
+        "declCardinality",
+      ),
     ),
   ],
   "Variable mapping target": [
-    check("Variable_mapping_target", MappingSource, (m) =>
+    key(on(MappingSourceDeclaration, "itemRef", "target")),
+    check("Variable_mapping_target", MappingSourceDeclaration, (m) =>
       m.or(m.eq(m.targetDeclared, false), m.eq(m.target, m.source)),
     ),
   ],

@@ -885,7 +885,7 @@ const judgeVersion = Effect.fn("test.judgeOpenNames")(function* judgeVersion(
 
   // Every attribute probe stands before every element probe, so each case's errors are at its
   // list's index, the element cases' after all the attribute cases'.
-  const errors = yield* validate(`${oracleRoot}/${version}`, driver, [
+  const errors = yield* validate("vocab-open", `${oracleRoot}/${version}`, driver, [
     ...attributeProbes,
     ...elementProbes,
   ]);
