@@ -305,6 +305,7 @@ const tones: InlineChoiceInteraction = {
     content: [{ kind: "text", text: `Tone ${identifier}` }],
     fixed: identifier === "E",
     identifier,
+    templateVisibility: Option.none(),
   })),
   class: "",
   kind: "inline-choice",

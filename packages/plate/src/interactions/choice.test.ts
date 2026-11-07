@@ -57,9 +57,9 @@ const colours: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Red")], fixed: false, identifier: "A" },
-    { content: [words("Green")], fixed: false, identifier: "B" },
-    { content: [words("Blue")], fixed: false, identifier: "C" },
+    { content: [words("Red")], fixed: false, identifier: "A", templateVisibility: Option.none() },
+    { content: [words("Green")], fixed: false, identifier: "B", templateVisibility: Option.none() },
+    { content: [words("Blue")], fixed: false, identifier: "C", templateVisibility: Option.none() },
   ],
   class: "swatches",
   kind: "choice",
@@ -422,14 +422,25 @@ const decorative = (source: string): BodyNode => contentElement("img", { alt: ""
 const swatches: ChoiceInteraction = {
   ...colours,
   choices: [
-    { content: [words("Red")], fixed: false, identifier: "A" },
-    { content: [decorative("images/green.png")], fixed: false, identifier: "B" },
+    { content: [words("Red")], fixed: false, identifier: "A", templateVisibility: Option.none() },
+    {
+      content: [decorative("images/green.png")],
+      fixed: false,
+      identifier: "B",
+      templateVisibility: Option.none(),
+    },
     {
       content: [contentElement("img", { alt: "A blue swatch", src: "images/blue.png" })],
       fixed: false,
       identifier: "C",
+      templateVisibility: Option.none(),
     },
-    { content: [words("Yellow")], fixed: false, identifier: "D" },
+    {
+      content: [words("Yellow")],
+      fixed: false,
+      identifier: "D",
+      templateVisibility: Option.none(),
+    },
   ],
 };
 
@@ -1022,6 +1033,7 @@ describe("renderChoice", () => {
               ],
               fixed: false,
               identifier: "A",
+              templateVisibility: Option.none(),
             },
             ...colours.choices.slice(1),
           ],
@@ -1083,6 +1095,7 @@ describe("renderChoice", () => {
             content: [contentElement("span", { "aria-label": "A green swatch", role: "img" })],
             fixed: false,
             identifier: "B",
+            templateVisibility: Option.none(),
           },
         ],
       });
@@ -1107,6 +1120,7 @@ describe("renderChoice", () => {
               content: [words(" \n\t"), contentElement("img", { alt: " ", src: "images/red.png" })],
               fixed: false,
               identifier: "A",
+              templateVisibility: Option.none(),
             },
             {
               content: [
@@ -1115,6 +1129,7 @@ describe("renderChoice", () => {
               ],
               fixed: false,
               identifier: "B",
+              templateVisibility: Option.none(),
             },
             {
               content: [
@@ -1126,6 +1141,7 @@ describe("renderChoice", () => {
               ],
               fixed: false,
               identifier: "C",
+              templateVisibility: Option.none(),
             },
           ],
         });
@@ -1155,6 +1171,7 @@ describe("renderChoice", () => {
             content: [decorative(`images/${colour}.png`)],
             fixed: false,
             identifier: ["A", "B", "C"][index] ?? "",
+            templateVisibility: Option.none(),
           })),
           shuffle: true,
         });
@@ -1197,6 +1214,7 @@ describe("renderChoice", () => {
               ],
               fixed: false,
               identifier: "A",
+              templateVisibility: Option.none(),
             },
             ...colours.choices.slice(1),
           ],

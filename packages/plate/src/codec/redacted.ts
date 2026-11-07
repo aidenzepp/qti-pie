@@ -14,7 +14,7 @@
  * @see `redactItem` in `#plate/payload.ts`, the allowlist that decides which fields a `Redacted`
  *   holds.
  */
-import { Data, Option, Predicate, Result, Schema } from "effect";
+import { Data, Option, Predicate, Result, Schema, SchemaGetter } from "effect";
 import { greatestCount } from "#plate/count-range.ts";
 import type {
   BodyNode,
@@ -194,11 +194,37 @@ const Count = Schema.BigIntFromString.check(Schema.isGreaterThanOrEqualToBigInt(
 const OptionalCount = Schema.OptionFromOptionalKey(Count);
 
 /**
+ * A choice's template visibility, which the JSON form never holds: decoding gives none, and
+ * encoding refuses a choice that holds one, because `redact` settles each choice's visibility
+ * before the item leaves the server.
+ */
+const NoTemplateVisibility = Schema.optionalKey(Schema.Never).pipe(
+  Schema.decodeTo(
+    Schema.Option(
+      Schema.Struct({
+        showHide: Schema.Literals(["hide", "show"]),
+        templateIdentifier: Schema.String,
+      }),
+    ).check(
+      Schema.makeFilter(Option.isNone, {
+        message: "a redacted choice holds no template visibility; redact settles it",
+      }),
+    ),
+    { decode: SchemaGetter.succeed(Option.none()), encode: SchemaGetter.omit() },
+  ),
+);
+
+/**
  * The choices of a Choice or an Inline Choice, each with its content, `fixed` and identifier, in
- * document order.
+ * document order, and no template visibility.
  */
 const Choices = Schema.Array(
-  Schema.Struct({ content: BodyNodes, fixed: Schema.Boolean, identifier: Schema.String }),
+  Schema.Struct({
+    content: BodyNodes,
+    fixed: Schema.Boolean,
+    identifier: Schema.String,
+    templateVisibility: NoTemplateVisibility,
+  }),
 );
 
 /**
