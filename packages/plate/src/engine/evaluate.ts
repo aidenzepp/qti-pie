@@ -5,7 +5,8 @@
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
  * value for every modelled declaration and the built-in `completionStatus`, as the session record
- * does, and the attempt count the built-in `numAttempts` reads. A rule that names an identifier
+ * does, and the attempt count the built-in `numAttempts` reads. A random kind draws from the one
+ * stream ({@link Draw}) the call is given, in evaluation order. A rule that names an identifier
  * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
  * is a failure of what the caller passed, and the caller can cause each one: the variables come
  * from a record the host hands back. An identifier the variables hold no value of is the record's
@@ -35,6 +36,8 @@ import { testEvaluators } from "#plate/engine/expressions/test.ts";
 import { textEvaluators } from "#plate/engine/expressions/text.ts";
 import { numberOf, sameNumber } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
+import { drawStream } from "#plate/engine/random.ts";
+import type { Draw } from "#plate/engine/random.ts";
 import type { ExpressionKind } from "#plate/model/expression.ts";
 import type { Expression, Item, LookupTable, OutcomeDeclaration, Rule } from "#plate/model/item.ts";
 import {
@@ -80,13 +83,19 @@ export interface Variables {
 
 /**
  * The evaluator's context: the item whose declarations give the correct responses, the mappings
- * and the area mappings, and the variables of the attempt.
+ * and the area mappings, the variables of the attempt, and the stream its random kinds draw from.
  *
  * Every evaluator takes it whole, so a field the engine adds reaches every family with no change
  * to an evaluator's signature. The family tests build it only through `scopeOf` in
  * `#plate/test/processing.ts`.
  */
 export interface Scope {
+  /**
+   * The stream every draw of one processing run comes from, in evaluation order: operands left to
+   * right and a condition's branches until the first true one. An operand is evaluated in its
+   * caller's scope, so it draws from the same stream.
+   */
+  readonly draw: Draw;
   readonly item: Item;
   readonly variables: Variables;
 }
@@ -243,6 +252,11 @@ const isTrue = (value: Value): boolean => {
  * @param item The item, whose declarations give the correct responses, the mappings and the area
  *   mappings.
  * @param variables The variables of the attempt.
+ * @param draw The stream the expression's random kinds draw from. Without one, the call builds the
+ *   default stream, `drawStream("")`, afresh, which stands for "no draws expected": it serves tests
+ *   and isolated evaluation. Every processing entry passes the stream of its own key instead
+ *   (`runAttempt` its response key, `firstAttempt` its template key), because an entry left on the
+ *   default would draw the same numbers for every session and attempt, and no test would fail.
  * @returns The expression's value; or an {@link EngineFailure}: an {@link UnknownIdentifierError}
  *   when it names a variable or response that is not held, or an {@link UnmappedResponseError} when
  *   a `map-response` names a response with no mapping or a `map-response-point` one with no area
@@ -252,7 +266,8 @@ export const evaluateExpression = (
   expression: Expression,
   item: Item,
   variables: Variables,
-): Result.Result<Value, EngineFailure> => evaluate(expression, { item, variables });
+  draw: Draw = drawStream(""),
+): Result.Result<Value, EngineFailure> => evaluate(expression, { draw, item, variables });
 
 /**
  * Give the type of an outcome a rule sets: its modelled declaration's, else the built-in
@@ -330,16 +345,18 @@ const setOutcome = (
  * @param condition The `qti-response-condition`.
  * @param item The item.
  * @param variables The variables before the condition.
+ * @param draw The run's stream.
  * @returns The chosen rules, or the first failure of a branch condition.
  */
 const chosenRules = (
   condition: Extract<Rule, { readonly kind: "condition" }>,
   item: Item,
   variables: Variables,
+  draw: Draw,
 ): Result.Result<readonly Rule[], EngineFailure> =>
   Result.gen(function* chooseBranch() {
     for (const branch of condition.branches) {
-      if (isTrue(yield* evaluateExpression(branch.when, item, variables))) {
+      if (isTrue(yield* evaluateExpression(branch.when, item, variables, draw))) {
         return branch.then;
       }
     }
@@ -441,22 +458,28 @@ interface Run {
  * @param rule The rule.
  * @param item The item.
  * @param variables The variables before the rule.
+ * @param draw The run's stream.
  * @returns The variables after it with whether it exited, or the first failure of the rule.
  */
-const runRule = (rule: Rule, item: Item, variables: Variables): Result.Result<Run, EngineFailure> =>
+const runRule = (
+  rule: Rule,
+  item: Item,
+  variables: Variables,
+  draw: Draw,
+): Result.Result<Run, EngineFailure> =>
   Result.gen(function* runOneRule() {
     if (rule.kind === "exit") {
       return { exited: true, variables };
     }
 
     if (rule.kind === "condition") {
-      const then = yield* chosenRules(rule, item, variables);
+      const then = yield* chosenRules(rule, item, variables, draw);
 
       // oxlint-disable-next-line eslint/no-use-before-define -- `runRule` and `runSequence` are mutually recursive, as conditions nest; the call runs only after both are defined.
-      return yield* runSequence(then, item, variables);
+      return yield* runSequence(then, item, variables, draw);
     }
 
-    const value = yield* evaluateExpression(rule.expression, item, variables);
+    const value = yield* evaluateExpression(rule.expression, item, variables, draw);
     const set = rule.kind === "set-outcome" ? value : lookedUp(item, rule.identifier, value);
 
     return { exited: false, variables: yield* setOutcome(item, variables, rule.identifier, set) };
@@ -468,6 +491,7 @@ const runRule = (rule: Rule, item: Item, variables: Variables): Result.Result<Ru
  * @param rules The rules.
  * @param item The item.
  * @param variables The variables before the rules run.
+ * @param draw The run's stream.
  * @returns The variables after the last rule run with whether an exit ended the run, or the first
  *   failure.
  */
@@ -475,11 +499,12 @@ const runSequence = (
   rules: readonly Rule[],
   item: Item,
   variables: Variables,
+  draw: Draw,
 ): Result.Result<Run, EngineFailure> =>
   Result.gen(function* runInOrder() {
     let current = variables;
     for (const rule of rules) {
-      const run = yield* runRule(rule, item, current);
+      const run = yield* runRule(rule, item, current, draw);
       if (run.exited) {
         return run;
       }
@@ -500,6 +525,12 @@ const runSequence = (
  * @param rules The rules, as the item model built them.
  * @param item The item they belong to.
  * @param variables The variables before the rules run.
+ * @param draw The one stream every rule's expressions draw from, in the order the rules run them.
+ *   Without one, the call builds the default stream, `drawStream("")`, afresh, which stands for "no
+ *   draws expected": it serves tests and isolated evaluation. Every processing entry passes the
+ *   stream of its own key instead (`runAttempt` its response key, `firstAttempt` its template key;
+ *   outcome processing brings its own), because an entry left on the default would draw the same
+ *   numbers for every session and attempt, and no test would fail.
  * @returns The variables after the last rule run; or the first failure, after which no rule runs:
  *   an {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do
  *   not hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
@@ -511,5 +542,6 @@ export const runRules = (
   rules: readonly Rule[],
   item: Item,
   variables: Variables,
+  draw: Draw = drawStream(""),
 ): Result.Result<Variables, EngineFailure> =>
-  Result.map(runSequence(rules, item, variables), (run) => run.variables);
+  Result.map(runSequence(rules, item, variables, draw), (run) => run.variables);

@@ -1,23 +1,34 @@
 /**
- * The owned generator: a 32-bit FNV-1a hash of a key seeds a SplitMix32 generator, whose draws
- * order a shuffled Choice by Fisher-Yates.
+ * OD-3's generator: a 32-bit FNV-1a hash of a key seeds a SplitMix32 stream, whose draws order a
+ * shuffled Choice by Fisher-Yates and give the random expression kinds their floats and integers.
  *
- * Every step is pinned to the bit, because the order is replayed: M2 restores a session's
- * presented order and its `choiceSequence` from the stored key alone, so the same key must give
- * the same order in every build, browser and engine. The generator is a placeholder for OD-3,
- * which M3.b settles; until then nothing here may change without a new pin.
+ * The algorithm is part of the session contract. A session's presented order and every value a
+ * random kind draws are replayed from the stored key alone, so the same key gives the same draws in
+ * every build, browser and engine. Every step is pinned to the bit, and nothing here may change
+ * without a new pin.
  *
  * Arithmetic is modulo 2^32 throughout: `Math.imul` multiplies modulo 2^32 and `>>> 0` reads a
- * result as an unsigned 32-bit integer. The module is pure and synchronous, and imports nothing.
+ * result as an unsigned 32-bit integer. The module is pure and synchronous, and imports nothing. It
+ * holds no stream: every draw comes from a stream its caller passes, so no result depends on an
+ * earlier call.
  *
  * @module
  */
-/* oxlint-disable no-bitwise -- FNV-1a and the MurmurHash3 finaliser are defined by XOR, shifts and modulo-2^32 multiplication; the bitwise operators are the specification, not a slip for logical ones. */
+/* oxlint-disable no-bitwise -- FNV-1a, the MurmurHash3 finaliser and the float draw are defined by XOR, shifts and modulo-2^32 multiplication; the bitwise operators are the specification, not a slip for logical ones. */
 
 /**
  * 2^32, the number of distinct draws; a draw divided by it is a fraction in [0, 1).
  */
-const drawCount = 2 ** 32;
+const drawCount = 4_294_967_296;
+
+/**
+ * One stream's draws: each call gives the stream's next draw, an unsigned 32-bit integer, and
+ * advances the stream.
+ *
+ * Every draw of one processing run comes from one stream, in evaluation order, so the run's values
+ * depend only on the stream's key ({@link drawStream}).
+ */
+export type Draw = () => number;
 
 /**
  * The encoder of a key's UTF-8 bytes. A lone surrogate encodes as U+FFFD, as the Encoding
@@ -118,3 +129,112 @@ export const shuffleOrder = (key: string, fixed: readonly boolean[]): readonly n
   // `shuffled` holds one entry per non-fixed position, so the iterator never runs dry here.
   return fixed.map((isFixed, index) => (isFixed ? index : (presented.next().value ?? index)));
 };
+
+/**
+ * Construct the stream of a key: {@link splitMix32} seeded with the key's {@link fnv1a32} hash, as
+ * {@link shuffleOrder} draws.
+ *
+ * Each call starts a fresh stream, so the same key gives the same draws in every call. The
+ * construction is part of OD-3's contract.
+ *
+ * @param key The key, such as {@link templateKey}'s or {@link responseKey}'s.
+ * @returns The stream's draws.
+ */
+export const drawStream = (key: string): Draw => splitMix32(fnv1a32(key));
+
+/**
+ * Draw a float in [0, 1) from two draws `a` and `b`, taken in that order:
+ * `((a >>> 5) × 67_108_864 + (b >>> 6)) / 9_007_199_254_740_992`, that is, the top 27 bits of `a`
+ * above the top 26 bits of `b`, over 2^53.
+ *
+ * The 53-bit numerator is exact in a `number` and the division by 2^53 is exact, so the float is
+ * the same in every engine: one of the 2^53 multiples of 2^-53 below 1, each equally likely. The
+ * formula is part of OD-3's contract.
+ *
+ * @param draw The stream; the float takes its next two draws.
+ * @returns The float, at least 0 and below 1.
+ */
+export const drawFloat = (draw: Draw): number => {
+  const high = draw() >>> 5;
+  const low = draw() >>> 6;
+
+  return (high * 67_108_864 + low) / 9_007_199_254_740_992;
+};
+
+/**
+ * Read one candidate of {@link drawBelow}: ⌈bits / 32⌉ draws as one big-endian number, the first
+ * draw the most significant 32-bit word and the last the least, masked to its low `bits` bits.
+ *
+ * @param draw The stream.
+ * @param bits The number of low bits kept, 1 or more.
+ * @returns The candidate, below 2^bits.
+ */
+const candidateOf = (draw: Draw, bits: number): bigint => {
+  let whole = 0n;
+  for (let read = 0; read < bits; read += 32) {
+    whole = whole * BigInt(drawCount) + BigInt(draw());
+  }
+
+  return BigInt.asUintN(bits, whole);
+};
+
+/**
+ * Draw an integer below a count, each equally likely, by rejection: with `k` the bit length of
+ * `count − 1`, read ⌈k / 32⌉ draws as one big-endian number (the first draw the most significant
+ * 32-bit word, the last the least), mask it to its low `k` bits, and draw again while the result is
+ * not below `count`.
+ *
+ * A candidate is below 2^k, which is less than twice `count`, so each candidate is accepted with
+ * probability above one half. A count of 1 has `k` 0: it draws nothing and gives 0. The procedure
+ * is part of OD-3's contract.
+ *
+ * @param draw The stream; each candidate takes its next ⌈k / 32⌉ draws.
+ * @param count The number of values to draw among, 1 or more. A count below 1 is read as 1, so the
+ *   draw always ends.
+ * @returns The integer, at least 0 and below `count`.
+ */
+export const drawBelow = (draw: Draw, count: bigint): bigint => {
+  if (count <= 1n) {
+    return 0n;
+  }
+
+  const bits = (count - 1n).toString(2).length;
+  let candidate = candidateOf(draw, bits);
+  while (candidate >= count) {
+    candidate = candidateOf(draw, bits);
+  }
+
+  return candidate;
+};
+
+/**
+ * The separator of a key's fields, U+001F INFORMATION SEPARATOR ONE, as a shuffled Choice's key
+ * joins its fields (`choiceOrder` in `#plate/payload.ts`).
+ */
+const keySeparator = "\u001F";
+
+/**
+ * Construct the key an item's template processing draws under:
+ * `<seed>\u001F<instance>\u001Ftemplate\u001F<item>`.
+ *
+ * @param seed The record's seed: the host's seed written with `String`, the empty string when the
+ *   host gave none.
+ * @param instance The item's instance.
+ * @param item The item's identifier.
+ * @returns The key, for {@link drawStream}.
+ */
+export const templateKey = (seed: string, instance: string, item: string): string =>
+  [seed, instance, "template", item].join(keySeparator);
+
+/**
+ * Construct the key an attempt's response processing draws under:
+ * `<seed>\u001F<instance>\u001Fresponse\u001F<numAttempts>`, the count written with `String`.
+ *
+ * @param seed The record's seed: the host's seed written with `String`, the empty string when the
+ *   host gave none.
+ * @param instance The item's instance.
+ * @param numAttempts The attempt's count, the built-in `numAttempts` its processing reads.
+ * @returns The key, for {@link drawStream}.
+ */
+export const responseKey = (seed: string, instance: string, numAttempts: number): string =>
+  [seed, instance, "response", String(numAttempts)].join(keySeparator);
