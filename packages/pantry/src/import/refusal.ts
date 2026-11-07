@@ -165,6 +165,7 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
+import { catalogLawsByName } from "#pantry/qti/catalog.ts";
 import { htmlLawsByName } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
 import { operatorLawsByName } from "#pantry/qti/operators.ts";
@@ -217,6 +218,8 @@ export const precedence = [
   "idref-target",
   "table-headers",
   "label-tool",
+  "card-support",
+  "card-default",
   "document-lang",
   // O2, declarations.
   "declaration-key",
@@ -516,6 +519,16 @@ export const lawTable = {
     rule: "branch-target",
     source:
       "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
+  },
+  "Card default entry": {
+    rule: "card-default",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_CardEntry (§5.27.2, CardEntry's default: 'Only one of the CardEntry instances can have a default designation'): a card holds at most one entry whose default, an xs:boolean collapsed, is true or 1 (catalog.ts DefaultEntry)",
+  },
+  "Card support": {
+    rule: "card-support",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog'): a catalog holds one card for each support, compared by its collapsed value (catalog.ts CardSupport)",
   },
   "Choice bounds": {
     rule: "choice-bounds",
@@ -1638,6 +1651,8 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("ResourceLomLanguageSet", "general", "lang"), "E1 derived"],
   [primaryKeyOf("Quotation", "node"), "E1 derived"],
   [primaryKeyOf("LabelUse", "node"), "Label tools"],
+  [primaryKeyOf("CardSupport", "node"), "E1 derived"],
+  [primaryKeyOf("DefaultEntry", "node"), "E1 derived"],
   [primaryKeyOf("TableScope", "node"), "E1 derived"],
   [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
   [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
@@ -2112,6 +2127,7 @@ export const namedLaws: readonly LawsByName[] = [
   htmlLawsByName,
   quotationLawsByName,
   operatorLawsByName,
+  catalogLawsByName,
 ];
 
 /**

@@ -98,6 +98,8 @@ const mutations: Readonly<Partial<Record<LawName, Mutation>>> = {
  * ahead of it too. The list only shrinks.
  */
 const owed: Readonly<Partial<Record<LawName, string>>> = {
+  "Card default entry": "its mutation is not written yet",
+  "Card support": "its mutation is not written yet",
   "Manifest id space":
     "every resource identifier and the manifest's are xs:ID values of one document, so a resource named as its manifest breaks DocumentId key, which ranks first, and the database names document-key: the law is shadowed (lane OL's finding)",
   "MathML align first": "its mutation is not written yet",

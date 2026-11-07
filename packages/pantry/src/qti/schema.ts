@@ -192,6 +192,7 @@ import {
   ResourceFile,
   ResourceHref,
 } from "#pantry/qti/package.ts";
+import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
 import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
 import { testLaws, testRelations } from "#pantry/qti/tests.ts";
 
@@ -427,6 +428,7 @@ export const Qti = schema(
     ...quotationRelations,
     ...operatorRelations,
     ...mathmlRelations,
+    ...catalogRelations,
   },
   [
     ...nodeLaws,
@@ -444,5 +446,6 @@ export const Qti = schema(
     ...quotationLaws,
     ...operatorLaws,
     ...mathmlLaws,
+    ...catalogLaws,
   ],
 );

@@ -172,6 +172,8 @@ export const oracleRules = [
   "body-empty",
   "branch-forward",
   "branch-target",
+  "card-default",
+  "card-support",
   "child-set",
   "choice-bounds",
   "choice-identifier-distinct",
@@ -4082,6 +4084,29 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
             (id === root?.id ? version === "3.0.1" : !readerLabels.has(kind)) &&
             Option.isSome(valueOf(view, id, "label")),
         );
+  // Reading R9-a: "Use only one card for any particular named support in a catalog" (§5.26.1), a
+  // support compared by its collapsed value, and "Only one of the CardEntry instances can have a
+  // default designation" (§5.27.2), an entry designating where its collapsed `default` is true or 1.
+  const cards = Map.groupBy(
+    view.members.flatMap((node) =>
+      node.kind === "qti-card"
+        ? Option.toArray(collapsedOf(overlay, node, "support")).map((support) => ({
+            node,
+            support,
+          }))
+        : [],
+    ),
+    ({ node, support }) => `${node.parent} ${support}`,
+  );
+  const designated = Map.groupBy(
+    view.members.filter(
+      (node) =>
+        node.kind === "qti-card-entry" &&
+        (Option.contains(collapsedOf(overlay, node, "default"), "true") ||
+          Option.contains(collapsedOf(overlay, node, "default"), "1")),
+    ),
+    ({ parent }) => parent,
+  );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
   // so in an item no two of the interactions Binding declared reads name one response.
   const bindings = overlay.isItem
@@ -4146,6 +4171,22 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
     }),
     ...labelled.map(({ id }) =>
       at(id, { keys: { missing: missingTools.join(" ") }, law: "Label tools" }),
+    ),
+    ...[...cards.values()].flatMap((held) =>
+      held.slice(1).map(({ node, support }) =>
+        at(node.id, {
+          keys: { first: pathOf(view, held[0]?.node.id ?? node.id), support },
+          law: "Card support",
+        }),
+      ),
+    ),
+    ...[...designated.values()].flatMap((held) =>
+      held.slice(1).map((node) =>
+        at(node.id, {
+          keys: { first: pathOf(view, held[0]?.id ?? node.id) },
+          law: "Card default entry",
+        }),
+      ),
     ),
     ...[...bindings].flatMap(([identifier, held]) =>
       held.slice(1).map(({ node }) =>
@@ -6101,6 +6142,20 @@ const ownLaws = {
     rule: "branch-target",
     source:
       "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
+  },
+  "Card default entry": {
+    explain: (keys) =>
+      `the entry ${field(keys, "node")} designates itself the default of its card, which ${field(keys, "first")} already does`,
+    rule: "card-default",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_CardEntry (§5.27.2, CardEntry's default: 'Only one of the CardEntry instances can have a default designation'): a card holds at most one entry whose default, an xs:boolean collapsed, is true or 1 (catalog.ts DefaultEntry)",
+  },
+  "Card support": {
+    explain: (keys) =>
+      `the card ${field(keys, "node")} names the support ${JSON.stringify(field(keys, "support"))}, which ${field(keys, "first")} already names in its catalog`,
+    rule: "card-support",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog'): a catalog holds one card for each support, compared by its collapsed value (catalog.ts CardSupport)",
   },
   "Choice bounds": {
     explain: (keys) =>
