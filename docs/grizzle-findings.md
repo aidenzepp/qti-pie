@@ -1559,8 +1559,11 @@ target's UNIQUE are both representable, and only the source's index is refused.
   - **Planted bugs, each caught:** an identity end, a first-member end, a dropped high hex digit, and the old
     `edit.ts:203` read.
   - **Still to come:** lane FOLD's part 2, distinct branded types for parameter text and output text.
-  - **qti-pie:** S-ORACLE's repin E and N2's confirmation follow, and their hashes are recorded here when they land.
-    Nothing is filed.
+  - **Confirmed downstream by lane N2** at `1bf3dbb`, from tarballs packed from a `git archive` of it (grizzle
+    `80a2dcaf…`, engine `a4cd1c90…`): in `~/.cache/gr8des/n2/repro/fold-closed-row-1bf3dbb/run-1bf3dbb.out` the case,
+    the host-bits variant and the sum control are all `accepted`, and the owner's end is `bases` `"1100"`, which is
+    {a, b}, beside `members` `"2"`.
+  - **qti-pie:** S-ORACLE's repin E follows, and its hash is recorded here when it lands. Nothing is filed.
 
 ### A CHECK's refusal drops PostgreSQL's DETAIL row (a reporting limit, accepted by grizzle)
 
