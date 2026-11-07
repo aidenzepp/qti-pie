@@ -68,9 +68,10 @@ const SCAN = new RegExp(
  */
 interface Scanned {
   /**
-   * The first reference whose name is no NCName, and where it stands in the body.
+   * The first reference whose name is no NCName: where it stands in the body, and how its name
+   * breaks the production.
    */
-  readonly colon: Option.Option<{ readonly name: string; readonly offset: number }>;
+  readonly colon: Option.Option<{ readonly offset: number; readonly violation: string }>;
   readonly names: readonly string[];
   readonly used: ReadonlySet<number>;
 }
@@ -84,9 +85,10 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
   const used = sentinelsWritten(body);
   let colon: Scanned["colon"] = Option.none();
   for (const match of body.matchAll(SCAN)) {
-    const { decimal, hex, name } = match.groups ?? {};
-    if (name !== undefined && Option.isNone(colon) && !isNCName(name)) {
-      colon = Option.some({ name, offset: match.index });
+    const [, hex, decimal, name] = match;
+    const violation = name === undefined ? Option.none() : productionViolation(name, "NCName");
+    if (Option.isNone(colon) && Option.isSome(violation)) {
+      colon = Option.some({ offset: match.index, violation: violation.value });
     }
 
     if (name !== undefined && !PREDEFINED.has(name) && !declared.has(name)) {
@@ -124,14 +126,14 @@ const assignSentinels = (
     (): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal | WellFormednessError> => {
       const scanned = scanReferences(substituted.slice(prolog.bodyStart), prolog.entities);
       if (Option.isSome(scanned.colon)) {
-        const { name, offset } = scanned.colon.value;
+        const { offset, violation } = scanned.colon.value;
         const at = prolog.bodyStart + offset;
         const position = positionOf(substituted, at);
 
         return Effect.fail(
           new WellFormednessError({
             ...position,
-            message: `${String(position.line)}:${String(position.column)}: entity reference: ${Option.getOrElse(productionViolation(name, "NCName"), () => name)}.`,
+            message: `${String(position.line)}:${String(position.column)}: entity reference: ${violation}.`,
           }),
         );
       }
@@ -514,6 +516,26 @@ const violationAt = (start: StartTag, message: string): WellFormednessError =>
   });
 
 /**
+ * Read where an element of the built tree ended its start tag. {@link parse} records it for every
+ * element it builds, when the element closes, so an element it did not build is its caller's defect
+ * and is thrown as one.
+ *
+ * @param built - The tree `saxes` built.
+ * @param element - One of its elements.
+ * @returns Where the element's start tag ended.
+ */
+const startOf = (built: Built, element: Element): StartTag => {
+  const start = built.starts.get(element);
+  if (start === undefined) {
+    throw new Error(
+      `The reader's built tree records no start tag for the element <${element.qname}>.`,
+    );
+  }
+
+  return start;
+};
+
+/**
  * Assemble the document from what the earlier stages read and the tree `saxes` built.
  *
  * One walk, without recursion, gives every element its {@link attributesOf}, written and
@@ -541,8 +563,6 @@ const assemble = (
       onSome: (declaration) => declaration.version,
     }),
   );
-  // Every element of the built tree has its start tag, set when it closed.
-  const documentStart: StartTag = { column: 0, line: 1 };
   const root = rebuild<Scope, WellFormednessError>(
     built.root,
     rootScope,
@@ -556,7 +576,7 @@ const assemble = (
           scope,
           namespaces,
         ),
-        (message) => violationAt(built.starts.get(element) ?? documentStart, message),
+        (message) => violationAt(startOf(built, element), message),
       ),
     (leaf) =>
       Result.succeed(

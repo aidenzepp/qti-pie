@@ -2,6 +2,7 @@
  * The private use area's code points, where an undeclared entity reference borrows a stand-in
  * character (6,400 of them), and the scan for the ones a text already writes out.
  */
+import { codePointOf } from "#crust/charset.ts";
 
 /**
  * The first code point of the private use area.
@@ -34,7 +35,7 @@ const SENTINELS = new RegExp(
 export const sentinelsWritten = (text: string): Set<number> => {
   const used = new Set<number>();
   for (const [character] of text.matchAll(SENTINELS)) {
-    used.add(character.codePointAt(0) ?? 0);
+    used.add(codePointOf(character));
   }
 
   return used;

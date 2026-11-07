@@ -20,8 +20,8 @@ export interface Opened<S> {
  * The rebuild folds `root`'s {@link tour}, so a tree of any depth or width is rebuilt without
  * recursion. Each open puts the counterpart in the children list being filled and makes its own
  * list and context the ones in force; each close returns to the list and context it interrupted,
- * which the root's own close leaves at the root's. The callbacks see only the original nodes. The
- * first failure in document order ends the rebuild.
+ * and the root's own close, which interrupted none, ends the rebuild. The callbacks see only the
+ * original nodes. The first failure in document order ends the rebuild.
  *
  * @param root - The element to rebuild.
  * @param scope - The context `root` is opened in.
@@ -62,8 +62,12 @@ export const rebuild = <S, E>(
       current = opened.success.scope;
     } else if (step.kind === "close") {
       const resumed = interrupted.pop();
-      into = resumed?.into ?? children;
-      current = resumed?.scope ?? top.success.scope;
+      // Only the root's own close, the tour's last step, interrupted nothing: the rebuild is done.
+      if (resumed === undefined) {
+        break;
+      }
+
+      ({ into, scope: current } = resumed);
     } else {
       const nodes = leaf(step.node);
       if (Result.isFailure(nodes)) {

@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Array as Arr, Effect, Option } from "effect";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import { NAME_CHAR, NAME_START, productionViolation } from "#crust/names.ts";
 import type { Production } from "#crust/names.ts";
@@ -425,9 +425,7 @@ export const positionOf = (source: string, offset: number) => {
     lineStart = lineBreak.index + lineBreak[0].length;
   }
 
-  const codePoints = before.slice(lineStart).match(/./gsu)?.length ?? 0;
-
-  return { column: codePoints + 1, line };
+  return { column: Arr.fromIterable(before.slice(lineStart)).length + 1, line };
 };
 
 /**
@@ -826,12 +824,12 @@ const expandEntityValue = (tables: Tables, cursor: Cursor, literal: Literal) =>
         return [yield* characterOf(cursor, token, offset)];
       }
 
-      const violation = productionViolation(general ?? parameter ?? "", "NCName");
-      if (Option.isSome(violation)) {
-        return yield* failure(cursor, `entity value: ${violation.value}.`, offset);
-      }
-
       if (general !== undefined) {
+        const violation = productionViolation(general, "NCName");
+        if (Option.isSome(violation)) {
+          return yield* failure(cursor, `entity value: ${violation.value}.`, offset);
+        }
+
         return [whole];
       }
 
@@ -841,6 +839,11 @@ const expandEntityValue = (tables: Tables, cursor: Cursor, literal: Literal) =>
           `entity value: "${whole}" must be written as a reference, "&#${whole === "&" ? "38" : "37"};".`,
           offset,
         );
+      }
+
+      const violation = productionViolation(parameter, "NCName");
+      if (Option.isSome(violation)) {
+        return yield* failure(cursor, `entity value: ${violation.value}.`, offset);
       }
 
       if (tables.parameters.has(parameter)) {
@@ -918,17 +921,17 @@ const expandDefault = (
         return [{ kind: "text", text: yield* characterOf(cursor, token, where) }];
       }
 
-      const violation = productionViolation(entity ?? "", "NCName");
-      if (Option.isSome(violation)) {
-        return yield* failure(cursor, `attribute default: ${violation.value}.`, where);
-      }
-
       if (entity === undefined) {
         return yield* failure(
           cursor,
           `attribute default: "${whole}" cannot appear in a default value; write "&#${whole === "&" ? "38" : "60"};".`,
           where,
         );
+      }
+
+      const violation = productionViolation(entity, "NCName");
+      if (Option.isSome(violation)) {
+        return yield* failure(cursor, `attribute default: ${violation.value}.`, where);
       }
 
       const predefined = PREDEFINED.get(entity);
@@ -1163,9 +1166,10 @@ const lexAttlist = Effect.fnUntraced(function* lexAttlistDeclaration(
       default: yield* lexAttributeDefault(tables, cursor, { attribute: name, element }),
       type,
     };
-    const attributes = tables.attlists.get(element) ?? new Map<string, AttlistEntry>();
-    tables.attlists.set(element, attributes);
-    if (!attributes.has(name)) {
+    const attributes = tables.attlists.get(element);
+    if (attributes === undefined) {
+      tables.attlists.set(element, new Map([[name, entry]]));
+    } else if (!attributes.has(name)) {
       attributes.set(name, entry);
     }
   }
@@ -1183,26 +1187,23 @@ const lexAttlist = Effect.fnUntraced(function* lexAttlistDeclaration(
  */
 const findCycle = (entities: ReadonlyMap<string, string>): Option.Option<readonly string[]> => {
   const cleared = new Set<string>();
-  for (const root of entities.keys()) {
+  for (const [root, text] of entities) {
     if (cleared.has(root)) {
       continue;
     }
 
-    const path: string[] = [root];
-    const onPath = new Set<string>(path);
-    const frames: Iterator<RegExpExecArray>[] = [
-      (entities.get(root) ?? "").matchAll(REFERENCE_OR_HIDDEN),
+    // Each entity along the path from `root`, with the references of its replacement text that are
+    // not yet followed; the innermost last.
+    const path: { readonly name: string; readonly references: Iterator<RegExpExecArray> }[] = [
+      { name: root, references: text.matchAll(REFERENCE_OR_HIDDEN) },
     ];
-    while (frames.length > 0) {
-      const step = frames.at(-1)?.next();
-      if (step === undefined || step.done === true) {
-        frames.pop();
-
-        const finished = path.pop();
-        if (finished !== undefined) {
-          onPath.delete(finished);
-          cleared.add(finished);
-        }
+    const onPath = new Set<string>([root]);
+    for (let frame = path.at(-1); frame !== undefined; frame = path.at(-1)) {
+      const step = frame.references.next();
+      if (step.done === true) {
+        path.pop();
+        onPath.delete(frame.name);
+        cleared.add(frame.name);
 
         continue;
       }
@@ -1213,14 +1214,15 @@ const findCycle = (entities: ReadonlyMap<string, string>): Option.Option<readonl
       }
 
       if (onPath.has(name)) {
-        return Option.some([...path.slice(path.indexOf(name)), name]);
+        const names = path.map((entry) => entry.name);
+
+        return Option.some([...names.slice(names.indexOf(name)), name]);
       }
 
       const replacement = entities.get(name);
       if (replacement !== undefined && !cleared.has(name)) {
-        path.push(name);
+        path.push({ name, references: replacement.matchAll(REFERENCE_OR_HIDDEN) });
         onPath.add(name);
-        frames.push(replacement.matchAll(REFERENCE_OR_HIDDEN));
       }
     }
   }
@@ -1339,16 +1341,10 @@ const lexElementNames = Effect.fnUntraced(function* lexElementDeclarationNames(
   const model = cursor.offset;
   const rest = consume(cursor, DECLARATION_REST);
   if (Option.isNone(rest)) {
-    yield* failure(cursor, "declaration: the declaration that starts here is not closed.");
+    return yield* failure(cursor, "declaration: the declaration that starts here is not closed.");
   }
 
-  yield* namesHeldTo(
-    cursor,
-    Option.getOrElse(rest, () => ""),
-    model,
-    "QName",
-    `${context}, content model`,
-  );
+  return yield* namesHeldTo(cursor, rest.value, model, "QName", `${context}, content model`);
 });
 
 /**
@@ -1422,7 +1418,7 @@ const lexSubset: (
         const used = yield* readParameterReference(tables, cursor, active);
         if (Option.isSome(used)) {
           const inside: Cursor = {
-            anchor: Option.some(Option.getOrElse(cursor.anchor, () => start)),
+            anchor: Option.orElseSome(cursor.anchor, () => start),
             offset: 0,
             source: cursor.source,
             text: used.value.replacement,
@@ -1745,8 +1741,8 @@ export const substitute = (text: string, prolog: Prolog): Effect.Effect<string, 
 
           offset = reference.value.end;
         } else {
-          const char = source[offset];
-          result += ATTRIBUTE_QUOTES.get(char ?? "") ?? char;
+          const char = source.charAt(offset);
+          result += ATTRIBUTE_QUOTES.get(char) ?? char;
           offset += 1;
         }
       }

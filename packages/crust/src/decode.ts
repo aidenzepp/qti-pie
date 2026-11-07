@@ -32,9 +32,13 @@ type BodyDecoder = (body: Uint8Array, label: string) => Effect.Effect<string, Re
  */
 interface Units {
   /**
-   * The code unit at `index`, `NaN` past the last whole one.
+   * The code unit at `index`, for an `index` below {@link Units.length}.
    */
   readonly at: (index: number) => number;
+  /**
+   * How many whole code units the body holds.
+   */
+  readonly length: number;
   /**
    * The first `count` units as characters; a cut surrogate pair becomes U+FFFD, since the text is
    * only searched for the XML declaration.
@@ -49,18 +53,18 @@ interface Units {
  * encoding signature that is no part of the document's text (XML 1.0 section 4.3.3). `units` reads
  * the body in the code units the row writes ASCII characters in, for its XML declaration.
  * `decoders` holds a decoder for each encoder class whose labels name an encoding of the row, and
- * for no other. `fallback` is the encoding of a document of the row that declares none: the mark's
- * encoding, or UTF-8 where there is no mark (section 4.3.3). `opening` and `named` word the row in
- * a refusal.
+ * for no other. `undeclared` is the encoding of a document of the row that declares none: the
+ * mark's encoding, or UTF-8 where there is no mark (section 4.3.3). `opening` and `named` word the
+ * row in a refusal.
  */
 interface Decodable {
   readonly _tag: "Decodable";
   readonly decoders: Partial<Readonly<Record<EncoderClass, BodyDecoder>>>;
-  readonly fallback: string;
   readonly mark: number;
   readonly named: string;
   readonly opening: string;
   readonly signature: readonly number[];
+  readonly undeclared: string;
   readonly units: (body: Uint8Array) => Units;
 }
 
@@ -116,10 +120,15 @@ const startsWith = (bytes: Uint8Array, prefix: readonly number[]): boolean =>
  * @param body - The bytes after any byte order mark.
  * @returns The units.
  */
-const byteUnits = (body: Uint8Array): Units => ({
-  at: (index) => body[index] ?? Number.NaN,
-  text: (count) => latin1Text(body.subarray(0, count)),
-});
+const byteUnits = (body: Uint8Array): Units => {
+  const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
+
+  return {
+    at: (index) => view.getUint8(index),
+    length: view.byteLength,
+    text: (count) => latin1Text(body.subarray(0, count)),
+  };
+};
 
 /**
  * Read `body` as UTF-16 code units in `order`.
@@ -132,10 +141,8 @@ const utf16Units = (body: Uint8Array, order: Utf16Order): Units => {
   const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
 
   return {
-    at: (index) =>
-      2 * index + 1 < view.byteLength
-        ? view.getUint16(2 * index, order === "utf-16le")
-        : Number.NaN,
+    at: (index) => view.getUint16(2 * index, order === "utf-16le"),
+    length: Math.floor(view.byteLength / 2),
     text: (count) => new TextDecoder(order).decode(body.subarray(0, 2 * count)),
   };
 };
@@ -152,12 +159,15 @@ const utf16Units = (body: Uint8Array, order: Utf16Order): Units => {
  *   encoding.
  */
 const declaredEncoding = (units: Units): Option.Option<string> => {
-  if (!declarationOpen.every((unit, index) => units.at(index) === unit)) {
+  if (
+    units.length < declarationOpen.length ||
+    !declarationOpen.every((unit, index) => units.at(index) === unit)
+  ) {
     return Option.none();
   }
 
   let end = declarationOpen.length;
-  while (!Number.isNaN(units.at(end)) && !(units.at(end - 1) === 0x3f && units.at(end) === 0x3e)) {
+  while (end < units.length && !(units.at(end - 1) === 0x3f && units.at(end) === 0x3e)) {
     end += 1;
   }
 
@@ -232,14 +242,14 @@ const decodeStrictly = (
  */
 const asciiDecoders: Readonly<Record<"ascii" | "decode-only" | "latin1" | "utf8", BodyDecoder>> = {
   ascii: (body, label) => {
-    const offset = body.findIndex((byte) => byte >= 0x80);
+    const byte = body.find((value) => value >= 0x80);
 
-    return offset === -1
+    return byte === undefined
       ? Effect.succeed(latin1Text(body))
       : Effect.fail(
           refuse(
             "decode",
-            `The document is read as ${label}, which holds only bytes below 0x80, but the byte at offset ${offset} is 0x${(body[offset] ?? 0).toString(16).toUpperCase()}. Re-save the document as UTF-8, or declare the encoding it was written in.`,
+            `The document is read as ${label}, which holds only bytes below 0x80, but the byte at offset ${body.indexOf(byte)} is 0x${byte.toString(16).toUpperCase()}. Re-save the document as UTF-8, or declare the encoding it was written in.`,
           ),
         );
   },
@@ -302,31 +312,31 @@ export const appendixRows: readonly Row[] = [
   {
     _tag: "Decodable",
     decoders: { utf16: utf16Decoder("utf-16be") },
-    fallback: "UTF-16",
     mark: 2,
     named: "UTF-16",
     opening: "the UTF-16 byte order mark FE FF",
     signature: [0xfe, 0xff],
+    undeclared: "UTF-16",
     units: (body) => utf16Units(body, "utf-16be"),
   },
   {
     _tag: "Decodable",
     decoders: { utf16: utf16Decoder("utf-16le") },
-    fallback: "UTF-16",
     mark: 2,
     named: "UTF-16",
     opening: "the UTF-16 byte order mark FF FE",
     signature: [0xff, 0xfe],
+    undeclared: "UTF-16",
     units: (body) => utf16Units(body, "utf-16le"),
   },
   {
     _tag: "Decodable",
     decoders: { utf8: asciiDecoders.utf8 },
-    fallback: "UTF-8",
     mark: 3,
     named: "UTF-8",
     opening: "the UTF-8 byte order mark EF BB BF",
     signature: [0xef, 0xbb, 0xbf],
+    undeclared: "UTF-8",
     units: byteUnits,
   },
   unsupported([0x00, 0x00, 0x00, 0x3c], "UCS-4 in big-endian (1234) order"),
@@ -336,21 +346,21 @@ export const appendixRows: readonly Row[] = [
   {
     _tag: "Decodable",
     decoders: { utf16be: utf16Decoder("utf-16be") },
-    fallback: "UTF-8",
     mark: 0,
     named: "UTF-16BE",
     opening: "<? in big-endian UTF-16 with no byte order mark (00 3C 00 3F)",
     signature: [0x00, 0x3c, 0x00, 0x3f],
+    undeclared: "UTF-8",
     units: (body) => utf16Units(body, "utf-16be"),
   },
   {
     _tag: "Decodable",
     decoders: { utf16le: utf16Decoder("utf-16le") },
-    fallback: "UTF-8",
     mark: 0,
     named: "UTF-16LE",
     opening: "<? in little-endian UTF-16 with no byte order mark (3C 00 3F 00)",
     signature: [0x3c, 0x00, 0x3f, 0x00],
+    undeclared: "UTF-8",
     units: (body) => utf16Units(body, "utf-16le"),
   },
   unsupported([0x4c, 0x6f, 0xa7, 0x94], "EBCDIC"),
@@ -365,11 +375,11 @@ export const appendixRows: readonly Row[] = [
 const asciiRow: Decodable = {
   _tag: "Decodable",
   decoders: asciiDecoders,
-  fallback: "UTF-8",
   mark: 0,
   named: "an encoding that writes ASCII as single bytes, such as UTF-8",
   opening: "bytes of an encoding that writes ASCII as single bytes",
   signature: [],
+  undeclared: "UTF-8",
   units: byteUnits,
 };
 
@@ -398,7 +408,7 @@ const mismatch = (row: Decodable, label: string, declared: boolean): ReaderRefus
  */
 const decodeRow = (row: Decodable, body: Uint8Array): Effect.Effect<Decoded, ReaderRefusal> => {
   const declared = declaredEncoding(row.units(body));
-  const label = Option.getOrElse(declared, () => row.fallback);
+  const label = Option.getOrElse(declared, () => row.undeclared);
   const decoder = row.decoders[classify(label).class];
 
   return decoder === undefined
@@ -466,12 +476,12 @@ export const decodeBy = (table: readonly Row[]) =>
 /**
  * Turn a document's bytes into its text, refusing whatever cannot be decoded faithfully.
  *
- * The opening bytes put the document in a row of XML 1.0 Appendix F.1's table
- * ({@link appendixRows}), and the row's code units read its XML declaration, however long. The
- * label the document is read as is the declaration's `encoding`, else the row's fallback: a byte
- * order mark's encoding, or UTF-8. The label must name an encoding of the row, because section
- * 4.3.3 makes it a fatal error "for an entity including an encoding declaration to be presented to
- * the XML processor in an encoding other than that named in the declaration, or for an entity which
+ * The opening bytes put the document in a row of XML 1.0 Appendix F.1's table ({@link
+ * appendixRows}), and the row's code units read its XML declaration, however long. The label the
+ * document is read as is the declaration's `encoding`, else the row's `undeclared`: a byte order
+ * mark's encoding, or UTF-8. The label must name an encoding of the row, because section 4.3.3
+ * makes it a fatal error "for an entity including an encoding declaration to be presented to the
+ * XML processor in an encoding other than that named in the declaration, or for an entity which
  * begins with neither a Byte Order Mark nor an encoding declaration to use an encoding other than
  * UTF-8", and the Appendix's note has the name checked even where the opening bytes settle the
  * encoding. The body is then decoded with every error fatal, so no byte is ever replaced with
