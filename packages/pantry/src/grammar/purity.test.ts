@@ -158,6 +158,7 @@ describe("the test helpers", () => {
     assert.deepStrictEqual(offences(files, ["#pantry/test/oracle.ts"]), [
       "import/overlays/interactions.test.ts: #pantry/test/oracle.ts",
       "import/overlays/metadata.test.ts: #pantry/test/oracle.ts",
+      "import/program.db.test.ts: #pantry/test/oracle.ts",
       "import/refusal.test.ts: #pantry/test/oracle.ts",
       "model/folds.test.ts: #pantry/test/oracle.ts",
       "model/shred.test.ts: #pantry/test/oracle.ts",
@@ -182,6 +183,7 @@ describe("the test helpers", () => {
       "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
       "test/oracle.complete.test.ts: #pantry/test/oracle.ts",
       "test/oracle.keys.test.ts: #pantry/test/oracle.ts",
+      "test/oracle.label-tools.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-g.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-h.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-i.test.ts: #pantry/test/oracle.ts",
