@@ -1065,6 +1065,12 @@ const referencesOf = (
  *   context variable or a built-in) is `expression-type` with `check: "reference"`, its detail the
  *   rules' P24 detail, as pantry's `checkAttributeReference` judges a resolved prefixed name. One
  *   of another type is the rules' own P24, which they judge through the typed reach.
+ * - In a `qti-map-response` or `qti-map-response-point`, a variable that is not a response (an
+ *   outcome, a template or context variable, a mapping target, which reads an outcome, or a
+ *   built-in) is `undeclared-variable` at the attribute with `expected: "response"`, the detail the
+ *   rules give an item's map-response of a name that is no response: each "looks up the value of a
+ *   response variable" (`info.txt:9306`, `:9314`). Pantry does not judge what a prefixed name reads
+ *   there, so this is an agreement difference (G-R3, pending).
  * - In a `qti-map-response` or `qti-map-response-point`, a response its item declares without the
  *   mapping or the area mapping the expression needs is `template-requirements`, as an item's
  *   inline expression is, the `identifier` as written: the information model's "transforms it using
@@ -1112,10 +1118,17 @@ const judgeReference = (
   }
 
   const { variable } = first;
+  const mapped = attribute.local === "identifier" && isQti(visit.element, mappingExpressions);
+  const response = Option.exists(variable.declaration, (declaration) =>
+    isQti(declaration, responseDeclarations),
+  );
 
   return [
     ...(first.untimed
       ? [refuse(document, "undeclared-variable", path, { ...named, check: "untimed-duration" })]
+      : []),
+    ...(mapped && !response
+      ? [refuse(document, "undeclared-variable", path, { ...named, expected: "response" })]
       : []),
     ...(variable.namable
       ? []
@@ -1132,12 +1145,7 @@ const judgeReference = (
           Option.toArray,
         )),
     ...variable.declaration.pipe(
-      Option.filter(
-        (declaration) =>
-          attribute.local === "identifier" &&
-          isQti(visit.element, mappingExpressions) &&
-          isQti(declaration, responseDeclarations),
-      ),
+      Option.filter(() => mapped && response),
       Option.flatMap((declaration) => mappingRequirement(element, identifier, declaration)),
       Option.map((detail) => refuse(document, "template-requirements", visit.path, detail)),
       Option.toArray,

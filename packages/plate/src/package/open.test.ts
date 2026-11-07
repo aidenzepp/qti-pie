@@ -1361,6 +1361,52 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
+      "[T-9] refuses a map-response of a dotted name that reads no response (an outcome, a template variable, a built-in) once, as undeclared-variable expecting a response, as an item's (info.txt:9306; G-R3, pending)",
+      () =>
+        Effect.gen(function* mapResponseOfNoResponse() {
+          const cases = [
+            ["qti-map-response", "ITEM1.SCORE"],
+            ["qti-map-response", "ITEM1.T"],
+            ["qti-map-response", "ITEM1.numAttempts"],
+            ["qti-map-response-point", "ITEM1.SCORE"],
+          ] as const;
+
+          for (const [element, reference] of cases) {
+            const verdict = yield* openSettingTotal(`<${element} identifier="${reference}"/>`);
+            assert.deepStrictEqual(
+              refusalsOf(verdict),
+              [
+                {
+                  detail: { element, expected: "response", identifier: reference },
+                  document: fileLocation(location, "test.xml"),
+                  location: { kind: "path", path: `${expressionAt(element)}/@identifier` },
+                  rule: "undeclared-variable",
+                },
+              ],
+              `${element} ${reference}`,
+            );
+            assert.isTrue(acceptedAlone(verdict), `${element} ${reference}`);
+          }
+        }),
+    );
+
+    it.effect(
+      "[T-9] controls for a map-response of a dotted name that reads no response: ITEM1.MAPPED, a response with a mapping, is accepted, and an unresolvable name keeps its one reading refusal",
+      () =>
+        Effect.gen(function* mapResponseOfNoResponseControls() {
+          acceptedOf(yield* openSettingTotal('<qti-map-response identifier="ITEM1.MAPPED"/>'));
+
+          const verdict = yield* openSettingTotal(
+            '<qti-map-response identifier="ITEM9.RESPONSE"/>',
+          );
+          assert.deepStrictEqual(
+            refusalsOf(verdict).map(({ detail, rule }) => [rule, detail["check"]]),
+            [["undeclared-variable", "reading"]],
+          );
+        }),
+    );
+
+    it.effect(
       "resolves an item ref as startTest does: against the test's path, escapes decoded before dot segments are removed, query and fragment set aside",
       () =>
         Effect.gen(function* escaped() {
