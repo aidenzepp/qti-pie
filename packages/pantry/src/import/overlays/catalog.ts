@@ -1,12 +1,13 @@
 /**
  * The catalog overlays' rows (spec reading R9-a, `#pantry/qti/catalog.ts`): from one document's XDM
- * tree and the ids its nodes are written under, one `CardSupport` row per `qti-card`'s `support`
- * and one `DefaultEntry` row per `qti-card-entry` whose `default` designates it, each keyed by its
- * node.
+ * tree and the ids its nodes are written under, one `CardSupport` row per `qti-card`'s `support`,
+ * one `DefaultEntry` row per `qti-card-entry` whose `default` designates it, one `CatalogRef` row
+ * per `data-catalog-idref` that holds a token and one `CatalogId` row per `qti-catalog` that
+ * writes an `id`, each keyed by its node.
  *
- * The rows restate what the tree says and nothing else: each row's node tuple (C18), its parent,
- * the attribute as written and that form collapsed. The database proves every one of them
- * (`catalogLaws`), so a row this builder gets wrong is refused, never accepted.
+ * The rows restate what the tree says and nothing else: each card overlay's node tuple (C18), its
+ * parent, and every attribute as written and that form collapsed. The database proves every one
+ * of them (`catalogLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { booleanTrue } from "#pantry/grammar/domains.ts";
@@ -134,8 +135,20 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
       if (holdsReference(node, lexical)) {
         references.set(id, { document, lexical, node: id, token: value });
       }
-    } else if (node.kind === "qti-catalog" && name === "id") {
+
+      continue;
+    }
+
+    if (node.kind === "qti-catalog" && name === "id") {
       catalogIds.set(id, { document, id: value, node: id, owner: id });
+      continue;
+    }
+
+    const isSupport = node.kind === "qti-card" && name === "support";
+    const isDesignating =
+      node.kind === "qti-card-entry" && name === "default" && designating.has(value);
+    if (!isSupport && !isDesignating) {
+      continue;
     }
 
     const tuple = {
@@ -147,9 +160,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
       start: node.start,
       version: node.version,
     };
-    if (node.kind === "qti-card" && name === "support") {
+    if (isSupport) {
       supports.set(id, { ...tuple, catalog: node.parent, support: value });
-    } else if (node.kind === "qti-card-entry" && name === "default" && designating.has(value)) {
+    } else {
       defaults.set(id, { ...tuple, card: node.parent, value });
     }
   }

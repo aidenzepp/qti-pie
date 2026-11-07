@@ -1,7 +1,8 @@
 /**
  * The catalog overlays' free tests: their statements are composed into `Qti`, each check is named
- * by an oracle law, and the oracle judges the two catalog laws of spec reading R9-a (information
- * model §5.26.1 and §5.27.2) over packages whose catalogs repeat a support or a default.
+ * by an oracle law, and the oracle judges the three catalog laws of spec reading R9-a (information
+ * model §5.26.1, §5.27.2 and §5.28.1) over packages whose catalogs repeat a support or a default,
+ * and whose `data-catalog-idref`s name or miss a catalog.
  *
  * The database tests judge the laws through PostgreSQL, and the builder's tests
  * (`#pantry/import/overlays/catalog.test.ts`) its rows.
@@ -25,6 +26,16 @@ const catalogInfo = (catalogs: string): string =>
   `<qti-catalog-info>${catalogs}</qti-catalog-info>`;
 
 /**
+ * The base item with the given markup at the end of its body and a catalog info after it.
+ *
+ * @param catalogs - The catalog info's `qti-catalog` children.
+ * @param body - The markup that ends the item body, none where none is given.
+ * @returns The item's text.
+ */
+const itemWithCatalogs = (catalogs: string, body = ""): string =>
+  edit(item, "</qti-item-body>", `${body}</qti-item-body>${catalogInfo(catalogs)}`);
+
+/**
  * The breaches of one law of the base item with a catalog info after its body.
  *
  * @param law - The law.
@@ -33,8 +44,7 @@ const catalogInfo = (catalogs: string): string =>
  */
 const breachesOfLaw = (law: "Card default entry" | "Card support", catalogs: string) =>
   Effect.gen(function* judgedCatalog() {
-    const text = edit(item, "</qti-item-body>", `</qti-item-body>${catalogInfo(catalogs)}`);
-    const breaches = breachesOf(yield* judged({ ...base, "item.xml": text }));
+    const breaches = breachesOf(yield* judged({ ...base, "item.xml": itemWithCatalogs(catalogs) }));
 
     return {
       keys: breaches.filter((breach) => breach.law === law).map(({ keys }) => keys["node"] ?? ""),
@@ -59,12 +69,9 @@ const referenceBreaches = (
   placed = (value: string) => `<p data-catalog-idref="${value}">b</p>`,
 ) =>
   Effect.gen(function* judgedReference() {
-    const text = edit(
-      edit(item, "</qti-item-body>", `${placed(token)}</qti-item-body>`),
-      "</qti-item-body>",
-      `</qti-item-body>${catalogInfo(catalogs)}`,
+    const breaches = breachesOf(
+      yield* judged({ ...base, "item.xml": itemWithCatalogs(catalogs, placed(token)) }),
     );
-    const breaches = breachesOf(yield* judged({ ...base, "item.xml": text }));
     const keysOf = (law: "Catalog reference" | "Idref target") =>
       breaches.filter((breach) => breach.law === law).map(({ keys }) => keys["node"] ?? "");
 

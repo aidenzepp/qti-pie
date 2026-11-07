@@ -71,9 +71,9 @@ import {
   RootOfType,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
+import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
-import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 

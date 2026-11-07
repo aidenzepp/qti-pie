@@ -1,7 +1,9 @@
 /**
  * The catalog builder's free tests: over a document of a known structure `rowsOf` gives each card
- * that writes a `support` its `CardSupport`, and each entry whose `default` collapses to `true` or
- * `1` its `DefaultEntry`, as the document's own construction says (spec reading R9-a).
+ * that writes a `support` its `CardSupport`, each entry whose `default` collapses to `true` or `1`
+ * its `DefaultEntry`, each `data-catalog-idref` that holds a token its `CatalogRef` and each
+ * catalog that writes an `id` its `CatalogId`, as the document's own construction says (spec
+ * reading R9-a).
  *
  * The expected rows are written by hand from each document's construction, so no expected row is
  * computed by the builder's own reading. The database tests judge the rows through PostgreSQL.
