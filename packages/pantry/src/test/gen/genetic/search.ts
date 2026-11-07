@@ -29,7 +29,7 @@ import type { Bench, Disagreement, Feature, Judged } from "#pantry/test/gen/gene
 import { noised } from "#pantry/test/gen/genetic/noise.ts";
 import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
 import { mutationOf, operators } from "#pantry/test/gen/genetic/mutate.ts";
-import type { Operator } from "#pantry/test/gen/genetic/mutate.ts";
+import type { Breeding, Operator } from "#pantry/test/gen/genetic/mutate.ts";
 
 /**
  * The noise each candidate's copy takes, in turn, none for a candidate judged alone: every other
@@ -139,17 +139,41 @@ export const hunt = Effect.fnUntraced(function* hunt(
         disagreements: [...own.disagreements, ...movedBy(own, twin, noise, salt)],
       } satisfies Judged;
     });
+  const breeding: Breeding = {
+    corpus,
+    grammar: bench.grammar,
+    lastEdit: new WeakMap(),
+    rewards: new Map(),
+    swarm: sketch.swarm,
+  };
+  const rewarded = new Set<string>();
+  const reward = (genome: Genome, judgment: Judged): Judged => {
+    const operator = breeding.lastEdit.get(genome);
+    for (const disagreement of judgment.disagreements) {
+      const signature = signatureOf(disagreement);
+      if (!rewarded.has(signature)) {
+        rewarded.add(signature);
+        if (operator !== undefined) {
+          breeding.rewards.set(operator, (breeding.rewards.get(operator) ?? 0) + 1);
+        }
+      }
+    }
+
+    return judgment;
+  };
   const judgeAll = (genomes: readonly Genome[]) =>
     Effect.forEach([...genomes], (genome) => {
       const noise = noiseSchedule[judged % noiseSchedule.length];
 
-      return noise === undefined ? judgeAt(genome) : withTwin(genome, noise, judged);
+      const judging = noise === undefined ? judgeAt(genome) : withTwin(genome, noise, judged);
+
+      return judging.pipe(Effect.map((judgment) => reward(genome, judgment)));
     });
   const evolved = yield* evolve(
     {
       familyOf,
       judge: judgeAll,
-      mutate: mutationOf({ corpus, grammar: bench.grammar, swarm: sketch.swarm }),
+      mutate: mutationOf(breeding),
       seeds: corpus.seeds.map(({ genome }) => genome),
       signatureOf,
     },
