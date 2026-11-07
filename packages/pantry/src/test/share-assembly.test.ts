@@ -211,7 +211,7 @@ const entriesOf = (drawn: Case): PackageEntries => {
 /**
  * Every law the host judges, read once.
  */
-const laws = judgedLaws(Qti.statements);
+const laws = judgedLaws(Qti);
 
 layer(NodeServices.layer, { excludeTestServices: true })("an assembled document's shares", (it) => {
   it.effect(

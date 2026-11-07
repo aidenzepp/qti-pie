@@ -132,7 +132,7 @@ const filesOf = (cn: string) => {
 /**
  * Every law the host judges, read once.
  */
-const laws = judgedLaws(Qti.statements);
+const laws = judgedLaws(Qti);
 
 layer(NodeServices.layer, { excludeTestServices: true })("the parts of a typed cn", (it) => {
   it.effect("is counted whatever its base and whatever its parts hold, by both judges", () =>

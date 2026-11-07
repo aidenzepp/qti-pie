@@ -29,7 +29,7 @@ import { asi, manifestOf } from "#pantry/test/probe.ts";
 /**
  * Every law the host judges, read once.
  */
-const laws = judgedLaws(Qti.statements);
+const laws = judgedLaws(Qti);
 
 /**
  * An item that includes `fragment.xml`, with its own markup before the include and, where it holds

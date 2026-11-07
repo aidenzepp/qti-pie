@@ -18,7 +18,7 @@ import { judgedLaws } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { base, edit, item } from "#pantry/test/probe.ts";
 
-const laws = judgedLaws(Qti.statements);
+const laws = judgedLaws(Qti);
 
 /**
  * The base item with a formula in its body: an HTML wrapper writing `wrapper` (none for no
