@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
 import { Config, ConfigProvider, Data, Duration, Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import {
   attr,
@@ -9,6 +10,7 @@ import {
   el,
   entity,
   text,
+  qtiNamespace,
   xincludeNamespace,
   xmlNamespace,
 } from "#plate/document/source.ts";
@@ -19,8 +21,10 @@ import type {
   SourceElement,
 } from "#plate/document/source.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
+import { runRules } from "#plate/engine/evaluate.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
+import type { IntegerOrRef, TemplateRule } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type {
   AreaMapping,
@@ -31,6 +35,8 @@ import type {
   InlineChoiceInteraction,
   Item,
   Rule,
+  TemplateDeclaration,
+  TemplateVisibility,
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
@@ -39,6 +45,7 @@ import type { Value } from "#plate/model/values.ts";
 import { score as scoreItem } from "#plate/score.ts";
 import { rptemplatesDirectory } from "#plate/test/caches.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
+import { acceptedOf, openCorpus } from "#plate/test/sweep.ts";
 import { checkRules } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
@@ -228,6 +235,27 @@ const statusItem = (rule: SourceElement): SourceDocument =>
   });
 
 /**
+ * Construct an item document whose response processing is one rule, beside the identifier outcome
+ * `STATUS` and a single identifier template variable named `completionStatus`.
+ *
+ * @param rule The rule.
+ * @returns The document at `items/test.xml`.
+ */
+const statusTemplateItem = (rule: SourceElement): SourceDocument =>
+  item({
+    after: [el("qti-response-processing", [], [rule])],
+    body: [],
+    declarations: [
+      declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
+      el("qti-template-declaration", [
+        attr("base-type", "identifier"),
+        attr("cardinality", "single"),
+        attr("identifier", "completionStatus"),
+      ]),
+    ],
+  });
+
+/**
  * A BG007-shaped item: an identifier `RESPONSE` whose correct response is `true`, a float `SCORE`
  * with default 1, and a two-choice interaction with `max-choices="1"`.
  *
@@ -303,6 +331,242 @@ const setsCorrectResponse: SourceElement = el(
     ),
   ],
 );
+
+/**
+ * A `qti-template-processing` that does not run: it holds a `qti-set-outcome-value`, which is not a
+ * template rule, so the reader marks it and the template processing is none.
+ */
+const stalledTemplating: SourceElement = el(
+  "qti-template-processing",
+  [],
+  [
+    el(
+      "qti-set-outcome-value",
+      [attr("identifier", "SCORE")],
+      [el("qti-base-value", [attr("base-type", "float")], [text("1")])],
+    ),
+  ],
+);
+
+/**
+ * Construct a `qti-template-declaration`.
+ *
+ * @param identifier The declared identifier.
+ * @param cardinality The `cardinality` value.
+ * @param baseType The `base-type` value, none when absent, as a record's is.
+ * @returns The declaration element.
+ */
+const templateDeclaration = (
+  identifier: string,
+  cardinality: string,
+  baseType?: string,
+): SourceElement =>
+  el("qti-template-declaration", [
+    ...(baseType === undefined ? [] : [attr("base-type", baseType)]),
+    attr("cardinality", cardinality),
+    attr("identifier", identifier),
+  ]);
+
+/**
+ * Construct a template setting rule.
+ *
+ * @param local The rule's name.
+ * @param identifier The variable it sets.
+ * @param expression Its expression.
+ * @returns The rule element.
+ */
+const templateSetting = (
+  local: "qti-set-correct-response" | "qti-set-default-value" | "qti-set-template-value",
+  identifier: string,
+  expression: SourceElement,
+): SourceElement => el(local, [attr("identifier", identifier)], [expression]);
+
+/**
+ * Construct a `qti-variable`.
+ *
+ * @param identifier The variable it reads.
+ * @returns The expression element.
+ */
+const variableElement = (identifier: string): SourceElement =>
+  el("qti-variable", [attr("identifier", identifier)]);
+
+/**
+ * Construct a `qti-is-null` of one operand.
+ *
+ * @param operand The operand.
+ * @returns The expression element.
+ */
+const isNullOf = (operand: SourceElement): SourceElement => el("qti-is-null", [], [operand]);
+
+/**
+ * The float outcome `SCORE`, which {@link templatingItem}'s response processing sets.
+ */
+const scoreDeclaration: SourceElement = declaration(
+  "qti-outcome-declaration",
+  "SCORE",
+  "float",
+  "single",
+);
+
+/**
+ * The single integer context variable `CTX`, whose default is 4.
+ */
+const contextDeclaration: SourceElement = el(
+  "qti-context-declaration",
+  [attr("base-type", "integer"), attr("cardinality", "single"), attr("identifier", "CTX")],
+  [values("qti-default-value", "4")],
+);
+
+/**
+ * Construct an item whose template processing is one rule, and whose inline response processing
+ * sets `SCORE` to 1, or, with a condition given, to 1 when that condition is true.
+ *
+ * @param declarations The declarations, in document order, `SCORE` among them.
+ * @param rule The template rule.
+ * @param condition The response processing's condition, none by default.
+ * @returns The document at `items/test.xml`.
+ */
+const templatingItem = (
+  declarations: readonly SourceElement[],
+  rule: SourceElement,
+  condition?: SourceElement,
+): SourceDocument =>
+  item({
+    after: [
+      el(
+        "qti-response-processing",
+        [],
+        [
+          condition === undefined
+            ? setScore("1")
+            : el(
+                "qti-response-condition",
+                [],
+                [el("qti-response-if", [], [condition, setScore("1")])],
+              ),
+        ],
+      ),
+    ],
+    attributes: [attr("time-dependent", "false")],
+    body: [],
+    declarations: [...declarations, el("qti-template-processing", [], [rule])],
+  });
+
+/**
+ * The seven shapes of template processing `check` accepts whose first attempt reads or sets a
+ * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each with
+ * its declarations, its one rule, the name it marks and the declarations' own marks: a read of
+ * `QTI_CONTEXT`; a read of a context variable through `qti-variable`, then through `qti-default`;
+ * a read of a template variable of cardinality `record`; a set of one of base type `duration`; a
+ * `qti-set-correct-response` of a `duration` response; and a `qti-set-default-value` of a `file`
+ * outcome.
+ */
+const unheldTemplating: readonly {
+  readonly declarations: readonly SourceElement[];
+  readonly marks: readonly Pick<UnsupportedFeature, "feature" | "path">[];
+  readonly rule: SourceElement;
+  readonly unheld: string;
+}[] = [
+  {
+    declarations: [scoreDeclaration, templateDeclaration("B", "single", "boolean")],
+    marks: [],
+    rule: templateSetting("qti-set-template-value", "B", isNullOf(variableElement("QTI_CONTEXT"))),
+    unheld: "QTI_CONTEXT",
+  },
+  {
+    declarations: [
+      contextDeclaration,
+      scoreDeclaration,
+      templateDeclaration("T", "single", "integer"),
+    ],
+    marks: [{ feature: "qti-context-declaration", path: `${root}/qti-context-declaration` }],
+    rule: templateSetting("qti-set-template-value", "T", variableElement("CTX")),
+    unheld: "CTX",
+  },
+  {
+    declarations: [
+      contextDeclaration,
+      scoreDeclaration,
+      templateDeclaration("T", "single", "integer"),
+    ],
+    marks: [{ feature: "qti-context-declaration", path: `${root}/qti-context-declaration` }],
+    rule: templateSetting(
+      "qti-set-template-value",
+      "T",
+      el("qti-default", [attr("identifier", "CTX")]),
+    ),
+    unheld: "CTX",
+  },
+  {
+    declarations: [
+      scoreDeclaration,
+      templateDeclaration("R", "record"),
+      templateDeclaration("B", "single", "boolean"),
+    ],
+    marks: [{ feature: 'cardinality="record"', path: `${root}/qti-template-declaration[1]` }],
+    rule: templateSetting("qti-set-template-value", "B", isNullOf(variableElement("R"))),
+    unheld: "R",
+  },
+  {
+    declarations: [scoreDeclaration, templateDeclaration("D", "single", "duration")],
+    marks: [{ feature: 'base-type="duration"', path: `${root}/qti-template-declaration` }],
+    rule: templateSetting("qti-set-template-value", "D", el("qti-null")),
+    unheld: "D",
+  },
+  {
+    declarations: [
+      declaration("qti-response-declaration", "RD", "duration", "single"),
+      scoreDeclaration,
+    ],
+    marks: [{ feature: 'base-type="duration"', path: `${root}/qti-response-declaration` }],
+    rule: templateSetting("qti-set-correct-response", "RD", el("qti-null")),
+    unheld: "RD",
+  },
+  {
+    declarations: [
+      scoreDeclaration,
+      declaration("qti-outcome-declaration", "OF", "file", "single"),
+    ],
+    marks: [{ feature: 'base-type="file"', path: `${root}/qti-outcome-declaration[2]` }],
+    rule: templateSetting("qti-set-default-value", "OF", el("qti-null")),
+    unheld: "OF",
+  },
+];
+
+/**
+ * A float `SCORE` and a float template variable `T`, with inline response processing that sets
+ * `SCORE` to `T`.
+ *
+ * @param templating What follows the declarations, such as a `qti-template-processing`; nothing
+ *   by default.
+ * @returns The document at `items/test.xml`.
+ */
+const readsTemplate = (templating: readonly SourceElement[] = []): SourceDocument =>
+  item({
+    after: [
+      el(
+        "qti-response-processing",
+        [],
+        [
+          el(
+            "qti-set-outcome-value",
+            [attr("identifier", "SCORE")],
+            [el("qti-variable", [attr("identifier", "T")])],
+          ),
+        ],
+      ),
+    ],
+    body: [],
+    declarations: [
+      declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+      el("qti-template-declaration", [
+        attr("base-type", "float"),
+        attr("cardinality", "single"),
+        attr("identifier", "T"),
+      ]),
+      ...templating,
+    ],
+  });
 
 /**
  * Set `SCORE` to a float.
@@ -755,6 +1019,15 @@ const inlineChoiceXml = (interaction: string): string =>
   ].join("");
 
 /**
+ * Give each choice's identifier beside its template visibility.
+ *
+ * @param choices A Choice's or an Inline Choice's choices.
+ * @returns The pairs, in document order.
+ */
+const visibilities = (choices: ChoiceInteraction["choices"]) =>
+  choices.map((each) => [each.identifier, each.templateVisibility] as const);
+
+/**
  * The path of the Inline Choice {@link inlineChoiceXml} writes.
  */
 const inlinePath = `${body}/p/qti-inline-choice-interaction`;
@@ -823,8 +1096,8 @@ const fewerDeclarations = 1000;
 const growthTimeoutMs = 60_000;
 
 /**
- * An item with `count` template declarations and an empty body. The model does not read a template
- * declaration, so each is one unsupported feature at its own path.
+ * An item with `count` template declarations of base type `duration` and an empty body. The model
+ * does not hold a `duration` declaration, so each is one unsupported feature at its own path.
  *
  * @param count How many declarations the item holds.
  * @returns The document at `items/test.xml`.
@@ -834,7 +1107,7 @@ const templated = (count: number): SourceDocument =>
     body: [],
     declarations: Array.from({ length: count }, (_, index) =>
       el("qti-template-declaration", [
-        attr("base-type", "integer"),
+        attr("base-type", "duration"),
         attr("cardinality", "single"),
         attr("identifier", `T${index}`),
       ]),
@@ -1782,8 +2055,18 @@ describe("buildItem", () => {
           ariaLabel: Option.some("Colour"),
           ariaLabelledby: Option.some("intro"),
           choices: [
-            { content: [{ kind: "text", text: "red" }], fixed: false, identifier: "R" },
-            { content: [{ kind: "text", text: "blue" }], fixed: true, identifier: "B" },
+            {
+              content: [{ kind: "text", text: "red" }],
+              fixed: false,
+              identifier: "R",
+              templateVisibility: Option.none(),
+            },
+            {
+              content: [{ kind: "text", text: "blue" }],
+              fixed: true,
+              identifier: "B",
+              templateVisibility: Option.none(),
+            },
             {
               content: [
                 {
@@ -1796,6 +2079,7 @@ describe("buildItem", () => {
               ],
               fixed: false,
               identifier: "G",
+              templateVisibility: Option.none(),
             },
           ],
           class: "qti-input-width-10",
@@ -1846,7 +2130,14 @@ describe("buildItem", () => {
         const expected: InlineChoiceInteraction = {
           ariaLabel: Option.none(),
           ariaLabelledby: Option.none(),
-          choices: [{ content: [{ kind: "text", text: "red" }], fixed: false, identifier: "R" }],
+          choices: [
+            {
+              content: [{ kind: "text", text: "red" }],
+              fixed: false,
+              identifier: "R",
+              templateVisibility: Option.none(),
+            },
+          ],
           class: "",
           kind: "inline-choice",
           label: Option.none(),
@@ -2177,6 +2468,344 @@ describe("buildItem", () => {
     }),
   );
 
+  it.effect(
+    "[I-5] holds a qti-printed-variable as a printed-variable node with every attribute it carries, and lists no unsupported feature for it",
+    () =>
+      Effect.gen(function* holdsPrintedVariable() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "p",
+                [],
+                [
+                  text("Score: "),
+                  el("qti-printed-variable", [
+                    attr("base", "B"),
+                    attr("delimiter", ", "),
+                    attr("field", "x"),
+                    attr("format", "%.1f"),
+                    attr("identifier", " SCORE "),
+                    attr("index", "2"),
+                    attr("mapping-indicator", ":"),
+                    attr("power-form", "true"),
+                  ]),
+                ],
+              ),
+            ],
+            declarations: [
+              declaration("qti-outcome-declaration", "B", "integer", "single"),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(built.body, [
+          {
+            attributes: [],
+            children: [
+              { kind: "text", text: "Score: " },
+              {
+                base: { _tag: "ref", identifier: "B" },
+                delimiter: ", ",
+                field: Option.some("x"),
+                format: Option.some("%.1f"),
+                identifier: "SCORE",
+                index: Option.some<IntegerOrRef>({ _tag: "literal", value: 2n }),
+                kind: "printed-variable",
+                mappingIndicator: ":",
+                path: `${body}/p/qti-printed-variable`,
+                powerForm: true,
+              },
+            ],
+            kind: "element",
+            path: `${body}/p`,
+            tag: "p",
+          },
+        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-5] holds a qti-printed-variable that carries only its identifier at the attributes' defaults: base 10, the delimiter ;, the mapping indicator =, no power form, and no format, field or index",
+    () =>
+      Effect.gen(function* printedVariableDefaults() {
+        const built = yield* buildItem(
+          item({
+            body: [el("qti-printed-variable", [attr("identifier", "SCORE")])],
+            declarations: [declaration("qti-outcome-declaration", "SCORE", "float", "single")],
+          }),
+        );
+
+        assert.deepStrictEqual(built.body, [
+          {
+            base: { _tag: "literal", value: 10n },
+            delimiter: ";",
+            field: Option.none(),
+            format: Option.none(),
+            identifier: "SCORE",
+            index: Option.none(),
+            kind: "printed-variable",
+            mappingIndicator: "=",
+            path: `${body}/qti-printed-variable`,
+            powerForm: false,
+          },
+        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-5] holds a qti-template-block and a qti-template-inline as body nodes with their identifier, template visibility and content, a block's content its qti-content-body's and its qti-stylesheet a mark",
+    () =>
+      Effect.gen(function* holdsTemplateContent() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "p",
+                [],
+                [
+                  text("Go by "),
+                  el(
+                    "qti-template-inline",
+                    [attr("identifier", " plane "), attr("template-identifier", " TRANSPORT ")],
+                    [el("em", [], [text("air")])],
+                  ),
+                ],
+              ),
+              el(
+                "qti-template-block",
+                [
+                  attr("identifier", "SOLUTION"),
+                  attr("show-hide", "hide"),
+                  attr("template-identifier", "SHOWN"),
+                ],
+                [
+                  el("qti-stylesheet", [attr("href", "block.css"), attr("type", "text/css")]),
+                  el("qti-content-body", [], [el("p", [], [text("Worked solution")])]),
+                ],
+              ),
+            ],
+            declarations: [],
+          }),
+        );
+        const block = `${body}/qti-template-block`;
+
+        assert.deepStrictEqual(built.body, [
+          {
+            attributes: [],
+            children: [
+              { kind: "text", text: "Go by " },
+              {
+                content: [
+                  {
+                    attributes: [],
+                    children: [{ kind: "text", text: "air" }],
+                    kind: "element",
+                    path: `${body}/p/qti-template-inline/em`,
+                    tag: "em",
+                  },
+                ],
+                identifier: "plane",
+                kind: "template-inline",
+                path: `${body}/p/qti-template-inline`,
+                responses: [],
+                templateVisibility: { showHide: "show", templateIdentifier: "TRANSPORT" },
+              },
+            ],
+            kind: "element",
+            path: `${body}/p`,
+            tag: "p",
+          },
+          {
+            content: [
+              {
+                attributes: [],
+                children: [{ kind: "text", text: "Worked solution" }],
+                kind: "element",
+                path: `${block}/qti-content-body/p`,
+                tag: "p",
+              },
+            ],
+            identifier: "SOLUTION",
+            kind: "template-block",
+            path: block,
+            responses: [],
+            templateVisibility: { showHide: "hide", templateIdentifier: "SHOWN" },
+          },
+        ]);
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "qti-stylesheet", path: `${block}/qti-stylesheet`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] names in a template block's or inline's responses every response its content binds, an interaction read or shown as a notice and one in nested template content, each once in document order, and none for content that binds none",
+    () =>
+      Effect.gen(function* namesTemplateResponses() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "qti-template-block",
+                [attr("identifier", "ANSWERS"), attr("template-identifier", "SHOWN")],
+                [
+                  el(
+                    "qti-content-body",
+                    [],
+                    [
+                      el(
+                        "qti-choice-interaction",
+                        [attr("response-identifier", "R1")],
+                        [el("qti-simple-choice", [attr("identifier", "A")], [text("Ant")])],
+                      ),
+                      el(
+                        "qti-order-interaction",
+                        [attr("response-identifier", " R2 ")],
+                        [
+                          el("qti-simple-choice", [attr("identifier", "X")], [text("First")]),
+                          el("qti-simple-choice", [attr("identifier", "Y")], [text("Second")]),
+                        ],
+                      ),
+                      el(
+                        "p",
+                        [],
+                        [
+                          text("Then "),
+                          el(
+                            "qti-template-inline",
+                            [attr("identifier", "ENTRY"), attr("template-identifier", "SHOWN")],
+                            [el("qti-text-entry-interaction", [attr("response-identifier", "R3")])],
+                          ),
+                        ],
+                      ),
+                      el(
+                        "qti-choice-interaction",
+                        [attr("response-identifier", "R1")],
+                        [el("qti-simple-choice", [attr("identifier", "B")], [text("Bee")])],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              el(
+                "qti-template-block",
+                [attr("identifier", "QUIET"), attr("template-identifier", "SHOWN")],
+                [el("qti-content-body", [], [el("p", [], [text("Nothing to answer")])])],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "R1", "identifier", "single"),
+              declaration("qti-response-declaration", "R2", "identifier", "ordered"),
+              declaration("qti-response-declaration", "R3", "string", "single"),
+            ],
+          }),
+        );
+        const [answers, quiet] = built.body;
+        const inline = answers?.kind === "template-block" ? answers.content[2] : undefined;
+        const [, entry] = childrenOf(inline);
+
+        assert.deepStrictEqual(
+          answers?.kind === "template-block" ? answers.responses : "not a template block",
+          ["R1", "R2", "R3"],
+        );
+        assert.deepStrictEqual(
+          entry?.kind === "template-inline" ? entry.responses : "not a template inline",
+          ["R3"],
+        );
+        assert.deepStrictEqual(
+          quiet?.kind === "template-block" ? quiet.responses : "not a template block",
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] reads a qti-simple-choice's and a qti-inline-choice's template-identifier and show-hide into its template visibility, show when absent, and gives none to a choice with no template-identifier whatever its show-hide",
+    () =>
+      Effect.gen(function* readsChoiceVisibility() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [
+                  el(
+                    "qti-simple-choice",
+                    [attr("identifier", "A"), attr("template-identifier", " SHOWN ")],
+                    [text("Ant")],
+                  ),
+                  el(
+                    "qti-simple-choice",
+                    [
+                      attr("identifier", "B"),
+                      attr("show-hide", "hide"),
+                      attr("template-identifier", "HIDDEN"),
+                    ],
+                    [text("Bee")],
+                  ),
+                  el(
+                    "qti-simple-choice",
+                    [attr("identifier", "C"), attr("show-hide", "hide")],
+                    [text("Cat")],
+                  ),
+                ],
+              ),
+              el(
+                "p",
+                [],
+                [
+                  el(
+                    "qti-inline-choice-interaction",
+                    [attr("response-identifier", "COLOUR")],
+                    [
+                      el(
+                        "qti-inline-choice",
+                        [
+                          attr("identifier", "R"),
+                          attr("show-hide", "hide"),
+                          attr("template-identifier", "SHOWN"),
+                        ],
+                        [text("red")],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              declaration("qti-response-declaration", "COLOUR", "identifier", "single"),
+            ],
+          }),
+        );
+        assert.deepStrictEqual(visibilities(choiceIn(built.body).choices), [
+          ["A", Option.some<TemplateVisibility>({ showHide: "show", templateIdentifier: "SHOWN" })],
+          [
+            "B",
+            Option.some<TemplateVisibility>({ showHide: "hide", templateIdentifier: "HIDDEN" }),
+          ],
+          ["C", Option.none()],
+        ]);
+
+        const [inline] = childrenOf(built.body[1]);
+        assert.deepStrictEqual(
+          inline?.kind === "inline-choice" ? visibilities(inline.choices) : [],
+          [
+            [
+              "R",
+              Option.some<TemplateVisibility>({ showHide: "hide", templateIdentifier: "SHOWN" }),
+            ],
+          ],
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
   it.effect("[I-0] [I-8] marks what it does not render outside the body and on body elements", () =>
     Effect.gen(function* marksUnread() {
       const built = yield* buildItem(
@@ -2219,11 +2848,6 @@ describe("buildItem", () => {
       assert.deepStrictEqual([...built.responses.keys()], ["POINT"]);
       assert.deepStrictEqual(built.unsupported, [
         { feature: 'adaptive="true"', path: root, shown: "mark" },
-        {
-          feature: "qti-template-declaration",
-          path: `${root}/qti-template-declaration`,
-          shown: "mark",
-        },
         { feature: "xml:base", path: `${body}/p`, shown: "mark" },
         { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
       ]);
@@ -2433,6 +3057,135 @@ describe("buildItem", () => {
         path: `${root}/qti-outcome-declaration/qti-default-value/qti-value`,
       });
     }),
+  );
+
+  it.effect(
+    "[I-3] holds each template declaration of a modelled type with its default, param-variable and math-variable, and marks only the others, by their type",
+    () =>
+      Effect.gen(function* holdsTemplates() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              el(
+                "qti-template-declaration",
+                [
+                  attr("base-type", "integer"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "T"),
+                  attr("param-variable", "true"),
+                ],
+                [values("qti-default-value", "7")],
+              ),
+              el(
+                "qti-template-declaration",
+                [
+                  attr("base-type", "string"),
+                  attr("cardinality", "multiple"),
+                  attr("identifier", "NAMES"),
+                  attr("math-variable", " 1 "),
+                  attr("param-variable", "0"),
+                ],
+                [values("qti-default-value", "a", "b")],
+              ),
+              el("qti-template-declaration", [
+                attr("base-type", "duration"),
+                attr("cardinality", "single"),
+                attr("identifier", "D"),
+              ]),
+              el("qti-template-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "R"),
+              ]),
+              el("qti-template-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "P"),
+              ]),
+            ],
+          }),
+        );
+        const expected: readonly TemplateDeclaration[] = [
+          {
+            baseType: "integer",
+            cardinality: "single",
+            defaultValue: Option.some(integer(7n)),
+            identifier: "T",
+            mathVariable: false,
+            paramVariable: true,
+          },
+          {
+            baseType: "string",
+            cardinality: "multiple",
+            defaultValue: Option.some({
+              baseType: "string",
+              cardinality: "multiple",
+              values: [
+                { baseType: "string", value: "a" },
+                { baseType: "string", value: "b" },
+              ],
+            }),
+            identifier: "NAMES",
+            mathVariable: true,
+            paramVariable: false,
+          },
+          {
+            baseType: "float",
+            cardinality: "single",
+            defaultValue: Option.none(),
+            identifier: "P",
+            mathVariable: false,
+            paramVariable: false,
+          },
+        ];
+
+        assert.deepStrictEqual([...built.templates.keys()], ["T", "NAMES", "P"]);
+        assert.deepStrictEqual([...built.templates.values()], expected);
+        assert.deepStrictEqual(built.templateProcessing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: 'base-type="duration"',
+            path: `${root}/qti-template-declaration[3]`,
+            shown: "mark",
+          },
+          {
+            feature: 'cardinality="record"',
+            path: `${root}/qti-template-declaration[4]`,
+            shown: "mark",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-3] refuses a template default outside its base type as value-type at its path",
+    () =>
+      Effect.gen(function* refusesTemplateDefault() {
+        const refusal = yield* Effect.flip(
+          buildItem(
+            item({
+              body: [],
+              declarations: [
+                el(
+                  "qti-template-declaration",
+                  [
+                    attr("base-type", "integer"),
+                    attr("cardinality", "single"),
+                    attr("identifier", "T"),
+                  ],
+                  [values("qti-default-value", "abc")],
+                ),
+              ],
+            }),
+          ),
+        );
+
+        assert.strictEqual(refusal.rule, "value-type");
+        assert.deepStrictEqual(refusal.location, {
+          kind: "path",
+          path: `${root}/qti-template-declaration/qti-default-value/qti-value`,
+        });
+      }),
   );
 
   it.effect(
@@ -3316,7 +4069,7 @@ describe("buildItem", () => {
               declarations: [
                 declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
                 el("qti-template-declaration", [
-                  attr("base-type", "identifier"),
+                  attr("base-type", "duration"),
                   attr("cardinality", "single"),
                   attr("identifier", "completionStatus"),
                 ]),
@@ -3327,10 +4080,60 @@ describe("buildItem", () => {
           assert.deepStrictEqual(built.processing, Option.none(), `rule ${String(index)}`);
           assert.deepStrictEqual(
             built.unsupported.map((entry) => entry.feature),
-            ["qti-template-declaration", "variable:completionStatus"],
+            ['base-type="duration"', "variable:completionStatus"],
             `rule ${String(index)}`,
           );
         }
+      }),
+  );
+
+  it.effect(
+    "[I-5] runs inline rules that read a template variable named completionStatus, and marks one that sets it, as only template processing sets a template variable",
+    () =>
+      Effect.gen(function* readsDeclaredCompletionStatus() {
+        const reading = yield* buildItem(
+          statusTemplateItem(
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "STATUS")],
+              [el("qti-variable", [attr("identifier", "completionStatus")])],
+            ),
+          ),
+        );
+        const setting = yield* buildItem(
+          statusTemplateItem(
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "completionStatus")],
+              [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          reading.processing,
+          Option.some<readonly Rule[]>([
+            {
+              expression: {
+                identifier: "completionStatus",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              identifier: "STATUS",
+              kind: "set-outcome",
+            },
+          ]),
+        );
+        assert.deepStrictEqual(reading.unsupported, []);
+        assert.deepStrictEqual(setting.processing, Option.none());
+        assert.deepStrictEqual(setting.unsupported, [
+          {
+            feature: "variable:completionStatus",
+            path: `${root}/qti-response-processing`,
+            shown: "mark",
+          },
+        ]);
       }),
   );
 
@@ -3358,7 +4161,7 @@ describe("buildItem", () => {
               declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single"),
               el("qti-template-declaration", [
                 attr("base-type", "integer"),
-                attr("cardinality", "single"),
+                attr("cardinality", "record"),
                 attr("identifier", "numAttempts"),
               ]),
             ],
@@ -3368,7 +4171,7 @@ describe("buildItem", () => {
         assert.deepStrictEqual(built.processing, Option.none());
         assert.deepStrictEqual(built.unsupported, [
           {
-            feature: "qti-template-declaration",
+            feature: 'cardinality="record"',
             path: `${root}/qti-template-declaration`,
             shown: "mark",
           },
@@ -3381,45 +4184,60 @@ describe("buildItem", () => {
       }),
   );
 
-  it.effect("marks inline rules that read a template variable as variable:T", () =>
-    Effect.gen(function* marksTemplateVariable() {
-      const built = yield* buildItem(
-        item({
-          after: [
-            el(
-              "qti-response-processing",
-              [],
-              [
-                el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", "SCORE")],
-                  [el("qti-variable", [attr("identifier", "T")])],
-                ),
-              ],
-            ),
-          ],
-          body: [],
-          declarations: [
-            declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-            el("qti-template-declaration", [
-              attr("base-type", "float"),
-              attr("cardinality", "single"),
-              attr("identifier", "T"),
-            ]),
-          ],
-        }),
-      );
+  it.effect(
+    "[I-5] runs inline rules that read a template variable, with no mark, the record's template value read",
+    () =>
+      Effect.gen(function* runsTemplateVariable() {
+        const built = yield* buildItem(readsTemplate());
+        const after = yield* Effect.fromResult(
+          runRules(
+            Option.getOrElse(built.processing, () => assert.fail("no processing")),
+            built,
+            {
+              outcomes: { SCORE: float(0) },
+              responses: {},
+              templates: { T: float(2.5) },
+            },
+          ),
+        );
 
-      assert.deepStrictEqual(built.processing, Option.none());
-      assert.deepStrictEqual(built.unsupported, [
-        {
-          feature: "qti-template-declaration",
-          path: `${root}/qti-template-declaration`,
-          shown: "mark",
-        },
-        { feature: "variable:T", path: `${root}/qti-response-processing`, shown: "mark" },
-      ]);
-    }),
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some<readonly Rule[]>([
+            {
+              expression: {
+                identifier: "T",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              identifier: "SCORE",
+              kind: "set-outcome",
+            },
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(after.outcomes["SCORE"], float(2.5));
+      }),
+  );
+
+  it.effect(
+    "[I-5] keeps response processing none beside a template processing with a marked element, and marks the template variables its rules read",
+    () =>
+      Effect.gen(function* stalledTemplateProcessing() {
+        const built = yield* buildItem(readsTemplate([stalledTemplating]));
+
+        assert.deepStrictEqual(built.templateProcessing, Option.none());
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: "qti-set-outcome-value",
+            path: `${root}/qti-template-processing/qti-set-outcome-value`,
+            shown: "mark",
+          },
+          { feature: "variable:T", path: `${root}/qti-response-processing`, shown: "mark" },
+        ]);
+      }),
   );
 
   it.effect("keeps BG007's match_correct tree, every identifier held, with no mark", () =>
@@ -3432,27 +4250,131 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "runs no processing for an item with template processing, and marks qti-template-processing",
+    "[I-5] keeps response processing beside a template processing that runs, and marks neither",
     () =>
-      Effect.gen(function* templatedRunsNone() {
+      Effect.gen(function* templatedRuns() {
         const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
+        const plain = yield* buildItem(floatMatchCorrect());
 
+        assert.isTrue(Option.isSome(built.templateProcessing), "the template processing runs");
+        assert.deepStrictEqual(built.processing, plain.processing);
+        assert.isTrue(Option.isSome(built.processing), "the response processing runs");
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-5] keeps response processing none beside a template processing with a marked element, whatever the tree",
+    () =>
+      Effect.gen(function* stalledRunsNone() {
+        const built = yield* buildItem(floatMatchCorrect([stalledTemplating]));
+
+        assert.deepStrictEqual(built.templateProcessing, Option.none());
         assert.deepStrictEqual(built.processing, Option.none());
         assert.deepStrictEqual(built.unsupported, [
           {
-            feature: "qti-template-processing",
-            path: `${root}/qti-template-processing`,
+            feature: "qti-set-outcome-value",
+            path: `${root}/qti-template-processing/qti-set-outcome-value`,
             shown: "mark",
           },
         ]);
       }),
   );
 
+  it("[I-5] marks template processing that reads or sets a name the engine does not hold while it runs, at the qti-template-processing, and runs neither processing", () => {
+    for (const { declarations, marks, rule, unheld } of unheldTemplating) {
+      const verdict = check(templatingItem(declarations, rule), tables);
+      const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+        assert.fail(`${unheld}: the item is ${verdict.verdict}, not accepted.`),
+      );
+
+      assert.strictEqual(verdict.verdict, "accepted-with-unsupported", unheld);
+      assert.deepStrictEqual(accepted.item.templateProcessing, Option.none(), unheld);
+      assert.deepStrictEqual(accepted.item.processing, Option.none(), unheld);
+      assert.deepStrictEqual(
+        accepted.unsupported,
+        [
+          ...marks.map((mark): UnsupportedFeature => ({ ...mark, shown: "mark" })),
+          {
+            feature: `variable:${unheld}`,
+            path: `${root}/qti-template-processing`,
+            shown: "mark",
+          },
+        ],
+        unheld,
+      );
+    }
+  });
+
+  it("[I-5] places the template processing's mark before the response processing's, in document order", () => {
+    const verdict = check(
+      templatingItem(
+        [scoreDeclaration, templateDeclaration("B", "single", "boolean")],
+        templateSetting("qti-set-template-value", "B", isNullOf(variableElement("QTI_CONTEXT"))),
+        variableElement("B"),
+      ),
+      tables,
+    );
+    const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+      assert.fail(`the item is ${verdict.verdict}, not accepted.`),
+    );
+
+    assert.deepStrictEqual(accepted.unsupported, [
+      { feature: "variable:QTI_CONTEXT", path: `${root}/qti-template-processing`, shown: "mark" },
+      { feature: "variable:B", path: `${root}/qti-response-processing`, shown: "mark" },
+    ]);
+  });
+
+  it("[I-5] keeps template processing that reads and sets only template variables the model holds, and response processing, with no mark", () => {
+    const verdict = check(
+      templatingItem(
+        [
+          scoreDeclaration,
+          templateDeclaration("T", "single", "integer"),
+          templateDeclaration("B", "single", "boolean"),
+        ],
+        el(
+          "qti-template-condition",
+          [],
+          [
+            el(
+              "qti-template-if",
+              [],
+              [
+                isNullOf(variableElement("T")),
+                templateSetting(
+                  "qti-set-template-value",
+                  "T",
+                  el("qti-base-value", [attr("base-type", "integer")], [text("3")]),
+                ),
+              ],
+            ),
+            el(
+              "qti-template-else",
+              [],
+              [templateSetting("qti-set-template-value", "B", isNullOf(variableElement("T")))],
+            ),
+          ],
+        ),
+        variableElement("B"),
+      ),
+      tables,
+    );
+    const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+      assert.fail(`the item is ${verdict.verdict}, not accepted.`),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted");
+    assert.isTrue(Option.isSome(accepted.item.templateProcessing), "the template processing runs");
+    assert.isTrue(Option.isSome(accepted.item.processing), "the response processing runs");
+    assert.deepStrictEqual(accepted.unsupported, []);
+  });
+
   it.effect(
-    "gives equal outcomes for the correct value and another on an item with template processing",
+    "gives equal outcomes for the correct value and another on an item whose template processing does not run",
     () =>
-      Effect.gen(function* templatedScoresNone() {
-        const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
+      Effect.gen(function* stalledScoresNone() {
+        const built = yield* buildItem(floatMatchCorrect([stalledTemplating]));
         const correct = yield* Effect.fromResult(
           runAttempt(built, fresh(built, "i"), { RESPONSE: float(1.5) }),
         );
@@ -3844,5 +4766,118 @@ describe("buildItem", () => {
         );
       }),
     growthTimeoutMs,
+  );
+});
+
+/**
+ * How many accepted corpus items have a `qti-template-processing` child of their root: the BPIG
+ * examples' `adaptiveTemplate`, `template_digging` and `template_image` and the packaging examples'
+ * `SineRule-001`, `SineRule-002-maths`, `adaptive_template` and `template_image`, each twice, as a
+ * file and inside its zip. `SineRule-001`'s `qti-custom-operator` is marked and gives NULL, since
+ * plate runs no extension, so its marks stop neither processing.
+ */
+const templatedCorpusItems = 14;
+
+/**
+ * The time the corpus count may take: it opens every corpus document once, as the sweeps do.
+ */
+const corpusTimeoutMs = 600_000;
+
+/**
+ * A template rule tree's outline: each setting rule as its kind and target, each condition as its
+ * branches' outlines and its otherwise's, so a case can pin a tree's structure without pinning how
+ * an expression in it is modelled.
+ */
+type Outline =
+  | string
+  | {
+      readonly branches: readonly (readonly Outline[])[];
+      readonly otherwise: Option.Option<readonly Outline[]>;
+    };
+
+/**
+ * Outline template rules.
+ *
+ * @param rules The rules.
+ * @returns Their outline, in order.
+ */
+const outline = (rules: readonly TemplateRule[]): readonly Outline[] =>
+  rules.map((rule): Outline => {
+    if (rule.kind === "template-condition") {
+      return {
+        branches: rule.branches.map((part) => outline(part.then)),
+        otherwise: rule.otherwise.pipe(Option.map(outline)),
+      };
+    }
+
+    return "identifier" in rule ? `${rule.kind} ${rule.identifier}` : rule.kind;
+  });
+
+describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
+  it.effect(
+    "[I-5] template_digging reads its template processing and runs its response processing, with no template mark",
+    () =>
+      Effect.gen(function* templateDigging() {
+        const location = "QTI3_BPIG_Examples/items/template_digging.xml";
+        const source = yield* readSource(location, yield* readCorpusFile(location));
+        const built = yield* buildItem(source);
+        const features = built.unsupported.map((entry) => entry.feature);
+
+        assert.deepStrictEqual([...built.templates.keys()], ["PEOPLE", "A", "B", "MIN"]);
+        assert.isTrue(Option.isSome(built.processing), "the response processing runs");
+        assert.notInclude(features, "qti-template-declaration");
+        assert.notInclude(features, "qti-template-processing");
+        assert.isFalse(
+          features.some((feature) => feature.startsWith("variable:")),
+          features.join(", "),
+        );
+        assert.deepStrictEqual(
+          built.templateProcessing.pipe(Option.map(outline)),
+          Option.some<readonly Outline[]>([
+            "set-template-value PEOPLE",
+            "set-template-value A",
+            {
+              branches: [["set-template-value B"], ["set-template-value B"]],
+              otherwise: Option.some(["set-template-value B"]),
+            },
+            "set-template-value MIN",
+            "set-correct-response RESPONSE",
+          ]),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] runs template processing and response processing in each of the 14 accepted corpus items whose root holds a qti-template-processing",
+    () =>
+      Effect.gen(function* templatedCorpus() {
+        const found: { readonly item: Item; readonly location: string }[] = [];
+        for (const member of yield* openCorpus) {
+          const accepted = acceptedOf(member);
+          if (Option.isSome(accepted)) {
+            const source = yield* readSource(member.location, member.bytes);
+            if (
+              source.root.children.some(
+                (child) =>
+                  child.kind === "element" &&
+                  child.namespace === qtiNamespace &&
+                  child.local === "qti-template-processing",
+              )
+            ) {
+              found.push({ item: accepted.value.item, location: member.location });
+            }
+          }
+        }
+
+        assert.lengthOf(found, templatedCorpusItems);
+        for (const { item: built, location } of found) {
+          assert.isTrue(
+            Option.isSome(built.templateProcessing),
+            `${location}: template processing`,
+          );
+          assert.isTrue(Option.isSome(built.processing), `${location}: response processing`);
+        }
+      }),
+    corpusTimeoutMs,
   );
 });

@@ -8,6 +8,11 @@
  * document order, and never stops at the first. The list of rules is closed, and each rule's
  * function names the sentence of the information model, or the reading, that settles it.
  *
+ * A test's printed variables are judged as an item's are, by the item rules' own judgement
+ * (`printedVariableReferences`), against the test's declarations and built-ins: the test declares
+ * the variables its printed variables name, as the qti package binds them (`bindsVariables`). A
+ * section declares nothing, so a section document's printed variables are not judged.
+ *
  * Two things a test may hold are valid here and are never refused. A dotted reference
  * (`ITEMREF.VAR`, `ITEMREF.N.VAR`, a part's or a section's `duration`) is valid in pre-conditions,
  * branch rules and outcome processing (readings 4, 5 and 37); reading 48 refuses one only when two
@@ -25,9 +30,12 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
+import { singleOf } from "#plate/model/expression.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
+import { declarationsOf, printedVariableReferences } from "#plate/validate/rules.ts";
+import type { NamedVariable, VariableScope } from "#plate/validate/rules.ts";
 import { governingTables } from "#plate/validate/structure.ts";
 import type { Tables } from "#plate/validate/xsd.ts";
 
@@ -99,6 +107,43 @@ const expressionContexts: ReadonlySet<string> = new Set([
   "qti-pre-condition",
   "qti-template-default",
 ]);
+
+/**
+ * The declarations a test holds whose variables its printed variables may name: "This allows
+ * globally scoped varables to be defined" (`info.txt:11725`, the test's context declarations) and
+ * its outcome declarations. A test declares no template or response variable. Where two share an
+ * identifier, the later kind here wins, as in an item.
+ */
+const testDeclarations = ["qti-context-declaration", "qti-outcome-declaration"] as const;
+
+/**
+ * The built-in variables of a test, each declared implicitly: "QTI_CONTEXT is a built-in variable
+ * and so any references within an item or an assessment to the QTI_CONTEXT variable [...] must
+ * succeed" (`info.txt:8456`), a record, and "The time spent on the test is recorded as if it were a
+ * built-in response variable called 'duration' declared at the test-level and of base-type duration
+ * and single cardinality" (`info.txt:9226`). An item's `completionStatus` and `numAttempts` are
+ * item session variables, so a test does not build them in.
+ */
+const testBuiltIns: ReadonlyMap<string, NamedVariable> = new Map<string, NamedVariable>([
+  ["duration", { kind: "response", type: Option.some(singleOf("duration")) }],
+  [
+    "QTI_CONTEXT",
+    { kind: "context", type: Option.some({ baseType: "unknown", cardinality: "record" }) },
+  ],
+]);
+
+/**
+ * Collect what a test's printed variables resolve their names against: the test's declarations
+ * ({@link testDeclarations}) and its built-ins ({@link testBuiltIns}).
+ *
+ * @param source The test.
+ * @returns The test's scope.
+ */
+const testScope = (source: SourceDocument): VariableScope => ({
+  builtIns: testBuiltIns,
+  declarer: "test",
+  variables: new Map(testDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
+});
 
 /**
  * The elements the rules judge, with each element's parent.
@@ -404,8 +449,13 @@ const expressionPlacement = (
  * Check a test or section document against the test prose rules: `duplicate-identifier` over its
  * parts, sections, item refs and section refs, reading 26's `child-count` on each section, readings
  * 24 and 25's `misplaced-element` for an interaction or a template element in a rubric block or
- * test feedback, and reading 23's `expression-placement` for an outcome-only expression, or a
- * weighted `qti-variable`, outside outcome processing.
+ * test feedback, reading 23's `expression-placement` for an outcome-only expression, or a weighted
+ * `qti-variable`, outside outcome processing, and, in a test, `undeclared-variable` and
+ * `expression-type` for what a `qti-printed-variable` names, judged as an item's are
+ * (`printedVariableReferences`): its `identifier` names an outcome the test declares, and its
+ * `base` and `index`, written as a name, a single integer outcome the test declares, where a
+ * context variable or a built-in of the test (`QTI_CONTEXT`, `duration`) is refused by its kind. A
+ * section document's printed variables are not judged, since a section declares nothing.
  *
  * The rules judge exactly what the structural walk checks, and only a document they can read
  * whole:
@@ -441,11 +491,18 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
   }
 
   const seen = new Set<string>();
+  const scope = isQti(source.root, (local) => local === "qti-assessment-test")
+    ? Option.some(testScope(source))
+    : Option.none();
 
   return visits.flatMap((visit) => [
     ...duplicateIdentifier(source, visit, seen),
     ...sectionChildCount(source, visit),
     ...misplacedInTestContent(source, visit, parents),
     ...expressionPlacement(source, visit, parents),
+    ...Option.match(scope, {
+      onNone: () => [],
+      onSome: (declared) => printedVariableReferences(source, visit, declared),
+    }),
   ]);
 };

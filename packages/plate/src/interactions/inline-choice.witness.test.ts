@@ -67,7 +67,7 @@ const legendItem = "qtiv3-examples/packaging/items/multi-input.xml";
  * Choice presents `P2`, then Marion, `A2`, then `B2` and `C2`, so Marion is not where the document
  * puts it.
  */
-const seed = 1;
+const seed = "1";
 
 /**
  * What a forged post carries for the legend's Inline Choice: Marion's identifier in lower case,
@@ -100,9 +100,14 @@ const fruits: InlineChoiceInteraction = {
   ariaLabel: Option.none(),
   ariaLabelledby: Option.none(),
   choices: [
-    { content: [words("apples")], fixed: false, identifier: "A" },
-    { content: [words("pears")], fixed: false, identifier: "B" },
-    { content: [words("plums")], fixed: false, identifier: "C" },
+    {
+      content: [words("apples")],
+      fixed: false,
+      identifier: "A",
+      templateVisibility: Option.none(),
+    },
+    { content: [words("pears")], fixed: false, identifier: "B", templateVisibility: Option.none() },
+    { content: [words("plums")], fixed: false, identifier: "C", templateVisibility: Option.none() },
   ],
   class: "",
   kind: "inline-choice",
@@ -151,6 +156,8 @@ const fruitItem: Opened = (() => {
         },
       ],
     ]),
+    templateProcessing: Option.none(),
+    templates: new Map(),
     title: "Fruit",
     unsupported: [],
   };

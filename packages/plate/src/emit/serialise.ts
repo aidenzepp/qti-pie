@@ -1,4 +1,4 @@
-import { Data } from "effect";
+import { Data, Option } from "effect";
 import type { Element, Node } from "#plate/emit/node.ts";
 
 /**
@@ -387,6 +387,56 @@ const startsWithLineFeed = (children: readonly Node[]): boolean => {
 };
 
 /**
+ * Hand a node of the output tree to `take` as HTML, chunk by chunk, in document order, until
+ * `take` refuses a chunk.
+ *
+ * It is the one walk {@link serialise} and {@link toHtmlWithin} share: each element is refused, as
+ * {@link serialise} says, before any of its chunks is handed on, and once `take` refuses a chunk
+ * no further chunk is made and no further node is visited.
+ *
+ * @param node The node to write, with its descendants.
+ * @param take Takes the next chunk and says whether the walk goes on.
+ * @returns Whether `take` took every chunk of `node`.
+ * @throws {MalformedTagName} When `node` or a descendant has a tag that is not a lower-case name.
+ * @throws {MalformedAttributeName} When `node` or a descendant has an attribute name HTML cannot
+ *   write.
+ * @throws {EventHandlerAttribute} When `node` or a descendant has an attribute name that starts
+ *   with `on`, in any case.
+ * @throws {VoidElementChildren} When `node` or a descendant is a void element with children.
+ * @throws {RawTextChildren} When `node` or a descendant is a raw-text element with children.
+ * @throws {PlaintextElement} When `node` or a descendant is a `plaintext` element with no children.
+ * @throws {EscapableRawTextElementChild} When `node` or a descendant is a `textarea` or `title`
+ *   with an element child.
+ */
+const walk = (node: Node, take: (chunk: string) => boolean): boolean => {
+  if (node.kind === "text") {
+    return take(escapeText(node.text));
+  }
+
+  refuseUnwritable(node);
+
+  if (!take(startTag(node))) {
+    return false;
+  }
+
+  if (voidElements.has(node.tag)) {
+    return true;
+  }
+
+  if (lineFeedDropping.has(node.tag) && startsWithLineFeed(node.children) && !take("\n")) {
+    return false;
+  }
+
+  for (const child of node.children) {
+    if (!walk(child, take)) {
+      return false;
+    }
+  }
+
+  return take(`</${node.tag}>`);
+};
+
+/**
  * Write a node of the output tree to `sink` as HTML, chunk by chunk, in document order.
  *
  * The same tree always gives the same bytes: no whitespace is added, every non-void element (`svg`,
@@ -413,28 +463,11 @@ const startsWithLineFeed = (children: readonly Node[]): boolean => {
  *   with an element child.
  */
 export const serialise = (node: Node, sink: Sink): void => {
-  if (node.kind === "text") {
-    sink.write(escapeText(node.text));
+  walk(node, (chunk) => {
+    sink.write(chunk);
 
-    return;
-  }
-
-  refuseUnwritable(node);
-  sink.write(startTag(node));
-
-  if (voidElements.has(node.tag)) {
-    return;
-  }
-
-  if (lineFeedDropping.has(node.tag) && startsWithLineFeed(node.children)) {
-    sink.write("\n");
-  }
-
-  for (const child of node.children) {
-    serialise(child, sink);
-  }
-
-  sink.write(`</${node.tag}>`);
+    return true;
+  });
 };
 
 /**
@@ -463,4 +496,50 @@ export const toHtml = (node: Node): string => {
   });
 
   return chunks.join("");
+};
+
+/**
+ * Write a node of the output tree as one HTML string, unless it passes a budget of characters.
+ *
+ * It counts the characters of each chunk as a string's `length` counts them (UTF-16 code units),
+ * text counted as escaped, and stops at the first chunk that would pass `budget`: that chunk and
+ * every node after it are never written, and no chunk past the budget is joined, so a tree too
+ * large to hold as one string costs no more than the budget. HTML of exactly `budget` characters is
+ * written.
+ *
+ * @example
+ *   toHtmlWithin(h("p", {}, [text("a & b")]), 16); // Option.some("<p>a &amp; b</p>")
+ *   toHtmlWithin(h("p", {}, [text("a & b")]), 15); // Option.none()
+ *
+ * @param node The node to write, with its descendants.
+ * @param budget The most characters the HTML may hold.
+ * @returns The string {@link toHtml} gives for `node` when it holds at most `budget` characters,
+ *   otherwise none.
+ * @throws {MalformedTagName} When `node` or a descendant written before the budget runs out has a
+ *   tag that is not a lower-case name.
+ * @throws {MalformedAttributeName} When such a node has an attribute name HTML cannot write.
+ * @throws {EventHandlerAttribute} When such a node has an attribute name that starts with `on`, in
+ *   any case.
+ * @throws {VoidElementChildren} When such a node is a void element with children.
+ * @throws {RawTextChildren} When such a node is a raw-text element with children.
+ * @throws {PlaintextElement} When such a node is a `plaintext` element with no children.
+ * @throws {EscapableRawTextElementChild} When such a node is a `textarea` or `title` with an
+ *   element child.
+ */
+export const toHtmlWithin = (node: Node, budget: number): Option.Option<string> => {
+  const chunks: string[] = [];
+  let written = 0;
+  const within = walk(node, (chunk) => {
+    written += chunk.length;
+
+    if (written > budget) {
+      return false;
+    }
+
+    chunks.push(chunk);
+
+    return true;
+  });
+
+  return within ? Option.some(chunks.join("")) : Option.none();
 };

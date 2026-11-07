@@ -4,11 +4,14 @@ import { decodeSession, encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
+import { firstAttempt } from "#plate/engine/attempt.ts";
+import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { openPackage } from "#plate/package/open.ts";
 import { manifestFile } from "#plate/package/store.ts";
 import { redact, render } from "#plate/render.ts";
+import { advance } from "#plate/session/advance.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import {
   current,
@@ -21,7 +24,7 @@ import {
 } from "#plate/session/start.ts";
 import type { Current, ItemView } from "#plate/session/start.ts";
 import { open } from "#plate/validate/open.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
 
@@ -81,6 +84,16 @@ const choiceB: Value = {
   baseType: "identifier",
   cardinality: "single",
   values: [{ baseType: "identifier", value: "B" }],
+};
+
+/**
+ * The default the hand-built templated item's template processing sets for `RESPONSE`: the choice
+ * `C`.
+ */
+const choiceC: Value = {
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value: "C" }],
 };
 
 /**
@@ -166,16 +179,72 @@ const itemXml = (
   ].join("");
 
 /**
- * Write the text of a hand-built test: one nonlinear, individual part with one section that holds
- * each item ref.
+ * Write the text of a hand-built templated item: one Choice over `A`, `B` and `C` bound to the
+ * single identifier `RESPONSE`, which declares the default `B`, and template processing that draws
+ * the single integer template variable `T` from 1 to 10^9 and sets `RESPONSE`'s default to `C`.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const templatedXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    "<qti-default-value><qti-value>B</qti-value></qti-default-value></qti-response-declaration>",
+    '<qti-template-declaration identifier="T" cardinality="single" base-type="integer"/>',
+    "<qti-template-processing>",
+    '<qti-set-template-value identifier="T"><qti-random-integer min="1" max="1000000000"/></qti-set-template-value>',
+    '<qti-set-default-value identifier="RESPONSE"><qti-base-value base-type="identifier">C</qti-base-value></qti-set-default-value>',
+    '</qti-template-processing><qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="false">',
+    ...["A", "B", "C"].map(
+      (choice) => `<qti-simple-choice identifier="${choice}">Choice ${choice}</qti-simple-choice>`,
+    ),
+    "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
+  ].join("");
+
+/**
+ * Write the text of a hand-built item whose template processing reads `QTI_CONTEXT`, which the
+ * engine does not hold while template processing runs, so `check` marks it and it does not run:
+ * one Choice over `A`, `B` and `C` bound to the single identifier `RESPONSE`, which declares the
+ * default `B`, and the single boolean template variable `B`, which the one rule sets to whether
+ * `QTI_CONTEXT` is NULL.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const contextReadingXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    "<qti-default-value><qti-value>B</qti-value></qti-default-value></qti-response-declaration>",
+    '<qti-template-declaration identifier="B" cardinality="single" base-type="boolean"/>',
+    '<qti-template-processing><qti-set-template-value identifier="B">',
+    '<qti-is-null><qti-variable identifier="QTI_CONTEXT"/></qti-is-null>',
+    "</qti-set-template-value></qti-template-processing>",
+    '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="false">',
+    ...["A", "B", "C"].map(
+      (choice) => `<qti-simple-choice identifier="${choice}">Choice ${choice}</qti-simple-choice>`,
+    ),
+    "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
+  ].join("");
+
+/**
+ * Write the text of a hand-built test: its outcome declarations, then one nonlinear, individual
+ * part with one section that holds each item ref.
  *
  * @param identifier The test's identifier.
  * @param refs Each item ref's identifier with its `href`, in document order.
+ * @param declarations The test's outcome declarations' text, in document order, none by default.
  * @returns The test's text.
  */
-const testXml = (identifier: string, refs: readonly (readonly [string, string])[]): string =>
+const testXml = (
+  identifier: string,
+  refs: readonly (readonly [string, string])[],
+  declarations: readonly string[] = [],
+): string =>
   [
     `<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}">`,
+    ...declarations,
     '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
     '<qti-assessment-section identifier="section" title="Section" visible="true">',
     ...refs.map(([ref, href]) => `<qti-assessment-item-ref identifier="${ref}" href="${href}"/>`),
@@ -188,11 +257,13 @@ const testXml = (identifier: string, refs: readonly (readonly [string, string])[
  *
  * @param identifier The test's identifier.
  * @param items Each item ref's identifier with its item's text.
+ * @param declarations The test's outcome declarations' text, none by default.
  * @returns The test and its items.
  */
 const builtDelivery = Effect.fnUntraced(function* builtDelivery(
   identifier: string,
   items: readonly (readonly [string, string])[],
+  declarations: readonly string[] = [],
 ) {
   const encoder = new TextEncoder();
   const test = yield* openTest(
@@ -201,6 +272,7 @@ const builtDelivery = Effect.fnUntraced(function* builtDelivery(
       testXml(
         identifier,
         items.map(([ref]) => [ref, `${ref}.xml`] as const),
+        declarations,
       ),
     ),
   );
@@ -369,6 +441,51 @@ const viewAt = (
   Result.getOrElse(itemView(delivery.test, session, configuration, sequenceIndex), (failure) =>
     assert.fail(`itemView failed: ${failure.message}`),
   );
+
+/**
+ * Give the record `firstAttempt` starts for one of a delivery's items, failing the test when it
+ * fails.
+ *
+ * @param delivery The test and its items.
+ * @param ref The item ref's identifier.
+ * @param start The item's instance and the seed, as `firstAttempt` takes them.
+ * @param start.instance The item's instance.
+ * @param start.seed The seed.
+ * @returns The record.
+ */
+const startedRecord = (
+  delivery: Delivery,
+  ref: string,
+  start: { readonly instance: string; readonly seed: string },
+): ItemRecord =>
+  Result.getOrElse(
+    firstAttempt(
+      (delivery.items.get(ref) ?? assert.fail(`the delivery has no item ${ref}`)).item,
+      start,
+    ),
+    (failure) => assert.fail(`firstAttempt failed: ${failure._tag}`),
+  );
+
+/**
+ * Open the two-item hand-built test whose items `first` and `second` are each
+ * {@link templatedXml}'s.
+ *
+ * @returns The test and its items.
+ */
+const templatedDelivery = () =>
+  builtDelivery("templated", [
+    ["first", templatedXml("first")],
+    ["second", templatedXml("second")],
+  ]);
+
+/**
+ * Give the record of a session's first item.
+ *
+ * @param session The session.
+ * @returns The record.
+ */
+const recordUnder = (session: TestSession): ItemRecord =>
+  session.items[0]?.record ?? assert.fail("the session has no items");
 
 /**
  * Read a result's failure, failing the test unless it failed with the tag given.
@@ -639,21 +756,21 @@ describe("current", () => {
     () =>
       Effect.gen(function* storedSeed() {
         const delivery = yield* guideDelivery();
-        const session = started(delivery, yield* configure({ seed: 7 }));
+        const session = started(delivery, yield* configure({ seed: "7" }));
 
-        assert.deepStrictEqual(session.seed, Option.some(7));
+        assert.strictEqual(session.seed, "7");
         assert.strictEqual(
-          currentItem(delivery, session, yield* configure({ seed: 9 })).configuration.seed,
-          7,
+          currentItem(delivery, session, yield* configure({ seed: "9" })).configuration.seed,
+          "7",
         );
       }),
     { tags: ["corpus"] },
   );
 
   it.effect(
-    "[T-14] renders a shuffled Choice byte-equal after a JSON round trip of a session started with no seed, whatever seed the host passes",
+    "[T-14] renders a shuffled Choice byte-equal after a JSON round trip, in the order of the seed the session stored, whatever seed the host passes",
     () =>
-      Effect.gen(function* unseededRoundTrip() {
+      Effect.gen(function* storedSeedRoundTrip() {
         const delivery = yield* builtDelivery("shuffle", [
           [
             "shuffled",
@@ -667,8 +784,8 @@ describe("current", () => {
         const item = redact(
           delivery.items.get("shuffled") ?? assert.fail("the shuffled item is missing"),
         );
-        const hostConfiguration = yield* configure({ seed: 9 });
-        const session = started(delivery, yield* configure({}));
+        const hostConfiguration = yield* configure({ seed: "9" });
+        const session = started(delivery, yield* configure({ seed: "7" }));
         const restored = throughHost(delivery.test, session);
         const htmlOf = (view: ItemView): string =>
           Result.getOrElse(
@@ -683,9 +800,9 @@ describe("current", () => {
         const restoredView = currentItem(delivery, restored, hostConfiguration);
         const underHostSeed = htmlOf({ ...before, configuration: hostConfiguration });
 
-        assert.isFalse(Object.hasOwn(before.configuration, "seed"));
-        assert.isFalse(Object.hasOwn(restoredView.configuration, "seed"));
-        assert.notStrictEqual(underHostSeed, htmlOf(before), "seed 9 presents another order");
+        assert.strictEqual(before.configuration.seed, session.seed);
+        assert.strictEqual(restoredView.configuration.seed, session.seed);
+        assert.notStrictEqual(underHostSeed, htmlOf(before), 'seed "9" presents another order');
         assert.strictEqual(htmlOf(restoredView), htmlOf(before));
       }),
   );
@@ -812,6 +929,241 @@ describe("present", () => {
         assert.deepStrictEqual([failure.sequenceIndex, failure.count], [7, 6]);
       }),
     { tags: ["corpus"] },
+  );
+});
+
+describe("a templated item in a session", () => {
+  it.effect(
+    "[I-5] presents each item with the record firstAttempt starts under the session's seed and the item's instance, the template-set default first",
+    () =>
+      Effect.gen(function* presentsTemplated() {
+        const delivery = yield* templatedDelivery();
+        const configuration = yield* configure({ seed: "11" });
+        const session = started(delivery, configuration);
+        const first = startedRecord(delivery, "first", { instance: `${instance}.1`, seed: "11" });
+
+        assert.deepStrictEqual(session.items[0]?.record, first);
+        assert.deepStrictEqual(Object.keys(first.templates), ["T"]);
+        assert.strictEqual(first.templates["T"]?.baseType, "integer");
+        assert.deepStrictEqual(first.responses, { RESPONSE: choiceC });
+        assert.deepStrictEqual(currentItem(delivery, session, configuration).values, {
+          RESPONSE: choiceC,
+        });
+        assert.deepStrictEqual(session.items[1]?.record.templates, {});
+
+        const presented = Result.getOrElse(
+          present(delivery.items, session, 2, after(1000)),
+          (failure) => assert.fail(failure.message),
+        );
+
+        assert.deepStrictEqual(
+          presented.items[1]?.record,
+          startedRecord(delivery, "second", { instance: `${instance}.2`, seed: "11" }),
+        );
+        assert.deepStrictEqual(presented.items[0], session.items[0]);
+      }),
+  );
+
+  it.effect("[I-5] gives two sessions started with two seeds two template values", () =>
+    Effect.gen(function* seedsDiffer() {
+      const delivery = yield* templatedDelivery();
+      const eleven = recordUnder(started(delivery, yield* configure({ seed: "11" })));
+      const twelve = recordUnder(started(delivery, yield* configure({ seed: "12" })));
+
+      assert.notDeepEqual(eleven.templates["T"], twelve.templates["T"]);
+      assert.deepStrictEqual([eleven.seed, twelve.seed], ["11", "12"]);
+    }),
+  );
+
+  it.effect(
+    "[I-5] draws a seed of 32 lowercase hex digits for a session started with no seed, another each session, which every presented item's record and the item configuration carry",
+    () =>
+      Effect.gen(function* drawsSessionSeed() {
+        const delivery = yield* templatedDelivery();
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const other = started(delivery, configuration);
+        const presented = Result.getOrElse(
+          present(delivery.items, session, 2, after(1000)),
+          (failure) => assert.fail(failure.message),
+        );
+
+        assert.match(session.seed, /^[0-9a-f]{32}$/u);
+        assert.match(other.seed, /^[0-9a-f]{32}$/u);
+        assert.notStrictEqual(other.seed, session.seed);
+        assert.deepStrictEqual(
+          presented.items.map((item) => item.record.seed),
+          [session.seed, session.seed],
+        );
+        assert.deepStrictEqual(
+          recordUnder(session),
+          startedRecord(delivery, "first", { instance: `${instance}.1`, seed: session.seed }),
+        );
+        assert.strictEqual(
+          currentItem(delivery, session, configuration).configuration.seed,
+          session.seed,
+        );
+      }),
+  );
+
+  it.effect("[I-5] gives each view the record of the item it shows", () =>
+    Effect.gen(function* viewsCarryRecords() {
+      const delivery = yield* templatedDelivery();
+      const configuration = yield* configure({ seed: "11" });
+      const session = Result.getOrElse(
+        present(delivery.items, started(delivery, configuration), 2, after(1000)),
+        (failure) => assert.fail(failure.message),
+      );
+
+      assert.deepStrictEqual(
+        currentItem(delivery, session, configuration).record,
+        session.items[0]?.record,
+      );
+      assert.deepStrictEqual(
+        [1, 2].map(
+          (sequenceIndex) => viewAt(delivery, session, configuration, sequenceIndex).record,
+        ),
+        session.items.map((item) => item.record),
+      );
+    }),
+  );
+
+  it.effect(
+    "[I-5] [T-14] shows a templated session's record and values the same after encode, a JSON round trip and decode",
+    () =>
+      Effect.gen(function* templatedRoundTrip() {
+        const delivery = yield* templatedDelivery();
+        const configuration = yield* configure({ seed: "11" });
+        const session = started(delivery, configuration);
+        const restored = throughHost(delivery.test, session);
+        const shown = currentItem(delivery, session, configuration);
+        const restoredView = currentItem(delivery, restored, configuration);
+
+        assert.deepStrictEqual(restored, session);
+        assert.deepStrictEqual(restoredView.record, shown.record);
+        assert.deepStrictEqual(restoredView.record.templates, shown.record.templates);
+        assert.deepStrictEqual(restoredView.values, { RESPONSE: choiceC });
+      }),
+  );
+
+  it.effect(
+    "[I-5] starts a test whose item's template processing reads QTI_CONTEXT, marked, and presents that item with a record that holds no template value",
+    () =>
+      Effect.gen(function* startsMarked() {
+        const delivery = yield* builtDelivery("marked", [["first", contextReadingXml("first")]]);
+        const configuration = yield* configure({ seed: "11" });
+        const returned = Result.getOrElse(
+          Result.try(() =>
+            startTest(delivery.test, delivery.items, configuration, {
+              instance,
+              now: startedAt,
+            }),
+          ),
+          () => assert.fail("startTest threw"),
+        );
+        const session = Result.getOrElse(returned, (failure) =>
+          assert.fail(`startTest refused: ${failure.message}`),
+        );
+        const record = recordUnder(session);
+
+        assert.deepStrictEqual(
+          delivery.items.get("first")?.item.templateProcessing,
+          Option.none(),
+          "the item's template processing is marked",
+        );
+        assert.deepStrictEqual([record.templates, record.correct, record.defaults], [{}, {}, {}]);
+        assert.deepStrictEqual(record.responses, { RESPONSE: choiceB });
+        assert.deepStrictEqual(currentItem(delivery, session, configuration).record, record);
+      }),
+  );
+
+  it.effect(
+    "[I-5] throws a tagged defect, and returns no session, when firstAttempt fails on an item no check accepted",
+    () =>
+      Effect.gen(function* unreachableFailure() {
+        const delivery = yield* builtDelivery("unchecked", [["first", templatedXml("first")]]);
+        const accepted = delivery.items.get("first") ?? assert.fail("the item is missing");
+        const rules = Option.getOrElse(accepted.item.templateProcessing, () =>
+          assert.fail("the item's template processing does not run"),
+        );
+        const misnamed = acceptForTest({
+          ...accepted.item,
+          templateProcessing: Option.some(
+            rules.map((rule) =>
+              rule.kind === "set-template-value" ? { ...rule, identifier: "UNDECLARED" } : rule,
+            ),
+          ),
+        });
+        const configuration = yield* configure({});
+
+        const thrown = Option.getOrElse(
+          Result.getFailure(
+            Result.try(() =>
+              startTest(delivery.test, new Map([["first", misnamed]]), configuration, {
+                instance,
+                now: startedAt,
+              }),
+            ),
+          ),
+          () => assert.fail("startTest returned instead of throwing"),
+        );
+
+        assert.propertyVal(thrown, "_tag", "FirstAttemptDefect");
+      }),
+  );
+});
+
+describe("a test whose SCORE and MAXSCORE are not floats", () => {
+  it.effect(
+    "[I-9a] opens a test declaring a string SCORE with a default and a point MAXSCORE, which the information model types in an item only, and starts it, shows its item and submits it",
+    () =>
+      Effect.gen(function* untypedScores() {
+        const delivery = yield* builtDelivery(
+          "untyped",
+          [
+            [
+              "first",
+              itemXml("first", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+            ],
+          ],
+          [
+            '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="string">',
+            "<qti-default-value><qti-value>high</qti-value></qti-default-value>",
+            "</qti-outcome-declaration>",
+            '<qti-outcome-declaration identifier="MAXSCORE" cardinality="single" base-type="point"/>',
+          ],
+        );
+        assert.deepStrictEqual(delivery.test.unsupported, []);
+        assert.deepStrictEqual(
+          [...delivery.test.test.outcomes.values()].map((outcome) => [
+            outcome.identifier,
+            outcome.baseType,
+          ]),
+          [
+            ["SCORE", "string"],
+            ["MAXSCORE", "point"],
+          ],
+        );
+
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        assert.strictEqual(viewAt(delivery, session, configuration, 1).sequenceIndex, 1);
+
+        const submitted = Result.getOrElse(
+          advance(
+            delivery.test,
+            delivery.items,
+            session,
+            { intent: { kind: "submit-item" }, responses: { RESPONSE: choiceB } },
+            configuration,
+            { now: after(1) },
+          ),
+          (failure) => assert.fail(`advance refused: ${failure.message}`),
+        );
+        const [first] = submitted.items;
+        assert.strictEqual(first?.record.numAttempts, 1);
+        assert.deepStrictEqual(first?.record.responses["RESPONSE"], choiceB);
+      }),
   );
 });
 

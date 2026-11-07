@@ -288,8 +288,9 @@ const namesOf = (element: BodyElement): readonly string[] =>
   element.attributes.map((attribute) => attribute.name);
 
 /**
- * Write a body's nodes compactly: an element as its tag with its children, text as itself and a
- * notice as `notice:<feature>@<path>`.
+ * Write a body's nodes compactly: an element as its tag with its children, text as itself, a
+ * printed variable as `printed:<identifier>@<path>`, a template block or inline as
+ * `<kind>:<identifier>@<path>` with its content, and a notice as `notice:<feature>@<path>`.
  *
  * @param nodes The nodes.
  * @returns One entry per node.
@@ -305,6 +306,13 @@ const outline = (nodes: readonly BodyNode[]): readonly unknown[] =>
       }
       case "unsupported": {
         return `notice:${node.feature}@${node.path}`;
+      }
+      case "printed-variable": {
+        return `printed:${node.identifier}@${node.path}`;
+      }
+      case "template-block":
+      case "template-inline": {
+        return { [`${node.kind}:${node.identifier}@${node.path}`]: outline(node.content) };
       }
       case "choice":
       case "extended-text":
@@ -344,6 +352,29 @@ describe("check", () => {
     assert.strictEqual(accepted.item.identifier, "item-1");
     assert.deepStrictEqual(accepted.unsupported, []);
     assert.deepStrictEqual(outline(accepted.item.body), [{ p: ["Hello"] }]);
+  });
+
+  it("[I-5] accepts an item whose body prints a variable as accepted, holding the printed variable as a body node and naming it no unsupported feature", () => {
+    const accepted = acceptedOf(
+      verdictOf(
+        item([
+          score(),
+          body([
+            el(
+              "p",
+              [],
+              [text("Score: "), el("qti-printed-variable", [attr("identifier", "SCORE")])],
+            ),
+          ]),
+        ]),
+      ),
+      "accepted",
+    );
+
+    assert.deepStrictEqual(accepted.unsupported, []);
+    assert.deepStrictEqual(outline(accepted.item.body), [
+      { p: ["Score: ", `printed:SCORE@${bodyPath}/p/qti-printed-variable`] },
+    ]);
   });
 
   it("refuses a root outside the QTI namespace with not-qti-root alone", () => {
@@ -1030,6 +1061,43 @@ describe("check, the built-in variables' identifiers and qti-equal's tolerance t
   });
 });
 
+describe("check, the base types of SCORE, MAXSCORE and PASSED (pantry ReservedOutcomeTypes)", () => {
+  it("[I-9a] refuses an item whose outcome SCORE is an integer, MAXSCORE a string or PASSED an integer, as attribute-type at its base-type (pantry ReservedOutcomeTypes)", () => {
+    for (const [identifier, baseType] of [
+      ["SCORE", "integer"],
+      ["MAXSCORE", "string"],
+      ["PASSED", "integer"],
+    ] as const) {
+      assert.deepStrictEqual(
+        refusalsOf(verdictOf(declaring("qti-outcome-declaration", identifier, baseType))),
+        [
+          {
+            location: { kind: "path", path: `${root}/qti-outcome-declaration/@base-type` },
+            rule: "attribute-type",
+          },
+        ],
+        identifier,
+      );
+    }
+  });
+
+  it("[I-9a] accepts an item whose outcome SCORE and MAXSCORE are floats, PASSED a boolean, an integer outcome of another name, and an integer response named SCORE", () => {
+    for (const [kind, identifier, baseType] of [
+      ["qti-outcome-declaration", "SCORE", "float"],
+      ["qti-outcome-declaration", "MAXSCORE", "float"],
+      ["qti-outcome-declaration", "PASSED", "boolean"],
+      ["qti-outcome-declaration", "TOTAL", "integer"],
+      ["qti-response-declaration", "SCORE", "integer"],
+    ] as const) {
+      assert.notStrictEqual(
+        verdictOf(declaring(kind, identifier, baseType)).verdict,
+        "refused",
+        `${kind} ${identifier}`,
+      );
+    }
+  });
+});
+
 /**
  * The location of every hand-built test, section and stimulus document in these tests.
  */
@@ -1153,6 +1221,46 @@ const acceptedTestOf = (
 const featuresOf = (
   features: readonly { readonly feature: string; readonly path: string }[],
 ): readonly string[] => features.map(({ feature, path }) => `${feature}@${path}`);
+
+/**
+ * Construct a single outcome declaration with no default.
+ *
+ * @param identifier Its `identifier`.
+ * @param baseType Its `base-type`.
+ * @returns The declaration.
+ */
+const outcome = (identifier: string, baseType: string): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("base-type", baseType),
+    attr("cardinality", "single"),
+    attr("identifier", identifier),
+  ]);
+
+describe("check, the base types of a test's SCORE, MAXSCORE and PASSED", () => {
+  it("[I-9a] accepts a test whose outcome SCORE is an integer and MAXSCORE a string, which the information model types in an item only (info.txt:8478, :8480)", () => {
+    const verdict = verdictOf(
+      assessmentTest([itemRef("q1")], [outcome("SCORE", "integer"), outcome("MAXSCORE", "string")]),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted");
+    assert.strictEqual(verdict.kind, "test");
+  });
+
+  it("[I-9a] refuses a test whose outcome PASSED is an integer, as attribute-type at its base-type (pantry ReservedOutcomeTypes; info.txt:8482)", () => {
+    assert.deepStrictEqual(
+      refusalsOf(verdictOf(assessmentTest([itemRef("q1")], [outcome("PASSED", "integer")]))),
+      [
+        {
+          location: {
+            kind: "path",
+            path: "qti-assessment-test/qti-outcome-declaration/@base-type",
+          },
+          rule: "attribute-type",
+        },
+      ],
+    );
+  });
+});
 
 describe("check, every QTI 3 root", () => {
   it.effect(
@@ -1289,6 +1397,32 @@ describe("check, every QTI 3 root", () => {
     assert.strictEqual(verdict.kind, "test");
   });
 
+  it("[I-5] refuses a test whose rubric block prints a variable the test does not declare, naming the test in the sentence", () => {
+    const rubric = el(
+      "qti-rubric-block",
+      [attr("view", "candidate")],
+      [
+        el(
+          "qti-content-body",
+          [],
+          [el("p", [], [el("qti-printed-variable", [attr("identifier", "NOPE")])])],
+        ),
+      ],
+    );
+    const verdict = verdictOf(assessmentTest([rubric, itemRef("q1")]));
+    const path =
+      "qti-assessment-test/qti-test-part/qti-assessment-section/qti-rubric-block/qti-content-body/p/qti-printed-variable/@identifier";
+
+    assert.deepStrictEqual(refusalsOf(verdict), [
+      { location: { kind: "path", path }, rule: "undeclared-variable" },
+    ]);
+    assert.strictEqual(verdict.kind, "test");
+    assert.include(
+      verdict.verdict === "refused" ? verdict.refusals.map(describeRefusal).join("\n") : "",
+      "and the test declares no outcome `NOPE`.",
+    );
+  });
+
   it("leaves a qti-response-processing root unchecked, of kind response-processing", () => {
     const verdict = verdictOf(doc("match_correct.xml", matchCorrect));
 
@@ -1403,6 +1537,8 @@ describe("acceptForTest", () => {
       outcomes: new Map(),
       processing: Option.none(),
       responses: new Map(),
+      templateProcessing: Option.none(),
+      templates: new Map(),
       title: "Hand",
       unsupported: [{ feature: "xml:base", path: root, shown: "mark" }],
     };
@@ -2057,6 +2193,32 @@ describe("describeRefusal", () => {
     );
   });
 
+  it("[I-9a] words an outcome SCORE, MAXSCORE or PASSED of another base type, citing the information model's line (pantry ReservedOutcomeTypes)", () => {
+    const sentence = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "base-type",
+        baseType: "float",
+        check: "reserved-outcome-type",
+        element: "qti-outcome-declaration",
+        expected: "float, the base type of an outcome named SCORE",
+        identifier: "SCORE",
+        pantry: "ReservedOutcomeTypes",
+        source: "info.txt:8478",
+        value: "integer",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-outcome-declaration`'s attribute `base-type` is `integer`, but an outcome named `SCORE` must have the base type `float` (info.txt:8478).",
+    );
+    assert.include(sentence, "Rule `attribute-type`.");
+    assert.include(
+      sentence,
+      "To make it valid: change `base-type` to `float`, or give `qti-outcome-declaration` another identifier.",
+    );
+  });
+
   it("[I-9a] words a qti-equal tolerance whose token is neither a number nor a variable's name, citing the information model's line (pantry P6)", () => {
     const sentence = describeRefusal(
       refusalOf("attribute-type", {
@@ -2196,7 +2358,125 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "outcome, to a");
   });
 
-  it("names the response variable a template rule reads", () => {
+  it("[I-5] offers a test's printed variable only an outcome the test declares, never a template variable, for its base and for its identifier (pantry printed-variable-ref)", () => {
+    const base = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "base",
+        check: "reference",
+        declarer: "test",
+        element: "qti-printed-variable",
+        expectedBaseType: "integer",
+        identifier: "SCORE",
+      }),
+    );
+    const named = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "identifier",
+        check: "reference",
+        declarer: "test",
+        element: "qti-printed-variable",
+        identifier: "duration",
+        source: "info.txt:70296",
+        variableKind: "response",
+      }),
+    );
+
+    assert.include(
+      base,
+      "`qti-printed-variable`'s attribute `base` names `SCORE`, which is not a single outcome variable of base type `integer`.",
+    );
+    assert.include(
+      base,
+      "To make it valid: in `base`, name a single outcome variable of base type `integer` that the test declares, or write a value of that base type.",
+    );
+    assert.include(
+      named,
+      "`qti-printed-variable`'s attribute `identifier` names `duration`, a response variable, which is not an outcome variable (info.txt:70296).",
+    );
+    assert.include(
+      named,
+      "To make it valid: in `identifier`, name an outcome variable that the test declares.",
+    );
+
+    for (const sentence of [base, named]) {
+      assert.notInclude(sentence, "template");
+    }
+  });
+
+  it("[I-5] names a printed variable's identifier that names a response as neither a template nor an outcome variable, and says no base type (pantry printed-variable-ref)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "identifier",
+        check: "reference",
+        element: "qti-printed-variable",
+        identifier: "RESPONSE",
+        source: "info.txt:70296",
+        variableKind: "response",
+      }),
+    );
+    const remedy = sentence.slice(sentence.indexOf("To make it valid:"));
+
+    assert.include(
+      sentence,
+      "`qti-printed-variable`'s attribute `identifier` names `RESPONSE`, a response variable, which is neither a template nor an outcome variable (info.txt:70296).",
+    );
+    assert.include(remedy, "name a template or outcome variable in `identifier`");
+    assert.include(remedy, "an outcome that response processing sets to the response's value");
+    assert.notInclude(sentence, "base type");
+    assert.notInclude(sentence, "untyped");
+    assert.notInclude(sentence, "single");
+  });
+
+  it("[I-5] names a printed variable's identifier that names a context variable, with no remedy about a response (pantry printed-variable-ref)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "identifier",
+        check: "reference",
+        element: "qti-printed-variable",
+        identifier: "CONTEXT",
+        source: "info.txt:70296",
+        variableKind: "context",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-printed-variable`'s attribute `identifier` names `CONTEXT`, a context variable, which is neither a template nor an outcome variable (info.txt:70296).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: name a template or outcome variable in `identifier`.",
+    );
+    assert.notInclude(sentence, "base type");
+  });
+
+  it("[I-5] names a template-identifier that names a float template variable as not an identifier template variable, single or multiple, citing the element's line (pantry template-ref)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "template-identifier",
+        check: "reference",
+        element: "qti-simple-choice",
+        expectedBaseType: "identifier",
+        expectedCardinalities: "single multiple",
+        identifier: "F",
+        source: "info.txt:42466",
+      }),
+    );
+    const remedy = sentence.slice(sentence.indexOf("To make it valid:"));
+
+    assert.include(
+      sentence,
+      "`qti-simple-choice`'s attribute `template-identifier` names `F`, which is not a template variable of base type `identifier`, single or multiple (info.txt:42466).",
+    );
+    assert.include(
+      remedy,
+      "name a template variable of base type `identifier`, single or multiple, in `template-identifier`",
+    );
+    assert.notInclude(sentence, "outcome");
+    assert.notInclude(sentence, "a single template");
+  });
+
+  it("[I-5] names the response variable a template rule reads, which may read only template and context variables (pantry P26)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
         check: "template-read",
@@ -2208,10 +2488,144 @@ describe("describeRefusal", () => {
 
     assert.include(
       sentence,
-      "`qti-variable` reads `RESPONSE`, a response variable, in template processing",
+      "`qti-variable` reads `RESPONSE`, a response variable, in template processing, which may read only template and context variables (info.txt:65111).",
     );
-    assert.include(sentence, "only template variables and correct or default values");
+    assert.include(sentence, "To make it valid: read a template variable instead.");
+    assert.notInclude(sentence, "correct or default");
     assert.notInclude(sentence, "outcome, to a");
+  });
+
+  it("[I-5] words a template rule's qti-correct of a response with a remedy that names neither qti-correct nor qti-default (pantry P26)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        check: "template-read",
+        element: "qti-correct",
+        identifier: "RESPONSE",
+        variableKind: "response",
+      }),
+    );
+    const remedy = sentence.slice(sentence.indexOf("To make it valid:"));
+
+    assert.include(
+      sentence,
+      "`qti-correct` reads `RESPONSE`, a response variable, in template processing, which may read only template and context variables (info.txt:65111).",
+    );
+    assert.include(remedy, "a template variable");
+    assert.notInclude(remedy, "qti-correct");
+    assert.notInclude(remedy, "qti-default");
+  });
+
+  it("[I-5] names the attribute through which a template rule reads a response, qti-repeat's number-repeats (pantry P26)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "number-repeats",
+        check: "template-read",
+        element: "qti-repeat",
+        identifier: "RESPONSE",
+        variableKind: "response",
+      }),
+    );
+    const remedy = sentence.slice(sentence.indexOf("To make it valid:"));
+
+    assert.include(
+      sentence,
+      "`qti-repeat`'s attribute `number-repeats` names `RESPONSE`, a response variable, in template processing, which may read only template and context variables (info.txt:65111).",
+    );
+    assert.include(remedy, "name a template variable in `number-repeats`");
+    assert.notInclude(remedy, "qti-correct");
+    assert.notInclude(remedy, "qti-default");
+  });
+
+  it("[I-5] names the template variable a qti-set-template-value sets to a value of another type, not an outcome (pantry P20)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-set-template-value",
+        expressionBaseType: "float",
+        expressionCardinality: "single",
+        identifier: "N",
+        outcomeBaseType: "integer",
+        outcomeCardinality: "single",
+        targetKind: "template",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-set-template-value` sets `N`, a single `integer` template variable, to a single `float` value.",
+    );
+    assert.notInclude(sentence, "outcome");
+  });
+
+  it("[I-5] names the response whose correct response a qti-set-correct-response sets to a value of another type, not an outcome (pantry P20)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-set-correct-response",
+        expressionBaseType: "integer",
+        expressionCardinality: "single",
+        identifier: "RESPONSE",
+        outcomeBaseType: "identifier",
+        outcomeCardinality: "single",
+        targetKind: "response",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-set-correct-response` sets the correct response of `RESPONSE`, a single `identifier` response, to a single `integer` value.",
+    );
+    assert.notInclude(sentence, "outcome");
+  });
+
+  it("[I-5] names the outcome a qti-set-outcome-value sets, with no target kind in its detail (pantry P20)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-set-outcome-value",
+        expressionBaseType: "integer",
+        expressionCardinality: "single",
+        identifier: "SCORE",
+        outcomeBaseType: "float",
+        outcomeCardinality: "single",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-set-outcome-value` sets `SCORE`, a single `float` outcome, to a single `integer` value.",
+    );
+  });
+
+  it("[I-5] names the kinds of variable a template rule's target must be when the item declares none of them by its name (pantry P8, DeclaredRefKind)", () => {
+    const template = describeRefusal(
+      refusalOf("undeclared-variable", {
+        element: "qti-set-template-value",
+        expected: "template",
+        identifier: "RESPONSE",
+      }),
+    );
+    const defaulted = describeRefusal(
+      refusalOf("undeclared-variable", {
+        element: "qti-set-default-value",
+        expected: "response outcome",
+        identifier: "N",
+      }),
+    );
+
+    assert.include(
+      template,
+      "`qti-set-template-value` names `RESPONSE`, and the item declares no template variable `RESPONSE`.",
+    );
+    assert.include(
+      template,
+      "To make it valid: declare `RESPONSE`, or name a declared template variable.",
+    );
+    assert.include(
+      defaulted,
+      "`qti-set-default-value` names `N`, and the item declares no response or outcome `N`.",
+    );
+    assert.include(
+      defaulted,
+      "To make it valid: declare `N`, or name a declared response or outcome.",
+    );
   });
 
   it("names the base type of a weighted qti-test-variables that is not float", () => {
@@ -2308,6 +2722,25 @@ describe("describeRefusal", () => {
       sentence,
       "`qti-any-n`'s attribute `min` names `MIN`, and the item declares no variable `MIN`.",
     );
+  });
+
+  it("[I-5] names the test, not an item, as what declares no outcome a test's printed variable names (pantry printed-variable-ref, binding-declared)", () => {
+    const sentence = describeRefusal(
+      refusalOf("undeclared-variable", {
+        attribute: "identifier",
+        declarer: "test",
+        element: "qti-printed-variable",
+        expected: "outcome",
+        identifier: "NOPE",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-printed-variable`'s attribute `identifier` names `NOPE`, and the test declares no outcome `NOPE`.",
+    );
+    assert.include(sentence, "To make it valid: declare `NOPE`, or name a declared outcome.");
+    assert.notInclude(sentence, "the item");
   });
 
   it("names the qti-map-response that needs a mapping, not a template", () => {

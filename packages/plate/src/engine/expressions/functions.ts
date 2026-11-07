@@ -40,10 +40,17 @@ import {
   tan,
   tanh,
 } from "#plate/engine/math.ts";
-import { floatOf, floatValue, integerValue, numberOf } from "#plate/engine/numbers.ts";
+import {
+  floatNull,
+  floatOf,
+  floatValue,
+  integerNull,
+  integerValue,
+  numberOf,
+} from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
+import { operandValues } from "#plate/engine/operands.ts";
 import type { Expression } from "#plate/model/expression.ts";
-import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
 /**
@@ -55,16 +62,6 @@ type MathOperatorName = Extract<Expression, { readonly kind: "math-operator" }>[
  * A `qti-stats-operator`'s name.
  */
 type StatsOperatorName = Extract<Expression, { readonly kind: "stats-operator" }>["name"];
-
-/**
- * The single float NULL.
- */
-const floatNull: Value = nullOf("float", "single");
-
-/**
- * The single integer NULL.
- */
-const integerNull: Value = nullOf("integer", "single");
 
 /**
  * Give the single float of a computed float, or the float NULL when it is NaN, the result of an
@@ -252,10 +249,8 @@ const operate = (operation: Operation, numbers: readonly NumberSingle[]): Value 
 };
 
 /**
- * Evaluate every operand, left to right, and give the number each holds.
- *
- * Every operand is evaluated, and the first failure is the result: an operator has no side
- * effects, so evaluating them all changes no value.
+ * Evaluate every operand, left to right ({@link operandValues}), and give the number each holds;
+ * the first failure is the result.
  *
  * @param operands The operands.
  * @param scope The item and the variables of the attempt.
@@ -268,7 +263,7 @@ const numbersOf = (
   scope: Scope,
   evaluate: Evaluate,
 ): Result.Result<Option.Option<readonly NumberSingle[]>, EngineFailure> =>
-  Result.map(Result.all(operands.map((operand) => evaluate(operand, scope))), (values) =>
+  Result.map(operandValues(operands, scope, evaluate), (values) =>
     Option.all(values.map((value) => numberOf(value))),
   );
 

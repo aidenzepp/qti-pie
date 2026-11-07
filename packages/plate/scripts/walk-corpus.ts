@@ -22,6 +22,8 @@
  *   `qti-label`, a `data-prompt`, `required`, the author's too-few message, a width class and a
  *   shuffle whose last choice is fixed, and one with none of those. In each, the options and the
  *   Placeholder start with different letters, so a test can type ahead to any of them.
+ * - `xhtml.xml`, five Extended Texts, three of them `format="xhtml"`, each under its own Prompt,
+ *   declaring no outcome and no response processing: the keyboard witness of the `xhtml` format.
  * - `derived/<corpus path without .xml>/<response>.xml`, one item per corpus text interaction that
  *   carries `pattern-mask`: the response's base type and cardinality, and the interaction's
  *   `pattern-mask`, `data-patternmask-message`, `expected-length` and `format` as written, under a
@@ -77,6 +79,11 @@ const orderedItem = "ordered.xml";
  * The Inline Choice item, relative to the walk directory.
  */
 const inlineItem = "inline.xml";
+
+/**
+ * The xhtml Extended Text item, relative to the walk directory.
+ */
+export const xhtmlItem = "xhtml.xml";
 
 /**
  * The text interactions a derived probe copies.
@@ -163,7 +170,8 @@ export interface WalkCorpus {
   readonly directory: string;
   /**
    * Every probe item, relative to the walk directory: the OD-14 (e) probe, the pattern item, the
-   * ordered Extended Text, the Inline Choice item, then the derived probes.
+   * ordered Extended Text, the Inline Choice item, the xhtml Extended Text item, then the derived
+   * probes.
    */
   readonly items: readonly string[];
   /**
@@ -355,6 +363,41 @@ const inlineProbe = [
 ].join("\n");
 
 /**
+ * The xhtml Extended Text item, the renderer's own text: five single `string` responses, each bound
+ * to an Extended Text under its own Prompt. `RESPONSE2`, `RESPONSE4` and `RESPONSE5` are
+ * `format="xhtml"`; `RESPONSE1` is `format="plain"` and `RESPONSE3` takes the default. The heights
+ * and counters vary as an author's would, and `RESPONSE4`'s Prompt is a paragraph that opens with a
+ * line break, whose accessible name Chromium starts with a space. It declares no outcome, `SCORE`
+ * included (OD-P8-9), and has no response processing, so a post is recorded and not scored.
+ * Hand-built, so the keyboard witness of the `xhtml` format reads no corpus file.
+ */
+export const xhtmlProbe = itemDocument(
+  "walk-xhtml",
+  "Walk probe: xhtml Extended Text",
+  ["RESPONSE1", "RESPONSE2", "RESPONSE3", "RESPONSE4", "RESPONSE5"].map(
+    (response) =>
+      `<qti-response-declaration identifier="${response}" cardinality="single" base-type="string"/>`,
+  ),
+  [
+    '<qti-extended-text-interaction response-identifier="RESPONSE1" format="plain" expected-length="100" class="qti-height-lines-3">',
+    "  <qti-prompt>Name a city you would like to visit.</qti-prompt>",
+    "</qti-extended-text-interaction>",
+    '<qti-extended-text-interaction response-identifier="RESPONSE2" format="xhtml" expected-length="400" class="qti-height-lines-6">',
+    "  <qti-prompt>Write a short letter to a friend about that city.</qti-prompt>",
+    "</qti-extended-text-interaction>",
+    '<qti-extended-text-interaction response-identifier="RESPONSE3" expected-length="100" class="qti-counter-up">',
+    "  <qti-prompt>Say in one sentence when you would go.</qti-prompt>",
+    "</qti-extended-text-interaction>",
+    '<qti-extended-text-interaction response-identifier="RESPONSE4" format="xhtml" expected-length="200" class="qti-height-lines-3 qti-counter-down">',
+    "  <qti-prompt><p><br/>Write a caption for a photograph of the city.</p></qti-prompt>",
+    "</qti-extended-text-interaction>",
+    '<qti-extended-text-interaction response-identifier="RESPONSE5" format="xhtml" class="qti-height-lines-15">',
+    "  <qti-prompt>Describe a day there, from morning to night.</qti-prompt>",
+    "</qti-extended-text-interaction>",
+  ],
+);
+
+/**
  * Read an attribute in no namespace.
  *
  * @param element The element.
@@ -526,8 +569,8 @@ const writeText = (file: string, text: string): Effect.Effect<void, ProbeUnwrita
 
 /**
  * Write the walk corpus: the OD-14 (e) probe and its two documents, the pattern item, the ordered
- * Extended Text, the Inline Choice item, and one derived probe per corpus text interaction that
- * carries `pattern-mask`.
+ * Extended Text, the Inline Choice item, the xhtml Extended Text item, and one derived probe per
+ * corpus text interaction that carries `pattern-mask`.
  *
  * Fails with {@link ProbeUnderivable} or {@link ProbeUnwritable}, with `CorpusMissing` or
  * `CorpusFileUnreadable` when the corpus cannot be read, and with a `ConfigError` when neither
@@ -557,6 +600,7 @@ export const writeWalkCorpus: Effect.Effect<
     [path.join(directory, patternItem), patternProbe],
     [path.join(directory, orderedItem), orderedProbe],
     [path.join(directory, inlineItem), inlineProbe],
+    [path.join(directory, xhtmlItem), xhtmlProbe],
     ...derivations.map(
       (derivation, index) =>
         [
@@ -572,7 +616,14 @@ export const writeWalkCorpus: Effect.Effect<
     controls: [od14HtmlFile, od14SvgFile],
     derived,
     directory,
-    items: [od14Item, patternItem, orderedItem, inlineItem, ...derived.map((probe) => probe.item)],
+    items: [
+      od14Item,
+      patternItem,
+      orderedItem,
+      inlineItem,
+      xhtmlItem,
+      ...derived.map((probe) => probe.item),
+    ],
     od14: od14Item,
   };
 }).pipe(Effect.withSpan("writeWalkCorpus"));
@@ -595,7 +646,7 @@ const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")
  */
 export const instructions = (written: WalkCorpus): string =>
   [
-    `Wrote ${String(written.items.length)} probe items under ${written.directory}: the OD-14 (e) probe, the pattern item, the ordered Extended Text, the Inline Choice item and ${String(written.derived.length)} derived probes.`,
+    `Wrote ${String(written.items.length)} probe items under ${written.directory}: the OD-14 (e) probe, the pattern item, the ordered Extended Text, the Inline Choice item, the xhtml Extended Text item and ${String(written.derived.length)} derived probes.`,
     "",
     "Serve them in the dev playground, from the repository root:",
     "",

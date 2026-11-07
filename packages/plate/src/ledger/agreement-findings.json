@@ -1,33 +1,5 @@
 [
   {
-    "file": "qtiv3-examples/items/shared-vocabulary/shared-vocabulary-imsmanifest.zip",
-    "finding": "plate leaves 3 of its 28 items unchecked for their MathML, which it does not check, and accepts the other 25, 14 of them with unsupported features (match, gap match, graphic gap match, hotspot and hottext interactions); a package with an unchecked document agrees with no verdict. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
-    "pantry": {
-      "rule": "unmodeled-vocabulary",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "unchecked"
-    },
-    "ruling": {
-      "expectedWhile": "pantry does not yet model this vocabulary (its phases 6 to 11)",
-      "group": 1,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "unmodeled-vocabulary",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "unchecked"
-        }
-      }
-    }
-  },
-  {
     "file": "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
     "finding": "plate leaves 5 of its 22 items unchecked for their MathML and accepts the test and the other 17 items, 15 of them with unsupported features (templates, feedback, printed variables, and upload, order, match, gap match and select point interactions among them); a package with an unchecked document agrees with no verdict. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
     "pantry": {

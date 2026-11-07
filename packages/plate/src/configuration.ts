@@ -7,6 +7,7 @@
 import type { SchemaIssue } from "effect";
 import { Config, ConfigProvider, Effect, Match, Option, Schema } from "effect";
 import { locales } from "#plate/messages.ts";
+import { defaultOutputBudget, maximumOutputBudget } from "#plate/output-budget.ts";
 
 /**
  * The Schema of the renderer's configuration, which owns every field's constraint and default.
@@ -16,10 +17,19 @@ import { locales } from "#plate/messages.ts";
  * `qti-item-session-control` settings; `maxAttempts` 0 means unlimited. `headingLevel` is the level
  * the item's shallowest heading takes, every other heading keeping its distance from it, capped at
  * `h6`; it starts at 2 because the host owns `h1`. `assetBase` `""` resolves asset URLs relative to
- * the package. `seed` keys a shuffled Choice's order with the instance and the response; an absent
- * seed is keyed as the empty string, so the order then follows the instance alone. Since plate
- * never draws a seed, an order is random by default only through a drawn instance, whose order no
- * one can recover.
+ * the package. `outputBudget` bounds the characters of HTML one `render` returns, counted as a
+ * string's `length` counts them (UTF-16 code units), and is 16,777,216 (16 MiB of ASCII) by
+ * default; past it `render` fails. `redact` takes the same budget as its last argument and stops
+ * printing an item's printed variables once their text passes it, so `render` fails then too. Its
+ * maximum, 536,870,888, is V8's longest string, the smallest
+ * of the engines' limits, so no budget asks an engine for a string it cannot build. `seed` is a
+ * string, used as given: it keys a shuffled Choice's order with the
+ * instance and the response, and `startTest` keeps it as the session's seed, under which each
+ * item's template processing draws. With no seed, `startTest` draws one (128 random bits), while
+ * `render` alone keys an absent seed as the empty string, so the order then follows the instance
+ * alone. `begin` never reads the configuration: it draws a seed when its own `start.seed` is
+ * absent. So a single item has two seeds: the configuration's keys its shuffle, and its record's
+ * keys its processing. {@link configure} reads an empty `seed` as no seed.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Configuration` is the Schema and the type of a configuration under one name, the interface the phase's slice list fixes, so a decoder and a signature read as one thing.
 export const Configuration = Schema.Struct({
@@ -34,7 +44,10 @@ export const Configuration = Schema.Struct({
   maxAttempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(1)),
   ),
-  seed: Schema.optionalKey(Schema.Finite),
+  outputBudget: Schema.Int.check(
+    Schema.isBetween({ maximum: maximumOutputBudget, minimum: 1 }),
+  ).pipe(Schema.withDecodingDefaultKey(Effect.succeed(defaultOutputBudget))),
+  seed: Schema.optionalKey(Schema.String),
   showFeedback: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   showSolution: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   validateResponses: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
@@ -61,7 +74,9 @@ const allowedValues: Readonly<Record<Field, string>> = {
   headingLevel: "an integer from 2 to 6",
   locale: `a supported locale: ${locales.map((locale) => `"${locale}"`).join(", ")}`,
   maxAttempts: "an integer of at least 0, where 0 means unlimited",
-  seed: "a finite number",
+  outputBudget:
+    "an integer from 1 to 536,870,888, the most characters of HTML one render may write",
+  seed: 'a string, such as "7"',
   showFeedback: "true or false",
   showSolution: "true or false",
   validateResponses: "true or false",

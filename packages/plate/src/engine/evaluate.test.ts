@@ -383,6 +383,8 @@ const item: Item = {
     ["OVERLAPPING", overlapping],
     ["UNMAPPED", unmapped],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Evaluate",
   unsupported: [],
 };

@@ -36,9 +36,8 @@ const SessionItemSchema = Schema.Struct({
 });
 
 /**
- * The fields of a test session, as {@link TestSession} has them. `seed` is left out of the stored
- * form when the session has none, and is otherwise a finite JSON number, which JSON text carries
- * exactly.
+ * The fields of a test session, as {@link TestSession} has them. `seed` is a string, required: the
+ * host's seed or the one `startTest` drew, which every stored session holds.
  */
 const sessionFields = {
   document: Schema.String,
@@ -52,7 +51,7 @@ const sessionFields = {
     }),
   ),
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  seed: Schema.OptionFromOptionalKey(Schema.Finite),
+  seed: Schema.String,
   started: Schema.String,
   status: Schema.Literals(["closed", "interacting"]),
   test: Schema.String,
@@ -78,10 +77,12 @@ export const TestSessionSchema = Schema.Struct({
 );
 
 /**
- * A test session in the form the host stores: JSON-safe data that names its version, `1`. Every
+ * A test session in the form the host stores: JSON-safe data that names its version, `2`. Every
  * value is written as the stored item record writes it, integers as their decimal digits, so no
- * integer is rounded on the way through the host; each item's `record` is a stored item record;
- * `seed`, an item's `saved` and an item's `firstOutcomes` are absent when there are none.
+ * integer is rounded on the way through the host; each item's `record` is a stored item record,
+ * its seed, template values, correct responses and defaults with it, so it is server data as the
+ * record is, and so is the session's own `seed`, which keys every value an item draws; an item's
+ * `saved` and an item's `firstOutcomes` are absent when there are none.
  */
 export type StoredTestSession = typeof TestSessionSchema.Encoded;
 
@@ -132,7 +133,7 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
    */
   readonly stage: SessionStage;
   /**
-   * The value the stored session holds under `version`, which is `1` when something else is
+   * The value the stored session holds under `version`, which is `2` when something else is
    * wrong; none when it is not an object or names no version, and at stage `encode`, where no
    * stored session was read.
    */

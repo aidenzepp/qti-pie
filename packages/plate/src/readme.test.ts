@@ -50,7 +50,7 @@ const opening = [
 const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
- * The README's sections: the eleven it had before M2 and the four M2 adds.
+ * The README's sections: the eleven it had before M2, the four M2 adds and the one M3.b-2 adds.
  */
 const headings = [
   "## Install",
@@ -61,6 +61,7 @@ const headings = [
   "## Results",
   "## Interactions",
   "## Scoring",
+  "## Template processing",
   "## Server and browser",
   "## Hosts",
   "## Styling",
@@ -117,15 +118,15 @@ const scratch = path.resolve(import.meta.dirname, "..", "work", `readme-test-${r
 
 /**
  * The item the server action's recipe runs on, written fresh: a Text Entry that reads `RESPONSE`,
- * a single integer, in base 16, and processing that sets `SCORE`, an integer, to `RESPONSE`.
+ * a single integer, in base 16, and processing that sets `TOTAL`, an integer, to `RESPONSE`.
  */
 const byteItemXml = [
   '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="byte" title="The largest byte" adaptive="false" time-dependent="false">',
   '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/>',
-  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="integer"/>',
+  '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="integer"/>',
   "<qti-item-body><p>The largest byte, in hexadecimal, is ",
   '<qti-text-entry-interaction response-identifier="RESPONSE" base="16"/>.</p></qti-item-body>',
-  '<qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-variable identifier="RESPONSE"/></qti-set-outcome-value></qti-response-processing>',
+  '<qti-response-processing><qti-set-outcome-value identifier="TOTAL"><qti-variable identifier="RESPONSE"/></qti-set-outcome-value></qti-response-processing>',
   "</qti-assessment-item>",
 ].join("");
 
@@ -437,6 +438,81 @@ describe("README.md", () => {
     }
   });
 
+  it("names begin and score as the writers of StoredRecord in the records table", () => {
+    const row =
+      sectionOf("## Records")
+        .split("\n")
+        .find((line) => line.startsWith("| `StoredRecord`")) ??
+      assert.fail("the records table has no StoredRecord row");
+    const writtenBy = row.split(" | ")[2] ?? "";
+
+    assert.include(writtenBy, "`begin`");
+    assert.include(writtenBy, "`score`");
+  });
+
+  it("says in Records that the record, ItemView and Restored are server data", () => {
+    const paragraphs = sectionOf("## Records")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("server data") &&
+          paragraph.includes("`ItemView`") &&
+          paragraph.includes("`Restored`"),
+      ),
+      "a paragraph of Records names ItemView and Restored as server data",
+    );
+  });
+
+  it("names the record's type in Records as Restored[\"record\"], and redact's narrower one through Parameters", () => {
+    const paragraphs = sectionOf("## Records")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("`ItemRecord`") &&
+          paragraph.includes('`Restored["record"]`') &&
+          paragraph.includes("`Parameters<typeof redact>[1]`"),
+      ),
+      "a paragraph of Records names the record's type Restored[\"record\"] and redact's through Parameters",
+    );
+  });
+
+  it('says configure reads a seed of "" as no seed', () => {
+    const paragraphs = markdownLines(readme())
+      .filter(({ code }) => !code)
+      .map(({ line }) => line)
+      .join("\n")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          /`configure` reads a `seed` of `""` as no seed/u.test(paragraph) &&
+          paragraph.includes("`startTest`"),
+      ),
+      'a paragraph says configure reads a seed of "" as no seed, so startTest draws one',
+    );
+  });
+
+  it("passes the session item's record and configuration to redact in Start's test and the server action", () => {
+    for (const heading of ["## Start", "### A plain server action"]) {
+      const scripts = codeBlocks(sectionOf(heading)).map(scriptOf);
+
+      assert.isTrue(
+        scripts.some((script) =>
+          /redact\(items\.get\(shown\.ref\)!, shown\.record, shown\.configuration\)/u.test(script),
+        ),
+        `${heading} passes shown.record and shown.configuration to redact`,
+      );
+    }
+  });
+
   it("names the navigation API and says its parts are plain buttons with no submit semantics", () => {
     const navigation = sectionOf("## Navigation");
 
@@ -558,6 +634,54 @@ describe("README.md", () => {
     );
   });
 
+  it("names outputBudget and OutputTooLarge in the paragraph of Scoring that advises a time limit", () => {
+    const paragraphs = sectionOf("## Scoring")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("time limit") &&
+          paragraph.includes("`outputBudget`") &&
+          paragraph.includes("`OutputTooLarge`"),
+      ),
+      "the paragraph of Scoring that advises a time limit names outputBudget and OutputTooLarge",
+    );
+  });
+
+  it("names redact beside outputBudget in the paragraph of Scoring that advises a time limit", () => {
+    const paragraphs = sectionOf("## Scoring")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("time limit") &&
+          paragraph.includes("`outputBudget`") &&
+          paragraph.includes("`redact`"),
+      ),
+      "the paragraph of Scoring that advises a time limit names redact beside outputBudget",
+    );
+  });
+
+  it("says in Scoring that a test's SCORE and MAXSCORE may have any base type", () => {
+    const paragraphs = sectionOf("## Scoring")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("`SCORE`") &&
+          paragraph.includes("`MAXSCORE`") &&
+          paragraph.includes("any base type"),
+      ),
+      "a paragraph of Scoring says a test's SCORE and MAXSCORE may have any base type",
+    );
+  });
+
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
     Effect.gen(function* runsServerAction() {
       const step = yield* serverAction();
@@ -585,7 +709,7 @@ describe("README.md", () => {
       const [byte] = ok(decodeSession(stored, test), "decodeSession").items;
 
       assert.deepStrictEqual(byte?.record.responses["RESPONSE"], integer(255n));
-      assert.deepStrictEqual(byte?.record.outcomes["SCORE"], integer(255n));
+      assert.deepStrictEqual(byte?.record.outcomes["TOTAL"], integer(255n));
     }),
   );
 

@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { afterAll, assert, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Option } from "effect";
 import { corpusRoot } from "#plate/document/corpus.ts";
-import type { BodyNode } from "#plate/model/item.ts";
+import type { BodyNode, ExtendedTextInteraction } from "#plate/model/item.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import { instructions, writeWalkCorpus } from "#scripts/walk-corpus.ts";
@@ -132,6 +132,21 @@ const objectData = (nodes: readonly BodyNode[]): readonly string[] =>
     return [...own, ...objectData(node.children)];
   });
 
+/**
+ * Collect the Extended Texts of an item body, in document order.
+ *
+ * @param nodes The body.
+ * @returns Each Extended Text interaction it holds.
+ */
+const extendedTexts = (nodes: readonly BodyNode[]): readonly ExtendedTextInteraction[] =>
+  nodes.flatMap((node): readonly ExtendedTextInteraction[] => {
+    if (node.kind === "extended-text") {
+      return [node];
+    }
+
+    return node.kind === "element" ? extendedTexts(node.children) : [];
+  });
+
 afterAll(() => {
   rmSync(scratch, { force: true, recursive: true });
 });
@@ -149,6 +164,41 @@ describe("the walk corpus", { tags: ["corpus"] }, () => {
           const verdict = yield* open(item, readWritten(item));
           assert.strictEqual(verdict.verdict, "accepted", item);
         }
+      }),
+    walkTimeoutMs,
+  );
+
+  it.effect(
+    "xhtml.xml, the xhtml witness, is accepted: five Extended Texts, three of them format xhtml, each under a Prompt, with no SCORE, no outcome and no response processing",
+    () =>
+      Effect.gen(function* xhtmlWitness() {
+        const walk = yield* written;
+
+        assert.include(walk.items, "xhtml.xml");
+
+        const verdict = yield* open("xhtml.xml", readWritten("xhtml.xml"));
+        const { item } = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`xhtml.xml is ${verdict.verdict}, not accepted`),
+        );
+
+        assert.deepStrictEqual(
+          extendedTexts(item.body).map((text) => [
+            text.response,
+            text.format,
+            Option.isSome(text.prompt),
+          ]),
+          [
+            ["RESPONSE1", "plain", true],
+            ["RESPONSE2", "xhtml", true],
+            ["RESPONSE3", "plain", true],
+            ["RESPONSE4", "xhtml", true],
+            ["RESPONSE5", "xhtml", true],
+          ],
+        );
+        assert.deepStrictEqual([...item.outcomes.keys()], [], "it declares no outcome");
+        assert.notMatch(new TextDecoder().decode(readWritten("xhtml.xml")), /"SCORE"/u);
+        assert.isTrue(Option.isNone(item.processing), "it has no response processing");
+        assert.deepStrictEqual(item.unsupported, [], "it shows no notice");
       }),
     walkTimeoutMs,
   );

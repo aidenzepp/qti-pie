@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Duration, Effect, Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import {
   format,
   isModelled,
@@ -11,6 +11,7 @@ import {
   parseLexical,
 } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
  * Construct a value for a test.
@@ -104,19 +105,47 @@ describe("parseElementText", () => {
     );
   });
 
-  it.live("trims a 100,000-character whitespace run in linear time", () =>
+  it.effect("trims a 100,000-character whitespace run in linear time", () =>
     Effect.gen(function* linearTrim() {
       const run = " \t\n\r".repeat(25_000);
-      const cases: readonly (readonly [ModelledBaseType, string, Single])[] = [
-        ["identifier", `${run}x`, { baseType: "identifier", value: "x" }],
-        ["pair", `A${run}B${run}`, { baseType: "pair", value: ["A", "B"] }],
+      const shorterRun = " \t\n\r".repeat(25_000 / growthFactor);
+      const cases: readonly (readonly [
+        ModelledBaseType,
+        (whitespace: string) => string,
+        Single,
+      ])[] = [
+        ["identifier", (whitespace) => `${whitespace}x`, { baseType: "identifier", value: "x" }],
+        [
+          "pair",
+          (whitespace) => `A${whitespace}B${whitespace}`,
+          { baseType: "pair", value: ["A", "B"] },
+        ],
       ];
-      for (const [baseType, text, single] of cases) {
-        const [elapsed, read] = yield* Effect.timed(
-          Effect.suspend(() => Effect.fromResult(parseElementText(baseType, text))),
+      for (const [baseType, textOf, single] of cases) {
+        const fewer = textOf(shorterRun);
+        const more = textOf(run);
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(parseElementText(baseType, more)),
+          Option.some(single),
         );
-        assert.deepStrictEqual(read, Option.some(single));
-        assert.isBelow(Duration.toMillis(elapsed), 200, `${baseType}: ${Duration.format(elapsed)}`);
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(parseElementText(baseType, fewer)),
+          Option.some(single),
+        );
+
+        const growth = yield* growthRatio(
+          () => {
+            parseElementText(baseType, fewer);
+          },
+          () => {
+            parseElementText(baseType, more);
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `${baseType}: 8 times the whitespace took ${growth.toFixed(1)} times as long`,
+        );
       }
     }),
   );

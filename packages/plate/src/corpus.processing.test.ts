@@ -4,18 +4,19 @@ import { decodeRecord } from "#plate/codec/record.ts";
 import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { score } from "#plate/index.ts";
-import type { Accepted } from "#plate/index.ts";
+import { score, solution } from "#plate/index.ts";
+import type { Accepted, StoredRecord } from "#plate/index.ts";
 import { expressionKinds, isUnlanded } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
-import { trimXmlSpace } from "#plate/model/values.ts";
+import type { SolutionRecord } from "#plate/model/record.ts";
+import { isNull, trimXmlSpace } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
-import { acceptedOf, openCorpus } from "#plate/test/sweep.ts";
+import { acceptedOf, begunUnder, openCorpus, sweepSeeds, templated } from "#plate/test/sweep.ts";
 
 /**
  * Opening the corpus (about 800 members) and scoring each item with inline response processing
- * twice runs in seconds here; the bound leaves room for a slow machine without letting a hung run
- * stall the suite.
+ * twice, an item whose template processing runs under each sweep seed, runs in seconds here; the
+ * bound leaves room for a slow machine without letting a hung run stall the suite.
  */
 const sweepTimeoutMs = 600_000;
 
@@ -74,6 +75,29 @@ const scoreOutcome = "SCORE";
 const orderExceptions: ReadonlyMap<string, string> = new Map<string, string>();
 
 /**
+ * One record the sweep scores an item from, with what it names: for an item whose template
+ * processing does not run, the record `score` starts from the item's declared defaults; for one
+ * whose template processing runs, the record `begin` starts under a sweep seed.
+ */
+interface Run {
+  /**
+   * The item's correct responses under the record, as `solution` reads them: each response that
+   * has one, at it.
+   */
+  readonly correct: Readonly<Record<string, Value>>;
+  /**
+   * The record `score` is passed: `begin`'s, or none for an item whose template processing does
+   * not run.
+   */
+  readonly record: Option.Option<StoredRecord>;
+  /**
+   * The item's corpus path, and the sweep seed its record was begun under where it has one, as a
+   * failure names them, so the run repeats.
+   */
+  readonly where: string;
+}
+
+/**
  * One accepted corpus item whose root's `qti-response-processing` has element children, as the
  * source scan found it.
  */
@@ -81,14 +105,19 @@ interface Swept {
   readonly accepted: Accepted;
   readonly location: string;
   /**
-   * Whether the root has a `qti-template-processing` child, which excuses the item from properties
-   * 1 to 3 until M3.b-2's P7T-11 runs template processing.
+   * The records the sweep scores the item from, or why `begin` could not start one.
    */
-  readonly templated: boolean;
+  readonly runs: Result.Result<readonly Run[], string>;
   /**
-   * The identifiers a `variable:<id>` mark may name: each template and context variable the root
-   * declares, `QTI_CONTEXT`, the built-in `duration`, and each response the root declares with a
-   * base type of `duration` or `file` or a cardinality of `record` that the model does not hold.
+   * Whether the root has a `qti-template-processing` child, as the source scan found it, so the
+   * sweep checks that the model runs it.
+   */
+  readonly templateProcessing: boolean;
+  /**
+   * The identifiers a `variable:<id>` mark may name: each context variable the root declares,
+   * `QTI_CONTEXT`, the built-in `duration`, and each response the root declares with a base type
+   * of `duration` or `file` or a cardinality of `record` that the model does not hold. A template
+   * variable is not among them: the engine holds its value once template processing runs.
    */
   readonly unheld: ReadonlySet<string>;
 }
@@ -139,7 +168,7 @@ const isInline = (source: SourceDocument): boolean =>
  * Give the identifiers an element's declarations of one kind declare.
  *
  * @param root The item's root.
- * @param local The declarations' local name, such as `qti-template-declaration`.
+ * @param local The declarations' local name, such as `qti-context-declaration`.
  * @returns Each declaration's identifier, in document order.
  */
 const identifiersOf = (root: SourceElement, local: string): readonly string[] =>
@@ -169,13 +198,72 @@ const unheldOf = (source: SourceDocument, accepted: Accepted): ReadonlySet<strin
   });
 
   return new Set([
-    ...identifiersOf(root, "qti-template-declaration"),
     ...identifiersOf(root, "qti-context-declaration"),
     builtInContext,
     builtInDuration,
     ...unheldResponses,
   ]);
 };
+
+/**
+ * Give an item's correct responses under a record, as `solution` reads them: each response that
+ * has one, at it. With no record, an item whose template processing does not run gives those its
+ * declarations give.
+ *
+ * @param accepted The item.
+ * @param record The record its first attempt started with, for an item whose template processing
+ *   runs.
+ * @returns The correct responses, by response identifier.
+ */
+const correctResponsesOf = (
+  accepted: Accepted,
+  record?: SolutionRecord,
+): Readonly<Record<string, Value>> =>
+  Object.fromEntries(
+    Object.entries(solution(accepted, record)).filter(([, correct]) => !isNull(correct)),
+  );
+
+/**
+ * Begin an item's record under a sweep seed ({@link begunUnder}) and read its correct responses
+ * from it.
+ *
+ * @param accepted The item, whose template processing runs.
+ * @param location The item's corpus path.
+ * @param seed The sweep seed.
+ * @returns The run over that record, or what failed, naming the item and the seed.
+ */
+const begunRun = (
+  accepted: Accepted,
+  location: string,
+  seed: string,
+): Result.Result<Run, string> => {
+  const where = `${location} (seed ${JSON.stringify(seed)})`;
+
+  return Result.mapBoth(begunUnder(accepted, seed), {
+    onFailure: (error) => `${where}: begin or the record's decoding fails with ${error._tag}`,
+    onSuccess: ({ decoded, stored }): Run => ({
+      correct: correctResponsesOf(accepted, decoded),
+      record: Option.some(stored),
+      where,
+    }),
+  });
+};
+
+/**
+ * Give the records the sweep scores an item from: for an item whose template processing does not
+ * run, the one `score` starts from its declared defaults; for one whose template processing runs,
+ * the one `begin` starts under each sweep seed, since `score` needs its record.
+ *
+ * @param accepted The item.
+ * @param location The item's corpus path.
+ * @returns The runs, or the first failure of `begin` or of the record's decoding.
+ */
+const runsOf = (accepted: Accepted, location: string): Result.Result<readonly Run[], string> =>
+  templated(accepted)
+    ? Result.all(sweepSeeds.map((seed) => begunRun(accepted, location, seed)))
+    : Result.succeed([
+        { correct: correctResponsesOf(accepted), record: Option.none(), where: location },
+      ]);
 
 /**
  * Every accepted corpus item whose root's `qti-response-processing` has element children, in the
@@ -194,7 +282,8 @@ const sweptItems = Effect.runSync(
             swept.push({
               accepted: accepted.value,
               location: member.location,
-              templated: qtiChildren(source.root, "qti-template-processing").length > 0,
+              runs: runsOf(accepted.value, member.location),
+              templateProcessing: qtiChildren(source.root, "qti-template-processing").length > 0,
               unheld: unheldOf(source, accepted.value),
             });
           }
@@ -240,33 +329,15 @@ const isAllowed = (swept: Swept, feature: string): boolean =>
   (feature.startsWith(variablePrefix) && swept.unheld.has(feature.slice(variablePrefix.length)));
 
 /**
- * Report whether property 1 excuses an item from running: it has template processing, or it
- * carries an allowed mark that stops its processing (every allowed mark but
- * `qti-custom-operator`).
+ * Report whether property 1 excuses an item from running: it carries an allowed mark that stops
+ * its processing (every allowed mark but `qti-custom-operator`).
  *
  * @param swept The item.
  * @returns Whether the item is excused.
  */
 const isExcused = (swept: Swept): boolean =>
-  swept.templated ||
   processingMarks(swept).some(
     (mark) => mark.feature !== customOperatorMark && isAllowed(swept, mark.feature),
-  );
-
-/**
- * Give the responses an item declares a correct response for, each at that response.
- *
- * @param accepted The item.
- * @returns The correct responses, by response identifier.
- */
-const correctResponsesOf = (accepted: Accepted): Readonly<Record<string, Value>> =>
-  Object.fromEntries(
-    [...accepted.item.responses].flatMap(([identifier, declaration]) =>
-      Option.match(declaration.correct, {
-        onNone: () => [],
-        onSome: (correct) => [[identifier, correct] as const],
-      }),
-    ),
   );
 
 /**
@@ -275,19 +346,22 @@ const correctResponsesOf = (accepted: Accepted): Readonly<Record<string, Value>>
 type Numeric = Extract<Single, { readonly baseType: "float" | "integer" }>;
 
 /**
- * Score one attempt of an item from a fresh record and read an outcome as a single number.
+ * Score one attempt of an item from one of its runs' records and read an outcome as a single
+ * number.
  *
  * @param accepted The item.
  * @param responses The responses, `{}` for none.
+ * @param run The run, whose record the attempt starts from.
  * @returns The outcome's value, or what failed: the scoring, the record, or the value's form.
  */
 const scoreOf = (
   accepted: Accepted,
   responses: Readonly<Record<string, Value>>,
+  run: Run,
 ): Result.Result<Numeric, string> =>
   Result.gen(function* scoreOnce() {
     const stored = yield* Result.mapError(
-      score(accepted, responses),
+      score(accepted, responses, Option.getOrUndefined(run.record)),
       (error) => `scoring failed with ${error._tag}`,
     );
     const record = yield* Result.mapError(
@@ -320,40 +394,65 @@ const atLeast = (left: Numeric, right: Numeric): boolean => {
 };
 
 /**
- * Report whether property 3 orders an item: its processing runs, every response the model holds
- * declares a correct response, and its `SCORE` is declared a single integer or float.
+ * Report whether property 3 orders an item under one of its runs: its processing runs, every
+ * response the model holds has a correct response under the run's record, and its `SCORE` is
+ * declared a single integer or float.
  *
  * @param swept The item.
+ * @param run The run.
  * @returns Whether the item's correct responses must score at least what `{}` scores.
  */
-const isOrdered = (swept: Swept): boolean => {
+const isOrdered = (swept: Swept, run: Run): boolean => {
   const { item } = swept.accepted;
   const declared = Option.fromUndefinedOr(item.outcomes.get(scoreOutcome));
 
   return (
     Option.isSome(item.processing) &&
-    [...item.responses.values()].every((declaration) => Option.isSome(declaration.correct)) &&
+    [...item.responses.keys()].every((identifier) => Object.hasOwn(run.correct, identifier)) &&
     Option.isSome(declared) &&
     declared.value.cardinality === "single" &&
     (declared.value.baseType === "float" || declared.value.baseType === "integer")
   );
 };
 
+/**
+ * Score each item under each of its runs with no response and with its correct responses, and
+ * give each failure, naming the item, the seed of the run's record where it has one, and the
+ * responses.
+ *
+ * @param items The items, whose processing runs.
+ * @returns Every failure, empty when every attempt scores.
+ */
+const scoringProblems = (items: readonly Swept[]): readonly string[] =>
+  items.flatMap((swept) =>
+    Result.match(swept.runs, {
+      onFailure: (reason) => [reason],
+      onSuccess: (runs) =>
+        runs.flatMap((run) =>
+          [["no response", {}] as const, ["its correct responses", run.correct] as const].flatMap(
+            ([what, responses]) =>
+              Result.match(score(swept.accepted, responses, Option.getOrUndefined(run.record)), {
+                onFailure: (error) => [`${run.where}: ${what} fails with ${error._tag}`],
+                onSuccess: () => [],
+              }),
+          ),
+        ),
+    }),
+  );
+
 describe("the inline response processing sweep over the corpus", { tags: ["corpus"] }, () => {
   it.effect(
     "[I-9a] marks each item's inline processing only with a kind a later stage owns, an element read but not run, or a variable the engine holds no value of",
     () =>
       Effect.gen(function* everyMarkExcused() {
-        const problems = (yield* sweptItems)
-          .filter((swept) => !swept.templated)
-          .flatMap((swept) =>
-            processingMarks(swept)
-              .filter((mark) => !isAllowed(swept, mark.feature))
-              .map(
-                (mark) =>
-                  `${swept.location}: the mark ${mark.feature} at ${mark.path} is in none of the three groups`,
-              ),
-          );
+        const problems = (yield* sweptItems).flatMap((swept) =>
+          processingMarks(swept)
+            .filter((mark) => !isAllowed(swept, mark.feature))
+            .map(
+              (mark) =>
+                `${swept.location}: the mark ${mark.feature} at ${mark.path} is in none of the three groups`,
+            ),
+        );
 
         assert.deepStrictEqual(problems, []);
       }),
@@ -361,40 +460,34 @@ describe("the inline response processing sweep over the corpus", { tags: ["corpu
   );
 
   it.effect(
-    "[I-9a] scores each item whose inline processing runs with no response and with its declared correct responses, with no failure",
+    "[I-9a] scores each item whose inline processing runs with no response and with its correct responses, with no failure",
     () =>
       Effect.gen(function* everyRunScores() {
-        const problems = (yield* sweptItems)
-          .filter((swept) => !swept.templated && Option.isSome(swept.accepted.item.processing))
-          .flatMap((swept) =>
-            [
-              ["no response", {}] as const,
-              ["its correct responses", correctResponsesOf(swept.accepted)] as const,
-            ].flatMap(([what, responses]) =>
-              Result.match(score(swept.accepted, responses), {
-                onFailure: (error) => [`${swept.location}: ${what} fails with ${error._tag}`],
-                onSuccess: () => [],
-              }),
-            ),
-          );
+        const running = (yield* sweptItems).filter((swept) =>
+          Option.isSome(swept.accepted.item.processing),
+        );
 
-        assert.deepStrictEqual(problems, []);
+        assert.deepStrictEqual(scoringProblems(running), []);
       }),
     sweepTimeoutMs,
   );
 
   it.effect(
-    "[I-9a] scores each item's declared correct responses at least what no response scores, where every response declares one and SCORE is a single number",
+    "[I-9a] scores each item's correct responses at least what no response scores, where every response has one and SCORE is a single number",
     () =>
       Effect.gen(function* correctAtLeastEmpty() {
-        const ordered = (yield* sweptItems).filter((swept) => !swept.templated && isOrdered(swept));
+        const ordered = (yield* sweptItems).flatMap((swept) =>
+          Result.getOrElse(swept.runs, (): readonly Run[] => []).flatMap((run) =>
+            isOrdered(swept, run) ? [[swept, run] as const] : [],
+          ),
+        );
         const problems = ordered
-          .filter((swept) => !orderExceptions.has(swept.location))
-          .flatMap((swept) =>
+          .filter(([swept]) => !orderExceptions.has(swept.location))
+          .flatMap(([swept, run]) =>
             Result.match(
               Result.gen(function* order() {
-                const empty = yield* scoreOf(swept.accepted, {});
-                const correct = yield* scoreOf(swept.accepted, correctResponsesOf(swept.accepted));
+                const empty = yield* scoreOf(swept.accepted, {}, run);
+                const correct = yield* scoreOf(swept.accepted, run.correct, run);
 
                 return atLeast(correct, empty)
                   ? Option.none()
@@ -403,11 +496,11 @@ describe("the inline response processing sweep over the corpus", { tags: ["corpu
                     );
               }),
               {
-                onFailure: (reason) => [`${swept.location}: ${reason}`],
+                onFailure: (reason) => [`${run.where}: ${reason}`],
                 onSuccess: (problem) =>
                   Option.match(problem, {
                     onNone: () => [],
-                    onSome: (text) => [`${swept.location}: ${text}`],
+                    onSome: (text) => [`${run.where}: ${text}`],
                   }),
               },
             ),
@@ -433,6 +526,29 @@ describe("the inline response processing sweep over the corpus", { tags: ["corpu
           swept.length - excused.length,
           `${String(running.length)} of ${String(swept.length)} run, and ${String(excused.length)} are excused`,
         );
+      }),
+    sweepTimeoutMs,
+  );
+
+  it.effect(
+    "[I-5] sweeps each item with template processing under begin's record for each sweep seed: the set is not empty, the engine runs each one's template and response processing, and each scores no response and the correct responses solution reads from the record with no failure",
+    () =>
+      Effect.gen(function* templatedRuns() {
+        const items = (yield* sweptItems).filter((swept) => swept.templateProcessing);
+        const stopped = items.flatMap((swept) => [
+          ...(templated(swept.accepted)
+            ? []
+            : [`${swept.location}: the engine does not run its template processing`]),
+          ...(Option.isSome(swept.accepted.item.processing)
+            ? []
+            : [`${swept.location}: the engine does not run its response processing`]),
+        ]);
+
+        assert.isNotEmpty(
+          items,
+          "the source scan found no accepted item with inline processing and template processing",
+        );
+        assert.deepStrictEqual([...stopped, ...scoringProblems(items)], []);
       }),
     sweepTimeoutMs,
   );

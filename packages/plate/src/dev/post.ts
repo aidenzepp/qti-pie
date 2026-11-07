@@ -12,6 +12,7 @@
 import { Effect, Option, Result } from "effect";
 import { decode, Malformed, partition } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { postings } from "#plate/payload.ts";
 import { redact } from "#plate/render.ts";
@@ -51,17 +52,26 @@ export const entriesOf = Effect.fnUntraced(function* entriesOf(
  * Read what a post carries for an item: its own entries, partitioned by the item's instance, each
  * response decoded through the item's `postings`, with the strings posted for it.
  *
- * A response no interaction binds has no posting, so the post carries nothing for it:
- * `checkResponses` treats it as NULL and `score` keeps its record value.
+ * The postings are those of the item as `redact` gives it with the record it was rendered from, so
+ * an interaction its template values hide, or a choice they hide, posts nothing here as it showed
+ * nothing on the page. A response no interaction binds has no posting, so the post carries nothing
+ * for it: `checkResponses` treats it as NULL and `score` keeps its record value.
  *
  * @param document The accepted item.
  * @param instance The item instance.
  * @param entries The posted entries.
+ * @param record The record the item was rendered from, as `restore` gave it back; none for an item
+ *   rendered without one.
  * @returns The post.
  */
-export const postOf = (document: Accepted, instance: string, entries: readonly Entry[]): Post => {
+export const postOf = (
+  document: Accepted,
+  instance: string,
+  entries: readonly Entry[],
+  record?: RedactRecord,
+): Post => {
   const { own } = partition(entries, instance);
-  const itemPostings = postings(redact(document), instance);
+  const itemPostings = postings(redact(document, record), instance);
   const decoded = Object.fromEntries(
     itemPostings.map(({ binding, identifier, options }) => [
       identifier,

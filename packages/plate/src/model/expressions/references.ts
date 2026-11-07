@@ -1,8 +1,7 @@
 /**
  * The references family of the item model: the kind rules and reader specs of `qti-variable`,
- * `qti-correct`, `qti-base-value`, `qti-map-response`, `qti-map-response-point`, `qti-default` and
- * `qti-null`, and the unlanded rule and stub reader spec of the two kinds the family has not landed
- * (`qti-random-integer` and `qti-random-float`), which M3.b-2 replaces.
+ * `qti-correct`, `qti-base-value`, `qti-map-response`, `qti-map-response-point`, `qti-default`,
+ * `qti-null`, `qti-random-integer` and `qti-random-float`.
  *
  * It value-imports only `effect`, `#plate/model/expression.ts`, the leaf
  * `#plate/model/attributes.ts`, `#plate/model/values.ts` and `#plate/vocabulary.ts`, and names the
@@ -18,13 +17,19 @@ import {
   identifierOf,
   pathOf,
   refusal,
+  requiredValue,
   textOf,
   typed,
   valueOf,
 } from "#plate/model/attributes.ts";
-import { acceptsAnyOperands, singleOf, unlandedRule } from "#plate/model/expression.ts";
-import type { FamilyRules, KindRule } from "#plate/model/expression.ts";
-import type { FamilyReaders, ReaderSpec, UnlandedReader } from "#plate/model/expressions/read.ts";
+import {
+  acceptsAnyOperands,
+  floatOrRefOf,
+  integerOrRefOf,
+  singleOf,
+} from "#plate/model/expression.ts";
+import type { FamilyRules, FloatOrRef, IntegerOrRef, KindRule } from "#plate/model/expression.ts";
+import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts";
 import { isModelled, parseElementText } from "#plate/model/values.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 
@@ -132,8 +137,42 @@ const mapResponsePointRule: KindRule = {
 };
 
 /**
- * The references family's kind rules by kind: the rule of each of its seven landed kinds, and the
- * unlanded rule for each kind the family has not landed.
+ * The rule of `qti-random-integer`: a single integer, drawn from its range, with a reference facet
+ * for its `min`, `max` and `step`, each of which may name a variable of base type integer
+ * (`IntegerOrVariableRef`). A reference there is checked: the validator refuses one that names no
+ * variable (P8) or a variable that is not a single integer template or outcome variable (P24), and
+ * the walks mark one the engine does not hold.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-random-integer
+ */
+const randomIntegerRule: KindRule = {
+  operandsAccept: acceptsAnyOperands,
+  references: [
+    { attribute: "min", baseType: "integer", checked: true, field: "min", list: false },
+    { attribute: "max", baseType: "integer", checked: true, field: "max", list: false },
+    { attribute: "step", baseType: "integer", checked: true, field: "step", list: false },
+  ],
+  resultType: () => singleOf("integer"),
+};
+
+/**
+ * The rule of `qti-random-float`: a single float, drawn from its range, with a reference facet for
+ * its `min` and `max`, each of which may name a variable of base type float
+ * (`FloatOrVariableRef`), checked as `qti-random-integer`'s are.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-random-float
+ */
+const randomFloatRule: KindRule = {
+  operandsAccept: acceptsAnyOperands,
+  references: [
+    { attribute: "min", baseType: "float", checked: true, field: "min", list: false },
+    { attribute: "max", baseType: "float", checked: true, field: "max", list: false },
+  ],
+  resultType: () => singleOf("float"),
+};
+
+/**
+ * The references family's kind rules by kind.
  */
 export const referencesRules: FamilyRules<
   | "base-value"
@@ -152,8 +191,8 @@ export const referencesRules: FamilyRules<
   "map-response": mapResponseRule,
   "map-response-point": mapResponsePointRule,
   null: nullRule,
-  "random-float": unlandedRule,
-  "random-integer": unlandedRule,
+  "random-float": randomFloatRule,
+  "random-integer": randomIntegerRule,
   variable: variableRule,
 };
 
@@ -283,14 +322,74 @@ const baseValueReader: ReaderSpec<"base-value"> = {
 };
 
 /**
- * The reader spec of each kind the family has not landed: the stub, which marks the kind's element
- * at its path and reads nothing in it.
+ * The literal 0, the `min` a `qti-random-integer` holds when the attribute is absent.
  */
-const unlanded: UnlandedReader = { _tag: "unlanded" };
+const integerZero: IntegerOrRef = { _tag: "literal", value: 0n };
 
 /**
- * The references family's reader specs by kind: the spec of each of its seven landed kinds, and
- * the stub for each kind the family has not landed.
+ * The literal 1, the `step` a `qti-random-integer` holds when the attribute is absent.
+ */
+const integerOne: IntegerOrRef = { _tag: "literal", value: 1n };
+
+/**
+ * The literal 0, the `min` a `qti-random-float` holds when the attribute is absent.
+ */
+const floatZero: FloatOrRef = { _tag: "literal", value: 0 };
+
+/**
+ * The reader spec of `qti-random-integer`: no operand, its required `max`, and its `min` and
+ * `step`, 0 and 1 when absent, each an `xs:integer` literal or the name of a variable, as
+ * `integerOrRefOf` classifies it. A name is held as a reference here, whatever it names: the
+ * validator and the walks judge it through the kind's reference facet.
+ *
+ * Its read fails with `missing-attribute` for an absent `max`, as a document the validator refuses
+ * first would.
+ */
+const randomIntegerReader: ReaderSpec<"random-integer"> = {
+  _tag: "generic",
+  arity: "none",
+  attributes: (context, element) =>
+    Effect.map(requiredValue(context.walk, element, "max"), (written) => {
+      const max = integerOrRefOf(written);
+      const min = Option.match(valueOf(element, "min"), {
+        onNone: () => integerZero,
+        onSome: integerOrRefOf,
+      });
+      const step = Option.match(valueOf(element, "step"), {
+        onNone: () => integerOne,
+        onSome: integerOrRefOf,
+      });
+
+      return (operands) => ({ kind: "random-integer", max, min, operands, step });
+    }),
+};
+
+/**
+ * The reader spec of `qti-random-float`: no operand, its required `max`, and its `min`, 0 when
+ * absent, each an `xs:double` literal or the name of a variable, as `floatOrRefOf` classifies it.
+ * A name is held as a reference here, whatever it names: the validator and the walks judge it
+ * through the kind's reference facet.
+ *
+ * Its read fails with `missing-attribute` for an absent `max`, as a document the validator refuses
+ * first would.
+ */
+const randomFloatReader: ReaderSpec<"random-float"> = {
+  _tag: "generic",
+  arity: "none",
+  attributes: (context, element) =>
+    Effect.map(requiredValue(context.walk, element, "max"), (written) => {
+      const max = floatOrRefOf(written);
+      const min = Option.match(valueOf(element, "min"), {
+        onNone: () => floatZero,
+        onSome: floatOrRefOf,
+      });
+
+      return (operands) => ({ kind: "random-float", max, min, operands });
+    }),
+};
+
+/**
+ * The references family's reader specs by kind.
  */
 export const referencesReaders: FamilyReaders<
   | "base-value"
@@ -309,7 +408,7 @@ export const referencesReaders: FamilyReaders<
   "map-response": mapResponseReader,
   "map-response-point": mapResponsePointReader,
   null: nullReader,
-  "random-float": unlanded,
-  "random-integer": unlanded,
+  "random-float": randomFloatReader,
+  "random-integer": randomIntegerReader,
   variable: variableReader,
 };

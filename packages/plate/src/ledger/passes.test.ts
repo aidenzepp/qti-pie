@@ -50,8 +50,8 @@ const notRun = "not run in the first sitting (2026-11-05)";
 
 /**
  * The step-1 items in the order the session lists them: BG007, BG010, BG011, the shuffled Choice
- * with a Prompt, the walk corpus's pattern-mask Text Entry, Item_QTI3_WritingPostcard_02 and the
- * walk corpus's container essay.
+ * with a Prompt, the walk corpus's pattern-mask Text Entry, its xhtml Extended Text item and its
+ * container essay.
  */
 const stepOne = [
   "QTI3_BPIG_Examples/items/BG007.xml",
@@ -59,7 +59,7 @@ const stepOne = [
   "QTI3_BeginnersGuide_Examples/items/BG011.xml",
   "qtiv3-examples/packaging/items/choice_fixed.xml",
   "pattern.xml",
-  "qtiv3-examples/items/shared-vocabulary/Items/Item_QTI3_WritingPostcard_02/extended_text_qti3.xml",
+  "xhtml.xml",
   "ordered.xml",
 ];
 

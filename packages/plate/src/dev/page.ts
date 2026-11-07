@@ -6,11 +6,13 @@
  * module owns them all: it lists every member of the corpus's document set under the verdict
  * `open` gives it, reports those verdicts as a table at `/verdicts` and the feature ledger the one
  * command last wrote at `/ledger`, opens any member through the verdict cache of
- * `#plate/dev/listing.ts`, keeps the `Accepted` item and the stored record on the server, and
- * sends only the HTML of `render(redact(…))` inside its own native form. A post is partitioned and
- * decoded on the server, checked with `checkResponses`, scored with `score`, and answered with the
- * page after a submit: the Status part first, one `autofocus`, and a title that
- * names the state. Every page is built through `h` and `toHtml`, so document text is escaped, and
+ * `#plate/dev/listing.ts`, begins each sitting's record with `begin` under the playground's seed
+ * (one `begin` draws when it is built with none), keeps the `Accepted` item and the stored record
+ * in its store on the server, and sends only the HTML of `render(redact(…))`, redacted with that
+ * record, inside its own native form. A post is partitioned and decoded on the server, checked
+ * with `checkResponses` and scored with `score`, both against the stored record, and answered with
+ * the page after a submit: the Status part first, one `autofocus`, and a title that names the
+ * state. Every page is built through `h` and `toHtml`, so document text is escaped, and
  * every response carries the content-security headers of rule `723e580c`. It also serves plate's
  * stylesheet, its own sheet and the host CSS of the theme its theme box last accepted, which it
  * keeps with a dark flag in memory until it restarts. Every page links the three sheets, carries
@@ -62,8 +64,8 @@ import { entriesOf, postOf, valuesOf } from "#plate/dev/post.ts";
 import { reviewPath, routeReview } from "#plate/dev/review-page.ts";
 import type { ReviewPlayground } from "#plate/dev/review-page.ts";
 import { sessionHref } from "#plate/dev/sitting.ts";
-import { sessionStore } from "#plate/dev/store.ts";
-import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
+import { boundedStore, sessionStore } from "#plate/dev/store.ts";
+import type { SessionEntry, SessionStore, Store } from "#plate/dev/store.ts";
 import { routeSessions, sessionPath } from "#plate/dev/test-page.ts";
 import type { SessionPlayground } from "#plate/dev/test-page.ts";
 import { emptyTheme, parseTheme, themeCss } from "#plate/dev/theme.ts";
@@ -73,6 +75,7 @@ import { readCorpusFile } from "#plate/document/corpus.ts";
 import { text } from "#plate/emit/node.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import {
+  begin,
   checkResponses,
   configure,
   h,
@@ -80,6 +83,7 @@ import {
   render,
   renderStatus,
   ResponsesRefused,
+  restore,
   score,
 } from "#plate/index.ts";
 import type {
@@ -112,26 +116,27 @@ export type Handler = (request: Request) => Promise<Response>;
 /**
  * The settings of one playground, each optional.
  *
- * `configuration` is the input `configure` decodes, every default when absent; `provider` is where
- * `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME` and the ledger page reads
- * `PLATE_LEDGER_DIR`, the process environment when absent; `verdicts` is the cache that opens and
- * keeps the corpus's members, a new one over `openMember` when absent; `packages` is the cache
- * that opens and keeps the packages, a new one over `openDirectory` when absent. Handlers given
- * one cache share its opens, and a test counts them through the cache's opener; a cache reads the
- * corpus root of the first handler that asks, so share one only between handlers over the same
- * root.
+ * `configuration` is the input `configure` decodes, every default when absent; `seed` is the seed
+ * every sitting's record begins under, given to `begin` as it is, and when absent `begin` draws one
+ * for each sitting (a fixed seed is guessable, so it is for tests); `newInstance` draws the
+ * instance token of each item the playground opens, a random UUID when absent, and must give a new
+ * token each call, since the playground holds each open item under its token (a test gives a fixed
+ * one so a sitting's values follow from its seed alone); `provider` is where `readCorpusFile` reads
+ * `PLATE_CORPUS_DIR` and `HOME` and the ledger page reads `PLATE_LEDGER_DIR`, the process
+ * environment when absent; `verdicts` is the cache that opens and keeps the corpus's members, a new
+ * one over `openMember` when absent; `packages` is the cache that opens and keeps the packages, a
+ * new one over `openDirectory` when absent. Handlers given one cache share its opens, and a test
+ * counts them through the cache's opener; a cache reads the corpus root of the first handler that
+ * asks, so share one only between handlers over the same root.
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
+  readonly newInstance?: () => string;
   readonly packages?: PackageCache;
   readonly provider?: ConfigProvider.ConfigProvider;
+  readonly seed?: string;
   readonly verdicts?: VerdictCache;
 }
-
-/**
- * The most sessions a playground keeps; the oldest is evicted first (OD-10's placeholder).
- */
-const sessionLimit = 100;
 
 /**
  * The item the plain-HTML host serves at {@link hostMount}: BG007, read from the corpus cache,
@@ -234,15 +239,16 @@ interface Shown {
 }
 
 /**
- * One opened item, held on the server under its instance token: the accepted document, the
- * record the last `score` returned, the scored attempts, and what the last scored page showed.
+ * One sitting of an opened item, held in the playground's store under its instance token: the
+ * accepted document, the record `begin` started or the last `score` returned, in the form the host
+ * stores, the scored attempts, and what the last scored page showed.
  */
 interface Session {
   readonly accepted: Accepted;
   readonly attempts: number;
   readonly last: Option.Option<Shown>;
   readonly path: string;
-  readonly record: Option.Option<StoredRecord>;
+  readonly record: StoredRecord;
 }
 
 /**
@@ -252,16 +258,19 @@ interface Session {
 type HostFailure = Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration;
 
 /**
- * A playground's state and settings: its theme box's appearance, its open items, oldest first, its
- * configuration input, the verdicts of the corpus's members, its packages, its test sessions, and
- * the plain-HTML host, built the first time it is asked for.
+ * A playground's state and settings: its theme box's appearance, its open items' sittings, oldest
+ * first, its configuration input, how it draws an opened item's instance token, the seed its
+ * sittings begin under (none for one `begin` draws), the verdicts of the corpus's members, its
+ * packages, its test sessions, and the plain-HTML host, built the first time it is asked for.
  */
 interface Playground {
   readonly appearance: Ref.Ref<Appearance>;
   readonly configuration: Partial<Configuration>;
   readonly host: Effect.Effect<HtmlHost, HostFailure>;
+  readonly newInstance: () => string;
   readonly packages: PackageCache;
-  readonly sessions: Map<string, Session>;
+  readonly seed: Option.Option<string>;
+  readonly sessions: Store<Session>;
   readonly tests: SessionStore;
   readonly verdicts: VerdictCache;
 }
@@ -393,31 +402,13 @@ const assetBaseOf = (corpusPath: string): string => {
  * @returns Whether some open item's directory holds it.
  */
 const inOpenPackage = (playground: Playground, corpusPath: string): boolean =>
-  [...playground.sessions.values()].some((session) => {
-    const directory = path.posix.dirname(session.path);
+  playground.sessions.ids().some((instance) =>
+    Option.exists(playground.sessions.get(instance), (session) => {
+      const directory = path.posix.dirname(session.path);
 
-    return directory === "." || corpusPath.startsWith(`${directory}/`);
-  });
-
-/**
- * Keep a session, evicting the oldest past {@link sessionLimit}.
- *
- * An existing instance keeps its place, so eviction follows the order items were opened.
- *
- * @param playground The playground.
- * @param instance The session's instance token.
- * @param session The session.
- */
-const remember = (playground: Playground, instance: string, session: Session): void => {
-  playground.sessions.set(instance, session);
-  for (const oldest of playground.sessions.keys()) {
-    if (playground.sessions.size <= sessionLimit) {
-      break;
-    }
-
-    playground.sessions.delete(oldest);
-  }
-};
+      return directory === "." || corpusPath.startsWith(`${directory}/`);
+    }),
+  );
 
 /**
  * Give the heading of a top folder of the corpus: its name, or `Corpus root` for members at the
@@ -643,24 +634,30 @@ const resultId = (instance: string): string => scopedId(instance, "status");
  * The action is written before the post's outcome is known, so the fragment is the same after
  * every submit, and the page of every outcome holds the region it names.
  *
+ * The item is redacted with the sitting's record, read back from its stored form through
+ * `restore`, so its printed variables, template blocks and choices show by its template values;
+ * the record itself stays on the server.
+ *
  * @param accepted The accepted document.
- * @param session The item's corpus path and instance token.
+ * @param session The item's corpus path, instance token and stored record.
  * @param configuration The configuration.
  * @param view What the page shows besides the item.
- * @returns The page, or a developer error's page when a render fails.
+ * @returns The page, or a developer error's page when the record does not restore or a render
+ *   fails.
  */
 const itemPage = (
   accepted: Accepted,
-  session: { readonly instance: string; readonly path: string },
+  session: { readonly instance: string; readonly path: string; readonly record: StoredRecord },
   configuration: Configuration,
   view: ItemView,
 ): Page => {
   const { locale } = configuration;
-  const redacted = redact(accepted);
-  const title = redacted.title.trim();
 
   return Result.match(
     Result.gen(function* composeItem() {
+      const { record } = yield* restore(accepted, session.record);
+      const redacted = redact(accepted, record, configuration);
+      const title = redacted.title.trim();
       const status = yield* Option.match(view.status, {
         onNone: () => Result.succeed<readonly string[]>([]),
         onSome: (input) =>
@@ -779,7 +776,7 @@ const refusedPage = (
 ): Page =>
   itemPage(
     target.session.accepted,
-    { instance: target.instance, path: target.session.path },
+    { instance: target.instance, path: target.session.path, record: target.session.record },
     configuration,
     {
       disabled: false,
@@ -806,7 +803,7 @@ const scoredPage = (
 ): Page =>
   itemPage(
     target.session.accepted,
-    { instance: target.instance, path: target.session.path },
+    { instance: target.instance, path: target.session.path, record: target.session.record },
     configuration,
     {
       disabled:
@@ -949,6 +946,11 @@ const sessionsInProgress = Effect.fnUntraced(function* sessionsInProgress(
  * reasons, from its cached verdict, or, for an accepted test, section or stimulus, with the page
  * that says what it is and links its package; a path that names no member is not found.
  *
+ * Each open of an accepted item is a new sitting: it draws an instance token, begins the sitting's
+ * record with `begin` under the playground's seed, or one `begin` draws, and keeps the record in
+ * the playground's store. `begin`'s failure cannot occur on a checked item; it answers as a
+ * developer error.
+ *
  * @param playground The playground.
  * @param corpusPath The document's corpus path, as the request named it.
  * @returns The page.
@@ -995,21 +997,37 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
           : rootPage(corpusPath, verdict.kind, yield* packageOfMember(playground, corpusPath));
       }
 
-      const instance = crypto.randomUUID();
-      remember(playground, instance, {
+      const instance = playground.newInstance();
+      const begun = begin(
+        accepted.value,
+        Option.match(playground.seed, {
+          onNone: () => ({ instance }),
+          onSome: (seed) => ({ instance, seed }),
+        }),
+      );
+      if (Result.isFailure(begun)) {
+        return failurePage(begun.failure);
+      }
+
+      playground.sessions.set(instance, {
         accepted: accepted.value,
         attempts: 0,
         last: Option.none(),
         path: corpusPath,
-        record: Option.none(),
+        record: begun.success,
       });
 
-      return itemPage(accepted.value, { instance, path: corpusPath }, configuration, {
-        disabled: false,
-        options: {},
-        state: "answering",
-        status: Option.none(),
-      });
+      return itemPage(
+        accepted.value,
+        { instance, path: corpusPath, record: begun.success },
+        configuration,
+        {
+          disabled: false,
+          options: {},
+          state: "answering",
+          status: Option.none(),
+        },
+      );
     }
     default: {
       return verdict satisfies never;
@@ -1019,7 +1037,9 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
 
 /**
  * Take a post of an open item: decode it on the server, check it, score it when it is accepted,
- * and answer with the page after the submit.
+ * and answer with the page after the submit. The post is decoded and checked against the
+ * sitting's stored record, read back through `restore`, and scored over it, and the record `score`
+ * returns replaces it in the store.
  *
  * A post past the attempt limit is not scored; the page of the last scored post answers it.
  *
@@ -1033,8 +1053,11 @@ const submit = Effect.fn("playground.submit")(function* submit(
   request: Request,
   target: { readonly instance: string; readonly path: string },
 ): Effect.fn.Return<Page, InvalidConfiguration> {
-  const session = playground.sessions.get(target.instance);
-  if (session === undefined || session.path !== target.path) {
+  const held = Option.filter(
+    playground.sessions.get(target.instance),
+    (sitting) => sitting.path === target.path,
+  );
+  if (Option.isNone(held)) {
     return notePage(
       404,
       "Item not open",
@@ -1042,6 +1065,7 @@ const submit = Effect.fn("playground.submit")(function* submit(
     );
   }
 
+  const session = held.value;
   const configuration = yield* configure(playground.configuration);
   const opened = { instance: target.instance, session };
   const finished = configuration.maxAttempts > 0 && session.attempts >= configuration.maxAttempts;
@@ -1058,16 +1082,22 @@ const submit = Effect.fn("playground.submit")(function* submit(
     );
   }
 
-  const post = postOf(session.accepted, target.instance, entries.value);
+  const restored = restore(session.accepted, session.record);
+  if (Result.isFailure(restored)) {
+    return failurePage(restored.failure);
+  }
+
+  const { record } = restored.success;
+  const post = postOf(session.accepted, target.instance, entries.value, record);
   const { posted } = post;
-  const messages = checkResponses(session.accepted, post.decoded, configuration);
+  const messages = checkResponses(session.accepted, post.decoded, configuration, record);
   if (messages.length > 0) {
     return refusedPage(opened, configuration, messages, posted);
   }
 
   const values = valuesOf(post);
 
-  return Result.match(score(session.accepted, values, Option.getOrUndefined(session.record)), {
+  return Result.match(score(session.accepted, values, session.record), {
     onFailure: (error) =>
       error instanceof ResponsesRefused
         ? refusedPage(opened, configuration, error.messages, posted)
@@ -1094,9 +1124,9 @@ const submit = Effect.fn("playground.submit")(function* submit(
         ...session,
         attempts: session.attempts + 1,
         last: Option.some(shown),
-        record: Option.some(stored),
+        record: stored,
       };
-      remember(playground, target.instance, next);
+      playground.sessions.set(target.instance, next);
 
       return scoredPage({ instance: target.instance, session: next }, configuration, shown);
     },
@@ -1562,23 +1592,23 @@ const answer = (
       );
 
 /**
- * Construct a playground's Fetch handler, with its own open items, test sessions, theme and dark
- * flag, its own plain-HTML host, built once its first build succeeds, and its own verdict and
- * package caches unless the settings give them: a member's verdict and a package's, once its open
- * succeeds, are kept for the handler's life.
+ * Construct a playground's Fetch handler, with its own store of open items' sittings and their
+ * records, its own test sessions, theme and dark flag, its own plain-HTML host, built once its
+ * first build succeeds, and its own verdict and package caches unless the settings give them: a
+ * member's verdict and a package's, once its open succeeds, are kept for the handler's life.
  *
  * It runs `open`, `configure`, the corpus read and the ledger read with `Effect.runPromise`;
- * `render`, `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure
- * the playground's settings or code cause answers with a 500 page that gives its message, and the
- * promise never rejects.
+ * `begin`, `restore`, `render`, `renderStatus`, `decode`, `checkResponses` and `score` are plain
+ * functions. A failure the playground's settings or code cause answers with a 500 page that gives
+ * its message, and the promise never rejects.
  *
  * @example
  *   const handle = createHandler({ configuration: { maxAttempts: 0 } });
  *   const response = await handle(new Request("http://127.0.0.1:5190/"));
  *   // 200, the listing
  *
- * @param settings The configuration input, the config provider, and the verdict and package
- *   caches, each optional.
+ * @param settings The configuration input, the sittings' seed and instance tokens, the config
+ *   provider, and the verdict and package caches, each optional.
  * @returns The handler.
  */
 export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
@@ -1592,8 +1622,10 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
         }),
       ),
     ),
+    newInstance: settings.newInstance ?? (() => crypto.randomUUID()),
     packages: settings.packages ?? Effect.runSync(packageCache()),
-    sessions: new Map(),
+    seed: Option.fromUndefinedOr(settings.seed),
+    sessions: boundedStore(),
     tests: sessionStore(),
     verdicts: settings.verdicts ?? Effect.runSync(verdictCache()),
   };
