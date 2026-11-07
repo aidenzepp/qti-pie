@@ -13,7 +13,7 @@
  * it is, and its field's pattern refuses it under the schema's limit law.
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
-import { Option } from "effect";
+import { Array as Arr, Option, pipe } from "effect";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
 import { ResourceType } from "#pantry/grammar/install.ts";
@@ -46,7 +46,9 @@ import type {
   LomStringLanguage,
   LomTitle,
   LomTitleString,
+  ObjectIdentifier,
   ObjectLang,
+  ObjectTitle,
   ResourceLomGeneral,
   StatisticDate,
   UsageValue,
@@ -100,7 +102,9 @@ export interface MetadataRows {
   readonly LomStringLanguage: ReadonlyMap<string, Addition<typeof LomStringLanguage>>;
   readonly LomTitle: ReadonlyMap<string, Addition<typeof LomTitle>>;
   readonly LomTitleString: ReadonlyMap<string, Addition<typeof LomTitleString>>;
+  readonly ObjectIdentifier: ReadonlyMap<string, Addition<typeof ObjectIdentifier>>;
   readonly ObjectLang: ReadonlyMap<string, Addition<typeof ObjectLang>>;
+  readonly ObjectTitle: ReadonlyMap<string, Addition<typeof ObjectTitle>>;
   readonly ResourceLomGeneral: ReadonlyMap<string, Addition<typeof ResourceLomGeneral>>;
   readonly StatisticDate: ReadonlyMap<string, Addition<typeof StatisticDate>>;
   readonly UsageValue: ReadonlyMap<string, Addition<typeof UsageValue>>;
@@ -322,6 +326,7 @@ export const stringValuesOf = (rows: FlatRows<Composed>): ((node: NodeId) => str
  * attributes and string value, and each node's {@link nodeRef}-shaped tuple.
  */
 interface Tree {
+  readonly document: NodeId;
   readonly nodes: readonly NodeRow<Composed>[];
   /**
    * Read a node's parent, which `flatten` writes before it; the document node is its own.
@@ -357,6 +362,7 @@ const treeOf = (doc: XdmDocument<Composed>, ids: MetadataIds): Tree => {
   const document = rows.document.node;
 
   return {
+    document,
     nodes: rows.nodes,
     parentOf: (node) => {
       const parent = byId.get(node.parent);
@@ -598,8 +604,22 @@ interface StringRows {
 }
 
 /**
+ * Read a `lom:string`'s language as `lom-title` compares it: its `language` case-folded, or
+ * {@link noLanguage} where it writes none.
+ *
+ * @param tree - The document's tree.
+ * @param node - The `lom:string`.
+ * @returns The compared language.
+ */
+const languageTagOf = (tree: Tree, node: NodeRow<Composed>): string =>
+  Option.match(Option.fromUndefinedOr(tree.valueOf(node, "language")), {
+    onNone: () => noLanguage,
+    onSome: lowerAscii,
+  });
+
+/**
  * Build a document's {@link LomString} and {@link LomStringLanguage} rows: one per `lom:string`,
- * with its `language` where it writes one.
+ * with its compared language, and its `language` where it writes one.
  *
  * @param tree - The document's tree.
  * @returns The rows, each by its node's id.
@@ -612,13 +632,14 @@ const stringRowsOf = (tree: Tree): StringRows => {
       strings.flatMap((node) => {
         const language = tree.valueOf(node, "language");
 
-        return language === undefined ? [] : [[node.id, { language, node: node.id }] as const];
+        return language === undefined
+          ? []
+          : [[node.id, { language, languageTag: lowerAscii(language), node: node.id }] as const];
       }),
     ),
     strings: new Map(
       strings.map(
-        (node) =>
-          [node.id, { language: tree.valueOf(node, "language") ?? "", node: node.id }] as const,
+        (node) => [node.id, { languageTag: languageTagOf(tree, node), node: node.id }] as const,
       ),
     ),
   };
@@ -626,8 +647,8 @@ const stringRowsOf = (tree: Tree): StringRows => {
 
 /**
  * Build a document's {@link LomTitleString} rows: one per `lom:string` of a title, with its title's
- * record, its string value and its `language` as written, and the two as `lom-title` compares them:
- * the value with its whitespace replaced, the language case-folded.
+ * record, its string value, and the two as `lom-title` compares them: the value with its whitespace
+ * replaced, and its language ({@link languageTagOf}).
  *
  * @param tree - The document's tree.
  * @param titles - The document's {@link LomTitle} rows.
@@ -644,7 +665,6 @@ const titleStringRowsOf = (
         return [];
       }
 
-      const language = tree.valueOf(node, "language") ?? "";
       const text = tree.stringValueOf(node.id);
 
       return [
@@ -652,8 +672,7 @@ const titleStringRowsOf = (
           node.id,
           {
             ...tree.tupleOf(node),
-            language,
-            languageTag: lowerAscii(language),
+            languageTag: languageTagOf(tree, node),
             record: title.record,
             text,
             textValue: replaceWhitespace(text),
@@ -702,61 +721,83 @@ const termRowsOf = (tree: Tree, kind: "lom:source" | "lom:value"): ReadonlyMap<s
 };
 
 /**
- * A document's root rows: an item's or test's {@link AssessmentObject}, and its
- * {@link ObjectLang} where it writes an `xml:lang`, each by its node's id.
+ * Read an `xml:lang` as `lom-title` compares it: its value collapsed (an `xs:language`) and
+ * case-folded (`Compute.lowerAscii`).
+ *
+ * @param lang - The attribute's lexical form.
+ * @returns The compared language.
  */
-interface RootRows {
-  readonly langs: ReadonlyMap<string, Addition<typeof ObjectLang>>;
-  readonly objects: ReadonlyMap<string, Addition<typeof AssessmentObject>>;
-}
+const langTagOf = (lang: string): string => lowerAscii(collapse(lang));
 
 /**
- * Build a document's {@link AssessmentObject} and {@link ObjectLang} rows: one per item's or test's
- * root, its `identifier` split around its collapsed value, its `title` as written and with its
- * whitespace replaced, and its `xml:lang` where it writes one, as written and collapsed and
- * case-folded. A root that writes no `identifier` or `title` has none, which AL3 refuses.
+ * A document's root rows, each by its node's id: an item's or test's {@link AssessmentObject}, and
+ * its {@link ObjectIdentifier}, {@link ObjectTitle} and {@link ObjectLang} where it writes the
+ * attribute.
+ */
+type RootRows = Pick<
+  MetadataRows,
+  "AssessmentObject" | "ObjectIdentifier" | "ObjectLang" | "ObjectTitle"
+>;
+
+/**
+ * Build a document's {@link AssessmentObject}, {@link ObjectIdentifier}, {@link ObjectTitle} and
+ * {@link ObjectLang} rows: one {@link AssessmentObject} per item's or test's root, whatever it
+ * writes, with its language as `lom-title` compares it; and each attribute's own row where it is
+ * written: its `identifier` split around its collapsed value, its `title` as written and with its
+ * whitespace replaced, and its `xml:lang` as written and collapsed and case-folded. A root that
+ * writes no `identifier` or `title` has no row of it, which AL3 refuses.
  *
  * @param tree - The document's tree.
+ * @param document - The document's node.
  * @returns The rows, each by its node's id.
  */
-const objectRowsOf = (tree: Tree): RootRows => {
+const objectRowsOf = (tree: Tree, document: NodeId): RootRows => {
   const roots = tree.nodes.filter(({ kind }) => objects.has(kind));
 
   return {
-    langs: new Map(
-      roots.flatMap((node) => {
-        const lang = tree.valueOf(node, "xml:lang");
-
-        return lang === undefined ? [] : [[node.id, { lang, node: node.id }] as const];
-      }),
-    ),
-    objects: new Map(
-      roots.flatMap((node) => {
-        const lexical = tree.valueOf(node, "identifier");
-        const title = tree.valueOf(node, "title");
-        if (lexical === undefined || title === undefined) {
-          return [];
-        }
-
-        const { lead, token, trail } = piecesOf(lexical);
-        const lang = tree.valueOf(node, "xml:lang") ?? "";
-
-        return [
+    AssessmentObject: new Map(
+      roots.map(
+        (node) =>
           [
             node.id,
             {
               ...tree.tupleOf(node),
-              identifier: token,
-              identifierLead: lead,
-              identifierLexical: lexical,
-              identifierTrail: trail,
-              lang,
-              langTag: lowerAscii(collapse(lang)),
-              title,
-              titleValue: replaceWhitespace(title),
+              langTag: Option.match(Option.fromUndefinedOr(tree.valueOf(node, "xml:lang")), {
+                onNone: () => noLanguage,
+                onSome: langTagOf,
+              }),
             },
           ] as const,
-        ];
+      ),
+    ),
+    ObjectIdentifier: new Map(
+      roots.flatMap((node) => {
+        const lexical = tree.valueOf(node, "identifier");
+        if (lexical === undefined) {
+          return [];
+        }
+
+        const { lead, token, trail } = piecesOf(lexical);
+
+        return [[node.id, { document, identifier: token, lead, lexical, node: node.id, trail }]];
+      }),
+    ),
+    ObjectLang: new Map(
+      roots.flatMap((node) => {
+        const lang = tree.valueOf(node, "xml:lang");
+
+        return lang === undefined
+          ? []
+          : [[node.id, { lang, langTag: langTagOf(lang), node: node.id }] as const];
+      }),
+    ),
+    ObjectTitle: new Map(
+      roots.flatMap((node) => {
+        const title = tree.valueOf(node, "title");
+
+        return title === undefined
+          ? []
+          : [[node.id, { document, node: node.id, title, titleValue: replaceWhitespace(title) }]];
       }),
     ),
   };
@@ -784,9 +825,10 @@ const dateRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof StatisticDa
   );
 
 /**
- * Build a document's {@link UsageValue} rows: one per usage value that writes a `baseType`, its
- * code the handle its lexical form spells (`none` where it spells none, which `E1_derived`
- * refuses) and its text its string value.
+ * Build a document's {@link UsageValue} rows: one per usage value whose `baseType` spells a code, as
+ * written (`spelledBaseTypes`), its code that handle and its text its string value. A value whose
+ * `baseType` spells none has no row, and its value domain refuses the attribute alone (lane NIL's
+ * audit, B11).
  *
  * @param tree - The document's tree.
  * @returns The rows, by their node's id.
@@ -795,7 +837,7 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
   new Map(
     tree.nodes.flatMap((node) => {
       const lexical = node.kind === usageValueKind ? tree.valueOf(node, "baseType") : undefined;
-      if (lexical === undefined) {
+      if (lexical === undefined || !spelledBaseTypes.has(lexical)) {
         return [];
       }
 
@@ -803,7 +845,7 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
         [
           node.id,
           {
-            baseType: spelledBaseTypes.has(lexical) ? lexical : "none",
+            baseType: lexical,
             baseTypeLexical: lexical,
             node: node.id,
             text: tree.stringValueOf(node.id),
@@ -836,7 +878,12 @@ const noRecordRows = {
   ResourceLomGeneral: new Map(),
 } as const satisfies Omit<
   MetadataRows,
-  "AssessmentObject" | "ObjectLang" | "StatisticDate" | "UsageValue"
+  | "AssessmentObject"
+  | "ObjectIdentifier"
+  | "ObjectLang"
+  | "ObjectTitle"
+  | "StatisticDate"
+  | "UsageValue"
 >;
 
 /**
@@ -861,10 +908,8 @@ const noRecordRows = {
  */
 export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRows => {
   const tree = treeOf(doc, ids);
-  const assessment = objectRowsOf(tree);
   const everyDocument = {
-    AssessmentObject: assessment.objects,
-    ObjectLang: assessment.langs,
+    ...objectRowsOf(tree, tree.document),
     StatisticDate: dateRowsOf(tree),
     UsageValue: usageValueRowsOf(tree),
   };
@@ -900,109 +945,153 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
 };
 
 /**
- * A document of a package as the object rows read it: its node's id, and its root's
- * {@link AssessmentObject} row where it has one.
+ * A document of a package as the object rows read it: its node's id, and what its root writes that
+ * a record names it by: its identifier, collapsed, and its title, as `lom-title` compares it, with
+ * its language. Each is none where the root is no assessment object or writes no such attribute.
  */
 export interface NamedDocument {
   readonly document: NodeId;
-  readonly object: Addition<typeof AssessmentObject> | undefined;
+  readonly identifier: Option.Option<string>;
+  readonly title: Option.Option<{ readonly lang: string; readonly value: string }>;
 }
 
 /**
+ * Read a document as the object rows read it, from its metadata rows: its root's
+ * {@link AssessmentObject}, the one whose parent is the document node, and that root's
+ * {@link ObjectIdentifier} and {@link ObjectTitle}.
+ *
+ * @param document - The document's node.
+ * @param rows - The document's metadata rows.
+ * @returns The document as the object rows read it.
+ */
+export const namedDocumentOf = (
+  document: NodeId,
+  rows: Pick<MetadataRows, "AssessmentObject" | "ObjectIdentifier" | "ObjectTitle">,
+): NamedDocument => {
+  const root = pipe(
+    rows.AssessmentObject.values(),
+    Arr.findFirst(({ parent }) => parent === document),
+  );
+
+  return {
+    document,
+    identifier: root.pipe(
+      Option.flatMap(({ node }) => Option.fromUndefinedOr(rows.ObjectIdentifier.get(node))),
+      Option.map(({ identifier }) => identifier),
+    ),
+    title: root.pipe(
+      Option.flatMap(({ langTag, node }) =>
+        Option.map(Option.fromUndefinedOr(rows.ObjectTitle.get(node)), ({ titleValue }) => ({
+          lang: langTag,
+          value: titleValue,
+        })),
+      ),
+    ),
+  };
+};
+
+/**
  * Decide whether a title string is in an object's language (`lom-title`): the object states no
- * `xml:lang` (an empty one, or one of whitespace alone, states none), the string no `language` (an
- * empty one states none alike), or the two name one tag without regard to case.
+ * language (an empty `xml:lang`, or one of whitespace alone, states none), the string no `language`
+ * (an empty one states none alike), or the two name one tag without regard to case.
  *
  * @param string - The title string.
- * @param object - The object.
+ * @param lang - The object's language, as `lom-title` compares it.
  * @returns Whether the string's language is the object's.
  */
-const inLanguage = (
-  string: Addition<typeof LomTitleString>,
-  object: Addition<typeof AssessmentObject> | undefined,
-): boolean =>
-  object === undefined ||
-  object.langTag === noLanguage ||
-  string.languageTag === noLanguage ||
-  string.languageTag === object.langTag;
+const inLanguage = (string: Addition<typeof LomTitleString>, lang: string): boolean =>
+  lang === noLanguage || string.languageTag === noLanguage || string.languageTag === lang;
 
 /**
  * Build a naming record's {@link LomObjectIdentifier} row: its witness the first general entry of
- * the record, in document order, whose token is the document's identifier, or the first when none
- * is.
+ * the record, in document order, whose token is the document's identifier.
  *
  * @param record - The record's node.
  * @param document - The document it names.
- * @param object - The document's assessment object, none when it has none.
+ * @param identifier - The document's identifier, none where its root writes none.
  * @param generalEntries - The manifest's general entries.
- * @returns The row, none when the record lists no general entry.
+ * @returns The row; none where the document has no identifier or no entry of the record is it, so
+ *   a record that lists a general entry is refused under `lom-identifier`'s existence.
  */
 const identifierRowOf = (
   record: NodeId,
   document: NodeId,
-  object: Addition<typeof AssessmentObject> | undefined,
+  identifier: Option.Option<string>,
   generalEntries: readonly Addition<typeof LomEntry>[],
-): Addition<typeof LomObjectIdentifier> | undefined => {
-  const entries = generalEntries.filter(({ holderParent }) => holderParent === record);
-  const identifier = object?.identifier ?? "";
-  const witness = entries.find(({ token }) => token === identifier) ?? entries.at(0);
-
-  return witness === undefined
-    ? undefined
-    : { document, entry: witness.node, general: witness.holder, identifier, record };
-};
+): Option.Option<Addition<typeof LomObjectIdentifier>> =>
+  identifier.pipe(
+    Option.flatMap((id) =>
+      Option.map(
+        pipe(
+          generalEntries,
+          Arr.findFirst(({ holderParent, token }) => holderParent === record && token === id),
+        ),
+        (witness) => ({
+          document,
+          entry: witness.node,
+          general: witness.holder,
+          identifier: id,
+          record,
+        }),
+      ),
+    ),
+  );
 
 /**
  * Build a naming record's {@link LomObjectTitle} row: its witness the first title string of the
  * record, in document order, in the document's language whose text has its title's value (both
- * with their whitespace replaced), or the first string when none is, or the title itself when the
- * record's titles hold no string.
+ * with their whitespace replaced).
  *
  * @param record - The record's node.
  * @param document - The document it names.
- * @param object - The document's assessment object, none when it has none.
+ * @param title - The document's title and language, none where its root writes no title.
  * @param metadata - The manifest's rows.
- * @returns The row, none when the record has no general title.
+ * @returns The row; none where the document has no title or no string of the record names it, so
+ *   a record with a general title is refused under `lom-title`'s existence.
  */
 const titleRowOf = (
   record: NodeId,
   document: NodeId,
-  object: Addition<typeof AssessmentObject> | undefined,
+  title: NamedDocument["title"],
   metadata: MetadataRows,
-): Addition<typeof LomObjectTitle> | undefined => {
-  const first = [...metadata.LomTitle.values()].find((title) => title.record === record);
-  const strings = [...metadata.LomTitleString.values()].filter(
-    (string) => string.record === record,
+): Option.Option<Addition<typeof LomObjectTitle>> =>
+  title.pipe(
+    Option.flatMap(({ lang, value }) =>
+      Option.map(
+        pipe(
+          metadata.LomTitleString.values(),
+          Arr.findFirst(
+            (string) =>
+              string.record === record && string.textValue === value && inLanguage(string, lang),
+          ),
+        ),
+        (witness) => ({
+          document,
+          objectLang: lang,
+          record,
+          string: witness.node,
+          stringLanguage: witness.languageTag,
+          title: value,
+        }),
+      ),
+    ),
   );
-  const title = object?.titleValue ?? "";
-  const witness =
-    strings.find((string) => string.textValue === title && inLanguage(string, object)) ??
-    strings.at(0);
-
-  return first === undefined
-    ? undefined
-    : {
-        document,
-        objectLang: object?.langTag ?? "",
-        record,
-        string: witness?.node ?? first.node,
-        stringLanguage: witness?.languageTag ?? "",
-        title,
-      };
-};
 
 /**
  * Build a package's object rows (reading 62): each naming record's {@link LomObject}, the document
- * at its resource's `href`'s path; its {@link LomObjectIdentifier} where it lists a general entry;
- * and its {@link LomObjectTitle} where it has a general title.
+ * at its resource's `href`'s path; its {@link LomObjectIdentifier} where one of its general entries
+ * names the document's identifier; and its {@link LomObjectTitle} where one of its title strings
+ * names the document's title.
  *
  * Each witness is the first, in document order, that names the document (an entry whose token is
- * its identifier; a title string in its language whose text is its title), or the first of its
- * kind when none does, so the law refuses the record. A title with no string has no string to name,
- * so its row names the title itself, which no title string is. A record names a document only where
- * its resource's `href` names one ({@link LomResource}'s `named`), so a record whose `href` names
- * none has no row here, and "Document entry" refuses the href. An href's path is the one its
- * `ResourceHref` row compares it by, resolved as the package overlays resolve it
+ * its identifier; a title string in its language whose text is its title). A record none of whose
+ * entries or strings names it, or whose document writes no identifier or no title, has no witness
+ * and no row, so the law's existence refuses the record under its own name: no row stands for a
+ * witness the record does not hold (reading 62, "One of the values given for the identifier must
+ * have an entry that matches"; "The title must have a value that matches"). A record names a
+ * document only where its resource's `href` names one ({@link LomResource}'s `named`), so a record
+ * whose `href` names none has no row here, and "Document entry" refuses the href. An href's path is
+ * the one its `ResourceHref` row compares it by, resolved as the package overlays resolve it
  * (`resourcePathsOf`, readings 102 and 103).
  *
  * @param manifest - The manifest's tree, as shred gives it.
@@ -1027,13 +1116,21 @@ export const objectRowsOfPackage = (
   };
 
   for (const record of metadata.LomRecord.values()) {
-    const path = paths.get(record.ownerParent);
-    const target = path === undefined ? undefined : documents.get(path);
-    if (record.named === namesNoDocument || path === undefined || target === undefined) {
+    if (record.named === namesNoDocument) {
       continue;
     }
 
-    const { document, object } = target;
+    // A record names a document only where its resource's href's path holds one (`resourceNamer`),
+    // so both lookups find it.
+    const path = paths.get(record.ownerParent);
+    const target = path === undefined ? undefined : documents.get(path);
+    if (path === undefined || target === undefined) {
+      throw new Error(
+        `Record ${record.node} names a ${record.named} document, but its resource ${record.ownerParent} has no href path the package's documents hold. Read the records under the targetAt the documents were listed by.`,
+      );
+    }
+
+    const { document } = target;
     named.LomObject.set(record.node, {
       document,
       package: ids.package,
@@ -1043,14 +1140,14 @@ export const objectRowsOfPackage = (
       type: record.named,
     });
 
-    const identified = identifierRowOf(record.node, document, object, generalEntries);
-    if (identified !== undefined) {
-      named.LomObjectIdentifier.set(record.node, identified);
+    for (const row of Option.toArray(
+      identifierRowOf(record.node, document, target.identifier, generalEntries),
+    )) {
+      named.LomObjectIdentifier.set(record.node, row);
     }
 
-    const titled = titleRowOf(record.node, document, object, metadata);
-    if (titled !== undefined) {
-      named.LomObjectTitle.set(record.node, titled);
+    for (const row of Option.toArray(titleRowOf(record.node, document, target.title, metadata))) {
+      named.LomObjectTitle.set(record.node, row);
     }
   }
 

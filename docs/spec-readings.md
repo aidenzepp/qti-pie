@@ -2619,3 +2619,21 @@ against it. A reading that is not an information-model-over-XSD case says which 
      (`testDocumentOf`'s empty default, `src/test/oracle-laws/assembly.ts`), under which two such elements of one
      document broke "Structure identifier". This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07
      by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-TESTS.)
+148. **An assessment item or test that writes no `identifier` or no `title` has none for its LOM record to match: no
+     entry or title string names it, the empty one included, and AL3 refuses the root while `lom-identifier` or
+     `lom-title` refuses a record that lists an entry or a title.** The ASI XSD requires both, with no default:
+     `<xs:attribute name="identifier" use="required" type="IdentifierDType" />` and `<xs:attribute name="title"
+     use="required" type="xs:normalizedString" />` in `AssessmentItemDType` and `AssessmentTestDType`
+     (`imsqti_asiv3p0_v1p0.xsd`). QTI 3.0 Metadata §2.7.1.1 asks that "One of the values given for the identifier must
+     have an entry that matches the identifier of the associated item, test or object bank", and §2.7.1.2 that "The
+     title must have a value that matches the value of the title attribute of the associated item, test or object
+     bank". A root that writes no `identifier` or `title` has no value to match, not the empty one, so an empty
+     `lom:entry` or `lom:string` matches nothing (reading 62). The importer holds each attribute as a row of its own
+     (`ObjectIdentifier`, `ObjectTitle`, `src/qti/metadata.ts`) beside the root's `AssessmentObject`, which every item
+     and test root has, and a record none of whose entries or strings names its document writes no witness row, so
+     the law's existence refuses it under its own name. This sets aside the reading of an unwritten identifier or title
+     as the empty one: the importer's, under which a root missing either had no `AssessmentObject`, so "E1 derived"
+     broke beside AL3 and an empty entry matched an unwritten identifier; and the law oracle's (`lomTitleLawsOf`'s
+     empty default, `src/test/oracle-laws/documents.ts`), under which an empty title string matched an unwritten
+     title. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-META.)

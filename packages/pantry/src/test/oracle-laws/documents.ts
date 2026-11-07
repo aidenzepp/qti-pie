@@ -518,7 +518,7 @@ const folded = (tag: string): string =>
  * states no `xml:lang` (an empty or blank one states none, XML 1.0 §2.12). The object is the
  * document the resource's href names where its root is an item or a test ({@link objectRoots}),
  * whatever the resource's type; a document of another root is no object, and a record with a
- * title breaks the law.
+ * title breaks the law; so does one whose object writes no `title`, which no string matches.
  *
  * @param input - The package.
  * @returns The breaches, each at the record.
@@ -542,8 +542,11 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
     }
 
     // The object's title and language; a root of no object has neither, and no string names it.
+    // A root that writes no `title` has no value for a string to match (QTI 3.0 Metadata
+    // §2.7.1.2: "The title must have a value that matches the value of the title attribute of the
+    // associated item, test or object bank"), so no string names it either.
     const object = objectRoots.has(root.kind);
-    const title = replaced(Option.getOrElse(valueOf(document.rows, root.id, "title"), () => ""));
+    const title = Option.map(valueOf(document.rows, root.id, "title"), replaced);
     const written = object ? typedOr(document.rows, root.id, "xml:lang", "") : Option.some("");
     if (Option.isNone(written)) {
       return [];
@@ -585,7 +588,7 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
 
           return (
             object &&
-            replaced(string.stringValue) === title &&
+            Option.exists(title, (value) => value === replaced(string.stringValue)) &&
             (lang === "" || language === "" || language === lang)
           );
         });
@@ -595,7 +598,10 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
           : [
               breachAt(manifest, lom, "LomObjectTitle", {
                 strings: JSON.stringify(strings.map(({ stringValue }) => stringValue)),
-                title,
+                ...Option.match(title, {
+                  onNone: () => ({}),
+                  onSome: (value) => ({ title: value }),
+                }),
               }),
             ];
       });

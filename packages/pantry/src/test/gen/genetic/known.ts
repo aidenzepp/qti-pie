@@ -131,44 +131,6 @@ export const known = {
     fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, identifierLexical)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
-        ],
-        [
-          "item.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item"/>`,
-        ],
-      ],
-      fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-      owner: "NIL",
-    },
-  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, title)":
-    {
-      files: [
-        [
-          "choice.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" title="s44"/>`,
-        ],
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
-        ],
-      ],
-      fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-      owner: "NIL",
-    },
   "import-only-law: E1 derived, contained Declaration(document, identifier, node, declarationKind, baseType, cardinality) in VariableLookup(document, name, declaration, declarationKind, baseType, cardinality)":
     {
       files: [
@@ -208,50 +170,6 @@ export const known = {
       ],
       fix: "two declarations of one identifier: the oracle raises the VariableLookup containment that breaks beside Declaration key, so precedence sees it",
       owner: "OL",
-    },
-  "import-only-law: E1 derived, contained LomObjectIdentifier(document, identifier) in AssessmentObject(document, identifier)":
-    {
-      files: [
-        [
-          "choice.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>`,
-        ],
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources>
-        <resource type="imsqti_item_xmlv3p0" href="choice.xml">
-            <metadata>
-                
-                <imsmd:lom>
-                    <imsmd:general>
-                        <imsmd:identifier>
-                            <imsmd:entry>choice</imsmd:entry>
-                        </imsmd:identifier>
-                        
-                        
-                    </imsmd:general>
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                </imsmd:lom>
-            </metadata>
-            
-            
-        </resource>
-    </resources></manifest>`,
-        ],
-      ],
-      fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-      owner: "NIL",
     },
   "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
     files: [
@@ -976,6 +894,44 @@ export const fixed = {
     fix: "a RecordField row only where a value writes both a field-identifier and a base-type, so a base-type written alone is refused under Value cardinality, never an empty field identifier's E1",
     owner: "FIX-UNWRITTEN",
   },
+  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, identifierLexical)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/></resources></manifest>`,
+        ],
+        [
+          "item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item"/>`,
+        ],
+      ],
+      fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
+      owner: "FB-META",
+    },
+  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, title)":
+    {
+      files: [
+        [
+          "choice.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" title="s44"/>`,
+        ],
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+        ],
+      ],
+      fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
+      owner: "FB-META",
+    },
   "import-only-law: E1 derived, contained Expression(kind, baseType) in ResultBase(kind, base)": {
     files: [
       [
@@ -1045,6 +1001,50 @@ export const fixed = {
       ],
       fix: "NS6: a record names a document only where its resource's href names one (LomResource.named, by targetAt), so a record whose href names none writes no LomObject, LomObjectIdentifier, LomObjectTitle or GeneralObject, and Document entry alone refuses the href",
       owner: "FIX-GENOBJ",
+    },
+  "import-only-law: E1 derived, contained LomObjectIdentifier(document, identifier) in AssessmentObject(document, identifier)":
+    {
+      files: [
+        [
+          "choice.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>`,
+        ],
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources>
+        <resource type="imsqti_item_xmlv3p0" href="choice.xml">
+            <metadata>
+                
+                <imsmd:lom>
+                    <imsmd:general>
+                        <imsmd:identifier>
+                            <imsmd:entry>choice</imsmd:entry>
+                        </imsmd:identifier>
+                        
+                        
+                    </imsmd:general>
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                </imsmd:lom>
+            </metadata>
+            
+            
+        </resource>
+    </resources></manifest>`,
+        ],
+      ],
+      fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
+      owner: "FB-META",
     },
   "import-only-law: E1 derived, contained LomResource(node) in Resource(node)": {
     files: [

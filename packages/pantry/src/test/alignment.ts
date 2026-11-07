@@ -870,6 +870,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    148,
+    {
+      owner:
+        "the import's `ObjectIdentifier` and `ObjectTitle`, each copied from its attribute and none without it, beside the `AssessmentObject` every item and test root has, and `LomObjectIdentifier` and `LomObjectTitle` written only for a witness that names the document (`objectRowsOf`, `identifierRowOf`, `titleRowOf`, `src/import/overlays/metadata.ts`; `src/qti/metadata.ts`); the oracle's lom-identifier over the root's identifier, none where unwritten (`packageBreaches`, `src/test/oracle.ts`), and lom-title over its title, none where unwritten (`lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-attributes.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

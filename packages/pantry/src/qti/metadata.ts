@@ -116,6 +116,7 @@ import {
   ResourceType,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
+import { baseTypes } from "#pantry/grammar/attributes.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
@@ -359,22 +360,26 @@ export const LomTitle = relation(
 
 /**
  * A LOM `lom:string`, keyed by its node, wherever it stands: its count of `language` attributes (0
- * or 1, as {@link LomStringLanguage} holds them), and `language`, that attribute's lexical form, or
- * the empty text where it has none. The count is the one total fact of whether the optional
- * attribute exists.
+ * or 1, as {@link LomStringLanguage} holds them), the one total fact of whether the optional
+ * attribute exists, and `languageTag`, the language as `lom-title` compares it: its
+ * {@link LomStringLanguage}'s where it writes one, {@link noLanguage} where it writes none. The
+ * attribute's lexical form is its own row's, never a field here.
  */
 export const LomString = relation(
   "LomString",
-  { language: keyText, languages: drawn(natural), node: uuid },
+  { languageTag: keyText, languages: drawn(natural), node: uuid },
   ["node"],
 );
 
 /**
- * A `lom:string`'s `language`, keyed by the string's node, as written.
+ * A `lom:string`'s `language`, keyed by the string's node: its lexical form as written, and
+ * `languageTag`, that form case-folded (`Compute.lowerAscii`), as `lom-title` compares it.
  */
-export const LomStringLanguage = relation("LomStringLanguage", { language: keyText, node: uuid }, [
-  "node",
-]);
+export const LomStringLanguage = relation(
+  "LomStringLanguage",
+  { language: keyText, languageTag: keyText, node: uuid },
+  ["node"],
+);
 
 /**
  * Each string's `language`, counted by {@link LomString}'s `languages`.
@@ -387,17 +392,15 @@ export const lomStringLanguages = counted(
 /**
  * A string of a LOM title, keyed by its `lom:string` node: its {@link nodeRef} tuple (its parent the
  * title), its title's record, its string value `text`, `Node.stringValue` folded by
- * `copiedTitleText` (`#pantry/qti/node.ts`), and its `language` as {@link LomString} holds it; and
- * the host's two compared forms, `textValue`, the text in `xs:normalizedString`'s value space
- * (`Compute.replaceWhitespace`), and `languageTag`, the language case-folded
- * (`Compute.lowerAscii`).
+ * `copiedTitleText` (`#pantry/qti/node.ts`), and the host's two compared forms, `textValue`, the
+ * text in `xs:normalizedString`'s value space (`Compute.replaceWhitespace`), and `languageTag`, its
+ * language as {@link LomString} holds it.
  */
 export const LomTitleString = relation(
   "LomTitleString",
   {
     document: uuid,
     kind: closedId(NodeKind),
-    language: keyText,
     languageTag: keyText,
     nearest: uuid,
     node: uuid,
@@ -412,41 +415,68 @@ export const LomTitleString = relation(
 );
 
 /**
- * An assessment object, keyed by the `qti-assessment-item` or `qti-assessment-test` root: its
- * {@link nodeRef} tuple; its `identifier` attribute in pieces, the lexical form as written,
- * `identifierLexical`, and its collapsed value, `identifier`; its `title` as written, and
- * `titleValue`, its value as an `xs:normalizedString` (`Compute.replaceWhitespace`); and its count
- * of `xml:lang` attributes (0 or 1, as {@link ObjectLang} holds them) with `lang`, that attribute's
- * lexical form, or the empty text where it has none, and `langTag`, its value collapsed and
- * case-folded (`Compute.lowerAscii`), empty where it states no language.
+ * An assessment object, keyed by the `qti-assessment-item` or `qti-assessment-test` root, whatever
+ * it writes: its {@link nodeRef} tuple; its count of `xml:lang` attributes (0 or 1, as
+ * {@link ObjectLang} holds them), the one total fact of whether the optional attribute exists; and
+ * `langTag`, its language as `lom-title` compares it: its {@link ObjectLang}'s where it writes one,
+ * {@link noLanguage} where it writes none. Its required `identifier` and `title` are rows of their
+ * own, {@link ObjectIdentifier} and {@link ObjectTitle}, so a root that writes neither still has its
+ * row and AL3 alone refuses it, and no LOM entry or title string matches what it does not write
+ * (spec reading 148).
  */
 export const AssessmentObject = relation(
   "AssessmentObject",
   {
     document: uuid,
-    identifier: keyText,
-    identifierLead: Space,
-    identifierLexical: keyText,
-    identifierTrail: Space,
     kind: closedId(NodeKind),
-    lang: keyText,
     langTag: keyText,
     langs: drawn(natural),
     nearest: uuid,
     node: uuid,
     parent: uuid,
     start: natural,
-    title: keyText,
-    titleValue: keyText,
     version: closedId(SchemaVersion),
   },
   ["node"],
 );
 
 /**
- * An assessment object's `xml:lang`, keyed by its root, as written.
+ * An assessment object's `identifier`, keyed by its root: its document, the lexical form as
+ * written, and that form in pieces, `lead ‖ identifier ‖ trail`, `identifier` its collapsed value.
+ * A root that writes no `identifier` has no row, and AL3 refuses it.
  */
-export const ObjectLang = relation("ObjectLang", { lang: keyText, node: uuid }, ["node"]);
+export const ObjectIdentifier = relation(
+  "ObjectIdentifier",
+  {
+    document: uuid,
+    identifier: keyText,
+    lead: Space,
+    lexical: keyText,
+    node: uuid,
+    trail: Space,
+  },
+  ["node"],
+);
+
+/**
+ * An assessment object's `title`, keyed by its root: its document, the title as written, and
+ * `titleValue`, its value as an `xs:normalizedString` (`Compute.replaceWhitespace`). A root that
+ * writes no `title` has no row, and AL3 refuses it.
+ */
+export const ObjectTitle = relation(
+  "ObjectTitle",
+  { document: uuid, node: uuid, title: keyText, titleValue: keyText },
+  ["node"],
+);
+
+/**
+ * An assessment object's `xml:lang`, keyed by its root: its lexical form as written, and `langTag`,
+ * its value collapsed (an `xs:language`) and case-folded (`Compute.lowerAscii`), as `lom-title`
+ * compares it.
+ */
+export const ObjectLang = relation("ObjectLang", { lang: keyText, langTag: keyText, node: uuid }, [
+  "node",
+]);
 
 /**
  * Each object's `xml:lang`, counted by {@link AssessmentObject}'s `langs`.
@@ -455,11 +485,12 @@ export const objectLangs = counted(on(ObjectLang, "node"), fin(AssessmentObject,
 
 /**
  * The entry by which a record names its document (`lom-identifier`), keyed by the record: the
- * document, its identifier, and an entry of one of the record's general categories whose token is
- * that identifier, with its category.
+ * document, its identifier ({@link ObjectIdentifier}'s), and an entry of one of the record's
+ * general categories whose token is that identifier, with its category.
  *
  * A row exists for every naming record that lists a general entry; its entry is the existential's
- * witness, so a record none of whose entries names its document has no row that holds.
+ * witness, so a record none of whose entries names its document, or whose document writes no
+ * identifier, has no row, and the existence refuses it.
  */
 export const LomObjectIdentifier = relation(
   "LomObjectIdentifier",
@@ -469,13 +500,14 @@ export const LomObjectIdentifier = relation(
 
 /**
  * The title string by which a record names its document (`lom-title`), keyed by the record: the
- * document, its title's value ({@link AssessmentObject}'s `titleValue`) and its `xml:lang`'s
- * case-folded value (`langTag`, empty where it states none), and a string of one of the record's
- * titles whose text has that value (`textValue`), with the string's case-folded `language`
- * (`languageTag`, empty where it has none).
+ * document, its title's value ({@link ObjectTitle}'s `titleValue`) and its language
+ * ({@link AssessmentObject}'s `langTag`, {@link noLanguage} where it states none), and a string of
+ * one of the record's titles whose text has that value (`textValue`), with the string's language
+ * (`languageTag`, {@link noLanguage} where it has none).
  *
  * A row exists for every naming record that has a general title; its string is the existential's
- * witness, so a record none of whose title strings names its document has no row that holds.
+ * witness, so a record none of whose title strings names its document, or whose document writes no
+ * title, has no row, and the existence refuses it.
  */
 export const LomObjectTitle = relation(
   "LomObjectTitle",
@@ -513,7 +545,9 @@ export const StatisticDate = relation.generated(
  *
  * A value that writes no `baseType` has no row: the usage data binding has no declaration to type
  * it, so it is its governing type's `xs:normalizedString` text, which every text is (spec reading
- * 105).
+ * 105). Nor does one whose `baseType` spells no code (`spelledBaseTypes`, as written): no type
+ * types its text, and the attribute's value domain refuses it alone, as a declaration's unspelled
+ * `base-type` is (lane NIL's audit, B11).
  */
 export const UsageValue = relation(
   "UsageValue",
@@ -594,7 +628,9 @@ export const metadataRelations = {
   LomStringLanguage,
   LomTitle,
   LomTitleString,
+  ObjectIdentifier,
   ObjectLang,
+  ObjectTitle,
   ResourceLomGeneral,
   StatisticDate,
   UsageValue,
@@ -774,6 +810,14 @@ const lastUpdateds = attributesOf("lastUpdated", statisticKinds);
 const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
 
 /**
+ * The `baseType` of each usage statistic's value that spells a code, as written
+ * (`spelledBaseTypes`): each has its {@link UsageValue}.
+ */
+const spelledUsageBaseTypes = select(Attribute, (a) =>
+  a.and(a.eq(a.name, "baseType"), a.eq(a.kind, usageValueKind), a.in(a.lexical, baseTypes)),
+);
+
+/**
  * Every statement over the metadata overlays, each `check` named by its oracle law:
  *
  * - **the resources:** each `Resource` has its {@link LomResource}, both ways; and its `named` is
@@ -796,8 +840,10 @@ const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
  *   `language` is its {@link LomString}'s, and whose compared forms are those two's ("E1
  *   derived").
  * - **the objects:** each item's and test's root has its {@link AssessmentObject}, one per document,
- *   with its `identifier` (in pieces), `title` and `xml:lang` copied, `langs` counting the last,
- *   and its title's and language's compared forms ("E1 derived").
+ *   with `langs` counting its `xml:lang` and its language's compared form; and each of its
+ *   `identifier` (in pieces), `title` and `xml:lang` is copied into its own row,
+ *   {@link ObjectIdentifier}, {@link ObjectTitle} or {@link ObjectLang}, with its compared form,
+ *   and no such row stands without its attribute ("E1 derived", spec reading 148).
  * - **`lom-identifier`:** a general entry of a naming record makes its record's
  *   {@link LomObjectIdentifier} exist, whose document is its record's object's, whose identifier is
  *   that document's, and whose entry is a general entry of the record with that token.
@@ -953,73 +999,77 @@ export const metadataLawsByName = {
       on(stringLanguageAttributes, "node", "lexical"),
       on(LomStringLanguage, "node", "language"),
     ),
+    check("E1_derived", LomStringLanguage, (s) =>
+      s.eq(s.languageTag, Compute.lowerAscii(s.language)),
+    ),
     contained(
       on(
         select(LomString, (s) => s.eq(s.languages, 1n)),
         "node",
-        "language",
+        "languageTag",
       ),
-      on(LomStringLanguage, "node", "language"),
+      on(LomStringLanguage, "node", "languageTag"),
     ),
-    check("E1_derived", LomString, (s) => s.or(s.eq(s.languages, 1n), s.eq(s.language, ""))),
+    check("E1_derived", LomString, (s) =>
+      s.or(s.eq(s.languages, 1n), s.eq(s.languageTag, noLanguage)),
+    ),
     contained(
       on(LomTitleString, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(on(titleStringNodes, "id", "stringValue"), on(LomTitleString, "node", "text")),
     contained(on(LomTitleString, "parent", "record"), on(LomTitle, "node", "record")),
-    contained(on(LomTitleString, "node", "language"), on(LomString, "node", "language")),
+    contained(on(LomTitleString, "node", "languageTag"), on(LomString, "node", "languageTag")),
     check("E1_derived", LomTitleString, (s) =>
-      s.and(
-        s.eq(s.kind, "lom:string"),
-        s.eq(s.textValue, Compute.replaceWhitespace(s.text)),
-        s.eq(s.languageTag, Compute.lowerAscii(s.language)),
-      ),
+      s.and(s.eq(s.kind, "lom:string"), s.eq(s.textValue, Compute.replaceWhitespace(s.text))),
     ),
     contained(
       on(AssessmentObject, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(
-      on(objectIdentifiers, "node", "lexical"),
-      on(AssessmentObject, "node", "identifierLexical"),
-    ),
-    contained(on(objectTitles, "node", "lexical"), on(AssessmentObject, "node", "title")),
     key(on(AssessmentObject, "document")),
-    objectLangs,
-    contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
-    contained(
-      on(
-        select(AssessmentObject, (o) => o.eq(o.langs, 1n)),
-        "node",
-        "lang",
-      ),
-      on(ObjectLang, "node", "lang"),
-    ),
     check("E1_derived", AssessmentObject, (o) =>
       o.and(
         o.in(o.kind, objectKinds),
         o.eq(o.parent, o.document),
-        o.eq(
-          o.identifierLexical,
-          Compute.concat(Compute.concat(o.identifierLead, o.identifier), o.identifierTrail),
-        ),
-        Compute.matches(o.identifier, identifierPattern),
-        o.or(o.eq(o.langs, 1n), o.eq(o.lang, "")),
-        o.eq(o.titleValue, Compute.replaceWhitespace(o.title)),
-        o.eq(o.langTag, Compute.lowerAscii(Compute.collapse(o.lang))),
+        o.or(o.eq(o.langs, 1n), o.eq(o.langTag, noLanguage)),
       ),
+    ),
+    contained(on(objectIdentifiers, "node", "lexical"), on(ObjectIdentifier, "node", "lexical")),
+    contained(on(ObjectIdentifier, "node"), on(objectIdentifiers, "node")),
+    contained(on(ObjectIdentifier, "node", "document"), on(AssessmentObject, "node", "document")),
+    key(on(ObjectIdentifier, "document")),
+    check("E1_derived", ObjectIdentifier, (o) =>
+      o.and(
+        o.eq(o.lexical, Compute.concat(Compute.concat(o.lead, o.identifier), o.trail)),
+        Compute.matches(o.identifier, identifierPattern),
+      ),
+    ),
+    contained(on(objectTitles, "node", "lexical"), on(ObjectTitle, "node", "title")),
+    contained(on(ObjectTitle, "node"), on(objectTitles, "node")),
+    contained(on(ObjectTitle, "node", "document"), on(AssessmentObject, "node", "document")),
+    key(on(ObjectTitle, "document")),
+    check("E1_derived", ObjectTitle, (o) => o.eq(o.titleValue, Compute.replaceWhitespace(o.title))),
+    objectLangs,
+    contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
+    check("E1_derived", ObjectLang, (o) =>
+      o.eq(o.langTag, Compute.lowerAscii(Compute.collapse(o.lang))),
+    ),
+    contained(
+      on(
+        select(AssessmentObject, (o) => o.eq(o.langs, 1n)),
+        "node",
+        "langTag",
+      ),
+      on(ObjectLang, "node", "langTag"),
     ),
     contained(on(LomObjectIdentifier, "record", "document"), on(LomObject, "record", "document")),
     contained(
       on(LomObjectIdentifier, "document", "identifier"),
-      on(AssessmentObject, "document", "identifier"),
+      on(ObjectIdentifier, "document", "identifier"),
     ),
     contained(on(LomObjectTitle, "record", "document"), on(LomObject, "record", "document")),
-    contained(
-      on(LomObjectTitle, "document", "title"),
-      on(AssessmentObject, "document", "titleValue"),
-    ),
+    contained(on(LomObjectTitle, "document", "title"), on(ObjectTitle, "document", "titleValue")),
     contained(
       on(LomObjectTitle, "document", "objectLang"),
       on(AssessmentObject, "document", "langTag"),
@@ -1041,7 +1091,10 @@ export const metadataLawsByName = {
     check("E1_derived", StatisticDate, (s) =>
       s.eq(s.lexical, Compute.concat(Compute.concat(s.lead, s.day), s.trail)),
     ),
-    contained(on(usageBaseTypes, "node", "lexical"), on(UsageValue, "node", "baseTypeLexical")),
+    contained(
+      on(spelledUsageBaseTypes, "node", "lexical"),
+      on(UsageValue, "node", "baseTypeLexical"),
+    ),
     contained(on(UsageValue, "node"), on(usageBaseTypes, "node")),
     contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
     check("E1_derived", UsageValue, (u) =>

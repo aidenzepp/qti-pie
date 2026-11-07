@@ -60,7 +60,11 @@ import type {
 } from "#pantry/import/overlays/interactions.ts";
 import { rowsOf as mappingRowsOf } from "#pantry/import/overlays/mapping.ts";
 import type { MappingRows } from "#pantry/import/overlays/mapping.ts";
-import { rowsOf as metadataRowsOf, objectRowsOfPackage } from "#pantry/import/overlays/metadata.ts";
+import {
+  rowsOf as metadataRowsOf,
+  namedDocumentOf,
+  objectRowsOfPackage,
+} from "#pantry/import/overlays/metadata.ts";
 import type { MetadataRows, NamedDocument, ObjectRows } from "#pantry/import/overlays/metadata.ts";
 import { rowsOf as operatorRowsOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows } from "#pantry/import/overlays/operators.ts";
@@ -285,10 +289,7 @@ export const overlayPartsOf = (
   const named = new Map<string, NamedDocument>();
   for (const { document, rows } of built) {
     if (document.listed.resourceType !== "none" && !named.has(document.listed.path)) {
-      named.set(document.listed.path, {
-        document: document.ids.idOf(0),
-        object: rows.metadata.AssessmentObject.values().next().value,
-      });
+      named.set(document.listed.path, namedDocumentOf(document.ids.idOf(0), rows.metadata));
     }
   }
 
