@@ -17,9 +17,9 @@ import { parseVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
  * shred, a fold and every law over each document it lists, with no database.
  *
  * Measured on 2026-11-05 with the grammar of W3 on the shared tree: the slowest package,
- * `BPIG_22April`, took under 10 s while three other suites ran beside it. The budget is the larger
- * of twice that and 60 s. Raise it only on a new measurement recorded here, never to make a run
- * pass.
+ * `BPIG_22April`, took under 10 s while three other suites ran beside it. Measured 2026-11-07:
+ * 9.6 s at a load average of 63 to 78, `BPIG_22April` again. The budget is the larger of twice that
+ * and 60 s. Raise it only on a new measurement recorded here, never to make a run pass.
  */
 const caseTimeoutMs = 60_000;
 

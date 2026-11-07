@@ -307,10 +307,10 @@ const reductionTries = settings.geneticRequested ? 400 : 30;
 
 /**
  * The test's timeout, in milliseconds. Measured on 2026-11-07, the free run (two streams of 432
- * candidates, their reductions and the kept documents) took 50 to 85 s at load averages of 50 to
- * 78 on 10 cores, and a run under `GR8DES_GENETIC=1` (two streams of 4,848) 811 s at about 50. The
- * budgets are about seven and four times those. Raise them only on a new measurement recorded
- * here.
+ * candidates, their reductions and the kept documents) took 50 to 85 s at load averages of 50 to 78
+ * on 10 cores, and a run under `GR8DES_GENETIC=1` (two streams of 4,848) 811 s at about 50.
+ * Measured 2026-11-07: 99.2 s at a load average of 63 to 73, the free run. The budgets are about
+ * six and four times those. Raise them only on a new measurement recorded here.
  */
 const testTimeoutMs = settings.geneticRequested ? 3_600_000 : 600_000;
 

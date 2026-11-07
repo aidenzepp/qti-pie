@@ -422,6 +422,7 @@ const productionCases: Gen<ProductionCase> = (source) => {
  * document through crust's reader, and the bounds box's 300 match texts of up to 649 code points
  * against patterns of counted repetitions, which JavaScript's backtracking engine tries split by
  * split.
+ * Measured 2026-11-07: 9.6 s at a load average of 63 to 73, the slowest box.
  */
 const boxTimeout = 120_000;
 

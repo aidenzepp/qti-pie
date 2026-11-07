@@ -302,11 +302,14 @@ const absence = await Effect.runPromise(
 );
 
 /**
- * The timeout, in milliseconds, of the hook that runs the XSD oracle over both versions' probes.
- * Measured on 2026-11-05 on a 10-CPU M2 Max at a load average near 12: 25 to 35 s. The budget is
- * four times that.
+ * The timeout, in milliseconds, of the hook that runs the XSD oracle over both versions' probes,
+ * and of the four tests that read the pinned XSDs. Measured 2026-11-07: 108.0 s at a load average
+ * of 76 to 87, the hook, beside three other suites that read the pinned XSDs, under `nice -n 15`;
+ * the slowest test took 9.1 s. The budget is twice the slowest, rounded up to the next minute. On
+ * 2026-11-05 the hook took 25 to 35 s at a load average near 12. Raise it only on a new measurement
+ * recorded here, never to make a run pass.
  */
-const hookTimeoutMs = 160_000;
+const hookTimeoutMs = 240_000;
 
 /**
  * One attribute candidate of the admission suite: its namespace, local name and class.

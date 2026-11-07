@@ -99,6 +99,7 @@ const schemas: readonly (readonly [SourcePath, (typeof schemaVersions)[number]])
  * How long reading the pinned XSDs and walking them may take: the two ASI XSDs are 18 MB each, and
  * a read of one took 3.2 s on 2026-11-05 at a load average of about 15, beside the swarm's other
  * suites. Twice the six reads' worst, rounded up.
+ * Measured 2026-11-07: 54.7 s at a load average of 63 to 73, the slower of its two tests.
  */
 const xsdTimeout = 120_000;
 
@@ -106,11 +107,12 @@ const xsdTimeout = 120_000;
  * How long one of the two compose searches may take, each a few hundred toy grammars composed in
  * turn. Vitest's 5 s default was met under load (seats PG and IN, 2026-11-06). Measured on
  * 2026-11-06 at `0f6264a` with this file's searches run alone on seeds 1 to 3: the projection
- * search took 3195, 2475 and 2573 ms and the restated search 940, 770 and 643 ms at one-minute
- * load averages of 14.6 to 16.0. Beside the whole free suite, on seeds 1, 101, 202, 303 and 202
- * again, they took 3704, 4074, 2908, 5168 and 7074 ms, and 1128, 1127, 879, 1655 and 1741 ms, at
- * loads of 26 to 28 where sampled. The budget is five times the slowest, 35.4 s, rounded up to the
- * next second. Raise it only on a new measurement recorded here, never to make a run pass.
+ * search took 3195, 2475 and 2573 ms and the restated search 940, 770 and 643 ms at one-minute load
+ * averages of 14.6 to 16.0. Beside the whole free suite, on seeds 1, 101, 202, 303 and 202 again,
+ * they took 3704, 4074, 2908, 5168 and 7074 ms, and 1128, 1127, 879, 1655 and 1741 ms, at loads of
+ * 26 to 28 where sampled. Measured 2026-11-07: 23.1 s at a load average of 63 to 73, the projection
+ * search, and the budget is the hang guard of 60 s, over twice that. Raise it only on a new
+ * measurement recorded here, never to make a run pass.
  */
 const searchTimeout = 60_000;
 

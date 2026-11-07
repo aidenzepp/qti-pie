@@ -74,6 +74,7 @@ const grammar = Effect.suspend(() => Effect.fromResult(composed()));
  * How long the first read of the composed grammar may take: one composition took 11.2 s on
  * 2026-11-05 at a load average of 41, beside the swarm's other suites. About five times that,
  * rounded up.
+ * Measured 2026-11-07: 0.1 s at a load average of 63 to 73, the slowest of its three tests.
  */
 const composeTimeout = 60_000;
 
@@ -118,6 +119,7 @@ const schemas: readonly (readonly [SourcePath, string])[] = [
 /**
  * How long reading one ASI XSD and walking it may take: an 18 MB read took 3.2 s on 2026-11-05 at
  * a load average of about 15 (`admission.test.ts`). Twice two reads' worst, rounded up.
+ * Measured 2026-11-07: 55.3 s at a load average of 63 to 73.
  */
 const xsdTimeout = 120_000;
 

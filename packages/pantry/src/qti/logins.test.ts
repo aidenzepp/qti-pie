@@ -20,8 +20,9 @@ import { scratchDirectory } from "#pantry/test/scratch.ts";
 const unusedCa = "an unused CA: this layer is built and released without connecting\n";
 
 /**
- * How long building the layer may take: the schema's artifacts are computed twice, for the base
- * and for the author role, about 50 s each under load (measured 2026-11-06).
+ * How long building the layer may take: the schema's artifacts are computed twice, for the base and
+ * for the author role, about 50 s each under load (measured 2026-11-06). Measured 2026-11-07:
+ * 205.8 s at a load average of 75, under V8 coverage, and 82.6 s at 63 to 73 without it.
  */
 const buildTimeoutMs = 900_000;
 

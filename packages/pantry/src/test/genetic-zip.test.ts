@@ -92,11 +92,11 @@ const budget: Budget = settings.geneticRequested
 const reduction = { batch: 60, kinds: 6, tries: 600 } as const;
 
 /**
- * The timeout, in milliseconds, of each test. Measured on 2026-11-07 at load averages of 70 to 78
- * on 10 cores: the box 1.4 to 2.5 s, the bred search of 1,700 archives 9.8 to 18.6 s, the writer's
- * 200 archives 0.3 to 1.1 s, each with its reductions. The free budget is six times the slowest,
- * rounded up, for a machine loaded further; the long one two hours. Raise it only on a new
- * measurement recorded here.
+ * The timeout, in milliseconds, of each test. Measured 2026-11-07: 18.6 s at a load average of 70
+ * to 78 on 10 cores, the slowest bred search of 1,700 archives (9.8 to 18.6 s); the box took 1.4 to
+ * 2.5 s and the writer's 200 archives 0.3 to 1.1 s, each with its reductions. The free budget is
+ * six times the slowest, rounded up, for a machine loaded further; the long one two hours. Raise it
+ * only on a new measurement recorded here.
  */
 const timeoutMs = settings.geneticRequested ? 7_200_000 : 120_000;
 

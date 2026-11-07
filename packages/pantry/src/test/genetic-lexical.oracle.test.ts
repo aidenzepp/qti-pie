@@ -93,18 +93,18 @@ const reduced = { findings: 12, tries: 400 } as const;
 
 /**
  * The timeout, in milliseconds, for the bounded run: the grammar and the sites, three `xmllint`
- * rounds of two processes each, and the reduction of what it found. Measured on 2026-11-07 at load
- * averages of 75 to 83 (seven runs, TEST_SEED=1, in clean archives with and without planted bugs):
- * the search took 152 to 191 s and the whole test 237 to 302 s, the slowest reducing 12 of 113
- * classes. The budget is twice the slowest, rounded up to the next minute. Raise it only on a new
- * measurement recorded here, never to make a run pass.
+ * rounds of two processes each, and the reduction of what it found. Measured 2026-11-07: 302 s at a
+ * load average of 75 to 83, the slowest whole test of seven runs (TEST_SEED=1, in clean archives
+ * with and without planted bugs): the search took 152 to 191 s and the whole test 237 to 302 s, the
+ * slowest reducing 12 of 113 classes. The budget is twice the slowest, rounded up to the next
+ * minute. Raise it only on a new measurement recorded here, never to make a run pass.
  */
 const boundedTimeoutMs = 660_000;
 
 /**
- * The timeout, in milliseconds, for the long run. Measured on 2026-11-07 at a load average near
- * 80 (two runs, TEST_SEED=1, 48,710 candidates): the search took 475 to 482 s and the whole test
- * 614 s. The budget is twice the slowest, rounded up to the next minute.
+ * The timeout, in milliseconds, for the long run. Measured 2026-11-07: 614 s at a load average of
+ * 80, the whole test of two runs near that load (TEST_SEED=1, 48,710 candidates), whose search took
+ * 475 to 482 s. The budget is twice the slowest, rounded up to the next minute.
  */
 const longTimeoutMs = 1_260_000;
 

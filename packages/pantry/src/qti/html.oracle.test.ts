@@ -30,6 +30,7 @@ import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned
  * whole, which takes some seconds beside the composed grammar.
+ * Measured 2026-11-07: 1.4 s at a load average of 63 to 73.
  */
 const buildTimeout = 60_000;
 

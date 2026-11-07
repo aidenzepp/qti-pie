@@ -354,6 +354,7 @@ const handlesOf = (name: string): readonly string[] =>
 /**
  * How long each exhaustive search of every relation or family may run: about ten times what each
  * took on 2026-11-06, a few seconds, under a load average of about 20.
+ * Measured 2026-11-07: 25.4 s at a load average of 63 to 73, the slowest search.
  */
 const searchTimeout = 120_000;
 

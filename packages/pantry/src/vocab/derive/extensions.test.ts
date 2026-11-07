@@ -73,8 +73,9 @@ const absence = await Effect.runPromise(
 
 /**
  * The timeout, in milliseconds, of the cache-gated tests: each reads both ASI XSDs, 37 MB, which
- * took 37 s for the deriver's run on 2026-11-05 at a load average near 45. The budget is four
- * times that.
+ * took 37 s for the deriver's run on 2026-11-05 at a load average near 45. The budget is four times
+ * that. Measured 2026-11-07: 54.1 s at a load average of 63 to 73, the regeneration, and 43.5 s at
+ * 80 to 83.
  */
 const cacheTimeoutMs = 150_000;
 

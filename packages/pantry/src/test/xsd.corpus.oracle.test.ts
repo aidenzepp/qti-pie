@@ -82,11 +82,11 @@ const oracleRoot = fileScratchDirectory("xsd-oracle-");
  * in both versions.
  *
  * Measured on 2026-11-05: each `xmllint` run over the 380 documents took 16.4 s of wall time at a
- * load average near 30 (3.4 s of CPU). The budget is to be set from the whole test's measured
- * time; until then it is 300 s. Raise it only on a new measurement recorded here, never to make a
- * run pass.
+ * load average near 30 (3.4 s of CPU). Measured 2026-11-07: 168.2 s at a load average of 63 to
+ * 78, the whole test, under `GR8DES_CORPUS=1`. The budget is twice that, rounded up to the next
+ * minute. Raise it only on a new measurement recorded here, never to make a run pass.
  */
-const testTimeoutMs = 300_000;
+const testTimeoutMs = 360_000;
 
 /**
  * Whether the XSD cache holds every pin, so `xmllint` can read them.
@@ -327,8 +327,8 @@ describe.skipIf(!settings.corpusRequested || !cached)(
 /**
  * The timeout, in milliseconds, for the libxml2 control: one `xmllint` run over four small
  * documents, which compiles the 3.0.0 XSDs once. Measured on 2026-11-05 under the shared tree's
- * load: over 5 s, and on 2026-11-07 at a load average near 70, 31.9 to 35.6 s, so the hang guard
- * is 90 s. Raise it only on a new measurement recorded here.
+ * load: over 5 s. Measured 2026-11-07: 35.6 s at a load average of 63 to 73, and 34.4 s at 70 to
+ * 74, so the hang guard is 90 s. Raise it only on a new measurement recorded here.
  */
 const controlTimeoutMs = 90_000;
 

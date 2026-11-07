@@ -64,9 +64,9 @@ const grammar = Result.getOrThrow(composed());
 
 /**
  * The timeout, in milliseconds, for the census test, which takes the census of the grammar built
- * above and writes one file: 1.2 s measured on 2026-11-05 at a load average near 30. The budget is
- * the larger of twice that and 20 s. Raise it only on a new measurement recorded here, never to
- * make a run pass.
+ * above and writes one file: 1.2 s measured on 2026-11-05 at a load average near 30. Measured
+ * 2026-11-07: 3.3 s at a load average of 75, under V8 coverage. The budget is the larger of twice
+ * that and 20 s. Raise it only on a new measurement recorded here, never to make a run pass.
  */
 const censusTimeoutMs = 20_000;
 

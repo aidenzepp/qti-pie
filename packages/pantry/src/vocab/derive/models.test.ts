@@ -105,11 +105,14 @@ const absence = await Effect.runPromise(
 
 /**
  * The timeout, in milliseconds, of the hook that reads both versions' schemas and runs the XSD
- * oracle over every probe. Measured on 2026-11-05 on a 10-CPU M2 Max at a load average near 12:
- * reading a version's 20 pinned files took 4 to 5 s and `xmllint` 7 to 10 s a version. The budget
- * is four times the larger total.
+ * oracle over every probe, and of each test under it. Measured 2026-11-07: 427.5 s at a load
+ * average of 76 to 87, the hook, beside three other suites that read the pinned XSDs, under
+ * `nice -n 15`; its slowest test took 103.9 s. The budget is twice the slowest, rounded up to the
+ * next minute. On 2026-11-05, at a load average near 12, reading a version's 20 pinned files took 4
+ * to 5 s and `xmllint` 7 to 10 s a version, and four times that, 240 s, cut the hook at the busier
+ * load. Raise it only on a new measurement recorded here, never to make a run pass.
  */
-const hookTimeoutMs = 240_000;
+const hookTimeoutMs = 900_000;
 
 /**
  * How long one search case may run: each reads precomputed verdicts, or derives one version's

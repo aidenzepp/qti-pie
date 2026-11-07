@@ -1,10 +1,10 @@
 /**
- * Every timeout a search runs under is a hang guard, never its budget: a search stops by its case
- * count (`runs`, an exhaustive `limit`), and its test's timeout is only the deadline past which it
- * hung. `@grizzle/testing`'s `searched` reads that timeout as the search's deadline and fails with
- * `DeadlineReached` once it arrives (`explore.ts`, `Run.deadline`), so a timeout near a search's
- * running time makes the search check less as the machine gets busier, and fail red where nothing
- * is wrong. Vitest's own default, 5 s, is a deadline no suite chose.
+ * Every timeout a test runs under is a hang guard, measured, never its budget: a search stops by
+ * its case count (`runs`, an exhaustive `limit`), and its test's timeout is only the deadline past
+ * which it hung. `@grizzle/testing`'s `searched` reads that timeout as the search's deadline and
+ * fails with `DeadlineReached` once it arrives (`explore.ts`, `Run.deadline`), so a timeout near a
+ * search's running time makes the search check less as the machine gets busier, and fail red where
+ * nothing is wrong. Vitest's own default, 5 s, is a deadline no suite chose.
  *
  * The guard reads every test file of `packages/pantry/src` and `packages/crust/src`, and each
  * package's `vite.config.ts`:
@@ -12,11 +12,24 @@
  * - Each test project states its `testTimeout` and `hookTimeout`, at least {@link hangGuardMs}, so no
  *   test runs under the 5 s default;
  * - Each test that calls `searched` and states a timeout of its own, or sits in a `describe` that
- *   states one, states at least {@link hangGuardMs}, a number or a constant of the file that holds
- *   one, so it reads.
+ *   states one, states at least {@link hangGuardMs}, a number or a constant that holds one, so it
+ *   reads;
+ * - Each constant a test, a `describe`, a `layer` or a hook of the free project states as its timeout
+ *   records in its doc comment a measurement taken at a load average of at least {@link busyLoad},
+ *   written `Measured <day>: <seconds> s at a load average of <least>`, or `of <least> to <most>`,
+ *   the least and most figures `uptime` gave through the run (its one-, five- and fifteen-minute
+ *   averages), of the slowest test or hook it times, and holds at least twice the slowest such
+ *   measurement. A budget measured on an idle machine is one a busy machine exceeds: the hooks of
+ *   `vocab/derive/declarations.test.ts` and `vocab/derive/models.test.ts`, measured at a load near
+ *   12 and given four times that, took 231 s and 427 s at a load of 76 to 87, past budgets of 160 s
+ *   and 240 s.
+ *
+ * The database project's files, named `*.db.test.ts` or `*.packaging.test.ts` or gated on the lease
+ * (`vite.config.ts` reads them so), run one at a time on a lease, which a free run does not hold,
+ * so the last rule leaves their constants to a measurement taken there.
  *
  * The floor is measured, not chosen: every suite was run once on 2026-11-07, pantry's free project
- * and crust's, each under `nice -n 15` with 3 workers at a load average of 64 to 73 (lane TD-B).
+ * and crust's, each under `nice -n 15` with 3 workers at a load average of 63 to 73 (lane TD-B).
  * The slowest test that took a project's timeout, re-run under it, ran 12.2 s at a load average of
  * 83 (`fixtures.foreign.test.ts`), so the floor, 60 s, is over 4× that, and every test that ran
  * past half of it states its own timeout, at least 2× its time there.
@@ -31,35 +44,50 @@ import { assert, describe, it } from "@effect/vitest";
 const hangGuardMs = 60_000;
 
 /**
- * The package folders the guard reads, each with its `src` and its `vite.config.ts`.
+ * The least load average a timeout's measurement may be taken at, of every figure `uptime` gave
+ * through the run: a busy machine's, as a run beside the other suites reaches it.
  */
-const packages = [
-  path.resolve(import.meta.dirname, "..", ".."),
-  path.resolve(import.meta.dirname, "..", "..", "..", "crust"),
-];
+const busyLoad = 60;
 
 /**
- * A test file the guard reads: its path, for the messages, and its text.
+ * The folder holding both packages, which a module's path is relative to.
  */
-interface Source {
-  readonly file: string;
-  readonly text: string;
+const packagesRoot = path.resolve(import.meta.dirname, "..", "..", "..");
+
+/**
+ * The package folders the guard reads, each with its `src` and its `vite.config.ts`, by the
+ * import alias its modules are reached by.
+ */
+const packages = { crust: "crust", pantry: "pantry" } as const;
+
+/**
+ * A measurement a timeout's doc comment records: how long the slowest test or hook it times took,
+ * in seconds, and the least load average `uptime` gave through the run.
+ */
+interface Measurement {
+  readonly load: number;
+  readonly seconds: number;
 }
 
 /**
- * Read every test file under a package's `src`.
- *
- * @param root - The package's folder.
- * @returns Its test files.
+ * A constant of a module: where it is declared, the measurements its doc comment records, and its
+ * milliseconds, the least number its initializer holds, or `unread` for one that holds none.
  */
-const testsOf = (root: string): readonly Source[] =>
-  readdirSync(path.join(root, "src"), { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".test.ts"))
-    .map((entry) => {
-      const file = path.join(entry.parentPath, entry.name);
+interface Constant {
+  readonly at: string;
+  readonly measured: readonly Measurement[];
+  readonly ms: number | "unread";
+}
 
-      return { file: path.relative(path.dirname(root), file), text: readFileSync(file, "utf-8") };
-    });
+/**
+ * A test file the guard reads: its path, for the messages, its text, and the constants it reaches
+ * by name, its own and those it imports.
+ */
+interface Source {
+  readonly constants: ReadonlyMap<string, Constant>;
+  readonly file: string;
+  readonly text: string;
+}
 
 /**
  * The offset just past a string literal, a comment, or none: what the reader skips whole, so a
@@ -90,11 +118,11 @@ const skipped = (text: string, at: number): number => {
 };
 
 /**
- * Split a call's arguments at its top-level commas.
+ * Split a bracketed list, a call's arguments or an object's entries, at its top-level commas.
  *
  * @param text - The module's text.
- * @param open - The offset of the call's opening parenthesis.
- * @returns The arguments' texts, and the offset just past the closing parenthesis.
+ * @param open - The offset of the list's opening bracket.
+ * @returns The items' texts, and the offset just past the closing bracket.
  */
 const argumentsAt = (text: string, open: number): readonly [readonly string[], number] => {
   const parts: string[] = [];
@@ -131,96 +159,6 @@ const argumentsAt = (text: string, open: number): readonly [readonly string[], n
 };
 
 /**
- * Read the numeric literals of an initializer.
- *
- * @param initializer - The text after a constant's `=`.
- * @returns Its numbers, `_` separators dropped.
- */
-const numbersIn = (initializer: string): readonly number[] =>
-  [...initializer.matchAll(/(?<![\w.])\d[\d_]*(?![\w.])/gu)].map(([digits]) =>
-    Number(digits.replaceAll("_", "")),
-  );
-
-/**
- * The milliseconds each exported numeric constant of the packages' sources holds, the less of a
- * conditional's two, for a timeout a test imports.
- */
-const exported: ReadonlyMap<string, number> = new Map(
-  packages
-    .flatMap((root) =>
-      readdirSync(path.join(root, "src"), { recursive: true, withFileTypes: true })
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
-        .map((entry) => readFileSync(path.join(entry.parentPath, entry.name), "utf-8")),
-    )
-    .flatMap((text) =>
-      [...text.matchAll(/\bexport const (?<name>\w+)\s*=\s*(?<value>[^;]+);/gu)].flatMap(
-        ({ groups }) => {
-          const numbers = numbersIn(groups?.["value"] ?? "");
-
-          return numbers.length === 0
-            ? []
-            : [[groups?.["name"] ?? "", Math.min(...numbers)] as const];
-        },
-      ),
-    ),
-);
-
-/**
- * Read a timeout's milliseconds: a numeric literal, or a constant of the file or an exported one
- * whose initializer is a numeric literal, or a conditional of two, of which the less.
- *
- * @param text - The module's text.
- * @param written - The timeout as written.
- * @returns The milliseconds, or `unread` for a timeout the guard cannot read.
- */
-const millisOf = (text: string, written: string): number | "unread" => {
-  if (/^\d[\d_]*$/u.test(written)) {
-    return Number(written.replaceAll("_", ""));
-  }
-
-  const initializer = new RegExp(`\\bconst ${written}\\s*=\\s*(?<value>[^;]+);`, "u").exec(text)
-    ?.groups?.["value"];
-  const numbers = numbersIn(initializer ?? "");
-
-  return numbers.length > 0 ? Math.min(...numbers) : (exported.get(written) ?? "unread");
-};
-
-/**
- * Read the timeout a test or a `describe` call states: a `{ timeout }` option among its arguments,
- * or a numeric literal or constant past its function (its third argument).
- *
- * @param text - The module's text.
- * @param parts - The call's arguments, its title first.
- * @returns The milliseconds, `unread`, or none where it states no timeout.
- */
-const statedTimeout = (text: string, parts: readonly string[]): number | "unread" | undefined => {
-  const option = parts
-    .slice(1)
-    .map((part) => part.trim())
-    .filter((part) => part.startsWith("{"))
-    .map((part) => /^\{[^{]*?\btimeout\s*:\s*(?<value>[\w$]+)/u.exec(part)?.groups?.["value"])
-    .find((value) => value !== undefined);
-  const third = (parts[1] ?? "").trim().startsWith("{") ? undefined : parts[2]?.trim();
-  if (option !== undefined) {
-    return millisOf(text, option);
-  }
-
-  if (third === undefined || third === "") {
-    return undefined;
-  }
-
-  return /^[\w$]+$/u.test(third) ? millisOf(text, third) : "unread";
-};
-
-/**
- * A test that calls `searched` under a timeout it states: where, its title, and the milliseconds.
- */
-interface Stated {
-  readonly at: string;
-  readonly timeout: number | "unread";
-}
-
-/**
  * Mark where a module's string literals and comments stand, so a call written inside one, as a
  * planted case's text, is no call.
  *
@@ -244,6 +182,291 @@ const quotedIn = (text: string): readonly (readonly [number, number])[] => {
 };
 
 /**
+ * Read the numeric literals of an initializer.
+ *
+ * @param initializer - The text after a constant's `=`.
+ * @returns Its numbers, `_` separators dropped.
+ */
+const numbersIn = (initializer: string): readonly number[] =>
+  [...initializer.matchAll(/(?<![\w.])\d[\d_]*(?![\w.])/gu)].map(([digits]) =>
+    Number(digits.replaceAll("_", "")),
+  );
+
+/**
+ * Read the measurements a doc comment records, each `Measured <day>: <seconds> s at a load average
+ * of <least>`, or `of <least> to <most>`, a line break of the comment read as a space.
+ *
+ * @param doc - The doc comment's text.
+ * @returns Each measurement, in order.
+ */
+const measurementsIn = (doc: string): readonly Measurement[] =>
+  [
+    ...doc
+      .replaceAll(/\s*\n\s*\*\s*/gu, " ")
+      .matchAll(
+        /\bMeasured \d{4}-\d{2}-\d{2}: (?<seconds>\d+(?:\.\d+)?) s at a load average of (?<load>\d+(?:\.\d+)?)/gu,
+      ),
+  ].map(({ groups }) => ({
+    load: Number(groups?.["load"] ?? ""),
+    seconds: Number(groups?.["seconds"] ?? ""),
+  }));
+
+/**
+ * Read a module's constants, each with the doc comment just above it.
+ *
+ * @param file - The module's path, relative to {@link packagesRoot}.
+ * @param text - The module's text.
+ * @returns Each constant by its name, and whether the module exports it.
+ */
+const constantsIn = (
+  file: string,
+  text: string,
+): readonly (readonly [string, Constant, boolean])[] =>
+  [
+    ...text.matchAll(
+      /(?:\/\*\*(?<doc>(?:[^*]|\*(?!\/))*)\*\/\s*)?(?<exported>export\s+)?\bconst (?<name>[\w$]+)\s*=\s*(?<value>[^;]+);/gu,
+    ),
+  ].map(({ groups }) => {
+    const name = groups?.["name"] ?? "";
+    const numbers = numbersIn(groups?.["value"] ?? "");
+
+    return [
+      name,
+      {
+        at: `${file}: ${name}`,
+        measured: measurementsIn(groups?.["doc"] ?? ""),
+        ms: numbers.length === 0 ? "unread" : Math.min(...numbers),
+      },
+      groups?.["exported"] !== undefined,
+    ] as const;
+  });
+
+/**
+ * Read every TypeScript module of both packages' `src`.
+ *
+ * @returns Each module's path, relative to {@link packagesRoot}, and its text.
+ */
+const modulesOf = (): readonly (readonly [string, string])[] =>
+  Object.values(packages).flatMap((name) =>
+    readdirSync(path.join(packagesRoot, name, "src"), { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+      .map((entry) => {
+        const file = path.join(entry.parentPath, entry.name);
+
+        return [path.relative(packagesRoot, file), readFileSync(file, "utf-8")] as const;
+      }),
+  );
+
+/**
+ * The constants each module of both packages exports, by the module's path.
+ */
+const exportedBy: ReadonlyMap<string, ReadonlyMap<string, Constant>> = new Map(
+  modulesOf().map(([file, text]) => [
+    file,
+    new Map(
+      constantsIn(file, text).flatMap(([name, constant, exported]) =>
+        exported ? [[name, constant] as const] : [],
+      ),
+    ),
+  ]),
+);
+
+/**
+ * Read the constants a module imports from either package by its alias, `#pantry/…` or `#crust/…`,
+ * each under the name the module reads it by.
+ *
+ * @param text - The module's text.
+ * @returns Each imported constant the guard finds exported.
+ */
+const importedIn = (text: string): readonly (readonly [string, Constant])[] =>
+  [
+    ...text.matchAll(
+      /\bimport\s*(?:type\s*)?\{(?<names>[^}]*)\}\s*from\s*["']#(?<alias>pantry|crust)\/(?<module>[^"']+)["']/gu,
+    ),
+  ].flatMap(({ groups }) => {
+    const alias = groups?.["alias"] === "crust" ? packages.crust : packages.pantry;
+    const exported = exportedBy.get(path.join(alias, "src", groups?.["module"] ?? ""));
+
+    return (groups?.["names"] ?? "").split(",").flatMap((written) => {
+      const [name = "", local = name] = written
+        .trim()
+        .replace(/^type\s+/u, "")
+        .split(/\s+as\s+/u);
+      const constant = exported?.get(name);
+
+      return constant === undefined ? [] : [[local, constant] as const];
+    });
+  });
+
+/**
+ * Read a test file: its own constants and those it imports, each by the name it reads it by.
+ *
+ * @param file - The file's path, for the messages.
+ * @param text - The file's text.
+ * @returns The source.
+ */
+const sourceOf = (file: string, text: string): Source => ({
+  constants: new Map([
+    ...importedIn(text),
+    ...constantsIn(file, text).map(([name, constant]) => [name, constant] as const),
+  ]),
+  file,
+  text,
+});
+
+/**
+ * Read every test file under a package's `src`.
+ *
+ * @param name - The package's folder name.
+ * @returns Its test files.
+ */
+const testsOf = (name: string): readonly Source[] =>
+  readdirSync(path.join(packagesRoot, name, "src"), { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".test.ts"))
+    .map((entry) => {
+      const file = path.join(entry.parentPath, entry.name);
+
+      return sourceOf(path.relative(packagesRoot, file), readFileSync(file, "utf-8"));
+    });
+
+/**
+ * Whether a test file runs in the database project, as `vite.config.ts` reads it: by its name, or
+ * by the lease gate its text names. The gate's name is matched as a pattern, so this file's own
+ * text does not name it and move the guard there.
+ *
+ * @param source - The test file.
+ * @returns Whether it is a database file.
+ */
+const inDatabaseProject = ({ file, text }: Source): boolean =>
+  /\.(?:db|packaging)\.test\.ts$/u.test(file) || /has[L]ease/u.test(text);
+
+/**
+ * Read a timeout's milliseconds: a numeric literal, a constant the file reaches whose initializer
+ * holds a number, or a conditional of two, of which the less.
+ *
+ * @param source - The file the timeout is written in.
+ * @param written - The timeout as written.
+ * @returns The milliseconds, or `unread` for a timeout the guard cannot read.
+ */
+const millisOf = (source: Source, written: string): number | "unread" => {
+  const timeout = written.trim();
+  const conditional = /^[^?:]+\?(?<when>[^:]+):(?<otherwise>[^:]+)$/u.exec(timeout)?.groups;
+  if (conditional !== undefined) {
+    const either = [conditional["when"] ?? "", conditional["otherwise"] ?? ""].map((branch) =>
+      millisOf(source, branch),
+    );
+
+    return either.includes("unread") ? "unread" : Math.min(...either.map(Number));
+  }
+
+  if (/^\d[\d_]*$/u.test(timeout)) {
+    return Number(timeout.replaceAll("_", ""));
+  }
+
+  return source.constants.get(timeout)?.ms ?? "unread";
+};
+
+/**
+ * A call of a test, a `describe`, a `layer` or a hook: its callee, its arguments, and where it
+ * starts and ends.
+ */
+interface Call {
+  readonly callee: string;
+  readonly end: number;
+  readonly parts: readonly string[];
+  readonly start: number;
+}
+
+/**
+ * The hooks whose second argument is their timeout.
+ */
+const hooks: ReadonlySet<string> = new Set(["afterAll", "afterEach", "beforeAll", "beforeEach"]);
+
+/**
+ * Find a module's calls of tests, `describe`s, `layer`s and hooks, outside its string literals and
+ * comments.
+ *
+ * @param text - The module's text.
+ * @returns Each call, in order.
+ */
+const callsIn = (text: string): readonly Call[] => {
+  const quoted = quotedIn(text);
+
+  return [
+    ...text.matchAll(
+      /\b(?<callee>describe|it|test|layer|afterAll|afterEach|beforeAll|beforeEach|\w+(?=\.effect\b))(?:\.\w+(?:\([^)]*\))?)*\s*\(/gu,
+    ),
+  ].flatMap((call) => {
+    if (quoted.some(([start, past]) => start <= call.index && call.index < past)) {
+      return [];
+    }
+
+    const [parts, end] = argumentsAt(text, call.index + call[0].length - 1);
+
+    return [{ callee: call.groups?.["callee"] ?? "", end, parts, start: call.index }];
+  });
+};
+
+/**
+ * Read the `timeout` entry of an options object.
+ *
+ * @param part - An argument's text.
+ * @returns The entry's value as written, or none where the argument is no object or states none.
+ */
+const optionTimeout = (part: string): string | undefined => {
+  const object = part.trim();
+  if (!object.startsWith("{")) {
+    return undefined;
+  }
+
+  const [entries] = argumentsAt(object, 0);
+
+  return entries
+    .map((entry) => /^\s*timeout\s*(?::(?<value>[\s\S]+))?$/u.exec(entry))
+    .map((found) => (found === null ? undefined : (found.groups?.["value"]?.trim() ?? "timeout")))
+    .find((value) => value !== undefined);
+};
+
+/**
+ * Read the timeout a call states, as written: a hook's second argument, a `layer`'s `timeout`
+ * option, or a test's or a `describe`'s `{ timeout }` option among its arguments or the number or
+ * constant past its function (its third argument).
+ *
+ * @param call - The call.
+ * @returns The timeout as written, or none where it states none, or a test or `describe` has no
+ *   written title.
+ */
+const timeoutOf = ({ callee, parts }: Call): string | undefined => {
+  if (hooks.has(callee)) {
+    return parts[1]?.trim();
+  }
+
+  if (callee === "layer") {
+    return optionTimeout(parts[1] ?? "");
+  }
+
+  if (!/^["'`]/u.test((parts[0] ?? "").trim())) {
+    return undefined;
+  }
+
+  const option = parts
+    .slice(1)
+    .map(optionTimeout)
+    .find((value) => value !== undefined);
+  const third = (parts[1] ?? "").trim().startsWith("{") ? undefined : parts[2]?.trim();
+
+  return option ?? (third === "" ? undefined : third);
+};
+
+/**
+ * A test that calls `searched` under a timeout it states: where, its title, and the milliseconds.
+ */
+interface Stated {
+  readonly at: string;
+  readonly timeout: number | "unread";
+}
+
+/**
  * Find every search's stated timeout in a test file: each test call whose body calls `searched`,
  * with the timeout it states, else the innermost `describe` around it that states one.
  *
@@ -251,45 +474,70 @@ const quotedIn = (text: string): readonly (readonly [number, number])[] => {
  * @returns Each stated timeout.
  */
 export const searchTimeouts = (source: Source): readonly Stated[] => {
-  const { file, text } = source;
   const scopes: {
     readonly end: number;
     readonly start: number;
     readonly timeout: number | "unread";
   }[] = [];
   const stated: Stated[] = [];
-  const quoted = quotedIn(text);
-  for (const call of text.matchAll(
-    /\b(?<callee>describe|it|test|\w+(?=\.effect\b))(?:\.\w+(?:\([^)]*\))?)*\s*\(/gu,
-  )) {
-    if (quoted.some(([start, past]) => start <= call.index && call.index < past)) {
+  for (const call of callsIn(source.text)) {
+    const title = (call.parts[0] ?? "").trim();
+    if (hooks.has(call.callee) || call.callee === "layer" || !/^["'`]/u.test(title)) {
       continue;
     }
 
-    const open = call.index + call[0].length - 1;
-    const [parts, end] = argumentsAt(text, open);
-    const title = (parts[0] ?? "").trim();
-    if (!/^["'`]/u.test(title)) {
-      continue;
-    }
-
-    const own = statedTimeout(text, parts);
-    if (call.groups?.["callee"] === "describe") {
+    const written = timeoutOf(call);
+    const own = written === undefined ? undefined : millisOf(source, written);
+    if (call.callee === "describe") {
       if (own !== undefined) {
-        scopes.push({ end, start: call.index, timeout: own });
+        scopes.push({ end: call.end, start: call.start, timeout: own });
       }
 
       continue;
     }
 
-    const around = scopes.findLast(({ end: last, start }) => start < call.index && last > end);
+    const around = scopes.findLast(({ end, start }) => start < call.start && end > call.end);
     const timeout = own ?? around?.timeout;
-    if (timeout !== undefined && parts.slice(1).some((part) => /\bsearched\(/u.test(part))) {
-      stated.push({ at: `${file}: ${title.slice(1, 80)}`, timeout });
+    if (timeout !== undefined && call.parts.slice(1).some((part) => /\bsearched\(/u.test(part))) {
+      stated.push({ at: `${source.file}: ${title.slice(1, 80)}`, timeout });
     }
   }
 
   return stated;
+};
+
+/**
+ * Find every constant a test file states as a timeout: each name in a test's, a `describe`'s, a
+ * `layer`'s or a hook's timeout that names a constant the file reaches whose initializer holds a
+ * number.
+ *
+ * @param source - The test file.
+ * @returns Each such constant, once for each call that states it.
+ */
+const namedTimeouts = (source: Source): readonly Constant[] =>
+  callsIn(source.text).flatMap((call) =>
+    [...(timeoutOf(call) ?? "").matchAll(/(?<![\w$.])[A-Za-z_$][\w$]*/gu)].flatMap(([name]) => {
+      const constant = source.constants.get(name);
+
+      return constant === undefined || constant.ms === "unread" ? [] : [constant];
+    }),
+  );
+
+/**
+ * Why a constant is no measured timeout: `idle` where none of its measurements was taken at a load
+ * average of {@link busyLoad} or more, and `short` where it holds less than twice the slowest of
+ * those; none where it is one.
+ *
+ * @param constant - The constant.
+ * @returns Why it fails the rule, or none.
+ */
+const unmeasured = ({ measured, ms }: Constant): "idle" | "short" | undefined => {
+  const busy = measured.filter(({ load }) => load >= busyLoad).map(({ seconds }) => seconds);
+  if (busy.length === 0) {
+    return "idle";
+  }
+
+  return ms === "unread" || ms < 2 * 1000 * Math.max(...busy) ? "short" : undefined;
 };
 
 /**
@@ -310,28 +558,28 @@ export const projectTimeouts = (config: string): readonly (readonly [string, num
  * @returns Each search's stated timeout, in order.
  */
 const planted = (text: string): readonly (number | "unread")[] =>
-  searchTimeouts({ file: "planted.test.ts", text }).map(({ timeout }) => timeout);
+  searchTimeouts(sourceOf("planted.test.ts", text)).map(({ timeout }) => timeout);
 
 describe("the timeouts a test runs under", () => {
   it("states each project's testTimeout and hookTimeout, at least the hang guard, in both packages", () => {
-    for (const root of packages) {
-      const config = readFileSync(path.join(root, "vite.config.ts"), "utf-8");
+    for (const name of Object.values(packages)) {
+      const config = readFileSync(path.join(packagesRoot, name, "vite.config.ts"), "utf-8");
       const projects = Math.max(1, [...config.matchAll(/\bname\s*:\s*"/gu)].length);
       const timeouts = projectTimeouts(config);
 
       for (const key of ["testTimeout", "hookTimeout"]) {
-        const stated = timeouts.filter(([name]) => name === key).map(([, ms]) => ms);
-        assert.lengthOf(stated, projects, `${root}/vite.config.ts states ${key} in each project`);
+        const stated = timeouts.filter(([held]) => held === key).map(([, ms]) => ms);
+        assert.lengthOf(stated, projects, `${name}/vite.config.ts states ${key} in each project`);
         assert.isTrue(
           stated.every((ms) => ms >= hangGuardMs),
-          `${root}/vite.config.ts: ${key} ${stated.join(", ")} below the hang guard ${String(hangGuardMs)}`,
+          `${name}/vite.config.ts: ${key} ${stated.join(", ")} below the hang guard ${String(hangGuardMs)}`,
         );
       }
     }
   });
 
   it("states no search a timeout below the hang guard, and each one as a number it reads", () => {
-    const short = packages
+    const short = Object.values(packages)
       .flatMap(testsOf)
       .flatMap(searchTimeouts)
       .filter(({ timeout }) => timeout === "unread" || timeout < hangGuardMs)
@@ -344,10 +592,31 @@ describe("the timeouts a test runs under", () => {
     );
   });
 
+  it("times the free project by constants measured at a busy load, each twice its slowest", () => {
+    const failing = new Map(
+      Object.values(packages)
+        .flatMap(testsOf)
+        .filter((source) => !inDatabaseProject(source))
+        .flatMap(namedTimeouts)
+        .flatMap((constant) => {
+          const why = unmeasured(constant);
+
+          return why === undefined ? [] : [[constant.at, `${constant.at} (${why})`] as const];
+        }),
+    );
+
+    assert.deepStrictEqual(
+      [...failing.values()].toSorted(),
+      [],
+      `timeout constants with no measurement at a load average of ${String(busyLoad)} or more (idle), or under twice their slowest (short)`,
+    );
+  });
+
   it("finds a planted search under a deadline, a project on the 5 s default and an unread timeout", () => {
     // Oracle: the rule above, on the named cases. Live: a search under the hang guard, stated
-    // itself, by a constant, and by its describe. Wild: a search at vitest's 5 s, one under a
-    // describe's 30 s, an unread timeout, and a configuration that states none.
+    // itself, by a constant, by its describe, and by a conditional of two. Wild: a search at
+    // vitest's 5 s, one under a describe's 30 s, an unread timeout, and a configuration that
+    // states none.
 
     assert.deepStrictEqual(
       planted(
@@ -360,9 +629,10 @@ describe("the timeouts a test runs under", () => {
           'describe("f", { timeout: 30_000 }, () => { it.effect("g", (ctx) => searched(ctx, x)); });',
           'it.effect("h", (ctx) => searched(ctx, x), timeoutOf(x));',
           'it.effect("i", () => Effect.void, 5_000);',
+          'it.effect("k", (ctx) => searched(ctx, x), { timeout: long ? 900_000 : guard });',
         ].join("\n"),
       ),
-      [120_000, 600_000, 300_000, 5000, 30_000, "unread"],
+      [120_000, 600_000, 300_000, 5000, 30_000, "unread", 600_000],
     );
     assert.deepStrictEqual(
       planted('it.effect("j", (ctx) => searched(ctx, x), 5_000);').filter(
@@ -372,5 +642,48 @@ describe("the timeouts a test runs under", () => {
       "the planted deadline-bounded search is below the hang guard",
     );
     assert.deepStrictEqual(projectTimeouts("export default defineConfig({ test: {} });"), []);
+  });
+
+  it("finds a planted constant measured on an idle machine, or under twice its slowest", () => {
+    // Oracle: the rule above, on the named cases. Live: a constant measured at a busy load and
+    // over twice it, read by a test, a hook and a layer, and by a conditional's branch. Wild: the
+    // prose the two hooks that timed out held ("at a load average near 12"), a canonical
+    // measurement at a load of 12, a busy measurement the budget is under twice of, a constant with
+    // no doc comment, and a literal, which names no constant.
+    const source = sourceOf(
+      "planted.test.ts",
+      [
+        "/**",
+        " * Measured 2026-11-07: 23.1 s at a load average",
+        " * of 63 to 73, its slowest test.",
+        " */",
+        "const busy = 60_000;",
+        "/** Measured on 2026-11-05 at a load average near 12: 30 s. The budget is four times that. */",
+        "const idle = 160_000;",
+        "/** Measured 2026-11-05: 30 s at a load average of 12. */",
+        "const quiet = 160_000;",
+        "/** Measured 2026-11-07: 231.4 s at a load average of 76 to 87. */",
+        "const short = 160_000;",
+        "const bare = 60_000;",
+        'it.effect("a", () => Effect.void, busy);',
+        'describe("b", { timeout: idle }, () => {});',
+        "beforeAll(() => preload, quiet);",
+        'layer(Suite, { timeout: short })("c", (it) => {});',
+        'it.effect("d", () => Effect.void, { timeout: long ? busy : bare });',
+        'it.effect("e", () => Effect.void, 5_000);',
+      ].join("\n"),
+    );
+
+    assert.deepStrictEqual(
+      namedTimeouts(source).map((constant) => [constant.at, unmeasured(constant)]),
+      [
+        ["planted.test.ts: busy", undefined],
+        ["planted.test.ts: idle", "idle"],
+        ["planted.test.ts: quiet", "idle"],
+        ["planted.test.ts: short", "short"],
+        ["planted.test.ts: busy", undefined],
+        ["planted.test.ts: bare", "idle"],
+      ],
+    );
   });
 });
