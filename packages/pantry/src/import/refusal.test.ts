@@ -11,12 +11,15 @@ import {
   drawn,
   fin,
   fold,
+  generated,
   key,
+  lexical,
   Monoid,
   mirrors,
   natural,
   on,
   ordered,
+  pg,
   pred,
   relation,
   select,
@@ -1489,7 +1492,9 @@ const modulesOf = Effect.gen(function* modulesOf() {
 });
 
 /**
- * Every text field of a schema's stored relations, with its pattern law.
+ * Every text field of a schema's stored relations, with its pattern law. A field's type is read as
+ * any value, as {@link generatedLaws} reads it, so a relation with a function-valued type
+ * (`MapKeyFloat`'s `pg["double precision"]`) is read, and a pattern of another shape throws.
  *
  * @param relations - The schema's `relations`.
  * @returns Each relation's text fields.
@@ -1499,21 +1504,68 @@ const patternFields = (
 ): readonly { readonly field: string; readonly law: Law; readonly relation: string }[] => {
   const Pattern = Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String });
   const Stored = Schema.Struct({
-    fields: Schema.Record(Schema.String, Schema.Struct({ pattern: Schema.optional(Pattern) })),
+    fields: Schema.Record(Schema.String, Schema.Unknown),
     kind: Schema.Literal("relation"),
     name: Schema.String,
   });
 
   return Object.values(relations).flatMap((value) =>
     Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
-      Object.entries(fields).flatMap(([field, { pattern }]) =>
-        pattern === undefined
-          ? []
-          : [{ field, law: { ...pattern, kind: "pattern" } satisfies Law, relation: name }],
+      Object.entries(fields).flatMap(([field, type]) =>
+        Predicate.hasProperty(type, "pattern") && type.pattern !== undefined
+          ? [
+              {
+                field,
+                law: {
+                  ...Schema.decodeUnknownSync(Pattern)(type.pattern),
+                  kind: "pattern",
+                } satisfies Law,
+                relation: name,
+              },
+            ]
+          : [],
       ),
     ),
   );
 };
+
+/**
+ * The law of every generated field of a schema's stored relations, which grizzle names when the
+ * field's column is NULL at a row (23502): it maps every generated column, whatever its term reads.
+ * A field's type is read as any value, since some are functions (`pg["double precision"]` is
+ * `pg.float(p)`'s), so every stored relation decodes and none drops out of the census unread.
+ *
+ * @param relations - The schema's `relations`.
+ * @returns Each generated field's law.
+ */
+const generatedLaws = (relations: AnySchema["relations"]): readonly Law[] => {
+  const Stored = Schema.Struct({
+    fields: Schema.Record(Schema.String, Schema.Unknown),
+    kind: Schema.Literal("relation"),
+    name: Schema.String,
+  });
+
+  return Object.values(relations).flatMap((value) =>
+    Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
+      Object.entries(fields).flatMap(([field, type]): readonly Law[] =>
+        Predicate.hasProperty(type, "writing") && type.writing === "generated"
+          ? [{ field, kind: "generated", relation: name }]
+          : [],
+      ),
+    ),
+  );
+};
+
+/**
+ * The generated laws of a schema's relations that no row of the table owns, by identity.
+ *
+ * @param relations - The schema's `relations`.
+ * @returns The identities, which an outcome naming one would refuse to rule.
+ */
+const unownedGenerated = (relations: AnySchema["relations"]): readonly string[] =>
+  generatedLaws(relations)
+    .map(lawIdentity)
+    .filter((identity) => !lawRules.has(identity));
 
 /**
  * The composed `Qti` schema, loaded by the census alone: it composes every `src/qti/` module that
@@ -1566,4 +1618,40 @@ describe("the census of the composed Qti schema", () => {
       }),
     120_000,
   );
+
+  it.effect(
+    "owns the law of every generated field of Qti's stored relations, and states no other generated law",
+    () =>
+      Effect.gen(function* generations() {
+        const Qti = yield* composedQti;
+        const raised = generatedLaws(Qti.relations).map(lawIdentity);
+        const stated = statedLaws.flatMap(([law]) =>
+          law.kind === "generated" ? [lawIdentity(law)] : [],
+        );
+
+        assert.isNotEmpty(raised, "Qti declares no generated field the census reads");
+        assert.deepStrictEqual(
+          unownedGenerated(Qti.relations),
+          [],
+          "generated fields whose law no row of the table owns",
+        );
+        assert.deepStrictEqual(
+          stated.filter((identity) => !raised.includes(identity)),
+          [],
+          "generated laws the table states for no generated field of Qti",
+        );
+      }),
+    120_000,
+  );
+
+  it("names a generated field no row owns, so a field Qti gains without one fails the census", () => {
+    const Planted = relation.generated(
+      "Planted",
+      { form: lexical(pg.bigint), node: uuid },
+      ["node"],
+      (r) => ({ value: generated(pg.bigint, Compute.cast(r.form, pg.bigint)) }),
+    );
+
+    assert.deepStrictEqual(unownedGenerated({ Planted }), ["generated Planted.value"]);
+  });
 });

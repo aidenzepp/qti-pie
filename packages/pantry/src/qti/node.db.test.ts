@@ -19,13 +19,13 @@
  * constraints PostgreSQL checks in an order it does not promise).
  *
  * The census (C12) reads the catalog: Node's foreign keys into Node are exactly the tree's three
- * axes, so N3, N5's predecessor copy and N7's last slot merged; the rest are the other slices'
- * foreign keys, as each reported its laws' objects.
+ * axes, so N3, N5's predecessor copy and N7's last slot merged; the rest are, target for target,
+ * the keys `Qti`'s statements put on Node into another relation.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import type { DbConnection } from "@bjornpagen/grizzle";
-import { Array as Arr, Effect, Option, Redacted, Result } from "effect";
+import { Array as Arr, Effect, Option, Order, Redacted, Result } from "effect";
 import { Client, DatabaseError } from "pg";
 import type { QueryResultRow } from "pg";
 import { describe } from "vitest";
@@ -57,12 +57,14 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { keysOf } from "#pantry/test/statements.ts";
 
 /**
  * The author login's PostgreSQL role, `<schema>__<login>`.
@@ -260,6 +262,55 @@ interface Catalogue {
   readonly columns: readonly Column[];
   readonly constraints: readonly Constraint[];
 }
+
+/**
+ * The relation a foreign key of `Node`'s table targets, by its declared name, as grizzle's comment
+ * on the constraint states it: `foreign key Node(…) to <Relation>(…)`.
+ *
+ * @param constraint - The foreign key.
+ * @returns The target relation's name.
+ * @throws {Error} When the comment names no target relation.
+ */
+const targetRelationOf = (constraint: Constraint): string => {
+  const named = [...constraint.comment.matchAll(/\) to (?<target>[A-Z][\dA-Za-z]*)\(/gu)].at(-1)
+    ?.groups?.["target"];
+  if (named === undefined) {
+    throw new Error(
+      `The comment on ${constraint.name} names no target relation, so the census can't place the foreign key: "${constraint.comment}". Read the comment grizzle now writes on a foreign key and match its target.`,
+    );
+  }
+
+  return named;
+};
+
+/**
+ * Fold names, each one key's, into the count of keys per name, by name.
+ *
+ * @param names - The name of each key.
+ * @returns Each name and how many keys hold it.
+ */
+const countPerName = (names: readonly string[]): readonly (readonly [string, number])[] =>
+  [...Map.groupBy(names, (name) => name)]
+    .map(([name, held]) => [name, held.length] as const)
+    .toSorted(([left], [right]) => Order.String(left, right));
+
+/**
+ * The foreign keys a schema's statements put on `Node`'s table into another stored relation, as
+ * the count per target relation: one for each containment from `Node` (or a selection of it), one
+ * for the `Node` half of each mirrors, and one for the proof key into its last member of each
+ * family `Node` owns.
+ *
+ * @param statements - The schema's statements.
+ * @returns Each target relation and how many of Node's keys it takes.
+ */
+const outOfNode = (statements: readonly unknown[]) => {
+  const keys = keysOf(statements);
+
+  return countPerName([
+    ...keys.laws.filter(({ from, to }) => from === "Node" && to !== "Node").map(({ to }) => to),
+    ...keys.axes.filter(({ from, to }) => to === "Node" && from !== "Node").map(({ from }) => from),
+  ]);
+};
 
 /**
  * The role a constraint of `Node` plays, read off its name (a check this slice names) or the
@@ -1702,19 +1753,13 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, C12: a containment of an axis's shape merges into
           // the axis, so no foreign key of N3, N5's predecessor copy or N7's last slot stands apart;
-          // and the other slices' reports of the objects their laws put on Node (Q5.04: its four
-          // arms, OpenElementName and the root kind; Q5.05 and Q5.04: the attribute and namespace
-          // families' last axes; Q5.11: the existence mirrors of AreaMapping, MatchTable and
-          // InterpolationTable; the overlays that hold a row for each node of their kinds, each from
-          // a generated id column of Node; reading 127: Quotation's). The list is the foreign keys
-          // a scratch `grizzle generate` drafted on `qti.node` on 2026-11-06 (grizzle `64f0427`),
-          // with review wave 1's readings in place.
-          // RETAKE AT Z (lane N2): the second list below is that draft's, not the regenerated
-          // _init's. Replace it with the catalog's list from the regenerated database, the target
-          // of each foreign key of `qti.node` into another table (`SELECT confrelid::regclass FROM
-          // pg_constraint WHERE conrelid = 'qti.node'::regclass AND contype = 'f'`), once per key,
-          // and check each new target against the slice that put its law on Node.
-          // Bound: every constraint of Node's table.
+          // and, for every other target, `Qti`'s own statements, each containment from Node, each
+          // mirrors' Node half and each family Node owns, so a key grizzle merged, split or
+          // dropped, or a law a slice put on Node unstated, changes a target's count. On the
+          // drafted _init (20261107020714) that is 40 keys into 38 relations: Document and Site
+          // take two each, and Rounding (ccccaeb3), LomResourceType and LomResourceTypeSource
+          // (96a7ea14) are the three the 2026-11-06 hand list lacked.
+          // Bound: every constraint of Node's table and every statement of Qti.
           Effect.gen(function* census() {
             const client = yield* loginSession;
             const catalogue = yield* catalogueOf(client);
@@ -1726,47 +1771,11 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
               "predecessor axis",
               "last axis",
             ]);
-            assert.sameMembers(
-              foreign.filter(({ target }) => target !== "qti.node").map(({ target }) => target),
-              [
-                "qti.attribute",
-                "qti.namespace",
-                "qti.comment",
-                "qti.pi",
-                "qti.doctype",
-                "qti.document",
-                "qti.document",
-                "qti.open_element_name",
-                "qti.area_mapping",
-                "qti.interpolation_table",
-                "qti.match_table",
-                "qti.value",
-                "qti.value_set",
-                "qti.expression",
-                "qti.literal",
-                "qti.processing",
-                "qti.template_default",
-                "qti.identity_text",
-                "qti.lom_language",
-                "qti.lom_entry",
-                "qti.lom_general",
-                "qti.lom_record",
-                "qti.lom_string",
-                "qti.lom_title",
-                "qti.lom_title_string",
-                "qti.reference_path",
-                "qti.item_ref_target",
-                "qti.named",
-                "qti.section",
-                "qti.section_member",
-                "qti.section_ordering",
-                "qti.section_selection",
-                "qti.site",
-                "qti.site",
-                "qti.stimulus_ref",
-                "qti.variable_mapping",
-                "qti.quotation",
-              ],
+            assert.deepStrictEqual(
+              countPerName(
+                foreign.filter(({ target }) => target !== "qti.node").map(targetRelationOf),
+              ),
+              outOfNode(Qti.statements),
             );
 
             const owner = intoNode.find((constraint) => roleOf(constraint) === "owner axis");
