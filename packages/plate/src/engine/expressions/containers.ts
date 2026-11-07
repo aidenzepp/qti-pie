@@ -361,8 +361,8 @@ const repeatOnce: Evaluator<"repeat"> = (expression, scope, evaluate) =>
  *   gives NULL with no pass at all, so it draws nothing. That NULL, and the budget's, is of the
  *   model's static base type of the `qti-repeat` ({@link staticBaseOf}).
  *
- * The container is of the first pass's base type ({@link baseOf}), and so is the NULL of a pass
- * that gives no value or would pass the bound.
+ * The container is of the first pass's base type ({@link baseOf}), and the NULL of a pass that
+ * gives no value or would pass the bound is of that pass's.
  *
  * The size of the container is bounded and the number of passes with it; the time the passes take,
  * a nested drawing `qti-repeat`'s included, is the host's (the operator's ruling `afb7e648`).
