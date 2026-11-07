@@ -16,15 +16,15 @@
  * on the binding's table, which PostgreSQL judges as the row is inserted, before the deferred
  * `declarationRef` that "Binding declared" was.
  *
- * A declaration that writes no cardinality, an empty one, or one no cardinality spells is held as
- * `single`, which `Declaration`'s own `E1_derived` refuses as well as AL3 or the value domain
- * (`cardinalityOf`'s design; lane NIL's audit, B11). The oracle names those two alone (the ruling
- * of 2026-11-06), so those four states are held here to the declaration's own rules and to no
- * refusal under `binding-fit`; their agreement with the oracle waits on B11, no `Declaration` row
- * for a cardinality written as none.
+ * A declaration that writes no cardinality, an empty one, one no cardinality spells or a padded one
+ * has no `Declaration` row, and no declaration row stands beside its bindings
+ * (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`; lane NIL's audit, B11), so AL3
+ * or the value domain refuses it alone, as the oracle names it (the ruling of 2026-11-06). Before,
+ * it was held as `single`, which `Declaration`'s own `E1_derived` refused too, and this suite
+ * tolerated that rule for those four states; it now holds every state to the oracle alike.
  */
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
+import { layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
@@ -32,10 +32,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { bindingCase, bindingSites, bindingStates } from "#pantry/test/binding-cases.ts";
-import type { BindingState } from "#pantry/test/binding-cases.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle } from "#pantry/test/locate.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
@@ -44,19 +41,6 @@ import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
  * The every-relation package the cases edit.
  */
 const base = everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 });
-
-/**
- * The states whose declaration's cardinality the declarations overlay holds as `single`, though it
- * writes none or none spelled.
- */
-const heldSingle: ReadonlySet<BindingState> = new Set(["absent", "empty", "unspelled", "padded"]);
-
-/**
- * The rules a declaration whose cardinality is held as `single` is refused under, each its own:
- * AL3's required attribute, the cardinality's value domain, and `Declaration`'s `E1_derived`. No
- * fit law's, `binding-fit`, is among them.
- */
-const declarationRules: readonly string[] = ["required-attribute", "attribute-lexical", "derived"];
 
 /**
  * Every (site, state) of the scope, by its number.
@@ -100,17 +84,7 @@ describe.skipIf(!hasLease)("import/binding-fit.db.test.ts, on the lease", () => 
 
                 const label = `${drawn.site.kind} ${drawn.site.attribute} ${drawn.state}`;
                 const dir = yield* scopedPackage(bindingCase(base, drawn.site, drawn.state));
-                if (!heldSingle.has(drawn.state)) {
-                  yield* importAgreesWithOracle(dir, label);
-
-                  return;
-                }
-
-                const refused = yield* Effect.flip(importPackage(dir));
-                assert.instanceOf(refused, ImportRefused, `${label}: ${refused.message}`);
-                if (refused instanceof ImportRefused) {
-                  assert.include(declarationRules, refused.rule, `${label}: ${refused.message}`);
-                }
+                yield* importAgreesWithOracle(dir, label);
               }).pipe(Effect.scoped),
           ),
         ),

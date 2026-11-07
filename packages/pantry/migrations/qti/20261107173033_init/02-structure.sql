@@ -6221,6 +6221,10 @@ ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_document_identi
 
 ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_document_identifier_predecessor_7zm76nlpw7" FOREIGN KEY ("document", "identifier", "__predecessor_declarations_4bpmrvn66z") REFERENCES "qti"."declaration" ("document", "identifier", "__index_declarations_dueviynmtk") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_node_fmwvj5nb36" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_ytivgtmxbd") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_node_wyv42lidub" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_lpxsr4hbto") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_node_document_kind_start_nearest_nmnr7f3tx7" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_node_ozaaoxvyso" FOREIGN KEY ("__node_b36zjq4sbg") REFERENCES "qti"."attribute" ("__node_o7dh7vw64w") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;

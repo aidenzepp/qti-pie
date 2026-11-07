@@ -15,17 +15,16 @@
  * For every site and every state:
  *
  * - Every binding row of the site has exactly one declaration row where a response declaration holds
- *   its name, and none where none does; each declaration row names that declaration, never the nil
- *   uuid, and carries the cardinality its `Declaration` row holds;
+ *   its name and spells its cardinality, and none otherwise; each declaration row names that
+ *   declaration, never the nil uuid, and carries the cardinality its `Declaration` row holds;
  * - The oracle raises "Binding declared" exactly when no response declaration holds the name;
  * - Over a declaration that spells its cardinality, the oracle raises each fit law the closed
  *   `BindingFit` and `RecordBindingFit` say the schema's statements refuse over the declaration
  *   rows, and no other;
  * - Over one that writes none or none spelled, the oracle raises no fit law (the orchestrator's
- *   ruling of 2026-11-06), and the schema's statements refuse none over the `single` its
- *   `Declaration` row holds, as every site of the scope takes a single response. A site whose
- *   interaction does not would part them, until no `Declaration` row is written for such a
- *   cardinality (lane NIL's audit, B11).
+ *   ruling of 2026-11-06), and the importer writes no `Declaration` row for it and no declaration
+ *   row beside its bindings, so no law reads a cardinality it does not have (lane NIL's audit, B11:
+ *   a missing value is a row of its own relation, never a sentinel).
  *
  * The database's own verdict over the same scope is `src/import/binding-fit.db.test.ts`'s.
  */
@@ -171,7 +170,7 @@ const holds = (site: BindingSite, state: BindingState) =>
     assert.isNotEmpty(bindings, `${label}: the importer writes no binding row`);
     assert.strictEqual(
       declarations.length,
-      expected.declared ? bindings.length : 0,
+      expected.typed ? bindings.length : 0,
       `${label}: ${String(declarations.length)} declaration rows beside ${String(bindings.length)} bindings`,
     );
 
@@ -225,10 +224,9 @@ const holds = (site: BindingSite, state: BindingState) =>
       [],
       `${label}: a fit law judges an untyped binding:\n${shown}`,
     );
-    assert.deepStrictEqual(
-      [...misfits],
-      [],
-      `${label}: the schema's statements refuse the single a Declaration row holds for no cardinality written`,
+    assert.isUndefined(
+      declared,
+      `${label}: a Declaration row stands for a declaration whose cardinality is unwritten or spells nothing`,
     );
   });
 

@@ -133,9 +133,11 @@ const added = (
 });
 
 /**
- * GEN-A's boundary seeds (2026-11-07), each a typed attribute written outside its type's lexical
- * space. A declaration's `base-type` written outside it, and its `cardinality` padded into a
- * spelled one, are B11's cases: VD's patch reads those two through their own domains.
+ * GEN-A's boundary seeds (2026-11-07), and lane PG's five over a declaration's `base-type` and
+ * `cardinality`, each a typed attribute written outside its type's lexical space. A declaration's
+ * `base-type` written outside it, and its `cardinality` padded into a spelled one, are B11's cases:
+ * the oracle reads those two as their types read them, through their own domains, with no
+ * collapse, since each enumerates a restriction of `xs:string`, whose whiteSpace is `preserve`.
  */
 const seeds: readonly Seed[] = [
   onChoice(
@@ -157,6 +159,31 @@ const seeds: readonly Seed[] = [
     'cardinality=" single" on an outcome declaration',
     shipped.outcome,
     shipped.outcome.replace('cardinality="single"', 'cardinality=" single"'),
+  ),
+  onChoice(
+    'base-type="+0" on an outcome declaration',
+    shipped.outcome,
+    shipped.outcome.replace('base-type="float"', 'base-type="+0"'),
+  ),
+  onChoice(
+    'base-type=" integer" on a response declaration',
+    shipped.response,
+    shipped.response.replace('base-type="identifier"', 'base-type=" integer"'),
+  ),
+  onChoice(
+    'base-type="URI" on an outcome declaration',
+    shipped.outcome,
+    shipped.outcome.replace('base-type="float"', 'base-type="URI"'),
+  ),
+  onChoice(
+    'base-type="-INF" on an outcome declaration',
+    shipped.outcome,
+    shipped.outcome.replace('base-type="float"', 'base-type="-INF"'),
+  ),
+  onChoice(
+    'cardinality=" record" on an outcome declaration',
+    shipped.outcome,
+    shipped.outcome.replace('cardinality="single"', 'cardinality=" record"'),
   ),
   onChoice(
     'max-choices="" on a choice interaction',

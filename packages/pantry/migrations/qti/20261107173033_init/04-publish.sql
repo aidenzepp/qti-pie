@@ -5447,6 +5447,10 @@ COMMENT ON CONSTRAINT "__declaration_fk_document_identifier_copy_lqwhv7ymiz" ON 
 
 COMMENT ON CONSTRAINT "__declaration_fk_document_identifier_predecessor_7zm76nlpw7" ON "qti"."declaration" IS 'foreign key Declaration(document, identifier, the predecessor of the index of the family ChoiceVariableName.declarations) to Declaration(document, identifier, the index of the family ChoiceVariableName.declarations)';
 
+COMMENT ON CONSTRAINT "__declaration_fk_node_fmwvj5nb36" ON "qti"."declaration" IS 'foreign key Declaration(node) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-context-declaration","qti-outcome-declaration","qti-response-declaration","qti-template-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"cardinality"}})';
+
+COMMENT ON CONSTRAINT "__declaration_fk_node_wyv42lidub" ON "qti"."declaration" IS 'foreign key Declaration(node) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-context-declaration","qti-outcome-declaration","qti-response-declaration","qti-template-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}})';
+
 COMMENT ON CONSTRAINT "__declaration_fk_node_document_kind_start_nearest_nmnr7f3tx7" ON "qti"."declaration" IS 'foreign key Declaration(node, document, kind, start, nearest, version, parent) to Node(id, document, kind, start, nearest, version, parent)';
 
 COMMENT ON CONSTRAINT "__declaration_fk_node_ozaaoxvyso" ON "qti"."declaration" IS 'foreign key Declaration(node where {"kind":"compare","left":{"field":"baseTypeLexical","kind":"field"},"op":"ne","right":{"kind":"literal","value":""}}) to Attribute(node where {"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-context-declaration","qti-outcome-declaration","qti-response-declaration","qti-template-declaration"]} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"base-type"}})';

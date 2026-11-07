@@ -14,7 +14,9 @@ import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
-import { BaseType, Cardinality, DeclarationKind } from "#pantry/grammar/install.ts";
+import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
+import { recordCardinality, spelledCardinalities } from "#pantry/grammar/compose.ts";
+import { DeclarationKind } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -90,25 +92,6 @@ export interface Pieces {
 const noBaseType: BaseTypeHandle = "none";
 
 /**
- * The `Cardinality` handle of a record.
- */
-const record: CardinalityHandle = "record";
-
-/**
- * The `BaseType` handles a lexical form spells: every one but the null object.
- */
-const spelledBaseTypes: ReadonlyMap<string, BaseTypeHandle> = new Map(
-  BaseType.handles.flatMap((handle) => (handle === noBaseType ? [] : [[handle, handle] as const])),
-);
-
-/**
- * The `Cardinality` handles, each spelled as its lexical form.
- */
-const spelledCardinalities: ReadonlyMap<string, CardinalityHandle> = new Map(
-  Cardinality.handles.map((handle) => [handle, handle] as const),
-);
-
-/**
  * The declaration kinds, each a `NodeKind` handle that is its own `DeclarationKind` handle.
  */
 const declarationKinds: ReadonlyMap<string, DeclarationKindHandle> = new Map(
@@ -153,51 +136,113 @@ export const piecesOf = (lexical: string): Pieces => {
  *   `Declaration_base_type` or `E1_derived` refuses.
  */
 export const baseTypeOf = (lexical: string | undefined): BaseTypeHandle =>
-  lexical === undefined ? noBaseType : (spelledBaseTypes.get(lexical) ?? noBaseType);
+  lexical === undefined || !spelledBaseTypes.has(lexical) ? noBaseType : lexical;
 
 /**
- * Read the code of a `cardinality` from its lexical form (C17).
- *
- * @param lexical - The lexical form.
- * @returns The handle it spells; `single` where it spells none, which `E1_derived` refuses, since
- *   `single`'s lexical form is not the one written.
+ * The lexical forms of the three attributes a declaration's row reads, each none where unwritten.
  */
-export const cardinalityOf = (lexical: string): CardinalityHandle =>
-  spelledCardinalities.get(lexical) ?? "single";
+export interface DeclarationLexicals {
+  readonly baseType: string | undefined;
+  readonly cardinality: string | undefined;
+  readonly identifier: string | undefined;
+}
 
 /**
- * The fields a declaring element gives every row that copies its declaration, and its kind's
- * `DeclarationKind`, none for an element that declares nothing.
+ * A declaration as its row holds it: its identifier as written and in its pieces, and the codes its
+ * `base-type` and `cardinality` spell, with their lexical forms (`""` for a `base-type` it does not
+ * write, whose code is `none`, a record's).
+ */
+export interface TypedDeclaration {
+  readonly baseType: BaseTypeHandle;
+  readonly baseTypeLexical: string;
+  readonly cardinality: CardinalityHandle;
+  readonly cardinalityLexical: string;
+  readonly identifier: Pieces;
+  readonly identifierLexical: string;
+}
+
+/**
+ * Read a declaration as its row holds it, where it has one: its `identifier` written and naming
+ * something once collapsed, its `cardinality` written and spelling a handle (an enumeration whose
+ * whitespace is preserved, so a padded one spells none), and its `base-type` unwritten or spelling
+ * one (C17).
+ *
+ * Every other declaration has no row, and no row anywhere stands for its identifier, type or
+ * cardinality: a missing value is a row of its own relation, never a sentinel (lane NIL's audit,
+ * B10 and B11). Each such declaration breaks AL3 (a required `identifier` or `cardinality`
+ * unwritten) or its attribute's value domain (written and spelling nothing), the one rule it is
+ * refused by (the orchestrator's ruling of 2026-11-06), and no law reads a type or a name it does
+ * not have. The overlays that read declarations, the bindings', the references' and the tables',
+ * read them through this, so they agree on which have rows.
+ *
+ * @param lexical - The lexical forms of its `identifier`, `base-type` and `cardinality`.
+ * @returns The declaration, or none where it has no row.
+ */
+export const typedDeclarationOf = (
+  lexical: DeclarationLexicals,
+): Option.Option<TypedDeclaration> => {
+  const identifier = piecesOf(lexical.identifier ?? "");
+
+  return lexical.identifier === undefined ||
+    identifier.name === "" ||
+    lexical.cardinality === undefined ||
+    !spelledCardinalities.has(lexical.cardinality) ||
+    (lexical.baseType !== undefined && !spelledBaseTypes.has(lexical.baseType))
+    ? Option.none()
+    : Option.some({
+        baseType: lexical.baseType ?? noBaseType,
+        baseTypeLexical: lexical.baseType ?? "",
+        cardinality: lexical.cardinality,
+        cardinalityLexical: lexical.cardinality,
+        identifier,
+        identifierLexical: lexical.identifier,
+      });
+};
+
+/**
+ * The fields a declaration gives every row that copies it, and its kind's `DeclarationKind`.
  */
 export interface DeclaredFields {
   readonly baseType: BaseTypeHandle;
   readonly cardinality: CardinalityHandle;
-  readonly declarationKind: Option.Option<DeclarationKindHandle>;
+  readonly declarationKind: DeclarationKindHandle;
   readonly identifier: string;
 }
 
 /**
  * Read the fields a declaring element gives every row that copies its declaration
- * (`declarationRef`), as {@link Declaration}'s builder writes them: its identifier without its
- * outer whitespace ({@link piecesOf}), the base type its `base-type` spells or `none`
- * ({@link baseTypeOf}), the cardinality its `cardinality` spells or `single`
- * ({@link cardinalityOf}), and its kind's `DeclarationKind`. Every overlay that resolves against a
- * declaration or copies one reads them here, so the database's `declarationRef` containments hold
- * by construction.
+ * (`declarationRef`), as {@link Declaration}'s builder writes them ({@link typedDeclarationOf}):
+ * its identifier without its outer whitespace, the codes its `base-type` and `cardinality` spell,
+ * and its kind's `DeclarationKind`. Every overlay that resolves against a declaration or copies one
+ * reads them here, so the database's `declarationRef` containments hold by construction.
+ *
+ * An element that declares nothing has none, and so has a declaration with no `Declaration` row,
+ * whose identifier or cardinality is unwritten or spells nothing, or whose base type spells
+ * nothing: no row copies a declaration that has none (lane NIL's audit, B11).
  *
  * @param kind - The element's kind.
  * @param attribute - Reads one of its attributes' lexical form, none where it is unwritten.
- * @returns The fields; the kind none for an element that declares nothing.
+ * @returns The fields, or none.
  */
 export const declaredFieldsOf = (
   kind: string,
   attribute: (name: string) => string | undefined,
-): DeclaredFields => ({
-  baseType: baseTypeOf(attribute("base-type")),
-  cardinality: cardinalityOf(attribute("cardinality") ?? ""),
-  declarationKind: Option.fromUndefinedOr(declarationKinds.get(kind)),
-  identifier: piecesOf(attribute("identifier") ?? "").name,
-});
+): Option.Option<DeclaredFields> =>
+  Option.flatMap(Option.fromUndefinedOr(declarationKinds.get(kind)), (declarationKind) =>
+    Option.map(
+      typedDeclarationOf({
+        baseType: attribute("base-type"),
+        cardinality: attribute("cardinality"),
+        identifier: attribute("identifier"),
+      }),
+      (declared) => ({
+        baseType: declared.baseType,
+        cardinality: declared.cardinality,
+        declarationKind,
+        identifier: declared.identifier.name,
+      }),
+    ),
+  );
 
 /**
  * Index a document's attribute rows by their element and name.
@@ -307,9 +352,9 @@ const tupleOf = (reading: Reading, node: NodeRow<Composed>) => ({
 });
 
 /**
- * Add a declaration's row, and its outcome range where it writes a scale attribute.
- *
- * A required attribute that is absent leaves its field empty, and AL3 refuses the element.
+ * Add a declaration's row, and its outcome range where it writes a scale attribute, where it has a
+ * row ({@link typedDeclarationOf}): one whose identifier or cardinality is unwritten or spells
+ * nothing has neither, nor any value set, value or field below it.
  *
  * @param reading - The document.
  * @param node - The declaration's node.
@@ -320,22 +365,27 @@ const addDeclaration = (
   node: NodeRow<Composed>,
   declarationKind: DeclarationKindHandle,
 ): void => {
-  const identifierLexical = valueOf(reading, node, "identifier") ?? "";
-  const { lead, trail } = piecesOf(identifierLexical);
-  const { baseType, cardinality, identifier } = declaredFieldsOf(node.kind, (name) =>
-    valueOf(reading, node, name),
-  );
+  const typed = typedDeclarationOf({
+    baseType: valueOf(reading, node, "base-type"),
+    cardinality: valueOf(reading, node, "cardinality"),
+    identifier: valueOf(reading, node, "identifier"),
+  });
+  if (Option.isNone(typed)) {
+    return;
+  }
+
+  const declared = typed.value;
   reading.rows.Declaration.set(node.id, {
     ...tupleOf(reading, node),
-    baseType,
-    baseTypeLexical: valueOf(reading, node, "base-type") ?? "",
-    cardinality,
-    cardinalityLexical: valueOf(reading, node, "cardinality") ?? "",
+    baseType: declared.baseType,
+    baseTypeLexical: declared.baseTypeLexical,
+    cardinality: declared.cardinality,
+    cardinalityLexical: declared.cardinalityLexical,
     declarationKind,
-    identifier,
-    identifierLead: lead,
-    identifierLexical,
-    identifierTrail: trail,
+    identifier: declared.identifier.name,
+    identifierLead: declared.identifier.lead,
+    identifierLexical: declared.identifierLexical,
+    identifierTrail: declared.identifier.trail,
   });
 
   const scale = {
@@ -406,7 +456,11 @@ const addValue = (
     text: reading.derived.text.get(node.id) ?? "",
   });
 
-  if (set.cardinality === record || fieldIdentifier !== undefined || fieldBaseType !== undefined) {
+  if (
+    set.cardinality === recordCardinality ||
+    fieldIdentifier !== undefined ||
+    fieldBaseType !== undefined
+  ) {
     const { lead, name, trail } = piecesOf(fieldIdentifier ?? "");
     reading.rows.RecordField.set(node.id, {
       ...tupleOf(reading, node),
@@ -421,9 +475,10 @@ const addValue = (
 };
 
 /**
- * Build the O2 overlay rows of a document: a row per declaration, per value set of a declaration,
- * per value of a value set and per record field, and an outcome range per outcome declaration that
- * writes a scale attribute.
+ * Build the O2 overlay rows of a document: a row per declaration that has one
+ * ({@link typedDeclarationOf}), per value set of such a declaration, per value of a value set and
+ * per record field, and an outcome range per such outcome declaration that writes a scale
+ * attribute.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -458,4 +513,40 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
   }
 
   return reading.rows;
+};
+
+/**
+ * The names a document's declarations hold that only a declaration with no row holds
+ * ({@link typedDeclarationOf}): its identifier written, its cardinality unwritten or spelling
+ * nothing, or its base type spelling nothing. No reference to such a name is written, in place
+ * either: the declaration's own law refuses it alone (lane NIL's audit, B11).
+ *
+ * @param doc - The document's tree, as shred gives it.
+ * @param ids - The ids its rows are written under.
+ * @returns Each name, under the document's node.
+ */
+export const untypedNamesOf = (
+  doc: XdmDocument<Composed>,
+  ids: DocumentIds,
+): readonly { readonly document: NodeId; readonly name: string }[] => {
+  const flat = flatten(doc, ids.idOf);
+  const attributes = attributesOf(flat);
+  const typed = new Set<string>();
+  const untyped = new Set<string>();
+  for (const node of flat.nodes.filter(({ kind }) => declarationKinds.has(kind))) {
+    const lexical = (name: string) => attributes.get(node.id)?.get(name);
+    const identifier = lexical("identifier");
+    if (identifier !== undefined) {
+      const held = typedDeclarationOf({
+        baseType: lexical("base-type"),
+        cardinality: lexical("cardinality"),
+        identifier,
+      });
+      (Option.isSome(held) ? typed : untyped).add(piecesOf(identifier).name);
+    }
+  }
+
+  return [...untyped]
+    .filter((name) => !typed.has(name))
+    .map((name) => ({ document: flat.document.node, name }));
 };

@@ -79,11 +79,6 @@ type DeclarationCopy = Pick<
 type BaseTypeHandle = Addition<typeof Mapping>["baseType"];
 
 /**
- * A `DeclarationKind` handle.
- */
-type DeclarationKindHandle = Addition<typeof Mapping>["declarationKind"];
-
-/**
  * The map keys of a float mapping that hold a typed value, as `floatKeys` selects them.
  */
 const floatKey = new RegExp(floatKeyPattern, "u");
@@ -419,9 +414,9 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
  * Build the mapping overlays' rows of one document.
  *
  * A declared overlay copies its parent's declaration fields as `Declaration`'s builder writes them
- * (`#pantry/import/overlays/declarations.ts` `declaredFieldsOf`). A parent that is no declaration,
- * which the content model never admits, takes the response declaration's kind, so the copy is one
- * no `Declaration` row holds, and the database refuses it.
+ * (`#pantry/import/overlays/declarations.ts` `declaredFieldsOf`), and exists only below a
+ * declaration with a `Declaration` row: a table below one with no row, or below no declaration,
+ * which the content model never admits, has no row, and its parent's own law refuses it.
  *
  * A map entry with no `map-key` has no `MapKey` row, and AL3 refuses the element. A key past the
  * key-text bound keeps its `MapKey` row and its typed row, whose `keyText` fields alone refuse it
@@ -456,20 +451,16 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     start: node.start,
     version: node.version,
   });
-  const declarationOf = (node: NodeRow<Composed>): DeclarationCopy => {
-    const { declarationKind, ...fields } = declaredFieldsOf(
-      byId.get(node.parent)?.kind ?? "",
-      (name) => valueOf(node.parent, name),
-    );
-
-    return {
-      ...fields,
-      declarationKind: Option.getOrElse(
-        declarationKind,
-        (): DeclarationKindHandle => "qti-response-declaration",
+  // Each declaration with a `Declaration` row, as that row holds it (`declaredFieldsOf`): a
+  // table hangs only below one, and copies it; one with no row has no table rows either, as its
+  // own law refuses it alone (lane NIL's audit, B11).
+  const declarations = new Map(
+    rows.nodes.flatMap((node) =>
+      Option.toArray(declaredFieldsOf(node.kind, (name) => valueOf(node.id, name))).map(
+        (declared): readonly [NodeId, DeclarationCopy] => [node.id, declared],
       ),
-    };
-  };
+    ),
+  );
 
   const areaMappings = new Map<string, Addition<typeof AreaMapping>>();
   const lookupValues = new Map<string, Addition<typeof LookupValue>>();
@@ -485,28 +476,26 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   const lookupTables = new Map<string, Addition<typeof LookupTable>>();
 
   for (const node of rows.nodes) {
-    const declared = () => ({
-      ...tupleOf(node),
-      ...declarationOf(node),
-      declaration: node.parent,
-    });
-
-    if (node.kind === "qti-mapping") {
-      mappings.set(node.id, declared());
-    } else if (node.kind === "qti-area-mapping") {
-      areaMappings.set(node.id, declared());
-    } else if (node.kind === "qti-match-table" || node.kind === "qti-interpolation-table") {
-      lookupTables.set(node.id, declared());
+    for (const declaration of Option.toArray(Option.fromNullishOr(declarations.get(node.parent)))) {
+      const declared = { ...tupleOf(node), ...declaration, declaration: node.parent };
+      if (node.kind === "qti-mapping") {
+        mappings.set(node.id, declared);
+      } else if (node.kind === "qti-area-mapping") {
+        areaMappings.set(node.id, declared);
+      } else if (node.kind === "qti-match-table" || node.kind === "qti-interpolation-table") {
+        lookupTables.set(node.id, declared);
+      }
     }
 
     const lookupAttribute = lookupAttributeOf.get(node.kind);
     const lookupValue =
       lookupAttribute === undefined ? undefined : valueOf(node.id, lookupAttribute);
     const table = lookupAttribute === "default-value" ? node : byId.get(node.parent);
-    if (lookupValue !== undefined && table !== undefined) {
+    const tableDeclaration = table === undefined ? undefined : declarations.get(table.parent);
+    if (lookupValue !== undefined && tableDeclaration !== undefined) {
       lookupValues.set(node.id, {
         ...tupleOf(node),
-        baseType: declarationOf(table).baseType,
+        baseType: tableDeclaration.baseType,
         parent: node.parent,
         value: lookupValue,
       });
@@ -514,11 +503,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
 
     const key = node.kind === "qti-map-entry" ? valueOf(node.id, "map-key") : undefined;
     const mapping = byId.get(node.parent);
-    if (key === undefined || mapping === undefined) {
+    const mappingDeclaration = mapping === undefined ? undefined : declarations.get(mapping.parent);
+    if (key === undefined || mappingDeclaration === undefined) {
       continue;
     }
 
-    const { baseType } = declarationOf(mapping);
+    const { baseType } = mappingDeclaration;
     mapKeys.set(node.id, { ...tupleOf(node), baseType, key, mapping: node.parent });
 
     addTypedKey(typed, baseType, { key, mapping: node.parent, node: node.id });

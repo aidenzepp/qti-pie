@@ -201,9 +201,10 @@ const written: Readonly<Partial<Record<BindingState, string>>> = {
  */
 export interface BindingExpectation {
   /**
-   * The cardinality the bound declaration's `Declaration` row holds: the one it spells, else
-   * `single` (the declarations overlay's `cardinalityOf`); none where no response declaration
-   * holds the name.
+   * The cardinality the bound declaration's `Declaration` row holds, the one it spells; none where
+   * no response declaration holds the name, or where its cardinality is unwritten or spells
+   * nothing, which leaves it no row (the declarations overlay's `typedDeclarationOf`; lane NIL's
+   * audit, B11).
    */
   readonly held: string | undefined;
   /**
@@ -237,7 +238,7 @@ export const expectationOf = (site: BindingSite, state: BindingState): BindingEx
 
   return {
     declared: true,
-    held: typed ? lexical : "single",
+    held: typed ? lexical : undefined,
     identifier: site.identifier,
     typed,
   };

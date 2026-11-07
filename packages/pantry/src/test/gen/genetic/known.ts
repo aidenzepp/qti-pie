@@ -201,47 +201,6 @@ export const known = {
     fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "import-only-law: Binding cardinality, contained BindingDeclaration(node) in CountBound(node)": {
-    files: [
-      [
-        "choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-response-declaration identifier="RESPONSE"/><qti-item-body>
-        
-        
-        <qti-choice-interaction response-identifier="RESPONSE" max-choices="1abc">
-            
-            
-            
-            
-        </qti-choice-interaction>
-    </qti-item-body></qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <metadata>
-        
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata>
-    
-    <resources>
-        <resource type="imsqti_item_xmlv3p0" href="choice.xml">
-            
-            
-            
-        </resource>
-    </resources>
-</manifest>`,
-      ],
-    ],
-    fix: "NS5: an unspelled count writes no CountBound row",
-    owner: "NIL",
-  },
   "import-only-law: Branch forward, check Branch_forward on BranchResolution": {
     files: [
       [
@@ -260,43 +219,6 @@ export const known = {
     fix: "C6: a branch rule whose target names nothing writes no target row",
     owner: "NIL",
   },
-  "import-only-law: Declaration base type, check Declaration_base_type on Declaration": {
-    files: [
-      [
-        "choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-response-declaration/></qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
-      ],
-    ],
-    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-    owner: "NIL",
-  },
-  "import-only-law: Declaration overlay, contained Value(node, baseType) in RecordField(node, baseType)":
-    {
-      files: [
-        [
-          "es/choice.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration><qti-default-value><qti-value/></qti-default-value></qti-outcome-declaration></qti-assessment-item>`,
-        ],
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
-        ],
-      ],
-      fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-      owner: "NIL",
-    },
   "import-only-law: E1 derived, check E1_derived on CountBound": {
     files: [
       [
@@ -317,24 +239,6 @@ export const known = {
       ],
     ],
     fix: "NS5: an unspelled count writes no CountBound row",
-    owner: "NIL",
-  },
-  "import-only-law: E1 derived, check E1_derived on Declaration": {
-    files: [
-      [
-        "es/choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration/></qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
-      ],
-    ],
-    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
   },
   "import-only-law: E1 derived, check E1_derived on RecordField": {
@@ -591,24 +495,6 @@ export const known = {
     fix: "N8: the oracle states the choice law the schema does, every choice in a choice interaction, so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
     owner: "OL",
   },
-  "import-only-law: Reserved type, check Reserved_type on Declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set02.xml"/></resources></manifest>`,
-      ],
-      [
-        "rtest01/rtest01-set02.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration identifier="SCORE"/></qti-assessment-item>`,
-      ],
-    ],
-    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-    owner: "NIL",
-  },
   "import-only-law: Template reference, contained TemplateRef(declaration, document, identifier, declarationKind, baseType, cardinality) in Declaration(node, document, identifier, declarationKind, baseType, cardinality)":
     {
       files: [
@@ -782,78 +668,6 @@ export const known = {
     ],
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
-  },
-  "oracle-only-law: Set type": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="N" cardinality="0"/><qti-template-processing><qti-set-template-value identifier="N"><qti-random-integer/></qti-set-template-value></qti-template-processing></qti-assessment-item>`,
-      ],
-    ],
-    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-    owner: "NIL",
-  },
-  "oracle-only-law: Template default type": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="N" cardinality="0"/></qti-assessment-item>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item.xml"><qti-template-default template-identifier="N"><qti-base-value/></qti-template-default></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
-      ],
-    ],
-    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-    owner: "NIL",
-  },
-  "oracle-only-law: Typed value": {
-    files: [
-      [
-        "choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer "><qti-correct-response><qti-value/></qti-correct-response></qti-response-declaration></qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata>
-        
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata><resources>
-        <resource type="imsqti_item_xmlv3p0" href="choice.xml">
-            
-            
-            
-            
-        </resource>
-        
-    </resources></manifest>`,
-      ],
-    ],
-    fix: "the whitespace class: a type whose whitespace facet collapses is read after collapsing, as XML Schema normalizes it",
-    owner: "PG",
   },
   "oracle-only-law: Variable declared": {
     files: [
@@ -1086,6 +900,47 @@ export const fixed = {
     fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
     owner: "NIL",
   },
+  "import-only-law: Binding cardinality, contained BindingDeclaration(node) in CountBound(node)": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-response-declaration identifier="RESPONSE"/><qti-item-body>
+        
+        
+        <qti-choice-interaction response-identifier="RESPONSE" max-choices="1abc">
+            
+            
+            
+            
+        </qti-choice-interaction>
+    </qti-item-body></qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <metadata>
+        
+        <schemaversion>3.0.0</schemaversion>
+        
+    </metadata>
+    
+    <resources>
+        <resource type="imsqti_item_xmlv3p0" href="choice.xml">
+            
+            
+            
+        </resource>
+    </resources>
+</manifest>`,
+      ],
+    ],
+    fix: "B11: a declaration whose cardinality spells nothing has no row, so no binding of it writes a BindingDeclaration or a CountBound row",
+    owner: "NIL",
+  },
   "import-only-law: Binding declared, contained BoundVariable(node, attribute, kind, document, identifier) in BindingDeclaration(node, attribute, kind, document, identifier)":
     {
       files: [
@@ -1104,6 +959,43 @@ export const fixed = {
       ],
       fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
       owner: "VD",
+    },
+  "import-only-law: Declaration base type, check Declaration_base_type on Declaration": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-response-declaration/></qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+      ],
+    ],
+    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
+    owner: "NIL",
+  },
+  "import-only-law: Declaration overlay, contained Value(node, baseType) in RecordField(node, baseType)":
+    {
+      files: [
+        [
+          "es/choice.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration><qti-default-value><qti-value/></qti-default-value></qti-outcome-declaration></qti-assessment-item>`,
+        ],
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
+        ],
+      ],
+      fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
+      owner: "NIL",
     },
   "import-only-law: Document entry, contained Site(package, path) in TestDocument(package, path)": {
     files: [
@@ -1148,6 +1040,24 @@ export const fixed = {
       fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, and removes the containment this class broke, so no package can show it",
       owner: "NIL",
     },
+  "import-only-law: E1 derived, check E1_derived on Declaration": {
+    files: [
+      [
+        "es/choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration/></qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
+      ],
+    ],
+    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
+    owner: "NIL",
+  },
   "import-only-law: E1 derived, contained Expression(kind, baseType) in ResultBase(kind, base)": {
     files: [
       [
@@ -1419,6 +1329,24 @@ export const fixed = {
       fix: "fix (3): a package's records are read from its manifest and its record files alone (recordDocumentTypes), and the Manifest overlay selections read the manifest's cp:* attributes alone, each by its node's and attribute's documentType (170356bd's reading)",
       owner: "GEN-A",
     },
+  "import-only-law: Reserved type, check Reserved_type on Declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set02.xml"/></resources></manifest>`,
+      ],
+      [
+        "rtest01/rtest01-set02.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration identifier="SCORE"/></qti-assessment-item>`,
+      ],
+    ],
+    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
+    owner: "NIL",
+  },
   "import-only-law: Test overlay, contained Site(node, package, path) in ReferencePath(node, package, path)":
     {
       files: [
@@ -1640,5 +1568,77 @@ export const fixed = {
     ],
     fix: "the oracle reads a record's object as the document its resource names where its root is an item or a test, whatever the resource's type (QTI 3.0 Metadata §2.7.1.1 and §2.7.1.2)",
     owner: "JAN",
+  },
+  "oracle-only-law: Set type": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
+      ],
+      [
+        "items/item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="N" cardinality="0"/><qti-template-processing><qti-set-template-value identifier="N"><qti-random-integer/></qti-set-template-value></qti-template-processing></qti-assessment-item>`,
+      ],
+    ],
+    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
+    owner: "NIL",
+  },
+  "oracle-only-law: Template default type": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "items/item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="N" cardinality="0"/></qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item.xml"><qti-template-default template-identifier="N"><qti-base-value/></qti-template-default></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
+    owner: "NIL",
+  },
+  "oracle-only-law: Typed value": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer "><qti-correct-response><qti-value/></qti-correct-response></qti-response-declaration></qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata>
+        
+        <schemaversion>3.0.0</schemaversion>
+        
+    </metadata><resources>
+        <resource type="imsqti_item_xmlv3p0" href="choice.xml">
+            
+            
+            
+            
+        </resource>
+        
+    </resources></manifest>`,
+      ],
+    ],
+    fix: "B11: the oracle reads a record field's base-type by its type's whitespace class (typedValueOf), as the import does",
+    owner: "VD",
   },
 } satisfies Entries;

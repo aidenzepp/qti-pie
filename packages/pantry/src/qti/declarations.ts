@@ -159,7 +159,10 @@ export const contextVariable = {
 };
 
 /**
- * A variable a document declares, keyed by its declaration element's node.
+ * A variable a document declares, keyed by its declaration element's node: one whose `identifier`
+ * and `cardinality` are written and spell a name and a handle, and whose `base-type`, where
+ * written, spells one. Any other declaration has no row (lane NIL's audit, B10 and B11), so no
+ * field here stands for a value the element does not write.
  *
  * Its fields, every one written by the host:
  *
@@ -510,9 +513,13 @@ const doubleForm = lexicalForm(pg["double precision"]);
  *   and its set's base type, a record field its `field-identifier` and `base-type`, and an outcome
  *   range its scale attributes. Each optional attribute's copy has a reverse containment, so an
  *   overlay writes a lexical form exactly where its element does.
- * - **existence:** every declaration has its row through its required `identifier`'s copy, every
- *   value set and value its row through a containment from `Node`, and every record value its field
- *   (`Value_cardinality`).
+ * - **existence:** a declaration has its row exactly where it writes its required `identifier` and
+ *   `cardinality`, through each one's copy and its reverse, and `E1_derived` holds each code to the
+ *   one its lexical form spells; one that writes either none, or one that spells nothing, has no
+ *   row, and AL3 or the attribute's value domain refuses it alone (lane NIL's audit, B10 and B11: a
+ *   missing value is a row of its own relation, never a sentinel; its copies refuse it too, after
+ *   them). Every value set and value of a declaration with a row has its row through a containment
+ *   from `Node`, and every record value its field (`Value_cardinality`).
  * - **E1 (C17), `E1_derived`:** a declaration's kind is its `Declares` kind; each code is the one its
  *   lexical form spells (`<Roster>Lexical`), `none` exactly where no base type is written; each
  *   identifier is its lexical form collapsed; a value's base type is its set's, or its field's.
@@ -548,7 +555,9 @@ export const declarationLawsByName = {
       nodeRef,
     ),
     contained(on(identifiers, "node", "lexical"), on(Declaration, "node", "identifierLexical")),
+    contained(on(Declaration, "node"), on(identifiers, "node")),
     contained(on(cardinalities, "node", "lexical"), on(Declaration, "node", "cardinalityLexical")),
+    contained(on(Declaration, "node"), on(cardinalities, "node")),
     contained(on(baseTypes, "node", "lexical"), on(Declaration, "node", "baseTypeLexical")),
     contained(
       on(
