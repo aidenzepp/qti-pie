@@ -281,7 +281,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
-  [62, { owner: "LomObjectIdentifier, LomObjectTitle", status: "G" }],
+  [
+    62,
+    {
+      owner:
+        "LomObjectIdentifier, LomObjectTitle, over the resource's own records, each a `lom:lom` of its `cp:metadata` (`resourceRecords` and `resourceGenerals`, `src/qti/metadata.ts`); the oracle's lom-identifier and lom-title over the same records, held by the cases `src/test/lom-records.ts` builds, a file's record naming another",
+      status: "G",
+    },
+  ],
   [
     63,
     {
