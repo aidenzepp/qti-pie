@@ -161,9 +161,9 @@ const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => 
  * records a package does not read.
  */
 const ids = {
-  documentAt: () => Option.none(),
   documentType: "imsqti_item_xmlv3p0",
   idOf,
+  targetAt: () => Option.none(),
 } as const satisfies IdentityIds;
 
 /**
@@ -505,9 +505,9 @@ interface Written {
  */
 const assembledIds = ({ base }: Written): IdentityIds => ({
   assembled: true,
-  documentAt: () => Option.none<NodeId>(),
   documentType: ids.documentType,
   idOf: (index: number) => idOf(base + index),
+  targetAt: () => Option.none(),
 });
 
 /**
