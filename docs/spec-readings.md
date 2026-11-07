@@ -2868,3 +2868,26 @@ against it. A reading that is not an information-model-over-XSD case says which 
      judged no law of such a declaration's own, and none of its mapping's but its map keys. This binds pantry and plate
      alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's
      standing ruling of 2026-11-05, from seat FIX-DECLCARD.)
+159. **A binding or a reference resolves by name to every declaration whose identifier names something, whatever its
+     cardinality spells, and each law over it judges what the declaration does spell.** The information model reads a
+     binding and a reference by the variable's name and kind: "Response variables are declared by response
+     declarations and bound to interactions in the itemBody" (section 2.2.2.2, reading 75), and a feedback element or
+     a printed variable names "an outcome variable" or "a template variable" (reading 77). A response declaration whose
+     `cardinality` is unwritten or spells nothing still declares its name (reading 158: it is still a declaration, and
+     AL3 or its value domain refuses the attribute alone). So each law over a binding or a reference reads the
+     declaration's name and kind, its cardinality, or its base type, and judges it where what it reads spells
+     something, as reading 158 has each law over the declaration itself do: Binding declared, Binding unique and every
+     reference's existence and kind laws read the name and the kind, so a binding to such a response declaration is
+     declared, and a feedback element naming such a response declaration still breaks Feedback reference; BindingFit,
+     RecordBindingFit, Binding cardinality, Max strings required and the laws over a referenced variable's type read
+     its cardinality, and judge nothing where it has none. This is also the stricter reading, since every law that does
+     not read the cardinality judges the binding or the reference as any other. It narrows reading 158's "no reference
+     resolves to it" to the type: such a name types nothing, so no law over a type reads one from it. The importer
+     resolves a name through `DeclarationIdentifier` (`declarationIdentifierRef`, `src/qti/declarations.ts`), and a law
+     over the referenced declaration's cardinality reads a row of the resolving row's own, copied from
+     `DeclarationCardinality` and written only where the declaration has one: a missing value is a row of its own
+     relation, never a sentinel. This sets aside lane NIL's B11 reading, under which a binding or a reference to a name
+     only such a declaration holds resolved to nothing, so the importer's rows broke Binding declared, or held no
+     reference row and broke "E1 derived"'s copy of the attribute, beside the AL3 or value domain the law oracle alone
+     raised. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-BINDCARD.)

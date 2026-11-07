@@ -65,6 +65,7 @@ import {
   check,
   closedId,
   Compute,
+  constant,
   contained,
   counted,
   drawn,
@@ -348,6 +349,26 @@ export const declarationRef = on(
   Declaration,
   "node",
   "document",
+  "declarationKind",
+  "cardinalities",
+  "baseTypes",
+);
+
+/**
+ * The one tuple of a named declaration every row that resolves a name to its declaration copies,
+ * whatever the declaration's cardinality spells: its node, document, name, declaration kind, and
+ * counts of cardinalities and base types, so `DeclarationIdentifier` carries one superkey UNIQUE
+ * for them all ({@link DeclarationName} copies it too). Neither the cardinality nor the base type
+ * is a field of it: a law over the named declaration's cardinality reads a row of the resolving
+ * row's own, copied from {@link DeclarationCardinality} only where `cardinalities` is 1, and one
+ * over its base type reads {@link DeclarationBaseType} where `baseTypes` is 1. A declaration whose
+ * identifier names nothing has no row here, and nothing resolves to it (spec readings 157 and 159).
+ */
+export const declarationIdentifierRef = on(
+  DeclarationIdentifier,
+  "node",
+  "document",
+  "identifier",
   "declarationKind",
   "cardinalities",
   "baseTypes",
@@ -1178,8 +1199,16 @@ export const declarationLawsByName = {
       on(DeclarationName, "node"),
     ),
     contained(
-      on(DeclarationName, "node", "document", "identifier", "declarationKind", "baseTypes"),
-      on(DeclarationIdentifier, "node", "document", "identifier", "declarationKind", "baseTypes"),
+      on(
+        DeclarationName,
+        "node",
+        "document",
+        "identifier",
+        "declarationKind",
+        constant(1n),
+        "baseTypes",
+      ),
+      declarationIdentifierRef,
     ),
     contained(
       on(DeclarationName, "node", "cardinality"),

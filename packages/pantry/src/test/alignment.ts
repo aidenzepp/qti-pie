@@ -958,6 +958,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    159,
+    {
+      owner:
+        "`declarationIdentifierRef` (`src/qti/declarations.ts`), the one tuple a name resolves to, which `DeclarationName` copies; the bindings' resolution through it and their cardinality rows (seat FIX-BINDCARD), and the references' (seat FIX-REFCARD); the oracle's binding and reference laws, which resolve a name whatever the declaration's cardinality (`src/test/oracle.ts`)",
+      status: "P",
+    },
+  ],
 ]);
 
 /**
