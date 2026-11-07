@@ -226,7 +226,7 @@ const itemOf = (members: MemberCounts): string =>
     '      <img src="media/pic.png" alt="A picture"/>',
     "    </div>",
     '    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>',
-    '    <p>Solve <m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:apply><m:log/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply><m:cn type="rational">1<m:sep/>2</m:cn></m:math>.</p>',
+    '    <p>Solve <m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:apply><m:log/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply><m:cn type="rational">1<m:sep/>2</m:cn><m:mtable><m:mtr><m:mtd><m:maligngroup/><m:maction actiontype="toggle" selection="1"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction></m:mtd></m:mtr></m:mtable></m:math>.</p>',
     '    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>',
     '    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>',
     "    <p>It says <q>read this</q> and stops.</p>",

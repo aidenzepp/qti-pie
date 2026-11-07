@@ -111,6 +111,13 @@ import {
   Mapping,
   MatchTable,
 } from "#pantry/qti/mapping.ts";
+import {
+  CellLeaf,
+  MathAction,
+  MathAlignGroup,
+  MathAlignScope,
+  MathCell,
+} from "#pantry/qti/mathml-align.ts";
 import { MathApply, MathArgument, MathQualifier } from "#pantry/qti/mathml-apply.ts";
 import { CnPartText, MathCn } from "#pantry/qti/mathml-cn.ts";
 import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
@@ -1195,6 +1202,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(BranchResolution, [...inputs.BranchResolution.values()])
     .insert(BranchRule, [...inputs.BranchRule.values()])
     .insert(CellHeaders, [...inputs.CellHeaders.values()])
+    .insert(CellLeaf, [...inputs.CellLeaf.values()])
     .insert(Choice, [...inputs.Choice.values()])
     .insert(ChoiceVariableName, [...inputs.ChoiceVariableName.values()])
     .insert(CnPartText, [...inputs.CnPartText.values()])
@@ -1251,8 +1259,12 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(MapKeyPoint, [...inputs.MapKeyPoint.values()])
     .insert(Mapping, [...inputs.Mapping.values()])
     .insert(MatchTable, [...inputs.MatchTable.values()])
+    .insert(MathAction, [...inputs.MathAction.values()])
+    .insert(MathAlignGroup, [...inputs.MathAlignGroup.values()])
+    .insert(MathAlignScope, [...inputs.MathAlignScope.values()])
     .insert(MathApply, [...inputs.MathApply.values()])
     .insert(MathArgument, [...inputs.MathArgument.values()])
+    .insert(MathCell, [...inputs.MathCell.values()])
     .insert(MathCn, [...inputs.MathCn.values()])
     .insert(MathQualifier, [...inputs.MathQualifier.values()])
     .insert(Named, [...inputs.Named.values()])

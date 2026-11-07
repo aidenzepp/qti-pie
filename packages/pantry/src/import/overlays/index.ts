@@ -276,6 +276,10 @@ const mergedOf = (
       "CellHeaders",
       parts.map(({ CellHeaders: rows }) => rows),
     ),
+    CellLeaf: unionOf(
+      "CellLeaf",
+      parts.map(({ CellLeaf: rows }) => rows),
+    ),
     Choice: unionOf(
       "Choice",
       parts.map(({ Choice: rows }) => rows),
@@ -524,6 +528,18 @@ const mergedOf = (
       "MatchTable",
       parts.map(({ MatchTable: rows }) => rows),
     ),
+    MathAction: unionOf(
+      "MathAction",
+      parts.map(({ MathAction: rows }) => rows),
+    ),
+    MathAlignGroup: unionOf(
+      "MathAlignGroup",
+      parts.map(({ MathAlignGroup: rows }) => rows),
+    ),
+    MathAlignScope: unionOf(
+      "MathAlignScope",
+      parts.map(({ MathAlignScope: rows }) => rows),
+    ),
     MathApply: unionOf(
       "MathApply",
       parts.map(({ MathApply: rows }) => rows),
@@ -531,6 +547,10 @@ const mergedOf = (
     MathArgument: unionOf(
       "MathArgument",
       parts.map(({ MathArgument: rows }) => rows),
+    ),
+    MathCell: unionOf(
+      "MathCell",
+      parts.map(({ MathCell: rows }) => rows),
     ),
     MathCn: unionOf(
       "MathCn",
