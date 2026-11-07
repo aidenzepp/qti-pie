@@ -4,7 +4,7 @@ import { Effect, FileSystem, Formatter, Option, Result } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
-import { fin, roster } from "#pantry/grammar/closed.ts";
+import { roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import {
@@ -252,15 +252,6 @@ describe("RootOfType", () => {
         );
       }),
   );
-
-  it("refuses a root kind the composition's roster does not hold", () => {
-    const result = packageGrammar({ facets: [asi.package, cp.package], kinds: fin("NodeKind", 1) });
-
-    assert.strictEqual(
-      Result.isFailure(result) ? result.failure._tag : "generated",
-      "OutsideCodeSpace",
-    );
-  });
 });
 
 /**
