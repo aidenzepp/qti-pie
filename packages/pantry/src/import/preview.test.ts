@@ -34,11 +34,11 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
       // Oracle: a second implementation of the count: each document's rows as `flatten` writes
       // them (its nodes, attributes, declarations, open names and entity references), the record's
       // entries, the members the nested inserts hold (an attribute's IDREF pieces and typed double,
-      // a text's typed double, an identity text's IDREF pieces, a cell's header tokens, a
-      // tolerance's values, an assembled reference's segments), each assembly's instances at every
-      // depth, and each flat input's keyed set, over the three accepted corpus packages and the
-      // every-relation package, which writes a row of every stored relation and nests instances
-      // under its assemblies.
+      // a text's typed double, an identity text's IDREF pieces, a cell's header tokens, a table
+      // cell's leaves, a tolerance's values, an assembled reference's segments), each assembly's
+      // instances at every depth, and each flat input's keyed set, over the three accepted corpus
+      // packages and the every-relation package, which writes a row of every stored relation and
+      // nests instances under its assemblies.
       Effect.gen(function* counts() {
         const dirs = [
           fixtures.simple,
@@ -83,6 +83,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
               "AttributeEntity",
               flats.reduce((sum, rows) => sum + rows.attributeEntities.length, 0),
             ],
+            ["CellLeaf", sumOf(flat.MathCell, ({ leaves }) => leaves.length)],
             ["Entry", program.files.length],
             ["DoubleValue", members.DoubleValue],
             ["HeaderToken", sumOf(flat.CellHeaders, ({ tokens }) => tokens.length)],
