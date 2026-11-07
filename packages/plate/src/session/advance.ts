@@ -23,7 +23,12 @@ import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { fitting, score } from "#plate/score.ts";
-import type { InvalidResponses, RecordMismatch, ResponsesRefused } from "#plate/score.ts";
+import type {
+  InvalidResponses,
+  RecordMismatch,
+  RecordRequired,
+  ResponsesRefused,
+} from "#plate/score.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { move, requestOf } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
@@ -166,7 +171,8 @@ export class StepResponseMisfit extends Data.TaggedError("StepResponseMisfit")<{
  * does not fit: `InvalidTime` for an invalid `now`, `ItemNotInSession` and `UnknownItemRef` for a
  * session that is not the test's, `TestNotDeliverable` for items that lack the one an intent
  * reaches or hold another document's, and `InvalidRecord` and `RecordMismatch` for an item record
- * `score` cannot take.
+ * `score` cannot take. `RecordRequired` is `score`'s, which a session never meets, since it always
+ * passes the item's record.
  */
 export type AdvanceFailure =
   | EngineFailure
@@ -176,6 +182,7 @@ export type AdvanceFailure =
   | InvalidTime
   | ItemNotInSession
   | RecordMismatch
+  | RecordRequired
   | ResponsesRefused
   | StepResponseMisfit
   | TestNotDeliverable

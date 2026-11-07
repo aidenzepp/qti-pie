@@ -27,7 +27,12 @@ import { postings, redactItem } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { score } from "#plate/score.ts";
-import type { InvalidResponses, RecordMismatch, ResponsesRefused } from "#plate/score.ts";
+import type {
+  InvalidResponses,
+  RecordMismatch,
+  RecordRequired,
+  ResponsesRefused,
+} from "#plate/score.ts";
 import { UnknownItemRef } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import {
@@ -137,13 +142,15 @@ export class SubmissionRefused extends Data.TaggedError("SubmissionRefused")<{
 }
 
 /**
- * Why `score` and the stored record's codec may fail an item's attempt.
+ * Why `score` and the stored record's codec may fail an item's attempt. It holds `score`'s
+ * `RecordRequired`, which a session never meets, since it always passes the item's record.
  */
 type ScoreFailure =
   | EngineFailure
   | InvalidRecord
   | InvalidResponses
   | RecordMismatch
+  | RecordRequired
   | ResponsesRefused;
 
 /**

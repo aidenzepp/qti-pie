@@ -130,7 +130,13 @@ export type { ResultContext, ResultsInput } from "#plate/results/results.ts";
 
 export { InvalidResultContext, ResultItemMissing, results } from "#plate/results/results.ts";
 
-export { InvalidResponses, RecordMismatch, ResponsesRefused, score } from "#plate/score.ts";
+export {
+  InvalidResponses,
+  RecordMismatch,
+  RecordRequired,
+  ResponsesRefused,
+  score,
+} from "#plate/score.ts";
 
 export type { AdvanceFailure } from "#plate/session/advance.ts";
 
