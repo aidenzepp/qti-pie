@@ -560,10 +560,10 @@ export interface DocumentRows {
 }
 
 /**
- * Build one document's rows as the importer will: the builder's overlay rows and the tree's insert,
- * under one id per node.
+ * Build a manifest's rows as the importer will: the builder's overlay rows and the tree's insert,
+ * under one id per node, the manifest's type `none`.
  *
- * @param tree - The document's tree.
+ * @param tree - The manifest's tree.
  * @param idOf - Its ids.
  * @returns Its rows.
  */
@@ -572,10 +572,11 @@ export const documentRowsOf = (
   idOf: (index: number) => NodeId,
 ): DocumentRows => {
   const rows: MetadataRows = rowsOf(tree, {
+    documentType: "none",
     idOf,
     package: "00000000-0000-4000-8000-00000000c0de" satisfies Uuid,
   });
-  const nodes = writtenNodes(rootInsertOf(tree, { idOf }));
+  const nodes = writtenNodes(rootInsertOf(tree, { documentType: "none", idOf }));
   const folded = new Map<string, string>();
   for (const node of nodes) {
     folded.set(node.parent, `${folded.get(node.parent) ?? ""}${node.stringPiece}`);

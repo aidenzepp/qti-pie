@@ -1328,7 +1328,7 @@ const familyOf = (row: Stored, name: string): readonly Stored[] => {
  * attribute family's owner copy), which the database fills from the owner's row and the program
  * leaves to it.
  */
-const ownerFields = ["document", "governs", "kind", "version"] as const;
+const ownerFields = ["document", "documentType", "governs", "kind", "version"] as const;
 
 /**
  * Read the fields an attribute copies from its owner's row.

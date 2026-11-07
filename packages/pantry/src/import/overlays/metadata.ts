@@ -20,7 +20,13 @@ import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { objectKinds, objectTypes, statisticKinds, usageValueKind } from "#pantry/qti/metadata.ts";
+import {
+  objectKinds,
+  objectTypes,
+  recordDocumentTypes,
+  statisticKinds,
+  usageValueKind,
+} from "#pantry/qti/metadata.ts";
 import type {
   AssessmentObject,
   LomEntry,
@@ -51,6 +57,11 @@ import type {
  * the tree's rows name each node by one id.
  */
 export interface MetadataIds {
+  /**
+   * The document's type, the resource's that lists it, `none` for the manifest: a package's
+   * records are read from a document of a type of `recordDocumentTypes` alone.
+   */
+  readonly documentType: (typeof ResourceType.handles)[number];
   readonly idOf: (index: number) => NodeId;
   readonly package: Uuid;
 }
@@ -729,33 +740,74 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
   );
 
 /**
+ * The types of the documents a package's records are read from (`recordDocumentTypes`).
+ */
+const recordTypes: ReadonlySet<string> = new Set(recordDocumentTypes);
+
+/**
+ * The metadata rows of a document that holds no package record: every relation of the records
+ * empty.
+ */
+const noRecordRows = {
+  LomEntry: new Map(),
+  LomGeneral: new Map(),
+  LomRecord: new Map(),
+  LomResource: new Map(),
+  LomResourceType: new Map(),
+  LomResourceTypeSource: new Map(),
+  LomString: new Map(),
+  LomStringLanguage: new Map(),
+  LomTitle: new Map(),
+  LomTitleString: new Map(),
+  ResourceLomGeneral: new Map(),
+} as const satisfies Omit<
+  MetadataRows,
+  "AssessmentObject" | "ObjectLang" | "StatisticDate" | "UsageValue"
+>;
+
+/**
  * Build the metadata rows of one document.
  *
- * Every `lom:lom`, `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every
- * `cp:resource` its {@link LomResource}, every general category under a resource's `cp:metadata` its
- * {@link ResourceLomGeneral}, every title's string its {@link LomTitleString}, and every learning
- * resource type its {@link LomResourceType} where it holds a value and its
- * {@link LomResourceTypeSource} where it writes a source. An item's or test's root has its
- * {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where it writes a
- * `lastUpdated`, and a usage value its {@link UsageBaseType} where it writes a `baseType` and its
- * {@link UsageValue} where it also writes a `fieldIdentifier`; an optional attribute's row exists
- * where it is written.
+ * A package's records are read from its manifest and its record files alone (`Qti`'s
+ * `recordDocumentTypes`): the manifest is its one `imsmanifest.xml` (IMS Content Packaging 1.2),
+ * and a `cp:metadata` of another document describes no part of the package (170356bd's ruling), so
+ * a document of another type writes no record. In a document of a record type, every `lom:lom`,
+ * `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every
+ * `cp:resource` its {@link LomResource}, every general category under a resource's `cp:metadata`
+ * its {@link ResourceLomGeneral}, every title's string its {@link LomTitleString}, and every
+ * learning resource type its {@link LomResourceType} where it holds a value and its
+ * {@link LomResourceTypeSource} where it writes a source. In every document, an item's or
+ * test's root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where
+ * it writes a `lastUpdated`, and a usage value its {@link UsageBaseType} where it writes a
+ * `baseType` and its {@link UsageValue} where it also writes a `fieldIdentifier`; an optional
+ * attribute's row exists where it is written.
  *
  * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
+ * @param ids - The ids its rows are written under, and its type.
  * @returns Every per-document overlay's rows.
  */
 export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRows => {
   const tree = treeOf(doc, ids);
+  const assessment = objectRowsOf(tree);
+  const everyDocument = {
+    AssessmentObject: assessment.objects,
+    ObjectLang: assessment.langs,
+    StatisticDate: dateRowsOf(tree),
+    UsageBaseType: usageBaseTypeRowsOf(tree),
+    UsageValue: usageValueRowsOf(tree),
+  };
+  if (!recordTypes.has(ids.documentType)) {
+    return { ...noRecordRows, ...everyDocument };
+  }
+
   const resources = resourceRowsOf(tree);
   const records = recordRowsOf(tree, resources);
   const generals = generalRowsOf(tree, records);
   const titles = titleRowsOf(tree, records);
   const strings = stringRowsOf(tree);
-  const assessment = objectRowsOf(tree);
 
   return {
-    AssessmentObject: assessment.objects,
+    ...everyDocument,
     LomEntry: entryRowsOf(tree, records),
     LomGeneral: generals,
     LomRecord: records,
@@ -766,15 +818,11 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
     LomStringLanguage: strings.languages,
     LomTitle: titles,
     LomTitleString: titleStringRowsOf(tree, titles),
-    ObjectLang: assessment.langs,
     ResourceLomGeneral: new Map(
       [...generals.values()].flatMap(({ node, owner, ownerParent }) =>
         owner === resourceMetadata ? [[node, { node, resource: ownerParent }] as const] : [],
       ),
     ),
-    StatisticDate: dateRowsOf(tree),
-    UsageBaseType: usageBaseTypeRowsOf(tree),
-    UsageValue: usageValueRowsOf(tree),
   };
 };
 

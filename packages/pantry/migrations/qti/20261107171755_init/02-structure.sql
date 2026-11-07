@@ -133,6 +133,7 @@ CREATE TABLE "qti"."attribute" (
   "attrs_after" "qti"."__attribute_slot_bits_112_aecznthxg5" NOT NULL,
   "attrs_was" "qti"."__attribute_slot_bits_112_aecznthxg5" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
+  "document_type" "qti"."resource_type" NOT NULL,
   "entities" "qti"."__domain_gfw43vigph" NOT NULL,
   "governs" "qti"."type_name" NOT NULL,
   "id" "pg_catalog"."uuid" NOT NULL,
@@ -1445,6 +1446,7 @@ CREATE TABLE "qti"."node" (
   "children" "qti"."__domain_gfw43vigph" NOT NULL,
   "counted_children" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
+  "document_type" "qti"."resource_type" NOT NULL,
   "element_children" "qti"."__domain_gfw43vigph" NOT NULL,
   "elements" "qti"."__domain_gfw43vigph" NOT NULL,
   "elements_was" "qti"."__domain_gfw43vigph" NOT NULL,
@@ -1497,11 +1499,10 @@ CREATE TABLE "qti"."node" (
   CONSTRAINT "ws_arm" CHECK (("chars" ~ '\A[\u0009\u000A\u000D ]+\Z'::"pg_catalog"."text" OR "kind" <> 6::smallint) IS TRUE),
   CONSTRAINT "__node_key_id_document_kind_start_nearest_version_osnugvmscd" UNIQUE NULLS DISTINCT ("id", "document", "kind", "start", "nearest", "version", "parent"),
   CONSTRAINT "__node_key_id_kind_phk5q5ctpf" UNIQUE NULLS DISTINCT ("id", "kind"),
-  CONSTRAINT "__node_key_id_attributes_document_governs_kind_wwqih5w2o2" UNIQUE NULLS DISTINCT ("id", "attributes", "document", "governs", "kind", "version"),
-  CONSTRAINT "__node_key_id_children_ancestry_document_governs_zuohtvwbva" UNIQUE NULLS DISTINCT ("id", "children", "ancestry", "document", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version"),
+  CONSTRAINT "__node_key_id_attributes_document_document_type_fvxodboidr" UNIQUE NULLS DISTINCT ("id", "attributes", "document", "document_type", "governs", "kind", "version"),
+  CONSTRAINT "__node_key_id_children_ancestry_document_document_ohhpdjxolc" UNIQUE NULLS DISTINCT ("id", "children", "ancestry", "document", "document_type", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version"),
   CONSTRAINT "__node_key_id_elements_element_children_3h5yw76jks" UNIQUE NULLS DISTINCT ("id", "elements", "element_children"),
   CONSTRAINT "__node_key_id_kind_version_document_governs_ulzwiwirmp" UNIQUE NULLS DISTINCT ("id", "kind", "version", "document", "governs"),
-  CONSTRAINT "__node_key_id_kind_parent_kind_tn43rs4qml" UNIQUE NULLS DISTINCT ("id", "kind", "parent_kind"),
   CONSTRAINT "__node_key_id_end_fccsn4czp6" UNIQUE NULLS DISTINCT ("id", "end"),
   CONSTRAINT "__node_check_node_in_node_a2p3dbqqpr" CHECK (("children" > 0::bigint OR "last_state" = 0::smallint) IS TRUE),
   CONSTRAINT "__node_check_node_kind_kind_in_xsi_type_sdppgqgkli" CHECK ((NOT (NOT "kind" IN (7::smallint, 1::smallint, 0::smallint, 9::smallint, 8::smallint, 5::smallint, 6::smallint) AND NOT "kind" IN (2::smallint, 3::smallint, 4::smallint)) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_3t4qepe5jn"(), ("version" * 644 + "kind") * 444 + "governs" + 1, 1)::integer = 1) IS TRUE),
@@ -1509,6 +1510,7 @@ CREATE TABLE "qti"."node" (
   CONSTRAINT "__node_key_id_at_children_lghweyjlxr" UNIQUE NULLS DISTINCT ("id", "at", "children"),
   CONSTRAINT "__node_key_id_document_r4xnpqafto" UNIQUE NULLS DISTINCT ("id", "document"),
   CONSTRAINT "__node_key_id_parent_nuilpdngjx" UNIQUE NULLS DISTINCT ("id", "parent"),
+  CONSTRAINT "__node_key_id_kind_parent_kind_tn43rs4qml" UNIQUE NULLS DISTINCT ("id", "kind", "parent_kind"),
   CONSTRAINT "__node_key_id_string_value_mgmofzxvaw" UNIQUE NULLS DISTINCT ("id", "string_value"),
   CONSTRAINT "__node_key_id_namespaces_jlmqcwppa7" UNIQUE NULLS DISTINCT ("id", "namespaces"),
   CONSTRAINT "__node_key_document_start_fjp4rtmxxb" UNIQUE NULLS DISTINCT ("document", "start")
@@ -2250,6 +2252,7 @@ CREATE TABLE "qti"."site" (
   "ancestry" "qti"."__flag_bits_12_i4uhexylc4" NOT NULL,
   "children" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
+  "document_type" "qti"."resource_type" NOT NULL,
   "governs" "qti"."type_name" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
@@ -2786,7 +2789,7 @@ ALTER TABLE "qti"."attribute" ADD COLUMN "__kind_u4palavsts" smallint GENERATED 
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_3dmcwkgtws" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN (NULLIF("pg_catalog"."substring"("qti"."__constant_cy4erml7fi"(), (("version" * 644 + "kind") * 413 + "name") * 2 + 1, 2)::integer, 0) - 1)::smallint IN (1::smallint, 0::smallint) THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_cwc5un3ikz" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" IN (371::smallint) AND "name" = 249::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_aqcyenvobm" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 371::smallint AND "name" = 249::smallint THEN "lexical" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_lebh7q6d4v" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" IN (51::smallint, 49::smallint, 50::smallint, 40::smallint, 44::smallint, 178::smallint, 69::smallint, 68::smallint, 67::smallint, 61::smallint, 60::smallint, 71::smallint, 72::smallint, 217::smallint, 216::smallint, 180::smallint, 213::smallint, 62::smallint) AND ((NOT "kind" IN (61::smallint) OR NOT "lexical" ~ '\A[\u0009\u000A\u000D ]*(?:INF|NaN)[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text") AND "lexical" ~ '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND (NULLIF("pg_catalog"."substring"("qti"."__constant_npu4wt2fbp"(), ("kind" * 413 + "name") * 2 + 1, 2)::integer, 0) - 1)::smallint = 0::smallint OR "lexical" ~ '\A\{[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*\}\Z'::"pg_catalog"."text" AND (NULLIF("pg_catalog"."substring"("qti"."__constant_npu4wt2fbp"(), ("kind" * 413 + "name") * 2 + 1, 2)::integer, 0) - 1)::smallint = 1::smallint) AND ("pg_catalog"."bit_count"("pg_catalog"."substring"("qti"."__constant_k76iyg4uka"(), "name" * 413 + 1, 413)::"qti"."__attribute_name_bits_416_thr6i6sipt" & (~ "pg_catalog"."substring"("qti"."__constant_samvsv5x3m"(), "kind" * 413 + 1, 413)::"qti"."__attribute_name_bits_416_thr6i6sipt")) = 0::bigint) = true THEN "lexical" END) STORED;
 
@@ -2852,17 +2855,17 @@ ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_lktkxizjfc" "pg_catalog"."te
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_dzgdisyh5w" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 88::smallint AND "name" = 86::smallint OR (NULLIF("pg_catalog"."substring"("qti"."__constant_hvuwyzycut"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_rto362yzie"(), CASE WHEN (NULLIF("pg_catalog"."substring"("qti"."__constant_zkhfdh2gmj"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 413 + "name") * 7 + 1, 7)::integer, 0) - 1)::smallint < NULLIF("pg_catalog"."substring"("qti"."__constant_dc7u4pz4ga"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 7 + 1, 7)::integer, 0) - 1 THEN NULLIF("pg_catalog"."substring"("qti"."__constant_fgsupcpxgj"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 13 + 1, 13)::integer, 0) - 1 + (NULLIF("pg_catalog"."substring"("qti"."__constant_zkhfdh2gmj"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 413 + "name") * 7 + 1, 7)::integer, 0) - 1)::smallint ELSE 6167 END * 18 + 1, 18)::integer, 0) - 1) / 826)::smallint * 3 + 1, 3)::integer, 0) - 1)::smallint = 0::smallint THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_vbfvlvs34k" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 313::smallint AND "name" = 243::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_72jpvju2nd" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 313::smallint AND "name" = 243::smallint THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_ifplkntwcc" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 312::smallint AND "name" = 103::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_75yybdbwh6" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 312::smallint AND "name" = 103::smallint THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_il7uym6ypm" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 315::smallint AND "name" = 86::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_2rg63xmlgw" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 315::smallint AND "name" = 86::smallint THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_vdszrrr2xi" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 314::smallint AND "name" = 103::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_yu6yqztq6s" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 314::smallint AND "name" = 103::smallint THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_mpakvztehp" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 314::smallint AND "name" = 86::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_ki37d34yx7" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 314::smallint AND "name" = 86::smallint THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_6e3r7rxspd" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 314::smallint AND "name" = 133::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_lne5fw3g5s" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 314::smallint AND "name" = 133::smallint THEN "lexical" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_qjblweql4m" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 299::smallint AND "name" = 232::smallint THEN "lexical" END) STORED;
 
@@ -2910,7 +2913,7 @@ ALTER TABLE "qti"."attribute" ADD COLUMN "__name_7dplxjmgxi" smallint GENERATED 
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_r33uye6ksm" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN (NULLIF("pg_catalog"."substring"("qti"."__constant_cy4erml7fi"(), (("version" * 644 + "kind") * 413 + "name") * 2 + 1, 2)::integer, 0) - 1)::smallint IN (1::smallint, 0::smallint) THEN "node" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_nbhwynzy7f" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (371::smallint) AND "name" = 249::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_527k5prlu4" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 371::smallint AND "name" = 249::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_llarbtyebl" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (51::smallint, 49::smallint, 50::smallint, 40::smallint, 44::smallint, 178::smallint, 69::smallint, 68::smallint, 67::smallint, 61::smallint, 60::smallint, 71::smallint, 72::smallint, 217::smallint, 216::smallint, 180::smallint, 213::smallint, 62::smallint) AND ((NOT "kind" IN (61::smallint) OR NOT "lexical" ~ '\A[\u0009\u000A\u000D ]*(?:INF|NaN)[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text") AND "lexical" ~ '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND (NULLIF("pg_catalog"."substring"("qti"."__constant_npu4wt2fbp"(), ("kind" * 413 + "name") * 2 + 1, 2)::integer, 0) - 1)::smallint = 0::smallint OR "lexical" ~ '\A\{[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u037D\u037F-\u1FFF\u200C\u200D\u203F\u2040\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\U00010000-\U000EFFFF]*\}\Z'::"pg_catalog"."text" AND (NULLIF("pg_catalog"."substring"("qti"."__constant_npu4wt2fbp"(), ("kind" * 413 + "name") * 2 + 1, 2)::integer, 0) - 1)::smallint = 1::smallint) AND ("pg_catalog"."bit_count"("pg_catalog"."substring"("qti"."__constant_k76iyg4uka"(), "name" * 413 + 1, 413)::"qti"."__attribute_name_bits_416_thr6i6sipt" & (~ "pg_catalog"."substring"("qti"."__constant_samvsv5x3m"(), "kind" * 413 + 1, 413)::"qti"."__attribute_name_bits_416_thr6i6sipt")) = 0::bigint) = true THEN "node" END) STORED;
 
@@ -2980,17 +2983,17 @@ ALTER TABLE "qti"."attribute" ADD COLUMN "__node_pwgw7uhuqi" "pg_catalog"."uuid"
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_4ex7lirjju" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 88::smallint AND "name" = 86::smallint OR (NULLIF("pg_catalog"."substring"("qti"."__constant_hvuwyzycut"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_rto362yzie"(), CASE WHEN (NULLIF("pg_catalog"."substring"("qti"."__constant_zkhfdh2gmj"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 413 + "name") * 7 + 1, 7)::integer, 0) - 1)::smallint < NULLIF("pg_catalog"."substring"("qti"."__constant_dc7u4pz4ga"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 7 + 1, 7)::integer, 0) - 1 THEN NULLIF("pg_catalog"."substring"("qti"."__constant_fgsupcpxgj"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 13 + 1, 13)::integer, 0) - 1 + (NULLIF("pg_catalog"."substring"("qti"."__constant_zkhfdh2gmj"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 413 + "name") * 7 + 1, 7)::integer, 0) - 1)::smallint ELSE 6167 END * 18 + 1, 18)::integer, 0) - 1) / 826)::smallint * 3 + 1, 3)::integer, 0) - 1)::smallint = 0::smallint THEN "node" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_q5vrnditwr" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 313::smallint AND "name" = 243::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_a64niotvhh" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 313::smallint AND "name" = 243::smallint THEN "node" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_drj3rlgthx" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 312::smallint AND "name" = 103::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_tv42jwsiu5" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 312::smallint AND "name" = 103::smallint THEN "node" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_lkjggx2jzg" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 315::smallint AND "name" = 86::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_y6hua4msde" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 315::smallint AND "name" = 86::smallint THEN "node" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_5kxf5wpeb2" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 314::smallint AND "name" = 103::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_5kigznagjw" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 314::smallint AND "name" = 103::smallint THEN "node" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_u4iollalmu" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 314::smallint AND "name" = 86::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_du2ephtoz3" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 314::smallint AND "name" = 86::smallint THEN "node" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_cjcviw4cfb" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 314::smallint AND "name" = 133::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_veney5sjvc" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 314::smallint AND "name" = 133::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_vfyq3inzu3" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 299::smallint AND "name" = 232::smallint THEN "node" END) STORED;
 
@@ -3860,6 +3863,26 @@ ALTER TABLE "qti"."node" ADD COLUMN "__document_xr2raznqkm" "pg_catalog"."uuid" 
 
 ALTER TABLE "qti"."node" ADD COLUMN "__first_c2z2qcicj5" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "start" > 0::bigint THEN "first" END) STORED;
 
+ALTER TABLE "qti"."node" ADD COLUMN "__id_5df6ipa74r" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_h7mwc7aijh" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 370::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_3pophosnyx" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 375::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_ksygqriqq6" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 363::smallint AND "parent_kind" = 375::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_gb2nnvx2kq" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 405::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_ci5q5c7gmq" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 343::smallint AND "parent_kind" = 355::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_yjlplxiyyf" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 371::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_5i32recxxj" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 371::smallint AND "parent_kind" = 365::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_tht2ejquu7" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 365::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_hmrhsglug6" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 344::smallint AND "parent_kind" = 355::smallint THEN "id" END) STORED;
+
 ALTER TABLE "qti"."node" ADD COLUMN "__id_rbrnmh2xkm" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (2::smallint, 3::smallint, 4::smallint) THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_4vxvcu7dk3" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (23::smallint, 51::smallint, 66::smallint, 48::smallint, 47::smallint, 49::smallint, 37::smallint, 50::smallint, 42::smallint, 34::smallint, 32::smallint, 31::smallint, 46::smallint, 40::smallint, 59::smallint, 74::smallint, 24::smallint, 27::smallint, 44::smallint, 65::smallint, 52::smallint, 53::smallint, 64::smallint, 54::smallint, 73::smallint, 26::smallint, 28::smallint, 69::smallint, 68::smallint, 43::smallint, 77::smallint, 79::smallint, 76::smallint, 55::smallint, 75::smallint, 35::smallint, 25::smallint, 41::smallint, 80::smallint, 81::smallint, 82::smallint, 83::smallint, 84::smallint, 29::smallint, 36::smallint, 86::smallint, 85::smallint, 67::smallint, 45::smallint, 56::smallint, 38::smallint, 61::smallint, 60::smallint, 71::smallint, 57::smallint, 72::smallint, 78::smallint, 70::smallint, 39::smallint, 33::smallint, 30::smallint, 63::smallint, 58::smallint, 62::smallint) THEN "id" END) STORED;
@@ -3887,24 +3910,6 @@ ALTER TABLE "qti"."node" ADD COLUMN "__id_zvbpmu7yp2" "pg_catalog"."uuid" GENERA
 ALTER TABLE "qti"."node" ADD COLUMN "__id_orae3kwywm" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 1::smallint THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_v3yvnypwaj" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 0::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_zxrhuudrut" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 370::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_o6j5s2ikos" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 375::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_e6yutna5v7" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 363::smallint AND "parent_kind" = 375::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_e4uq7ygsiv" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 405::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_kllxftojah" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 343::smallint AND "parent_kind" = 355::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_fwqh74pls6" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 371::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_qx6nymeqvi" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 371::smallint AND "parent_kind" = 365::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_lphqrnnwsq" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 365::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_3us2a6cwao" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 344::smallint AND "parent_kind" = 355::smallint THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_laqeu7frlh" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 8::smallint THEN "id" END) STORED;
 
@@ -3938,29 +3943,29 @@ ALTER TABLE "qti"."node" ADD COLUMN "__last_lrfjhtdcju" "pg_catalog"."text" COLL
 
 ALTER TABLE "qti"."node" ADD COLUMN "__parent_5vue23yquy" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN NOT "kind" IN (7::smallint, 1::smallint, 0::smallint, 9::smallint, 8::smallint, 5::smallint, 6::smallint) AND ("pg_catalog"."bit_count"("pg_catalog"."substring"("qti"."__constant_om6wchq5ni"(), "state" * 306 + 1, 306)::"qti"."__position_bits_308_gsnowf36kr" & (~ "pg_catalog"."substring"("qti"."__constant_cc6vlqxc5e"(), ("version" * 644 + "parent_kind") * 306 + 1, 306)::"qti"."__position_bits_308_gsnowf36kr")) = 0::bigint) = true AND "start" > 0::bigint THEN "parent" END) STORED;
 
+ALTER TABLE "qti"."node" ADD COLUMN "__parent_awdlahwjp6" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 363::smallint AND "parent_kind" = 375::smallint THEN "parent" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__parent_y4eux76ahh" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 343::smallint AND "parent_kind" = 355::smallint THEN "parent" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__parent_zuk5itbmgc" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 344::smallint AND "parent_kind" = 355::smallint THEN "parent" END) STORED;
+
 ALTER TABLE "qti"."node" ADD COLUMN "__parent_fxsgzodkzz" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN (NULLIF("pg_catalog"."substring"("qti"."__constant_hvuwyzycut"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_tqfvihahbu"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 3 + 1, 3)::integer, 0) - 1)::smallint <> 3::smallint THEN "parent" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__parent_r7upmvp7av" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 363::smallint AND "parent_kind" = 375::smallint THEN "parent" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__parent_vvwbd362s7" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 343::smallint AND "parent_kind" = 355::smallint THEN "parent" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__parent_hrzqsuidmd" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 344::smallint AND "parent_kind" = 355::smallint THEN "parent" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__parent_l4ckjnvwat" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "start" > 0::bigint THEN "parent" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__state_2t36fyheek" smallint GENERATED ALWAYS AS (CASE WHEN NOT "kind" IN (7::smallint, 1::smallint, 0::smallint, 9::smallint, 8::smallint, 5::smallint, 6::smallint) AND ("pg_catalog"."bit_count"("pg_catalog"."substring"("qti"."__constant_om6wchq5ni"(), "state" * 306 + 1, 306)::"qti"."__position_bits_308_gsnowf36kr" & (~ "pg_catalog"."substring"("qti"."__constant_cc6vlqxc5e"(), ("version" * 644 + "parent_kind") * 306 + 1, 306)::"qti"."__position_bits_308_gsnowf36kr")) = 0::bigint) = true AND "start" > 0::bigint THEN "state" END) STORED;
 
+ALTER TABLE "qti"."node" ADD COLUMN "__string_value_iwzel4vptr" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 370::smallint THEN "string_value" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__string_value_272p6e5jv4" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 363::smallint AND "parent_kind" = 375::smallint THEN "string_value" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__string_value_nhlkaaxgdg" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 343::smallint AND "parent_kind" = 355::smallint THEN "string_value" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__string_value_t22k7slxjv" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 371::smallint AND "parent_kind" = 365::smallint THEN "string_value" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__string_value_332mhof6rk" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) AND "kind" = 344::smallint AND "parent_kind" = 355::smallint THEN "string_value" END) STORED;
+
 ALTER TABLE "qti"."node" ADD COLUMN "__string_value_zwb7jdjpr3" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN (NULLIF("pg_catalog"."substring"("qti"."__constant_hvuwyzycut"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_tqfvihahbu"(), ("version" * 1319 + (NULLIF("pg_catalog"."substring"("qti"."__constant_7ayqtsnyfr"(), (("version" * 644 + "kind") * 444 + "governs") * 11 + 1, 11)::integer, 0) - 1)::smallint) * 8 + 1, 8)::integer, 0) - 1)::smallint * 3 + 1, 3)::integer, 0) - 1)::smallint <> 3::smallint THEN "string_value" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__string_value_bcv25iuqox" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 370::smallint THEN "string_value" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__string_value_2cy3vefhoc" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 363::smallint AND "parent_kind" = 375::smallint THEN "string_value" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__string_value_4aoawe2nov" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 343::smallint AND "parent_kind" = 355::smallint THEN "string_value" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__string_value_eriolojczj" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 371::smallint AND "parent_kind" = 365::smallint THEN "string_value" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__string_value_hlu6hjetsg" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 344::smallint AND "parent_kind" = 355::smallint THEN "string_value" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__string_value_au6fy6olpt" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 66::smallint THEN "string_value" END) STORED;
 
@@ -4822,7 +4827,7 @@ ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_document_kka43rlk6
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_name_it3effkro5" UNIQUE NULLS DISTINCT ("__node_r33uye6ksm", "__name_bjcimgcvll");
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_edrelpp5d7" UNIQUE NULLS DISTINCT ("__node_nbhwynzy7f");
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_rywvn257xg" UNIQUE NULLS DISTINCT ("__node_527k5prlu4");
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_name_76ne7v4352" UNIQUE NULLS DISTINCT ("__node_llarbtyebl", "__name_pm5bo6s47u");
 
@@ -4890,17 +4895,17 @@ ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_name_ggb2ud2t
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_jheixofuge" UNIQUE NULLS DISTINCT ("__node_4ex7lirjju");
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_bg3akf4elw" UNIQUE NULLS DISTINCT ("__node_q5vrnditwr");
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_d55k67prtg" UNIQUE NULLS DISTINCT ("__node_a64niotvhh");
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_seiqjk2u3t" UNIQUE NULLS DISTINCT ("__node_drj3rlgthx");
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_n4gccldiri" UNIQUE NULLS DISTINCT ("__node_tv42jwsiu5");
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_vk3qyijtae" UNIQUE NULLS DISTINCT ("__node_lkjggx2jzg");
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_zblxzhkrg7" UNIQUE NULLS DISTINCT ("__node_y6hua4msde");
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_almorntplb" UNIQUE NULLS DISTINCT ("__node_5kxf5wpeb2");
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_7frkqmnnsy" UNIQUE NULLS DISTINCT ("__node_5kigznagjw");
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_z36mhzwlrs" UNIQUE NULLS DISTINCT ("__node_u4iollalmu");
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_pdwhbu2jlw" UNIQUE NULLS DISTINCT ("__node_du2ephtoz3");
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_bc5bivcwyd" UNIQUE NULLS DISTINCT ("__node_cjcviw4cfb");
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_fjtzp55anw" UNIQUE NULLS DISTINCT ("__node_veney5sjvc");
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_key_node_ofvc46ba3s" UNIQUE NULLS DISTINCT ("__node_vfyq3inzu3");
 
@@ -5012,19 +5017,23 @@ ALTER TABLE "qti"."mapping_lookup" ADD CONSTRAINT "__mapping_lookup_key_item_ref
 
 ALTER TABLE "qti"."named" ADD CONSTRAINT "__named_key_document_index_names_ygamjbmyze" UNIQUE NULLS DISTINCT ("document", "__index_names_mbaffe626y");
 
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_kind_a5lprkyzjg" UNIQUE NULLS DISTINCT ("__id_5df6ipa74r", "kind");
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_kind_parent_kind_yjhrl5ivzs" UNIQUE NULLS DISTINCT ("__id_5df6ipa74r", "kind", "parent_kind");
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_wmbgedr43j" UNIQUE NULLS DISTINCT ("__id_h7mwc7aijh");
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_qtthcv7k5k" UNIQUE NULLS DISTINCT ("__id_ksygqriqq6");
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_p3kfcvtf73" UNIQUE NULLS DISTINCT ("__id_ci5q5c7gmq");
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_zfhytxa4fm" UNIQUE NULLS DISTINCT ("__id_5i32recxxj");
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_6jme3ffklk" UNIQUE NULLS DISTINCT ("__id_hmrhsglug6");
+
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_zlofbnqy7x" UNIQUE NULLS DISTINCT ("__id_i3372l665q");
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_tu2lejn7dc" UNIQUE NULLS DISTINCT ("__id_jrir5nld5p");
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_6s6psb4iff" UNIQUE NULLS DISTINCT ("__id_zxrhuudrut");
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_axlw3sqkgd" UNIQUE NULLS DISTINCT ("__id_e6yutna5v7");
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_3hg2dtuayf" UNIQUE NULLS DISTINCT ("__id_kllxftojah");
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_pk7dcmrd6k" UNIQUE NULLS DISTINCT ("__id_qx6nymeqvi");
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_estslxcuih" UNIQUE NULLS DISTINCT ("__id_3us2a6cwao");
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_parent_state_ofhdr45dwn" UNIQUE NULLS DISTINCT ("__parent_5vue23yquy", "__state_2t36fyheek");
 
@@ -6050,13 +6059,13 @@ ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_idrefs
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_open_name_r5twrp7dwx" FOREIGN KEY ("node", "id", "__pred_open_name_736u424hys") REFERENCES "qti"."open_attribute_name" ("node", "attribute", "at") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_copy_attributes_document_governs_hfqzizqyd4" FOREIGN KEY ("node", "__copy_attributes_6qn3pvdjs3", "document", "governs", "kind", "version") REFERENCES "qti"."node" ("id", "attributes", "document", "governs", "kind", "version") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_copy_attributes_document_yy5gbgp3uk" FOREIGN KEY ("node", "__copy_attributes_6qn3pvdjs3", "document", "document_type", "governs", "kind", "version") REFERENCES "qti"."node" ("id", "attributes", "document", "document_type", "governs", "kind", "version") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_pred_at_attrs_was_wwtjh26i6n" FOREIGN KEY ("node", "__pred_at_xktcobhsti", "attrs_was") REFERENCES "qti"."attribute" ("node", "at", "attrs_after") MATCH SIMPLE;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_lexical_document_kind_q6czk6ohxz" FOREIGN KEY ("__node_r33uye6ksm", "__name_bjcimgcvll", "__lexical_3dmcwkgtws", "__document_ujijvivytq", "__kind_anjyjm4hrl") REFERENCES "qti"."reference" ("node", "name", "lexical", "document", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_cgam7qxtil" FOREIGN KEY ("__node_nbhwynzy7f", "__lexical_cwc5un3ikz") REFERENCES "qti"."lom_string_language" ("node", "language") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_wk5qyll2a2" FOREIGN KEY ("__node_527k5prlu4", "__lexical_aqcyenvobm") REFERENCES "qti"."lom_string_language" ("node", "language") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_kind_lexical_cuoymyrgwh" FOREIGN KEY ("__node_llarbtyebl", "__name_pm5bo6s47u", "__kind_ekvm7ixq3m", "__lexical_lebh7q6d4v") REFERENCES "qti"."variable_ref" ("node", "attribute", "kind", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6126,17 +6135,17 @@ ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_kind_lexi
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_document_lexical_da4jfka5c7" FOREIGN KEY ("__node_4ex7lirjju", "__document_ydr4qsnw7m", "__lexical_dzgdisyh5w") REFERENCES "qti"."document_id" ("node", "document", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_x2tbycf5kn" FOREIGN KEY ("__node_q5vrnditwr", "__lexical_vbfvlvs34k") REFERENCES "qti"."dependency" ("node", "ref") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_2okgmcxa7u" FOREIGN KEY ("__node_a64niotvhh", "__lexical_72jpvju2nd") REFERENCES "qti"."dependency" ("node", "ref") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_ptra4nr6xi" FOREIGN KEY ("__node_drj3rlgthx", "__lexical_ifplkntwcc") REFERENCES "qti"."file" ("node", "href") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_piztef2wyq" FOREIGN KEY ("__node_tv42jwsiu5", "__lexical_75yybdbwh6") REFERENCES "qti"."file" ("node", "href") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_spasif6chh" FOREIGN KEY ("__node_lkjggx2jzg", "__lexical_il7uym6ypm") REFERENCES "qti"."manifest_id" ("node", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_hy742todyt" FOREIGN KEY ("__node_y6hua4msde", "__lexical_2rg63xmlgw") REFERENCES "qti"."manifest_id" ("node", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_ukr6v2zihk" FOREIGN KEY ("__node_5kxf5wpeb2", "__lexical_vdszrrr2xi") REFERENCES "qti"."resource_href" ("node", "href") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_gnshy64grh" FOREIGN KEY ("__node_5kigznagjw", "__lexical_yu6yqztq6s") REFERENCES "qti"."resource_href" ("node", "href") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_sqksiuqqyj" FOREIGN KEY ("__node_u4iollalmu", "__lexical_mpakvztehp") REFERENCES "qti"."resource" ("node", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_q35kr5p4v2" FOREIGN KEY ("__node_du2ephtoz3", "__lexical_ki37d34yx7") REFERENCES "qti"."resource" ("node", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_w3nt6idly4" FOREIGN KEY ("__node_cjcviw4cfb", "__lexical_6e3r7rxspd") REFERENCES "qti"."resource" ("node", "type_lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_xe2loezx3y" FOREIGN KEY ("__node_veney5sjvc", "__lexical_lne5fw3g5s") REFERENCES "qti"."resource" ("node", "type_lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_document_lexical_odtutmz4jy" FOREIGN KEY ("__node_vfyq3inzu3", "__document_i7b2abt6bz", "__lexical_qjblweql4m") REFERENCES "qti"."item_timing" ("node", "document", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6302,7 +6311,7 @@ ALTER TABLE "qti"."doctype" ADD CONSTRAINT "__doctype_fk_node_tag_kind_doctype_2
 
 ALTER TABLE "qti"."document" ADD CONSTRAINT "__document_fk_node_dum75scy6o" FOREIGN KEY ("node") REFERENCES "qti"."document_generals" ("document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."document" ADD CONSTRAINT "__document_fk_node_node_children_context_node_5fm6a3hy4r" FOREIGN KEY ("node", "node_children", "context", "node_document", "node_governs", "node_kind", "context_nearest", "context_nearest_kind", "node_parent_kind", "node_start", "version") REFERENCES "qti"."node" ("id", "children", "ancestry", "document", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."document" ADD CONSTRAINT "__document_fk_node_node_children_context_node_lcfkh3tpi2" FOREIGN KEY ("node", "node_children", "context", "node_document", "resource_type", "node_governs", "node_kind", "context_nearest", "context_nearest_kind", "node_parent_kind", "node_start", "version") REFERENCES "qti"."node" ("id", "children", "ancestry", "document", "document_type", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."document" ADD CONSTRAINT "__document_fk_node_tag_kind_document_in2l2mn2ty" FOREIGN KEY ("node", "__tag_kind_document_dbsst7xqb4") REFERENCES "qti"."node" ("id", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6642,7 +6651,7 @@ ALTER TABLE "qti"."lom_language" ADD CONSTRAINT "__lom_language_fk_general_tag_c
 
 ALTER TABLE "qti"."lom_language" ADD CONSTRAINT "__lom_language_fk_general_tag_predecessor_carriers_yqusf5b2t3" FOREIGN KEY ("general", "tag", "__predecessor_carriers_gwlaxdawzd") REFERENCES "qti"."lom_language" ("general", "tag", "__index_carriers_hprm4xufhg") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_language" ADD CONSTRAINT "__lom_language_fk_node_tag_kind_lom_language_tag_5bpdfssvab" FOREIGN KEY ("node", "__tag_kind_lom_language_6guimqy5l2", "__tag_parent_kind_lom_general_3vcfeyuobm") REFERENCES "qti"."node" ("id", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lom_language" ADD CONSTRAINT "__lom_language_fk_node_tag_kind_lom_language_tag_rlvzml7mg6" FOREIGN KEY ("node", "__tag_kind_lom_language_6guimqy5l2", "__tag_parent_kind_lom_general_3vcfeyuobm") REFERENCES "qti"."node" ("__id_5df6ipa74r", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."lom_object" ADD CONSTRAINT "__lom_object_fk_package_path_document_lrripwtddq" FOREIGN KEY ("package", "path", "document") REFERENCES "qti"."document" ("package", "path", "node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6678,13 +6687,13 @@ ALTER TABLE "qti"."lom_resource" ADD CONSTRAINT "__lom_resource_fk_node_slr76tmc
 
 ALTER TABLE "qti"."lom_resource" ADD CONSTRAINT "__lom_resource_fk_node_named_wrhz3dsh3m" FOREIGN KEY ("__node_uylg5h7nr5", "__named_quw3gqg6g5") REFERENCES "qti"."typed_href" ("__node_fid66jnndo", "__type_bo7oxqydo6") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_resource_type" ADD CONSTRAINT "__lom_resource_type_fk_term_tag_kind_lom_value_tag_bttya6jjlz" FOREIGN KEY ("term", "__tag_kind_lom_value_uyss5uoxlf", "__tag_parent_kind_lom_learning_resource_type_vpculv3nxv") REFERENCES "qti"."node" ("id", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lom_resource_type" ADD CONSTRAINT "__lom_resource_type_fk_term_tag_kind_lom_value_tag_m4wq54r6gh" FOREIGN KEY ("term", "__tag_kind_lom_value_uyss5uoxlf", "__tag_parent_kind_lom_learning_resource_type_vpculv3nxv") REFERENCES "qti"."node" ("__id_5df6ipa74r", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."lom_resource_type" ADD CONSTRAINT "__lom_resource_type_fk_node_cyekcelmbz" FOREIGN KEY ("__node_dzmkpyu5uh") REFERENCES "qti"."lom_resource_type_source" ("__node_jr3yepcmfz") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_resource_type_source" ADD CONSTRAINT "__lom_resource_type_source_fk_term_tag_kind_lom_bxhmqps4r3" FOREIGN KEY ("term", "__tag_kind_lom_source_m6ibym2vwk", "__tag_parent_kind_lom_learning_resource_type_vpculv3nxv") REFERENCES "qti"."node" ("id", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lom_resource_type_source" ADD CONSTRAINT "__lom_resource_type_source_fk_term_tag_kind_lom_sqvk4iwwrj" FOREIGN KEY ("term", "__tag_kind_lom_source_m6ibym2vwk", "__tag_parent_kind_lom_learning_resource_type_vpculv3nxv") REFERENCES "qti"."node" ("__id_5df6ipa74r", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_tag_kind_lom_string_l4rlboibj6" FOREIGN KEY ("node", "__tag_kind_lom_string_y5pieaaf6y") REFERENCES "qti"."node" ("id", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_tag_kind_lom_string_kru4esvoft" FOREIGN KEY ("node", "__tag_kind_lom_string_y5pieaaf6y") REFERENCES "qti"."node" ("__id_5df6ipa74r", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_pred_languages_fouwh2wpp7" FOREIGN KEY ("node", "__pred_languages_i7e7rxcgke") REFERENCES "qti"."lom_string_language" ("node", "__index_languages_ft2z7nkccu") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6818,9 +6827,27 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_pred_children_string_value
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_pred_namespaces_qja2g4likk" FOREIGN KEY ("id", "__pred_namespaces_feftb6bqtj") REFERENCES "qti"."namespace" ("node", "at") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_parent_copy_children_parent_ancestry_koqy3nkwgs" FOREIGN KEY ("parent", "__copy_children_ob6cc2vg45", "parent_ancestry", "document", "parent_governs", "parent_kind", "parent_nearest", "parent_nearest_kind", "parent_parent_kind", "__parent_start_children_bgo43fyxun", "version") REFERENCES "qti"."node" ("id", "children", "ancestry", "document", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") MATCH SIMPLE;
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_parent_copy_children_parent_ancestry_ghwsxw2q3w" FOREIGN KEY ("parent", "__copy_children_ob6cc2vg45", "parent_ancestry", "document", "document_type", "parent_governs", "parent_kind", "parent_nearest", "parent_nearest_kind", "parent_parent_kind", "__parent_start_children_bgo43fyxun", "version") REFERENCES "qti"."node" ("id", "children", "ancestry", "document", "document_type", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") MATCH SIMPLE;
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_document_kind_hgebl3k4qm" FOREIGN KEY ("__document_jlx2xep5af", "__kind_3zonnawsqb") REFERENCES "qti"."document" ("node", "root_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_string_value_gre2s7iikk" FOREIGN KEY ("__id_h7mwc7aijh", "__string_value_iwzel4vptr") REFERENCES "qti"."lom_entry" ("node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_qhat3dtege" FOREIGN KEY ("__id_3pophosnyx") REFERENCES "qti"."lom_general" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_parent_string_value_5m27sl3ms3" FOREIGN KEY ("__id_ksygqriqq6", "__parent_awdlahwjp6", "__string_value_272p6e5jv4") REFERENCES "qti"."lom_language" ("node", "general", "lang") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_qnwss3kqdu" FOREIGN KEY ("__id_gb2nnvx2kq") REFERENCES "qti"."lom_record" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_parent_string_value_fqldhdk65l" FOREIGN KEY ("__id_ci5q5c7gmq", "__parent_y4eux76ahh", "__string_value_nhlkaaxgdg") REFERENCES "qti"."lom_resource_type_source" ("term", "node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_5bmuakmzwg" FOREIGN KEY ("__id_yjlplxiyyf") REFERENCES "qti"."lom_string" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_string_value_et7ui66gpi" FOREIGN KEY ("__id_5i32recxxj", "__string_value_t22k7slxjv") REFERENCES "qti"."lom_title_string" ("node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_peycxyuabj" FOREIGN KEY ("__id_tht2ejquu7") REFERENCES "qti"."lom_title" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_parent_string_value_5dvbwxbe4d" FOREIGN KEY ("__id_hmrhsglug6", "__parent_zuk5itbmgc", "__string_value_332mhof6rk") REFERENCES "qti"."lom_resource_type" ("term", "node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_fk2vwz6paf" FOREIGN KEY ("__id_rbrnmh2xkm") REFERENCES "qti"."open_element_name" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6847,24 +6874,6 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_ri2sd7tkby" FOREIGN KEY ("
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_popwxzz6f7" FOREIGN KEY ("__id_orae3kwywm") REFERENCES "qti"."doctype" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_fgdmja7iz2" FOREIGN KEY ("__id_v3yvnypwaj") REFERENCES "qti"."document" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_string_value_inj46svd7d" FOREIGN KEY ("__id_zxrhuudrut", "__string_value_bcv25iuqox") REFERENCES "qti"."lom_entry" ("node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_d6nscgvekf" FOREIGN KEY ("__id_o6j5s2ikos") REFERENCES "qti"."lom_general" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_parent_string_value_3cco3gkldg" FOREIGN KEY ("__id_e6yutna5v7", "__parent_r7upmvp7av", "__string_value_2cy3vefhoc") REFERENCES "qti"."lom_language" ("node", "general", "lang") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_kzfjptib3l" FOREIGN KEY ("__id_e4uq7ygsiv") REFERENCES "qti"."lom_record" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_parent_string_value_kewmvcuyfi" FOREIGN KEY ("__id_kllxftojah", "__parent_vvwbd362s7", "__string_value_4aoawe2nov") REFERENCES "qti"."lom_resource_type_source" ("term", "node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_rsoptv6yfp" FOREIGN KEY ("__id_fwqh74pls6") REFERENCES "qti"."lom_string" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_string_value_kyf4qksdiv" FOREIGN KEY ("__id_qx6nymeqvi", "__string_value_eriolojczj") REFERENCES "qti"."lom_title_string" ("node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_riud6xfqtp" FOREIGN KEY ("__id_lphqrnnwsq") REFERENCES "qti"."lom_title" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_parent_string_value_sigo7qn4ua" FOREIGN KEY ("__id_3us2a6cwao", "__parent_hrzqsuidmd", "__string_value_hlu6hjetsg") REFERENCES "qti"."lom_resource_type" ("term", "node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_5jub37xnsu" FOREIGN KEY ("__id_laqeu7frlh") REFERENCES "qti"."pi" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7260,7 +7269,7 @@ ALTER TABLE "qti"."section_template_ref" ADD CONSTRAINT "__section_template_ref_
 
 ALTER TABLE "qti"."section_template_ref" ADD CONSTRAINT "__section_template_ref_fk_declaration_assembly_tnjghs25fh" FOREIGN KEY ("__declaration_g7x33pdi4g", "__assembly_izwh6opjdd", "__identifier_gausqms2f7", "__declaration_kind_cxvq2cbr6r", "__base_type_kuxnzca2qd", "__cardinality_2rxzwziehm") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_children_ancestry_document_governs_joppgidqd5" FOREIGN KEY ("node", "children", "ancestry", "document", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") REFERENCES "qti"."node" ("id", "children", "ancestry", "document", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_children_ancestry_document_document_kxfmkls4fg" FOREIGN KEY ("node", "children", "ancestry", "document", "document_type", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") REFERENCES "qti"."node" ("id", "children", "ancestry", "document", "document_type", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_parent_hjpmqzvjk4" FOREIGN KEY ("node", "parent") REFERENCES "qti"."node" ("id", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

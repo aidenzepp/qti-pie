@@ -359,7 +359,9 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  * - `rootKind` is a `NodeKind` handle, the root element's kind, which a containment from the root
  *   element proves. `RootOfType`'s payload is over `NodeKind` too, so P2 compares them directly.
  * - `resourceType` is the type of the resource that lists the document, `none` for the manifest,
- *   which no resource lists (ResourceType's code 0); Q5.06's P1 and P2 judge it.
+ *   which no resource lists (ResourceType's code 0); Q5.06's P1 and P2 judge it. Its document node
+ *   holds it as its `documentType`, and every node and attribute of the document holds it alike, so
+ *   a law can tell the manifest's elements from another document's.
  * - **its context** (spec readings 85 and 117): the ancestry and nearest interaction its document
  *   node holds, which every node below it inherits along the tree's owner axis, so an included
  *   fragment's content is judged where it is included. `context` is the union of the ancestries of
@@ -545,6 +547,7 @@ export const chardataLawsByName = {
         "nodeChildren",
         "context",
         "nodeDocument",
+        "resourceType",
         "nodeGoverns",
         "nodeKind",
         "contextNearest",

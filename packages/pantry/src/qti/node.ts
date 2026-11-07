@@ -72,6 +72,7 @@ import {
   openElementClasses,
   Position,
   PositionSelf,
+  ResourceType,
   SchemaVersion,
   SharedModelOf,
   SlotSelf,
@@ -141,12 +142,13 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  * Its fields by how each is written (§C):
  *
  * - **the host's:** `id`, `document` (the root field, on the root alone, its own id), `kind`,
- *   `version`, `governs`, `prefix`, `nearest`, `nearestKind`, `state` (its content-automaton state,
- *   from `placedStep`), `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or whitespace
- *   node's characters, an entity reference's `&name;`, empty elsewhere), `first` and `last` (the
- *   first and last code points of its `chars`, empty where `chars` is) and `stringPiece` (its
- *   `chars` where its parent's text is checked or copied, empty elsewhere: the string value fold's
- *   step);
+ *   `version`, `documentType` (the type of the resource that lists its document, `none` for the
+ *   manifest: its document's `Document.resourceType` at the root, its parent's below), `governs`,
+ *   `prefix`, `nearest`, `nearestKind`, `state` (its content-automaton state, from `placedStep`),
+ *   `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or whitespace node's characters,
+ *   an entity reference's `&name;`, empty elsewhere), `first` and `last` (the first and last code
+ *   points of its `chars`, empty where `chars` is) and `stringPiece` (its `chars` where its
+ *   parent's text is checked or copied, empty elsewhere: the string value fold's step);
  * - **the tree's group:** `parent`, which the nesting supplies and the root holds as its own id;
  * - **drawn:** `at`, `children`, `start`, `end`, and the attribute and namespace family counts;
  * - **accumulated** by grizzle along the tree's axes: the parent copies (`parentParentKind` the
@@ -172,6 +174,7 @@ export const Node = relation(
     children: drawn(natural),
     countedChildren: accumulated(natural, 0n),
     document: uuid,
+    documentType: closedId(ResourceType),
     elementChildren: accumulated(natural, 0n),
     elements: accumulated(natural, 0n),
     elementsWas: accumulated(natural, 0n),
@@ -461,7 +464,8 @@ export const nodeRef = on(Node, "id", "document", "kind", "start", "nearest", "v
 
 /**
  * A node's context (spec readings 85 and 117): the fields the tree's owner axis copies to its
- * children, with its id, children, document and start. It is exactly the column set the owner
+ * children, with its id, children, document and start, and its document's type, which every node
+ * of a document holds alike. It is exactly the column set the owner
  * axis's foreign key targets, so a containment into it shares that UNIQUE on `Node` and adds no
  * index: a document's `Document` row states its document node's context through it, and an
  * include's site copies the include's ancestry and nearest interaction through it.
@@ -472,6 +476,7 @@ export const nodeContext = on(
   "children",
   "ancestry",
   "document",
+  "documentType",
   "governs",
   "kind",
   "nearest",
@@ -782,6 +787,7 @@ export const nodeLawsByName = {
         members,
         "parent",
         "version",
+        "documentType",
         "parentKind",
         "parentGoverns",
         "parentAncestry",
@@ -793,6 +799,7 @@ export const nodeLawsByName = {
         Node,
         "id",
         "version",
+        "documentType",
         "kind",
         "governs",
         "ancestry",

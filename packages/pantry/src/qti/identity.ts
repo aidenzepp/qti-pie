@@ -140,7 +140,13 @@ import {
 import { Attribute, Idref } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { LomGeneral, LomObject, LomRecord, ResourceLomGeneral } from "#pantry/qti/metadata.ts";
+import {
+  LomGeneral,
+  LomObject,
+  LomRecord,
+  recordDocumentTypes,
+  ResourceLomGeneral,
+} from "#pantry/qti/metadata.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
 
@@ -835,11 +841,16 @@ const toolVersions = select(Attribute, (a) =>
 );
 
 /**
- * Every `lom:language` of a LOM `general` category, the source of {@link LomLanguage}: its id, its
- * parent and its string value.
+ * Every `lom:language` of a LOM `general` category of a document a package's records are read from
+ * (`recordDocumentTypes`), the source of {@link LomLanguage}: its id, its parent and its string
+ * value.
  */
 const lomLanguages = select(Node, (n) =>
-  n.and(n.eq(n.kind, "lom:language"), n.eq(n.parentKind, "lom:general")),
+  n.and(
+    n.in(n.documentType, recordDocumentTypes),
+    n.eq(n.kind, "lom:language"),
+    n.eq(n.parentKind, "lom:general"),
+  ),
 );
 
 /**

@@ -220,7 +220,7 @@ const labelNames: ReadonlyMap<string, Named> = new Map<string, Named>([
  * The labels the oracle knows, as a case may spell them: each of {@link labelNames} once, in some
  * letter case.
  */
-export const knownLabels: readonly string[] = [
+export const knownLabels: readonly [string, ...string[]] = [
   "UTF-8",
   "utf-8",
   "UTF-16",

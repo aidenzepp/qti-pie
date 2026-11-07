@@ -227,9 +227,10 @@ const REFERENCE_OR_HIDDEN = new RegExp(
 const LINE_BREAK = /\r\n|[\n\r]/gu;
 
 /**
- * The entities every XML processor knows, by name, with their characters (XML 1.0 section 4.6).
+ * The entities every XML processor knows, by name, with their characters (XML 1.0 section 4.6):
+ * the one table the prolog's lexer and the body's reference scan (`#crust/read.ts`) both read.
  */
-const PREDEFINED: ReadonlyMap<string, string> = new Map([
+export const PREDEFINED: ReadonlyMap<string, string> = new Map([
   ["amp", "&"],
   ["apos", "'"],
   ["gt", ">"],

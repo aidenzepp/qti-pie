@@ -2,7 +2,7 @@ import { Effect, Option, Result } from "effect";
 import { SaxesParser } from "saxes";
 import { decode } from "#crust/decode.ts";
 import type { Decoded } from "#crust/decode.ts";
-import { lexProlog, positionOf, substitute, undeclaredEntity } from "#crust/dtd.ts";
+import { PREDEFINED, lexProlog, positionOf, substitute, undeclaredEntity } from "#crust/dtd.ts";
 import type { AttlistEntry, Prolog, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import { NAME_CHAR, NAME_START, isNCName, productionViolation } from "#crust/names.ts";
@@ -61,11 +61,6 @@ const SCAN = new RegExp(
   String.raw`<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[[\s\S]*?\]\]>|&#(?:x(?<hex>[0-9A-Fa-f]+)|(?<decimal>[0-9]+));|&(?<name>[${NAME_START}][${NAME_CHAR}]*);`,
   "gu",
 );
-
-/**
- * The five entities every XML processor knows (XML 1.0 section 4.6).
- */
-const PREDEFINED: ReadonlySet<string> = new Set(["lt", "gt", "amp", "apos", "quot"]);
 
 /**
  * The undeclared entity names the body references, in order of first use, and the code points the

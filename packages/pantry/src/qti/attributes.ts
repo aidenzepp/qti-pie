@@ -109,6 +109,7 @@ import {
   NodeKind,
   openElementClasses,
   Required,
+  ResourceType,
   SchemaVersion,
   SlotSelf,
   TextDomain,
@@ -201,9 +202,9 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  *   of its name under its element's governor);
  * - **the family's group:** `node`, its element's id, which the nesting supplies;
  * - **drawn:** `at`, and the counts of its three families, `openName`, `idrefs` and `entities`;
- * - **accumulated** by grizzle: `kind`, `version`, `document` and `governs`, its element's, along the
- *   owner axis; `attrsWas` and `attrsAfter`, AL2's fold before and after this attribute; and
- *   `idrefText`, the end of its `Idref` pieces' concatenation.
+ * - **accumulated** by grizzle: `kind`, `version`, `document`, `governs` and `documentType`, its
+ *   element's, along the owner axis; `attrsWas` and `attrsAfter`, AL2's fold before and after this
+ *   attribute; and `idrefText`, the end of its `Idref` pieces' concatenation.
  */
 export const Attribute = relation(
   "Attribute",
@@ -212,6 +213,7 @@ export const Attribute = relation(
     attrsAfter: accumulated(bits(AttributeSlot), Bits.of(AttributeSlot, [])),
     attrsWas: accumulated(bits(AttributeSlot), Bits.of(AttributeSlot, [])),
     document: accumulated(uuid, nilUuid),
+    documentType: accumulated(closedId(ResourceType), "none"),
     entities: drawn(natural),
     governs: accumulated(closedId(TypeName), "none"),
     id: uuid,
@@ -489,8 +491,8 @@ export const attributeLawsByName = {
   "AL1 admission": [check("AL1_admission", Attribute, admitted)],
   "AL1 owner": [
     contained(
-      on(Attribute, "node", "kind", "version", "document", "governs"),
-      on(Node, "id", "kind", "version", "document", "governs"),
+      on(Attribute, "node", "kind", "version", "document", "governs", "documentType"),
+      on(Node, "id", "kind", "version", "document", "governs", "documentType"),
     ),
     contained(
       on(OpenAttributeName, "node", "attribute", "class", "kind", "version", "governs"),

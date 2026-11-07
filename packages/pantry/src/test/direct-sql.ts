@@ -951,8 +951,202 @@ const keyAt = (fact: Stated["fact"], fields: readonly string[]): string =>
   fields.map((field) => String(fact[field])).join("\u0000");
 
 /**
+ * A side of a containment a writer copies values across: a relation, or a selection of it by a
+ * predicate the writer reads. A selection of another shape reads as no such side, so the writer
+ * copies across no containment of it.
+ */
+const CopySideSchema = Schema.Struct({
+  source: Schema.Union([
+    Schema.Struct({
+      desc: Schema.Struct({ predicate: ExpressionSchema }),
+      relation: Schema.Struct({ name: Schema.String }),
+    }),
+    Schema.Struct({ name: Schema.String }),
+  ]),
+  terms: Schema.Array(Schema.Unknown),
+});
+
+/**
+ * A containment as a writer copies values across it, both sides by relation and terms.
+ */
+const CopySchema = Schema.Struct({
+  kind: Schema.Literals(["contained"]),
+  left: CopySideSchema,
+  right: CopySideSchema,
+});
+
+/**
+ * A relation's name and its primary key's fields, as grizzle declares it.
+ */
+const KeyedSchema = Schema.Struct({ name: Schema.String, primaryKey: Schema.Array(Schema.String) });
+
+/**
+ * `Qti`'s stored relations' primary keys, by relation.
+ */
+const primaryKeys: ReadonlyMap<string, readonly string[]> = new Map(
+  Object.values(Qti.relations).flatMap((relation) =>
+    Option.match(Schema.decodeUnknownOption(KeyedSchema)(relation), {
+      onNone: () => [],
+      onSome: ({ name, primaryKey }) => [[name, primaryKey] as const],
+    }),
+  ),
+);
+
+/**
+ * A side as a writer copies across it: its relation, and the selection that holds its rows.
+ *
+ * @param side - The side, as grizzle keeps it.
+ * @returns Its relation and selection.
+ */
+const copySideOf = (side: typeof CopySideSchema.Type) =>
+  "desc" in side.source
+    ? { relation: side.source.relation.name, selection: Option.some(side.source.desc.predicate) }
+    : { relation: side.source.name, selection: Option.none() };
+
+/**
+ * `Qti`'s containments a writer copies values across: each whose right side names its relation's
+ * whole primary key, so a row of the left matches at most one of the right. A containment holds a
+ * matched pair's other fields equal, so a value either side states is the other side's: a tree
+ * member's copies of its parent's (T3), an attribute's of its element's, a document node's of its
+ * `Document` row's, a site's of its include's.
+ */
+const copies = Qti.statements.flatMap((statement) =>
+  Option.match(Schema.decodeUnknownOption(CopySchema)(statement), {
+    onNone: () => [],
+    onSome: ({ left, right }) => {
+      const pairs = left.terms.flatMap((term, at) => {
+        const other = right.terms[at];
+
+        return Predicate.isString(term) && Predicate.isString(other)
+          ? [[term, other] as const]
+          : [];
+      });
+      const to = copySideOf(right);
+      const key = primaryKeys.get(to.relation) ?? [];
+      const keyPairs = key.flatMap((field) => pairs.filter(([, other]) => other === field));
+
+      return key.length === 0 ||
+        keyPairs.length !== key.length ||
+        left.terms.length !== right.terms.length
+        ? []
+        : [
+            {
+              from: copySideOf(left),
+              key: keyPairs,
+              to,
+              values: pairs.filter(([, other]) => !key.includes(other)),
+            },
+          ];
+    },
+  }),
+);
+
+/**
+ * The fields a selection's predicate reads.
+ *
+ * @param expression - The predicate, or one of its operands.
+ * @returns The fields.
+ */
+const fieldsRead = (expression: Expression): readonly string[] =>
+  Match.value(expression).pipe(
+    Match.discriminatorsExhaustive("kind")({
+      and: ({ args }) => args.flatMap(fieldsRead),
+      closedAt: ({ args }) => args.flatMap(fieldsRead),
+      compare: ({ left, right }) => [...fieldsRead(left), ...fieldsRead(right)],
+      field: ({ field }) => [field],
+      in: ({ arg }) => fieldsRead(arg),
+      literal: () => [],
+      not: ({ arg }) => fieldsRead(arg),
+      or: ({ args }) => args.flatMap(fieldsRead),
+    }),
+  );
+
+/**
+ * Whether a side's selection holds a fact: every fact of an unselected relation, and of a
+ * selection a fact stating every field its predicate reads, where the predicate holds.
+ *
+ * @param side - The side.
+ * @param side.selection - Its selection's predicate, none for the relation itself.
+ * @param fact - The fact.
+ * @returns Whether it does.
+ */
+const selects = (
+  { selection }: { readonly selection: Option.Option<Expression> },
+  fact: Stated["fact"],
+): boolean =>
+  Option.match(selection, {
+    onNone: () => true,
+    onSome: (predicate) =>
+      fieldsRead(predicate).every((field) => fact[field] !== undefined) &&
+      valueOf(predicate, fact) === true,
+  });
+
+/**
+ * Each fact with the values its containments copy filled where it states none: across each of
+ * {@link copies}, a left fact and the one right fact its key fields name hold each further pair
+ * equal, so a value one of them states fills the other's. It repeats until no value moves, so a
+ * value runs down a tree from its root, a root's from its `Document` row's.
+ *
+ * @param stated - The facts.
+ * @returns The facts, each with its copied values.
+ */
+const copiedOf = (stated: readonly Stated[]): readonly Stated[] => {
+  const facts = stated.map(({ fact }) => ({ ...fact }));
+  const names = new Set(stated.map(({ relation }) => relation.name));
+  const across = copies.filter(
+    ({ from, to }) => names.has(from.relation) && names.has(to.relation),
+  );
+  const factsOf = (side: (typeof copies)[number]["to"]) =>
+    facts.filter((fact, at) => stated[at]?.relation.name === side.relation && selects(side, fact));
+  const copyOnce = () =>
+    across.flatMap(({ from, key, to, values }) => {
+      const targets = new Map(
+        factsOf(to).map((fact) => [
+          keyAt(
+            fact,
+            key.map(([, field]) => field),
+          ),
+          fact,
+        ]),
+      );
+
+      return factsOf(from).flatMap((fact) => {
+        const fields = key.map(([field]) => field);
+        const target = fields.every((field) => fact[field] !== undefined)
+          ? targets.get(keyAt(fact, fields))
+          : undefined;
+
+        return target === undefined
+          ? []
+          : values.flatMap(([field, other]) => {
+              const [here, there] = [fact[field], target[other]];
+              if (here === undefined && there !== undefined) {
+                fact[field] = there;
+
+                return [field];
+              }
+
+              if (there === undefined && here !== undefined) {
+                target[other] = here;
+
+                return [other];
+              }
+
+              return [];
+            });
+      });
+    });
+  while (copyOnce().length > 0) {
+    // Each pass fills at least one value a pass before left empty, so the loop ends.
+  }
+
+  return stated.map((held, at) => ({ ...held, fact: facts[at] ?? held.fact }));
+};
+
+/**
  * Each fact with every value the writer derives for it stated: in the stated order,
  *
+ * - Each value a containment copies where the fact states none ({@link copiedOf});
  * - Each owner with its families' counts and its hidden folds' ends, where it states none: the
  *   members stated under it, and the steps they make;
  * - Each member with its families' hidden slots: its index, its place among its owner's stated
@@ -966,10 +1160,11 @@ const keyAt = (fact: Stated["fact"], fields: readonly string[]): string =>
  * names and nothing the writer derived from the lawful ones, as a writer that sets one wrong field
  * of a row the program filled does.
  *
- * @param stated - The facts.
+ * @param given - The facts.
  * @returns The facts, each with its derived values.
  */
-export const pinned = (stated: readonly Stated[]): readonly Stated[] => {
+export const pinned = (given: readonly Stated[]): readonly Stated[] => {
+  const stated = copiedOf(given);
   const membersOf = (family: Family, group: string) =>
     stated.flatMap((other, at) =>
       other.relation.name === family.member &&

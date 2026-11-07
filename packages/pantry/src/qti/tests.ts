@@ -488,12 +488,12 @@ export const SectionOrdering = relation(
  * its own (information model §7.5 and §2.12).
  *
  * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`,
- *   `ancestry`, `document`, `governs`, `kind`, `nearest`, `nearestKind`, `parentKind`, `start`,
- *   `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`; `external`,
- *   whether its href resolves outside the package, which its href's `Reference` row proves (an
- *   include's then is stored as written and never fetched); and the scope it is placed in, its
- *   parent's: `part`, `replaced` (its parent section's `replacing`), `parentMixes` and
- *   `parentLooseChain`.
+ *   `ancestry`, `document`, `documentType`, `governs`, `kind`, `nearest`, `nearestKind`,
+ *   `parentKind`, `start`, `version`), which also holds its {@link nodeRef} fields but `parent`;
+ *   `parent`; `external`, whether its href resolves outside the package, which its href's
+ *   `Reference` row proves (an include's then is stored as written and never fetched); and the
+ *   scope it is placed in, its parent's: `part`, `replaced` (its parent section's `replacing`),
+ *   `parentMixes` and `parentLooseChain`.
  *
  * Its `part` is the test part it sits in: its parent section's under a section, its parent under a
  * test part, and its own document under any other parent (an item's body or processing, a
@@ -511,6 +511,7 @@ export const Site = relation(
     ancestry: bits(Flag),
     children: natural,
     document: uuid,
+    documentType: closedId(ResourceType),
     external: pg.boolean,
     governs: closedId(TypeName),
     kind: closedId(NodeKind),
@@ -1492,6 +1493,7 @@ export const testOverlayLaws = [
       "children",
       "ancestry",
       "document",
+      "documentType",
       "governs",
       "kind",
       "nearest",

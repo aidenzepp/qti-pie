@@ -117,6 +117,12 @@ const slotOf = (name: string, at: string = version, governor: string = kind): nu
 const strayNode = "00000000-0000-4000-8000-0000000000a0";
 
 /**
+ * The resource type of the cases' element's document: a hotspot choice is an item's, and no case
+ * writes the element its attributes copy it from.
+ */
+const documentType = "imsqti_item_xmlv3p0";
+
+/**
  * A member's copy of its owner's count, stated by the case where it writes fewer members than its
  * owner counts.
  *
@@ -168,6 +174,7 @@ const attributeOf = (
       attrsAfter: slotBits(...was, ...(open ? [] : [slot])),
       attrsWas: slotBits(...was),
       document: strayNode,
+      documentType,
       governs: host.governs,
       id: `00000000-0000-4000-8000-0000000001${String(at).padStart(2, "0")}`,
       idrefText: "",
@@ -440,6 +447,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
                     attrsAfter: slotBits(...slot),
                     attrsWas: slotBits(),
                     document: strayNode,
+                    documentType,
                     governs: governing.governs,
                     id: "00000000-0000-4000-8000-000000000200",
                     idrefText: "",

@@ -87,9 +87,11 @@ const namespaces = {
  * row's, so two documents' rows never share an id.
  *
  * @param document - The document's number in its package, the manifest 0.
+ * @param documentType - The type it is listed under, `none` for the manifest.
  * @returns The ids, under the test package.
  */
-const idsFor = (document: number): MetadataIds => ({
+const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => ({
+  documentType,
   idOf: (index) =>
     `00000000-0000-4000-8${document.toString(16).padStart(3, "0")}-${index.toString(16).padStart(12, "0")}`,
   package: packageId,
@@ -184,7 +186,12 @@ const builtOf = (input: Shredded): Built => {
   const objects = new Map<string, Addition<typeof AssessmentObject>>();
 
   for (const [path, { number, tree }] of input.documents) {
-    const ids = idsFor(number);
+    const listed = grammar.package.rootOfType.rows.find(({ root }) => root === tree.root.kind);
+    if (listed === undefined) {
+      continue;
+    }
+
+    const ids = idsFor(number, listed.type);
     const object = rowsOf(tree, ids).AssessmentObject.values().next().value;
     documents.set(path, { document: ids.idOf(0), object });
     if (object !== undefined) {
@@ -193,9 +200,9 @@ const builtOf = (input: Shredded): Built => {
   }
 
   return {
-    manifest: rowsOf(input.manifest, idsFor(0)),
+    manifest: rowsOf(input.manifest, idsFor(0, "none")),
     objects,
-    rows: objectRowsOfPackage(input.manifest, idsFor(0), documents),
+    rows: objectRowsOfPackage(input.manifest, idsFor(0, "none"), documents),
   };
 };
 
@@ -1138,7 +1145,7 @@ describe("import/overlays/metadata.ts, usage values", () => {
               ].join("");
               const read = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
               const tree = yield* Effect.orDie(shred(read, "3.0.1", shredGrammar));
-              const built = rowsOf(tree, idsFor(1));
+              const built = rowsOf(tree, idsFor(1, "qtiusagedata/xml"));
               const rows = [...built.UsageValue.values()];
               const copies = [...built.UsageBaseType.values()];
 
@@ -1244,7 +1251,7 @@ describe("import/overlays/metadata.ts, learning resource types", { timeout: sear
 
                 const xml = yield* Effect.orDie(readXml(file.bytes));
                 const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammar));
-                const ids = idsFor(1);
+                const ids = idsFor(1, path === "imsmanifest.xml" ? "none" : "resourcemetadata/xml");
                 const rows = rowsOf(tree, ids);
                 const { nodes } = flatten(tree, ids.idOf);
                 const typeNodes = nodes.filter(({ kind }) => kind === "lom:learningResourceType");

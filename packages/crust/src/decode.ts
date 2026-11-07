@@ -260,6 +260,11 @@ const utf16Decoder =
     decodeStrictly(order, label, body);
 
 /**
+ * A row of XML 1.0 Appendix F.1's table, one a decoder here reads or one none does.
+ */
+export type Row = Decodable | Unsupported;
+
+/**
  * Build a row of a family no decoder here reads.
  *
  * @param signature - The row's opening bytes.
@@ -286,7 +291,7 @@ const unsupported = (signature: readonly number[], family: string): Unsupported 
  * @see {@link https://www.unicode.org/versions/Unicode16.0.0/core-spec/chapter-3/ | Unicode 16.0, section 3.10}
  * @see {@link https://www.rfc-editor.org/rfc/rfc2781#section-4 | RFC 2781, section 4}
  */
-const rows: readonly (Decodable | Unsupported)[] = [
+export const appendixRows: readonly Row[] = [
   unsupported([0x00, 0x00, 0xfe, 0xff], "UCS-4 in big-endian (1234) order with a byte order mark"),
   unsupported(
     [0xff, 0xfe, 0x00, 0x00],
@@ -352,10 +357,10 @@ const rows: readonly (Decodable | Unsupported)[] = [
 ];
 
 /**
- * The last row of XML 1.0 Appendix F.1's table, which every document {@link rows} does not take
- * is in: both the table's `3C 3F 78 6D` (an encoding that writes ASCII as single bytes, which the
- * declaration names) and its "Other" (UTF-8 without an encoding declaration). Either is read one
- * byte per code unit, and a declaration, if one opens the document, names its encoding.
+ * The last row of XML 1.0 Appendix F.1's table, which every document {@link appendixRows} does not
+ * take is in: both the table's `3C 3F 78 6D` (an encoding that writes ASCII as single bytes, which
+ * the declaration names) and its "Other" (UTF-8 without an encoding declaration). Either is read
+ * one byte per code unit, and a declaration, if one opens the document, names its encoding.
  */
 const asciiRow: Decodable = {
   _tag: "Decodable",
@@ -434,17 +439,43 @@ const requireXmlCharacters = (decoded: Decoded): Effect.Effect<Decoded, ReaderRe
 };
 
 /**
+ * Build the decoder of a table of XML 1.0 Appendix F.1's rows: the rows tried in order, then
+ * {@link asciiRow}. {@link decode} is the decoder of {@link appendixRows}; a test builds one of a
+ * table it has changed, a past defect kept as data, and shows its search tells the two apart.
+ *
+ * @param table - The rows, in the order they are tried.
+ * @returns The decoder, as {@link decode} describes it for its own table.
+ */
+export const decodeBy = (table: readonly Row[]) =>
+  Effect.fn("xml.decode")(function* decode(
+    bytes: Uint8Array,
+  ): Effect.fn.Return<Decoded, ReaderRefusal> {
+    const row = table.find(({ signature }) => startsWith(bytes, signature)) ?? asciiRow;
+    if (row._tag === "Unsupported") {
+      return yield* refuse(
+        "unsupported-encoding",
+        `The document begins with the bytes of ${row.family} (XML 1.0 Appendix F), an encoding this reader cannot decode. Re-save the document as UTF-8.`,
+      );
+    }
+
+    return yield* decodeRow(row, bytes.subarray(row.mark)).pipe(
+      Effect.flatMap(requireXmlCharacters),
+    );
+  });
+
+/**
  * Turn a document's bytes into its text, refusing whatever cannot be decoded faithfully.
  *
- * The opening bytes put the document in a row of XML 1.0 Appendix F.1's table ({@link rows}), and
- * the row's code units read its XML declaration, however long. The label the document is read as
- * is the declaration's `encoding`, else the row's fallback: a byte order mark's encoding, or UTF-8.
- * The label must name an encoding of the row, because section 4.3.3 makes it a fatal error "for an
- * entity including an encoding declaration to be presented to the XML processor in an encoding
- * other than that named in the declaration, or for an entity which begins with neither a Byte Order
- * Mark nor an encoding declaration to use an encoding other than UTF-8", and the Appendix's note
- * has the name checked even where the opening bytes settle the encoding. The body is then decoded
- * with every error fatal, so no byte is ever replaced with U+FFFD, and must hold no U+0000.
+ * The opening bytes put the document in a row of XML 1.0 Appendix F.1's table
+ * ({@link appendixRows}), and the row's code units read its XML declaration, however long. The
+ * label the document is read as is the declaration's `encoding`, else the row's fallback: a byte
+ * order mark's encoding, or UTF-8. The label must name an encoding of the row, because section
+ * 4.3.3 makes it a fatal error "for an entity including an encoding declaration to be presented to
+ * the XML processor in an encoding other than that named in the declaration, or for an entity which
+ * begins with neither a Byte Order Mark nor an encoding declaration to use an encoding other than
+ * UTF-8", and the Appendix's note has the name checked even where the opening bytes settle the
+ * encoding. The body is then decoded with every error fatal, so no byte is ever replaced with
+ * U+FFFD, and must hold no U+0000.
  *
  * @param bytes - The document as read from storage.
  * @returns The text, without its byte order mark, and the label it was read as, which becomes the
@@ -454,16 +485,4 @@ const requireXmlCharacters = (decoded: Decoded): Effect.Effect<Decoded, ReaderRe
  *   U+0000, which XML 1.0 forbids.
  * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#charencoding | XML 1.0 (Fifth Edition), section 4.3.3}
  */
-export const decode = Effect.fn("xml.decode")(function* decode(
-  bytes: Uint8Array,
-): Effect.fn.Return<Decoded, ReaderRefusal> {
-  const row = rows.find(({ signature }) => startsWith(bytes, signature)) ?? asciiRow;
-  if (row._tag === "Unsupported") {
-    return yield* refuse(
-      "unsupported-encoding",
-      `The document begins with the bytes of ${row.family} (XML 1.0 Appendix F), an encoding this reader cannot decode. Re-save the document as UTF-8.`,
-    );
-  }
-
-  return yield* decodeRow(row, bytes.subarray(row.mark)).pipe(Effect.flatMap(requireXmlCharacters));
-});
+export const decode = decodeBy(appendixRows);

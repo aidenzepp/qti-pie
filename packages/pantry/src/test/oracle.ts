@@ -2709,19 +2709,58 @@ const charsOf = (view: View, node: FoldedNode<Composed>): string => {
 };
 
 /**
+ * The package's manifest's path: its one `imsmanifest.xml`, at its root (IMS Content Packaging
+ * 1.2).
+ */
+const manifestEntry = "imsmanifest.xml";
+
+/**
+ * The type of the resource that lists a document, as its nodes and attributes copy it
+ * (`Node.documentType`): `none` for the package's manifest, its one `imsmanifest.xml`, which no
+ * resource lists, and for every other document the type `RootOfType` pairs with its root's kind,
+ * which is the type a resource lists it under wherever `RootOfType` holds: an external record
+ * file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type pairs gives the empty
+ * text, which is no type.
+ *
+ * @param view - The document.
+ * @param laws - The grammar's tables.
+ * @returns Its type, as the laws compare it.
+ */
+const documentTypeOf = (view: View, laws: Laws): string => {
+  if (view.path === manifestEntry) {
+    return "none";
+  }
+
+  const roots = view.rows.nodes.filter(
+    ({ id, parent }) => parent === view.self && id !== view.self,
+  );
+
+  return (
+    laws.grammar.package.rootOfType.rows.find(({ root }) => roots.some(({ kind }) => kind === root))
+      ?.type ?? ""
+  );
+};
+
+/**
  * Read the fields of a node row a key copy's selection or check reads
  * (`#pantry/test/key-copies.ts` `nodeFields`), its parent's from the parent's row: a root's parent
  * is the document node, which governs no type and is its own parent's kind.
  *
  * @param view - The node's document.
  * @param node - The node.
+ * @param documentType - The document's type ({@link documentTypeOf}).
  * @returns Its fields.
  */
-const nodeFieldsOf = (view: View, node: FoldedNode<Composed>): DocumentRows["Node"] => {
+const nodeFieldsOf = (
+  view: View,
+  node: FoldedNode<Composed>,
+  documentType: string,
+): DocumentRows["Node"] => {
   const parent = view.byId.get(node.parent);
 
   return {
     chars: charsOf(view, node),
+    documentType,
     governs: node.governs,
     kind: node.kind,
     parentGoverns: parent?.governs ?? noType,
@@ -2797,14 +2836,16 @@ const keyTexts = (
   readonly value: string;
 }[] => {
   const nodeOfAttribute = new Map(view.rows.attributes.map(({ id, node }) => [id, node]));
+  const documentType = documentTypeOf(view, laws);
   const nodes = view.rows.nodes.map((node) => ({
-    fields: nodeFieldsOf(view, node),
+    fields: nodeFieldsOf(view, node, documentType),
     node: node.id,
   }));
   const fieldsOf = new Map(nodes.map(({ fields, node }) => [node, fields]));
   const rows = {
     attributes: view.rows.attributes.map((attribute) => ({
       fields: {
+        documentType,
         governs: attribute.governs,
         kind: attribute.kind,
         lexical: attribute.lexical,

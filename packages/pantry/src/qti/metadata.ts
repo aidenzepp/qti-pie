@@ -602,51 +602,76 @@ export const metadataRelations = {
 };
 
 /**
- * The `lom:lom` nodes: each has its {@link LomRecord}.
+ * The types of the documents a package's records are read from: its manifest's, `none`, the one
+ * document of that type (`RootOfType`'s check), whose `cp:metadata` holds the package's and each
+ * resource's records; and an external record file's, `resourcemetadata/xml`, whose root is a
+ * `lom:lom` (spec reading 81: an external LOM metadata file, assessed against the loose LOM
+ * binding; spec reading 122 places a record in a resource's metadata, the manifest's own or such
+ * a file, `#pantry/test/gen/lom-resource-type.ts`). The manifest is the package's one
+ * `imsmanifest.xml` (IMS Content Packaging 1.2), and a `cp:metadata` of any other document
+ * describes no part of the package (170356bd's ruling), so its `lom:*` elements are no record's.
  */
-const recordNodes = select(Node, (n) => n.eq(n.kind, "lom:lom"));
+export const recordDocumentTypes = [
+  "none",
+  "resourcemetadata/xml",
+] as const satisfies readonly (typeof ResourceType.handles)[number][];
 
 /**
- * The `lom:general` nodes: each has its {@link LomGeneral}.
+ * Whether a node is of a document a package's records are read from ({@link recordDocumentTypes}).
+ *
+ * @param n - The row.
+ * @returns The predicate.
  */
-const generalNodes = select(Node, (n) => n.eq(n.kind, "lom:general"));
+const inRecords = (n: RowScalars<typeof Node>) => n.in(n.documentType, recordDocumentTypes);
 
 /**
- * The `lom:entry` nodes: each has its {@link LomEntry}, carrying its string value.
+ * The `lom:lom` nodes of the records' documents: each has its {@link LomRecord}.
  */
-const entryNodes = select(Node, (n) => n.eq(n.kind, "lom:entry"));
+const recordNodes = select(Node, (n) => n.and(inRecords(n), n.eq(n.kind, "lom:lom")));
 
 /**
- * The `lom:title` nodes: each has its {@link LomTitle}.
+ * The `lom:general` nodes of the records' documents: each has its {@link LomGeneral}.
  */
-const titleNodes = select(Node, (n) => n.eq(n.kind, "lom:title"));
+const generalNodes = select(Node, (n) => n.and(inRecords(n), n.eq(n.kind, "lom:general")));
 
 /**
- * The `lom:string` nodes: each has its {@link LomString}.
+ * The `lom:entry` nodes of the records' documents: each has its {@link LomEntry}, carrying its
+ * string value.
  */
-const stringNodes = select(Node, (n) => n.eq(n.kind, "lom:string"));
+const entryNodes = select(Node, (n) => n.and(inRecords(n), n.eq(n.kind, "lom:entry")));
 
 /**
- * The `lom:string` nodes of a title: each has its {@link LomTitleString}, carrying its string value.
+ * The `lom:title` nodes of the records' documents: each has its {@link LomTitle}.
  */
-const titleStringNodes = select(Node, (n) =>
-  n.and(n.eq(n.kind, "lom:string"), n.eq(n.parentKind, "lom:title")),
-);
+const titleNodes = select(Node, (n) => n.and(inRecords(n), n.eq(n.kind, "lom:title")));
 
 /**
- * The `lom:value` nodes of the learning resource types: each has its {@link LomResourceType},
+ * The `lom:string` nodes of the records' documents: each has its {@link LomString}.
+ */
+const stringNodes = select(Node, (n) => n.and(inRecords(n), n.eq(n.kind, "lom:string")));
+
+/**
+ * The `lom:string` nodes of a title of the records' documents: each has its {@link LomTitleString},
  * carrying its string value.
  */
-const resourceTypeValues = select(Node, (n) =>
-  n.and(n.eq(n.kind, "lom:value"), n.eq(n.parentKind, "lom:learningResourceType")),
+const titleStringNodes = select(Node, (n) =>
+  n.and(inRecords(n), n.eq(n.kind, "lom:string"), n.eq(n.parentKind, "lom:title")),
 );
 
 /**
- * The `lom:source` nodes of the learning resource types: each has its
+ * The `lom:value` nodes of the records' learning resource types: each has its
+ * {@link LomResourceType}, carrying its string value.
+ */
+const resourceTypeValues = select(Node, (n) =>
+  n.and(inRecords(n), n.eq(n.kind, "lom:value"), n.eq(n.parentKind, "lom:learningResourceType")),
+);
+
+/**
+ * The `lom:source` nodes of the records' learning resource types: each has its
  * {@link LomResourceTypeSource}, carrying its string value.
  */
 const resourceTypeSources = select(Node, (n) =>
-  n.and(n.eq(n.kind, "lom:source"), n.eq(n.parentKind, "lom:learningResourceType")),
+  n.and(inRecords(n), n.eq(n.kind, "lom:source"), n.eq(n.parentKind, "lom:learningResourceType")),
 );
 
 /**
@@ -709,7 +734,7 @@ const namingTitles = select(LomTitle, (t) => t.ne(t.named, "none"));
  * @returns The selection.
  */
 const attributesOf = (
-  name: "baseType" | "identifier" | "lastUpdated" | "language" | "title" | "xml:lang",
+  name: "baseType" | "identifier" | "lastUpdated" | "title" | "xml:lang",
   kinds: readonly (typeof NodeKind.handles)[number][],
 ) => select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
 
@@ -729,9 +754,15 @@ const objectTitles = attributesOf("title", objectKinds);
 const objectLangAttributes = attributesOf("xml:lang", objectKinds);
 
 /**
- * The `language` of each `lom:string`.
+ * The `language` of each `lom:string` of a record's document.
  */
-const stringLanguageAttributes = attributesOf("language", ["lom:string"]);
+const stringLanguageAttributes = select(Attribute, (a) =>
+  a.and(
+    a.eq(a.name, "language"),
+    a.eq(a.kind, "lom:string"),
+    a.in(a.documentType, recordDocumentTypes),
+  ),
+);
 
 /**
  * The `lastUpdated` of each usage statistic.

@@ -1026,6 +1026,8 @@ const packageRowsOf = (
   const inputs = documents.map(([at, tree], n): AssembledExpressionInput => {
     const ids: TestIds = {
       documentAt: (to: string) => Option.fromNullishOr(nodes.get(to)),
+      documentType:
+        grammar.package.rootOfType.rows.find(({ root }) => root === tree.root.kind)?.type ?? "none",
       idOf: idsIn(n),
       package: packageId,
       path: at,
