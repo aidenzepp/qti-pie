@@ -547,7 +547,8 @@ export const lawTable = {
   },
   "Document entry": {
     rule: "entry-kind",
-    source: "IMS Content Packaging 1.2: a listed document is an entry of the package",
+    source:
+      "IMS Content Packaging 1.2: a listed document is an entry of the package, and one document: a resource names the document at its href, read as a document of its type (reading 93), so no path is listed as documents of two types (qti/package.ts, Document's key over package and path)",
   },
   "Document lang": {
     rule: "document-lang",

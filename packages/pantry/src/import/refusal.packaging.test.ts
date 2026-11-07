@@ -16,7 +16,8 @@ import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
  *
  * A fixture that breaks several laws lists each one's rule, since PostgreSQL reports whichever
  * constraint it checks first: `lti300-as-301` breaks `ResourceTypeOf` and a value domain, and
- * `extmeta-item-href` breaks `RootOfType`, `Href listed` and `LomObjectIdentifier`. A second
+ * `extmeta-item-href` breaks `RootOfType`, `Href listed`, `LomObjectIdentifier`, `Document lang`
+ * and, since its item and its record name one file under two types, `Document entry`. A second
  * `GUID` (`csm-two-guids`) or a second set (`csm-two-sets`) breaks its particle's at-most-once,
  * which the content automaton holds (`N5 Follow`), so its rule is `ordering`.
  *
@@ -29,7 +30,10 @@ const refused = [
   ["csm-no-labelled-guid", ["child-set"]],
   ["csm-two-guids", ["ordering"]],
   ["csm-two-sets", ["ordering"]],
-  ["extmeta-item-href", ["root-type-reverse", "href-listed", "lom-identifier"]],
+  [
+    "extmeta-item-href",
+    ["root-type-reverse", "href-listed", "lom-identifier", "document-lang", "entry-kind"],
+  ],
   ["extmeta-item-root", ["root-type-reverse"]],
   ["filelom-two-metadata", ["ordering"]],
   ["lti300-as-301", ["resource-type", "attribute-lexical"]],

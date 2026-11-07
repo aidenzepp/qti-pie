@@ -202,6 +202,8 @@ describe("the test helpers", () => {
       "test/fixtures.ssml.test.ts: #pantry/test/oracle.ts",
       "test/gen/assembly.compile.test.ts: #pantry/test/oracle.ts",
       "test/gen/xdm.ts: #pantry/test/oracle.ts",
+      "test/inclusion-cycles.oracle.test.ts: #pantry/test/oracle.ts",
+      "test/key-breaches.oracle.test.ts: #pantry/test/oracle.ts",
       "test/locate.ts: #pantry/test/oracle.ts",
       "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
       "test/oracle.complete.test.ts: #pantry/test/oracle.ts",

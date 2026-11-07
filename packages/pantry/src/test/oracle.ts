@@ -563,7 +563,8 @@ export const lawSources = {
   "Declaration not reserved":
     "reading 72: https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables referred to below which are declared implicitly and must not be declared'; §2.2.2.2: numAttempts and duration 'must not appear in a response declaration'; §2.2.2.3: completionStatus 'must not appear in an outcome declaration') and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, §5.115.1, §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration'), each spelled exactly, with no alias, the identifier compared collapsed (references.ts BuiltInVariable, its session variables); the context variable QTI_CONTEXT is Reserved type's",
   Document: "the XDM document node as the Document row (plan §1.4, fin.md D7)",
-  "Document entry": "IMS Content Packaging 1.2: a listed document is an entry of the package",
+  "Document entry":
+    "IMS Content Packaging 1.2: a listed document is an entry of the package, and one document: a resource names the document at its href, read as a document of its type (reading 93), so no path is listed as documents of two types (qti/package.ts, Document's key over package and path)",
   "Document lang":
     "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1)",
   "DocumentId key":
@@ -6000,6 +6001,10 @@ const packageBreaches = (
     Option.exists(resource.handle, (type) =>
       grammar.package.rootOfType.rows.some((row) => row.type === type),
     );
+  const typesAt = new Map<string, ReadonlySet<string>>();
+  for (const { path, resource } of input.documents) {
+    typesAt.set(path, new Set([...(typesAt.get(path) ?? []), resource.type]));
+  }
   const manifestNode = manifest.members.find(({ kind }) => kind === "cp:manifest");
   const manifestId = Option.fromNullishOr(manifestNode).pipe(
     Option.flatMap(({ id }) => valueOf(manifest, id, "identifier")),
@@ -6081,6 +6086,14 @@ const packageBreaches = (
       .flatMap((resource) => Option.toArray(resource.resolved))
       .filter(({ resolution }) => resolution.scope !== "entry")
       .map(({ path }) => breach("Document entry", { path })),
+    // A path two resources name under two document types would be two documents at one path,
+    // which `Document`'s key over (package, path) refuses: the import reads each (path, type) a
+    // resource's href names as a document of that type (reading 93).
+    ...[...typesAt]
+      .filter(([, types]) => types.size > 1)
+      .map(([path, types]) =>
+        breach("Document entry", { path, types: spaced([...types].toSorted()) }),
+      ),
     ...fileNodes.flatMap(({ member, resolved }) =>
       Option.toArray(entryPathAt(resolved))
         .filter((path) => !entryPaths.has(path))

@@ -35,14 +35,18 @@ import {
   AttributeSlot,
   Banned,
   BarredOf,
+  ContentModelOf,
   CountedOf,
   Flag,
+  Follow,
   GoverningOf,
   grammar,
   NodeKind,
   nonElementKinds,
   Position,
   SchemaVersion,
+  SharedModelOf,
+  Symbol as ContentSymbol,
   TextDomain,
   TypeName,
 } from "#pantry/grammar/install.ts";
@@ -516,6 +520,17 @@ type SqlRow = Record<string, string>;
  * @returns The literal.
  */
 const text = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+
+/**
+ * Read a code back as its handle, the inverse of {@link code}.
+ *
+ * @param roster - The roster.
+ * @param roster.handles - Its handles, in code order.
+ * @param at - The code's literal.
+ * @returns The handle, empty for a code past the roster.
+ */
+const handleAt = (roster: { readonly handles: readonly string[] }, at: string): string =>
+  roster.handles[Number(at)] ?? "";
 
 /**
  * Spell a handle as its code, its index in its roster's handles, the code a fresh installation
@@ -1317,10 +1332,14 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
               "first leaf",
             );
             const withSibling = targetOf(lawful, (row) => row["at"] === "1", "second sibling");
+            // The ring moves an inner element under its own first leaf, at slot 0. An element that
+            // already stands at slot 0 of its family keeps every first-slot value of its folds and
+            // its content state there (fin.md §4.3), so no row CHECK of its own breaks: only the
+            // tree's natives, which read across rows, can refuse it.
             const inner = targetOf(
               lawful,
-              (row, index) => index > 1 && row["children"] !== "0",
-              "inner element",
+              (row, index) => index > 1 && row["children"] !== "0" && row["at"] === "0",
+              "inner element at slot 0",
             );
             const deeper = targetOf(
               lawful,
@@ -1457,8 +1476,9 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a shared kind's state outside Symbol or unfollowed, a junk accumulator at each fold's first slot, a wrong after, a leaked root ancestry, a wrong nearest, an end that is not its node's characters' and an xsi:type outside XsiType",
         () =>
-          // Oracle: the specification as a checker: N5's Symbol and Follow (`m:mfrac`'s two `m:ci`
-          // at positions 1 and 2), fin.md §4.3's first-slot pins and combine CHECKs, C10's root
+          // Oracle: the specification as a checker: N5's Symbol and Follow (`m:mfrac`'s two `m:ci`,
+          // their positions read from the closed relations), fin.md §4.3's first-slot pins and
+          // combine CHECKs, C10's root
           // pin, N8, E1's ends (reading 127) and N12, each an edit of a lawful item's rows that
           // breaks the one law.
           // Bound: the two lawful items under each named edit.
@@ -1469,11 +1489,53 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
             const lawful = sqlRowsOf(lawfulRows);
             const math = sqlRowsOf(yield* foldedOf(mathItem));
             const ciKind = code(NodeKind, "m:ci");
+            const firstCi = targetOf(
+              math,
+              (row) => row["kind"] === ciKind && row["at"] === "0",
+              "first m:ci",
+            );
             const secondCi = targetOf(
               math,
               (row) => row["kind"] === ciKind && row["at"] === "1",
               "second m:ci",
             );
+            // The positions N5 reads for the second m:ci, from the closed relations themselves: the
+            // positions Symbol names for m:ci under m:mfrac's shared model (N5 admitted), and those
+            // Follow steps to from its predecessor's state (N5 Follow). Each case below states its
+            // position by them, so the laws it breaks are its premise, checked here, never an
+            // accident of which CHECK PostgreSQL names first.
+            const version = handleAt(SchemaVersion, math[secondCi]?.["version"] ?? "");
+            const mfrac = handleAt(NodeKind, math[secondCi]?.["parentKind"] ?? "");
+            const sharedModel = SharedModelOf.rows.find(
+              (row) => row.version === version && row.parent === mfrac,
+            )?.model;
+            const contentModel = ContentModelOf.rows.find(
+              (row) => row.version === version && row.parent === mfrac,
+            )?.model;
+            const was = handleAt(Position, math[secondCi]?.["was"] ?? "");
+            const symbolPositions = new Set<string>(
+              ContentSymbol.rows
+                .filter((row) => row.model === sharedModel && row.kind === "m:ci")
+                .map(({ position }) => position),
+            );
+            const followed = new Set<string>(
+              Follow.rows
+                .filter((row) => row.model === contentModel && row.from === was)
+                .map(({ to }) => to),
+            );
+            const breaks = (position: string) =>
+              [
+                ...(symbolPositions.has(position) ? [] : ["N5 admitted"]),
+                ...(followed.has(position) ? [] : ["N5 Follow"]),
+              ].toSorted();
+            const firstState = handleAt(Position, math[firstCi]?.["state"] ?? "");
+            const unnamed = Position.handles.find(
+              (position) =>
+                position !== "0" && !symbolPositions.has(position) && !followed.has(position),
+            );
+            assert.deepStrictEqual(breaks(firstState), ["N5 Follow"], "the first m:ci's position");
+            assert.isDefined(unnamed, "a position neither Symbol nor Follow names for m:ci");
+
             const firstMember = targetOf(
               lawful,
               (row) => row["at"] === "0" && row["start"] !== "0",
@@ -1515,15 +1577,17 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
             }[] = [
               {
                 codes: ["23514"],
-                name: "a shared kind at a Symbol position Follow does not step to",
-                roles: ["N5 Follow"],
-                rows: edited(math, secondCi, { state: code(Position, "1") }),
+                name: "a shared kind at a Symbol position Follow does not step to: the first m:ci's",
+                roles: breaks(firstState),
+                rows: edited(math, secondCi, { state: code(Position, firstState) }),
               },
               {
+                // A position Symbol does not name is no position Follow steps to either, so the
+                // edit breaks both laws, and either refusal is the case's.
                 codes: ["23514"],
                 name: "a shared kind at a position Symbol does not name",
-                roles: ["N5 admitted", "N5 Follow"],
-                rows: edited(math, secondCi, { state: code(Position, "3") }),
+                roles: breaks(unnamed ?? ""),
+                rows: edited(math, secondCi, { state: code(Position, unnamed ?? "") }),
               },
               {
                 codes: ["23514"],
