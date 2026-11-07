@@ -7,7 +7,10 @@
  * - Reading 128, a QTI 3.0.1 item root's own `label` asks for `tool-name` and `tool-version` (3.0.1
  *   §4.1.3), and a 3.0.0 one's does not (3.0.0 §4.1.3);
  * - Reading 3, SSML mark names compared by their collapsed value (`xsd:token`, SSML 1.1 §3.3.2);
- * - Reading 131, a namespace name an RFC 3986 URI reference (Namespaces in XML 1.0 §3, §2.1);
+ * - Reading 131, a namespace name an RFC 3986 URI reference (Namespaces in XML 1.0 §3, §2.1): crust's
+ *   reader refuses a package that declares one that is none, as not well-formed (reading 142), so
+ *   the law's box judges rows the reader never sees, a tree whose declarations are set after
+ *   reading;
  * - Reading 134, an item's languages listed by its record's general categories, compared as language
  *   tags (QTI 3.0 Metadata §2.7.1.3; RFC 5646 §2.1 and §2.1.1).
  *
@@ -23,9 +26,22 @@ import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Result } from "effect";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 import { composed } from "#pantry/grammar/compose.ts";
+import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { fold } from "#pantry/model/folds.ts";
+import { shred } from "#pantry/model/shred.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { judge, lawsOf, ruleOf, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
+import { idOf } from "#pantry/test/gen/xdm.ts";
+import {
+  documentBreaches,
+  judge,
+  lawsOf,
+  ruleOf,
+  shownBreach,
+  verdictOf,
+} from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName, OracleRule } from "#pantry/test/oracle.ts";
 
 /**
@@ -116,6 +132,11 @@ const shown = (breaches: readonly Breach[]): string =>
  */
 interface Named {
   readonly name: string;
+  /**
+   * What crust's reader's refusal says, for an input the reader refuses as not well-formed before
+   * any law reads it.
+   */
+  readonly reader?: string;
   readonly refused?: { readonly law: LawName; readonly rule: OracleRule };
   readonly unbroken?: LawName;
   readonly written: Written;
@@ -189,17 +210,17 @@ const cases: readonly (readonly [reading: string, cases: readonly Named[]])[] = 
     [
       {
         name: `xmlns:x="http://[bad"`,
-        refused: { law: "Namespace name", rule: "namespace-name" },
+        reader: `the prefix x is bound to "http://[bad", which is no URI reference`,
         written: { root: `xmlns:x="http://[bad"` },
       },
       {
         name: `xmlns:x="a b"`,
-        refused: { law: "Namespace name", rule: "namespace-name" },
+        reader: `the prefix x is bound to "a b", which is no URI reference`,
         written: { root: `xmlns:x="a b"` },
       },
       {
         name: `xmlns:x="%zz"`,
-        refused: { law: "Namespace name", rule: "namespace-name" },
+        reader: `the prefix x is bound to "%zz", which is no URI reference`,
         written: { root: `xmlns:x="%zz"` },
       },
       { name: `xmlns:x="http://[::1]/"`, written: { root: `xmlns:x="http://[::1]/"` } },
@@ -245,31 +266,46 @@ const cases: readonly (readonly [reading: string, cases: readonly Named[]])[] = 
 
 for (const [reading, named] of cases) {
   describe(reading, () => {
-    for (const { name, refused, unbroken, written } of named) {
+    for (const { name, reader, refused, unbroken, written } of named) {
       const title = unbroken === undefined ? `accepts ${name}` : `breaks no ${unbroken} in ${name}`;
-      it.effect(refused === undefined ? title : `refuses ${name} under ${refused.rule}`, () =>
-        Effect.gen(function* judged() {
-          const judgment = yield* judge(packageOf(written), grammar, laws);
-          const breaches = breachesOf(judgment);
+      const refusedTitle = refused === undefined ? title : `refuses ${name} under ${refused.rule}`;
+      it.effect(
+        reader === undefined
+          ? refusedTitle
+          : `refuses ${name} at the reader, under well-formedness`,
+        () =>
+          Effect.gen(function* judged() {
+            const judgment = yield* judge(packageOf(written), grammar, laws);
+            if (reader !== undefined) {
+              assert.deepStrictEqual(verdictOf(judgment), {
+                rule: "well-formedness",
+                verdict: "refused",
+              });
+              assert.include(judgment._tag === "CodecRefusal" ? judgment.detail : "", reader);
 
-          if (unbroken !== undefined) {
-            assert.deepStrictEqual(
-              breaches.filter(({ law }) => law === unbroken),
-              [],
-              shown(breaches),
-            );
-          } else if (refused === undefined) {
-            assert.deepStrictEqual(breaches, [], shown(breaches));
-            assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
-          } else {
-            assert.strictEqual(breaches[0]?.law, refused.law, shown(breaches));
-            assert.strictEqual(ruleOf(refused.law), refused.rule);
-            assert.deepStrictEqual(verdictOf(judgment), {
-              rule: refused.rule,
-              verdict: "refused",
-            });
-          }
-        }),
+              return;
+            }
+
+            const breaches = breachesOf(judgment);
+
+            if (unbroken !== undefined) {
+              assert.deepStrictEqual(
+                breaches.filter(({ law }) => law === unbroken),
+                [],
+                shown(breaches),
+              );
+            } else if (refused === undefined) {
+              assert.deepStrictEqual(breaches, [], shown(breaches));
+              assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+            } else {
+              assert.strictEqual(breaches[0]?.law, refused.law, shown(breaches));
+              assert.strictEqual(ruleOf(refused.law), refused.rule);
+              assert.deepStrictEqual(verdictOf(judgment), {
+                rule: refused.rule,
+                verdict: "refused",
+              });
+            }
+          }),
       );
     }
   });
@@ -308,13 +344,74 @@ const declarationsOf: Gen<readonly Declaration[]> = (source) =>
     .map((name, at) => ({ name, prefix: at === 0 ? "a" : "b" }));
 
 /**
- * Write an element's declarations as attributes.
- *
- * @param declared - The declarations.
- * @returns Them as written, space-separated.
+ * The grammar the box shreds an item by.
  */
-const written = (declared: readonly Declaration[]): string =>
-  declared.map(({ name, prefix }) => `xmlns:${prefix}="${name}"`).join(" ");
+const shredGrammar = shredGrammarOf(grammar);
+
+/**
+ * The grammar the box folds an item's tree by.
+ */
+const foldGrammar = foldGrammarOf(grammar);
+
+/**
+ * The placeholder name a declaration is read with, by where it stands and the prefix it declares.
+ *
+ * @param where - `root` or `p`.
+ * @param prefix - The prefix.
+ * @returns The placeholder, a URI reference.
+ */
+const placeholder = (where: string, prefix: string): string => `urn:placeholder:${where}:${prefix}`;
+
+/**
+ * Set every attribute value that names a placeholder to the name it stands for, through an
+ * element and everything below it.
+ *
+ * @param held - The element.
+ * @param names - The name each placeholder stands for.
+ * @returns The element with its placeholders replaced.
+ */
+const withNames = (held: Element, names: ReadonlyMap<string, string>): Element => ({
+  ...held,
+  attributes: held.attributes.map((attribute) => ({
+    ...attribute,
+    value: names.get(attribute.value) ?? attribute.value,
+  })),
+  children: held.children.map((child) =>
+    child.kind === "element" ? withNames(child, names) : child,
+  ),
+});
+
+/**
+ * Judge an item whose root and paragraph declare the box's names by its rows, below the reader.
+ *
+ * Crust's reader refuses a declaration whose name is no URI reference (reading 142), so the item
+ * is read with each declaration bound to a placeholder, the tree's declarations are then set to the
+ * case's names, and the tree is shredded, folded and judged by the oracle's document laws: the rows
+ * hold names no reader admits, as a direct write of rows can.
+ *
+ * @param root - The root's declarations.
+ * @param body - The paragraph's declarations.
+ * @returns The document's breaches.
+ */
+const breachesBelowReader = Effect.fnUntraced(function* breachesBelowReader(
+  root: readonly Declaration[],
+  body: readonly Declaration[],
+) {
+  const declare = (where: string, declared: readonly Declaration[]): string =>
+    declared.map(({ prefix }) => ` xmlns:${prefix}="${placeholder(where, prefix)}"`).join("");
+  const names = new Map([
+    ...root.map(({ name, prefix }) => [placeholder("root", prefix), name] as const),
+    ...body.map(({ name, prefix }) => [placeholder("p", prefix), name] as const),
+  ]);
+  const text = `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false"${declare("root", root)}><qti-item-body><p${declare("p", body)}>Hi</p></qti-item-body></qti-assessment-item>`;
+  const document = yield* Effect.orDie(readXml(new TextEncoder().encode(text)));
+  const xdm = yield* Effect.orDie(
+    shred({ ...document, root: withNames(document.root, names) }, "3.0.1", shredGrammar),
+  );
+  const rows = yield* Effect.orDie(Effect.fromResult(fold(xdm, idOf, foldGrammar)));
+
+  return documentBreaches("item.xml", rows, laws);
+});
 
 /**
  * A situation the declaration box must reach.
@@ -397,12 +494,9 @@ describe(
                   c.note("two names refused");
                 }
 
-                const judgment = yield* judge(
-                  packageOf({ body: `<p ${written(body)}>Hi</p>`, root: written(root) }),
-                  grammar,
-                  laws,
+                const breaches = (yield* breachesBelowReader(root, body)).filter(
+                  ({ law }) => law === "Namespace name",
                 );
-                const breaches = breachesOf(judgment).filter(({ law }) => law === "Namespace name");
 
                 assert.deepStrictEqual(
                   breaches
