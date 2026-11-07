@@ -5,8 +5,10 @@
  * The library ends at parts and pure functions (rule `a9d04969`): `render` writes the item Root
  * around its body and nothing else, so the form, its submit control, where the Status part goes
  * and every step of a flow are the author's. Its one input that is not a function of its
- * arguments is the instance a render draws when the author passes none. This is a browser module:
- * it value-imports from `effect` only `Option`, `Array`, `pipe`, `Data` and `Result`.
+ * arguments is the instance a render draws when the author passes none. `render` writes at most
+ * the configuration's `outputBudget` characters of HTML: past it, it returns
+ * {@link OutputTooLarge} and none of the page, never a part of it. This is a browser module: it
+ * value-imports from `effect` only `Option`, `Array`, `pipe`, `Data` and `Result`.
  *
  * @module
  */
@@ -18,7 +20,7 @@ import { emitItem, emitStatus } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { PartOverrides, Resolved, UnknownPart } from "#plate/emit/parts.ts";
-import { toHtml } from "#plate/emit/serialise.ts";
+import { toHtml, toHtmlWithin } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
@@ -123,6 +125,27 @@ export class InvalidInstance extends Data.TaggedError("InvalidInstance")<{
    */
   override get message(): string {
     return `The instance token ${JSON.stringify(this.token)} in ${this.source} ${breaches[this.requirement](this.token)}. ${instanceRemedies[this.source]}.`;
+  }
+}
+
+/**
+ * The HTML of an item that would pass the configuration's `outputBudget`: the host's limit,
+ * returned through a `Result`, never thrown.
+ *
+ * {@link render} counts the characters it writes as it writes them, as a string's `length` counts
+ * them, and stops at the first chunk that would pass the budget, so it never builds the oversized
+ * page and returns none of it. `budget` is the configuration's `outputBudget` and `item` the
+ * redacted item's `identifier`.
+ */
+export class OutputTooLarge extends Data.TaggedError("OutputTooLarge")<{
+  readonly budget: number;
+  readonly item: string;
+}> {
+  /**
+   * The item, the budget it passed, that nothing was written, and what to change.
+   */
+  override get message(): string {
+    return `Item ${JSON.stringify(this.item)} renders to more than ${String(this.budget)} characters of HTML, the configuration's outputBudget, so render wrote none of it. Raise outputBudget, up to 536,870,888, if the host can hold a page that large.`;
   }
 }
 
@@ -266,23 +289,29 @@ const interactionRenderer =
  * names `options.mode`. It writes no form, submit control, title or record. Given the same
  * instance, configuration and inputs, it gives the same HTML, and it returns the instance it used.
  *
+ * It counts the characters of HTML as it writes them, as a string's `length` counts them, and
+ * stops at the first chunk that would pass the configuration's `outputBudget`: HTML of exactly
+ * `outputBudget` characters is returned, and one more fails {@link OutputTooLarge} with none of
+ * the page built or returned.
+ *
  * @example
  *   const rendered = render(redact(accepted), configuration, { instance: "q1" });
  *   // Result.succeed({ html: '<qti-assessment-item id="q1-item" …>…</qti-assessment-item>', instance: "q1" })
  *
  * @param item The item `redact` gave.
  * @param configuration The configuration, which gives the locale, the heading level, the asset
- *   base and the seed.
+ *   base, the seed and the output budget.
  * @param options The author's inputs, none by default.
  * @returns The Root's HTML and the instance token it used, or {@link UnknownPart} for an override
  *   the part table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
- *   or {@link PartSwapRefused} for a replacement that breaks the swap invariant.
+ *   {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
+ *   {@link OutputTooLarge} for HTML that would pass the configuration's `outputBudget`.
  */
 export const render = (
   item: Redacted,
   configuration: Configuration,
   options: Options = {},
-): Result.Result<Rendered, InvalidInstance | PartSwapRefused | UnknownPart> =>
+): Result.Result<Rendered, InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart> =>
   Result.gen(function* renderItem() {
     const parts = yield* resolveOverrides(options.parts);
     const instance = yield* options.instance === undefined
@@ -292,8 +321,12 @@ export const render = (
     const built = payload(item, viewOf(instance, configuration, options));
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
     const root = yield* emitItem(built, state, body);
+    const html = yield* Result.fromOption(
+      toHtmlWithin(root, configuration.outputBudget),
+      () => new OutputTooLarge({ budget: configuration.outputBudget, item: item.identifier }),
+    );
 
-    return { html: toHtml(root), instance };
+    return { html, instance };
   });
 
 /**
