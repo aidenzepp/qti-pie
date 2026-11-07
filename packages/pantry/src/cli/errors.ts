@@ -131,7 +131,10 @@ type KindedTag =
  * `DocumentRowCount`, `XmlVersionUnread`), page through them (grizzle's `CursorError`) or write it
  * in its charset (crust's `EncodeError`). Each is a defect of qti, never of the package.
  */
-type ExportDefectTag = Exclude<Effect.Error<ReturnType<typeof exportPackage>>["_tag"], KindedTag>;
+export type ExportDefectTag = Exclude<
+  Effect.Error<ReturnType<typeof exportPackage>>["_tag"],
+  KindedTag
+>;
 
 /**
  * Every other way the import ends (`#pantry/import/package.ts`): the codec refusing a value the
@@ -139,47 +142,11 @@ type ExportDefectTag = Exclude<Effect.Error<ReturnType<typeof exportPackage>>["_
  * finds no breach of the refusal's laws, laws no rule owns, and two builders that disagree on a
  * row. Each is a defect of qti, never of the package.
  */
-type ImportDefectTag =
+export type ImportDefectTag =
   | Exclude<Effect.Error<ReturnType<typeof importPackage>>["_tag"], KindedTag>
   | LocateDisagreement["_tag"]
   | OverlayConflict["_tag"]
   | UnownedLaws["_tag"];
-
-/**
- * The tags of {@link ExportDefectTag}, checked against the export's error union both ways, so a
- * failure the export gains fails to compile here until it is named.
- */
-const exportDefectTags = {
-  CursorError: true,
-  DocumentInterval: true,
-  DocumentRowCount: true,
-  EncodeError: true,
-  EndBeyondParent: true,
-  IdRepeated: true,
-  IntervalEmpty: true,
-  LeafOversized: true,
-  NodeMisplaced: true,
-  ParentNotOpen: true,
-  RootMissing: true,
-  RowMissing: true,
-  RowUnreached: true,
-  SlotBeyond: true,
-  SlotOutOfTurn: true,
-  SlotTaken: true,
-  StartBeyond: true,
-  StartTaken: true,
-  XmlVersionUnread: true,
-} as const satisfies Readonly<Record<ExportDefectTag, true>>;
-
-/**
- * The tags of {@link ImportDefectTag}, checked against the import's error union both ways.
- */
-const importDefectTags = {
-  EncodingFailure: true,
-  LocateDisagreement: true,
-  OverlayConflict: true,
-  UnownedLaws: true,
-} as const satisfies Readonly<Record<ImportDefectTag, true>>;
 
 /**
  * What to do next after an export that cannot rebuild a package the database holds.
@@ -206,12 +173,38 @@ const databaseRefusalHelp = {
 } as const satisfies Readonly<Record<NonNullable<RefusalFields["witness"]>, string>>;
 
 /**
- * The help of each named failure: the export's defects and the import's.
+ * A tag {@link namedFailureOf} names: one of the export's defects or the import's.
  */
-const namedHelp: ReadonlyMap<string, string> = new Map([
-  ...Object.keys(exportDefectTags).map((tag) => [tag, exportDefectHelp] as const),
-  ...Object.keys(importDefectTags).map((tag) => [tag, importDefectHelp] as const),
-]);
+type NamedTag = ExportDefectTag | ImportDefectTag;
+
+/**
+ * The help of each named failure, by its tag: every export defect's is {@link exportDefectHelp}
+ * and every import defect's {@link importDefectHelp}. It is checked against both error unions both
+ * ways, so a failure either gains fails to compile here until it is named, and one it loses until
+ * its row goes. Each such failure's kind is `internal`, which {@link kindOf} gives any failure no
+ * other kind claims, so its exit code is that kind's.
+ */
+const namedHelp = {
+  CursorError: exportDefectHelp,
+  DocumentRowCount: exportDefectHelp,
+  EncodeError: exportDefectHelp,
+  EncodingFailure: importDefectHelp,
+  LocateDisagreement: importDefectHelp,
+  OverlayConflict: importDefectHelp,
+  RootMissing: exportDefectHelp,
+  RowMissing: exportDefectHelp,
+  RowsOutsideImage: exportDefectHelp,
+  UnownedLaws: importDefectHelp,
+  XmlVersionUnread: exportDefectHelp,
+} as const satisfies Readonly<Record<NamedTag, string>>;
+
+/**
+ * Test whether a tag is one {@link namedHelp} names.
+ *
+ * @param tag - A failure's tag.
+ * @returns Whether it is a named failure's.
+ */
+const isNamedTag = (tag: string): tag is NamedTag => Object.hasOwn(namedHelp, tag);
 
 /**
  * The path the person named is not there, or is neither a directory nor a `.zip` file.
@@ -322,8 +315,8 @@ const tagOf = (failure: unknown): string | undefined =>
  * @returns The failure's tag, or none for any other failure.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
-export const namedFailureOf = (failure: unknown): Option.Option<string> =>
-  Option.filter(Option.fromUndefinedOr(tagOf(failure)), (tag) => namedHelp.has(tag));
+export const namedFailureOf = (failure: unknown): Option.Option<NamedTag> =>
+  Option.filter(Option.fromUndefinedOr(tagOf(failure)), isNamedTag);
 
 /**
  * The tags of the failures that mean the local set-up is missing or unreadable: the layer's two
@@ -424,9 +417,7 @@ const helpOf = (failure: unknown, kind: Kind): string => {
     return failure.help;
   }
 
-  const named = Option.flatMap(namedFailureOf(failure), (tag) =>
-    Option.fromUndefinedOr(namedHelp.get(tag)),
-  );
+  const named = Option.map(namedFailureOf(failure), (tag) => namedHelp[tag]);
   if (Option.isSome(named)) {
     return named.value;
   }

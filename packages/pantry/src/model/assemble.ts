@@ -3,35 +3,38 @@
  * Assemble: the rows one document is stored as, back to the tree they were written from (fin.md
  * §4.6, trees.md §6), the inverse of `flatten` in `#pantry/model/xdm.ts`.
  *
- * Rows are a set: assembly reads each row by its key, never by the order it arrives in. The node
- * rows are placed by `start`, so a document of N nodes holds each start from 0 to N − 1 once, and
- * then read in that order, document order, in one scan with a stack of the elements whose
- * intervals are open (trees.md §3). Each row first closes every open element whose interval ends
- * at or before its start, and is then the next child of the innermost element still open, or of the
- * document node when none is: so a row whose parent is not that element, whose slot is not that
- * element's next, or whose interval leaves that element's is refused, and so is an interval that
- * holds no node, a leaf's that holds more than the leaf, a second row of one id, and a document
- * node whose interval is not `[0, N)`.
+ * Assembly reads the rows leniently into a tree, then holds them to the rows `flatten` writes for
+ * that tree. Rows are a set: each list is first keyed by its relation's key, a key held twice
+ * refused, and no row is read by the order it arrives in.
  *
- * Each node is built as the scan meets it. Its attributes and namespace declarations go into its
- * element's families at their own `at`, where a family of n rows has the slots 0 to n − 1, and an
- * attribute's open name and entity references are found by the attribute's id, the references in
- * offset order. A row keyed by a node or an attribute the scan never builds is left over.
+ * The read takes the document node's row by the document row's node, and every other node row in
+ * `start` order, with a stack of the elements whose intervals are open (trees.md §3): each row
+ * closes every open element whose interval ends at or before its start, and is the next child of
+ * the innermost element still open, or of the document node when none is. A node's content is the
+ * row of its kind, an element's attributes and namespace declarations are its rows of each family
+ * in `at` order, and an attribute's open name and entity references are the rows keyed by its id,
+ * the references in offset order. The read takes nothing else from a node row: its `parent`, its
+ * `at` and the document node's interval are the image's to judge.
  *
- * So assembly succeeds on exactly the rows `flatten` writes for some tree, up to the ids drawn and
- * the order of the rows, and gives back that tree. The starts are a permutation of 0 to N − 1, and
- * the scan makes each row the child of the element it sits in, so the rows met while an element is
- * open are its subtree: by the end and size checks they are the starts its interval holds, so its
- * `start` is its place in document order and `end − start` its subtree's size, as `flatten` writes
- * them. The refusals ({@link AssembleError}) are the checks that fail. Assembly re-checks no field
- * the database's laws state and the scan does not read: a node's version beside its document's, or
- * the empty prefix of a node that is not an element. Every relation is grouped by its owner once,
- * and the scan keeps its own stack, so a tree of any depth or width assembles in time linear in its
- * rows.
+ * The tree read is then flattened again, under the rows' own ids: node i, in the order read, takes
+ * its row's id, and each attribute its row's. The rows are its image exactly when the two agree,
+ * list by list, on every key and on every field `flatten` writes at it.
+ *
+ * So assembly succeeds on exactly the rows `flatten` writes for some tree, under ids distinct
+ * within each relation and in any row order, and gives back that tree. Accepted rows are that image
+ * by the comparison. And rows `flatten` wrote for a tree read back as that tree: their starts
+ * number its nodes in document order, and an element's interval holds exactly its subtree's, so the
+ * stack makes each node the child of the element it was written under, in slot order; each family's
+ * slots, and each attribute's offsets, order its rows as they were written. So the second flatten
+ * writes them again, drawing the ids they were written under.
+ *
+ * Every relation is grouped by its owner once, and the read keeps its own stack, so a tree of any
+ * depth or width assembles in time linear in its rows. Each refusal ({@link AssembleError}) is a
+ * defect wherever the rows are a database's, whose laws hold every agreement the image states.
  */
-import { Option, Order, Result, Schema } from "effect";
+import { Array as Arr, Option, Order, Record, Result, Schema } from "effect";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
-import { none } from "#pantry/model/xdm.ts";
+import { flatten, none } from "#pantry/model/xdm.ts";
 import type { OpenName } from "#pantry/vocab/open.ts";
 import type {
   AttributeEntityRow,
@@ -64,7 +67,7 @@ import type {
 type RowList = Exclude<keyof FlatRows<XdmVocabulary>, "document">;
 
 /**
- * Every list of {@link FlatRows} but the document row, in the order a refusal reports them.
+ * Every list of {@link FlatRows} but the document row, in the order the image compares them.
  */
 const rowLists = [
   "nodes",
@@ -82,27 +85,9 @@ const rowLists = [
 ] as const satisfies readonly RowList[];
 
 /**
- * The lists whose rows are keyed by a node or an attribute the scan builds: every list but the
- * nodes, which the scan reads itself.
- */
-const keyedLists = [
-  "attributes",
-  "openNames",
-  "attributeEntities",
-  "namespaces",
-  "openElementNames",
-  "texts",
-  "whitespace",
-  "comments",
-  "pis",
-  "entityRefs",
-  "doctypes",
-] as const satisfies readonly RowList[];
-
-/**
- * A row another row names is not among the rows: a character-data node's row of its kind, an
- * open-class attribute's exact name, a foreign element's expanded name, or the document node's own
- * `Node` row.
+ * A row another row names is not among the rows, so the read cannot build the node: a
+ * character-data node's row of its kind, an open-class attribute's exact name, a foreign element's
+ * expanded name, or the document node's own `Node` row.
  */
 export class RowMissing extends Schema.TaggedError<RowMissing>()("RowMissing", {
   /**
@@ -123,26 +108,6 @@ export class RowMissing extends Schema.TaggedError<RowMissing>()("RowMissing", {
 }
 
 /**
- * A node of a kind its parent cannot hold: a doctype or a document node under an element, an
- * element under the document node but one root element of a kind, or anything else there but its
- * doctype first, its comments and processing instructions, and one root element of a kind. The
- * document node's own row is misplaced when it is not of kind `document`, its own parent at slot 0.
- */
-export class NodeMisplaced extends Schema.TaggedError<NodeMisplaced>()("NodeMisplaced", {
-  at: Schema.BigInt,
-  kind: Schema.String,
-  node: Schema.String,
-  parent: Schema.String,
-}) {
-  /**
-   * The node, its kind and its place, the rule that refuses them, and the repair.
-   */
-  override get message(): string {
-    return `Node ${this.node}, of kind ${this.kind}, sits under ${this.parent} at slot ${String(this.at)}, where no node of its kind can: the document node is its own parent at slot 0 and holds its doctype first, its comments and processing instructions, and one root element; and an element, of a kind or foreign, holds elements and character data but no doctype. Assemble the rows of one document as its scans returned them.`;
-  }
-}
-
-/**
  * The document node holds no root element.
  */
 export class RootMissing extends Schema.TaggedError<RootMissing>()("RootMissing", {
@@ -157,333 +122,353 @@ export class RootMissing extends Schema.TaggedError<RootMissing>()("RootMissing"
 }
 
 /**
- * Two node rows hold one start (T1): each node of a document has its own place in document order.
+ * How a row leaves the image: its key held by a second row of its list; its node of a kind the
+ * node the read places it under cannot hold; a key the tree read writes no row at; a key the tree
+ * writes a row at, which the rows lack; or a field the row at a key holds otherwise than the tree
+ * writes it.
  */
-export class StartTaken extends Schema.TaggedError<StartTaken>()("StartTaken", {
-  node: Schema.String,
-  /**
-   * The node whose row holds the start already.
-   */
-  other: Schema.String,
-  start: Schema.BigInt,
-}) {
-  /**
-   * The start, the two nodes, and the repair.
-   */
-  override get message(): string {
-    return `Node ${this.node} starts at ${String(this.start)}, where node ${this.other} starts too, but each node of a document has its own start, its place in document order. Assemble the rows of one document, each once, as its scans returned them.`;
-  }
-}
+const Departure = Schema.Union([
+  Schema.TaggedStruct("repeated", {}),
+  Schema.TaggedStruct("unplaced", {
+    /**
+     * The node's kind.
+     */
+    kind: Schema.String,
+    /**
+     * The node the read places it under: the innermost element whose interval holds its start, or
+     * the document node.
+     */
+    under: Schema.String,
+  }),
+  Schema.TaggedStruct("unwritten", {}),
+  Schema.TaggedStruct("lacked", {}),
+  Schema.TaggedStruct("differs", {
+    field: Schema.String,
+    /**
+     * The field's value in the row.
+     */
+    found: Schema.String,
+    /**
+     * The field's value in the row the tree writes at the key.
+     */
+    written: Schema.String,
+  }),
+]);
 
 /**
- * A node row's start is outside its document: a document of N nodes numbers them from 0 to N − 1,
- * so a start at N or beyond leaves a place below it empty.
+ * The rows are not `flatten`'s image of the tree they read as: the first row that leaves it, by the
+ * read's checks and then list by list, the document row first and the rest in {@link rowLists}
+ * order. Every such refusal is one cause, a row no tree's rows hold, and differs only in the list,
+ * the key and how the row leaves the image, which it holds as data.
  */
-export class StartBeyond extends Schema.TaggedError<StartBeyond>()("StartBeyond", {
-  count: Schema.Number,
-  node: Schema.String,
-  start: Schema.BigInt,
-}) {
+export class RowsOutsideImage extends Schema.TaggedError<RowsOutsideImage>()("RowsOutsideImage", {
   /**
-   * The node, its start, the document's size, and the repair.
+   * How the row leaves the image.
    */
-  override get message(): string {
-    return `Node ${this.node} starts at ${String(this.start)}, but its document's ${String(this.count)} nodes start from 0 to ${String(this.count - 1)}, one each, in document order. Assemble every node row of one document, none filtered out.`;
-  }
-}
-
-/**
- * The document node's interval is not `[0, N)`: it is the root, so it starts its document and its
- * subtree holds every node.
- */
-export class DocumentInterval extends Schema.TaggedError<DocumentInterval>()("DocumentInterval", {
-  count: Schema.Number,
-  end: Schema.BigInt,
-  node: Schema.String,
-  start: Schema.BigInt,
-}) {
+  departure: Departure,
   /**
-   * The document node, its interval, the one it must have, and the repair.
-   */
-  override get message(): string {
-    return `The document node ${this.node} has the interval [${String(this.start)}, ${String(this.end)}), but it is the root of its document's ${String(this.count)} nodes, so its interval is [0, ${String(this.count)}). Assemble every node row of one document, none filtered out.`;
-  }
-}
-
-/**
- * A node row whose parent is not the element its start sits in: in document order, a node is the
- * child of the innermost element whose interval holds its start, or of the document node when no
- * element's does.
- */
-export class ParentNotOpen extends Schema.TaggedError<ParentNotOpen>()("ParentNotOpen", {
-  node: Schema.String,
-  /**
-   * The innermost node whose interval holds the row's start: the parent its interval gives it.
-   */
-  open: Schema.String,
-  parent: Schema.String,
-  start: Schema.BigInt,
-}) {
-  /**
-   * The node, the parent it names, the one its start gives it, and the repair.
-   */
-  override get message(): string {
-    return `Node ${this.node} starts at ${String(this.start)} and names ${this.parent} as its parent, but the innermost node whose interval holds that start is ${this.open}, so the node is a child of ${this.open} or of no node. A node's parent is the nearest node before it in document order whose interval holds it; assemble the rows of one document as its scans returned them.`;
-  }
-}
-
-/**
- * A node row whose slot is not its parent's next: in document order a family's slots run from 0
- * up, one each, so a node's slot is the number of its siblings that start before it.
- */
-export class SlotOutOfTurn extends Schema.TaggedError<SlotOutOfTurn>()("SlotOutOfTurn", {
-  at: Schema.BigInt,
-  /**
-   * The number of the node's siblings that start before it: the slot its start gives it.
-   */
-  expected: Schema.BigInt,
-  node: Schema.String,
-  parent: Schema.String,
-}) {
-  /**
-   * The node, its slot, the one its start gives it, and the repair.
-   */
-  override get message(): string {
-    return `Node ${this.node} is at slot ${String(this.at)} of ${this.parent}'s family, but ${String(this.expected)} of its siblings start before it, so its slot is ${String(this.expected)}. A family's slots follow document order from 0, with no gap and none twice; assemble the rows of one document as its scans returned them.`;
-  }
-}
-
-/**
- * A node row whose interval leaves its parent's: a node's subtree lies inside its parent's, so it
- * ends at or before its parent ends.
- */
-export class EndBeyondParent extends Schema.TaggedError<EndBeyondParent>()("EndBeyondParent", {
-  end: Schema.BigInt,
-  node: Schema.String,
-  parent: Schema.String,
-  parentEnd: Schema.BigInt,
-}) {
-  /**
-   * The node, its end, its parent's, and the repair.
-   */
-  override get message(): string {
-    return `Node ${this.node} ends at ${String(this.end)}, past the end of its parent ${this.parent} at ${String(this.parentEnd)}, so its interval leaves its parent's, which holds its whole subtree. Assemble the rows of one document as its scans returned them.`;
-  }
-}
-
-/**
- * A node row whose interval holds no node: an interval holds at least its own node, so it ends
- * after it starts.
- */
-export class IntervalEmpty extends Schema.TaggedError<IntervalEmpty>()("IntervalEmpty", {
-  end: Schema.BigInt,
-  node: Schema.String,
-  start: Schema.BigInt,
-}) {
-  /**
-   * The node, its interval, and the repair.
-   */
-  override get message(): string {
-    return `Node ${this.node} has the interval [${String(this.start)}, ${String(this.end)}), which holds no node, but a node's interval holds at least the node itself. Assemble the rows of one document as its scans returned them.`;
-  }
-}
-
-/**
- * A leaf's interval holds more than the leaf: character data and the doctype hold no children, so
- * a leaf's interval is `[start, start + 1)`.
- */
-export class LeafOversized extends Schema.TaggedError<LeafOversized>()("LeafOversized", {
-  end: Schema.BigInt,
-  kind: Schema.String,
-  node: Schema.String,
-  start: Schema.BigInt,
-}) {
-  /**
-   * The leaf, its interval, the one it must have, and the repair.
-   */
-  override get message(): string {
-    return `Node ${this.node}, of kind ${this.kind}, has the interval [${String(this.start)}, ${String(this.end)}), but a ${this.kind} holds no children, so its interval holds only itself: [${String(this.start)}, ${String(this.start + 1n)}). Assemble the rows of one document as its scans returned them.`;
-  }
-}
-
-/**
- * Two node rows of one id: each node is one row.
- */
-export class IdRepeated extends Schema.TaggedError<IdRepeated>()("IdRepeated", {
-  node: Schema.String,
-  /**
-   * The start of the second row, in document order, of the id.
-   */
-  start: Schema.BigInt,
-}) {
-  /**
-   * The node, its second row's start, and the repair.
-   */
-  override get message(): string {
-    return `Node ${this.node} has a second row, starting at ${String(this.start)}, but each node is one row. Assemble the rows of one document, each once, as its scans returned them.`;
-  }
-}
-
-/**
- * The families of an element a slot is placed in besides its children: its attributes and its
- * namespace declarations.
- */
-const families = ["attributes", "namespaces"] as const;
-
-/**
- * A row's slot is held by another row of its family: two rows of one family share a slot, as a
- * duplicated `at` does.
- */
-export class SlotTaken extends Schema.TaggedError<SlotTaken>()("SlotTaken", {
-  at: Schema.BigInt,
-  /**
-   * The key of the row that cannot be placed.
+   * The row's key as its relation spells it.
    */
   key: Schema.String,
-  owner: Schema.String,
-  rows: Schema.Literals(families),
+  /**
+   * The list of {@link FlatRows} the row is in, or the document row.
+   */
+  rows: Schema.Literals(["document", ...rowLists]),
 }) {
   /**
-   * The family, the slot, the row, and the repair.
+   * The row, how it leaves the image, why no document's rows hold it, and the repair.
    */
   override get message(): string {
-    return `The ${this.rows} row (${this.key}) is at slot ${String(this.at)} of ${this.owner}'s family, which another of its rows holds. Each row of a family holds its own slot; assemble the rows of one document as its scans returned them.`;
+    const repair =
+      "So they are the rows of no document. Assemble the rows of one document, each once, as its scans returned them.";
+    switch (this.departure._tag) {
+      case "repeated": {
+        return `The rows hold two ${this.rows} rows at (${this.key}), but a document's rows hold one row at each key of a list. ${repair}`;
+      }
+      case "unplaced": {
+        const { kind, under } = this.departure;
+
+        return `Node ${this.key}, of kind ${kind}, reads as a child of ${under}, which cannot hold a node of its kind: the document node holds one doctype, first, its comments and processing instructions, and one root element of a kind; an element holds elements and character data, but no doctype; and only the document node is of kind document. ${repair}`;
+      }
+      case "unwritten": {
+        return `The rows hold a ${this.rows} row at (${this.key}), where the tree they read as writes none. ${repair}`;
+      }
+      case "lacked": {
+        return `The rows hold no ${this.rows} row at (${this.key}), where the tree they read as writes one. ${repair}`;
+      }
+      case "differs": {
+        const { field, found, written } = this.departure;
+
+        return `The ${this.rows} row at (${this.key}) holds ${field} ${found}, where the tree the rows read as writes ${written}. ${repair}`;
+      }
+      default: {
+        return this.departure satisfies never;
+      }
+    }
   }
 }
 
 /**
- * A row's slot is past its family's last: a family of n rows holds the slots 0 to n − 1, so a slot
- * at n or beyond leaves a slot below it empty, as a gap in `at` does.
+ * Every way {@link assemble} can refuse rows.
  */
-export class SlotBeyond extends Schema.TaggedError<SlotBeyond>()("SlotBeyond", {
-  at: Schema.BigInt,
-  count: Schema.Number,
-  /**
-   * The key of the row that cannot be placed.
-   */
-  key: Schema.String,
-  owner: Schema.String,
-  rows: Schema.Literals(families),
-}) {
-  /**
-   * The family, the slot, the row, and the repair.
-   */
-  override get message(): string {
-    return `The ${this.rows} row (${this.key}) is at slot ${String(this.at)} of ${this.owner}'s family of ${String(this.count)} rows, whose slots run from 0 to ${String(this.count - 1)}. A family's slots have no gap; assemble the rows of one document as its scans returned them.`;
-  }
+export type AssembleError = RootMissing | RowMissing | RowsOutsideImage;
+
+/**
+ * A list's relation as the image is held to it: the key the relation gives a row, and every field
+ * `flatten` writes, which a row and the image's row at its key agree on.
+ */
+interface Relation<Row extends object> {
+  readonly fields: Readonly<Record<keyof Row & string, true>>;
+  readonly key: (row: Row) => string;
 }
 
 /**
- * A row keyed by a node or an attribute the scan does not build, or a second row at one key.
- */
-export class RowUnreached extends Schema.TaggedError<RowUnreached>()("RowUnreached", {
-  /**
-   * The row's key as its relation spells it: its node's id, its attribute's id, or its element's
-   * id and slot.
-   */
-  key: Schema.String,
-  rows: Schema.Literals(keyedLists),
-}) {
-  /**
-   * The list, the row, and the repair.
-   */
-  override get message(): string {
-    return `The ${this.rows} row at (${this.key}) belongs to no node or attribute of the document the node rows build, so the rows are not one document's. Assemble the rows of one document, each once, as its scans returned them.`;
-  }
-}
-
-/**
- * The ways a document's rows fail to assemble.
- */
-export type AssembleError =
-  | DocumentInterval
-  | EndBeyondParent
-  | IdRepeated
-  | IntervalEmpty
-  | LeafOversized
-  | NodeMisplaced
-  | ParentNotOpen
-  | RootMissing
-  | RowMissing
-  | RowUnreached
-  | SlotBeyond
-  | SlotOutOfTurn
-  | SlotTaken
-  | StartBeyond
-  | StartTaken;
-
-/**
- * Spell the key of a family row: its owner's id and its slot.
+ * Spell the key of a row keyed by its node.
  *
  * @param row - The row.
- * @param row.at - Its slot.
- * @param row.node - Its owner.
- * @returns The key.
+ * @param row.node - Its node.
+ * @returns The node's id.
  */
-const slotKeyOf = ({ at, node }: { readonly at: bigint; readonly node: NodeId }): string =>
-  `${node}, ${String(at)}`;
+const byNode = ({ node }: { readonly node: NodeId }): string => node;
+
+/**
+ * Spell the key of a row keyed by its own id.
+ *
+ * @param row - The row.
+ * @param row.id - Its id.
+ * @returns The id.
+ */
+const byId = ({ id }: { readonly id: NodeId }): string => id;
+
+/**
+ * The fields of a row of character data or the doctype.
+ */
+const characterFields = { node: true, value: true } as const;
+
+/**
+ * Each list's relation: its key, and every field of its row.
+ */
+const relations = {
+  attributeEntities: {
+    fields: { attribute: true, name: true, offset: true },
+    key: ({ attribute, offset }) => `${attribute}, ${String(offset)}`,
+  },
+  attributes: {
+    fields: { at: true, id: true, lexical: true, name: true, node: true, prefix: true },
+    key: byId,
+  },
+  comments: { fields: characterFields, key: byNode },
+  doctypes: { fields: characterFields, key: byNode },
+  entityRefs: { fields: { name: true, node: true }, key: byNode },
+  namespaces: {
+    fields: { at: true, node: true, prefix: true, uri: true },
+    key: ({ at, node }) => `${node}, ${String(at)}`,
+  },
+  nodes: {
+    fields: {
+      at: true,
+      end: true,
+      governs: true,
+      id: true,
+      kind: true,
+      parent: true,
+      prefix: true,
+      start: true,
+      version: true,
+    },
+    key: byId,
+  },
+  openElementNames: { fields: { local: true, namespace: true, node: true }, key: byNode },
+  openNames: {
+    fields: { attribute: true, local: true, uri: true },
+    key: ({ attribute }) => attribute,
+  },
+  pis: { fields: { data: true, node: true, target: true }, key: byNode },
+  texts: { fields: characterFields, key: byNode },
+  whitespace: { fields: characterFields, key: byNode },
+} as const satisfies { readonly [K in RowList]: Relation<FlatRows<XdmVocabulary>[K][number]> };
+
+/**
+ * The document row's relation, keyed by its node.
+ */
+const documentRelation = {
+  fields: {
+    charset: true,
+    encoding: true,
+    exportCharset: true,
+    node: true,
+    standalone: true,
+    xmlVersion: true,
+  },
+  key: byNode,
+} as const satisfies Relation<DocumentRow>;
+
+/**
+ * Each list's rows by their keys.
+ */
+type Keyed = { readonly [K in RowList]: ReadonlyMap<string, FlatRows<XdmVocabulary>[K][number]> };
+
+/**
+ * Key a list's rows, each once.
+ *
+ * @param rows - Which list they are.
+ * @param list - The rows.
+ * @param relation - The list's relation.
+ * @returns The rows by key, or the refusal of the first key held twice.
+ */
+const keyedIn = <Row extends object>(
+  rows: RowList,
+  list: readonly Row[],
+  { key }: Relation<Row>,
+): Result.Result<ReadonlyMap<string, Row>, RowsOutsideImage> => {
+  const keyed = new Map<string, Row>();
+  for (const row of list) {
+    const at = key(row);
+    if (keyed.has(at)) {
+      return Result.fail(new RowsOutsideImage({ departure: { _tag: "repeated" }, key: at, rows }));
+    }
+
+    keyed.set(at, row);
+  }
+
+  return Result.succeed(keyed);
+};
+
+/**
+ * Key every list of a document's rows.
+ *
+ * @param rows - The rows.
+ * @returns Each list's rows by key, or the refusal of the first key held twice.
+ */
+const keyedOf = (rows: FlatRows<XdmVocabulary>): Result.Result<Keyed, RowsOutsideImage> =>
+  Result.gen(function* keyed() {
+    return {
+      attributeEntities: yield* keyedIn(
+        "attributeEntities",
+        rows.attributeEntities,
+        relations.attributeEntities,
+      ),
+      attributes: yield* keyedIn("attributes", rows.attributes, relations.attributes),
+      comments: yield* keyedIn("comments", rows.comments, relations.comments),
+      doctypes: yield* keyedIn("doctypes", rows.doctypes, relations.doctypes),
+      entityRefs: yield* keyedIn("entityRefs", rows.entityRefs, relations.entityRefs),
+      namespaces: yield* keyedIn("namespaces", rows.namespaces, relations.namespaces),
+      nodes: yield* keyedIn("nodes", rows.nodes, relations.nodes),
+      openElementNames: yield* keyedIn(
+        "openElementNames",
+        rows.openElementNames,
+        relations.openElementNames,
+      ),
+      openNames: yield* keyedIn("openNames", rows.openNames, relations.openNames),
+      pis: yield* keyedIn("pis", rows.pis, relations.pis),
+      texts: yield* keyedIn("texts", rows.texts, relations.texts),
+      whitespace: yield* keyedIn("whitespace", rows.whitespace, relations.whitespace),
+    };
+  });
+
+/**
+ * Hold a list's rows to the image's: every row the image writes is at its key with every field
+ * alike, and no other key is held.
+ *
+ * @param rows - Which list they are.
+ * @param held - The rows by key.
+ * @param written - The image's rows.
+ * @param relation - The list's relation.
+ * @returns The refusal of the first row that leaves the image, none when the rows are its image.
+ */
+const outsideIn = <Row extends object>(
+  rows: RowList | "document",
+  held: ReadonlyMap<string, Row>,
+  written: readonly Row[],
+  { fields, key }: Relation<Row>,
+): Option.Option<RowsOutsideImage> => {
+  const writtenKeys = new Set<string>();
+  for (const row of written) {
+    const at = key(row);
+    writtenKeys.add(at);
+
+    const found = held.get(at);
+    if (found === undefined) {
+      return Option.some(new RowsOutsideImage({ departure: { _tag: "lacked" }, key: at, rows }));
+    }
+
+    const field = Record.keys(fields).find((name) => found[name] !== row[name]);
+    if (field !== undefined) {
+      return Option.some(
+        new RowsOutsideImage({
+          departure: {
+            _tag: "differs",
+            field,
+            found: String(found[field]),
+            written: String(row[field]),
+          },
+          key: at,
+          rows,
+        }),
+      );
+    }
+  }
+
+  return Option.map(
+    Option.fromNullishOr([...held.keys()].find((at) => !writtenKeys.has(at))),
+    (at) => new RowsOutsideImage({ departure: { _tag: "unwritten" }, key: at, rows }),
+  );
+};
+
+/**
+ * Hold a document's rows to the image of the tree they read as.
+ *
+ * @param document - The document row.
+ * @param keyed - The other rows by key.
+ * @param image - The rows `flatten` writes for the tree.
+ * @returns The refusal of the first row, the document row and then list by list, that leaves the
+ *   image; none when the rows are the image.
+ */
+const outsideImage = (
+  document: DocumentRow,
+  keyed: Keyed,
+  image: FlatRows<XdmVocabulary>,
+): Option.Option<RowsOutsideImage> =>
+  Option.firstSomeOf([
+    outsideIn("document", new Map([[document.node, document]]), [image.document], documentRelation),
+    outsideIn("nodes", keyed.nodes, image.nodes, relations.nodes),
+    outsideIn("attributes", keyed.attributes, image.attributes, relations.attributes),
+    outsideIn("openNames", keyed.openNames, image.openNames, relations.openNames),
+    outsideIn(
+      "attributeEntities",
+      keyed.attributeEntities,
+      image.attributeEntities,
+      relations.attributeEntities,
+    ),
+    outsideIn("namespaces", keyed.namespaces, image.namespaces, relations.namespaces),
+    outsideIn(
+      "openElementNames",
+      keyed.openElementNames,
+      image.openElementNames,
+      relations.openElementNames,
+    ),
+    outsideIn("texts", keyed.texts, image.texts, relations.texts),
+    outsideIn("whitespace", keyed.whitespace, image.whitespace, relations.whitespace),
+    outsideIn("comments", keyed.comments, image.comments, relations.comments),
+    outsideIn("pis", keyed.pis, image.pis, relations.pis),
+    outsideIn("entityRefs", keyed.entityRefs, image.entityRefs, relations.entityRefs),
+    outsideIn("doctypes", keyed.doctypes, image.doctypes, relations.doctypes),
+  ]);
+
+/**
+ * The order the read takes node rows in: by start.
+ */
+const byStart = Order.mapInput(Order.BigInt, (row: { readonly start: bigint }) => row.start);
+
+/**
+ * The order of a family's rows: by slot.
+ */
+const bySlot = Order.mapInput(Order.BigInt, (row: { readonly at: bigint }) => row.at);
 
 /**
  * The order of an attribute's entity references: by offset, their key within the attribute.
  */
 const byOffset = Order.mapInput(Order.BigInt, (row: AttributeEntityRow) => row.offset);
-
-/**
- * Place rows at the slots their own field names, each once and none past the last.
- *
- * @param rows - The rows, in any order.
- * @param slotOf - The slot a row names.
- * @param refuse - The refusals of a row past the last slot and of a row at a slot another holds.
- * @param refuse.beyond - Refuse a row at a slot of n or more, for n rows.
- * @param refuse.taken - Refuse a row at a slot another row holds.
- * @returns The rows in slot order, or the refusal of the first that cannot be placed.
- */
-const slotted = <Row, Beyond, Taken>(
-  rows: readonly Row[],
-  slotOf: (row: Row) => bigint,
-  refuse: {
-    readonly beyond: (row: Row) => Beyond;
-    readonly taken: (row: Row, held: Row) => Taken;
-  },
-): Result.Result<readonly Row[], Beyond | Taken> => {
-  const slots: (Row | undefined)[] = Array.from({ length: rows.length });
-  for (const row of rows) {
-    const slot = slotOf(row);
-    if (slot < 0n || slot >= BigInt(rows.length)) {
-      return Result.fail(refuse.beyond(row));
-    }
-
-    const held = slots[Number(slot)];
-    if (held !== undefined) {
-      return Result.fail(refuse.taken(row, held));
-    }
-
-    slots[Number(slot)] = row;
-  }
-
-  return Result.succeed(slots.filter((row) => row !== undefined));
-};
-
-/**
- * Place an element's family at its slots.
- *
- * @param rows - The family's rows, in any order.
- * @param family - Which family they are.
- * @param owner - The family's owner.
- * @param keyOfRow - A row's key, which a refusal names.
- * @returns The rows in slot order, or the refusal of the first that cannot be placed.
- */
-const placed = <Row extends { readonly at: bigint }>(
-  rows: readonly Row[],
-  family: (typeof families)[number],
-  owner: NodeId,
-  keyOfRow: (row: Row) => string,
-): Result.Result<readonly Row[], SlotBeyond | SlotTaken> =>
-  slotted(rows, ({ at }) => at, {
-    beyond: (row) =>
-      new SlotBeyond({ at: row.at, count: rows.length, key: keyOfRow(row), owner, rows: family }),
-    taken: (row) => new SlotTaken({ at: row.at, key: keyOfRow(row), owner, rows: family }),
-  });
 
 /**
  * A document's rows grouped by the owner each is looked up under: leaves and a foreign element's
@@ -525,33 +510,19 @@ const indexOf = <V extends XdmVocabulary>(rows: FlatRows<V>): Index<V> => ({
 });
 
 /**
- * The rows other than node rows that the scan has taken, each once.
- */
-type Reached = Set<object>;
-
-/**
- * Take the row at a key, recording that the scan reached it.
+ * Take the row at a key.
  *
- * @param reached - The rows reached.
  * @param rows - The list the row belongs in, which a refusal names.
  * @param map - The list's rows by key.
  * @param key - The key.
  * @returns The row, or the refusal of its absence.
  */
-const take = <Row extends object>(
-  reached: Reached,
+const take = <Row>(
   rows: RowList,
   map: ReadonlyMap<string, Row>,
   key: string,
 ): Result.Result<Row, RowMissing> =>
-  Result.map(
-    Result.fromNullishOr(map.get(key), () => new RowMissing({ key, rows })),
-    (row) => {
-      reached.add(row);
-
-      return row;
-    },
-  );
+  Result.fromNullishOr(map.get(key), () => new RowMissing({ key, rows }));
 
 /**
  * The open classes, the attribute name handles whose attributes carry an exact name beside them.
@@ -587,87 +558,63 @@ const openNameOf = {
  * Build an attribute from its row and the rows keyed by its id.
  *
  * @param index - The document's rows by owner.
- * @param reached - The rows reached, which the attribute's rows join.
  * @param row - The attribute's row.
  * @returns The attribute, or the refusal of an open-class one without its open name.
  */
 const attributeOf = <V extends XdmVocabulary>(
   index: Index<V>,
-  reached: Reached,
   row: AttributeRow<V>,
-): Result.Result<XdmAttribute<V>, RowMissing> => {
-  reached.add(row);
-
-  return Result.gen(function* attribute() {
+): Result.Result<XdmAttribute<V>, RowMissing> =>
+  Result.gen(function* attribute() {
     const { id, lexical, name, prefix } = row;
     const named: XdmAttributeName<V> = isOpenClass(name)
-      ? yield* Result.map(take(reached, "openNames", index.openNames, id), (open) =>
+      ? yield* Result.map(take("openNames", index.openNames, id), (open) =>
           openNameOf[name](open, prefix),
         )
       : { _tag: "closed", handle: name, prefix };
-    const references = (index.references.get(id) ?? []).toSorted(byOffset);
-    for (const reference of references) {
-      reached.add(reference);
-    }
 
     return {
       lexical,
       name: named,
-      references: references.map(({ name: entity, offset }) => ({
-        name: entity,
-        offset: Number(offset),
-      })),
+      references: (index.references.get(id) ?? [])
+        .toSorted(byOffset)
+        .map(({ name: entity, offset }) => ({ name: entity, offset: Number(offset) })),
     };
   });
-};
 
 /**
  * Build what every element holds but its children: its attributes and namespace declarations,
- * each at its slot, and its prefix.
+ * each family in slot order, and its prefix.
  *
  * @param index - The document's rows by owner.
- * @param reached - The rows reached.
+ * @param attributeIds - The ids of the attributes read so far, which the element's join in slot
+ *   order.
  * @param row - The element's row.
- * @returns The element's content, or the refusal of a family that cannot be placed or an attribute
- *   without its rows.
+ * @returns The element's content, or the refusal of an attribute without its open name.
  */
 const contentOf = <V extends XdmVocabulary>(
   index: Index<V>,
-  reached: Reached,
+  attributeIds: AttributeId[],
   row: NodeRow<V>,
-): Result.Result<
-  Pick<XdmClosedElement<V>, "attributes" | "namespaces" | "prefix">,
-  RowMissing | SlotBeyond | SlotTaken
-> =>
+): Result.Result<Pick<XdmClosedElement<V>, "attributes" | "namespaces" | "prefix">, RowMissing> =>
   Result.gen(function* elementContent() {
-    const attributeRows = yield* placed(
-      index.attributes.get(row.id) ?? [],
-      "attributes",
-      row.id,
-      ({ id }) => id,
-    );
+    const attributeRows = (index.attributes.get(row.id) ?? []).toSorted(bySlot);
+    attributeIds.push(...attributeRows.map(({ id }) => id));
+
     const attributes = yield* Result.all(
-      attributeRows.map((attribute) => attributeOf(index, reached, attribute)),
+      attributeRows.map((attribute) => attributeOf(index, attribute)),
     );
-    const declarations = yield* placed(
-      index.namespaces.get(row.id) ?? [],
-      "namespaces",
-      row.id,
-      slotKeyOf,
-    );
-    const namespaces: XdmNamespace[] = [];
-    for (const declaration of declarations) {
-      reached.add(declaration);
-      namespaces.push({ prefix: declaration.prefix, uri: declaration.uri });
-    }
+    const namespaces: XdmNamespace[] = (index.namespaces.get(row.id) ?? [])
+      .toSorted(bySlot)
+      .map(({ prefix, uri }) => ({ prefix, uri }));
 
     return { attributes, namespaces, prefix: row.prefix };
   });
 
 /**
  * A node built from its row, with the list its children are appended to: an element of a kind or a
- * foreign one, which holds any child but a doctype; or character data and the doctype, which hold
- * nothing.
+ * foreign one, which holds any child but a doctype; character data and the doctype, which hold
+ * nothing; or a node of kind document below the document node, which no node holds.
  */
 type Built<V extends XdmVocabulary> =
   | {
@@ -676,21 +623,27 @@ type Built<V extends XdmVocabulary> =
       readonly node: XdmElement<V>;
     }
   | { readonly _tag: "character"; readonly node: XdmCharacter }
-  | { readonly _tag: "doctype"; readonly value: string };
+  | { readonly _tag: "doctype"; readonly value: string }
+  | { readonly _tag: "document" };
 
 /**
- * A built node that holds children: an element of either shape, whose family the scan appends to.
+ * A built node that holds children: an element of either shape, whose family the read appends to.
  */
 type Owner<V extends XdmVocabulary> = Extract<Built<V>, { readonly _tag: "element" }>;
 
 /**
- * Refuse a node where its row places it.
+ * Refuse a node under the node the read places it under.
  *
  * @param row - The node's row.
- * @returns The refusal, naming the node, its kind and its place.
+ * @param under - The row of the node it would be a child of.
+ * @returns The refusal, naming the node, its kind and the node it would be a child of.
  */
-const misplaced = <V extends XdmVocabulary>(row: NodeRow<V>): NodeMisplaced =>
-  new NodeMisplaced({ at: row.at, kind: row.kind, node: row.id, parent: row.parent });
+const unplaced = <V extends XdmVocabulary>(row: NodeRow<V>, under: NodeRow<V>): RowsOutsideImage =>
+  new RowsOutsideImage({
+    departure: { _tag: "unplaced", kind: row.kind, under: under.id },
+    key: row.id,
+    rows: "nodes",
+  });
 
 /**
  * A node that holds no children and keeps its content in one row of a list of its kind: character
@@ -702,40 +655,36 @@ type LeafKind = XdmCharacter["_tag"] | "doctype";
  * The builder of each leaf kind's node from the row of its kind.
  */
 const leaves = {
-  comment: (index, reached, id) =>
-    Result.map(take(reached, "comments", index.comments, id), ({ value }) => ({
+  comment: (index, id) =>
+    Result.map(take("comments", index.comments, id), ({ value }) => ({
       _tag: "character",
       node: { _tag: "comment", value },
     })),
-  doctype: (index, reached, id) =>
-    Result.map(take(reached, "doctypes", index.doctypes, id), ({ value }) => ({
-      _tag: "doctype",
-      value,
-    })),
-  entityRef: (index, reached, id) =>
-    Result.map(take(reached, "entityRefs", index.entityRefs, id), ({ name }) => ({
+  doctype: (index, id) =>
+    Result.map(take("doctypes", index.doctypes, id), ({ value }) => ({ _tag: "doctype", value })),
+  entityRef: (index, id) =>
+    Result.map(take("entityRefs", index.entityRefs, id), ({ name }) => ({
       _tag: "character",
       node: { _tag: "entityRef", name },
     })),
-  pi: (index, reached, id) =>
-    Result.map(take(reached, "pis", index.pis, id), ({ data, target }) => ({
+  pi: (index, id) =>
+    Result.map(take("pis", index.pis, id), ({ data, target }) => ({
       _tag: "character",
       node: { _tag: "pi", data, target },
     })),
-  text: (index, reached, id) =>
-    Result.map(take(reached, "texts", index.texts, id), ({ value }) => ({
+  text: (index, id) =>
+    Result.map(take("texts", index.texts, id), ({ value }) => ({
       _tag: "character",
       node: { _tag: "text", value },
     })),
-  ws: (index, reached, id) =>
-    Result.map(take(reached, "whitespace", index.whitespace, id), ({ value }) => ({
+  ws: (index, id) =>
+    Result.map(take("whitespace", index.whitespace, id), ({ value }) => ({
       _tag: "character",
       node: { _tag: "ws", value },
     })),
 } as const satisfies {
   readonly [K in LeafKind]: (
     index: Index<XdmVocabulary>,
-    reached: Reached,
     id: NodeId,
   ) => Result.Result<
     Extract<Built<XdmVocabulary>, { readonly _tag: "character" | "doctype" }>,
@@ -755,36 +704,30 @@ const isLeafKind = (kind: string): kind is LeafKind => Object.hasOwn(leaves, kin
  * Build the node a row below the document node stands for, with no children yet.
  *
  * @param index - The document's rows by owner.
- * @param reached - The rows reached, which the node's rows join.
+ * @param attributeIds - The ids of the attributes read so far.
  * @param row - The node's row.
  * @returns The node, or the refusal of a leaf without its row, a foreign element without its name,
- *   an element with a family that cannot be placed or an attribute without its rows, or a document
- *   node below the document node.
+ *   or an attribute without its open name.
  */
 const builtOf = <V extends XdmVocabulary>(
   index: Index<V>,
-  reached: Reached,
+  attributeIds: AttributeId[],
   row: NodeRow<V>,
-): Result.Result<Built<V>, AssembleError> => {
+): Result.Result<Built<V>, RowMissing> => {
   const { id, kind } = row;
   if (isLeafKind(kind)) {
-    return leaves[kind](index, reached, id);
+    return leaves[kind](index, id);
   }
 
   if (kind === "document") {
-    return Result.fail(misplaced(row));
+    return Result.succeed({ _tag: "document" });
   }
 
   return Result.gen(function* element() {
-    const content = yield* contentOf(index, reached, row);
+    const content = yield* contentOf(index, attributeIds, row);
     const children: XdmChild<V>[] = [];
     if (isForeignKind(kind)) {
-      const { local, namespace } = yield* take(
-        reached,
-        "openElementNames",
-        index.openElementNames,
-        id,
-      );
+      const { local, namespace } = yield* take("openElementNames", index.openElementNames, id);
 
       return {
         _tag: "element",
@@ -808,27 +751,24 @@ const builtOf = <V extends XdmVocabulary>(
 };
 
 /**
- * Append a built node to the element it sits in, or refuse it there.
+ * Append a built node to the element it sits in, where an element holds it: an element or
+ * character data, but no doctype or document node.
  *
  * @param parent - The element.
  * @param child - The built node.
- * @param row - The node's row, which a refusal names.
- * @returns Nothing once the node is appended.
+ * @returns Whether the node is appended.
  */
-const appendTo = <V extends XdmVocabulary>(
-  parent: Owner<V>,
-  child: Built<V>,
-  row: NodeRow<V>,
-): Result.Result<void, NodeMisplaced> => {
+const appendTo = <V extends XdmVocabulary>(parent: Owner<V>, child: Built<V>): boolean => {
   switch (child._tag) {
-    case "doctype": {
-      return Result.fail(misplaced(row));
+    case "doctype":
+    case "document": {
+      return false;
     }
     case "element":
     case "character": {
       parent.children.push(child.node);
 
-      return Result.void;
+      return true;
     }
     default: {
       return child satisfies never;
@@ -848,49 +788,51 @@ interface DocumentChildren<V extends XdmVocabulary> {
 }
 
 /**
- * Place one of the document node's children by its place in XML's `document` production, or
- * refuse it there.
+ * Place one of the document node's children by its place in XML's `document` production, where
+ * the document node holds it: one doctype, the first root element of a kind, and comments and
+ * processing instructions, before the root in the prolog and after it in the epilog.
  *
  * @param parsed - The document node's children so far.
  * @param child - The built child.
- * @param row - The child's row, which a refusal names.
- * @returns Nothing once the child is placed.
+ * @returns Whether the child is placed.
  * @see {@link https://www.w3.org/TR/xml/#NT-document | XML 1.0, document}
  */
 const placeInDocument = <V extends XdmVocabulary>(
   parsed: DocumentChildren<V>,
   child: Built<V>,
-  row: NodeRow<V>,
-): Result.Result<void, NodeMisplaced> => {
+): boolean => {
   switch (child._tag) {
     case "doctype": {
-      if (row.at !== 0n) {
-        return Result.fail(misplaced(row));
+      if (Option.isSome(parsed.doctype)) {
+        return false;
       }
 
       parsed.doctype = Option.some(child.value);
 
-      return Result.void;
+      return true;
     }
     case "element": {
       const { node } = child;
       if (node._tag !== "element" || Option.isSome(parsed.root)) {
-        return Result.fail(misplaced(row));
+        return false;
       }
 
       parsed.root = Option.some(node);
 
-      return Result.void;
+      return true;
     }
     case "character": {
       const { node } = child;
       if (node._tag !== "comment" && node._tag !== "pi") {
-        return Result.fail(misplaced(row));
+        return false;
       }
 
       (Option.isSome(parsed.root) ? parsed.epilog : parsed.prolog).push(node);
 
-      return Result.void;
+      return true;
+    }
+    case "document": {
+      return false;
     }
     default: {
       return child satisfies never;
@@ -914,131 +856,43 @@ const declarationOf = (row: DocumentRow): Option.Option<XdmDeclaration> =>
       });
 
 /**
- * Find the first row of a list the scan did not reach: one it never took, or one the list holds a
- * second time, which the scan takes once.
- *
- * @param rows - The list's rows.
- * @param reached - The rows reached.
- * @param list - Which list they are.
- * @param key - A row's key as its relation spells it.
- * @returns The refusal of the first row not reached, none when every row was.
- */
-const unreachedIn = <Row extends object>(
-  rows: readonly Row[],
-  reached: Reached,
-  list: (typeof keyedLists)[number],
-  key: (row: Row) => string,
-): Option.Option<RowUnreached> => {
-  const counted = new Set<object>();
-
-  return Option.map(
-    Option.fromNullishOr(
-      rows.find((row) => {
-        const once = reached.has(row) && !counted.has(row);
-        counted.add(row);
-
-        return !once;
-      }),
-    ),
-    (row) => new RowUnreached({ key: key(row), rows: list }),
-  );
-};
-
-/**
- * Spell the key of a row keyed by its node.
- *
- * @param row - The row.
- * @param row.node - Its node.
- * @returns The node's id.
- */
-const byNode = ({ node }: { readonly node: NodeId }): string => node;
-
-/**
- * Find the first row the scan did not reach, by the lists in {@link keyedLists} order.
- *
- * @param rows - The document's rows.
- * @param reached - The rows reached.
- * @returns The refusal of the first row not reached, none when every row was.
- */
-const unreached = <V extends XdmVocabulary>(
-  rows: FlatRows<V>,
-  reached: Reached,
-): Option.Option<RowUnreached> =>
-  Option.firstSomeOf([
-    unreachedIn(rows.attributes, reached, "attributes", ({ id }) => id),
-    unreachedIn(rows.openNames, reached, "openNames", ({ attribute }) => attribute),
-    unreachedIn(
-      rows.attributeEntities,
-      reached,
-      "attributeEntities",
-      ({ attribute, offset }) => `${attribute}, ${String(offset)}`,
-    ),
-    unreachedIn(rows.namespaces, reached, "namespaces", slotKeyOf),
-    unreachedIn(rows.openElementNames, reached, "openElementNames", byNode),
-    unreachedIn(rows.texts, reached, "texts", byNode),
-    unreachedIn(rows.whitespace, reached, "whitespace", byNode),
-    unreachedIn(rows.comments, reached, "comments", byNode),
-    unreachedIn(rows.pis, reached, "pis", byNode),
-    unreachedIn(rows.entityRefs, reached, "entityRefs", byNode),
-    unreachedIn(rows.doctypes, reached, "doctypes", byNode),
-  ]);
-
-/**
- * A node whose interval the scan holds open: its row, how many of its children the scan has
- * placed, and how a child is placed in it, by its element's content or by the `document`
- * production.
+ * A node whose interval the read holds open: its row, and how a child is placed in it, by its
+ * element's content or by the `document` production, saying whether it holds the child.
  */
 interface Open<V extends XdmVocabulary> {
-  count: bigint;
-  readonly place: (child: Built<V>, row: NodeRow<V>) => Result.Result<void, NodeMisplaced>;
+  readonly place: (child: Built<V>) => boolean;
   readonly row: NodeRow<V>;
 }
 
 /**
- * Assemble a document's rows back into its tree.
- *
- * The node rows are placed by `start` and read in that order, with a stack of the elements whose
- * intervals hold the row read: each row closes the elements whose intervals end at or before its
- * start, is checked against the innermost one left, or the document node, is built, and when it is
- * an element is opened in turn. The document node's own interval, `[0, N)`, holds every start, so
- * it is never closed and is the bottom of the stack.
- *
- * @param rows - Every row of one document, in any order.
- * @returns The document `flatten` writes as these rows; or the refusal of the first rows, in
- *   document order, that fail a check: two node rows at one start or one past the last, a document
- *   node misplaced or not over `[0, N)`, a node whose parent, slot or interval is not the one its
- *   start gives it, an empty interval or an oversized leaf, a repeated id, a node of a kind where
- *   none can sit, a row another names missing, a family of attributes or declarations that cannot
- *   be placed, no root element, or a row of no node or attribute the scan builds.
+ * A document read from its rows: the tree, and the ids it was read under, each node's in the order
+ * read and each attribute's in its element's order, then slot order.
  */
-export const assemble = <V extends XdmVocabulary>(
+interface Read<V extends XdmVocabulary> {
+  readonly document: XdmDocument<V>;
+  readonly ids: readonly NodeId[];
+}
+
+/**
+ * Read a document's rows into a tree, taking from each row only what the tree holds.
+ *
+ * @param rows - Every row of one document, no key of a list held twice.
+ * @returns The tree and its ids; or the refusal of a row the read needs and does not find, a node
+ *   of a kind its place cannot hold, or a document node with no root element.
+ */
+const readOf = <V extends XdmVocabulary>(
   rows: FlatRows<V>,
-): Result.Result<XdmDocument<V>, AssembleError> =>
-  Result.gen(function* assembleDocument() {
+): Result.Result<Read<V>, AssembleError> =>
+  Result.gen(function* read() {
     const { document } = rows;
     const self = document.node;
-    const count = rows.nodes.length;
-    const nodes = yield* slotted(rows.nodes, ({ start }) => start, {
-      beyond: (row) => new StartBeyond({ count, node: row.id, start: row.start }),
-      taken: (row, held) => new StartTaken({ node: row.id, other: held.id, start: row.start }),
-    });
     const sentinel = yield* Result.fromNullishOr(
       rows.nodes.find(({ id }) => id === self),
       () => new RowMissing({ key: self, rows: "nodes" }),
     );
-    if (sentinel.kind !== "document" || sentinel.parent !== self || sentinel.at !== 0n) {
-      return yield* Result.fail(misplaced(sentinel));
-    }
-
-    if (sentinel.start !== 0n || sentinel.end !== BigInt(count)) {
-      return yield* Result.fail(
-        new DocumentInterval({ count, end: sentinel.end, node: self, start: sentinel.start }),
-      );
-    }
-
+    const order = [sentinel, ...rows.nodes.filter((row) => row !== sentinel).toSorted(byStart)];
     const index = indexOf(rows);
-    const reached: Reached = new Set();
-    const ids = new Set<NodeId>([self]);
+    const attributeIds: AttributeId[] = [];
     const parsed: DocumentChildren<V> = {
       doctype: Option.none(),
       epilog: [],
@@ -1046,86 +900,70 @@ export const assemble = <V extends XdmVocabulary>(
       root: Option.none(),
     };
     const root: Open<V> = {
-      count: 0n,
-      place: (child, row) => placeInDocument(parsed, child, row),
+      place: (child) => placeInDocument(parsed, child),
       row: sentinel,
     };
     const stack: Open<V>[] = [];
     const innermost = (): Open<V> => stack.at(-1) ?? root;
-    for (const row of nodes.slice(1)) {
+    for (const row of order.slice(1)) {
       while (stack.length > 0 && innermost().row.end <= row.start) {
         stack.pop();
       }
 
       const open = innermost();
-      if (ids.has(row.id)) {
-        return yield* Result.fail(new IdRepeated({ node: row.id, start: row.start }));
+      const child = yield* builtOf(index, attributeIds, row);
+      if (!open.place(child)) {
+        return yield* Result.fail(unplaced(row, open.row));
       }
 
-      ids.add(row.id);
-      if (row.parent !== open.row.id) {
-        return yield* Result.fail(
-          new ParentNotOpen({
-            node: row.id,
-            open: open.row.id,
-            parent: row.parent,
-            start: row.start,
-          }),
-        );
-      }
-
-      if (row.at !== open.count) {
-        return yield* Result.fail(
-          new SlotOutOfTurn({ at: row.at, expected: open.count, node: row.id, parent: row.parent }),
-        );
-      }
-
-      if (row.end > open.row.end) {
-        return yield* Result.fail(
-          new EndBeyondParent({
-            end: row.end,
-            node: row.id,
-            parent: row.parent,
-            parentEnd: open.row.end,
-          }),
-        );
-      }
-
-      if (row.end <= row.start) {
-        return yield* Result.fail(
-          new IntervalEmpty({ end: row.end, node: row.id, start: row.start }),
-        );
-      }
-
-      if (isLeafKind(row.kind) && row.end !== row.start + 1n) {
-        return yield* Result.fail(
-          new LeafOversized({ end: row.end, kind: row.kind, node: row.id, start: row.start }),
-        );
-      }
-
-      const child = yield* builtOf(index, reached, row);
-      yield* open.place(child, row);
-      open.count += 1n;
       if (child._tag === "element") {
-        stack.push({ count: 0n, place: (built, at) => appendTo(child, built, at), row });
+        stack.push({ place: (built) => appendTo(child, built), row });
       }
     }
 
     const element = yield* Result.fromOption(parsed.root, () => new RootMissing({ node: self }));
-    const left = unreached(rows, reached);
+
+    return {
+      document: {
+        _tag: "document",
+        charset: document.charset,
+        declaration: declarationOf(document),
+        doctype: parsed.doctype,
+        epilog: parsed.epilog,
+        exportCharset: document.exportCharset,
+        prolog: parsed.prolog,
+        root: element,
+        version: sentinel.version,
+      },
+      ids: [...order.map(({ id }) => id), ...attributeIds],
+    };
+  });
+
+/**
+ * Assemble a document's rows back into its tree.
+ *
+ * Each list is keyed, the rows are read into a tree, and that tree is flattened again under the
+ * ids it was read under and held to the rows.
+ *
+ * @param rows - Every row of one document, in any order.
+ * @returns The document `flatten` writes as these rows; or the refusal of a key held twice, a row
+ *   the read needs and does not find, a node of a kind its place cannot hold, no root element, or
+ *   the first row outside the image of the tree read.
+ */
+export const assemble = <V extends XdmVocabulary>(
+  rows: FlatRows<V>,
+): Result.Result<XdmDocument<V>, AssembleError> =>
+  Result.gen(function* assembleDocument() {
+    const keyed = yield* keyedOf(rows);
+    const { document, ids } = yield* readOf(rows);
+    const left = outsideImage(
+      rows.document,
+      keyed,
+      flatten(document, (index) => Arr.getUnsafe(ids, index)),
+    );
     if (Option.isSome(left)) {
       return yield* Result.fail(left.value);
     }
 
-    return {
-      _tag: "document",
-      charset: document.charset,
-      declaration: declarationOf(document),
-      doctype: parsed.doctype,
-      epilog: parsed.epilog,
-      exportCharset: document.exportCharset,
-      prolog: parsed.prolog,
-      root: element,
-      version: sentinel.version,
-    };
+    return document;
   });
