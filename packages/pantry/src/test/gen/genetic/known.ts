@@ -195,65 +195,7 @@ export const fixed = {
     fix: "NS3: an item ref whose href names no item document is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "dangling-uuid: MappingLookup.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-    
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    
-    
-    <resource type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-    </resource>
-    
-  </resources>
-</manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="test1" title="Every relation test">
-  
-  
-  
-  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="first" title="First" visible="true">
-      <qti-assessment-item-ref identifier="ref1" href="items/item.xml">
-        
-        <qti-variable-mapping source-identifier="SCORE" target-identifier="ITEMSCORE"/>
-        
-      </qti-assessment-item-ref>
-      
-    </qti-assessment-section>
-    
-  </qti-test-part>
-  
-</qti-assessment-test>`,
-      ],
-    ],
-    fix: "A17-A22: a template default, mapping source or lookup that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
-  "dangling-uuid: MappingSource.declaration": {
+  "dangling-uuid: MappingSourceDeclaration.declaration": {
     files: [
       [
         "imsmanifest.xml",
@@ -353,7 +295,7 @@ export const fixed = {
     fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
     owner: "NIL",
   },
-  "dangling-uuid: PlacedVariableRef.declaration": {
+  "dangling-uuid: PlacedVariableRefDeclaration.declaration": {
     files: [
       [
         "imsmanifest.xml",
@@ -411,7 +353,7 @@ export const fixed = {
     fix: "NS1 (FB-EXPR): a declared reference's declaration is a row of its own, VariableRefDeclaration or PlacedVariableRefDeclaration, so one that names a built-in or nothing holds no nil uuid",
     owner: "NIL",
   },
-  "dangling-uuid: SectionTemplateRef.declaration": {
+  "dangling-uuid: SectionTemplateRefDeclaration.declaration": {
     files: [
       [
         "imsmanifest.xml",
@@ -463,7 +405,7 @@ export const fixed = {
     fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
     owner: "NIL",
   },
-  "dangling-uuid: TemplateRef.declaration": {
+  "dangling-uuid: TemplateRefDeclaration.declaration": {
     files: [
       [
         "imsmanifest.xml",
@@ -475,13 +417,13 @@ export const fixed = {
         "items/item.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier="NONE"/></p></qti-item-body></qti-assessment-item>`,
       ],
     ],
     fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
     owner: "NIL",
   },
-  "dangling-uuid: VariableRef.declaration": {
+  "dangling-uuid: VariableRefDeclaration.declaration": {
     files: [
       [
         "imsmanifest.xml",
@@ -614,43 +556,43 @@ export const fixed = {
       fix: "spec reading 157: a declaration's name is a row of its own, DeclarationName, so a declaration whose identifier is unwritten or names nothing keeps its Declaration row and every row below it, and AL3 or the value domain refuses it alone",
       owner: "FIX-DECLNAME",
     },
-  "import-only-law: Declaration overlay, contained Value(node, baseType) in RecordField(node, baseType)":
-    {
-      files: [
-        [
-          "es/choice.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration><qti-default-value><qti-value/></qti-default-value></qti-outcome-declaration></qti-assessment-item>`,
-        ],
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
-        ],
-      ],
-      fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
-      owner: "NIL",
-    },
-  "import-only-law: Document entry, contained Site(package, path) in TestDocument(package, path)": {
+  "import-only-law: Declaration overlay, contained Declaration(node) in Attribute(node)": {
     files: [
+      [
+        "es/choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-outcome-declaration><qti-default-value><qti-value/></qti-default-value></qti-outcome-declaration></qti-assessment-item>`,
+      ],
       [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_section_xmlv3p0" href="es/choice.xml"/></resources></manifest>`,
       ],
     ],
-    fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, and removes the containment this class broke, so no package can show it",
+    fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
   },
+  "import-only-law: Document entry, contained SitePath(package, path) in TestDocument(package, path)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+        ],
+        [
+          "test.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section-ref href="section.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+        ],
+      ],
+      fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, so a section ref whose href names no entry of the package is refused by File exists alone, and Document entry reads only the paths an entry holds",
+      owner: "NIL",
+    },
   "import-only-law: Document entry, contained SiteTarget(package, path, target) in TestDocument(package, path, node)":
     {
       files: [
@@ -770,7 +712,7 @@ export const fixed = {
     fix: "a RecordField row only where a value writes both a field-identifier and a base-type, so a base-type written alone is refused under Value cardinality, never an empty field identifier's E1",
     owner: "FIX-UNWRITTEN",
   },
-  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, identifierLexical)":
+  "import-only-law: E1 derived, contained Attribute(node, lexical) in ObjectIdentifier(node, lexical)":
     {
       files: [
         [
@@ -789,26 +731,25 @@ export const fixed = {
       fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
       owner: "FB-META",
     },
-  "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, title)":
-    {
-      files: [
-        [
-          "choice.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
+  "import-only-law: E1 derived, contained Attribute(node, lexical) in ObjectTitle(node, title)": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" title="s44"/>`,
-        ],
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
-        ],
       ],
-      fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
-      owner: "FB-META",
-    },
-  "import-only-law: E1 derived, contained Declaration(document, identifier, node, declarationKind, cardinality, baseTypes) in VariableLookup(document, name, declaration, declarationKind, cardinality, baseTypes)":
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+      ],
+    ],
+    fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
+    owner: "FB-META",
+  },
+  "import-only-law: E1 derived, contained DeclarationName(document, identifier, node, declarationKind, cardinality, baseTypes) in VariableLookup(document, name, declaration, declarationKind, cardinality, baseTypes)":
     {
       files: [
         [
@@ -866,7 +807,7 @@ export const fixed = {
     fix: "PG's Expression base type commit: an attribute-typed expression whose base-type spells no base is unknown, and ResultBase judges no such one (resultTyped), so the containment this class broke no longer reads it and its statement is another",
     owner: "PG",
   },
-  "import-only-law: E1 derived, contained Expression(parent, baseType, cardinality) in VariableRef(node, heldBase, heldCardinality)":
+  "import-only-law: E1 derived, contained Expression(parent, baseType, cardinality) in HeldType(node, heldBase, heldCardinality)":
     {
       files: [
         [
@@ -882,7 +823,7 @@ export const fixed = {
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-set-outcome-value identifier=""><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
         ],
       ],
-      fix: "FIX-HELDTYPE: a setter's or a lookup's held type is a row of its own, HeldType, keyed by the setter and written only where it names a variable and holds an expression, so one whose identifier names no variable (unwritten, or no NCName: spec reading 152) is refused by AL3 or its value domain alone, and the statement this class broke is gone",
+      fix: "FIX-HELDTYPE: a setter's or a lookup's held type is a row of its own, HeldType, keyed by the setter and written only where it names a variable and holds an expression, so one whose identifier names no variable (unwritten, or no NCName: spec reading 152) is refused by AL3 or its value domain alone, and no law forces a setter's expression into HeldType",
       owner: "FIX-HELDTYPE",
     },
   "import-only-law: E1 derived, contained GeneralObject(record, document) in LomObject(record, document)":
@@ -937,7 +878,7 @@ export const fixed = {
       fix: "NS6: a record names a document only where its resource's href names one (LomResource.named, by targetAt), so a record whose href names none writes no LomObject, LomObjectIdentifier, LomObjectTitle or GeneralObject, and Document entry alone refuses the href",
       owner: "FIX-GENOBJ",
     },
-  "import-only-law: E1 derived, contained LomObjectIdentifier(document, identifier) in AssessmentObject(document, identifier)":
+  "import-only-law: E1 derived, contained LomObjectIdentifier(document, identifier) in ObjectIdentifier(document, identifier)":
     {
       files: [
         [
@@ -1107,7 +1048,7 @@ export const fixed = {
     fix: "spec reading 155: an item ref that writes no href names nothing, so the schema demands no ItemRefTarget, ReferencePath or NameLookup type of it and AL3 alone refuses it, and the law oracle judges an item ref's laws whether or not it, its sections or its part write an identifier",
     owner: "FIX-ITEMREF",
   },
-  "import-only-law: Key text bound, a text past LomString.language, LomStringLanguage.language, LomTitleString.language, LomTitleString.languageTag's bound":
+  "import-only-law: Key text bound, a text past LomString.languageTag, LomStringLanguage.language, LomStringLanguage.languageTag, LomTitleString.languageTag's bound":
     {
       files: [
         [
@@ -1132,18 +1073,6 @@ export const fixed = {
       fix: "fix (3), the oracle's half: a document's type is the manifest's none or the type RootOfType pairs with its root, so an external record file's lom:string language is a key text of its records, which the oracle bounds as the database does",
       owner: "GEN-A",
     },
-  "import-only-law: Key text bound, a text past Node.stringPiece's bound": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion><imsmd:lom><imsmd:metaMetadata><imsmd:language>Ké語é𝔸xéxééé語é語𝔸語𝔸語é𝔸ééx語語xx語𝔸x語éééxéé語éxx𝔸𝔸𝔸x語x語𝔸𝔸語語xé語語é𝔸語éxé語xxx語é語𝔸é𝔸語語𝔸語𝔸x語語x語𝔸éé𝔸é語xééxxé𝔸𝔸éé語é語語𝔸é𝔸xéx語é𝔸x語𝔸é語𝔸xé語語é語é語語𝔸éxxéx𝔸éé𝔸x𝔸é𝔸語𝔸x𝔸𝔸語語é語語語xéxéé𝔸𝔸語é語𝔸𝔸éé𝔸é語xxxé𝔸éx𝔸語語語𝔸xéx𝔸é語xé𝔸x語語é𝔸éxx𝔸𝔸語x語語𝔸語éx語語𝔸語xx語𝔸語語xéé𝔸éxxééxéééxé𝔸é𝔸x𝔸語𝔸語x語x𝔸xé語é𝔸é語xéx語x語xé𝔸é語é語x𝔸xéx語éx𝔸é語ééx語語𝔸éx語𝔸𝔸xé𝔸x語語éx𝔸x𝔸éxxé𝔸é語語x𝔸𝔸𝔸𝔸𝔸𝔸x𝔸éé語éééx𝔸語語x語語𝔸xxxé語語𝔸𝔸xx語𝔸語𝔸x語𝔸x𝔸語x𝔸éxx語𝔸𝔸𝔸語x語éé𝔸xé𝔸語x語語語𝔸𝔸é𝔸é𝔸語語ééé語x𝔸éé語éx𝔸éxéé語𝔸x𝔸𝔸x語éx語xé𝔸語語𝔸xéxxé語xéx語é語語xxé語x語éxé𝔸xx𝔸語𝔸𝔸𝔸語é𝔸𝔸𝔸x語𝔸𝔸𝔸𝔸𝔸x𝔸語𝔸éxéé語x語x𝔸é𝔸𝔸é語𝔸é語é語x𝔸xé語éé𝔸xéé語x語éx語語語語éé𝔸xé語語語𝔸𝔸𝔸éx𝔸é𝔸語xé語x𝔸𝔸x𝔸𝔸語xé𝔸𝔸𝔸𝔸𝔸xx𝔸𝔸𝔸𝔸x𝔸語x𝔸é𝔸語語𝔸𝔸é語𝔸語語語𝔸𝔸語éé語x𝔸éx𝔸x語éx語𝔸é𝔸𝔸𝔸é語語x語x語xééé𝔸語𝔸é𝔸x𝔸語ééxx𝔸é𝔸語𝔸𝔸𝔸語語𝔸語éxé語𝔸𝔸𝔸éé語x語語éé𝔸語𝔸語𝔸éé語𝔸語éxxx語語xx語é𝔸x語é語éxé語éxxééx語𝔸語𝔸語𝔸𝔸語𝔸𝔸é𝔸xéé語𝔸𝔸xé𝔸語éx語語𝔸語𝔸éx𝔸語xéxé𝔸x語𝔸x𝔸𝔸é𝔸ééx語語x𝔸ééééxé𝔸xxx語ééx語xx語𝔸𝔸x𝔸語𝔸語x語x語é語xéx語𝔸語語éxxé語xéx語語x𝔸x語𝔸ééé語é𝔸語語é𝔸𝔸é𝔸語語é𝔸𝔸xé𝔸xxéx𝔸語éx語𝔸𝔸語𝔸𝔸𝔸éé語x𝔸éxx語語x語𝔸x𝔸語x𝔸é語𝔸é𝔸𝔸𝔸é𝔸x語xxx𝔸語xé語xééééé語xx𝔸xé𝔸𝔸𝔸éxééééé𝔸xx語x語語語x𝔸語x𝔸x語語語𝔸éx𝔸𝔸語x語𝔸𝔸x𝔸語𝔸𝔸語é𝔸語x語語xé語語語éx𝔸é語é語xééxx𝔸𝔸éx語xxéééé𝔸x語xx語語𝔸é語xé𝔸é語語éx𝔸語x𝔸éé𝔸ééé語x語é𝔸語é𝔸xééé語xé𝔸𝔸語x語語ééé𝔸é語𝔸𝔸é𝔸é語éx𝔸x語éé𝔸𝔸語é語é語語語語é語é𝔸é𝔸éxé語𝔸語é語x</imsmd:language></imsmd:metaMetadata></imsmd:lom></metadata><resources><resource><cpx:variant/></resource></resources></manifest>`,
-      ],
-    ],
-    fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
-    owner: "VD",
-  },
   "import-only-law: LomObjectIdentifier, contained LomEntry(holderParent) in LomObjectIdentifier(record)":
     {
       files: [
@@ -1395,7 +1324,7 @@ export const fixed = {
     fix: "spec reading 155: an item ref that writes no href names nothing, so the schema demands no ItemRefTarget, ReferencePath or NameLookup type of it and AL3 alone refuses it, and the law oracle judges an item ref's laws whether or not it, its sections or its part write an identifier",
     owner: "FIX-ITEMREF",
   },
-  "import-only-law: Test overlay, contained Site(node, package, path) in ReferencePath(node, package, path)":
+  "import-only-law: Test overlay, contained SitePath(node, package, path) in ReferencePath(node, package, path)":
     {
       files: [
         [
@@ -1411,7 +1340,7 @@ export const fixed = {
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><xi:include/></qti-item-body></qti-assessment-item>`,
         ],
       ],
-      fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, and removes the containment this class broke, so no package can show it",
+      fix: "25d16460 (SitePath) writes a site's href as a row of its own, only where the site writes one that resolves, so an include with no href has no stand-in path and Include target alone refuses it",
       owner: "NIL",
     },
   "import-only-law: value domain, check value_domain on Attribute": {
