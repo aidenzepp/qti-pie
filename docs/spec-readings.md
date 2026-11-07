@@ -2494,3 +2494,32 @@ R10-b. **A 3.0.0 document holds no `qti-custom-interaction`; a 3.0.1 document ma
 section 5.106 says "PCIs MUST be used instead of custom interactions (the latter have been deprecated)"; the 3.0.1 text
 drops the sentence. Both XSDs declare the element; this follows the information model of each version. (A proposal for
 the operator, only if goal 3.14 stays; numbered at integration.)
+
+**R7-a** (a proposal for the operator; numbered at integration). **A `data-ssml` value, on an element that declares the
+attribute, is one JSON object that Data-SSML 1.0's normative JSON Schema admits, judged as written; the importer checks
+it, and the database stores it as text and does not re-prove its form.** QTI's information model types `data-ssml` as a
+String, "the container for the equivalent JSON value that is to be passed to the SSML processor" (section 5.20.10), and
+its implementation guide names the 1EdTech Data-SSML document as the definition of that JSON. That document's JSON
+Schema (section 3.4) is normative, and validation is required (section 3.1's MUST over section 1.3's SHOULD). So the
+value is one JSON text (RFC 8259) holding one object (the schema's root, over the prose's "one or more JSON objects")
+whose members are among `break`, `phoneme`, `prosody`, `say-as` and `sub`, each an object holding only the properties the
+schema lists for it (`strength` and `time`; `ph`, `alphabet` and `type`; `rate`; `interpret-as`; `alias`), each property
+a string, with `ph`, `interpret-as` and `alias` present, and `strength`, `alphabet`, `type` and `interpret-as` one of the
+schema's values. `time` and `rate` are any normalized string (OAS3, Appendix C and the information model's `RateUnion`,
+over OAS2 and the prose's percentage), so no tab, line feed or carriage return in their decoded value. Names and values
+are compared after JSON's escapes are decoded, so `"break"` is `break`. A name written twice in one object is
+accepted, since RFC 8259 section 4 says only that names "SHOULD be unique", and each of its values is judged. On an
+element that does not declare `data-ssml`, it is a custom `data-*` attribute (readings 13 and 90). The value is kept as
+written, with no length bound.
+
+Where the check lives: pantry's importer parses the value as JSON and judges it against the schema's tables
+(`src/import/data-ssml.ts`), and refuses a package that holds a value the schema does not admit under
+`attribute-lexical`, the rule of a value its domain refuses. The attribute's value domain in the database stays
+`xs:string`. Writing the language as the domain's pattern was tried and does not fit: one pattern for it needs about
+4,400 positions where grizzle admits 4,096 (`regexMaxPositions`), and splitting it into chained pattern steps makes a
+product of about 35,791, past pantry's `productPositions` of 4,096 (`docs/grizzle-findings.md`, the row for the pattern
+size). Dropping any JSON spelling of a name or value to make it fit would refuse valid content, which decision 321
+forbids. So a ChangeSet written without the importer could store a `data-ssml` the schema refuses: that is this
+reading's stated limit, the same shape as the `xsi:type` and SSML `role` values the codec checks and no law over the
+stored rows holds. This binds pantry and plate alike as to what is valid; where it is checked is pantry's. (Decision
+351; 2026-11-06.)
