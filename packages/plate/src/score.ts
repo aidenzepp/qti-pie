@@ -18,7 +18,8 @@ import { ValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
-import type { Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
+import { interactionsIn } from "#plate/model/interactions.ts";
+import type { BodyNode, Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import {
   completionStatus,
   completionStatusType,
@@ -26,6 +27,7 @@ import {
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
+import { redactItem } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { drawSeed } from "#plate/seed.ts";
@@ -519,6 +521,46 @@ const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | Recor
     : firstAttempt(item, { instance: "", seed: drawSeed() });
 
 /**
+ * Give the responses the interactions of some body nodes bind.
+ *
+ * @param nodes The body nodes.
+ * @returns The responses' identifiers.
+ */
+const boundIn = (nodes: readonly BodyNode[]): ReadonlySet<string> =>
+  new Set(interactionsIn(nodes).map(({ response }) => response));
+
+/**
+ * Leave out the posted value of each response the page showed no control for: a response an
+ * interaction of the item binds, but no interaction of the item as `redactItem` in
+ * `#plate/payload.ts` shows it under the record's template values, the walk `checkResponses`
+ * judges by, such as one only a hidden template block holds.
+ *
+ * `checkResponses` gives such a response no message, so a session's stored value for it passes
+ * that check, and this is the one guard that keeps a posted value from reaching response
+ * processing: the attempt reads the record's value instead, which stands even when the value
+ * posted is NULL. Every route into an attempt passes it: outside tests, only {@link score} calls
+ * `runAttempt`, and `submit` and `advance` in `#plate/session/` score through it. A response no
+ * interaction of the item binds is passed on as posted.
+ *
+ * @param item The item.
+ * @param record The record the attempt scores from.
+ * @param responses The responses, each checked against its declaration.
+ * @returns The responses an interaction shown binds, and those no interaction binds.
+ */
+const shownOnly = (
+  item: Item,
+  record: ItemRecord,
+  responses: Readonly<Record<string, Value>>,
+): Readonly<Record<string, Value>> => {
+  const shown = boundIn(redactItem(item, record).body);
+  const bound = boundIn(item.body);
+
+  return Object.fromEntries(
+    Object.entries(responses).filter(([response]) => shown.has(response) || !bound.has(response)),
+  );
+};
+
+/**
  * Score one attempt of an item: run its response processing over the responses and return the
  * record the host stores.
  *
@@ -527,10 +569,14 @@ const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | Recor
  * that the built-in `completionStatus`, which the attempt carries over, is a single identifier,
  * and that its template values, correct responses and defaults are each of its variable's
  * declared type; it checks each response as a value of its declaration; it refuses responses that
- * break a tier (a) limit, under the default configuration; then it runs the attempt and writes the
- * record. The record's seed, template values, correct responses and defaults come back unchanged,
- * and the rules read the template values, and the correct responses and defaults template
- * processing set, from it. It sets no attempt limit: `maxAttempts` is the author's flow.
+ * break a tier (a) limit, under the default configuration, judging the item as the record it
+ * scores from shows it (`checkResponses` with that record), so a choice the record's template
+ * values hide is refused `unknownChoice` and one they show is judged as any choice; it leaves out
+ * the posted value of a response only content the record hides binds ({@link shownOnly}); then it
+ * runs the attempt and writes the record. The record's seed, template values, correct responses
+ * and defaults come back unchanged, and the rules read the template values, and the correct
+ * responses and defaults template processing set, from it. It sets no attempt limit:
+ * `maxAttempts` is the author's flow.
  *
  * With no record, an item whose template processing runs fails {@link RecordRequired}: its values
  * are drawn once, by `begin`, and `score` invents none. Any other item starts from the record its
@@ -545,7 +591,8 @@ const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | Recor
  *
  * @param document The document `check` accepted.
  * @param responses The candidate's responses by identifier, each a value of its declaration's base
- *   type and cardinality, an integer as a `bigint`. A response left out keeps the record's value.
+ *   type and cardinality, an integer as a `bigint`. A response left out keeps the record's value,
+ *   as does one only content the record hides binds, whatever is posted for it.
  * @param record The record `begin` or the last `score` of this item returned, passed back
  *   unchanged. It may be left out for an item whose template processing does not run.
  * @returns The record after the attempt, in the form the host stores, or {@link InvalidRecord} for
@@ -554,9 +601,9 @@ const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | Recor
  *   declaration, or a `completionStatus` that is not a single identifier, {@link RecordMismatch}
  *   for another item's record, {@link RecordRequired} for no record of an item whose template
  *   processing runs, {@link InvalidResponses} for a response that does not fit its declaration,
- *   {@link ResponsesRefused} for responses that break a tier (a) limit, or an {@link EngineFailure}
- *   when the record lacks a response the processing reads or the processing sets an outcome to a
- *   value of another type.
+ *   {@link ResponsesRefused} for responses that break a tier (a) limit, a choice the record hides
+ *   among them, or an {@link EngineFailure} when the record lacks a response the processing reads
+ *   or the processing sets an outcome to a value of another type.
  */
 export const score = (
   document: Accepted,
@@ -578,10 +625,10 @@ export const score = (
         ? yield* unrecorded(item)
         : yield* carriedFitting(item, yield* belonging(item, yield* decodeRecord(record)));
     const checked = yield* checkedResponses(item, responses);
-    const messages = checkResponses(document, checked, tierA);
+    const messages = checkResponses(document, checked, tierA, before);
     if (messages.length > 0) {
       return yield* Result.fail(new ResponsesRefused({ messages }));
     }
 
-    return yield* encodeRecord(yield* runAttempt(item, before, checked));
+    return yield* encodeRecord(yield* runAttempt(item, before, shownOnly(item, before, checked)));
   });

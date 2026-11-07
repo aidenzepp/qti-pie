@@ -12,10 +12,12 @@ import type {
   ChoiceInteraction,
   InlineChoiceInteraction,
   Item,
+  TemplateVisibility,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
+import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { render } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
@@ -340,6 +342,150 @@ const defaulted = acceptForTest({
     ]),
   ),
 });
+
+/**
+ * The template visibility of a part shown when the template variable `SHOWN` holds its identifier.
+ */
+const shownBy: TemplateVisibility = { showHide: "show", templateIdentifier: "SHOWN" };
+
+/**
+ * The single Choice `RESPONSE` of {@link visibleItem}: choice `A` with no template visibility, and
+ * `B` and `C` each {@link shownBy}.
+ */
+const visibleChoice: ChoiceInteraction = (() => {
+  const choice = choiceOf("RESPONSE", "single", { maxChoices: 1n, minChoices: 0n }, [
+    "A",
+    "B",
+    "C",
+  ]);
+
+  return {
+    ...choice,
+    choices: choice.choices.map((simple) =>
+      simple.identifier === "A" ? simple : { ...simple, templateVisibility: Option.some(shownBy) },
+    ),
+  };
+})();
+
+/**
+ * A hand-built item whose template processing sets the single identifier template variable `SHOWN`
+ * to `B`, so its record shows {@link visibleChoice}'s `A` and `B` and hides `C`, and hides the
+ * template block shown when `SHOWN` holds `C`, which holds the integer Text Entry `HIDDEN`,
+ * declared with the default 3. Its processing sets `SCORE` to 1 when `RESPONSE` matches its correct
+ * response, `B`, else to 0, and the integer `ECHO` to `HIDDEN`.
+ */
+const visibleItem: Item = {
+  ...item,
+  body: [
+    visibleChoice,
+    {
+      content: [
+        {
+          attributes: [],
+          children: [
+            {
+              ...number,
+              path: "qti-assessment-item/qti-item-body/qti-template-block/p/qti-text-entry-interaction",
+              response: "HIDDEN",
+            },
+          ],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/qti-template-block/p",
+          tag: "p",
+        },
+      ],
+      identifier: "C",
+      kind: "template-block",
+      path: "qti-assessment-item/qti-item-body/qti-template-block",
+      templateVisibility: shownBy,
+    },
+  ],
+  document: "items/visible.xml",
+  identifier: "visible",
+  outcomes: new Map([
+    ...item.outcomes,
+    [
+      "ECHO",
+      {
+        baseType: "integer",
+        cardinality: "single",
+        defaultValue: Option.none(),
+        identifier: "ECHO",
+        interpretation: Option.none(),
+        longInterpretation: Option.none(),
+        lookupTable: Option.none(),
+        masteryValue: Option.none(),
+        normalMaximum: Option.none(),
+        normalMinimum: Option.none(),
+        view: Option.none(),
+      },
+    ],
+  ]),
+  processing: Option.some([
+    ...Option.getOrElse(item.processing, () => []),
+    {
+      expression: {
+        identifier: "HIDDEN",
+        kind: "variable",
+        operands: [],
+        weightIdentifier: Option.none(),
+      },
+      identifier: "ECHO",
+      kind: "set-outcome",
+    },
+  ]),
+  responses: new Map([
+    [
+      "RESPONSE",
+      {
+        areaMapping: Option.none(),
+        baseType: "identifier",
+        cardinality: "single",
+        correct: Option.some(identifiers("single", "B")),
+        defaultValue: Option.none(),
+        identifier: "RESPONSE",
+        mapping: Option.none(),
+      },
+    ],
+    [
+      "HIDDEN",
+      {
+        areaMapping: Option.none(),
+        baseType: "integer",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.some(integer(3n)),
+        identifier: "HIDDEN",
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+  templateProcessing: Option.some([
+    {
+      expression: { kind: "base-value", operands: [], value: identifiers("single", "B") },
+      identifier: "SHOWN",
+      kind: "set-template-value",
+    },
+  ]),
+  templates: new Map([
+    [
+      "SHOWN",
+      {
+        baseType: "identifier",
+        cardinality: "single",
+        defaultValue: Option.none(),
+        identifier: "SHOWN",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+};
+
+/**
+ * {@link visibleItem} as `check` would accept it, through the tests' named seam.
+ */
+const visible = acceptForTest(visibleItem);
 
 /**
  * Give the failure of a score, after checking it is a `Result` at all.
@@ -849,6 +995,62 @@ describe("score", () => {
       Schema.decodeSync(Configuration)({ locale: "en", validateResponses: false }),
     );
   });
+});
+
+describe("score over the content a templated item's record shows", () => {
+  it.effect(
+    "[I-5] scores a choice begin's record shows, and refuses one it hides unknownChoice inside ResponsesRefused",
+    () =>
+      Effect.gen(function* judgesChoices() {
+        const started = yield* Effect.fromResult(begin(visible, { instance: "q1", seed: "7" }));
+        const shown = yield* Effect.fromResult(
+          score(visible, { RESPONSE: identifiers("single", "B") }, started),
+        );
+
+        assert.deepStrictEqual(outcomeOf(shown, "SCORE"), [1]);
+        assert.deepStrictEqual(
+          Option.map(
+            failureOf(score(visible, { RESPONSE: identifiers("single", "C") }, started)),
+            (failure) => (failure._tag === "ResponsesRefused" ? failure.messages : [failure._tag]),
+          ),
+          Option.some([{ response: "RESPONSE", text: message("en", "unknownChoice") }]),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] keeps the record's value of a response only a hidden template block binds, whether a value or a NULL is posted for it",
+    () =>
+      Effect.gen(function* keepsHidden() {
+        const started = yield* Effect.fromResult(begin(visible, { instance: "q1", seed: "7" }));
+        const unposted = yield* Effect.fromResult(score(visible, {}, started));
+        const posted = yield* Effect.fromResult(score(visible, { HIDDEN: integer(9n) }, started));
+        const nulled = yield* Effect.fromResult(
+          score(visible, { HIDDEN: nullOf("integer", "single") }, started),
+        );
+
+        assert.deepStrictEqual(outcomeOf(unposted, "ECHO"), ["3"]);
+        assert.deepStrictEqual(outcomeOf(posted, "ECHO"), ["3"]);
+        assert.deepStrictEqual(outcomeOf(nulled, "ECHO"), ["3"]);
+        assert.deepStrictEqual(
+          [posted.responses["HIDDEN"], nulled.responses["HIDDEN"]],
+          [started.responses["HIDDEN"], started.responses["HIDDEN"]],
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] takes back the responses begin's record stores, a hidden interaction's declared default among them, without refusing it",
+    () =>
+      Effect.gen(function* takesStored() {
+        const started = yield* Effect.fromResult(begin(visible, { instance: "q1", seed: "7" }));
+        const { responses } = yield* Effect.fromResult(decodeRecord(started));
+        const scored = yield* Effect.fromResult(score(visible, responses, started));
+
+        assert.deepStrictEqual(outcomeOf(scored, "ECHO"), ["3"]);
+        assert.deepStrictEqual(outcomeOf(scored, "SCORE"), [0]);
+      }),
+  );
 });
 
 describe("fitting", () => {
