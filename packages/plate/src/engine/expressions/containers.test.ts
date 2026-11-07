@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Option, Result } from "effect";
 import type { Evaluate, Variables } from "#plate/engine/evaluate.ts";
 import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
-import { drawBelow, drawStream } from "#plate/engine/random.ts";
+import { drawBelow, drawFloat, drawStream } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
 import { isUnlanded } from "#plate/model/expression.ts";
 import type {
@@ -14,7 +14,7 @@ import type {
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
-import { bg007Item, integer } from "#plate/test/fixtures.ts";
+import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
 import { assertKindType, evaluateIn, operandOf, scopeOf } from "#plate/test/processing.ts";
 
 /**
@@ -696,5 +696,223 @@ describe("the containers family's bound on a computed container (operator ruling
     assert.deepStrictEqual(value, list("A", "A", "A"));
     assertKindType(value, "repeat", [typeOf(one("A"))]);
     assert.strictEqual(evaluations, 1, "the operand was evaluated once, not once per pass");
+  });
+});
+
+/**
+ * Construct a `qti-random-integer` of literal bounds, its step 1.
+ *
+ * @param min Its `min`.
+ * @param max Its `max`.
+ * @returns The expression.
+ */
+const randomIntegerOf = (min: bigint, max: bigint): Expression => ({
+  kind: "random-integer",
+  max: literal(max),
+  min: literal(min),
+  operands: [],
+  step: literal(1n),
+});
+
+/**
+ * A `qti-random-integer` from 1 to 1,000,000, whose draws repeat a value rarely.
+ */
+const wide = randomIntegerOf(1n, 1_000_000n);
+
+/**
+ * Construct a `qti-repeat` of expressions.
+ *
+ * @param numberRepeats Its `number-repeats`.
+ * @param first Its first operand.
+ * @param rest Its other operands.
+ * @returns The expression.
+ */
+const repeating = (
+  numberRepeats: IntOrIdentifier,
+  first: Expression,
+  ...rest: readonly Expression[]
+): Expression => ({ kind: "repeat", numberRepeats, operands: [first, ...rest] });
+
+/**
+ * Construct an ordered container of integers.
+ *
+ * @param values Its integers, in order.
+ * @returns The value.
+ */
+const integers = (values: readonly bigint[]): Value => ({
+  baseType: "integer",
+  cardinality: "ordered",
+  values: values.map((value) => ({ baseType: "integer", value })),
+});
+
+/**
+ * Give the draws a stream of a key takes after skipping some of its first draws.
+ *
+ * @param key The stream's key.
+ * @param skipped How many of its first draws to skip.
+ * @returns The stream, its next draw the key's draw after those skipped.
+ */
+const after = (key: string, skipped: number): Draw => {
+  const stream = drawStream(key);
+  for (let taken = 0; taken < skipped; taken += 1) {
+    stream();
+  }
+
+  return stream;
+};
+
+/**
+ * The key under which the first draw of a `qti-random-integer` from 0 to 1 gives 0, which the
+ * setup of rule (a)'s case found among `repeat 0`, `repeat 1`, …: a draw from 0 to 1 takes one
+ * draw, masked to its low bit.
+ */
+const zeroFirst = "repeat 2";
+
+describe("the containers family's drawing qti-repeat (an operand holds a random kind)", () => {
+  it("[I-9a] evaluates its operands once per pass, left to right, so each pass draws anew", () => {
+    const key = "repeat per pass";
+    const expected = after(key, 0);
+    const draws = Array.from({ length: 5 }, () => drawBelow(expected, 1_000_000n) + 1n);
+    const repeated = evaluated(repeating(literal(5n), wide), none, drawStream(key));
+
+    assert.deepStrictEqual(repeated, integers(draws));
+    assert.isAbove(new Set(draws).size, 1, "the five passes' values are not all equal");
+
+    const pairs = after(key, 0);
+    const interleaved = Array.from({ length: 2 }, () => [
+      drawBelow(pairs, 1_000_000n) + 1n,
+      drawBelow(pairs, 10n) + 1n,
+    ]).flat();
+    assert.deepStrictEqual(
+      evaluated(repeating(literal(2n), wide, randomIntegerOf(1n, 10n)), none, drawStream(key)),
+      integers(interleaved),
+      "each pass evaluates the first operand, then the second",
+    );
+  });
+
+  it("[I-9a] draws per pass for a random kind at any depth: qti-random-float, qti-random, and a qti-random-integer inside a qti-sum", () => {
+    const key = "repeat at depth";
+    const floats = after(key, 0);
+    const expected: Value = {
+      baseType: "float",
+      cardinality: "ordered",
+      values: Array.from({ length: 3 }, () => ({ baseType: "float", value: drawFloat(floats) })),
+    };
+    const unit: Expression = {
+      kind: "random-float",
+      max: { _tag: "literal", value: 1 },
+      min: { _tag: "literal", value: 0 },
+      operands: [],
+    };
+    assert.deepStrictEqual(
+      evaluated(repeating(literal(3n), unit), none, drawStream(key)),
+      expected,
+    );
+
+    const letters = bag("A", "B", "C", "D", "E", "F", "G", "H");
+    const picks = after(key, 0);
+    const picked = Array.from({ length: 4 }, () =>
+      Number(drawBelow(picks, BigInt(letters.values.length))),
+    ).flatMap((at) => letters.values.slice(at, at + 1));
+    assert.deepStrictEqual(
+      evaluated(repeating(literal(4n), randomOf(letters)), none, drawStream(key)),
+      { baseType: "identifier", cardinality: "ordered", values: picked },
+    );
+
+    const sums = after(key, 0);
+    const summed = Array.from({ length: 3 }, () => drawBelow(sums, 1_000_000n) + 1n + 10n);
+    assert.deepStrictEqual(
+      evaluated(
+        repeating(literal(3n), { kind: "sum", operands: [wide, operandOf(integer(10n))] }),
+        none,
+        drawStream(key),
+      ),
+      integers(summed),
+    );
+  });
+
+  it("[I-9a] gives NULL before any pass for number-repeats above 1,000,000, the pass budget, and draws nothing", () => {
+    const stream = counted("repeat budget");
+
+    assertUnset(
+      evaluated(repeating(literal(1_000_001n), wide), none, stream.draw),
+      nullOf("integer", "ordered"),
+    );
+    assert.strictEqual(stream.count(), 0, "no pass ran, so nothing was drawn");
+  });
+
+  it("[I-9a] checks the running size before each pass's values are added, so a pass that would grow the container past 1,000,000 values gives NULL", () => {
+    const { repeat } = containersEvaluators;
+    assert.notStrictEqual(repeat, "unlanded", "qti-repeat is landed");
+    if (repeat === "unlanded") {
+      return;
+    }
+
+    let passes = 0;
+    const growing: Evaluate = () => {
+      passes += 1;
+
+      return Result.succeed(sized("ordered", 600_000));
+    };
+    const repeated = repeat(
+      { kind: "repeat", numberRepeats: literal(3n), operands: [wide] },
+      scopeOf(bg007Item, none),
+      growing,
+    );
+    assert.isTrue(Result.isSuccess(repeated), "qti-repeat failed");
+    assertUnset(Result.getOrThrow(repeated), list());
+    assert.strictEqual(passes, 2, "the second pass ran and its values were not added");
+  });
+
+  it("[I-9a] rule (a): a pass that gives no value gives NULL at once and runs no later pass, so it draws nothing more", () => {
+    assert.strictEqual(
+      drawBelow(drawStream(zeroFirst), 2n),
+      0n,
+      `the first draw under ${zeroFirst} from 0 to 1 is 0`,
+    );
+
+    const draw = drawStream(zeroFirst);
+    const quotient: Expression = {
+      kind: "divide",
+      operands: [operandOf(float(1)), randomIntegerOf(0n, 1n)],
+    };
+    assertUnset(
+      evaluated(repeating(literal(5n), quotient), none, draw),
+      nullOf("float", "ordered"),
+    );
+    assert.strictEqual(draw(), after(zeroFirst, 1)(), "the next draw is the key's second");
+  });
+
+  it("[I-9a] rule (b): number-repeats below 1, or naming a variable that holds NULL, or an untyped operand, gives NULL of the static base type with no pass, so it draws nothing", () => {
+    const key = "repeat with no pass";
+    const cases: readonly (readonly [string, Expression, Variables, Value])[] = [
+      ["number-repeats 0", repeating(literal(0n), wide), none, nullOf("integer", "ordered")],
+      ["number-repeats -2", repeating(literal(-2n), wide), none, nullOf("integer", "ordered")],
+      [
+        "number-repeats naming a variable that holds NULL",
+        repeating(ref("n"), wide),
+        holding({ n: nullOf("integer", "single") }),
+        nullOf("integer", "ordered"),
+      ],
+      [
+        "number-repeats 0 over a qti-random of identifiers",
+        repeating(literal(0n), randomOf(bag("A", "B"))),
+        none,
+        nullOf("identifier", "ordered"),
+      ],
+      [
+        "an untyped operand, whose static type is unknown",
+        repeating(literal(2n), custom, wide),
+        none,
+        nullOf("string", "ordered"),
+      ],
+    ];
+
+    for (const [title, expression, variables, expected] of cases) {
+      const draw = drawStream(key);
+
+      assertUnset(evaluated(expression, variables, draw), expected);
+      assert.strictEqual(draw(), after(key, 0)(), `${title}: the next draw is the key's first`);
+    }
   });
 });
