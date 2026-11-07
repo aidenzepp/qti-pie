@@ -410,6 +410,21 @@ const scoringBranch = (local: string, condition: SourceElement): SourceElement =
   );
 
 /**
+ * Construct a test with the float `SCORE` whose outcome processing sets it to 1 when an expression
+ * is NULL. `qti-is-null` takes an operand of any type, so the expression meets no type rule but
+ * its own, as a weighted `qti-test-variables`, a multiple, meets P29 alone.
+ *
+ * @param expression The expression.
+ * @returns The test.
+ */
+const whenNull = (expression: SourceElement): SourceDocument =>
+  assessmentTest([
+    score,
+    part("P", [section("S", [itemRef("ITEM1")])]),
+    outcomeCondition(scoringBranch("qti-outcome-if", el("qti-is-null", [], [expression]))),
+  ]);
+
+/**
  * Construct a `qti-test-variables` of `SCORE` weighted by `W`.
  *
  * @param baseType Its `base-type`, none when absent.
@@ -817,11 +832,11 @@ describe("checkTestRules", () => {
     it("refuses each outcome-only expression in a part's pre-condition", () => {
       for (const expression of outcomeOnly) {
         assert.deepStrictEqual(
-          judged(oneSection([itemRef("I1")], [preCondition(atLeastOne(expression))])),
+          judged(oneSection([itemRef("I1")], [preCondition(el("qti-is-null", [], [expression]))])),
           [
             {
               detail: { context: "qti-pre-condition", element: expression.local, reading: "23" },
-              path: `${partPath}/qti-pre-condition/qti-gte/${expression.local}`,
+              path: `${partPath}/qti-pre-condition/qti-is-null/${expression.local}`,
               rule: "expression-placement",
             },
           ],
@@ -1174,10 +1189,10 @@ describe("checkTestRules", () => {
     });
 
     it("[T-9] refuses a weighted qti-test-variables whose base type is integer, with check weight (pantry P29)", () => {
-      assert.deepStrictEqual(judged(scoring(weighted("integer"))), [
+      assert.deepStrictEqual(judged(whenNull(weighted("integer"))), [
         {
           detail: { baseType: "integer", check: "weight", element: "qti-test-variables" },
-          path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-test-variables",
+          path: "qti-assessment-test/qti-outcome-processing/qti-outcome-condition/qti-outcome-if/qti-is-null/qti-test-variables",
           rule: "expression-type",
         },
       ]);
@@ -1185,8 +1200,33 @@ describe("checkTestRules", () => {
 
     it("[T-9] accepts a weighted qti-test-variables whose base type is float or absent (pantry P29)", () => {
       assert.deepStrictEqual(
-        [judged(scoring(weighted("float"))), judged(scoring(weighted()))],
+        [judged(whenNull(weighted("float"))), judged(whenNull(weighted()))],
         [[], []],
+      );
+    });
+
+    it("[T-9] test-level type: refuses the single float SCORE set straight from qti-test-variables, a multiple, as expression-type, and accepts it under a qti-sum (pantry P20)", () => {
+      const testVariables = el("qti-test-variables", [attr("variable-identifier", "SCORE")]);
+
+      assert.deepStrictEqual(
+        [judged(scoring(testVariables)), judged(scoring(sum(testVariables)))],
+        [
+          [
+            {
+              detail: {
+                element: "qti-set-outcome-value",
+                expressionBaseType: "",
+                expressionCardinality: "multiple",
+                identifier: "SCORE",
+                outcomeBaseType: "float",
+                outcomeCardinality: "single",
+              },
+              path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+              rule: "expression-type",
+            },
+          ],
+          [],
+        ],
       );
     });
 

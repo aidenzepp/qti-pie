@@ -1,69 +1,271 @@
 /**
- * The test family of the item model: the kind rules and reader specs of the test-level expressions
- * `qti-number-correct`, `qti-number-incorrect`, `qti-number-presented`, `qti-number-responded`,
- * `qti-number-selected`, `qti-outcome-minimum`, `qti-outcome-maximum` and `qti-test-variables`. The
- * family has landed no kind yet, so each kind has the unlanded rule and the stub reader spec; a
- * test's outcome processing reads them, and M3.b-3 replaces each with the kind's rule and reader
- * spec.
+ * The test family of the item model: the kind rules and reader specs of the outcome-only
+ * expressions `qti-number-correct`, `qti-number-incorrect`, `qti-number-presented`,
+ * `qti-number-responded`, `qti-number-selected`, `qti-outcome-minimum`, `qti-outcome-maximum` and
+ * `qti-test-variables`, which only a test's outcome processing holds (reading 23 refuses them
+ * anywhere else, as `expression-placement`).
  *
- * It value-imports only `#plate/model/expression.ts`, and names the registry's reader types with
- * `import type` only, so the registry in `#plate/model/expressions/read.ts` may import it without a
- * cycle.
+ * Each kind reads the test's items through its filters, `section-identifier`, `include-category`
+ * and `exclude-category`; the engine evaluates them over the test scope
+ * (`#plate/engine/expressions/test.ts`). Their rules type them as the qti package's rows do
+ * (`resultTypes` in `packages/pantry/src/processing/types.ts`): each count a single integer, and
+ * the other three a multiple of the written `base-type`, unknown when none is written, so the
+ * validator refuses what the qti package refuses, a multiple set straight into a single outcome
+ * among it (P20), and nothing more.
+ *
+ * It value-imports only `effect`, `#plate/model/expression.ts`, the leaf
+ * `#plate/model/attributes.ts`, `#plate/model/values.ts` and `#plate/vocabulary.ts`, and names the
+ * registry's reader types with `import type` only, so the registry in
+ * `#plate/model/expressions/read.ts` may import it without a cycle.
  *
  * @module
  */
-import { unlandedRule } from "#plate/model/expression.ts";
-import type { FamilyRules } from "#plate/model/expression.ts";
-import type { FamilyReaders, UnlandedReader } from "#plate/model/expressions/read.ts";
+import { Effect, Option } from "effect";
+import type { SourceElement } from "#plate/document/source.ts";
+import {
+  elementsOf,
+  enumerated,
+  identifierAttribute,
+  identifierOf,
+  valueOf,
+} from "#plate/model/attributes.ts";
+import { acceptsAnyOperands, singleOf } from "#plate/model/expression.ts";
+import type { FamilyRules, KindRule } from "#plate/model/expression.ts";
+import type { FamilyReaders, ReaderSpec, Variant } from "#plate/model/expressions/read.ts";
+import { isModelled } from "#plate/model/values.ts";
+import { baseTypes } from "#plate/vocabulary.ts";
 
 /**
- * The test family's kind rules by kind: the unlanded rule for each.
+ * The five kinds that count the items they read.
  */
-export const testRules: FamilyRules<
+type CountKind =
   | "number-correct"
   | "number-incorrect"
   | "number-presented"
   | "number-responded"
-  | "number-selected"
-  | "outcome-maximum"
-  | "outcome-minimum"
-  | "test-variables"
-> = {
-  "number-correct": unlandedRule,
-  "number-incorrect": unlandedRule,
-  "number-presented": unlandedRule,
-  "number-responded": unlandedRule,
-  "number-selected": unlandedRule,
-  "outcome-maximum": unlandedRule,
-  "outcome-minimum": unlandedRule,
-  "test-variables": unlandedRule,
+  | "number-selected";
+
+/**
+ * The family's kinds.
+ */
+type TestKind = CountKind | "outcome-maximum" | "outcome-minimum" | "test-variables";
+
+/**
+ * The filters every kind of the family takes over the test's items, as its variant holds them.
+ */
+type Filters = Pick<
+  Variant<"number-selected">,
+  "excludeCategory" | "includeCategory" | "sectionIdentifier"
+>;
+
+/**
+ * The rule of each count: a single integer, the number of items it counts, whatever it reads.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutNumberCorrect
+ */
+const countRule: KindRule = {
+  operandsAccept: acceptsAnyOperands,
+  references: [],
+  resultType: () => singleOf("integer"),
 };
 
 /**
- * The reader spec of each kind the family has not landed: the stub, which marks the kind's element
- * at its path and reads nothing in it.
+ * The rule of `qti-outcome-minimum`, `qti-outcome-maximum` and `qti-test-variables`: a multiple of
+ * the base type the caller passes in its attributes, the expression's own `base-type`, unknown
+ * when it passes none, as the qti package's `attributeContainer` types them. The engine gives a
+ * minimum's and a maximum's values as floats and `qti-test-variables`' as integers or floats when
+ * no `base-type` is written; an unknown base type agrees with either.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutOutcomeMin
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutTestVariables
  */
-const unlanded: UnlandedReader = { _tag: "unlanded" };
+const collectedRule: KindRule = {
+  operandsAccept: acceptsAnyOperands,
+  references: [],
+  resultType: (_operands, attributes) => ({
+    baseType: attributes.baseType ?? "unknown",
+    cardinality: "multiple",
+  }),
+};
 
 /**
- * The test family's reader specs by kind: the stub for each.
+ * The test family's kind rules by kind.
  */
-export const testReaders: FamilyReaders<
-  | "number-correct"
-  | "number-incorrect"
-  | "number-presented"
-  | "number-responded"
-  | "number-selected"
-  | "outcome-maximum"
-  | "outcome-minimum"
-  | "test-variables"
-> = {
-  "number-correct": unlanded,
-  "number-incorrect": unlanded,
-  "number-presented": unlanded,
-  "number-responded": unlanded,
-  "number-selected": unlanded,
-  "outcome-maximum": unlanded,
-  "outcome-minimum": unlanded,
-  "test-variables": unlanded,
+export const testRules: FamilyRules<TestKind> = {
+  "number-correct": countRule,
+  "number-incorrect": countRule,
+  "number-presented": countRule,
+  "number-responded": countRule,
+  "number-selected": countRule,
+  "outcome-maximum": collectedRule,
+  "outcome-minimum": collectedRule,
+  "test-variables": collectedRule,
+};
+
+/**
+ * A run of XML whitespace, which separates the identifiers of an XSD list.
+ */
+const xmlWhitespaceRun = /[\t\n\r ]+/u;
+
+/**
+ * Read a category list attribute, an XSD list of identifiers: its identifiers in written order,
+ * an empty list when it is written empty, none when it is absent.
+ *
+ * @param element The kind's element.
+ * @param name The attribute's name, `include-category` or `exclude-category`.
+ * @returns The identifiers.
+ */
+const categoriesOf = (element: SourceElement, name: string): Option.Option<readonly string[]> =>
+  Option.map(valueOf(element, name), (written) =>
+    written.split(xmlWhitespaceRun).filter((token) => token !== ""),
+  );
+
+/**
+ * Read the filters every kind of the family takes, each none when absent: the
+ * `section-identifier`, read as an identifier, and the two category lists.
+ *
+ * @param element The kind's element.
+ * @returns The filters.
+ */
+const filtersOf = (element: SourceElement): Filters => ({
+  excludeCategory: categoriesOf(element, "exclude-category"),
+  includeCategory: categoriesOf(element, "include-category"),
+  sectionIdentifier: Option.map(valueOf(element, "section-identifier"), identifierOf),
+});
+
+/**
+ * Read an optional `weight-identifier`, as an identifier.
+ *
+ * @param element The kind's element.
+ * @returns The weight's identifier, none when absent.
+ */
+const weightOf = (element: SourceElement): Option.Option<string> =>
+  Option.map(valueOf(element, "weight-identifier"), identifierOf);
+
+/**
+ * Construct the reader spec of a count: no operand, and its filters.
+ *
+ * @param build The count's variant from its filters and its operands.
+ * @returns The spec.
+ */
+const countReader = <K extends CountKind>(
+  build: (filters: Filters, operands: readonly []) => Variant<K>,
+): ReaderSpec<K> => ({
+  _tag: "generic",
+  arity: "none",
+  attributes: (_context, element) =>
+    Effect.succeed((operands) => build(filtersOf(element), operands)),
+});
+
+/**
+ * Construct the reader spec of `qti-outcome-minimum` or `qti-outcome-maximum`: no operand, its
+ * required `outcome-identifier`, its optional `weight-identifier`, and its filters.
+ *
+ * Its read fails with `missing-attribute` for an absent `outcome-identifier`, as a document the
+ * validator refuses first would.
+ *
+ * @param build The kind's variant from its attributes and its operands.
+ * @returns The spec.
+ */
+const boundReader = <K extends "outcome-maximum" | "outcome-minimum">(
+  build: (
+    attributes: Filters & {
+      readonly outcomeIdentifier: string;
+      readonly weightIdentifier: Option.Option<string>;
+    },
+    operands: readonly [],
+  ) => Variant<K>,
+): ReaderSpec<K> => ({
+  _tag: "generic",
+  arity: "none",
+  attributes: (context, element) =>
+    Effect.map(
+      identifierAttribute(context.walk, element, "outcome-identifier"),
+      (outcomeIdentifier) => (operands) =>
+        build(
+          { ...filtersOf(element), outcomeIdentifier, weightIdentifier: weightOf(element) },
+          operands,
+        ),
+    ),
+});
+
+/**
+ * The reader spec of `qti-test-variables`: no operand, its required `variable-identifier`, its
+ * optional `base-type` and `weight-identifier`, and its filters. A `base-type` of `file`, whose
+ * values the value model does not hold, is the mark `base-type="file"` at its path, and builds
+ * nothing, as `qti-base-value`'s reader marks it; so is an element with an operand, as the generic
+ * reader marks a kind that takes none.
+ *
+ * Its read fails with `missing-attribute` for an absent `variable-identifier` and `attribute-type`
+ * for a `base-type` outside its values, as a document the validator refuses first would.
+ */
+const testVariablesReader: ReaderSpec<"test-variables"> = {
+  _tag: "custom",
+  read: (context, element) =>
+    Effect.gen(function* readTestVariables() {
+      if (elementsOf(element).length > 0) {
+        return yield* context.unread(element);
+      }
+
+      const variableIdentifier = yield* identifierAttribute(
+        context.walk,
+        element,
+        "variable-identifier",
+      );
+      const baseType = yield* enumerated(context.walk, element, "base-type", baseTypes);
+      if (Option.isSome(baseType) && !isModelled(baseType.value)) {
+        return yield* context.unread(element, `base-type="${baseType.value}"`);
+      }
+
+      return Option.some({
+        ...filtersOf(element),
+        baseType,
+        kind: "test-variables",
+        operands: [],
+        variableIdentifier,
+        weightIdentifier: weightOf(element),
+      });
+    }),
+};
+
+/**
+ * The test family's reader specs by kind.
+ */
+export const testReaders: FamilyReaders<TestKind> = {
+  "number-correct": countReader((filters, operands) => ({
+    ...filters,
+    kind: "number-correct",
+    operands,
+  })),
+  "number-incorrect": countReader((filters, operands) => ({
+    ...filters,
+    kind: "number-incorrect",
+    operands,
+  })),
+  "number-presented": countReader((filters, operands) => ({
+    ...filters,
+    kind: "number-presented",
+    operands,
+  })),
+  "number-responded": countReader((filters, operands) => ({
+    ...filters,
+    kind: "number-responded",
+    operands,
+  })),
+  "number-selected": countReader((filters, operands) => ({
+    ...filters,
+    kind: "number-selected",
+    operands,
+  })),
+  "outcome-maximum": boundReader((attributes, operands) => ({
+    ...attributes,
+    kind: "outcome-maximum",
+    operands,
+  })),
+  "outcome-minimum": boundReader((attributes, operands) => ({
+    ...attributes,
+    kind: "outcome-minimum",
+    operands,
+  })),
+  "test-variables": testVariablesReader,
 };
