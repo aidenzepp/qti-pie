@@ -69,7 +69,7 @@ const relationOf = (side: StoredSide): typeof RelationSchema.Type =>
  * A foreign key as the statements give it: from one relation into another, by their declared
  * names, and whether its target holds no field beyond the terms it names.
  */
-export interface Edge {
+export interface ForeignKey {
   readonly covers: boolean;
   readonly from: string;
   readonly to: string;
@@ -81,9 +81,9 @@ export interface Edge {
  *
  * @param from - The source side.
  * @param to - The target side.
- * @returns The edge, or none.
+ * @returns The key, or none.
  */
-const edgesOf = (from: StoredSide, to: StoredSide): readonly Edge[] => {
+const foreignKeysOf = (from: StoredSide, to: StoredSide): readonly ForeignKey[] => {
   const source = relationOf(from);
   const target = relationOf(to);
   const terms = new Set(to.terms.filter(Predicate.isString));
@@ -102,8 +102,8 @@ const edgesOf = (from: StoredSide, to: StoredSide): readonly Edge[] => {
 /**
  * Read a schema's statements as the foreign keys its laws install and its families' owner axes.
  *
- * - `laws`: one edge per containment between stored relations, and one each way per mirrors;
- * - `axes`: one edge per counted or ordered family, from its member into its owner. Every family also
+ * - `laws`: one key per containment between stored relations, and one each way per mirrors;
+ * - `axes`: one key per counted or ordered family, from its member into its owner. Every family also
  *   installs the reverse key, its owner's proof key into its last member, as `Qti`'s drafted
  *   `_init` (`20261107020714`) holds for each of its 68 families.
  *
@@ -111,16 +111,16 @@ const edgesOf = (from: StoredSide, to: StoredSide): readonly Edge[] => {
  * @returns The laws' foreign keys and the owner axes, one per statement and direction.
  */
 export const keysOf = (statements: readonly unknown[]) => {
-  const laws: Edge[] = [];
-  const axes: Edge[] = [];
+  const laws: ForeignKey[] = [];
+  const axes: ForeignKey[] = [];
   for (const statement of statements) {
     const kind = Option.map(Schema.decodeUnknownOption(KindSchema)(statement), ({ kind: k }) => k);
     if (Option.isSome(kind) && keyKinds.has(kind.value)) {
       const read = Schema.decodeUnknownSync(StatementSchema)(statement);
       if (read.kind === "contained") {
-        laws.push(...edgesOf(read.left, read.right));
+        laws.push(...foreignKeysOf(read.left, read.right));
       } else if (read.kind === "mirrors") {
-        laws.push(...edgesOf(read.left, read.right), ...edgesOf(read.right, read.left));
+        laws.push(...foreignKeysOf(read.left, read.right), ...foreignKeysOf(read.right, read.left));
       } else if ("family" in read) {
         axes.push({ covers: true, from: relationOf(read.family).name, to: read.slots.owner.name });
       }
