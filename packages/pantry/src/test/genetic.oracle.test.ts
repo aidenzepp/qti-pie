@@ -44,6 +44,7 @@ import {
   shownReport,
   shownResidual,
 } from "#pantry/test/gen/genetic/search.ts";
+import type { Isolating } from "#pantry/test/gen/genetic/search.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
@@ -56,21 +57,31 @@ const laws = lawsOf(grammar);
 /**
  * The two budgets: the bounded one the free suite runs, and the long one `GR8DES_GENETIC=1` asks
  * for. `runs` is the rotating stream's runs (the floor stream runs a quarter as many), `budget`
- * each run's, and `tries` each reduction's.
+ * each run's, `isolating` its isolation phase's, and `tries` each reduction's.
  */
 const budgets = {
   bounded: {
     budget: { candidates: 80, edits: 3, generation: 1, initial: 6 },
+    isolating: { laws: 6, tries: 25 },
     runs: 2,
     tries: 120,
   },
   long: {
     budget: { candidates: 600, edits: 4, generation: 1, initial: 12 },
+    isolating: { laws: 200, tries: 60 },
     runs: 8,
     tries: 400,
   },
 } as const satisfies Readonly<
-  Record<string, { readonly budget: Budget; readonly runs: number; readonly tries: number }>
+  Record<
+    string,
+    {
+      readonly budget: Budget;
+      readonly isolating: Isolating;
+      readonly runs: number;
+      readonly tries: number;
+    }
+  >
 >;
 
 /**
@@ -206,7 +217,14 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               },
               (sketch, c) =>
                 Effect.gen(function* oneRun() {
-                  const report = yield* hunt(corpus, bench, chosen.budget, chosen.tries, sketch);
+                  const report = yield* hunt(
+                    corpus,
+                    bench,
+                    chosen.budget,
+                    chosen.tries,
+                    sketch,
+                    chosen.isolating,
+                  );
                   c.noteAll(report.evolved.features.keys());
                   for (const law of report.isolation.alone) {
                     isolation.alone.add(law);

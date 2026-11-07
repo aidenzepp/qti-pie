@@ -143,6 +143,13 @@ export const oneOf =
     items.length === 0 ? undefined : items[source.draw(below(items.length))];
 
 /**
+ * How often a candidate is bred from a seed of the problem rather than from the population: one in
+ * this many, so a named fault lands on a lawful seed often enough that the fault is the package's
+ * one cause, where a law another cause in the parent also breaks would mask it.
+ */
+const freshEvery = 4;
+
+/**
  * Draw how many edits a candidate takes: one half the time, two a quarter, and so on up to the
  * most, so most candidates stand one edit from their parent.
  *
@@ -247,7 +254,8 @@ export const residualsOf = <F extends string>(
  * Run the genetic search: judge `budget.initial` distinct seeds drawn from the problem's
  * population, then breed `budget.candidates` candidates in generations of `budget.generation`. Each
  * candidate of a generation is a parent picked by novelty over the population and the feature
- * counts as the generation began, with one to `budget.edits` edits, any of which may cross it with
+ * counts as the generation began, or one time in four a seed of the problem, with one to
+ * `budget.edits` edits, any of which may cross it with
  * a second parent; the generation is judged in one call and folded in in order. A candidate that
  * shows a feature no earlier candidate showed joins the population. Every disagreement is kept by
  * its signature with the first candidate that showed it. A generation of one breeds each candidate
@@ -318,7 +326,10 @@ export const evolve = Effect.fnUntraced(function* evolve<G, F extends string, D,
     const pick = parentOf(population, counts);
     const generation: { genome: G; lineage: readonly string[] }[] = [];
     for (let child = 0; child < Math.min(size, budget.candidates - bred); child += 1) {
-      const parent = draw(pick);
+      const fresh = problem.seeds.length > 0 && draw(below(freshEvery)) === 0;
+      const origin = fresh ? problem.seeds[draw(below(problem.seeds.length))] : undefined;
+      const parent: Member<G, F> =
+        origin === undefined ? draw(pick) : { features: new Set(), genome: origin, lineage: [] };
       const edits = draw(editCount(budget.edits));
       let current = parent.genome;
       const lineage = [...parent.lineage];
