@@ -25,6 +25,7 @@ import { noFacets } from "#pantry/grammar/facets.ts";
 import type { Facets } from "#pantry/grammar/facets.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import type { KindOf, NameOf, SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { readSource, sourcePaths, sources, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type { Source, Sources } from "#pantry/vocab/inventory/types.ts";
@@ -1089,7 +1090,7 @@ export const validateContents = Effect.fn("test.validateContents")(function* val
 ) {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* xsdDirectory;
-  const scratch = yield* fs.makeTempDirectoryScoped();
+  const scratch = yield* scratchDirectory("xsd-content-probes-");
   const types = [
     ...new Map(
       probes.flatMap(({ parent }) =>
