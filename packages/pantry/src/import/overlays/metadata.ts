@@ -762,7 +762,7 @@ const noRecordRows = {
   ResourceLomGeneral: new Map(),
 } as const satisfies Omit<
   MetadataRows,
-  "AssessmentObject" | "ObjectLang" | "StatisticDate" | "UsageValue"
+  "AssessmentObject" | "ObjectLang" | "StatisticDate" | "UsageBaseType" | "UsageValue"
 >;
 
 /**
