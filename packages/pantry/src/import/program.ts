@@ -25,7 +25,7 @@ import { overlayRowsOf, unionsOf } from "#pantry/import/overlays/index.ts";
 import { namedDocuments, rowsOf as packageRowsOf } from "#pantry/import/overlays/package.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
-import { dataSsmlFaultIn } from "#pantry/import/data-ssml.ts";
+import { dataSsmlFaultIn } from "#pantry/vocab/data-ssml.ts";
 import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
 import { documentLayerNames } from "#pantry/import/roster.ts";
 import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";

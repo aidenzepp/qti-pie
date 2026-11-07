@@ -2613,7 +2613,7 @@ element that does not declare `data-ssml`, it is a custom `data-*` attribute (re
 written, with no length bound.
 
 Where the check lives: pantry's importer parses the value as JSON and judges it against the schema's tables
-(`src/import/data-ssml.ts`), and refuses a package that holds a value the schema does not admit under
+(`src/vocab/data-ssml.ts`), and refuses a package that holds a value the schema does not admit under
 `attribute-lexical`, the rule of a value its domain refuses. The attribute's value domain in the database stays
 `xs:string`. Writing the language as the domain's pattern was tried and does not fit: one pattern for it needs about
 4,400 positions where grizzle admits 4,096 (`regexMaxPositions`), and splitting it into chained pattern steps makes a

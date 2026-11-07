@@ -120,7 +120,7 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
-import { dataSsmlFaultIn } from "#pantry/import/data-ssml.ts";
+import { dataSsmlFaultIn } from "#pantry/vocab/data-ssml.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";

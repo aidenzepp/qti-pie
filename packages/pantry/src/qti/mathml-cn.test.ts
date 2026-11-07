@@ -1,8 +1,8 @@
 /**
  * The MathML cn laws' free tests (spec reading 2, MathML 3 validity): the module's relations are
  * composed into `Qti` under their own names, a schema of `Node` and the module's statements builds
- * with each statement once, the check is named by its law of the refusal table
- * (`#pantry/import/refusal.ts`), every other statement reads as "E1 derived", and the spellings
+ * with each statement once, the check is named by its law of the law catalog
+ * (`#pantry/vocab/laws.ts`), every other statement reads as "E1 derived", and the spellings
  * that tie a handle to its attribute's lexical form are the handles' own.
  *
  * The database tests judge the law through PostgreSQL once the builder writes the rows.
@@ -16,9 +16,9 @@ import {
   lawNameOf,
   lawNames,
   lawOfCheck,
-  lawTable,
   statedLaws,
 } from "#pantry/import/refusal.ts";
+import { lawTable } from "#pantry/vocab/laws.ts";
 import {
   baseSpellings,
   cnLaws,

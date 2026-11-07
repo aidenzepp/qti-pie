@@ -1,8 +1,8 @@
 /**
  * The MathML apply laws' free tests (spec reading 2, MathML 3 validity): the module's relations are
  * composed into `Qti` under their own names, a schema of `Node` and the module's statements builds
- * with each statement once, each check is named by a law of the refusal table
- * (`#pantry/import/refusal.ts`), and the one containment that reads as "MathML head qualifier" is
+ * with each statement once, each check is named by a law of the law catalog
+ * (`#pantry/vocab/laws.ts`), and the one containment that reads as "MathML head qualifier" is
  * the only statement the module names otherwise than "E1 derived".
  *
  * The database tests judge the laws through PostgreSQL once the builder writes the rows.
@@ -15,9 +15,9 @@ import {
   lawNameOf,
   lawNames,
   lawOfCheck,
-  lawTable,
   statedLaws,
 } from "#pantry/import/refusal.ts";
+import { lawTable } from "#pantry/vocab/laws.ts";
 import { applyLaws, applyRelations } from "#pantry/qti/mathml-apply.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";

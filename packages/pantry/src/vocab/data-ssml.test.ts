@@ -1,12 +1,12 @@
 /**
- * The importer's judgment of a `data-ssml` value (`#pantry/import/data-ssml.ts`, spec reading
+ * The importer's judgment of a `data-ssml` value (`#pantry/vocab/data-ssml.ts`, spec reading
  * R7-a): what Data-SSML 1.0's JSON Schema admits, and the refusal of a package that holds a value
  * it does not.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
-import { dataSsmlFaultOf } from "#pantry/import/data-ssml.ts";
+import { dataSsmlFaultOf } from "#pantry/vocab/data-ssml.ts";
 import { previewPackage } from "#pantry/import/preview.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";

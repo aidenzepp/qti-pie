@@ -1,15 +1,16 @@
 /**
  * The MathML share law's free tests (spec reading 2, MathML 3 validity): the module's relations are
  * composed into `Qti` under their own names, a schema of `Node` and the module's statements builds
- * with each statement once, the check is named by its law of the refusal table
- * (`#pantry/import/refusal.ts`), and every other statement reads as "E1 derived".
+ * with each statement once, the check is named by its law of the law catalog
+ * (`#pantry/vocab/laws.ts`), and every other statement reads as "E1 derived".
  *
  * The database tests judge the law through PostgreSQL once the builder writes the rows.
  */
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
-import { lawNameOf, lawNames, lawOfCheck, lawTable, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNameOf, lawNames, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
+import { lawTable } from "#pantry/vocab/laws.ts";
 import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
