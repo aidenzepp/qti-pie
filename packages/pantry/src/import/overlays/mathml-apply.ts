@@ -23,7 +23,7 @@ import {
   mathHeadQualifiers,
   mathQualifiers,
 } from "#pantry/grammar/expression.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
 import { nonElements } from "#pantry/import/overlays/mathml-tree.ts";
 import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -75,7 +75,7 @@ export const rowsOf = (
   const qualifiers = new Map<string, Addition<typeof MathQualifier>>();
   const placed = (node: NodeRow<Composed>) => ({
     document: document.node,
-    nearest: folds.get(node.id)?.nearest ?? document.node,
+    nearest: foldAt(folds, node.id).nearest,
     node: node.id,
     parent: node.parent,
     start: node.start,
@@ -92,8 +92,8 @@ export const rowsOf = (
     const head = first.kind;
     applications.set(application.id, {
       ...placed(application),
-      elementChildren: folds.get(application.id)?.elementChildren ?? 0n,
-      elements: folds.get(application.id)?.elements ?? 1n,
+      elementChildren: foldAt(folds, application.id).elementChildren,
+      elements: foldAt(folds, application.id).elements,
       kind: application.kind,
       operator: head,
     });

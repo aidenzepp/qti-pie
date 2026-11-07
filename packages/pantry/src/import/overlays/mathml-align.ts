@@ -41,7 +41,7 @@
  * costs time linear in its nodes (decision 357).
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
@@ -266,7 +266,7 @@ const selectionHeld = (kind: string, values: ReadonlyMap<string, string> | undef
  */
 const placed = (reading: Reading, node: NodeRow<Composed>) => ({
   document: reading.document,
-  nearest: reading.folds.get(node.id)?.nearest ?? reading.document,
+  nearest: foldAt(reading.folds, node.id).nearest,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -284,8 +284,8 @@ const actionOf = (reading: Reading, node: NodeRow<Composed>): Addition<typeof Ma
   const lexical = reading.attributes.get(node.id)?.get("selection");
 
   return {
-    elementChildren: reading.folds.get(node.id)?.elementChildren ?? 0n,
-    elements: reading.folds.get(node.id)?.elements ?? 1n,
+    elementChildren: foldAt(reading.folds, node.id).elementChildren,
+    elements: foldAt(reading.folds, node.id).elements,
     node: node.id,
     selection: selectionOf(lexical),
     selectionLexical: lexical ?? "",
@@ -317,7 +317,7 @@ const scopeOf = (
   const own = reading.owns.get(node.id) ?? inherited;
   const parentKind = reading.kinds.get(node.parent) ?? node.kind;
   const underAction = parentKind === "m:maction";
-  const elements = reading.folds.get(node.id)?.elements ?? 1n;
+  const { elements } = foldAt(reading.folds, node.id);
   const chosen = underAction ? (above?.selection ?? 0n) : 0n;
   const received: State = above?.passes ?? "open";
   const state = isCell ? "open" : stateOf(received, underAction, elements, chosen);
@@ -330,7 +330,7 @@ const scopeOf = (
       cell,
       chosen,
       dirLexical: dirLexicalOf(values?.get("dir")),
-      elementChildren: reading.folds.get(node.id)?.elementChildren ?? 0n,
+      elementChildren: foldAt(reading.folds, node.id).elementChildren,
       elements,
       inherited,
       kind: node.kind,

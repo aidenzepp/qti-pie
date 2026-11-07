@@ -20,7 +20,7 @@ import { Option } from "effect";
 import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
 import { attributeRows, ValueIdentity } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldOf, governorOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, governorOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -186,7 +186,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
       document,
       kind: node.kind,
       lexical,
-      nearest: folds.get(id)?.nearest ?? document,
+      nearest: foldAt(folds, id).nearest,
       node: id,
       start: node.start,
       version: node.version,
