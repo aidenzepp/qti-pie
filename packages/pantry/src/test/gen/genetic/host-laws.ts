@@ -117,7 +117,10 @@ const LiteralSchema = Schema.Union([
 ]);
 
 /**
- * A term of a stored predicate as grizzle keeps it, read field by field.
+ * A term of a stored predicate as grizzle keeps it, read field by field, a literal's value unread:
+ * {@link termOf} reads it, and a literal of no {@link Literal} is `unread` there, as the production
+ * host judge reads one (`#pantry/host/predicates.ts` `termOf`), so the statement that holds it is
+ * still evaluated, unknown where the literal decides.
  */
 interface StoredTerm {
   readonly arg?: StoredTerm;
@@ -129,13 +132,12 @@ interface StoredTerm {
   readonly left?: StoredTerm;
   readonly op?: string;
   readonly right?: StoredTerm;
-  readonly value?: Literal;
-  readonly values?: readonly Literal[];
+  readonly value?: unknown;
+  readonly values?: readonly unknown[];
 }
 
 /**
- * The schema of a {@link StoredTerm}: a predicate whose literal is no text, number or flag does not
- * decode, and its statement is not evaluated.
+ * The schema of a {@link StoredTerm}.
  */
 const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
   arg: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
@@ -149,8 +151,8 @@ const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
   op: Schema.optionalKey(Schema.String),
   relation: Schema.optionalKey(Schema.String),
   right: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
-  value: Schema.optionalKey(LiteralSchema),
-  values: Schema.optionalKey(Schema.Array(LiteralSchema)),
+  value: Schema.optionalKey(Schema.Unknown),
+  values: Schema.optionalKey(Schema.Array(Schema.Unknown)),
 });
 
 /**
@@ -208,11 +210,16 @@ const termReaders: ReadonlyMap<string, (stored: StoredTerm, read: TermReader) =>
   ["not", (stored, read) => ({ arg: read(stored.arg), kind: "not" })],
   [
     "in",
-    (stored, read) => ({
-      arg: read(stored.arg),
-      kind: "in",
-      values: (stored.values ?? []).map(String),
-    }),
+    (stored, read) => {
+      const written = stored.values ?? [];
+      const values = written.flatMap((value) =>
+        Option.toArray(Schema.decodeUnknownOption(LiteralSchema)(value)),
+      );
+
+      return values.length === written.length
+        ? { arg: read(stored.arg), kind: "in", values: values.map(String) }
+        : unread;
+    },
   ],
   [
     "field",
@@ -232,7 +239,11 @@ const termReaders: ReadonlyMap<string, (stored: StoredTerm, read: TermReader) =>
   ],
   [
     "literal",
-    (stored) => (stored.value === undefined ? unread : { kind: "literal", value: stored.value }),
+    (stored) =>
+      Option.match(Schema.decodeUnknownOption(LiteralSchema)(stored.value), {
+        onNone: () => unread,
+        onSome: (value): Term => ({ kind: "literal", value }),
+      }),
   ],
   [
     "closedAt",
