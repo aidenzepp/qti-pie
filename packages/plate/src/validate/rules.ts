@@ -891,21 +891,30 @@ const modelledBaseType = (element: SourceElement): Option.Option<ModelledBaseTyp
   );
 
 /**
- * Give the base type a declaration's typed values take, when this rule judges them.
- *
- * A `record` declaration's values are typed field by field, so they are not judged, and neither
- * are values of a base type {@link modelledBaseType} does not give.
+ * Report whether a declaration is a record: its `cardinality` is `record`.
  *
  * @param declaration The declaration.
- * @returns Its base type, none when its values are not judged.
+ * @returns Whether it declares a record.
  */
-const declaredBaseType = (declaration: SourceElement): Option.Option<ModelledBaseType> =>
+const isRecordDeclaration = (declaration: SourceElement): boolean =>
   Option.exists(
     attributeOf(declaration, "cardinality"),
     (attribute) => attribute.value === "record",
-  )
-    ? Option.none()
-    : modelledBaseType(declaration);
+  );
+
+/**
+ * Give the base type a declaration's typed values take, when this rule judges them.
+ *
+ * A `record` declaration's values are typed field by field, each by its own `base-type`
+ * ({@link textBaseType}), so a `base-type` the record declaration itself carries types none of
+ * them and is accepted unread (G-R4, pending). Values of a base type {@link modelledBaseType} does
+ * not give are not judged either.
+ *
+ * @param declaration The declaration.
+ * @returns Its base type, none when its values are not judged under it.
+ */
+const declaredBaseType = (declaration: SourceElement): Option.Option<ModelledBaseType> =>
+  isRecordDeclaration(declaration) ? Option.none() : modelledBaseType(declaration);
 
 /**
  * Join an element's text children, the content of a `qti-value` or a `qti-base-value`, as the item
@@ -1031,9 +1040,30 @@ const attributeValueType = (
   });
 
 /**
+ * Find the record declaration a `qti-value` is a field of: one in a `qti-correct-response` or a
+ * `qti-default-value` of a declaration whose `cardinality` is `record`, of any of the item's four
+ * kinds.
+ *
+ * @param visit The element's visit.
+ * @param context The parents the walk has met.
+ * @returns The record declaration, none for any other element.
+ */
+const recordOfField = (visit: Visit, context: Context): Option.Option<SourceElement> =>
+  isQti(visit.element, (local) => local === "qti-value")
+    ? Option.filter(
+        enclosing(context, visit.element, [
+          named("qti-correct-response", "qti-default-value"),
+          isDeclaration,
+        ]),
+        isRecordDeclaration,
+      )
+    : Option.none();
+
+/**
  * Give the base type an element's text is read in, when its text is a typed value this rule
- * judges: a `qti-base-value`'s own `base-type`, or the declaration's for a `qti-value` in a
- * declaration's `qti-correct-response` or `qti-default-value`.
+ * judges: a `qti-base-value`'s own `base-type`; for a `qti-value` in a declaration's
+ * `qti-correct-response` or `qti-default-value`, the declaration's, or, when the declaration is a
+ * record, the field's own `base-type` ({@link recordOfField}).
  *
  * @param visit The element's visit.
  * @param context The parents the walk has met.
@@ -1046,6 +1076,10 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
 
   if (!isQti(visit.element, (local) => local === "qti-value")) {
     return Option.none();
+  }
+
+  if (Option.isSome(recordOfField(visit, context))) {
+    return modelledBaseType(visit.element);
   }
 
   return Option.flatMap(
@@ -1062,7 +1096,9 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
  *
  * Reading 1 and the value model's lexical spaces (research `ea422814` §3): a `qti-value` in a
  * declaration's `qti-correct-response` or `qti-default-value` parses under the declaration's base
- * type, and a `qti-base-value` under its own `base-type`, after reading 7's trim of element text,
+ * type, a field of a record declaration's value under its own `base-type` (as pantry's import reads
+ * it, `valueRows` in `packages/pantry/src/import/item.ts`), and a `qti-base-value` under its own
+ * `base-type`, after reading 7's trim of element text,
  * which the value model's `parseElementText` applies. A boolean is `true` or `false`, never `1` or
  * `0` (reading 34). The XSD does not decide, typing `qti-value` as `xs:normalizedString` and
  * `qti-base-value` as `xs:string`; the information model's boolean base type is the boolean
@@ -1086,6 +1122,50 @@ const textValueType = (
     onSome: (baseType) =>
       valueRefusals(source, visit.path, parseElementText(baseType, textOf(visit.element))),
   });
+
+/**
+ * The attributes each field of a record declaration's value carries.
+ */
+const fieldAttributes = ["field-identifier", "base-type"] as const;
+
+/**
+ * Apply `missing-attribute` to a field of a record declaration's value: a `qti-value` in the
+ * `qti-correct-response` or `qti-default-value` of a declaration whose `cardinality` is `record`
+ * ({@link recordOfField}) carries both `field-identifier` and `base-type`.
+ *
+ * The XSD makes both optional on every `qti-value`; the information model requires them of a
+ * record's: a record "contains a set of independent values each identified by its own identifier
+ * and having its own base-type" (`info.txt:73046`). The qti package refuses the same document:
+ * a field with no `base-type` has no arm, which its commit refuses (`valueRows` in
+ * `packages/pantry/src/import/item.ts`), and one with no `field-identifier` fails the NCName
+ * contract `RecordFieldIdentifier` (`packages/pantry/src/schema/contracts.ts`). A field whose text
+ * is outside its own `base-type` is `value-type`'s ({@link textValueType}).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The parents the walk has met.
+ * @returns One refusal at each missing attribute's path, `field-identifier`'s first; none for any
+ *   other element.
+ */
+const recordFieldAttributes = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] =>
+  Option.isSome(recordOfField(visit, context))
+    ? fieldAttributes.flatMap((attribute) =>
+        Option.isSome(attributeOf(visit.element, attribute))
+          ? []
+          : [
+              refusal(
+                source,
+                "missing-attribute",
+                attributePath(visit.path, { local: attribute, namespace: "" }),
+                { attribute, element: "qti-value", source: "info.txt:73046" },
+              ),
+            ],
+      )
+    : [];
 
 /**
  * Apply `value-type` to a `qti-base-value` that lies in a processing ({@link processings}), as
@@ -3166,7 +3246,8 @@ const setCorrectResponses = (
  * names. Each expression is typed through its kind's rule in the registry (`kindRules` in
  * `#plate/model/expressions/read.ts`), and one whose kind's family has not landed is untyped and
  * not judged. The variable, type and reference rules judge inline response processing and template
- * processing alike, as the qti package does.
+ * processing alike, as the qti package does. A field of a record declaration's value that lacks its
+ * `field-identifier` or its `base-type` is `missing-attribute` ({@link recordFieldAttributes}).
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
@@ -3231,6 +3312,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...mapResponseRequirements(source, visit, context),
       ...attributeValueType(source, visit, context),
       ...textValueType(source, visit, context),
+      ...recordFieldAttributes(source, visit, context),
       ...undeclaredVariable(source, visit, context),
       ...templateTarget(source, visit, context),
       ...templateReads(source, visit, context),
